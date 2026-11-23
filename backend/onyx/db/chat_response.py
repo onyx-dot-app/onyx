@@ -316,9 +316,9 @@ def save_chat_turn(
 
     # Preserve referenced generated files for subsequent turns; unreferenced
     # ones remain intermediate artifacts. Published files are files of the
-    # message; the chat delete finds them by their ID prefix
-    # (CHAT_ARTIFACT_FILE_PREFIX) either way. A terminal save can repeat, so
-    # a file already listed is not added again.
+    # message; the chat delete finds them through their artifacts either
+    # way. A terminal save can repeat, so a file already listed is not
+    # added again.
     attached = [
         *(
             _extract_referenced_file_descriptors(tool_calls, sanitized_message_text)

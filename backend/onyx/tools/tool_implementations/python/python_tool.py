@@ -16,7 +16,6 @@ from onyx.configs.app_configs import (
     CODE_INTERPRETER_MAX_STAGED_FILES,
     CODE_INTERPRETER_STAGING_CONCURRENCY,
 )
-from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.file_store.utils import (
     build_full_frontend_file_url,
@@ -462,7 +461,6 @@ class PythonTool(Tool):
                             file_content,
                             display_name=filename,
                             file_type=chat_output_file_type(filename),
-                            file_origin=FileOrigin.CHAT_IMAGE_GEN,
                             chat_session_id=self._chat_session_id,
                         )
 

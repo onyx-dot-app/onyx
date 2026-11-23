@@ -8,13 +8,17 @@ from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginat
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.hierarchy import (
+    get_accessible_hierarchy_node,
     get_accessible_hierarchy_nodes_for_source,
     search_accessible_hierarchy_nodes,
 )
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.hierarchy.constants import (
     DOCUMENT_PAGE_SIZE,
     HIERARCHY_NODE_DOCUMENTS_PATH,
+    HIERARCHY_NODE_PATH,
     HIERARCHY_NODE_SEARCH_LIMIT,
     HIERARCHY_NODES_LIST_PATH,
     HIERARCHY_NODES_PREFIX,
@@ -150,4 +154,27 @@ def search_hierarchy_nodes(
             )
             for node in nodes
         ]
+    )
+
+
+# Registered after the fixed paths so that "/search" does not match it.
+@router.get(HIERARCHY_NODE_PATH)
+def get_hierarchy_node(
+    node_id: int,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> HierarchyNodeSearchSummary:
+    user_email, external_group_ids = _get_user_access_info(user, db_session)
+    node = get_accessible_hierarchy_node(
+        db_session, node_id, user_email, external_group_ids, user_id=user.id
+    )
+    # An inaccessible node looks the same as a missing one.
+    if node is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Hierarchy node not found")
+    return HierarchyNodeSearchSummary(
+        id=node.id,
+        title=node.display_name,
+        link=node.link,
+        parent_id=node.parent_id,
+        source=node.source,
     )

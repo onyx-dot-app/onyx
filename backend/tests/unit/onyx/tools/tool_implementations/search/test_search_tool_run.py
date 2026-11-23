@@ -19,6 +19,7 @@ from onyx.context.search.models import (
     InferenceSection,
     SearchCycle,
     SearchDocsResponse,
+    Tag,
     TimeFilter,
     UserAccessFilters,
 )
@@ -272,6 +273,36 @@ def test_slack_search_over_primary_budget_skips_only_slack_lane() -> None:
 
     assert cost.call_args.kwargs["llm_provider_api_key"] == "primary-key"
     slack.assert_not_called()
+
+
+@pytest.mark.parametrize("tags", [None, [Tag(tag_key="assignee", tag_value="Ada")]])
+def test_tagged_search_skips_federated_and_slack(tags: list[Tag] | None) -> None:
+    """Federated sources cannot apply tags, so their results would ignore them."""
+    tool = _make_tool(
+        user_selected_filters=BaseFilters(tags=tags), auto_detect_filters=False
+    )
+    tool.enable_slack_search = True
+    federated_info = MagicMock()
+    with (
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        patch.object(tool, "_run_slack_search", return_value=[]) as slack,
+    ):
+        pipeline = _run(
+            tool,
+            connected_sources=[DocumentSource.JIRA],
+            skip_query_expansion=True,
+            federated_mock=MagicMock(return_value=[federated_info]),
+        )
+
+    federated_sent = pipeline.call_args.kwargs["prefetched_federated_retrieval_infos"]
+    if tags:
+        slack.assert_not_called()
+        assert federated_sent == []
+    else:
+        slack.assert_called_once()
+        assert federated_sent == [federated_info]
 
 
 @pytest.mark.parametrize("selection_mode", ["configured", "primary", "unavailable"])

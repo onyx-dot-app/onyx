@@ -185,13 +185,114 @@
   answer gets its own part. If the stream drops while the run continues, the
   chat attaches again and later output, such as an approval card, still
   appears.
-- **The model publishes files from its sandbox.** Each published file shows
-  as a download card after the answer, with its title (else its file name),
-  type and size. A click opens the file preview; HTML shows as source, never
-  as a rendered page. A later publish of a file with the same name in the
-  same answer adds a card marked as an updated version. The timeline step lists the
+- **The model publishes files from its sandbox.** While a turn runs, its
+  reply shows no file cards; the right panel and its toggle update live. When
+  the turn ends (stopped and failed turns too), each file that the turn
+  published shows as a download card after the answer, with its title (else
+  its file name), type and size. As in Craft, a reply shows at most five
+  cards, then a "View all N files" button that opens the panel's Files list;
+  a page without the panel shows every card. Every publish of one path in a chat is a version of one
+  artifact (`artifact_id`, `version`). A click opens the card's version in
+  its artifact's tab in the right panel; a page without the panel (NRF)
+  opens it in the preview modal. HTML shows as source, never as a rendered
+  page. Each card shows only its file; a later publish of the same path adds
+  a card of its own. Cards that show one name also show their
+  `display_path`, which the backend sends: relative to the chat's working
+  directory, or the whole path outside it. The path shows under the title, before the type and size, in an
+  LTR code span, and the type shows only for an extension of ASCII letters
+  and digits. The timeline step lists the
   files that the call asked for and how it ended. Shared chats show the same
   cards.
+- **A chat has a right panel, with a toggle at the far end of its header**
+  (the shared view's header for a shared chat), with or without published
+  files. The toggle sits over the workspace's top end, so it stays at the
+  same place over the header, the panel beside the page and a panel over it.
+  The header and the panel's controls keep out of its room
+  (`lib/outputPanel/layout.ts:PANEL_TOGGLE_RESERVE`). It has one label and
+  `aria-expanded`, and it acts on what the user sees: on a shown panel it
+  closes any tab, Sources too; on a hidden panel, also one whose stored state
+  shows Sources that the page hides, it shows the last shown Files tab, else
+  the Files list, whose empty state says that the chat has no files. The panel
+  has no close button of its own. The right panel looks and
+  behaves like Craft's output panel: a tab strip (Files, Sources, and a
+  closable tab per opened file), a URL bar, and the active tab's content. As
+  in Craft's, the URL bar of a Files tab starts with a refresh button, which
+  loads the chat's file list again
+  (`lib/chat/pagedSession.ts:reloadChatPublishedFiles`, the latest page of
+  `get-chat-session`, which has the server's list; a shared chat reads its
+  `is_shared` page). An open file's tab keeps showing its file; the list shows
+  the newer publishes. Every load of a chat page takes a sequence as its fetch
+  starts (`lib/chat/publishedFiles.ts:startChatLoad`), and a load's list
+  replaces the chat's list only when no load that started later gave it, so an
+  older load never overwrites a newer list. The button is off while the reload
+  runs, and a failure shows a toast. A file tab's URL bar shows the file's
+  path, then a Download button; the preview in the panel draws no copy,
+  download or count of its own (`FilePreviewBody`'s `actions`). It
+  opens at half the page; the user drags its edge, or uses the arrow keys on
+  the edge, to resize it, and the width is kept per chat through a reload. A
+  button expands it over the whole page and back. A page too narrow for both
+  the chat and the panel shows the panel over the page, without the size
+  button. A panel over the page covers only the page column,
+  not the sidebar, and the page under it cannot be focused. Files and Sources
+  lead the tab strip when they have content, or while they are active. A citation's Sources control opens the panel on Sources. The
+  Files tab shows Craft's output tiles for the files published in the chat,
+  on every branch, also by answers that are not loaded and by subagents: one
+  tile per artifact, its newest version, newest artifact first (a new
+  version keeps its artifact's place), with its title or else its
+  name, and a search in the URL bar. A text or markdown tile up to 256 KB
+  shows the start of its file, scaled down, once it nears the view
+  (`SWR_KEYS.chatFileTileText`), read through the preview's bounded
+  `loadChatFilePreview`; it loads at most once per file and session,
+  and a failure is kept as well, so a failed tile does not fetch its file
+  again. A PDF, PowerPoint or Word tile shows the JPEG of its first page that
+  the server drew when the file was published (`thumbnail_file_id`, lazy), and
+  its icon when it has none or the image fails. Other tiles show an image
+  thumbnail or the file's icon. The first time the panel shows Files, by
+  any route, every listed file counts as seen; a file published later shows
+  Craft's new-file marker until the panel shows it, also as a new version
+  in its open tab. Several files can be open at once; tabs switch
+  with a click or the arrow keys, reorder by drag or Alt+arrow among the
+  file tabs, and closing
+  the active tab returns to the tab used before it, else to Files. Files and
+  Sources cannot close or move, and a file tab cannot move before them. File
+  tabs of one shown name show their paths. An artifact has one tab, which
+  follows its newest version: a reload's list or a live publish of a newer
+  version updates an open tab. A card of an older version pins the tab to
+  that version, labelled "v{version} of {latest}"; the newest version has no
+  label. The five most recent file viewers stay
+  mounted, so switching back does not load the file again; a hidden one
+  leaves layout (`content-visibility: hidden`). During a drag of the panel's
+  edge, the content follows the width live, as in Craft, under an overlay
+  so the pointer hovers nothing in it. A file tab and
+  the preview modal show a file the same way: markdown as a document, a CSV
+  or workbook as a grid with a sheet bar, a PDF one page at a time with page
+  thumbnails and zoom, a PowerPoint deck one slide at a time with a slide
+  list, a Word file as pages scaled to fit the width, an image fit to the
+  panel, and code, data, SVG and text as highlighted source. The PDF and
+  slide views share Craft's toolbar and resizable thumbnail column
+  (`sections/file-preview/PreviewControls.tsx`). The column is one tab stop,
+  the current page or slide, and the arrow keys move it, with focus. A
+  preview under 480 px wide, as on a phone, starts with the column hidden:
+  `lib/filePreview/hooks.ts:useThumbnailColumn` measures the row that holds
+  the column and the page when it mounts, before the first paint, then
+  follows its width until the user toggles the column. The
+  modal adds the counts,
+  copy and download over the content's bottom, and an image's actual-size
+  toggle. A loader shows only when a load takes over 300 ms. A file over its
+  format's limit (5 MB of text, 20 MB for Word or PowerPoint, 100 MB for a
+  PDF), a legacy `.ppt` and other types show one card with a download
+  instead. So does a failed load, with a retry, and a PDF, deck, Word file or
+  image that does not render, such as a HEIC image.
+  Closing the panel
+  keeps its tabs, so reopening it, or coming back to the chat, restores them.
+  A closed panel cannot be focused, and closing it returns focus to the
+  control that opened it, or that last switched it from outside the panel,
+  also when the panel covered the page.
+  Escape leaves full
+  screen first, before a run's Escape stops the run; a narrow page has no
+  full screen, so Escape skips that step. Then it closes the active file's
+  tab, back on its tile, or on the Files tab for a file without one, then
+  closes the panel. Multi-model turns have no sandbox, so they publish no files.
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
   tab-separated text so a spreadsheet keeps the columns. Each answer table
   also has its own copy button, which writes HTML with links and full source
@@ -244,7 +345,8 @@ This component owns:
   of [[llm-providers]];
 - the development `/api` proxy route.
 
-It shares the file preview renderers with [[craft-frontend]].
+It owns the chat file previews; [[craft-frontend]] has its own previewers
+for sandbox files.
 
 Neighbours own the rest. [[streaming-protocol]] owns the packet vocabulary,
 the enum mirrors, line framing and heartbeats. [[citations]] owns marker
@@ -350,13 +452,150 @@ that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group wi
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
 making their own step. Generated images accumulate across tool steps, unique
 by file ID, and render once above the answer as soon as they arrive. Later tool
-calls do not hide them. Published files work the same way: each
+calls do not hide them. An image call does not mark the answer as final;
+later search or image calls can continue the timeline. Published files work the same way: each
 `publish_files_end` adds its files, unique by file ID, to
-`ProcessorState.publishedFiles` with a version per file name, and
-`AgentMessage` shows them after the answer of their section
-(`sections/chat/PublishedFileCards.tsx`, which opens `PreviewModal` and
-downloads from `/api/chat/file/{file_id}`). An image call does not mark the
-answer as final; later search or image calls can continue the timeline.
+`ProcessorState.publishedFiles`, and
+`AgentMessage` shows them after the answer of their section once the section
+ends: the response stopped and its answer rendered (`isComplete`), or a later
+section began (`buildSectionSegments` owns the placement)
+(`sections/chat/PublishedFileCards.tsx`, which downloads from
+`/api/chat/file/{file_id}`; a click calls `PublishedFilesPanelContext`'s
+`openFile` and the view-all button its `showFiles`, which the chat page
+(`CHAT_FILES_PANEL`) and the shared view provide; without one, the card opens
+`PreviewModal` and every card shows). The right panel (`sections/chat/ChatRightPanel.tsx`)
+is built from the output-panel parts that it shares with Craft's panel
+(`sections/output-panel/` and `lib/outputPanel/`): the presentational parts,
+the tab rules, and `sections/output-panel/PanelResize.tsx:useOutputPanelWorkspace`, which measures
+the workspace, resizes the panel, makes the covered page inert after it moves
+focus out, and restores a full panel on Escape. [[craft-frontend]] lists the
+parts, and a change to them changes Craft's panel too. A file tab and
+`PreviewModal` show a file through `sections/file-preview/FilePreview.tsx:FilePreviewBody`,
+with one renderer per format in `sections/file-preview/`. Each loads the file
+with `lib/filePreview/hooks.ts:useChatFilePreview`, an SWR read that
+`FilePreviewScope` scopes to the preview, so the file's bytes go and its
+download stops when the preview closes, and that does not revalidate. A
+file tab keys the scope by the shown file, so a tab that moves to another
+version starts a new preview with fresh controls.
+`FilePreviewBody` owns the card for a file that cannot show; a renderer only
+reports that it failed. Its loader,
+`lib/filePreview/loadChatFilePreview.ts:loadChatFilePreview`, reads
+`/api/chat/file/{id}` once with the default cache mode. The response's name
+and type pick the format (`lib/filePreview/format.ts:resolveFilePreviewFormat`).
+A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
+the workbook, and an image or an unsupported file reads no body: the image
+loads from the file URL in an `<img>`. SVG shows as XML source, because the
+server serves it as `application/octet-stream`. Other bodies
+are read up to the format's limit while they stream, because the server sends
+no length. Text over 200,000 characters shows without highlighting, and
+markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
+the build's `/pdfjs/` assets, with `isEvalSupported` off. A Word file renders
+through `lib/docx/renderDocx.ts`, which sanitizes it, into a shadow root. A
+PowerPoint deck parses in the browser with `@jvmr/pptx-to-html` through
+`lib/pptx/renderPptx.ts`, which sanitizes each slide: no script, no style
+element, and no image or CSS `url()` from outside the deck: a style property
+with any `url()` that is not an embedded image goes. Each slide
+renders into its own shadow root, scaled from the deck's slide size. The
+parser uses namespaced selectors that jsdom lacks, so Jest tests give its
+output.
+Markdown shows raw HTML as text. Craft's previewers read sandbox paths, not
+chat files. Published files belong to the chat, not to a branch.
+`lib/chat/publishedFiles.ts:chatPublishedFiles` owns the Files list: the
+newest load's `published_files` (the newest version of each artifact, by
+the artifact's first publish), then the files that packets published after
+the loads, such as live publishes and an answer that resumes after an
+approval, merged per artifact (`artifactKey`) into its highest version. A
+file saved without `artifact_id` is its own one-version artifact. The
+session's `loadedPublishedFiles` holds the list, the sequence of the load
+that gave it, and the file IDs that the loads' packets replayed
+(`addLoadedPublishedFiles`; every load and settle applies it with the
+sequence it took as its fetch started, and an older page adds its packets). A replayed file that the
+list leaves out stays out: an older version, a file saved without an
+artifact or one whose object is missing. Without a list, the packets give all the
+files.
+A shared chat has no live publishes, so its load's list alone gives its
+files, until the panel's reload adds a newer page's list. A file tab (`ChatRightPanelState.fileTabs`, keyed by
+`rightPanelFileTab`, the artifact) keeps the file that it opened with and
+whether it is pinned: both card openers (`openPublishedFileInChat`, the
+shared view's opener) build the action with `openCardFileAction`, which
+pins it when the chat's files hold a newer version (`newestVersion`). A card
+saved without `artifact_id` whose file the list holds opens the listed
+file, so the card and its tile share one tab. The panel shows a pinned tab's file, else the newest
+version of its artifact, so a card always opens its own file, also one that
+the list does not hold. A background
+subagent's files are not in the root stream; they appear at the next
+latest-page load, for example when the turn that its results start settles.
+Foreground subagent publishes stream nested in the root answer.
+`lib/chat/hooks.ts:publishedFilesOf` builds a chat's files once per message
+tree and loads, for the open chat and the shared view; `usePublishedFiles`
+keeps them the same while their content does, and the panel and its views
+are memoized, so a packet that changes no file or tab does not render the
+panel.
+`views/AppPage.tsx` puts a memoized `CurrentChatRightPanel` element in the
+app shell's right slot, as the shared view places `ChatRightPanel`. Both
+always mount it, so a card opens its file also when the list holds no files;
+closed, the panel takes no room. The panel draws its own toggle once the chat
+has a session, and the header leaves room for it at its end
+(`layouts/chromes/AppChrome.tsx`, the shared view's header padding). In the
+DOM, the toggle follows what the user sees: a closed panel puts it in the
+workspace's `panelToggleSlot`, before the page, and an open panel puts it
+before its tabs. Closing gives focus back to it when the move or the panel
+took focus. The
+element changes only with its inputs (open, the Sources view, whether
+Sources has content), so a packet, a search keystroke, a tab change or a
+resize renders the panel and not the app chrome. Names that the model or the
+sandbox chose show in their own text direction: the tab strip and the tiles
+isolate them with `dir="auto"`, an older version's tab puts the name in a
+`<bdi>` apart from its sentence, and the URL bar and a card show a path with
+`dir="ltr"` (a card's path is an Opal code span). In the panel, cards and
+Files search, a published file's shown name and path come only from
+`lib/chat/publishedFiles.ts:publishedFileLabel` and `publishedFilePath`, which
+strip bidi controls. The timeline step shows the sandbox path from the start
+packet, stripped where it renders.
+
+The panel's state and its transitions are one pure module,
+`lib/chat/rightPanel.ts:rightPanelReducer`, which owns the tabs: the mode
+(closed, medium or full, as Craft's), the open files (Files and Sources
+are fixed tabs, so only the active tab and the history name them), width,
+search and seen files. The Files list and the file tabs follow the shared
+tab rules (`lib/outputPanel/tabs.ts:openPanelTab`, `closePanelTab`), with
+the Files list first, so closing the last file tab shows the Files list;
+Sources stands apart. A file that the panel shows counts as seen
+(`markSeen`); the first time the panel shows files, the panel marks the
+listed files seen once (`initializeSeen`). The store keeps one state per
+session and applies the reducer (`updateCurrentRightPanel`); the shared view
+applies it with `useReducer`. The store keeps each chat's width in session
+storage (`lib/outputPanel/preferences.ts`, which Craft's preferences also
+use), and every load of a chat applies its approvals version and published
+files in one place (`app/app/stores/useChatSessionStore.ts:applyLoadedSession`). The panel shows one tab at a time. A move
+(`reorderTab`) names the tab that it drops on. The automatic close
+(`hideSources`) closes the panel only when Sources is active. The panel lives
+in the app shell's right slot.
+`layouts/chromes/AppWorkspace.tsx` gives it the workspace row and the page
+column; the open panel measures the row, so a width change renders the panel
+and nothing else, and a covering panel makes the page column inert. A closed
+panel does not watch the width; it measures again when it opens.
+`ChatSidePanel`'s `reserve` keeps the medium width in the row's flow, and the
+panel sits over the row's end: at the reserve's width at medium size, at the
+row's full width (`100%`) when it covers. A change of size moves only the
+panel's edge, never the page or the panel's position. The width slides only
+when the panel's shape changes (open, close, beside or over the page); a
+change of the row's width or a drag applies at once. The panel and its
+reserve carry transition timing only while they slide: CSS
+`transition-property` defaults to `all`, so a duration left on them animates
+every drag step and the panel trails the pointer. The chat panel throws
+without the workspace context.
+In the panel, `sections/document-sidebar/DocumentsSidebar.tsx` gets no
+`closeSidebar` and draws no frame; NRF draws its frame. `sections/chat/ChatSidePanel.tsx` is
+the sliding panel frame: it returns focus to the opener on close. It records
+the opener in a layout effect, before the covering panel's layout effect
+moves focus to the panel toggle. The chat
+page and the shared view use it only through `ChatRightPanel`; NRF uses it
+directly for its Sources panel. Focus moves into the panel only when it opens from
+outside (a card, a citation, the panel toggle); a card focuses the file's
+preview, also when it opens another version of the shown artifact. A
+tab-strip change keeps focus on the strip, and so does a new version that an
+unpinned tab follows.
 
 A group closes on its own parent-level `SECTION_END` or `ERROR`
 (`lib/timeline/chat/packetHelpers.ts:isGroupEndPacket`,
@@ -387,7 +626,8 @@ unchanged call, so memoized renderers of finished calls do not redraw.
 `ResearchAgentRenderer` draws each entry of `nestedCalls` with the renderer of its tool.
 After the answer starts, a tool packet of a group whose tool has not started
 is a new tool call and sets `finalAnswerComing` back to false. The tool starts
-with its first tool packet other than a streamed argument, so a call whose
+with its first tool packet other than a pre-start packet
+([[streaming-protocol]]), so a call whose
 arguments streamed before the answer also counts when it starts. A later
 packet of a started tool, such as a code mode closing record, joins its group,
 and the answer stays shown. The stop packet sets `finalAnswerComing` again
@@ -716,21 +956,49 @@ up its own branding.
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
 
-15. `scroll-follow-intent` **Content growth must not cancel following.**
-    `sections/chat/ChatScrollContainer.tsx` keeps following intent across the
-    typewriter drain and spacer smooth-scroll pauses. When either pause ends,
-    catch up if auto-scroll is enabled and the user has not scrolled away.
-    During the opening-follow window, content observers can also catch up with
-    auto-scroll disabled. Scrolling up ends that window. Content observers
-    update visual state without treating layout growth as a user scroll. When
-    the content shrinks, an upward scroll up to the shrinkage is layout, not
-    the user, so only movement beyond it stops following.
-    Every scroll baseline records the position and the content height
-    together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
-    turn sent from the page, which passes through `loading`. A run the page
-    resumes starts at `streaming` and gets no space. The scroll element is
-    keyed by session, so a chat switch remounts the spacer. Its unmount clears
-    its state and the shared spacer height.
+15. `scroll-follow-intent` **The user's input sets the scroll mode; layout keeps it.**
+    `lib/chatScroll/components/ChatScrollContainer.tsx` is in one of three
+    modes: `following` keeps to the end as content grows; `reading` never moves
+    (native scroll anchoring keeps the content still); `gliding` is its own
+    smooth scroll to the end (a send, the button), which ends on `scrollend` or
+    a timeout. A scroll event is the user's only within 600ms of scroll input
+    (wheel, touch, scroll keys, a focus move into the view), or while a pointer
+    is held on the view; each such move restarts the 600ms, so a fling stays the
+    user's while it moves. Then the position sets the mode. A glide ignores
+    input from before it started, and a send's glide stops at the user message
+    of a turn taller than the view, which then reads. A move that keeps the
+    distance from the end is native anchoring, not the user, even with a
+    pointer held. Any other move is layout (Firefox clamps the
+    position while content briefly shrinks, anchoring adjusts, a glide runs),
+    and only a `following` view reacts, by returning to the end. The one
+    exception: with auto-scroll off while a reply runs, growth that leaves the
+    end makes the view `reading`, so a later resume never jumps. A change of
+    the chat's width, such as the right panel opening or resizing, reflows the
+    rows; a `following` view then keeps to the end also with auto-scroll off. The
+    typewriter's drain is a pause (`pauseFollowing`), and the view catches up
+    when it ends. Do not write `scrollTop` while the user scrolls: a following
+    view catches up once the input settles. Keep native scroll anchoring on: a
+    script write stops a trackpad fling.
+    **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
+    user message and its replies) in a `data-chat-turn` element. The latest turn
+    has `min-height: calc(100cqh - 3rem)` (the scroll element is a size
+    container): at the end of every chat, in every tab and after a reload, the
+    latest user message sits 1rem below the top, with space below it, while the
+    turn fits in that height. A taller turn ends at the bottom, and its user
+    message is above the viewport. Nothing
+    measures it. A send glides to the end through
+    `lib/chatScroll/hooks.ts:useScrollToNewTurn` (only while the chat is
+    `loading`, and not on a switch back to a running chat, so a resumed run
+    never moves the view). The scroll-to-bottom button ignores the latest
+    turn's unfilled space. Text that grows inside that space changes no scroll
+    height, so a ResizeObserver watches the latest turn's rows.
+    Each chat's position (end, or a row and offset) and its row heights live
+    in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
+    them from loaded rows only, so a switch never waits on the network. Rows
+    use `lib/chat/rowIds.ts:messageRowId`.
+    Craft's transcript (`app/craft/components/ChatPanel.tsx`) uses the same
+    `ChatScrollContainer`, with its composer in the `footer` slot. Its rows are
+    not turn groups, so Craft has no space below its latest turn.
 
 ---
 
@@ -756,9 +1024,12 @@ up its own branding.
 - **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
   not awaited. A send that reaches the server first can fail with "not on the
   latest mainline". This is inferred from the code, not seen in a test.
-- **Auto-naming can run twice.** `handleNewSessionNaming` names a new session
-  after its first answer, and the session controller names an untitled session
-  with two or more messages on load. A quick reload can trigger both.
+- **The server names a new chat.** It names it during the first turn and sends
+  a `chat_session_name` line, because `sendMessage` sets
+  `accepts_chat_session_name`. `handleNewSessionNaming` runs only when the
+  stream ends without that line. It and the session controller's on-load naming
+  call `PUT /chat/rename-chat-session`, which returns a saved name or waits for
+  one in progress (one naming lock per chat, `backend/onyx/chat/session_naming.py`).
 
 ---
 

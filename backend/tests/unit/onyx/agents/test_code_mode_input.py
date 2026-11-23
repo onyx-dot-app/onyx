@@ -27,6 +27,7 @@ from onyx.agents.models import (
     RunStatus,
     ToolCallContext,
     ToolResultAmendment,
+    ToolResultContext,
 )
 from onyx.agents.runtime import Agent, RestorableFeature, Run
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
@@ -189,6 +190,8 @@ class Agents:
         self.limits = PARKING_LIMITS
         # Set once a request shows; later model steps wait for it.
         self.shown = threading.Event()
+        # The agents' prepare_tool_result hook.
+        self.prepare: Callable[[ToolResultContext], ToolResult] | None = None
 
     def send(self, invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
         self.sent.append(invocation.arguments["value"])
@@ -236,6 +239,7 @@ class Agents:
             on_suspend=cells.suspend,
             on_finish=cells.finish,
             restoration=CellsFeature(cells),
+            prepare_tool_result=self.prepare,
         )
 
 
@@ -1148,6 +1152,75 @@ def test_a_restored_run_that_ends_before_its_answer_closes_the_saved_cell() -> N
     assert result is not None and result.is_error
     assert "before" in result.text and "[0] send: unfinished" in result.text
     assert agents.sent == []
+
+
+def test_a_restored_cell_gives_the_hook_the_output_that_its_cut_leaves_out() -> None:
+    # Within the cell's collector (LIMITS), over the observation's cut.
+    program = 'print("x" * 1_500)\nr = await tools.send(value="x")\nprint("sent", r)'
+    agents = Agents(
+        ToolCall(
+            id="program",
+            name=CodeModeTool.NAME,
+            arguments={"code": program, "max_output_chars": 300},
+        )
+    )
+    prepared: list[ToolResultContext] = []
+
+    def prepare(context: ToolResultContext) -> ToolResult:
+        prepared.append(context)
+        return context.result.model_copy(
+            update={"content": f"{context.result.content}\n[spilled]"}
+        )
+
+    agents.prepare = prepare
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _transferred(run)
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state, answers=[_answer(InputDecision.APPROVE)]
+    )
+    output = resumed.result(timeout=20).output.text
+    assert resumed.wait_for_idle(10)
+
+    [context] = prepared
+    full = context.result.full_value
+    assert isinstance(full, str)
+    assert "x" * 1_500 in full and "sent {'sent': 'x'}" in full
+    assert "x" * 1_500 not in context.result.content
+    assert output == f"{context.result.content}\n[spilled]"
+
+
+def test_an_unresumed_cell_gives_the_hook_the_output_that_its_cut_leaves_out() -> None:
+    program = 'print("x" * 1_500)\nr = await tools.send(value="x")\nprint("sent", r)'
+    agents = Agents(
+        ToolCall(
+            id="program",
+            name=CodeModeTool.NAME,
+            arguments={"code": program, "max_output_chars": 300},
+        )
+    )
+    prepared: list[ToolResultContext] = []
+
+    def prepare(context: ToolResultContext) -> ToolResult:
+        prepared.append(context)
+        return context.result
+
+    agents.prepare = prepare
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _transferred(run)
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state, answers=[]
+    )
+    _suspended(resumed)
+    resumed.cancel()
+    assert resumed.wait_for_idle(10)
+
+    [context] = prepared
+    assert context.amended
+    full = context.result.full_value
+    assert isinstance(full, str) and "x" * 1_500 in full
+    assert "x" * 1_500 not in context.result.content
 
 
 def test_a_restored_call_whose_function_now_names_another_tool_does_not_run() -> None:

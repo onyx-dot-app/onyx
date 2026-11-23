@@ -1228,6 +1228,14 @@ def add_credential_to_connector(
             data=connector_id,
         )
 
+    # The ingestion API never gets an index attempt, so nothing would ever
+    # move its pair out of SCHEDULED. It starts ACTIVE, like DefaultCCPair.
+    if (
+        connector.source == DocumentSource.INGESTION_API
+        and initial_status == ConnectorCredentialPairStatus.SCHEDULED
+    ):
+        initial_status = ConnectorCredentialPairStatus.ACTIVE
+
     association = ConnectorCredentialPair(
         creator_id=user.id,
         connector_id=connector_id,

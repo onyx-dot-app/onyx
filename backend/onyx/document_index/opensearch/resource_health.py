@@ -56,7 +56,7 @@ def evaluate_resource_health(
     vector_high_nodes: set[str] = {
         node_id
         for node_id, node in vectors.nodes.items()
-        if node.graph_memory_usage_percentage >= VECTOR_USAGE_THRESHOLD_PERCENT
+        if node.usage_percent >= VECTOR_USAGE_THRESHOLD_PERCENT
     }
     issues: list[ResourceIssue] = []
     if any(

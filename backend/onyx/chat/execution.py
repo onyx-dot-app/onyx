@@ -33,7 +33,12 @@ from onyx.chat.errors import chat_error
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.incognito import incognito_llm_request_policy
 from onyx.chat.incognito_context import incognito_session_ended
-from onyx.chat.models import ChatResponseOutcome, ChatTurnSetup, CreateChatSessionID
+from onyx.chat.models import (
+    ChatResponseOutcome,
+    ChatSessionNameInfo,
+    ChatTurnSetup,
+    CreateChatSessionID,
+)
 from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.prompt_utils import build_language_section
@@ -44,6 +49,7 @@ from onyx.chat.run_store import (
     ChatRunStore,
     fail_suspended_response,
 )
+from onyx.chat.session_naming import name_new_chat_session
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.configs.chat_configs import (
@@ -105,7 +111,10 @@ from onyx.tools.tool_implementations.skills.skill_tools import (
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import start_thread_future
+from onyx.utils.threadpool_concurrency import (
+    start_thread_future,
+    start_thread_with_context,
+)
 from shared_configs.contextvars import (
     CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
     CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR,
@@ -220,6 +229,13 @@ def start_chat_turn(
                 setup.mentions,
             )
         )
+        if setup.auto_name:
+            # In parallel with the answer; a failure never touches the turn.
+            start_thread_with_context(
+                _name_new_chat_session,
+                name="chat-naming",
+                args=(setup, user, turn.delivery),
+            )
         if query_observation is not None:
             query_observation.writer_owned = True
         control = start_thread_future(
@@ -243,6 +259,31 @@ def start_chat_turn(
     finally:
         CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.reset(session_token)
         CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.reset(mode_token)
+
+
+def _name_new_chat_session(
+    setup: ChatTurnSetup, user: User, delivery: ChatDelivery
+) -> None:
+    """Name a new chat from its first question, and send the name on the
+    turn's stream. A stream that already ended drops the packet; the saved name
+    reaches the client on its next session fetch."""
+    try:
+        name = name_new_chat_session(
+            chat_session_id=setup.chat_session_id,
+            user=user,
+            chat_llm=setup.responses[0].llm,
+            additional_headers=setup.litellm_additional_headers,
+        )
+    except Exception:
+        logger.exception("Could not name the new chat session")
+        return
+    # Only a client that asked for it reads this line.
+    if name is not None and setup.new_msg_req.accepts_chat_session_name:
+        delivery.publish(
+            ChatSessionNameInfo(
+                chat_session_id=setup.chat_session_id, chat_session_name=name
+            )
+        )
 
 
 class ChatTurnExecution:
@@ -993,7 +1034,10 @@ def create_chat_agent(
         # user's current skills. Restored and child agents receive them with
         # the other configured tools.
         if setup.has_chat_skills:
-            tools += [SkillsListTool(user), SkillsReadTool(user)]
+            tools += [
+                SkillsListTool(user, built_ins=setup.sandbox_tools),
+                SkillsReadTool(user, built_ins=setup.sandbox_tools),
+            ]
 
         preferred_tool = setup.preferred_tool
         if preferred_tool is not None and not any(
@@ -1045,6 +1089,8 @@ def create_chat_agent(
                 tenant_id=get_current_tenant_id(),
                 user_id=user.id,
                 chat_session_id=setup.chat_session_id,
+                vm_chat_files=setup.vm_chat_files,
+                copy_vm_chat_files=setup.copy_vm_chat_files,
             )
             if setup.sandbox_tools
             else None

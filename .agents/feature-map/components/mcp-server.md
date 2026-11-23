@@ -47,7 +47,11 @@
   challenge, an inactive subscription gets a 402, and an API server outage
   gets a 503. A tool call with an unknown source, document set or agent
   returns an error that names the valid values when the list is short. A deployment with no indexed sources, or with no vector database,
-  returns an error from the search tool. With no active web search provider,
+  returns an error from the search tool. The source list comes from
+  `GET /manage/indexed-sources?include_ingestion_api=true`, which adds
+  `ingestion_api` only when an Ingestion API connector holds documents
+  (`backend/onyx/db/connector.py:fetch_unique_document_sources`). The default Ingestion API
+  connector always exists, so its row alone does not count. With no active web search provider,
   `search_web` gets `INVALID_INPUT` from `/web-search/search-lite`, and the
   tool is still listed. `open_urls` falls back to the built-in crawler when no
   content provider is set.
@@ -155,6 +159,10 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    shapes are a client contract.** Clients cache the tool list. A rename, a new
    required argument or a change to `mcp_server/tools/search.py:_to_mcp_dict`
    breaks configured clients with no error until they list tools again.
+   `search_indexed_documents` returns a `ToolResult` with one JSON text block
+   (`mcp_server/tools/search.py:_as_tool_result`), so it has no output schema and no
+   `structuredContent` copy of the results. `_to_mcp_dict` omits empty
+   `metadata` to keep results small.
 5. `errors-as-results` **Errors come back as a result, not as an MCP error.**
    `mcp_server/tools/search.py:_error_payload` returns `{"error": ...,
    "results": []}`. A client sees a successful call whose content is the error

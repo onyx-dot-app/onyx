@@ -33,7 +33,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import AssistantMessage, Message, ToolResult
+from onyx.llm.models import AssistantMessage, Message, ToolResultFields
 from onyx.tools.constants import QUESTION_TOOL_NAMES
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
@@ -242,7 +242,7 @@ def persist_checkpoint_files(
     def messages(items: list[Message]) -> None:
         for message in items:
             payload(message.metadata)
-            if isinstance(message, ToolResult):
+            if isinstance(message, ToolResultFields):
                 payload(message.details)
 
     def snapshot(record: RunState) -> None:

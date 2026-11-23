@@ -1,6 +1,11 @@
 # Descriptions of the sandbox tools that the model reads.
 
-from onyx.server.features.build.sandbox.harness_base import ONYX_VM_FILES_ROOT
+from onyx.server.features.build.sandbox.harness_base import (
+    AGENT_FILES_DIR,
+    CHAT_FILES_DIR,
+    ONYX_VM_FILES_ROOT,
+    PROJECT_FILES_DIR,
+)
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_FILES,
@@ -24,6 +29,21 @@ EXEC_COMMAND_DESCRIPTION = (
     "Runs a command with bash, returning output or a session ID for ongoing "
     "interaction. The command runs without a PTY: stdin, stdout and stderr are "
     "plain pipes. The default working directory is this chat's session directory."
+)
+# The end of the exec_command description in a chat with chat files
+# (tools/tool_implementations/sandbox/file_copies.py).
+CHAT_FILES_LAYOUT = (
+    f"{CHAT_FILES_DIR}/ has copies of the chat's files: the user's uploads, "
+    f"the project's files in {PROJECT_FILES_DIR}/ and the agent's files in "
+    f"{AGENT_FILES_DIR}/. Each name starts with a short file ID. Onyx can "
+    "put back the original files at any turn, so write a changed file to a "
+    f"path outside {CHAT_FILES_DIR}/."
+)
+
+# The end of an edit, write or apply_patch result that changed a chat file.
+ATTACHMENTS_NOT_SAVED_NOTE = (
+    f"Onyx can put back the original files in {CHAT_FILES_DIR}/ at any turn. "
+    f"Write the changed file to a path outside {CHAT_FILES_DIR}/ to keep it."
 )
 
 WRITE_STDIN_DESCRIPTION = (
@@ -105,7 +125,7 @@ Usage:
 - Make and check files anywhere in the VM. Publish only finished deliverables, not drafts, scripts or intermediate files.
 - Each path must be a regular file of at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Copy a file from elsewhere into the working directory first.
 - One call publishes at most {PUBLISH_FILES_MAX_FILES} files. If one file fails, the call publishes none.
-- Publishing a file with the same name again adds a new version; earlier cards do not change.
+- Publishing the same path again adds a new version of that file; earlier cards keep their version.
 - Do not paste the contents of a published file into your reply.
 - Do not tell the user that a file is available unless this tool succeeded.
 """

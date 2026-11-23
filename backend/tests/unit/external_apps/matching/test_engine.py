@@ -1,5 +1,7 @@
 """Recognition uses provider catalogs without loading permission or credential state."""
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -47,3 +49,38 @@ def test_custom_app_unknown_action_is_the_whole_domain_action() -> None:
     )
     assert matched[0].action_type == WHOLE_DOMAIN_ACTION_TYPE
     assert matched[0].policy == ActionPolicy.ASK
+
+
+def _linear_actions(body: object) -> list[str]:
+    matched = recognize_actions(
+        ExternalAppType.LINEAR,
+        ProxiedRequest(method="POST", path="/graphql", body=json.dumps(body).encode()),
+    )
+    return [action.action_type for action in matched]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {
+            "query": 'query A { viewer { id } } mutation B { issueDelete(id: "x") { success } }'
+        },
+        {"query": "{ viewer { id } organization { id } }"},
+        [
+            {"query": "{ viewer { id } }"},
+            {"query": 'mutation { issueDelete(id: "x") { success } }'},
+        ],
+    ],
+    ids=["two_operations", "two_root_fields", "batch"],
+)
+def test_unknown_graphql_field_next_to_a_known_one_asks(body: object) -> None:
+    actions = _linear_actions(body)
+    assert actions[0] == WHOLE_DOMAIN_ACTION_TYPE
+    assert "linear.viewer.read" in actions
+
+
+def test_known_graphql_fields_of_one_action_do_not_ask() -> None:
+    actions = _linear_actions(
+        {"query": '{ issues { nodes { id } } issue(id: "x") { id } }'}
+    )
+    assert actions == ["linear.issues.read"]

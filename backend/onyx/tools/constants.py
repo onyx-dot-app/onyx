@@ -46,3 +46,13 @@ CITEABLE_TOOLS_NAMES: list[str] = [
 ]
 
 FILE_READER_MAX_CHARS = 16000
+
+# The model's cut of a tool's output (code mode cells, exec_command and
+# write_stdin, argument `max_output_chars`): the default and the most.
+DEFAULT_MAX_OUTPUT_CHARS = 40_000
+MAX_OUTPUT_CHARS = 160_000
+MAX_OUTPUT_CHARS_DESCRIPTION = (
+    "Character budget for the output this call returns; longer output is cut in "
+    f"the middle. Defaults to {DEFAULT_MAX_OUTPUT_CHARS} characters, at most "
+    f"{MAX_OUTPUT_CHARS}."
+)

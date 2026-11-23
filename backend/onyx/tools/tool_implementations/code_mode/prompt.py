@@ -2,8 +2,8 @@
 
 import json
 from collections.abc import Sequence
+from typing import NamedTuple
 
-from onyx.agents.compaction import count_tokens, head_and_tail_tokens
 from onyx.tools.tool_implementations.code_mode.models import (
     CellClosing,
     CellWindow,
@@ -31,7 +31,10 @@ from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageResult,
 )
-from onyx.tools.tool_implementations.utils import truncate_output
+from onyx.tools.tool_implementations.utils import (
+    truncate_output,
+    truncation_marker,
+)
 
 # Characters of the notes after the output; they are never cut by the budget.
 MAX_NOTES_CHARS = 10_000
@@ -249,24 +252,13 @@ def continues_note(cell_id: int) -> str:
     )
 
 
-def token_budget(text: str, max_tokens: int, *, elided_chars: int = 0) -> str:
-    """`text` within `max_tokens`, cut in the middle with a warning that gives
-    the original token count.
+class CellContent(NamedTuple):
+    """The text that the model reads for one window of a cell."""
 
-    `elided_chars` were already cut from the middle of `text`; the count
-    estimates their tokens at the ratio of `text`.
-    """
-    head, tail, count = head_and_tail_tokens(text, max_tokens)
-    if count <= max_tokens:
-        return text
-    if elided_chars:
-        count += round(elided_chars * count / max(1, len(text)))
-    lines = text.count("\n") + 1
-    return (
-        f"Warning: truncated output (original token count: {count})\n"
-        f"Total output lines: {lines}\n\n"
-        f"{head}…{count - max_tokens} tokens truncated…{tail}"
-    )
+    text: str
+    # When the budget cut text from the sections after the heading (the
+    # printed output, the result, the error): those sections, uncut.
+    full_value: str | None
 
 
 def format_content(
@@ -276,12 +268,12 @@ def format_content(
     status: CodeModeStatus,
     cell_id: int,
     cell_calls: Sequence[CodeModeCall],
-    max_tokens: int,
+    max_chars: int,
     end: SandboxResult | None,
     discarded: DiscardedWrites | None,
     elided_chars: int,
     lost_store_writes: LostStoreWrites | None = None,
-) -> str:
+) -> CellContent:
     """The text the model reads for one window of a cell: an observation, or
     the closing record after the last one. `heading` is its first line.
 
@@ -289,9 +281,11 @@ def format_content(
     window that reports a program that did not complete lists them, since they
     may have had effects. `end` and `discarded` (store() writes that did not
     commit) are set when the window reports the program's end. The output
-    sections share `max_tokens` with the notes after them and are cut once.
-    `elided_chars` were cut from the middle of the printed text before this.
-    `lost_store_writes` are earlier commits that the store dropped.
+    sections share `max_chars` with the notes after them and are cut once in
+    the middle, with a warning that gives the original character count.
+    `elided_chars` were cut from the middle of the printed text before this;
+    the count includes them. `lost_store_writes` are earlier commits that the
+    store dropped.
     """
     completed = status == "completed"
     running = status == "running"
@@ -323,9 +317,22 @@ def format_content(
     note_text = truncate_output(
         note_text, MAX_NOTES_CHARS, label="code mode notes", keep_tail=True
     )
-    text = token_budget(
-        "\n\n".join(sections),
-        max(0, max_tokens - (count_tokens(note_text) if note_text else 0)),
-        elided_chars=elided_chars,
+    text = "\n\n".join(sections)
+    max_text_chars = max(0, max_chars - len(note_text))
+    full_value = None
+    if len(text) > max_text_chars:
+        count = len(text) + elided_chars
+        head_chars = max_text_chars // 2
+        tail_start = len(text) - (max_text_chars - head_chars)
+        # The sections after the heading start after its "\n\n" separator.
+        if tail_start > len(heading) + 2:
+            full_value = "\n\n".join(sections[1:])
+        text = (
+            f"Warning: truncated output (original character count: {count})\n"
+            f"Total output lines: {text.count('\n') + 1}\n\n"
+            f"{text[:head_chars]}{truncation_marker(count - max_text_chars)}"
+            f"{text[tail_start:]}"
+        )
+    return CellContent(
+        text=f"{text}\n\n{note_text}" if note_text else text, full_value=full_value
     )
-    return f"{text}\n\n{note_text}" if note_text else text

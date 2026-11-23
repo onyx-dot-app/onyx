@@ -2,11 +2,14 @@ import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text, type TextColor } from "@opal/components";
+import { codeSpan, markdown, richNodes, stripBidiControls } from "@opal/utils";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   ApplyPatchEnd,
   ApplyPatchFileChange,
+  ApplyPatchStart,
   ApplyPatchToolPacket,
+  FileToolProgress,
   PacketType,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
@@ -39,7 +42,7 @@ function renderPatchLines(text: string) {
     coloredLines.reduce((length, line) => length + line.length + 1, 0)
   );
   return (
-    <div className="whitespace-pre-wrap wrap-break-word">
+    <div dir="ltr" className="whitespace-pre-wrap wrap-break-word">
       {coloredLines.map((line, index) => (
         <Text
           key={index}
@@ -66,6 +69,53 @@ function renderPatchLines(text: string) {
   );
 }
 
+interface FileRow {
+  path: string;
+  // Set once the call changed the file
+  change: ApplyPatchFileChange["change"] | null;
+  movePath: string | null;
+}
+
+/** The files of a call: named while it streams, then marked as changed. */
+function FileList({ files }: { files: FileRow[] }) {
+  return (
+    <Section gap={1} alignItems="start" height="fit">
+      {files.map((file, index) => (
+        <Section
+          key={index}
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="start"
+          gap={2}
+          height="fit"
+        >
+          {file.change !== null && (
+            <Text
+              font="secondary-mono"
+              color={CHANGE_MARKERS[file.change].color}
+            >
+              {CHANGE_MARKERS[file.change].marker}
+            </Text>
+          )}
+          <Text font="secondary-mono" color="text-04" wordWrap="break-all">
+            {richNodes(
+              <>
+                <span dir="ltr">{stripBidiControls(file.path)}</span>
+                {file.movePath !== null && (
+                  <>
+                    {" → "}
+                    <span dir="ltr">{stripBidiControls(file.movePath)}</span>
+                  </>
+                )}
+              </>
+            )}
+          </Text>
+        </Section>
+      ))}
+    </Section>
+  );
+}
+
 type ApplyPatchToolRendererProps = ComponentProps<
   MessageRenderer<ApplyPatchToolPacket, {}>
 >;
@@ -79,19 +129,23 @@ export function ApplyPatchToolRenderer({
   children,
 }: ApplyPatchToolRendererProps) {
   const t = useTranslations("chat.messages.timeline");
-  const { patch, end } = useMemo(() => {
-    let patch = "";
+  const { start, end, progress } = useMemo(() => {
+    let start: ApplyPatchStart | null = null;
     let end: ApplyPatchEnd | null = null;
+    let progress: FileToolProgress | null = null;
     for (const { obj } of packets) {
       if (obj.type === PacketType.APPLY_PATCH_START) {
-        patch = obj.patch;
+        start = obj;
       } else if (obj.type === PacketType.APPLY_PATCH_END) {
         end = obj;
+      } else if (obj.type === PacketType.FILE_TOOL_PROGRESS) {
+        progress = obj;
       }
     }
-    return { patch, end };
+    return { start, end, progress };
   }, [packets]);
-  const { error, stopped } = useSandboxCallStatus(
+  const patch = start?.patch ?? "";
+  const { isComplete, error, stopped } = useSandboxCallStatus(
     packets,
     end,
     stopPacketSeen,
@@ -110,41 +164,59 @@ export function ApplyPatchToolRenderer({
     return lineEnd + 1 < patch.length ? `${patch.slice(0, lineEnd)}\n…` : patch;
   }, [patch]);
 
+  // While the model writes the arguments, their progress names the step; the
+  // start packet replaces it with the card that replay shows. A call that
+  // ends without a start shows only how it ended.
+  const liveProgress = start !== null || isComplete ? null : progress;
+  const [progressPath] = liveProgress?.paths ?? [];
+  const pathCode =
+    progressPath === undefined
+      ? null
+      : codeSpan(stripBidiControls(progressPath));
+
   const status = stopped
     ? t("sandbox.stopped.status")
     : error !== null
       ? t("sandbox.patch.failed.status")
       : end !== null
         ? t("sandbox.patch.edited.status", { count: end.files.length })
-        : t("header.editingFiles.label");
+        : liveProgress === null
+          ? t("header.editingFiles.label")
+          : liveProgress.tool_name === "apply_patch"
+            ? t("sandbox.patch.progress.patching.status", {
+                count: liveProgress.paths.length,
+              })
+            : pathCode === null
+              ? t("sandbox.patch.progress.unnamed.status", {
+                  tool: liveProgress.tool_name,
+                })
+              : markdown(
+                  t("sandbox.patch.progress.named.status", {
+                    tool: liveProgress.tool_name,
+                    path: pathCode,
+                  })
+                );
 
   const content = (
     <SandboxCallContent renderType={renderType}>
+      {liveProgress?.tool_name === "apply_patch" && (
+        <FileList
+          files={liveProgress.paths.map((path) => ({
+            path,
+            change: null,
+            movePath: null,
+          }))}
+        />
+      )}
+
       {end !== null && end.files.length > 0 && (
-        <Section gap={1} alignItems="start" height="fit">
-          {end.files.map((file) => (
-            <Section
-              key={file.path}
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="start"
-              gap={2}
-              height="fit"
-            >
-              <Text
-                font="secondary-mono"
-                color={CHANGE_MARKERS[file.change].color}
-              >
-                {CHANGE_MARKERS[file.change].marker}
-              </Text>
-              <Text font="secondary-mono" color="text-04" wordWrap="break-all">
-                {file.move_path
-                  ? `${file.path} → ${file.move_path}`
-                  : file.path}
-              </Text>
-            </Section>
-          ))}
-        </Section>
+        <FileList
+          files={end.files.map((file) => ({
+            path: file.path,
+            change: file.change,
+            movePath: file.move_path,
+          }))}
+        />
       )}
 
       {error !== null && <SandboxCallError error={error} />}
@@ -165,6 +237,9 @@ export function ApplyPatchToolRenderer({
     {
       icon: STEP_ICONS.edit,
       status,
+      // The live progress updates in place; only the end of the call swaps
+      // the title.
+      statusKey: liveProgress === null ? undefined : "progress",
       supportsCollapsible: true,
       content,
     },

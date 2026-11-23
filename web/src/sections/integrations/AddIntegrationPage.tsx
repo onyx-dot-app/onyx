@@ -23,9 +23,13 @@ import {
 } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgCodeFile, SvgPlug } from "@opal/icons";
-import { useNavigation } from "@opal/navigation";
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { customizeTabHref, integrationHref } from "@/lib/customize/paths";
+import {
+  customizeTabHref,
+  integrationHref,
+  parseNewIntegrationPrefill,
+} from "@/lib/customize/paths";
 import { integrationDetailHref } from "@/lib/integrations/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
@@ -72,6 +76,7 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
   const tabCopy = useTranslations("customize.tabs");
   const listCopy = useTranslations("admin.integrations");
   const navigation = useNavigation();
+  const prefill = parseNewIntegrationPrefill(useSearchParams());
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_ACTIONS);
   const canChooseOrganization = from === "admin" && isGlobalHolder;
   const { mutate } = useSWRConfig();
@@ -89,13 +94,18 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
   const [schemaOpen, setSchemaOpen] = useState(false);
   const [schemaBusy, setSchemaBusy] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(prefill?.name ?? "");
   const [description, setDescription] = useState("");
-  const [forOrganization, setForOrganization] = useState(false);
+  // Null until the user picks: the prefill decides, also when the
+  // permission loads after the first render.
+  const [ownerChoice, setForOrganization] = useState<boolean | null>(null);
+  const forOrganization = ownerChoice ?? prefill?.forOrganization === true;
   const [signIn, setSignIn] = useState<SignInDraft>(DEFAULT_SIGN_IN);
   const [signInTouched, setSignInTouched] = useState(false);
-  const [serverUrl, setServerUrl] = useState("");
-  const [transport, setTransport] = useState<McpTransport>("STREAMABLE_HTTP");
+  const [serverUrl, setServerUrl] = useState(prefill?.serverUrl ?? "");
+  const [transport, setTransport] = useState<McpTransport>(
+    prefill?.transport ?? "STREAMABLE_HTTP"
+  );
   const [openapiSpec, setOpenapiSpec] = useState<Record<
     string,
     unknown
@@ -229,6 +239,14 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
         config: body,
       });
       toast.success(t("created", { name: created.name }));
+      if (prefill?.returnTo) {
+        await Promise.all([
+          mutate(SWR_KEYS.integrations),
+          mutate(SWR_KEYS.adminIntegrations),
+        ]);
+        navigation.go(prefill.returnTo);
+        return;
+      }
       // The detail page reads the new integration from the list.
       if (from === "admin") {
         await mutate(SWR_KEYS.adminIntegrations);

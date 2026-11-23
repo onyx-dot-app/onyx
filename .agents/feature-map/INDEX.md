@@ -120,8 +120,8 @@ The product that runs a coding agent in a sandbox for each user.
 | [craft-sandboxes](components/craft-sandboxes.md) | The sandbox a user's Craft sessions run in, on Kubernetes or Docker: provisioning, the sidecar daemon, snapshot and restore, idle sleep, resource cleanup, and the network lockdown that sends all traffic to the egress proxy. |
 | [craft-webapp-proxy](components/craft-webapp-proxy.md) | Lets a user see, inside Onyx, the web app that their Craft session builds and the static HTML files it writes; it is the trust boundary between code that an LLM wrote and the viewer's browser. |
 | [craft-external-apps](components/craft-external-apps.md) | The egress proxy that every outbound request from a Craft sandbox goes through, and the external apps it gates. A request to a connected app or MCP server gets an action policy check, an approval wait for Ask actions, and the real credential; other public traffic goes out with no policy check. |
-| [craft-scheduled-tasks](components/craft-scheduled-tasks.md) | A user schedules a Craft prompt to run on a timer. Each fire creates a new headless Craft session in the owner's sandbox, runs one agent turn with nobody watching, and records a run row the user can open later. |
-| [skills](components/skills.md) | Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read as custom skills. This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools. |
+| [craft-scheduled-tasks](components/craft-scheduled-tasks.md) | A user schedules a prompt to run on a timer. Each fire creates a new hidden chat owned by the user, runs one chat turn of the default agent with nobody watching, and records a run row that the user opens later as a chat. |
+| [skills](components/skills.md) | Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read (custom skills, and on a deployment with chat VMs the chat built-ins). This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools. |
 
 ---
 
@@ -170,7 +170,7 @@ section of [CROSS-CUTTING.md](CROSS-CUTTING.md), if one exists.
 | A built-in Craft app | [[craft-external-apps#built-in-app]] → [[skills#add-built-in-skill]] → [[craft-admin#external-app-admin-field]] (if the app needs one) |
 | A new host for an existing built-in Craft app | [[craft-external-apps#new-host-for-built-in-app]] → [[skills#add-built-in-skill]] (update the skill files) |
 | A Craft workspace setting | [[craft-admin#workspace-setting]] → [[editions-and-gating#add-paid-field]] (if paid) → [[craft-sandboxes]] (if the sandbox reads it) |
-| A Celery task for Craft scheduled tasks | [[background-jobs#periodic-task]] → [[craft-scheduled-tasks#celery-task]] |
+| A Celery task for scheduled tasks | [[background-jobs#periodic-task]] → [[craft-scheduled-tasks#celery-task]] |
 | A skill mutation or sharing route | [[skills#add-skill-mutation-route]] → [[craft-sandboxes]] (the push transport) |
 | Investigate a leak: a user sees a document they should not, or cannot see one they should | [[access-control#investigate-acl-mismatch]] → [[permission-sync#investigate-leak]] → [[document-index#investigate-stale-acl]] |
 | Investigate a private document in a Slack or Discord answer | [[slack-bot#investigate-private-doc-in-answer]] → [[discord-bot#no-member-identity]] → [[federated-search#investigate-slack-leak]] |
@@ -189,5 +189,5 @@ section of [CROSS-CUTTING.md](CROSS-CUTTING.md), if one exists.
 | Investigate a Craft turn that hangs or shows no output | [[craft-sessions#investigate-stuck-turn]] → [[craft-streaming#investigate-stream]] → [[craft-frontend#reproduce-queue-bug]] |
 | Investigate a Craft web app preview that stays offline | [[craft-webapp-proxy#investigate-preview-offline]] → [[craft-sandboxes#investigate-craft-fails-to-start]] |
 | Investigate a blocked or failed Craft app call | [[craft-external-apps#investigate-app-call-failed]] → [[craft-sandboxes#investigate-craft-fails-to-start]] (if no proxy line appears) |
-| Investigate a Craft scheduled task that did not run | [[craft-scheduled-tasks#investigate-task-did-not-run]] → [[craft-admin#investigate-craft-off]] (if the run is skipped because Craft is off for the owner) |
+| Investigate a scheduled task that did not run | [[craft-scheduled-tasks#investigate-task-did-not-run]] |
 | Test paid features locally | [[billing#load-license-locally]] → [[editions-and-gating#test-ce-or-ee]] |

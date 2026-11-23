@@ -28,7 +28,8 @@ type AppPositionType =
         | "new-session"
         | "user-settings"
         | "shared-chat"
-        | "customize";
+        | "customize"
+        | "scheduled-tasks";
     };
 
 /** A row id, or null for a parameter that is absent or is not one. */
@@ -63,6 +64,8 @@ function hrefFor(value: AppPositionType): Route {
       return "/app/agents";
     case "customize":
       return "/app/customize";
+    case "scheduled-tasks":
+      return "/app/scheduled-tasks";
     case "user-settings":
       return "/app/settings";
     case "shared-chat":
@@ -193,6 +196,10 @@ class AppPosition {
     return this.value.location === "customize";
   }
 
+  isScheduledTasks(): boolean {
+    return this.value.location === "scheduled-tasks";
+  }
+
   isUserSettings(): boolean {
     return this.value.location === "user-settings";
   }
@@ -267,6 +274,12 @@ export function useAppPosition(): AppPosition {
       pathname.startsWith("/app/customize/")
     ) {
       return new AppPosition({ location: "customize" }, navigation);
+    }
+    if (
+      pathname === "/app/scheduled-tasks" ||
+      pathname.startsWith("/app/scheduled-tasks/")
+    ) {
+      return new AppPosition({ location: "scheduled-tasks" }, navigation);
     }
     if (pathname.startsWith("/app/agents")) {
       return new AppPosition({ location: "more-agents" }, navigation);

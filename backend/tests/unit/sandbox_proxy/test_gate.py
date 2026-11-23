@@ -34,15 +34,11 @@ from onyx.db.enums import (
     ApprovalDecision,
     IntegrationKind,
 )
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
     MatchedAction,
 )
-from onyx.integrations.craft import TaskIntegrations
-from onyx.integrations.models import ActionSettings
 from onyx.sandbox_proxy import destination_policy
 from onyx.sandbox_proxy.addons import gate
 from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
@@ -89,7 +85,6 @@ class _StubMatcher(RequestEvaluator):
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
-        scheduled_task_id: UUID | None,  # noqa: ARG002
     ) -> AllMatchedActions | McpProtocolRequest | None:
         self.calls += 1
         if self._exc is not None:
@@ -137,9 +132,6 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *_args, **_kwargs: _addrinfo("93.184.216.34"),
     )
     monkeypatch.setattr(gate, "pin_destination", lambda _host, _port, _address: None)
-    monkeypatch.setattr(
-        gate, "get_active_scheduled_task_context", lambda _db, _session: None
-    )
     monkeypatch.setattr(
         gate,
         "resolve_gate_policies",
@@ -600,7 +592,6 @@ async def test_ask_denied_blocks(
 # ---------------------------------------------------------------------------
 
 
-_RUN_ID = UUID("55555555-5555-5555-5555-555555555555")
 # make_matched_actions defaults external_app_id=42.
 _GRANTED_APP_ID = 42
 _GRANTED_MCP_SERVER_ID = 73
@@ -1735,28 +1726,21 @@ async def test_personal_setting_restricts_catalog_auto_approval(
 
 
 @pytest.mark.asyncio
-async def test_task_settings_are_read_live_without_grant_cache(
+async def test_settings_are_read_live_without_grant_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    task_id = uuid4()
-    monkeypatch.setattr(
-        gate,
-        "get_active_scheduled_task_context",
-        lambda _db, _session: (_RUN_ID, task_id),
-    )
     current_policy = ActionPolicy.ALWAYS
-    owners: list[UUID | None] = []
+    reads = 0
 
     def resolve(
         _db: Session,
         *,
         recognized_actions: AllMatchedActions,
-        task_id: UUID | None,
         **_kwargs: object,
     ) -> dict[str, ActionPolicy]:
-        catalog_policies = _defaults(recognized_actions)
-        owners.append(task_id)
-        return dict.fromkeys(catalog_policies, current_policy)
+        nonlocal reads
+        reads += 1
+        return dict.fromkeys(_defaults(recognized_actions), current_policy)
 
     monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
     addon = _build(
@@ -1777,20 +1761,15 @@ async def test_task_settings_are_read_live_without_grant_cache(
     await addon.request(second)
     _assert_403(second, SandboxProxyError.POLICY_DENIED)
     assert len(spy.dispatched) == 1
-    assert owners == [task_id, task_id]
+    assert reads == 2
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["disable", "run_finished", "recognition_failed"])
+@pytest.mark.parametrize("change", ["disable", "recognition_failed"])
 async def test_approval_cannot_bypass_changes_during_wait(
     monkeypatch: pytest.MonkeyPatch, change: str
 ) -> None:
-    task_id = uuid4()
-    active: tuple[UUID, UUID] | None = (_RUN_ID, task_id)
     current_policy = ActionPolicy.ASK
-    monkeypatch.setattr(
-        gate, "get_active_scheduled_task_context", lambda _db, _session: active
-    )
     monkeypatch.setattr(
         gate,
         "resolve_gate_policies",
@@ -1808,12 +1787,9 @@ async def test_approval_cannot_bypass_changes_during_wait(
     spy = _spy_pipeline(addon, monkeypatch)
 
     async def decide(*_args: object) -> ApprovalDecision:
-        nonlocal active, current_policy
+        nonlocal current_policy
         if change == "disable":
             current_policy = ActionPolicy.DENY
-        elif change == "run_finished":
-            active = None
-            current_policy = ActionPolicy.ALWAYS
         else:
             matcher._exc = RuntimeError("registry unavailable")
         return ApprovalDecision.APPROVED
@@ -1827,7 +1803,6 @@ async def test_approval_cannot_bypass_changes_during_wait(
     assert spy.dispatched == []
     expected = {
         "disable": SandboxProxyError.POLICY_DENIED,
-        "run_finished": SandboxProxyError.NO_ACTIVE_SESSION,
         "recognition_failed": SandboxProxyError.INTERNAL_ERROR,
     }
     _assert_403(flow, expected[change])
@@ -1984,20 +1959,9 @@ async def test_unknown_external_action_ignores_historical_session_grant(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("enabled", [True, False])
-async def test_mcp_protocol_checks_task_app_without_requesting_approval(
-    monkeypatch: pytest.MonkeyPatch, enabled: bool
+async def test_mcp_protocol_dispatches_without_requesting_approval(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        gate, "get_active_scheduled_task_context", lambda *_args: (_RUN_ID, uuid4())
-    )
-    task = TaskIntegrations(
-        accessible=[],
-        settings=(
-            {_MATCH_MCP.target.integration_id: ActionSettings()} if enabled else {}
-        ),
-    )
-    monkeypatch.setattr(gate, "load_task_integrations", lambda *_args: task)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
@@ -2008,11 +1972,8 @@ async def test_mcp_protocol_checks_task_app_without_requesting_approval(
     flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
     await addon.request(flow)
     assert not spy.approval_ran
-    assert bool(spy.dispatched) is enabled
-    if enabled:
-        assert flow.response is None
-    else:
-        _assert_403(flow, SandboxProxyError.POLICY_DENIED)
+    assert len(spy.dispatched) == 1
+    assert flow.response is None
 
 
 @pytest.mark.asyncio
@@ -2024,32 +1985,3 @@ async def test_mcp_protocol_without_session_is_blocked() -> None:
     flow = make_flow()
     await addon.request(flow)
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("protocol", [False, True])
-async def test_inactive_scheduled_session_returns_authorization_error(
-    monkeypatch: pytest.MonkeyPatch, protocol: bool
-) -> None:
-    def inactive_session(_db: Session, _session_id: UUID) -> None:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "Scheduled execution has ended"
-        )
-
-    monkeypatch.setattr(gate, "get_active_scheduled_task_context", inactive_session)
-    addon = _build(
-        resolver=StubResolver(
-            sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
-        ),
-        matcher=_StubMatcher(
-            result=McpProtocolRequest(target=_MATCH_MCP.target) if protocol else _MATCH
-        ),
-    )
-    spy = _spy_pipeline(addon, monkeypatch)
-    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
-
-    await addon.request(flow)
-
-    _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
-    assert not spy.approval_ran
-    assert spy.dispatched == []

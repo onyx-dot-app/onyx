@@ -16,3 +16,7 @@ the field is just the entry point (e.g. a list of domains or scopes in a form).
 | `placeholder` | `string`                     | `""`    | Input placeholder               |
 | `disabled`    | `boolean`                    | `false` | Disables input and chip removal |
 | `error`       | `boolean`                    | `false` | Error chrome on the input       |
+| `tooltip`     | `string \| RichStr`          | —       | Shown on hover over the input, in any state |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the list, and its `disabledTooltip` replaces `tooltip` while disabled.

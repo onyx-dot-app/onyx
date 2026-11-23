@@ -1,7 +1,7 @@
 """Chat session policy and conversion of saved history into model input."""
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from itertools import groupby
 
 from pydantic import JsonValue
@@ -42,6 +42,7 @@ from onyx.file_store.models import (
     FileDescriptor,
     FileToolMetadata,
 )
+from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import (
     AssistantMessage,
     Message,
@@ -361,8 +362,12 @@ def capture_chat_history(
 def convert_chat_history(
     chat_history: list[ChatHistoryMessage],
     files: list[ChatLoadedFile],
+    vm_paths: Mapping[str, str],
 ) -> ChatHistoryResult:
-    """Load canonical assistant output and attach user files to message history."""
+    """Load canonical assistant output and attach user files to message history.
+    `vm_paths`: the sandbox path of each attachment, by file ID, in a turn
+    with a sandbox; the file's message names it, and images get a message
+    that names theirs."""
     messages: list[Message] = []
     all_injected_file_metadata: dict[str, FileToolMetadata] = {}
     input_start = 0
@@ -403,10 +408,29 @@ def convert_chat_history(
                     content_text=text_file.content_text,
                     token_count=text_file.token_count,
                     content_pending=text_file.content_pending,
+                    indexed=text_file.indexed,
+                    vm_path=vm_paths.get(fd["id"]),
                 )
                 ctx.message.id = f"chat:{chat_message.id}:file:{fd['id']}"
                 messages.append(ctx.message)
                 all_injected_file_metadata[tool_id] = ctx.tool_metadata
+
+            image_paths = [
+                f"Image: {image.filename or 'unknown'}\nIn the VM: {vm_paths[image.file_id]}"
+                for image in image_files
+                if image.file_id in vm_paths
+            ]
+            if image_paths:
+                text = "\n\n".join(image_paths)
+                messages.append(
+                    UserMessage(
+                        id=f"chat:{chat_message.id}:images",
+                        content=text,
+                        metadata=PromptMetadata(
+                            token_count=max(1, len(text) // APPROX_CHARS_PER_TOKEN)
+                        ),
+                    )
+                )
 
             # Count the images attached to this user message.
             image_token_count = (

@@ -10,8 +10,10 @@ import {
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgCalendar, SvgClock, SvgRefreshCw } from "@opal/icons";
+import { SvgCalendar, SvgClock, SvgCode, SvgRefreshCw } from "@opal/icons";
+import { compileLocalPayloadToUtcCron } from "@/app/craft/v1/tasks/schedule";
 import type {
+  AdvancedPayload,
   DailyWeeklyPayload,
   EditorMode,
   EditorPayload,
@@ -42,6 +44,11 @@ export interface ScheduleEditorProps {
   payload: EditorPayload;
   onPayloadChange: (payload: EditorPayload) => void;
   error?: string | null;
+  /** Show a third tab for a raw UTC cron expression. */
+  allowAdvanced?: boolean;
+  /** The date whose UTC offset converts local times; the next run of the
+   * task, so a daylight-saving change before it does not shift the cron. */
+  referenceDate?: Date;
 }
 
 export default function ScheduleEditor({
@@ -50,6 +57,8 @@ export default function ScheduleEditor({
   payload,
   onPayloadChange,
   error,
+  allowAdvanced = false,
+  referenceDate,
 }: ScheduleEditorProps) {
   const t = useTranslations("craft.tasks.scheduleEditor");
   return (
@@ -59,6 +68,17 @@ export default function ScheduleEditor({
           value={mode}
           gap={6}
           onValueChange={(next) => {
+            if (next === "advanced" && allowAdvanced) {
+              const compiled = compileLocalPayloadToUtcCron(
+                mode,
+                payload,
+                referenceDate
+              );
+              onModeChange(next);
+              if (!("cron" in payload))
+                onPayloadChange({ cron: compiled.ok ? compiled.cron : "" });
+              return;
+            }
             if (next !== "interval" && next !== "daily_weekly") return;
             onModeChange(next);
             if (next === "interval" && !("unit" in payload)) {
@@ -75,6 +95,11 @@ export default function ScheduleEditor({
             <Tabs.Trigger value="daily_weekly" icon={SvgCalendar}>
               {t("tabs.dailyWeekly")}
             </Tabs.Trigger>
+            {allowAdvanced && (
+              <Tabs.Trigger value="advanced" icon={SvgCode}>
+                {t("tabs.advanced")}
+              </Tabs.Trigger>
+            )}
           </Tabs.List>
           <Tabs.Content value="interval">
             <IntervalEditor
@@ -88,6 +113,14 @@ export default function ScheduleEditor({
               onChange={onPayloadChange}
             />
           </Tabs.Content>
+          {allowAdvanced && (
+            <Tabs.Content value="advanced">
+              <AdvancedEditor
+                payload={"cron" in payload ? payload : { cron: "" }}
+                onChange={onPayloadChange}
+              />
+            </Tabs.Content>
+          )}
         </Tabs>
       </Card>
       {error && (
@@ -147,6 +180,32 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
           />
         </Section>
       </Section>
+    </Section>
+  );
+}
+
+interface AdvancedEditorProps {
+  payload: AdvancedPayload;
+  onChange: (payload: AdvancedPayload) => void;
+}
+
+function AdvancedEditor({ payload, onChange }: AdvancedEditorProps) {
+  const t = useTranslations("craft.tasks.scheduleEditor");
+  return (
+    <Section height="auto" alignItems="stretch" gap={3}>
+      <Text as="p" font="secondary-action" color="text-03">
+        {t("advanced.cronLabel")}
+      </Text>
+      <InputTypeIn
+        aria-label={t("advanced.cronLabel")}
+        value={payload.cron}
+        placeholder={t("advanced.placeholder")}
+        onChange={(e) => onChange({ cron: e.target.value })}
+        data-testid="advanced-cron"
+      />
+      <Text as="p" font="secondary-body" color="text-03">
+        {t("advanced.hint")}
+      </Text>
     </Section>
   );
 }

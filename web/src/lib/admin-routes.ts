@@ -13,6 +13,7 @@ import {
   SvgClipboard,
   SvgCpu,
   SvgDownload,
+  SvgHardDrive,
   SvgEmpty,
   SvgFileText,
   SvgFiles,
@@ -516,6 +517,17 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Usage",
     requiredTier: Tier.ENTERPRISE,
+    visibleWhen: (f: FeatureFlags) => !f.enableCloud,
+  },
+  // Cloud shares the search cluster across tenants, so it has no status page.
+  SERVICE_STATUS: {
+    path: "/admin/service-status",
+    icon: SvgHardDrive,
+    title: "Service Status",
+    sidebarLabel: "Service Status",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: Tier.BUSINESS,
     visibleWhen: (f: FeatureFlags) => !f.enableCloud,
   },
 

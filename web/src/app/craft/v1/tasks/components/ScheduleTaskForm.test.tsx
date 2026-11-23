@@ -48,6 +48,17 @@ jest.mock("@/hooks/useUserSkills", () => ({
   default: () => ({ data: mockSkills }),
 }));
 
+const mockChatSkills = {
+  entries: { skills: [], apps: [], mcpServers: [] },
+  onInputFocus: () => undefined,
+};
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/skills/hooks")>(
+    "@/lib/skills/hooks"
+  ),
+  useChatSkills: () => mockChatSkills,
+}));
+
 const mockExternalApps = [
   { id: 1, name: "Slack", app_type: "SLACK", authenticated: true },
   { id: 2, name: "Gmail", app_type: "GMAIL", authenticated: false },
@@ -136,6 +147,15 @@ describe("ScheduleTaskForm app picker", () => {
       expect(prompt).toHaveValue('[Use external app "Slack" (ID: 1)] ')
     );
     expect(mockRouterReplace).not.toHaveBeenCalled();
+  });
+
+  it("fetches the chat skills again when the prompt gains focus", () => {
+    const onInputFocus = jest.fn();
+    mockChatSkills.onInputFocus = onInputFocus;
+    renderForm();
+    fireEvent.focus(screen.getByTestId("task-prompt-input"));
+    expect(onInputFocus).toHaveBeenCalledTimes(1);
+    mockChatSkills.onInputFocus = () => undefined;
   });
 
   it("routes an unauthenticated app to connection without inserting it", async () => {

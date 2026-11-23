@@ -7,14 +7,14 @@ import {
   pickerEntryPromptPrefix,
   toPickerSections,
   type PickerSections,
+  type PickerSkill,
+  type PickerSkillSources,
 } from "@/lib/skills/picker";
 import {
   appFixture,
   builtinFixture,
-  customFixture,
   mcpServerFixture,
 } from "@/lib/skills/__fixtures__/picker";
-import type { SkillsList } from "@/lib/skills/types";
 
 describe("detectPickerTrigger", () => {
   /** The text with the caret at its end. */
@@ -94,8 +94,12 @@ describe("detectPickerTrigger", () => {
 });
 
 describe("toPickerSections", () => {
-  function skillsList(over: Partial<SkillsList> = {}): SkillsList {
+  function skillsList(over: PickerSkillSources = {}): PickerSkillSources {
     return { builtins: [], customs: [], ...over };
+  }
+
+  function pickerSkill(name: string): PickerSkill {
+    return { kind: "skill", slug: name, name, description: `${name} skill` };
   }
 
   it("returns empty sections when no data", () => {
@@ -130,29 +134,19 @@ describe("toPickerSections", () => {
     ]);
   });
 
-  it("appends enabled customs to `skills`", () => {
+  it("lists each custom skill the sandbox gets after built-ins of the same name", () => {
     const data = skillsList({
       builtins: [builtinFixture({ name: "pptx" })],
       customs: [
-        customFixture({ name: "my-custom" }),
-        customFixture({ name: "disabled-one", enabled: false }),
+        pickerSkill("review"),
+        pickerSkill("plan"),
+        pickerSkill("pptx"),
       ],
     });
     expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
-      "my-custom",
+      "plan",
       "pptx",
-    ]);
-  });
-
-  it("filters out invalid customs", () => {
-    const data = skillsList({
-      customs: [
-        customFixture({ name: "valid-skill" }),
-        customFixture({ name: "invalid-skill", is_valid: false }),
-      ],
-    });
-    expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
-      "valid-skill",
+      "review",
     ]);
   });
 

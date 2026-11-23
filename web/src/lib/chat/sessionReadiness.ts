@@ -63,12 +63,15 @@ export async function readChatSessionStatus(
   return status;
 }
 
-/** The chat's latest page, or the page before `beforeMessageId`. */
+/**
+ * The chat's latest page, or the page before `beforeMessageId`, read past the
+ * HTTP cache. `shared` reads a shared chat (`chatPageUrl`).
+ */
 export async function fetchSettledChatSession(
   sessionId: string,
-  beforeMessageId?: number
+  page: { beforeMessageId?: number; shared?: boolean } = {}
 ): Promise<BackendChatSession> {
-  const response = await fetch(chatPageUrl(sessionId, beforeMessageId), {
+  const response = await fetch(chatPageUrl(sessionId, page), {
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
   });

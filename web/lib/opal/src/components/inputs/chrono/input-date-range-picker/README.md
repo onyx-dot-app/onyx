@@ -13,6 +13,11 @@ formatted span (e.g. "Mar 3 – Apr 1"). Built on `SelectButton`, `Popover`, and
 | `value`         | `DateRange`                  | —       | Controlled range (or unset)                 |
 | `onValueChange` | `(value: DateRange) => void` | —       | Fires on preset pick or custom-range commit |
 | `size`          | `"md" \| "sm"`               | `"md"`  | Button size                                 |
+| `disabled`      | `boolean`                    | `false` | Disables every preset and the custom trigger |
+| `tooltip`       | `string \| RichStr`          | —       | Shown on hover, in any state                |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the picker, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 All labels — preset names, the group and custom-range aria labels — come from `OpalStrings`
 (`dateRange*` keys), bridged from the `opal.dateRange` catalog namespace.

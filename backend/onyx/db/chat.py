@@ -1,21 +1,29 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from typing import NoReturn, Tuple
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
 from sqlalchemy import (
     Integer,
     Row,
+    String,
+    Text,
     any_,
     bindparam,
+    case,
+    cast,
     delete,
     desc,
+    event,
+    exists,
     func,
     literal,
     nullsfirst,
     or_,
     select,
+    true,
     update,
 )
 from sqlalchemy.dialects import postgresql
@@ -43,15 +51,22 @@ from onyx.chat.models import (
     read_message_rendering,
 )
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
+from onyx.configs.constants import (
+    ANONYMOUS_USER_UUID,
+    FileOrigin,
+    MessageType,
+)
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.document_set import require_document_set_access
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IncognitoRecordMode,
     record_mode_persists_content,
 )
 from onyx.db.models import (
+    ChatArtifact,
+    ChatArtifactVersion,
     ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
@@ -59,19 +74,22 @@ from onyx.db.models import (
     ChatSessionSharedStatus,
     FileRecord,
     Persona,
+    ScheduledTaskRun,
     ToolCall,
     User,
+    UserFile,
 )
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.constants import (
-    AGENT_CHECKPOINT_FILE_PREFIX,
-    CHAT_ARTIFACT_FILE_PREFIX,
+from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
+from onyx.file_store.file_store import (
+    FILE_SIZE_MISSING_SENTINEL,
+    get_default_file_store,
 )
-from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.models import GenerationRequestParams, TextContent, ThinkingContent
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
@@ -80,6 +98,10 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.tools.models import IntegrationEntry, ToolOptions
+from onyx.tools.tool_implementations.sandbox.models import (
+    PublishedFile,
+    PublishedFileView,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -220,6 +242,12 @@ def content_persisting_sessions_filter() -> ColumnElement[bool]:
 
 # Retrieves chat sessions by user
 # Chat sessions do not include onyxbot flows
+def not_a_scheduled_run_chat() -> ColumnElement[bool]:
+    """Excludes the hidden chat that a scheduled task run made. The history
+    list, chat search and delete-all leave those chats out."""
+    return ~exists().where(ScheduledTaskRun.chat_session_id == ChatSession.id)
+
+
 def get_chat_sessions_by_user(
     user_id: UUID | None,
     deleted: bool | None,
@@ -237,6 +265,7 @@ def get_chat_sessions_by_user(
         .where(ChatSession.user_id == user_id)
         .where(ChatSession.spawned_by_message_id.is_(None))
         .where(ChatSession.onyxbot_flow.is_(False))
+        .where(not_a_scheduled_run_chat())
         .order_by(desc(ChatSession.time_updated))
     )
 
@@ -310,9 +339,50 @@ def delete_orphaned_search_docs(db_session: Session) -> None:
     db_session.commit()
 
 
+def delete_chat_artifact_files(versions: Sequence[tuple[str, str | None]]) -> None:
+    """Delete the file and the thumbnail of each artifact version, the
+    thumbnail first: the file's delete cascades to its version, which links
+    the thumbnail. A failed thumbnail delete keeps its file and version, so a
+    later hard chat delete retries both. Raises the first failure after it
+    tries every version."""
+    file_store = get_default_file_store()
+    failures: list[Exception] = []
+    for file_id, thumbnail_file_id in versions:
+        try:
+            if thumbnail_file_id is not None:
+                file_store.delete_file(
+                    file_id=thumbnail_file_id, error_on_missing=False
+                )
+            file_store.delete_file(file_id=file_id, error_on_missing=False)
+        except Exception as e:
+            logger.warning(
+                "Could not delete published file %s or its thumbnail %s",
+                file_id,
+                thumbnail_file_id,
+                exc_info=True,
+            )
+            failures.append(e)
+    if failures:
+        raise failures[0]
+
+
 def delete_messages_and_files_from_chat_session(
     chat_session_id: UUID, db_session: Session
 ) -> None:
+    # The chat's published files and thumbnails go before the message files:
+    # a saved message lists a published file, whose delete would drop the
+    # link to its thumbnail. A failure stops the delete, so the next hard
+    # delete finds what is left.
+    delete_chat_artifact_files(
+        db_session.execute(
+            select(ChatArtifactVersion.file_id, ChatArtifactVersion.thumbnail_file_id)
+            .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+            .where(ChatArtifact.chat_session_id == chat_session_id)
+        )
+        .tuples()
+        .all()
+    )
+
     descendants = session_descendants(chat_session_id)
     messages_with_files = (
         db_session.execute(
@@ -332,23 +402,16 @@ def delete_messages_and_files_from_chat_session(
                 continue
             file_store.delete_file(file_id=file_info["id"], error_on_missing=False)
 
-    # Checkpoint files, and published files that no message lists, such as
-    # those of a response that ended without its save.
-    session_files = db_session.scalars(
+    checkpoint_files = db_session.scalars(
         select(FileRecord.file_id)
         .where(
-            or_(
-                FileRecord.file_id.startswith(
-                    f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
-                ),
-                FileRecord.file_id.startswith(
-                    f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session_id}-"
-                ),
+            FileRecord.file_id.startswith(
+                f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
             )
         )
         .execution_options(yield_per=FILE_CLEANUP_BATCH_SIZE)
     )
-    for file_id in session_files:
+    for file_id in checkpoint_files:
         file_store.delete_file(file_id=file_id, error_on_missing=False)
 
     # Delete ChatMessage records - CASCADE constraints will automatically handle:
@@ -361,6 +424,39 @@ def delete_messages_and_files_from_chat_session(
     db_session.commit()
 
     delete_orphaned_search_docs(db_session)
+
+
+def create_chat_session__no_commit(
+    db_session: Session,
+    description: str | None,
+    user_id: UUID | None,
+    persona_id: int | None,  # Can be none if temporary persona is used
+    llm_override: LLMOverride | None = None,
+    prompt_override: PromptOverride | None = None,
+    onyxbot_flow: bool = False,
+    slack_thread_id: str | None = None,
+    project_id: int | None = None,
+    incognito_record_mode: IncognitoRecordMode | None = None,
+    session_id: UUID | None = None,
+) -> ChatSession:
+    """A chat session flushed into the caller's transaction."""
+    chat_session = ChatSession(
+        # Caller-supplied only for incognito, where uploads name the session
+        # before it exists so the server can verify them.
+        **({"id": session_id} if session_id is not None else {}),
+        user_id=user_id,
+        persona_id=persona_id,
+        description=description,
+        llm_override=llm_override,
+        prompt_override=prompt_override,
+        onyxbot_flow=onyxbot_flow,
+        slack_thread_id=slack_thread_id,
+        project_id=project_id,
+        incognito_record_mode=incognito_record_mode,
+    )
+    db_session.add(chat_session)
+    db_session.flush()
+    return chat_session
 
 
 def create_chat_session(
@@ -376,24 +472,20 @@ def create_chat_session(
     incognito_record_mode: IncognitoRecordMode | None = None,
     session_id: UUID | None = None,
 ) -> ChatSession:
-    chat_session = ChatSession(
-        # Caller-supplied only for incognito, where uploads name the session
-        # before it exists so the server can verify them.
-        **({"id": session_id} if session_id is not None else {}),
-        user_id=user_id,
-        persona_id=persona_id,
-        description=description,
+    chat_session = create_chat_session__no_commit(
+        db_session,
+        description,
+        user_id,
+        persona_id,
         llm_override=llm_override,
         prompt_override=prompt_override,
         onyxbot_flow=onyxbot_flow,
         slack_thread_id=slack_thread_id,
         project_id=project_id,
         incognito_record_mode=incognito_record_mode,
+        session_id=session_id,
     )
-
-    db_session.add(chat_session)
     db_session.commit()
-
     return chat_session
 
 
@@ -481,6 +573,31 @@ def update_chat_session(
     return chat_session
 
 
+def save_chat_session_name_if_unnamed(
+    db_session: Session,
+    user_id: UUID | None,
+    chat_session_id: UUID,
+    name: str,
+) -> bool:
+    """Save an auto-generated name only while the chat has none, so a rename
+    made during generation wins. Returns whether the name was saved."""
+    statement = (
+        update(ChatSession)
+        .where(
+            ChatSession.id == chat_session_id,
+            ChatSession.deleted.is_(False),
+            or_(ChatSession.description.is_(None), ChatSession.description == ""),
+        )
+        .values(description=name)
+        .returning(ChatSession.id)
+    )
+    if user_id is not None:
+        statement = statement.where(ChatSession.user_id == user_id)
+    saved_id = db_session.execute(statement).scalar_one_or_none()
+    db_session.commit()
+    return saved_id is not None
+
+
 def delete_all_chat_sessions_for_user(
     user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
 ) -> list[UUID]:
@@ -492,6 +609,7 @@ def delete_all_chat_sessions_for_user(
         .filter(
             ChatSession.user_id == user_id,
             ChatSession.onyxbot_flow.is_(False),
+            not_a_scheduled_run_chat(),
             ChatSession.spawned_by_message_id.is_(None),
         )
         .all()
@@ -900,6 +1018,193 @@ def get_chat_message_page_ids(
     return page_ids, start > 0
 
 
+def save_chat_artifact(
+    content: bytes,
+    *,
+    name: str,
+    mime_type: str,
+    chat_session_id: UUID,
+    path: str,
+    title: str | None,
+    thumbnail: bytes | None,
+) -> PublishedFile:
+    """Save a file that the model published in the root chat
+    `chat_session_id` as the next version of the chat's artifact at `path`,
+    with `thumbnail`, a JPEG of its first page, if set. The file and its
+    thumbnail get the chat's access, the chat's file list, and its hard
+    delete. A thumbnail that fails to save is left out."""
+    file_store = get_default_file_store()
+    file_id = str(uuid4())
+    thumbnail_file_id: str | None = None
+    if thumbnail is not None:
+        try:
+            thumbnail_file_id = file_store.save_file(
+                content=BytesIO(thumbnail),
+                display_name=f"{name} thumbnail",
+                file_origin=FileOrigin.CHAT_ARTIFACT_THUMBNAIL,
+                file_type="image/jpeg",
+            )
+        except Exception:
+            logger.warning(
+                "Could not save the thumbnail of published file %s",
+                file_id,
+                exc_info=True,
+            )
+    saved: list[tuple[UUID, int]] = []
+
+    def add_version(db_session: Session) -> None:
+        # The upsert locks the artifact's row until the commit, so concurrent
+        # publishes of one path take turns, and the next statement reads
+        # the versions they committed.
+        artifact_id = db_session.execute(
+            postgresql.insert(ChatArtifact)
+            .values(chat_session_id=chat_session_id, path=path)
+            .on_conflict_do_update(
+                index_elements=[ChatArtifact.chat_session_id, ChatArtifact.path],
+                set_={"updated_at": func.now()},
+            )
+            .returning(ChatArtifact.id)
+        ).scalar_one()
+        version = db_session.execute(
+            postgresql.insert(ChatArtifactVersion)
+            .from_select(
+                ["artifact_id", "version", "file_id", "title", "thumbnail_file_id"],
+                select(
+                    literal(artifact_id),
+                    func.coalesce(func.max(ChatArtifactVersion.version), 0) + 1,
+                    literal(file_id),
+                    literal(title, Text()),
+                    literal(thumbnail_file_id, String()),
+                ).where(ChatArtifactVersion.artifact_id == artifact_id),
+            )
+            .returning(ChatArtifactVersion.version)
+        ).scalar_one()
+        saved.append((artifact_id, version))
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            # save_file commits the session once, after it writes the file
+            # record. The rows go in that transaction after the record, so
+            # the upload holds no lock.
+            event.listen(db_session, "before_commit", add_version, once=True)
+            file_store.save_file(
+                content=BytesIO(content),
+                display_name=name,
+                file_origin=FileOrigin.CHAT_ARTIFACT,
+                file_type=mime_type,
+                file_id=file_id,
+                db_session=db_session,
+            )
+        if not saved:
+            raise RuntimeError(
+                f"save_file did not commit the session for published file {file_id}"
+            )
+    except BaseException:
+        if thumbnail_file_id is not None:
+            delete_files_best_effort([thumbnail_file_id], "unpublished thumbnail")
+        raise
+    [(artifact_id, version)] = saved
+    return PublishedFile(
+        file_id=file_id,
+        artifact_id=artifact_id,
+        version=version,
+        name=name,
+        title=title,
+        path=path,
+        size=len(content),
+        mime_type=mime_type,
+        thumbnail_file_id=thumbnail_file_id,
+    )
+
+
+def delete_unpublished_chat_artifacts(published: Sequence[PublishedFile]) -> None:
+    """Delete the files and thumbnails of a publish that failed
+    (delete_chat_artifact_files), then the artifacts that they leave without a
+    version, so a failed publish sets no artifact's first publish or version
+    numbers."""
+    try:
+        delete_chat_artifact_files(
+            [(file.file_id, file.thumbnail_file_id) for file in published]
+        )
+    except Exception:
+        # A kept file keeps its version, so its artifact stays below and a
+        # hard chat delete retries it.
+        logger.warning(
+            "Kept unpublished files whose delete failed: %s",
+            [file.file_id for file in published],
+        )
+    artifact_ids = sorted({file.artifact_id for file in published if file.artifact_id})
+    if not artifact_ids:
+        return
+    with get_session_with_current_tenant() as db_session:
+        # The lock waits for a concurrent publish of the path to commit, and
+        # the delete's new snapshot then sees its version.
+        db_session.execute(
+            select(ChatArtifact.id)
+            .where(ChatArtifact.id.in_(artifact_ids))
+            .order_by(ChatArtifact.id)
+            .with_for_update()
+        )
+        db_session.execute(
+            delete(ChatArtifact).where(
+                ChatArtifact.id.in_(artifact_ids),
+                ~select(ChatArtifactVersion.artifact_id)
+                .where(ChatArtifactVersion.artifact_id == ChatArtifact.id)
+                .exists(),
+            )
+        )
+        db_session.commit()
+
+
+def get_chat_published_files(
+    chat_session_id: UUID, db_session: Session
+) -> list[PublishedFileView]:
+    """The files that the model published in a chat, its subagents' files
+    included: the latest version of each artifact, by the artifact's first
+    publish. Versions whose object is missing are left out."""
+    latest = (
+        select(
+            ChatArtifact.id.label("artifact_id"),
+            ChatArtifact.path,
+            ChatArtifact.created_at,
+            ChatArtifactVersion.version,
+            ChatArtifactVersion.file_id,
+            ChatArtifactVersion.title,
+            ChatArtifactVersion.thumbnail_file_id,
+            FileRecord.display_name,
+            FileRecord.file_type,
+            FileRecord.file_size,
+        )
+        .join(ChatArtifactVersion, ChatArtifactVersion.artifact_id == ChatArtifact.id)
+        .join(FileRecord, FileRecord.file_id == ChatArtifactVersion.file_id)
+        .where(
+            ChatArtifact.chat_session_id == chat_session_id,
+            FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
+        )
+        .distinct(ChatArtifact.id)
+        .order_by(ChatArtifact.id, ChatArtifactVersion.version.desc())
+        .subquery()
+    )
+    rows = db_session.execute(
+        select(latest).order_by(latest.c.created_at, latest.c.artifact_id)
+    ).all()
+    return [
+        PublishedFileView(
+            file_id=row.file_id,
+            artifact_id=row.artifact_id,
+            version=row.version,
+            name=row.display_name or row.file_id,
+            title=row.title,
+            path=row.path,
+            # A file without a recorded size shows as 0.
+            size=row.file_size or 0,
+            mime_type=row.file_type,
+            thumbnail_file_id=row.thumbnail_file_id,
+        )
+        for row in rows
+    ]
+
+
 def get_or_create_root_message(
     chat_session_id: UUID,
     db_session: Session,
@@ -1214,6 +1519,52 @@ def create_new_chat_message(
         db_session.commit()
 
     return new_chat_message
+
+
+_UUID_PATTERN = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+
+def get_chat_session_user_files(
+    chat_session_id: UUID, db_session: Session
+) -> list[UserFile]:
+    """The user files that the chat's user messages attached, on every
+    branch, in the order of their first message. Only file descriptors whose
+    `user_file_id` is the UUID of an existing user file count."""
+    descriptor = (
+        func.jsonb_array_elements(
+            case(
+                (func.jsonb_typeof(ChatMessage.files) == "array", ChatMessage.files),
+                else_=cast(literal("[]"), postgresql.JSONB),
+            )
+        )
+        .table_valued("value")
+        .lateral("descriptor")
+    )
+    raw_id = descriptor.c.value.op("->>", return_type=String)("user_file_id")
+    user_file_id = case(
+        (raw_id.op("~*")(_UUID_PATTERN), cast(raw_id, postgresql.UUID(as_uuid=True)))
+    )
+    first_messages = (
+        select(
+            user_file_id.label("user_file_id"),
+            func.min(ChatMessage.id).label("message_id"),
+        )
+        .select_from(ChatMessage)
+        .join(descriptor, true())
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.message_type == MessageType.USER,
+        )
+        .group_by(user_file_id)
+        .subquery()
+    )
+    return list(
+        db_session.scalars(
+            select(UserFile)
+            .join(first_messages, first_messages.c.user_file_id == UserFile.id)
+            .order_by(first_messages.c.message_id, UserFile.id)
+        )
+    )
 
 
 def set_as_latest_chat_message(

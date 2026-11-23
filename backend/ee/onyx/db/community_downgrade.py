@@ -21,6 +21,7 @@ from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
     AccountType,
+    MarketplaceKind,
     Permission,
     PersonaSharePermission,
     PluginInstallationPolicy,
@@ -37,6 +38,7 @@ from onyx.db.models import (
     Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
+    Marketplace,
     MCPServer,
     MCPServer__UserGroup,
     PermissionGrant,
@@ -44,6 +46,7 @@ from onyx.db.models import (
     Persona__UserFile,
     Persona__UserGroup,
     Plugin,
+    Plugin__User,
     Plugin__UserGroup,
     PublicExternalUserGroup,
     ScimToken,
@@ -242,9 +245,49 @@ def _make_group_shared_resources_public__no_commit(
             != PluginInstallationPolicy.NOT_AVAILABLE,
         ),
     )
+    # A synced plugin stays in its GitHub marketplace: the group's members get
+    # a user share instead.
+    github_marketplace_ids = select(Marketplace.id).where(
+        Marketplace.kind == MarketplaceKind.GITHUB
+    )
+    synced_shares = db_session.execute(
+        pg_insert(Plugin__User)
+        .from_select(
+            ["plugin_id", "user_id"],
+            select(Plugin.id, User__UserGroup.user_id)
+            .join(Plugin__UserGroup, Plugin__UserGroup.plugin_id == Plugin.id)
+            .join(
+                User__UserGroup,
+                User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
+            )
+            .where(
+                Plugin__UserGroup.user_group_id.in_(group_ids),
+                Plugin__UserGroup.permission.is_not(None),
+                or_(
+                    Plugin__UserGroup.installation_policy.is_(None),
+                    Plugin__UserGroup.installation_policy
+                    != PluginInstallationPolicy.NOT_AVAILABLE,
+                ),
+                Plugin.marketplace_id.in_(github_marketplace_ids),
+                User__UserGroup.user_id.is_not(None),
+            )
+            .distinct(),
+        )
+        .on_conflict_do_nothing()
+        .returning(Plugin__User.plugin_id)
+    ).all()
+    logger.info(
+        "Community downgrade gave %d synced plugin shares to the members of "
+        "removed groups",
+        len(synced_shares),
+    )
     plugin_ids: Sequence[UUID] = db_session.scalars(
         select(Plugin.id)
-        .where(Plugin.id.in_(shared_plugin_ids), Plugin.marketplace_id != library_id)
+        .where(
+            Plugin.id.in_(shared_plugin_ids),
+            Plugin.marketplace_id != library_id,
+            Plugin.marketplace_id.not_in(github_marketplace_ids),
+        )
         .order_by(Plugin.id)
         .with_for_update()
     ).all()

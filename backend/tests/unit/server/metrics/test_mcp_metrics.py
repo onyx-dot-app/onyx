@@ -22,6 +22,7 @@ from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.metrics.mcp_server import MCPAuthResult, MCPServerToolName
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from tests.unit.onyx.mcp_server.tool_result import tool_payload
 
 _MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 
@@ -171,7 +172,7 @@ def test_server_empty_state_is_success() -> None:
         patch.object(search, "record_mcp_server_tool_outcome") as outcome,
         patch.object(search, "record_mcp_search_results") as results,
     ):
-        response = asyncio.run(search.search_indexed_documents("query"))
+        response = tool_payload(asyncio.run(search.search_indexed_documents("query")))
 
     assert response["results"] == []
     outcome.assert_called_once()

@@ -7,6 +7,8 @@ from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.microvm import reconcile, registry
 from onyx.microvm.registry import set_node_agent_address
+from onyx.tools.tool_implementations.sandbox import file_copies
+from onyx.tools.tool_implementations.sandbox.file_copies import FileCopyPool
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.microvm.fake_agent import (
     FakeHostAgent,
@@ -86,3 +88,26 @@ def new_sandbox_id(
     yield new
     for sandbox_id in ids:
         forget_sandbox_keys(tenant_cache, sandbox_id)
+
+
+NewFileCopyPool = Callable[[], FileCopyPool]
+
+
+@pytest.fixture
+def new_file_copy_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[NewFileCopyPool, None, None]:
+    """Make a new pod pool, which `file_copy_pool` gives from then on. A test
+    that changes the pool's limits makes its pool after the change. The pools
+    shut down after the test."""
+    pools: list[FileCopyPool] = []
+
+    def new() -> FileCopyPool:
+        pool = FileCopyPool()
+        pools.append(pool)
+        monkeypatch.setattr(file_copies, "file_copy_pool", lambda: pool)
+        return pool
+
+    yield new
+    for pool in pools:
+        pool.shutdown()

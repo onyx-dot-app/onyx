@@ -1,6 +1,6 @@
 # Skills
 
-> Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read as custom skills. This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools.
+> Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read (custom skills, and on a deployment with chat VMs the chat built-ins). This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools.
 
 **Verified against:** `73e0ae3c31` (2026-10-28)
 **Edition:** CE. Group shares need the EE group tables.
@@ -13,11 +13,12 @@
   `sections/customize/CustomizeSkillsPage.tsx`; Craft is not needed, and
   `/craft/v1/skills*` redirect here with their query). The groups are Created by
   you (owner is the user), From your organization (published), Shared with you,
-  and Built-in, which shows only with Craft on, as `list_chat_skills` leaves
-  built-ins out of chat (`lib/customize/skills.ts:groupSkills`). A row has the
+  and Built-in, which shows only with Craft on
+  (`lib/customize/skills.ts:groupSkills`). A row has the
   tag Disabled, Required, Pending review or Unpublished changes, the date, Turn
-  on, and a menu (Turn on/off, Share, Remove). Add has Upload skill, Create a
-  skill (`/app/customize/skills/new`) and Import from GitHub. A custom skill
+  on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
+  skill (`/app/customize/skills/new`); GitHub skills come in through a
+  marketplace ([[#github-marketplaces]]). A custom skill
   opens at `/app/customize/skills/[id]`; a built-in opens a preview. A custom
   skill's icon is a themed glyph picked from its name and description
   (`sections/customize/skillIcon.tsx`). The Admin Panel lists custom skills
@@ -28,12 +29,49 @@
   as Slack or Linear, shows and loads only for a user who runs a plugin that
   holds that app ([[#built-in-app-skill-rule]]). A custom skill written for an
   app is an ordinary custom skill: it loads before the user connects the app.
-- **Authoring.** A user writes a skill in the browser editor, uploads a `.zip`
-  or a single SKILL.md, or imports skills from a GitHub repository after a
-  preview of every SKILL.md found. A private repository needs the user's
-  GitHub connection in Craft; without it the import is anonymous. The owner
-  shares with users or groups as viewer or editor, publishes to the
-  organization, or transfers ownership.
+- **Authoring.** A user writes a skill in the browser editor, or uploads a
+  `.zip` or a single SKILL.md. The owner shares with users or groups as
+  viewer or editor, publishes to the organization, or transfers ownership.
+- **GitHub marketplaces.** A user adds a GitHub repository with a
+  `.claude-plugin/marketplace.json` as a marketplace ([[#github-marketplaces]]).
+  Each entry becomes one plugin, and "Sync now" brings the repository's
+  changes. A personal marketplace belongs to the user who adds it. A company
+  marketplace needs organization-wide `MANAGE_PLUGINS` on the user and on the
+  token (`server/features/skill/marketplace_api.py:_is_manager`), and the organization
+  sees its plugins as it sees published ones, under the marketplace default.
+  A synced plugin's content changes only in GitHub. A company plugin's sharing
+  and install settings change in Onyx; a personal one has neither. On the web, the Plugins tab Add menu
+  (`sections/customize/AddSkillMenu.tsx`) has Add marketplace
+  (`sections/marketplaces/AddMarketplaceModal.tsx`: source, then a confirm
+  step with the resolved source and each entry's Will install list) and
+  Manage marketplaces (`/app/customize/plugins/marketplaces`,
+  `sections/marketplaces/MarketplacesPage.tsx`). The admin skills page
+  (`views/SkillsPage.tsx`) shows the same table
+  (`sections/marketplaces/MarketplacesTable.tsx`): failed syncs above it,
+  a row menu (Sync now, Default Access, Replace login,
+  Remove, which names the plugins it deletes) and a detail modal. Members see
+  company marketplaces read-only (`can_manage` false: no row menu, no Sync
+  now). The confirm step asks for the type before the entries and lists ready
+  entries first; the others fold behind one button. On the Plugins tab
+  (`lib/plugins/directory.ts`, `lib/customize/plugins.ts`) a synced plugin is
+  in "From marketplaces" with "from <marketplace>", and a manager sees another
+  user's unshared plugin as "private to <email>", not shared. The plugin page
+  shows "Synced from owner/repo", the marketplace as its Location and a
+  "Managed by the <name> marketplace" note with a link to Marketplaces. For `content_locked` the web offers no
+  content change: no Edit on the skill page, no restore or publish on the
+  versions tab, and no organization access or ownership transfer in the share
+  dialog (`lib/skills/sharing.ts:canChangeOrganizationAccess`); each says
+  why. `can_delete` is false for a synced plugin.
+- **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
+  ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
+  MCP servers the plugin needs with their state for the user, the parts Onyx
+  does not use, and the save target. `POST /skills/plugins` saves it. On the
+  web, Add > Upload plugin on the Plugins tab of Customize opens
+  `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
+  plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
+  flow. A dropped folder is zipped in the browser when it has SKILL.md or a
+  plugin.json at its top level (`lib/skills/bundleUpload.ts:prepareSkillBundleUpload`
+  with `allowPlugin`).
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), required (on,
   and the user cannot turn it off), or not available (hidden). With no own
@@ -122,11 +160,13 @@
   `sections/customize/CustomizeDetailLayout.tsx` (back link, header, underline
   tabs, and `DetailOverview`: the description beside a card of `KeyValue`
   facts). Built-in skills keep a preview-only dialog.
-- **Access at import.** GitHub import and multiple-ZIP upload accept one set
+- **Access at import.** Multiple-ZIP upload accepts one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
 - **In chat**, the agent sees the names and descriptions of the user's
-  enabled custom skills. In this catalog, a skill's
+  enabled custom skills and, when the turn has the sandbox tools, the
+  available chat built-ins (`skills/built_in.py:CHAT_BUILT_IN_SKILL_IDS`:
+  pptx, and browser with `ENABLE_BROWSER`). In this catalog, a skill's
   `metadata.short-description` replaces its description when it has one;
   `skills_list` shows the full description. The agent reads a skill's
   SKILL.md with `skills_read` when the task matches. Deep Research and its
@@ -136,16 +176,29 @@
   accepted, at the version the user ran. A SKILL.md over 8,000 bytes is cut
   there, with a note that tells the model to continue with `skills_read`. History keeps that text, so a later edit, a deletion or lost access
   does not change what earlier turns see. A skill that cannot be read when
-  the message is accepted is not applied. Built-in skills
-  do not reach chat, because they need the Craft sandbox. Chat cannot open a skill's other files or run its scripts.
+  the message is accepted is not applied. A chat built-in's SKILL.md
+  starts with a `Skill files:` line that names its folder in the chat VM
+  (`/mnt/skills/<name>/`, read-only and noexec), where the model reads its
+  other files and runs its scripts through their interpreter with the
+  sandbox tools ([[craft-sandboxes]]). Chat cannot open the other files of a
+  custom skill or run its scripts. App built-ins, company-search,
+  image-generation and craft-documentation stay out of chat.
+  A built-in is a built-in plugin in code (`BuiltInSkillDefinition.skills`):
+  one skill with SKILL.md at its root, or one skill per
+  `skills/<name>/SKILL.md`, as in an uploaded plugin version. Each skill of a
+  built-in plugin is one chat skill, and the push puts each skill in its own
+  folder. Built-ins have no plugin rows; their `ChatSkill.version_id` is the
+  `skill` row id, with `built_in_skill_id` set.
   In the chat input, `@` at the start of a word opens a picker of these
   skills, with a **Manage skills** row that opens Customize → Skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
-  filtered by name prefix without case. A row shows the skill's short
+  filtered by name prefix without case. In an incognito, multi-model or
+  Deep Research chat the picker leaves built-ins out (`useChatSkills({ builtIns })`).
+  A row shows the skill's short
   description when it has one, else its description. A skill change in the
   library, the skill editor, a plugin's Skills tab or a Craft app connection
   fetches the list again (`lib/skills/cache.ts:refreshSkillLists`). Other
-  changes, such as one from another tab or user, show after the chat input
-  gains focus, unless a fetch of the list started in the last minute; a
+  changes, such as one from another tab or user, show after the chat input,
+  the Craft input or a scheduled task prompt gains focus, unless a fetch of the list started in the last minute; a
   window focus does not fetch the list. A message mentions at most 20 skills: at that
   limit, the picker offers only the skills already picked, and each request
   sends only the first 20 (`lib/chat/mentions.ts:requestMentions`). The query
@@ -156,7 +209,9 @@
   `@`. A pick replaces the whole word with a mention tile that reads `@name`.
   Craft's `/` pickers, in the input bar and in the scheduled task prompt,
   follow the same rules and match a substring
-  (`lib/skills/hooks.ts:useEntryPicker`). The tiles are the mentions: only a pick
+  (`lib/skills/hooks.ts:useEntryPicker`). They offer the built-ins from
+  `GET /skills` and the custom skills from `GET /skills/chat`, one per skill of
+  a plugin by its own name (`lib/skills/picker.ts:toPickerSections`). The tiles are the mentions: only a pick
   mentions a skill, so typed or pasted `@name` text does not. Removing a tile
   by delete or cut removes its mention, and undo brings it back. A draft,
   a failed send's restore and voice input keep each tile where it was, also
@@ -179,7 +234,10 @@ When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
   `.template` file is rejected with a message. A direct upload over a size or
   file count limit is rejected with a 413 that names the limit. Batch uploads
-  list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
+  list the Skill in `not_imported`.
+  A frontmatter field that Onyx does not read (`license`, `compatibility`,
+  `metadata`, `allowed-tools`) with a value it cannot read is kept as written
+  and does not block the skill. Messages name the field in plain words.
 - Turning on a skill whose name another enabled skill the user can see uses
   returns a name conflict. The client can retry with `replace_conflict` to
   switch skills. The kept choice of a skill the user can no longer see neither
@@ -197,7 +255,7 @@ When it fails:
 ## Scope
 
 This component owns the built-in skill rows; the plugin tables ([[#plugin-tables]]); bundle parsing and validation; built-in skill definitions;
-per-user rendering of templates; GitHub import; the push of a user's skill
+per-user rendering of templates; GitHub marketplaces and their sync; the push of a user's skill
 files into a sandbox; and the skills library UI.
 
 Neighbours own the rest:
@@ -228,8 +286,9 @@ skill mutation (server/features/skill/api.py)   compute affected users BEFORE th
          _assemble_skills                one fit loop: whole plugins within 900 MB and
                                          10,000 files; built-ins from disk, custom from
                                          the FileStore bundle of that version, in a
-                                         folder named by its frontmatter; resolves
-                                         ${CLAUDE_SKILL_DIR}
+                                         folder named by its frontmatter (each
+                                         skills/<name>/ of a plugin version in its own
+                                         folder); resolves ${CLAUDE_SKILL_DIR}
          build_connectable_apps_list     guidance for unconnected apps
        compute_skill_runtime_hash        skip a sandbox whose hash matches
        push_to_sandboxes(SKILLS_MOUNT_PATH)   parallel batches of 10 sandboxes, or
@@ -243,7 +302,9 @@ session start: sandbox_lifecycle.py:build_managed_content_payload
 
 **One data model.** A custom skill is a plugin (`db/plugin.py`,
 [[#plugin-tables]]) whose version holds one skill at the bundle root; the
-skill id is the plugin id. `db/skill.py` passes the `Plugin` row for a custom
+skill id is the plugin id. An uploaded plugin's version holds its skills in
+`skills/<name>/`, one `plugin_skill` row each, or no skill
+([[#plugin-upload]]). `db/skill.py` passes the `Plugin` row for a custom
 skill and the `Skill` row for a built-in (`StoredSkill`). Every read and write
 of a custom skill uses the plugin rows: access, names, validity, bundles and
 content. Built-in skills have no plugin. Old custom `skill` rows and the
@@ -278,7 +339,7 @@ plugin required for the user, then a published one, then the user's own,
 then a shared one. The older plugin (`plugin.created_at`, then id) wins a
 tie. It returns the one set of plugins that lose a name: they do not load and
 show as off. Only skills that can run take part, and the names of the
-built-in skills the user gets are reserved. The toggle and the auto-enable
+built-in skills the user gets, and of their nested skills, are reserved. The toggle and the auto-enable
 count a conflict by the same rule (`db/skill.py:_UserSkillSelection.other_skills_named`).
 
 **Two hashes.** `compute_skill_runtime_hash` is a SHA-256 over every rendered
@@ -303,8 +364,9 @@ chat gets: the custom skills the sandbox loads for the user
 (`_UserSkillSelection.loaded`, the same selection as
 `list_runtime_skills_for_user`: install settings, the user's choice, the name
 order and a version that is not invalid), with the name, description,
-`metadata.short-description` and id of the version the user runs. Anonymous
-users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
+`metadata.short-description` and id of the version the user runs. With
+`built_ins`, it also lists `list_chat_built_in_skills`, the same rows the
+sandbox mounts; they do not depend on the user. Anonymous users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
 turn's picks and reservation, each agent reads it once when it is built (for
 its catalog), each skill tool call reads it, and so does each accepted
 mid-run message with picks. The `@` picker reads it through
@@ -430,9 +492,11 @@ the app from the same rule
 3. `shared-read-predicates` **Every new read path must use the shared
    predicates.** Reads use `db/skill.py:fetch_skill` and `list_skills`
    (`_visible_custom_skill_select`). Edits use `db/skill.py:fetch_editable_skill`
-   (`_editable_by_user`). A query on `Plugin` without them skips sharing. Both
-   list only a plugin whose version is a skill
-   (`db/plugin_access.py:holds_one_root_skill`). Both read
+   (`_editable_by_user`). A query on `Plugin` without them skips sharing. The
+   reads list every plugin; `SkillResponse.kind` is `plugin` when the version
+   the user runs is not a skill (`db/plugin_access.py:holds_one_root_skill`).
+   An edit of the files finds only a skill; the access routes (share,
+   publish, review, versions, delete, bulk) pass `any_plugin=True`. Both read
    the plugin tables through `db/plugin_access.py`: visibility and the install
    setting come only from `db/plugin_access.py:_user_plugin_pairs` (through
    `visible_plugin_ids`, `load_user_plugin_states` and
@@ -563,10 +627,13 @@ the app from the same rule
     or left in the background (`skills/push.py:enqueue_skill_push`, task
     `push_skills_to_users` on the `sandbox` queue), so a large sync does not
     wait for the pushes. Other routes push in the request, after their commit
-    (`skills/push.py:push_skills_and_commit`). The Organization library
-    default is written by
-    `db/plugin.py:set_organization_library_default__no_commit`, which refuses
-    `REQUIRED` and returns the users of the plugins that follow it. EDIT on a skill is not enough
+    (`skills/push.py:push_skills_and_commit`). A marketplace default (the
+    Organization library or a company GitHub marketplace) is written by
+    `db/plugin.py:set_marketplace_default__no_commit`, which refuses
+    `REQUIRED` only for the Organization library (a company marketplace can be
+    Required, as in Claude) and returns the users of the plugins that follow
+    it. A Required plugin keeps its skill names first; the plugin that loses
+    one shows `name_held_by` (see the name order above). EDIT on a skill is not enough
     to change its groups: any
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
@@ -687,7 +754,9 @@ the app from the same rule
     ([[#bundle-change-adds-version]]); the skill responses read
     `db/plugin_access.py:load_plugin_access`. The list and
     runtime names and descriptions come from the frontmatter of the version
-    the user runs. An old custom skill row with no plugin is ignored. Migration
+    the user runs. Migration `2d7510746863` adds `plugin_version.manifest`
+    and `plugin_version.needs` (nullable JSONB, NULL for a skill version).
+    An old custom skill row with no plugin is ignored. Migration
     `65f8d8cd1bf3` drops `ck_private_skill_has_owner`: old rows go stale, and
     the check would refuse a user delete. A user delete is refused
     while the user's "My uploads" holds a plugin
@@ -757,8 +826,10 @@ the app from the same rule
     another skill gets 404. `review_status` is derived from the plugin
     pointers: `published`, `pending` or `draft`. Restore needs
     `base_version_id` (409 `PLUGIN_VERSION_STALE`) and saves through the
-    editor save path, so equal files add no version. UI:
-    `web/src/sections/modals/skills/SkillVersionsTab.tsx`.
+    editor save path, so equal files add no version. The list gives the
+    plugin.json version (`manifest_version`) of a plugin version. UI:
+    `web/src/sections/modals/skills/SkillVersionsTab.tsx`; a plugin version
+    preview shows its skills and needs.
 23. `publishing-review` **The Publishing setting governs every publish by
     authors.** Only the author or global `MANAGE_PLUGINS` publishes
     (`db/skill.py:ensure_can_edit_org_visibility`); an editor saves versions
@@ -787,7 +858,12 @@ the app from the same rule
     mentions are records.** Change which skills chat gets only in
     `db/skill.py:list_chat_skills`; the turn, the tools and the `@` picker all
     read it, and the web client does not decide which skills chat gets (the
-    composer only limits a message to 20 picks). A skill
+    composer only limits a message to 20 picks). It gives one skill for each
+    `plugin_skill` row of each version the sandbox loads; a SKILL.md read is
+    keyed by version id and folder (`db/plugin.py:SkillKey`). When a loaded
+    plugin needs an integration that is not on for the user, the catalog
+    names it in one line
+    (`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`). A skill
     mention is accepted only once, when its message is accepted
     (`skills/chat.py:accept_picked_skills`), and stored as a record (type,
     name, version id) and a `<skill>` message with the cut SKILL.md and its
@@ -799,7 +875,55 @@ the app from the same rule
     (`db/chat.py:load_message_branch`). A content-free incognito row keeps the
     record and no skill message
     ([[chat-persistence#incognito-decision-per-field]]).
-25. `write-skill-limit` **A user's own write never moves that user past 500
+25. `plugin-upload` **An uploaded plugin never gives access to an
+    integration.** `skills/plugin_bundle.py:read_plugin_bundle` reads the zip
+    with the skill upload limits: `.claude-plugin/plugin.json`,
+    `.codex-plugin/plugin.json` or `plugin.json`, at the root or in one
+    folder; skills in `skills/<name>/SKILL.md`; MCP servers in `.mcp.json` or
+    `mcpServers`. It refuses a plugin with no skill and no MCP server. A zip
+    with only a SKILL.md stays a skill upload. A need stores the normalized
+    URL (`utils/url.py:normalize_mcp_server_url`) and no integration id.
+    Each viewer sees that URL, so a URL with a credential (user info or a
+    query value such as `api_key`), a `${VAR}` or a bad scheme is dropped;
+    `url_problem` keeps the reason (`mcp_server_url_problem`) for the UI.
+    `integrations/plugin_needs.py:need_views` matches it at read time against
+    the integrations of `integrations_for_needs`, so a private integration
+    the user cannot see is `not_added`. `integrations_for_needs` adds the
+    server URL of each no-access integration for the match only, so a
+    group-limited integration is `no_access`; the member list never shows that
+    URL. One match gives that integration's member state; two give
+    `more_than_one`. The save
+    (`server/features/skill/api.py:save_plugin_upload`) adds a version to a
+    plugin with the same name that the user edits and that is not a skill:
+    the user's uploads first, then another user's uploads shared as EDITOR,
+    then the Organization library (`db/plugin.py:find_upload_target`);
+    `save_as_new` makes a new plugin with the next free name. The save stores
+    the bundle, then takes the user row lock and finds the target under it, so
+    two uploads of one new name make one plugin with two versions. A new version
+    keeps shares, publishing and user choices. An upload with the files of
+    the current version adds no version and returns `unchanged`. A new plugin
+    with a skill name that another plugin the user runs holds is saved off;
+    the preview and the save name those plugins (`name_conflicts`). A plugin
+    the user turned on that loses a skill name gets `name_held_by`, the
+    plugins that hold it (`db/skill.py:skill_user_states`); a 409
+    `SKILL_NAME_CONFLICT` on a turn-on has `conflict_names`.
+    `GET /skills/{id}/plugin-skill?path=` returns one skill's SKILL.md
+    instructions in the version the user runs. `GET /skills` marks each custom
+    skill `member_visible`: false for one a global `MANAGE_PLUGINS` user sees
+    only through that permission; the Customize lists leave those out. The description is the plugin.json description of the version
+    the user runs (`db/plugin_access.py:load_plugin_access`), so a draft
+    version does not show to the users who run the published one. Version
+    preview and restore take a plugin version too: the preview adds `files`
+    and `plugin` (manifest, skills, needs), and a restore adds a version from
+    the old bundle (`db/skill.py:restore_plugin_version__no_commit`). Turning a
+    plugin on (`PUT /skills/{id}/enabled`, bulk enable, a new upload, and a
+    new version of a plugin the user has on) turns
+    on each needed integration in `turn_on` with a connected status, through
+    `integrations/access.py:set_integration_enabled__no_commit`, and reloads
+    the user's Craft sessions when one changed.
+    The on/off switch and the name order stay per plugin: a plugin that
+    loses any skill name does not load.
+26. `write-skill-limit` **A user's own write never moves that user past 500
     MB or 5,000 files of skills.** Limits are `skills/limits.py` constants. A
     user's total is the recorded size (`plugin_version.unpacked_size_bytes`,
     `file_count`) of the version the user runs, for each plugin on for the user
@@ -817,7 +941,7 @@ the app from the same rule
     and group membership are never checked: the run-time rule and the admin
     banner handle a user they put past the limit. A user already over is not
     refused.
-26. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
+27. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
     and 10,000 files.** `skills/push.py:build_user_skills_payload` applies it,
     so session start (`build_managed_content_payload`) and the push both do.
     `list_runtime_skills_for_user` returns the skills in keep order: built-in,
@@ -836,6 +960,89 @@ the app from the same rule
     SQL sum of enabled, not invalid plugins
     (`db/plugin_access.py:users_with_usage_past`) picks the candidates, and
     the per-user read then runs for those users only.
+28. `github-marketplaces` **A GitHub marketplace sync writes one read or
+    nothing.** A `plugin_marketplace` row of kind `github` keeps its
+    `repository`, `folder` and `ref` ('' for none; one unique index for
+    personal and one for company sources), its login user and its last sync.
+    `skills/marketplace/provider.py:marketplace_config` reads them as a
+    `GitHubMarketplaceConfig`. Skill responses add `marketplace` (id, name, kind,
+    repository and `personal`) and `content_locked`. `skills/marketplace/reader.py:read_marketplace` reads
+    `.claude-plugin/marketplace.json` (then `.agents/plugins/marketplace.json`)
+    and builds one bundle per entry through
+    `skills/plugin_bundle.py:read_plugin_bundle`: the folder's plugin.json
+    over the entry fields, or the entry fields alone; an entry `skills` list
+    takes only those folders and the MCP files that the entry names. A bad entry is blocked and the rest go on;
+    `github`, `url` and `git-subdir` sources on github.com are fetched from
+    their repository (20 per sync, one repository in memory at a time); other
+    sources and hosts are not supported, with a reason that names the source
+    kind or the host. `skills/ingest_from_github.py:read_repository_archive`
+    records symbolic links, and only an entry whose folder holds one is
+    blocked. `skills/marketplace/reader.py:BundleBudget` holds the
+    skill and size limits for local and remote plugins together.
+    `skills/marketplace/compare.py:plan_marketplace_sync` decides the writes.
+    A synced plugin has the name of its entry, and the plan matches plugins
+    to entries by that name (unique per marketplace); the plugin.json name
+    does not name it. An entry gets a version only when its file list
+    changed; every gone entry deletes its plugin; a blocked entry keeps its
+    plugin. "Is synced" is the marketplace kind (`db/plugin.py:is_synced`).
+    `skills/marketplace/sync.py:sync_marketplace` stores only the bundles to
+    write, then `db/marketplace.py:apply_marketplace_sync__no_commit` compares
+    again under the marketplace row lock and writes all in one transaction. A
+    failed read or a GitHub error only sets `last_error`. A failure before the
+    commit deletes the stored bundles. One sync runs at a time per
+    marketplace (cache lock `marketplace_sync:{id}`); a sync that finds the
+    lock held does nothing. `skills/marketplace/sync.py:marketplace_syncing`
+    is true while `marketplace_sync_queued:{id}` (task expiry TTL; a failed
+    send deletes it) or `marketplace_syncing:{id}` (lock TTL, 5 minutes) is
+    set. The run deletes the running key only while it still holds the lock.
+    A running sync extends the lock and the key between steps (read, each
+    other repository, each staged bundle, apply) and stops after 30 minutes,
+    so a killed worker frees the marketplace within 5 minutes.
+    `request_marketplace_sync` does nothing while `marketplace_syncing` is
+    true, and the web turns Sync now off then. A sync whose lock expired writes nothing. A folder URL
+    (`.../tree/<ref>/<folder>`) and `github.com/owner/repo` fill the ref and
+    the folder. A personal add of a source that a company marketplace has is
+    refused with CONFLICT. A missing branch and a missing repository give
+    their own `last_error`. Remote entries read at most `REMOTE_REPOSITORY_MAX_COUNT` (20) other
+    repositories without a GitHub login and
+    `REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN` (200) with one
+    (`skills/marketplace/provider.py`); entries past it are blocked with a
+    `MarketplaceReasonCode`, and the web shows one note for them. A plugin
+    with only commands, agents or hooks is not supported with
+    `SKILLS_AND_MCP_ONLY`. The web translates `reason_code` and keeps
+    `reason` as the fallback (`lib/marketplaces/hooks.ts:useMarketplaceCopy`).
+    `utils/github.py:github_rate_limited` puts GitHub's reset time in the
+    error (`reset_at`), and a 422 for a ref that names no commit counts as
+    not found. The preview says when the caller or the company already has
+    the source (`db/marketplace.py:source_added_for`). `GitHubMarketplaceConfig` lowercases owner and repo, so the
+    unique indexes catch a duplicate that differs only in case. Every JSON
+    read in `skills/marketplace/reader.py` turns a `RecursionError` into a
+    blocked entry or a failed read. Replace login needs no GitHub
+    connection: the new login reads a public repository without one. The Celery task
+    `sync_marketplace` runs on the `sandbox` queue; Onyx Lite runs the sync
+    in the API server after the response. Company plugins have no author and
+    `published_version_id` follows each version;
+    `db/plugin_access.py:seen_by_organization` makes the organization see
+    them. A personal plugin belongs to the marketplace owner and starts off, as
+    in Claude; the owner turns plugins on one at a time. `db/plugin.py:refuse_if_synced`
+    refuses content edits, uploads, restores, publishing, ownership transfer
+    and delete of a synced plugin with "Change this plugin in GitHub.". A
+    company plugin's shares and install settings still change. A personal
+    plugin takes no user or group share and no install setting
+    (`db/skill.py:_check_skill_access_change`), and a global plugin manager
+    does not see or edit another user's personal plugins
+    (`db/skill.py:_not_others_personal_marketplace`). `db/skill.py:may_delete_skill` takes
+    `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A user delete removes the user's personal
+    marketplaces and their plugins (`db/users.py:delete_user_from_db__no_commit`
+    returns a `UserDeleteCleanup`; after the commit, `finish_user_delete`
+    deletes their bundle files and pushes skills to the users who could see
+    them).
+    The routes are in
+    `server/features/skill/marketplace_api.py`, under `/marketplaces`;
+    they authorize before any GitHub call. The web client is
+    `web/src/lib/marketplaces/` (`web/src/lib/marketplaces/hooks.ts` reads the list again every 3 s
+    while a marketplace syncs, and refreshes the skill lists when a sync
+    changes plugins).
 
 ---
 
@@ -862,8 +1069,9 @@ the app from the same rule
 
 ## Known issues
 
-- **GitHub import checks a skill's shape, not its content.** Import enforces
-  archive size and member limits, path safety and frontmatter rules. Nothing
+- **A marketplace sync checks a plugin's shape, not its content.** The sync
+  enforces archive size and member limits, path safety, the bundle limits
+  and frontmatter rules. Nothing
   inspects the instructions or bundled scripts. A harmful skill is contained
   only by the sandbox and its egress proxy ([[craft-sandboxes]],
   [[craft-external-apps]]).
@@ -891,9 +1099,9 @@ the app from the same rule
 - [[craft-sessions]]: the stale check and the reload that apply a push to a
   live runtime.
 - [[craft-external-apps]]: the app rows behind built-in app skills, the
-  connectable-apps list and action policy views. GitHub
-  import and preview authenticate with the user's connection of the GitHub
-  integration (`server/features/skill/api.py:_github_authorization_header`,
+  connectable-apps list and action policy views. A marketplace preview uses
+  the caller's connection of the GitHub integration, and a sync uses the
+  login user's (`integrations/github_auth.py:github_authorization_for`,
   through `resolve_call_credentials`).
 - [[authorization]]: `MANAGE_PLUGINS` and the scoped-manager group check
   (`assert_within_scope`).
@@ -919,9 +1127,11 @@ the app from the same rule
   rendered bytes ([[#rendering-input-changes-hash]]).
 - `add-skill-mutation-route` **Add a skill mutation route.** Copy `share_current_user_skill` in
   `server/features/skill/api.py`: compute `affected_user_ids_for_plugins`
-  before the change, apply it, compute it again, commit, call
-  `push_skills_for_users` with the union, then commit again
-  ([[#affected-users-before-change]]).
+  before the change, apply it, compute it again, commit, then call
+  `skills/push.py:push_skills_and_commit` with the union
+  ([[#affected-users-before-change]]). Its second commit holds only the push
+  state: a failure there rolls back and logs, so the route still returns the
+  saved change. A plain `db_session.commit()` there makes a retry save twice.
 - `investigate-skill-missing` **Investigate "my skill is not in the sandbox".** Check the inputs of
   `list_runtime_skills_for_user` one at a time for that user: visibility,
   `load_user_plugin_states` (setting and choice), the name order
@@ -939,8 +1149,11 @@ the app from the same rule
 
 ## Verification
 
-- `backend/tests/unit/onyx/skills/` covers bundles, validation, rendering and
-  GitHub import.
+- `backend/tests/unit/onyx/skills/` covers bundles, validation, rendering,
+  the repository archive read and the marketplace reader and compare.
+- `backend/tests/external_dependency_unit/craft/marketplace/` covers the
+  marketplace sync, the task lock, the API, access and the content lock with
+  a fake GitHub (`backend/tests/external_dependency_unit/craft/fake_github.py`).
 - `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
   covers visibility, the fileset, affected users, ownership and push faults.
   `backend/tests/external_dependency_unit/craft/test_skill_version_reads.py` covers the version each user runs (an
@@ -953,6 +1166,11 @@ the app from the same rule
   the re-sync, and
   `backend/tests/external_dependency_unit/db/test_plugin_constraints.py` the
   database rules of the plugin tables.
+- `backend/tests/unit/onyx/skills/test_plugin_bundle.py` covers the plugin
+  zip reader and `backend/tests/unit/onyx/utils/test_mcp_server_url.py` the
+  URL rule. `backend/tests/external_dependency_unit/craft/test_plugin_upload.py`
+  covers the save target, multi-skill run time and chat, need states, turn
+  on and the chat line.
 - `backend/tests/integration/tests/skills/` covers the API, bulk actions,
   import sharing and plugin version writes
   (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`),

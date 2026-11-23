@@ -10,9 +10,11 @@ from onyx.agents.tools import ToolInvocation
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.db.skill import list_chat_skills
+from onyx.integrations.plugin_needs import unavailable_need_names
 from onyx.llm.models import SystemMessage, ToolDefinition, ToolResult
+from onyx.prompts.skill_prompts import SKILLS_UNAVAILABLE_INTEGRATIONS_LINE
 from onyx.skills.chat import render_skills_catalog, truncate_catalog_description
-from onyx.skills.content import read_versions_skill_md
+from onyx.skills.content import read_chat_skills_md
 from onyx.tools.constants import SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME
 from onyx.tools.interface import (
     Tool,
@@ -50,8 +52,9 @@ class _SkillTool(Tool):
     code_mode_exposure = CodeModeExposure.DIRECT
     arguments: ClassVar[type[BaseModel]]
 
-    def __init__(self, user: User) -> None:
+    def __init__(self, user: User, *, built_ins: bool) -> None:
         self.user = user
+        self.built_ins = built_ins
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
@@ -76,7 +79,7 @@ class SkillsListTool(_SkillTool):
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(SkillsListArguments, invocation.arguments)
         with get_session_with_current_tenant() as db_session:
-            skills = list_chat_skills(db_session, self.user)
+            skills = list_chat_skills(db_session, self.user, built_ins=self.built_ins)
         page = skills[request.offset : request.offset + SKILLS_PER_PAGE]
         lines = [
             f"- {skill.name}: {truncate_catalog_description(skill.description)}"
@@ -106,7 +109,9 @@ class SkillsReadTool(_SkillTool):
             skill = next(
                 (
                     skill
-                    for skill in list_chat_skills(db_session, self.user)
+                    for skill in list_chat_skills(
+                        db_session, self.user, built_ins=self.built_ins
+                    )
                     if skill.name == request.name
                 ),
                 None,
@@ -119,9 +124,9 @@ class SkillsReadTool(_SkillTool):
                         f"{SKILLS_LIST_TOOL_NAME} for the skills you can use."
                     ),
                 )
-            skill_md = read_versions_skill_md(
-                [skill.version_id], self.user.id, db_session
-            ).get(skill.version_id)
+            skill_md = read_chat_skills_md([skill], self.user.id, db_session).get(
+                (skill.version_id, skill.path)
+            )
         if skill_md is None:
             raise ToolCallException(
                 message=f"Unreadable skill: {request.name}",
@@ -150,7 +155,17 @@ def skills_catalog_message(
     if list_tool is None:
         return None
     with get_session_with_current_tenant() as db_session:
-        catalog = render_skills_catalog(
-            list_chat_skills(db_session, list_tool.user), context_window_tokens
+        skills = list_chat_skills(
+            db_session, list_tool.user, built_ins=list_tool.built_ins
         )
-    return SystemMessage(content=catalog) if catalog is not None else None
+        catalog = render_skills_catalog(skills, context_window_tokens)
+        if catalog is None:
+            return None
+        unavailable = unavailable_need_names(
+            list_tool.user, {skill.version_id for skill in skills}, db_session
+        )
+    if unavailable:
+        catalog += "\n" + SKILLS_UNAVAILABLE_INTEGRATIONS_LINE.format(
+            names=", ".join(unavailable)
+        )
+    return SystemMessage(content=catalog)

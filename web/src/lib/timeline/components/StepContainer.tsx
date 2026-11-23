@@ -11,6 +11,8 @@ export interface StepContainerProps {
   stepIcon?: FunctionComponent<IconProps>;
   /** The step's title; it fills the line */
   header?: string | RichStr;
+  /** The title's identity: a new key swaps the title; see opal `Line` */
+  headerKey?: React.Key;
   /** Rendered at the inline end of the line, before the fold button */
   headerAccessory?: React.ReactNode;
   /** Controlled expanded state */
@@ -44,6 +46,7 @@ export function StepContainer({
   children,
   stepIcon,
   header,
+  headerKey,
   headerAccessory,
   isExpanded = true,
   onToggle,
@@ -69,6 +72,7 @@ export function StepContainer({
       variant,
       icon,
       title,
+      titleKey: headerKey,
       rightChildren: headerAccessory,
     } as const;
     return children == null || children === false ? (
@@ -84,6 +88,7 @@ export function StepContainer({
       variant={variant}
       icon={icon}
       title={title}
+      titleKey={headerKey}
       onClick={onToggle}
       // The line draws the chevron; the accessory sits before it.
       rightChildren={headerAccessory}

@@ -26,7 +26,7 @@ The web search action does not appear in chat until an admin connects a search e
 
     <img className="rounded-image" src="/assets/admins/actions/web_search/search_engines.webp" alt="Search Engine providers"/>
 
-    <Tabs tabs={["Exa", "Serper", "Brave", "Google PSE", "SearXNG", "Tavily", "Firecrawl"]}>
+    <Tabs tabs={["Exa", "Serper", "Brave", "Google PSE", "SearXNG", "Tavily", "Firecrawl", "Parallel"]}>
       <Tab title="Exa">
         Create an API key in the [Exa dashboard](https://dashboard.exa.ai/api-keys)
         and paste it in the **API Key** field.
@@ -73,6 +73,14 @@ The web search action does not appear in chat until an admin connects a search e
         Onyx does not follow redirects, so use the final URL.
 
         Onyx also saves this key for the Firecrawl web crawler, so you only need to select it there.
+      </Tab>
+
+      <Tab title="Parallel">
+        Create an API key in [Parallel Platform](https://platform.parallel.ai) and paste it in the **API Key** field.
+
+        Onyx sends each query to the Parallel Search API in `fast` mode and uses the excerpts that Parallel returns as
+        the result snippets. Parallel does not support the `site:` operator,
+        so Onyx changes a `site:` filter into a domain filter.
       </Tab>
     </Tabs>
   </Step>

@@ -93,7 +93,6 @@ Open **Customize → Skills**, select **Add**, then choose how you want to begin
 | --- | --- | --- |
 | You want to write the Skill in Onyx | **Create a skill** | The Skill editor opens so you can write the details and instructions, then add supporting files. |
 | You already have a Skill | **Upload skill** | Upload `SKILL.md`, a ZIP, or a Skill folder. Onyx reads the instructions and creates the Skill for you. |
-| The Skill lives in a GitHub repository | **Import from GitHub** | Enter the repository. Onyx lists the importable Skills it finds, and you choose which ones to import. |
 
 Every new Skill is personal and private. After you create it, Onyx opens its page, where you can share it.
 
@@ -170,16 +169,22 @@ description: Create a concise weekly customer update from meeting notes and acco
   </Step>
 </Steps>
 
-### Import from GitHub
+### Upload a plugin with several skills
 
-Select **Add** > **Import from GitHub** and enter the repository, such as `owner/repo`.
-Onyx scans the repository for folders that contain a `SKILL.md` and lists the importable Skills.
-Select the Skills you want. Select **Configure access** to share them with people, groups, or your organization.
-The access settings apply to all selected Skills. Import the selection and review the results.
-Onyx shows which Skills it imported and which it could not.
+A Claude Code or Codex plugin can hold several skills in `skills/<name>/SKILL.md`,
+and it can name the MCP servers that it needs. Upload it on the **Plugins** tab with **Add → Upload plugin**.
+Onyx keeps the skills together as one plugin with versions. If you own or can edit a plugin with the same name,
+the upload becomes its next version, unless you select **Save as a New Plugin**. If you can only view that plugin,
+the upload becomes a new plugin. If you upload a zip with a `SKILL.md` and no `plugin.json` there,
+Onyx continues with the skill flow on this page. See [Upload a plugin](/overview/core_features/plugins#upload-a-plugin).
 
-Public repositories work without setup. To import from a private repository, use **Connect GitHub** in the
-import dialog. If GitHub is not set up for your workspace, ask an admin.
+### Get Skills from GitHub
+
+To get Skills from a GitHub repository,
+add the repository as a marketplace on the **Plugins** tab with **Add → Add marketplace**.
+The repository needs a `.claude-plugin/marketplace.json` file. Each entry becomes a plugin,
+and **Sync now** gets the changes from GitHub.
+See [Add a marketplace](/overview/core_features/plugins#add-a-marketplace).
 
 ### Update a Skill
 
@@ -303,7 +308,7 @@ See [Manage several Skills](/admins/managing_features/craft_skills#manage-severa
   </Accordion>
 
   <Accordion title="My SKILL.md is too large">
-    A `SKILL.md` can be at most 256 KiB. This limit applies to uploads, GitHub imports, and edits.
+    A `SKILL.md` can be at most 256 KiB. This limit applies to uploads, marketplace syncs, and edits.
     Split the instructions into several files in the Skill, and link them from `SKILL.md`.
   </Accordion>
 </AccordionGroup>

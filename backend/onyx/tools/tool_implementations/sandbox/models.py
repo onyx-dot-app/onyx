@@ -1,12 +1,13 @@
-"""Arguments and result details of the sandbox tools (sandbox_tools.py). The
-saved-details unions import it, so it imports only models and constants."""
+"""Arguments and result details of the sandbox tools (sandbox_tools.py), and
+the chat file copies (file_copies.py). The saved-details unions import it,
+so it imports only models and constants."""
 
 from typing import Annotated, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from onyx.server.features.build.sandbox.exec_output import (
-    DEFAULT_MAX_OUTPUT_TOKENS,
     EXEC_DEFAULT_YIELD_MS,
     EXEC_MAX_YIELD_MS,
     EXEC_MIN_YIELD_MS,
@@ -15,12 +16,22 @@ from onyx.server.features.build.sandbox.exec_output import (
     WRITE_STDIN_DEFAULT_YIELD_MS,
     WRITE_STDIN_MAX_YIELD_MS,
 )
-from onyx.server.features.build.sandbox.models import ExecCompletionName
+from onyx.server.features.build.sandbox.models import (
+    SESSION_WORKSPACE_ROOT,
+    ExecCompletionName,
+)
+from onyx.tools.constants import DEFAULT_MAX_OUTPUT_CHARS, MAX_OUTPUT_CHARS_DESCRIPTION
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
-_MAX_OUTPUT_TOKENS_DESCRIPTION = (
-    f"Output token budget. Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens."
-)
+
+class VmChatFile(BaseModel):
+    """A chat file in the chat's sandbox: a file store file and its path,
+    relative to the chat's working directory."""
+
+    model_config = ConfigDict(frozen=True)
+
+    file_id: str
+    path: str
 
 
 class ExecCommandArguments(BaseModel):
@@ -36,8 +47,8 @@ class ExecCommandArguments(BaseModel):
         f"{EXEC_DEFAULT_YIELD_MS} ms; effective range is "
         f"{EXEC_MIN_YIELD_MS}-{EXEC_MAX_YIELD_MS} ms.",
     )
-    max_output_tokens: int | None = Field(
-        default=None, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    max_output_chars: int = Field(
+        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
     )
 
 
@@ -57,8 +68,8 @@ class WriteStdinArguments(BaseModel):
         f"{WRITE_STDIN_DEFAULT_YIELD_MS} ms and cap at {WRITE_STDIN_MAX_YIELD_MS} "
         f"ms; empty polls wait {POLL_MIN_YIELD_MS}-{POLL_MAX_YIELD_MS} ms.",
     )
-    max_output_tokens: int | None = Field(
-        default=None, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    max_output_chars: int = Field(
+        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
     )
 
 
@@ -108,17 +119,26 @@ class ExecCommandOutput(BaseModel):
     completion: Annotated[ExecCompletionName | None, OMITTED_WHEN_NONE] = Field(
         default=None, description="How the command ended."
     )
-    original_token_count: int = Field(
-        description="Approximate token count before output truncation."
-    )
+
+
+class SpilledOutput(BaseModel):
+    """What the user's card shows of a result whose full value went to a
+    file in the sandbox VM (spill.py): its head and tail, with a plain note."""
+
+    head: str
+    tail: str
 
 
 class SandboxExecResult(ExecCommandOutput):
     """Saved details of an exec_command or write_stdin call."""
 
     type: Literal["sandbox_exec"] = "sandbox_exec"
-    # A byte or token cap removed output.
+    # `output` is not all of the output: the call's max_output_chars cut it,
+    # the byte cap (EXEC_CALL_OUTPUT_MAX_BYTES) dropped some, or the daemon
+    # lost some. In the full value, only the last two.
     truncated: bool = False
+    # Set, with an empty `output`, when the output went to the sandbox VM.
+    spilled: Annotated[SpilledOutput | None, OMITTED_WHEN_NONE] = None
 
 
 # The names of the file tools (sandbox_tools.py), which the patch card shows.
@@ -143,6 +163,8 @@ class ApplyPatchResult(BaseModel):
 PUBLISH_FILES_MAX_BYTES = 100 << 20
 # Most files that one publish_files call publishes.
 PUBLISH_FILES_MAX_FILES = 20
+# Longest title that publish_files keeps; it cuts a longer one.
+PUBLISH_FILES_MAX_TITLE_CHARS = 200
 
 
 class PublishFileArgument(BaseModel):
@@ -175,14 +197,39 @@ class PublishedFile(BaseModel):
     """A file that publish_files copied from the VM to the file store."""
 
     file_id: str
-    # The file name, which the download keeps. Publishes of one name are
-    # versions of one file.
+    # The chat's artifact at this path and this file's version of it, from 1.
+    # Details saved without them have neither; such a file is an artifact of
+    # its own.
+    artifact_id: UUID | None = None
+    version: int | None = None
+    # The file name, which the download keeps.
     name: str
     title: str | None = None
     # Absolute and normalized.
     path: str
     size: int
     mime_type: str
+    # A JPEG of the file's first page, for a PDF, PowerPoint or Word file
+    # that rendered; it downloads from /chat/file/{thumbnail_file_id}.
+    thumbnail_file_id: str | None = None
+
+
+class PublishedFileView(PublishedFile):
+    """A published file as clients get it, in packets and the session load:
+    with the path to show. Saved details keep the plain `PublishedFile`."""
+
+    @computed_field
+    @property
+    def display_path(self) -> str:
+        """The path to show: relative to the working directory of the chat
+        that published the file, or the whole path outside it. publish_files
+        accepts only that chat's working directory under
+        SESSION_WORKSPACE_ROOT."""
+        workspaces = f"{SESSION_WORKSPACE_ROOT}/"
+        if not self.path.startswith(workspaces):
+            return self.path
+        _, _, relative = self.path.removeprefix(workspaces).partition("/")
+        return relative or self.path
 
 
 class PublishedFiles(BaseModel):

@@ -33,6 +33,24 @@ different shard settings on AWS-managed OpenSearch.
 - **A full admin sees resource warnings** when the OpenSearch cluster is short
   of disk, JVM heap or vector memory: one popup per 24 hours, and a banner on
   admin pages.
+- **A full admin on a self-hosted Business or Enterprise deployment** reads the
+  cluster status (`GET /admin/service-status/opensearch`, EE): cluster health,
+  each data node's disk, heap and vector memory against its file cache, the
+  current and reindex indexes, and the issues with their severity. The result is
+  shared for 60 seconds. Multi-tenant Cloud refuses it. A second route
+  (`/admin/service-status/opensearch/searches`) returns the last 30 minutes of
+  searches: per minute the count, failures and the p10 and p90 of the
+  successful searches, the window's p90, the slow p90 threshold (700 ms), each
+  slow or failed search, and up to 20 random other searches per minute. The
+  current minute reports its elapsed seconds, so its rate is not understated.
+  The admin **Service Status** page (Usage section, hidden on Cloud) shows
+  both: a cluster card, the search rate with failed searches, the search
+  latency (one faint dot per listed search in its minute's column, the p10 to
+  p90 band, and the p90 line, green until both ends of a segment pass the
+  threshold; hovering a minute shows its p90 and p10),
+  each data node's disk and vector memory, the indexes, and an issues panel.
+  An admin can dismiss a warning in their browser until it changes; critical
+  issues stay.
 - **An operator** sees the old index deleted about a day after a switch, once
   the new index is healthy. A reclaim that fails repeatedly stops and needs a
   person.
@@ -46,7 +64,8 @@ swap and the reclaim of old indices. It owns the metadata sync: the `needs_sync`
 predicate and `document_index_metadata_sync_task`. Their module keeps the name
 `vespa`; the backend AGENTS file explains why. It owns the embedding model registry,
 how the model server loads a self-hosted model, the cluster resource health
-check and the `cc_pair_ids` backfill.
+check, the cluster status for the admin Service Status page and
+the `cc_pair_ids` backfill.
 
 Its neighbours own:
 - [[indexing-pipeline]]: building the chunks that cross `index()`.
@@ -260,6 +279,23 @@ it deletes the old one.
 
 ## Decisions
 
+- **Vector memory is estimated from the vector files, not k-NN memory.**
+  Lucene reads vectors through the OS file cache, so k-NN graph memory stays 0
+  for Onyx indexes. `document_index/opensearch/client.py:get_node_vector_bytes` sums each shard copy's
+  graph (`vex`) plus the vectors the graph walk reads: the quantized copy
+  (`veq`, `veb`) when there is one, else the float32 `vec`. The file cache is
+  the smaller of host RAM and the cgroup limit, minus the heap. The resource
+  warning and the status page share this estimate.
+- **Search samples are buffered per process, not written per search.** Each
+  search adds a small sample to an in-process buffer
+  (`document_index/opensearch/search_samples.py`). A daemon thread flushes it
+  every 5 seconds as one member of a per-minute set in the shared cache, so a
+  search pays no cache round trip. Prometheus keeps only latency buckets per
+  pod. The read returns per-minute percentiles of the successful searches
+  and lists the latest 1,000 slow or failed searches. It also lists up to 20
+  other searches per minute, picked at random with the minute as the seed, so
+  a refresh shows the same ones.
+  Multi-tenant deployments record nothing.
 - **Reindex copies stored chunks instead of fetching sources again.** A full
   refetch is slow and fails when a connector is broken. The port re-embeds what
   PRESENT holds, and the reindex endpoint creates every FUTURE row with

@@ -2,6 +2,7 @@
 
 import hashlib
 from collections.abc import Iterable
+from functools import cache
 from typing import Literal
 from uuid import UUID
 
@@ -22,7 +23,9 @@ from onyx.db.sandbox import (
 )
 from onyx.db.skill import (
     RuntimeSkill,
+    RuntimeSkillFolder,
     SkillValidityUpdate,
+    list_chat_built_in_skills,
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
@@ -34,7 +37,7 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
     MAX_FILE_BYTES,
 )
-from onyx.server.features.build.sandbox.models import FileSet
+from onyx.server.features.build.sandbox.models import FileSet, SkillsBundle
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
@@ -48,6 +51,8 @@ from onyx.skills.built_in import (
 )
 from onyx.skills.bundle import (
     DEFAULT_PER_FILE_MAX_BYTES,
+    PLUGIN_BUNDLE_LAYOUT,
+    SKILL_BUNDLE_LAYOUT,
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
     open_bundle_zip,
@@ -125,15 +130,18 @@ class UserSkillsPayload(BaseModel):
 
 
 def _add_static_builtin(
-    files: FileSet, name: str, definition: BuiltInSkillDefinition
+    files: FileSet,
+    folders: Iterable[RuntimeSkillFolder],
+    definition: BuiltInSkillDefinition,
 ) -> None:
     source_dir = definition.source_dir
     for path in iter_builtin_skill_files(source_dir):
         # Template sources are rendered separately; never ship them raw.
         if path.suffix == TEMPLATE_SUFFIX:
             continue
-        rel = path.relative_to(source_dir)
-        files[f"{name}/{rel.as_posix()}"] = path.read_bytes()
+        sandbox_path = _sandbox_path(path.relative_to(source_dir).as_posix(), folders)
+        if sandbox_path is not None:
+            files[sandbox_path] = path.read_bytes()
 
 
 def _render_template(
@@ -213,7 +221,10 @@ def _load_custom_bundle(
     version = runtime_skill.version
     if version is None or version.is_valid is False:
         return None
-    if version.is_valid is None:
+    layout = (
+        PLUGIN_BUNDLE_LAYOUT if runtime_skill.plugin_skills else SKILL_BUNDLE_LAYOUT
+    )
+    if version.is_valid is None and not runtime_skill.plugin_skills:
         validation = validate_stored_custom_skill(
             runtime_skill.name, version.bundle_file_id, file_store
         )
@@ -234,11 +245,20 @@ def _load_custom_bundle(
         return None
     try:
         return load_stored_custom_skill_bundle(
-            version.bundle_file_id, file_store
+            version.bundle_file_id, file_store, layout
         ).content
     except Exception as exc:
         logger.warning("Skipping unreadable valid skill %s: %s", runtime_skill.id, exc)
         return None
+
+
+def _sandbox_path(path: str, folders: Iterable[RuntimeSkillFolder]) -> str | None:
+    for folder in folders:
+        if not folder.path:
+            return f"{folder.name}/{path}"
+        if path.startswith(f"{folder.path}/"):
+            return f"{folder.name}/{path.removeprefix(f'{folder.path}/')}"
+    return None
 
 
 def _assemble_skills(
@@ -248,6 +268,8 @@ def _assemble_skills(
 
     Built-ins render from disk. A custom skill sends the bundle of the plugin
     version the user runs, in a folder named by that version's frontmatter.
+    A plugin version sends each skill folder, in a folder named by that
+    skill's frontmatter, and no other file of its bundle.
     The version must already be valid or pass lazy validation before its
     FileStore bundle is unpacked. Invalid, indeterminate, and unknown built-in
     rows are skipped.
@@ -291,10 +313,15 @@ def _assemble_skills(
         return True
 
     for runtime_skill in skills:
-        name = runtime_skill.name
-        if name in seen_names:
+        folders = runtime_skill.plugin_skills or (
+            RuntimeSkillFolder(path="", name=runtime_skill.name),
+        )
+        names = {folder.name for folder in folders}
+        if not names.isdisjoint(seen_names):
             logger.warning(
-                "Skipping skill %s: another skill is named '%s'", runtime_skill.id, name
+                "Skipping skill %s: another skill has one of the names %s",
+                runtime_skill.id,
+                sorted(names),
             )
             continue
         skill_files: FileSet = {}
@@ -311,19 +338,25 @@ def _assemble_skills(
                 continue
             try:
                 with open_bundle_zip(bundle_bytes) as zf:
-                    infos = [info for info in zf.infolist() if not info.is_dir()]
+                    infos = [
+                        (info, sandbox_path)
+                        for info in zf.infolist()
+                        if not info.is_dir()
+                        and (sandbox_path := _sandbox_path(info.filename, folders))
+                        is not None
+                    ]
                     # The zip directory bounds memory before the files are read.
                     size = _larger(
                         runtime_skill.usage,
                         SkillUsage(
-                            bytes=sum(info.file_size for info in infos),
+                            bytes=sum(info.file_size for info, _ in infos),
                             files=len(infos),
                         ),
                     )
                     if left_out(runtime_skill, size):
                         continue
                     skill_files = {
-                        f"{name}/{info.filename}": zf.read(info) for info in infos
+                        sandbox_path: zf.read(info) for info, sandbox_path in infos
                     }
             except Exception:
                 logger.warning(
@@ -337,22 +370,22 @@ def _assemble_skills(
             if definition is None:
                 logger.warning(
                     "Skill row %s references unknown built-in %s; skipping",
-                    name,
+                    runtime_skill.name,
                     runtime_skill.built_in_skill_id,
                 )
                 continue
-            _add_static_builtin(skill_files, name, definition)
+            _add_static_builtin(skill_files, folders, definition)
             if definition.has_template:
                 _render_template(
                     skill_files, runtime_skill, definition, db_session, user
                 )
-        if not _resolve_skill_dir(skill_files, name):
+        if not all(_resolve_skill_dir(skill_files, name) for name in names):
             continue
         size = _larger(size, _usage_of(skill_files))
         if left_out(runtime_skill, size):
             continue
         files.update(skill_files)
-        seen_names.add(name)
+        seen_names |= names
         used += size
 
     try:
@@ -410,6 +443,35 @@ def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayl
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     """Return the skill files a sandbox of the user gets."""
     return build_user_skills_payload(user, db_session).files
+
+
+def build_chat_built_ins_bundle(db_session: Session) -> SkillsBundle | None:
+    """The chat built-ins as one bundle, or None when none is available."""
+    skills = list_chat_built_in_skills(db_session)
+    if not skills:
+        return None
+    return _chat_built_ins_bundle(
+        tuple(
+            (skill.built_in_skill_id or "", skill.name, skill.plugin_skills)
+            for skill in skills
+        )
+    )
+
+
+@cache
+def _chat_built_ins_bundle(
+    skills: tuple[tuple[str, str, tuple[RuntimeSkillFolder, ...]], ...],
+) -> SkillsBundle:
+    # Keyed without row ids, so tenants with the same built-ins share one
+    # bundle. Chat built-ins have no template, so no file depends on the user.
+    files: FileSet = {}
+    for built_in_skill_id, name, folders in skills:
+        _add_static_builtin(
+            files,
+            folders or (RuntimeSkillFolder(path="", name=name),),
+            BUILT_IN_SKILLS[built_in_skill_id],
+        )
+    return SkillsBundle.from_files(files)
 
 
 def push_skill_to_affected_sandboxes(skill: Plugin, db_session: Session) -> None:
@@ -519,6 +581,11 @@ def push_skills_and_commit(user_ids: Iterable[UUID], db_session: Session) -> Non
     """Push to the users after the caller committed the change, and commit the
     push state."""
     push_skills_for_users(set(user_ids), db_session)
+    commit_push_state(db_session)
+
+
+def commit_push_state(db_session: Session) -> None:
+    """Commit the push state after the caller committed the change."""
     try:
         db_session.commit()
     except Exception:

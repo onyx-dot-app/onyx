@@ -14,8 +14,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { cn } from "@opal/utils";
 import { SelectCard, Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
-import DocumentPreviewControls from "@/app/craft/components/output-panel/DocumentPreviewControls";
-import PreviewSidebar from "@/app/craft/components/output-panel/PreviewSidebar";
+import {
+  DocumentToolbar,
+  PreviewSidebar,
+} from "@/sections/file-preview/PreviewControls";
+import { useThumbnailColumn } from "@/lib/filePreview/hooks";
 import {
   fetchPptxPreview,
   buildArtifactUrl,
@@ -51,7 +54,7 @@ export default function PptxPreview({
   const format: ReturnType<typeof useFormatter> = useFormatter();
   const selectedThumbnailRef = useRef<HTMLDivElement>(null);
   const [currentSlide, setCurrentSlide] = useState(initialSlide);
-  const [showThumbnails, setShowThumbnails] = useState(true);
+  const thumbnails = useThumbnailColumn();
 
   const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
@@ -173,7 +176,7 @@ export default function PptxPreview({
           </Text>
         </div>
       )}
-      <DocumentPreviewControls
+      <DocumentToolbar
         label={t("controls.label")}
         previousLabel={t("previous.label")}
         nextLabel={t("next.label")}
@@ -184,57 +187,65 @@ export default function PptxPreview({
         })}
         page={activeSlide + 1}
         pageCount={slideCount}
-        showThumbnails={showThumbnails}
-        onToggleThumbnails={() => setShowThumbnails((value) => !value)}
+        showThumbnails={thumbnails.show}
+        onToggleThumbnails={thumbnails.toggle}
         onPageChange={(page) => setCurrentSlide(page - 1)}
       />
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div
+        ref={thumbnails.observePreview}
+        className="flex min-h-0 flex-1 overflow-hidden"
+      >
         <PreviewSidebar
-          hidden={!showThumbnails}
+          hidden={!thumbnails.show}
+          previewWidth={thumbnails.previewWidth}
           label={t("resize.ariaLabel")}
           initialWidth={112}
         >
-          <div
-            role="toolbar"
-            aria-label={t("slides.label")}
-            aria-orientation="vertical"
-            tabIndex={0}
-            onKeyDown={handleKeyDown}
-            className="h-full overflow-y-auto overscroll-contain p-2"
-          >
-            <div className="flex flex-col gap-2">
-              {data.slide_paths.map((path, index) => (
-                <SelectCard
-                  key={path}
-                  ref={index === activeSlide ? selectedThumbnailRef : undefined}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={t("slide.counter", {
-                    current: index + 1,
-                    total: slideCount,
-                  })}
-                  aria-current={index === activeSlide ? "true" : undefined}
-                  state={index === activeSlide ? "selected" : "empty"}
-                  padding={1}
-                  rounding={2}
-                  onClick={() => setCurrentSlide(index)}
-                >
-                  <div className="flex flex-col gap-1">
-                    <img
-                      src={`${buildArtifactUrl(sessionId, path)}?revision=${data.imageRevision}`}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full aspect-video object-contain rounded-04 bg-background-neutral-02"
-                    />
-                    <Text font="secondary-body" color="text-03">
-                      {format.number(index + 1)}
-                    </Text>
-                  </div>
-                </SelectCard>
-              ))}
+          {() => (
+            <div
+              role="toolbar"
+              aria-label={t("slides.label")}
+              aria-orientation="vertical"
+              tabIndex={0}
+              onKeyDown={handleKeyDown}
+              className="h-full overflow-y-auto overscroll-contain p-2"
+            >
+              <div className="flex flex-col gap-2">
+                {data.slide_paths.map((path, index) => (
+                  <SelectCard
+                    key={path}
+                    ref={
+                      index === activeSlide ? selectedThumbnailRef : undefined
+                    }
+                    role="button"
+                    tabIndex={0}
+                    aria-label={t("slide.counter", {
+                      current: index + 1,
+                      total: slideCount,
+                    })}
+                    aria-current={index === activeSlide ? "true" : undefined}
+                    state={index === activeSlide ? "selected" : "empty"}
+                    padding={1}
+                    rounding={2}
+                    onClick={() => setCurrentSlide(index)}
+                  >
+                    <div className="flex flex-col gap-1">
+                      <img
+                        src={`${buildArtifactUrl(sessionId, path)}?revision=${data.imageRevision}`}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full aspect-video object-contain rounded-04 bg-background-neutral-02"
+                      />
+                      <Text font="secondary-body" color="text-03">
+                        {format.number(index + 1)}
+                      </Text>
+                    </div>
+                  </SelectCard>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </PreviewSidebar>
         <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
           <SlideImage

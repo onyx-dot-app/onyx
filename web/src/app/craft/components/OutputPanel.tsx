@@ -26,24 +26,24 @@ import {
   useIsPreProvisioning,
   useBuildSessionStore,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import {
-  panelTabId,
-  type OutputPanelMode,
-  type PanelTab,
-} from "@/app/craft/types/displayTypes";
+import { panelTabId, type PanelTab } from "@/app/craft/types/displayTypes";
+import type { OutputPanelMode } from "@/lib/outputPanel/layout";
+import { retainedFileViewers } from "@/lib/outputPanel/tabs";
 import {
   exportDocx,
   downloadArtifactFile,
 } from "@/app/craft/services/apiServices";
-import ResourceTabStrip, {
-  resourcePanelDomId,
-  resourceTabDomId,
-} from "@/app/craft/components/output-panel/ResourceTabStrip";
+import ResourceTabStrip from "@/app/craft/components/output-panel/ResourceTabStrip";
+import {
+  panelContentDomId,
+  panelTabDomId,
+} from "@/sections/output-panel/PanelTabStrip";
 import OutputsTab from "@/app/craft/components/output-panel/OutputsTab";
 import BrowserTab from "@/app/craft/components/output-panel/BrowserTab";
 import { WorkspaceUploadButton } from "@/app/craft/components/output-panel/WorkspaceUploadButton";
 import UrlBar from "@/app/craft/components/output-panel/UrlBar";
-import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
+import { OutputPanelLayout } from "@/sections/output-panel/OutputPanelLayout";
 
 const FilesTab = dynamic(
   () => import("@/app/craft/components/output-panel/FilesTab"),
@@ -69,7 +69,6 @@ interface TabResourceState extends FileResourceViewState {
   pending: boolean;
   exportState: "pending" | "failed" | "idle";
 }
-const MAX_RETAINED_FILE_VIEWERS = 5;
 const FILES_TAB: PanelTab = { kind: "files" };
 
 function createResource(tab: PanelTab, mountKey = 0): TabResourceState {
@@ -88,6 +87,7 @@ function createResource(tab: PanelTab, mountKey = 0): TabResourceState {
 interface ResourceRegistry {
   tabs: PanelTab[];
   visitedId: string | null;
+  // File tabs visited while the panel was open, most recent first
   visited: string[];
   entries: Record<string, TabResourceState>;
 }
@@ -120,11 +120,7 @@ function reconcileResources(
     tabs,
     visitedId,
     entries,
-    visited: visitedId
-      ? [...visited.filter((id) => id !== visitedId), visitedId].slice(
-          -MAX_RETAINED_FILE_VIEWERS
-        )
-      : visited,
+    visited: visitedId ? retainedFileViewers([visitedId, ...visited]) : visited,
   };
 }
 
@@ -439,11 +435,10 @@ function OutputResources({
       panelTabId(first.tab).localeCompare(panelTabId(second.tab))
     );
   return (
-    <div className="flex h-full min-w-0 flex-col" data-testid="output-panel">
-      <div
-        className="flex h-[52px] shrink-0 items-center ps-3"
-        style={{ paddingInlineEnd: headerControlWidth }}
-      >
+    <OutputPanelLayout
+      data-testid="output-panel"
+      headerControlWidth={headerControlWidth}
+      tabStrip={
         <ResourceTabStrip
           tabs={tabs}
           activeTabId={activeId}
@@ -459,234 +454,235 @@ function OutputResources({
           onOpenBrowser={() => openBrowser(sessionId)}
           panelMode={panelMode}
         />
-      </div>
-      {active && (
-        <UrlBar
-          displayUrl={
-            active.kind === "file"
-              ? active.path
-              : active.kind === "browser"
-                ? (selectedApp?.url ?? t("browser.placeholder"))
+      }
+      toolbar={
+        active && (
+          <UrlBar
+            displayUrl={
+              active.kind === "file"
+                ? active.path
+                : active.kind === "browser"
+                  ? (selectedApp?.url ?? t("browser.placeholder"))
+                  : active.kind === "outputs"
+                    ? outputsTranslations("home.description")
+                    : t("files.location.label")
+            }
+            searchValue={active.kind === "outputs" ? outputsSearch : search}
+            onSearchChange={
+              active.kind === "files"
+                ? setSearch
                 : active.kind === "outputs"
-                  ? outputsTranslations("home.description")
-                  : t("files.location.label")
-          }
-          searchValue={active.kind === "outputs" ? outputsSearch : search}
-          onSearchChange={
-            active.kind === "files"
-              ? setSearch
-              : active.kind === "outputs"
-                ? setOutputsSearch
+                  ? setOutputsSearch
+                  : undefined
+            }
+            placeholder={
+              active.kind === "outputs"
+                ? outputsTranslations("search.placeholder")
+                : t("files.search.placeholder")
+            }
+            refreshLabel={
+              refreshAllowed
+                ? t(
+                    active.kind === "file"
+                      ? "reload.file"
+                      : active.kind === "files" || active.kind === "outputs"
+                        ? "reload.files"
+                        : "reload.browser"
+                  )
+                : t("reload.unavailable")
+            }
+            onRefresh={refreshAllowed ? refresh : undefined}
+            isRefreshing={refreshing}
+            isUserRefreshing={activeResource?.manualRefresh ?? false}
+            uploadAction={
+              contentSessionId ? (
+                <div hidden={active.kind !== "files"}>
+                  <WorkspaceUploadButton
+                    key={contentSessionId}
+                    sessionId={contentSessionId}
+                    disabled={runtimeUnavailable || accessRevoked}
+                  />
+                </div>
+              ) : undefined
+            }
+            onDownloadRaw={
+              !accessRevoked && active.kind === "file" && contentSessionId
+                ? () => downloadArtifactFile(contentSessionId, active.path)
                 : undefined
-          }
-          placeholder={
-            active.kind === "outputs"
-              ? outputsTranslations("search.placeholder")
-              : t("files.search.placeholder")
-          }
-          refreshLabel={
-            refreshAllowed
-              ? t(
-                  active.kind === "file"
-                    ? "reload.file"
-                    : active.kind === "files" || active.kind === "outputs"
-                      ? "reload.files"
-                      : "reload.browser"
-                )
-              : t("reload.unavailable")
-          }
-          onRefresh={refreshAllowed ? refresh : undefined}
-          isRefreshing={refreshing}
-          isUserRefreshing={activeResource?.manualRefresh ?? false}
-          uploadAction={
-            contentSessionId ? (
-              <div hidden={active.kind !== "files"}>
-                <WorkspaceUploadButton
-                  key={contentSessionId}
-                  sessionId={contentSessionId}
-                  disabled={runtimeUnavailable || accessRevoked}
-                />
-              </div>
-            ) : undefined
-          }
-          onDownloadRaw={
-            !accessRevoked && active.kind === "file" && contentSessionId
-              ? () => downloadArtifactFile(contentSessionId, active.path)
-              : undefined
-          }
-          onDownload={
-            !accessRevoked &&
-            active.kind === "file" &&
-            /\.md$/i.test(active.path)
-              ? downloadDocx
-              : undefined
-          }
-          isDownloading={exporting}
-          previewUrl={accessRevoked ? undefined : selectedApp?.url}
-          sessionId={selectedApp ? (sessionId ?? undefined) : undefined}
-          sharingScope={webappInfo?.sharing_scope}
-          onScopeChange={() => {
-            void refreshWebapps().catch(() => undefined);
-          }}
-        />
-      )}
-      {exportError && (
-        <div role="alert" className="px-3">
-          <Text font="secondary-body" color="text-03">
-            {t("export.failed")}
-          </Text>
+            }
+            onDownload={
+              !accessRevoked &&
+              active.kind === "file" &&
+              /\.md$/i.test(active.path)
+                ? downloadDocx
+                : undefined
+            }
+            isDownloading={exporting}
+            previewUrl={accessRevoked ? undefined : selectedApp?.url}
+            sessionId={selectedApp ? (sessionId ?? undefined) : undefined}
+            sharingScope={webappInfo?.sharing_scope}
+            onScopeChange={() => {
+              void refreshWebapps().catch(() => undefined);
+            }}
+          />
+        )
+      }
+      notices={
+        exportError && (
+          <div role="alert" className="px-3">
+            <Text font="secondary-body" color="text-03">
+              {t("export.failed")}
+            </Text>
+          </div>
+        )
+      }
+    >
+      {accessRevoked && (
+        <div role="alert" className="p-4">
+          <Text color="text-03">{t("reload.unavailable")}</Text>
         </div>
       )}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {accessRevoked && (
-          <div role="alert" className="p-4">
-            <Text color="text-03">{t("reload.unavailable")}</Text>
-          </div>
-        )}
-        {!active && (
-          <WorkspaceHome title={t("empty.title")}>
-            {[
-              {
-                label: tabTranslations("outputs.label"),
-                icon: SvgFiles,
-                onOpen: () => openOutputs(sessionId),
-              },
-              {
-                label: tabTranslations("files.label"),
-                icon: SvgFolder,
-                onOpen: () => openFiles(sessionId),
-              },
-              {
-                label: tabTranslations("browser.label"),
-                icon: SvgGlobe,
-                onOpen: () => openBrowser(sessionId),
-              },
-            ].map(({ label, icon: Icon, onOpen }) => (
-              <SelectCard
-                key={label}
-                role="button"
-                tabIndex={0}
-                aria-label={label}
-                state="filled"
-                border="none"
-                padding={3}
-                rounding={3}
-                onClick={onOpen}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon size={20} className="stroke-text-03" aria-hidden />
-                  <Text font="main-ui-muted">{label}</Text>
-                </div>
-              </SelectCard>
-            ))}
-          </WorkspaceHome>
-        )}
-        {mountedResources.map((resource) => {
-          const tab = resource.tab;
-          const id = panelTabId(tab);
-          const visible = isOpen && id === activeId;
-          return (
-            <div
-              key={`${id}:${resource.mountKey}`}
-              id={resourcePanelDomId(id)}
-              role={tabs.includes(tab) ? "tabpanel" : undefined}
-              aria-labelledby={
-                tabs.includes(tab) ? resourceTabDomId(id) : undefined
-              }
-              aria-hidden={!visible}
-              inert={!visible}
-              className={cn(
-                "absolute inset-0",
-                !visible && "invisible pointer-events-none"
-              )}
+      {!active && (
+        <WorkspaceHome title={t("empty.title")}>
+          {[
+            {
+              label: tabTranslations("outputs.label"),
+              icon: SvgFiles,
+              onOpen: () => openOutputs(sessionId),
+            },
+            {
+              label: tabTranslations("files.label"),
+              icon: SvgFolder,
+              onOpen: () => openFiles(sessionId),
+            },
+            {
+              label: tabTranslations("browser.label"),
+              icon: SvgGlobe,
+              onOpen: () => openBrowser(sessionId),
+            },
+          ].map(({ label, icon: Icon, onOpen }) => (
+            <SelectCard
+              key={label}
+              role="button"
+              tabIndex={0}
+              aria-label={label}
+              state="filled"
+              border="none"
+              padding={3}
+              rounding={3}
+              onClick={onOpen}
             >
-              {tab.kind === "outputs" ? (
-                <OutputsTab
-                  sessionId={contentSessionId}
-                  searchQuery={outputsSearch}
-                  outputCards={outputCards}
-                  onMarkAllViewed={markAllViewed}
-                  turnIndex={outputsTurnIndex}
-                  onTurnChange={(turnIndex) => {
-                    if (contentSessionId)
-                      useBuildSessionStore
-                        .getState()
-                        .updateOutputsTabState(contentSessionId, { turnIndex });
-                  }}
-                  onAppOpen={(card) => {
-                    openBrowser(sessionId, contentSessionId ?? undefined);
-                    void markViewed(card);
-                  }}
-                  isActive={visible && runtimeReady}
-                  onFileOpen={openFile}
-                />
-              ) : tab.kind === "files" ? (
-                <FilesTab
-                  sessionId={contentSessionId}
-                  searchQuery={search}
-                  onFileClick={contentSessionId ? openFile : undefined}
-                  refreshKey={resource.refreshKey}
-                  onRefreshingChange={onFilesLoading}
-                  isProvisioning={!sessionId && isProvisioning}
-                  isActive={visible && runtimeReady}
-                  canLoad={runtimeReady}
-                />
-              ) : tab.kind === "file" && contentSessionId ? (
-                <RestoredFileResource
-                  tab={tab}
-                  sessionId={contentSessionId}
-                  filePath={tab.path}
-                  revision={session?.outputInventory?.[tab.path]?.revision}
-                  refreshKey={
-                    (session?.filePreviewRefreshKeys[tab.path] ?? 0) +
-                    resource.refreshKey +
-                    (session?.webappNeedsRemount ?? 0)
-                  }
-                  isActive={visible && runtimeReady}
-                  viewState={resource}
-                  onViewStateChange={updateResource}
-                  onLoading={onResourceLoading}
-                />
-              ) : tab.kind === "browser" ? (
-                <BrowserTab
-                  resourceId={id}
-                  onLoadingChange={(_, pending) =>
-                    onResourceLoading(tab, pending)
-                  }
-                  accessRevoked={accessRevoked}
-                  apps={apps}
-                  htmlFiles={Object.keys(session?.outputInventory ?? {})
-                    .filter(
-                      (path) =>
-                        path.startsWith("outputs/") && /\.html?$/i.test(path)
-                    )
-                    .sort()}
-                  htmlInventoryStatus={
-                    session?.outputInventoryStatus ?? "unloaded"
-                  }
-                  htmlInventoryLoading={!!outputInventoryLoading}
-                  onFileOpen={openFile}
-                  appId={tab.appId}
-                  discoveryState={discoveryState}
-                  refreshKey={
-                    resource.refreshKey + (session?.webappNeedsRemount ?? 0)
-                  }
-                  onNavigate={(appId) => {
-                    markAppViewed(appId);
-                    navigateBrowser(
-                      sessionId,
-                      id,
-                      appId,
-                      apps.find((app) => app.id === appId)?.name
-                    );
-                  }}
-                />
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+              <div className="flex items-center gap-3">
+                <Icon size={20} className="stroke-text-03" aria-hidden />
+                <Text font="main-ui-muted">{label}</Text>
+              </div>
+            </SelectCard>
+          ))}
+        </WorkspaceHome>
+      )}
+      {mountedResources.map((resource) => {
+        const tab = resource.tab;
+        const id = panelTabId(tab);
+        const visible = isOpen && id === activeId;
+        return (
+          <div
+            key={`${id}:${resource.mountKey}`}
+            id={panelContentDomId(id)}
+            role={tabs.includes(tab) ? "tabpanel" : undefined}
+            aria-labelledby={tabs.includes(tab) ? panelTabDomId(id) : undefined}
+            aria-hidden={!visible}
+            inert={!visible}
+            className={cn(
+              "absolute inset-0",
+              !visible && "invisible pointer-events-none"
+            )}
+          >
+            {tab.kind === "outputs" ? (
+              <OutputsTab
+                sessionId={contentSessionId}
+                searchQuery={outputsSearch}
+                outputCards={outputCards}
+                onMarkAllViewed={markAllViewed}
+                turnIndex={outputsTurnIndex}
+                onTurnChange={(turnIndex) => {
+                  if (contentSessionId)
+                    useBuildSessionStore
+                      .getState()
+                      .updateOutputsTabState(contentSessionId, { turnIndex });
+                }}
+                onAppOpen={(card) => {
+                  openBrowser(sessionId, contentSessionId ?? undefined);
+                  void markViewed(card);
+                }}
+                isActive={visible && runtimeReady}
+                onFileOpen={openFile}
+              />
+            ) : tab.kind === "files" ? (
+              <FilesTab
+                sessionId={contentSessionId}
+                searchQuery={search}
+                onFileClick={contentSessionId ? openFile : undefined}
+                refreshKey={resource.refreshKey}
+                onRefreshingChange={onFilesLoading}
+                isProvisioning={!sessionId && isProvisioning}
+                isActive={visible && runtimeReady}
+                canLoad={runtimeReady}
+              />
+            ) : tab.kind === "file" && contentSessionId ? (
+              <RestoredFileResource
+                tab={tab}
+                sessionId={contentSessionId}
+                filePath={tab.path}
+                revision={session?.outputInventory?.[tab.path]?.revision}
+                refreshKey={
+                  (session?.filePreviewRefreshKeys[tab.path] ?? 0) +
+                  resource.refreshKey +
+                  (session?.webappNeedsRemount ?? 0)
+                }
+                isActive={visible && runtimeReady}
+                viewState={resource}
+                onViewStateChange={updateResource}
+                onLoading={onResourceLoading}
+              />
+            ) : tab.kind === "browser" ? (
+              <BrowserTab
+                resourceId={id}
+                onLoadingChange={(_, pending) =>
+                  onResourceLoading(tab, pending)
+                }
+                accessRevoked={accessRevoked}
+                apps={apps}
+                htmlFiles={Object.keys(session?.outputInventory ?? {})
+                  .filter(
+                    (path) =>
+                      path.startsWith("outputs/") && /\.html?$/i.test(path)
+                  )
+                  .sort()}
+                htmlInventoryStatus={
+                  session?.outputInventoryStatus ?? "unloaded"
+                }
+                htmlInventoryLoading={!!outputInventoryLoading}
+                onFileOpen={openFile}
+                appId={tab.appId}
+                discoveryState={discoveryState}
+                refreshKey={
+                  resource.refreshKey + (session?.webappNeedsRemount ?? 0)
+                }
+                onNavigate={(appId) => {
+                  markAppViewed(appId);
+                  navigateBrowser(
+                    sessionId,
+                    id,
+                    appId,
+                    apps.find((app) => app.id === appId)?.name
+                  );
+                }}
+              />
+            ) : null}
+          </div>
+        );
+      })}
+    </OutputPanelLayout>
   );
 }
 

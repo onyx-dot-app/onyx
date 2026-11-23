@@ -42,5 +42,9 @@ Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) chrome prop (`ta
 | `search`        | `boolean`                           | `false`        | A search field at the top of the list filters the rows; see [InputSingleSelect](../input-single-select/README.md#search) |
 | `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |
 | `showTags`          | `boolean`                           | `true`         | `false` keeps the chosen options out of the field: they show only as selected rows in the list, for a caller that lists them elsewhere |
+| `tooltip`           | `string \| RichStr`                 | —              | Shown on hover, in any state                                       |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the field, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 Formik: `InputMultiSelectField` from `@opal/form`, whose value is `string[]` of option values.

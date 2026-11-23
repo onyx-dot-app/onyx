@@ -13,6 +13,7 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.external_apps.providers.base import ExternalAppProvider
+from onyx.skills.models import PluginNeed
 
 
 class IntegrationActionSpec(BaseModel):
@@ -197,3 +198,28 @@ class PersonaIntegrationLink(BaseModel):
 
 class PersonaIntegrationSnapshot(PersonaIntegrationLink):
     integration_name: str
+
+
+class PluginNeedState(str, Enum):
+    ON = "on"
+    TURN_ON = "turn_on"
+    SIGN_IN = "sign_in"
+    NO_ACCESS = "no_access"
+    TURNED_OFF = "turned_off"
+    NOT_ADDED = "not_added"
+    MORE_THAN_ONE = "more_than_one"
+    NOT_SUPPORTED = "not_supported"
+
+
+class PluginNeedView(PluginNeed):
+    model_config = ConfigDict(frozen=True)
+
+    state: PluginNeedState
+    integration_id: int | None
+
+
+class NeedCounts(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    available_count: int
+    needed_count: int

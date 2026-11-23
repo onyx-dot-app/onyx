@@ -89,6 +89,64 @@ test("opens a new tab and resolves on the matching same-origin message", async (
   expect(popup.close).toHaveBeenCalledTimes(1);
 });
 
+test("cancels when the user is back and the sign-in tab is closed", async () => {
+  jest.useFakeTimers();
+  const hasFocus = jest.spyOn(document, "hasFocus").mockReturnValue(true);
+  const { popup } = openPopup();
+  const state = popup as unknown as { closed: boolean };
+  state.closed = false;
+  const promise = launchOAuth(async () => authUrl);
+  await flush();
+  window.dispatchEvent(new Event("focus"));
+  jest.advanceTimersByTime(5000);
+  state.closed = true;
+  window.dispatchEvent(new Event("focus"));
+  jest.advanceTimersByTime(999);
+  notifyOAuthComplete("abc_123");
+  await expect(promise).resolves.toEqual({});
+
+  const second = openPopup().popup as unknown as { closed: boolean };
+  second.closed = false;
+  const cancelled = launchOAuth(async () => authUrl);
+  await flush();
+  second.closed = true;
+  window.dispatchEvent(new Event("focus"));
+  jest.advanceTimersByTime(1000);
+  await expect(cancelled).rejects.toMatchObject({ reason: "cancelled" });
+
+  // While the user is on the provider tab, this page has no focus.
+  hasFocus.mockReturnValue(false);
+  const third = openPopup().popup as unknown as { closed: boolean };
+  third.closed = false;
+  const waiting = launchOAuth(async () => authUrl);
+  let settled = false;
+  waiting.catch(() => {}).finally(() => (settled = true));
+  await flush();
+  third.closed = true;
+  jest.advanceTimersByTime(5000);
+  await flush();
+  expect(settled).toBe(false);
+  hasFocus.mockReturnValue(true);
+  jest.advanceTimersByTime(2000);
+  await expect(waiting).rejects.toMatchObject({ reason: "cancelled" });
+
+  // The user leaves for the provider tab during the grace period.
+  const fourth = openPopup().popup as unknown as { closed: boolean };
+  fourth.closed = false;
+  const left = launchOAuth(async () => authUrl);
+  let leftSettled = false;
+  left.catch(() => {}).finally(() => (leftSettled = true));
+  await flush();
+  fourth.closed = true;
+  window.dispatchEvent(new Event("focus"));
+  hasFocus.mockReturnValue(false);
+  jest.advanceTimersByTime(1500);
+  await flush();
+  expect(leftSettled).toBe(false);
+  notifyOAuthComplete("abc_123");
+  await expect(left).resolves.toEqual({});
+});
+
 test("resolves from a BroadcastChannel completion and rejects a failed one", async () => {
   openPopup();
   const ok = launchOAuth(async () => authUrl);

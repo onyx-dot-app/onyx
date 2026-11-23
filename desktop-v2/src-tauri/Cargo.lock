@@ -3019,6 +3019,7 @@ version = "0.0.0-dev"
 dependencies = [
  "base64 0.22.1",
  "block2",
+ "flate2",
  "futures-util",
  "keyring",
  "libc",

@@ -28,9 +28,11 @@ before taking task actions: call `{SKILLS_READ_TOOL_NAME}` with its name. If \
 `{SKILLS_READ_TOOL_NAME}` says the file continues, call it again with \
 `start_char` until the end. A skill in a <skill> block is already loaded; do \
 not read it again unless its block says it continues.
-  2) You cannot open the other files of a skill or run its scripts. Follow its \
-instructions as far as your tools allow, and tell the user when a step needs a \
-bundled file or script.
+  2) When a `SKILL.md` starts with a `Skill files:` line, its other files are \
+in the sandbox at that folder: read them and run its scripts with your sandbox \
+tools. You cannot open the other files of any other skill or run its scripts. \
+Follow its instructions as far as your tools allow, and tell the user when a \
+step needs a bundled file or script.
   3) Read each selected skill yourself before acting on it. Do not delegate \
 reading, summarizing, or interpreting skill instructions to another agent. \
 Agents you start may still perform task work when the selected skill allows it.
@@ -46,6 +48,17 @@ reading a selected instruction file. Do not load unrelated skills.
 instructions, a step needs a file or script you cannot open), state the issue, \
 pick the next-best approach, and continue.
 </skills_instructions>"""
+
+BUILT_IN_SKILL_FILES_LINE = (
+    "Skill files: {folder}/ (read-only). Run its scripts with their interpreter, "
+    "for example `python {folder}/scripts/<name>.py`.\n\n"
+)
+
+SKILLS_UNAVAILABLE_INTEGRATIONS_LINE = (
+    "Some skills come from plugins that need integrations the user cannot use "
+    "now: {names}. If a step needs one, tell the user to add it, turn it on or "
+    "sign in under Customize > Integrations."
+)
 
 SKILLS_OMITTED_LINE = (
     "- {count} additional {skills} omitted from this bounded skills list."

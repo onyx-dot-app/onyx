@@ -14,7 +14,7 @@ import {
   Tooltip,
   useCreateModal,
 } from "@opal/components";
-import { Hoverable, Disabled } from "@opal/core";
+import { Hoverable } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { Formik, Form, FieldArray } from "formik";
@@ -1368,84 +1368,58 @@ export default function AgentEditorPage({
                         description={t("editor.actions.description")}
                       >
                         <Section gap={2} alignItems="stretch">
-                          <Disabled
-                            disabled={!isImageGenerationAvailable}
-                            tooltip={imageGenerationDisabledTooltip}
-                          >
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="image_generation"
-                                title={t(
-                                  "editor.actions.imageGeneration.title"
-                                )}
-                                description={t(
-                                  "editor.actions.imageGeneration.description"
-                                )}
-                                disabled={!isImageGenerationAvailable}
-                              >
-                                <InputSwitchField
-                                  name="image_generation"
-                                  disabled={!isImageGenerationAvailable}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
+                          <Card border="solid" rounding={4}>
+                            <InputHorizontal
+                              withLabel="image_generation"
+                              title={t("editor.actions.imageGeneration.title")}
+                              description={t(
+                                "editor.actions.imageGeneration.description"
+                              )}
+                              disabled={!isImageGenerationAvailable}
+                              disabledTooltip={imageGenerationDisabledTooltip}
+                            >
+                              <InputSwitchField name="image_generation" />
+                            </InputHorizontal>
+                          </Card>
 
-                          <Disabled disabled={!webSearchTool}>
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="web_search"
-                                title={t("editor.actions.webSearch.title")}
-                                description={t(
-                                  "editor.actions.webSearch.description"
-                                )}
-                                disabled={!webSearchTool}
-                              >
-                                <InputSwitchField
-                                  name="web_search"
-                                  disabled={!webSearchTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
+                          <Card border="solid" rounding={4}>
+                            <InputHorizontal
+                              withLabel="web_search"
+                              title={t("editor.actions.webSearch.title")}
+                              description={t(
+                                "editor.actions.webSearch.description"
+                              )}
+                              disabled={!webSearchTool}
+                            >
+                              <InputSwitchField name="web_search" />
+                            </InputHorizontal>
+                          </Card>
 
-                          <Disabled disabled={!openURLTool}>
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="open_url"
-                                title={t("editor.actions.openUrl.title")}
-                                description={t(
-                                  "editor.actions.openUrl.description"
-                                )}
-                                disabled={!openURLTool}
-                              >
-                                <InputSwitchField
-                                  name="open_url"
-                                  disabled={!openURLTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
+                          <Card border="solid" rounding={4}>
+                            <InputHorizontal
+                              withLabel="open_url"
+                              title={t("editor.actions.openUrl.title")}
+                              description={t(
+                                "editor.actions.openUrl.description"
+                              )}
+                              disabled={!openURLTool}
+                            >
+                              <InputSwitchField name="open_url" />
+                            </InputHorizontal>
+                          </Card>
 
-                          <Disabled disabled={!codeInterpreterTool}>
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="code_interpreter"
-                                title={t(
-                                  "editor.actions.codeInterpreter.title"
-                                )}
-                                description={t(
-                                  "editor.actions.codeInterpreter.description"
-                                )}
-                                disabled={!codeInterpreterTool}
-                              >
-                                <InputSwitchField
-                                  name="code_interpreter"
-                                  disabled={!codeInterpreterTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
+                          <Card border="solid" rounding={4}>
+                            <InputHorizontal
+                              withLabel="code_interpreter"
+                              title={t("editor.actions.codeInterpreter.title")}
+                              description={t(
+                                "editor.actions.codeInterpreter.description"
+                              )}
+                              disabled={!codeInterpreterTool}
+                            >
+                              <InputSwitchField name="code_interpreter" />
+                            </InputHorizontal>
+                          </Card>
 
                           <Divider
                             paddingPerpendicular={1}
