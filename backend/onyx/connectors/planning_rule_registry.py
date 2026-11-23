@@ -30,6 +30,7 @@ from onyx.connectors.file.edit_planning import (
     file_planning_rule,
     load_file_planning_data,
 )
+from onyx.connectors.gmail.config import GmailConnectorConfig, gmail_planning_rule
 from onyx.connectors.google_drive.config import (
     GoogleDriveConnectorConfig,
     google_drive_planning_rule,
@@ -76,6 +77,7 @@ PLANNING_RULES: dict[DocumentSource, PlanningRule] = {
         load_file_planning_data,
         file_planning_rule,
     ),
+    DocumentSource.GMAIL: planning_rule(GmailConnectorConfig, gmail_planning_rule),
     DocumentSource.GOOGLE_DRIVE: planning_rule(
         GoogleDriveConnectorConfig, google_drive_planning_rule
     ),

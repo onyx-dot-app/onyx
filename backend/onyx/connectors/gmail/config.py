@@ -5,6 +5,9 @@ from pydantic import field_validator
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig, field_format_error
 from onyx.connectors.field_policy import FieldClass, FieldPolicy
+from onyx.connectors.planning_rule import ConnectorChangeOverride, RuleSteps
+
+_COLLABORATIVE_INBOX_GROUPS = "collaborative_inbox_groups"
 
 
 class GmailConnectorConfig(ConnectorConfig):
@@ -33,3 +36,18 @@ class GmailConnectorConfig(ConnectorConfig):
                 "Enter each group as an email address, such as support@example.com."
             )
         return value
+
+
+def gmail_planning_rule(
+    old: GmailConnectorConfig, new: GmailConnectorConfig
+) -> ConnectorChangeOverride | None:
+    # The crawl splits out a new group's mail as it indexes it, so adding a
+    # group needs no step. A removed group needs the default full re-index to
+    # put its mail back into the thread documents.
+    old_groups = set(old.collaborative_inbox_groups or [])
+    new_groups = set(new.collaborative_inbox_groups or [])
+    if old_groups == new_groups or old_groups - new_groups:
+        return None
+    return ConnectorChangeOverride(
+        rule_steps=RuleSteps(field_names=frozenset({_COLLABORATIVE_INBOX_GROUPS}))
+    )
