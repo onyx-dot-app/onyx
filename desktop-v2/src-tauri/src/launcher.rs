@@ -216,8 +216,7 @@ mod platform {
 #[cfg(not(target_os = "macos"))]
 mod platform {
     use tauri::{
-        AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-        WindowEvent,
+        AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent,
     };
 
     use super::{local_navigation_allowed, local_new_window, LAUNCHER};
@@ -292,7 +291,7 @@ mod platform {
     /// Openbox refuse focus to a request without a fresh X timestamp, and no
     /// key event reaches GTK for a grabbed global shortcut.
     #[cfg(target_os = "linux")]
-    fn present(window: &WebviewWindow) -> Result<(), String> {
+    fn present(window: &tauri::WebviewWindow) -> Result<(), String> {
         use gdkx11::glib::Cast;
         use gtk::prelude::{GtkWindowExt, WidgetExt};
 
