@@ -101,6 +101,11 @@ fn main() {
         // Must come first: a second launch (or an onyx:// link that starts
         // the app) hands its URL to the running instance and exits.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // A clicked answer toast shows the launcher (notify.rs), not the main window.
+            #[cfg(windows)]
+            if _args.iter().any(|arg| notify::is_answer_link(arg)) {
+                return;
+            }
             windows::show_primary(app);
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -157,6 +162,8 @@ fn main() {
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
                         sso::handle_callback(&link_app, &url);
+                        #[cfg(windows)]
+                        notify::handle_link(&link_app, &url);
                     }
                 });
             }

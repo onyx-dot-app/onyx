@@ -474,6 +474,8 @@ pub async fn open_url(
     // WebView2 and WebKitGTK show alert(), confirm() and prompt() themselves.
     #[cfg(target_os = "macos")]
     crate::macos_dialogs::install(&window);
+    #[cfg(target_os = "linux")]
+    crate::aonyx::step_aside_for_file_choosers(&window);
 
     // A window that did not get the session must not stay open: the next
     // open() would reuse it without a session and show the web login page.

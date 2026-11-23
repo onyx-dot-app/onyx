@@ -3066,6 +3066,8 @@ dependencies = [
  "block2",
  "flate2",
  "futures-util",
+ "gdkx11",
+ "gtk",
  "keyring",
  "libc",
  "log",
@@ -3095,6 +3097,7 @@ dependencies = [
  "tokio",
  "url",
  "webkit2gtk",
+ "windows",
  "winreg",
 ]
 

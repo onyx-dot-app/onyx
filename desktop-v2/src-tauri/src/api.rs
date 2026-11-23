@@ -14,6 +14,10 @@ use crate::reachability::{self, Unreachable};
 
 const USER_AGENT: &str = concat!("OnyxDesktop/", env!("CARGO_PKG_VERSION"));
 
+/// The `origin` of launcher questions (the server's `MessageOrigin`).
+const ORIGIN: &str = "desktop";
+const FALLBACK_ORIGIN: &str = "unknown";
+
 pub struct Api {
     http: Client,
     /// Follows no redirects: any answer from the web UI counts, wherever it points.
@@ -1054,22 +1058,48 @@ impl Api {
     ) -> Result<Response, SendError> {
         let file_descriptors: Vec<serde_json::Value> =
             files.iter().map(AttachedFile::descriptor).collect();
+        let mut body = json!({
+            "message": message,
+            "chat_session_id": chat_session_id,
+            "parent_message_id": if follow_up { json!(-1) } else { json!(null) },
+            "file_descriptors": file_descriptors,
+            "deep_research": false,
+            "origin": ORIGIN,
+        });
+        let response = self.post_message(server, token, &body).await?;
+        // Servers older than the desktop origin reject it before they take the
+        // question; ask again as an unknown client.
+        let response = if response.status() == StatusCode::UNPROCESSABLE_ENTITY {
+            body["origin"] = json!(FALLBACK_ORIGIN);
+            self.post_message(server, token, &body).await?
+        } else {
+            response
+        };
+        if !response.status().is_success() {
+            // The server answered and refused the question (for example a usage limit).
+            return Err(SendError {
+                message: error_detail(server, response).await,
+                not_sent: true,
+            });
+        }
+        Ok(response)
+    }
+
+    async fn post_message(
+        &self,
+        server: &str,
+        token: &str,
+        body: &serde_json::Value,
+    ) -> Result<Response, SendError> {
         // Bounds the wait for the response headers only; the streamed answer
         // that follows has its own idle timeout in `ask::run`.
         let request = self
             .http
             .post(format!("{server}/api/chat/send-chat-message"))
             .bearer_auth(token)
-            .json(&json!({
-                "message": message,
-                "chat_session_id": chat_session_id,
-                "parent_message_id": if follow_up { json!(-1) } else { json!(null) },
-                "file_descriptors": file_descriptors,
-                "deep_research": false,
-                "origin": "unknown",
-            }))
+            .json(body)
             .send();
-        let response = tokio::time::timeout(Duration::from_secs(120), request)
+        tokio::time::timeout(Duration::from_secs(120), request)
             .await
             .map_err(|_| SendError {
                 message: "The server did not start answering.".into(),
@@ -1079,15 +1109,7 @@ impl Api {
                 message: reachability::describe(server, &e),
                 // A connection that never opened carried no question.
                 not_sent: e.is_connect(),
-            })?;
-        if !response.status().is_success() {
-            // The server answered and refused the question (for example a usage limit).
-            return Err(SendError {
-                message: error_detail(server, response).await,
-                not_sent: true,
-            });
-        }
-        Ok(response)
+            })
     }
 
     pub async fn search(
@@ -1155,10 +1177,10 @@ pub struct SendError {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use super::{
         body_chunks, file_state, is_file_id, multipart_body, normalize_managed_server_url,
@@ -1237,6 +1259,69 @@ mod tests {
             reqwest::StatusCode::OK
         );
         assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
+
+    /// A send-chat-message endpoint that rejects origins it does not know, as
+    /// a server's request validation does. Returns the origins it received.
+    fn chat_server(known: &'static [&'static str]) -> (String, Arc<Mutex<Vec<String>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let origins = Arc::new(Mutex::new(Vec::new()));
+        let seen = origins.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { return };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut length = 0;
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                    let header = line.to_ascii_lowercase();
+                    if let Some(value) = header.strip_prefix("content-length:") {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                    line.clear();
+                }
+                let mut body = vec![0; length];
+                let _ = reader.read_exact(&mut body);
+                let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+                let origin = body["origin"].as_str().unwrap_or_default().to_string();
+                let status = if known.contains(&origin.as_str()) {
+                    "200 OK"
+                } else {
+                    "422 Unprocessable Entity"
+                };
+                seen.lock().unwrap().push(origin);
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+        (base, origins)
+    }
+
+    fn send(server: &str) -> bool {
+        tauri::async_runtime::block_on(async {
+            Api::new()
+                .unwrap()
+                .send_message(server, "token", "chat", "hello", false, &[])
+                .await
+                .is_ok()
+        })
+    }
+
+    #[test]
+    fn launcher_questions_say_they_come_from_the_desktop_app() {
+        let (server, origins) = chat_server(&["desktop", "unknown"]);
+        assert!(send(&server));
+        assert_eq!(*origins.lock().unwrap(), ["desktop"]);
+    }
+
+    #[test]
+    fn older_servers_get_the_question_as_an_unknown_client() {
+        let (server, origins) = chat_server(&["unknown"]);
+        assert!(send(&server));
+        assert_eq!(*origins.lock().unwrap(), ["desktop", "unknown"]);
     }
 
     #[test]
