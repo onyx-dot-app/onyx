@@ -466,6 +466,12 @@ How the app differs from macOS:
 - The session cookie goes in through wry's cookie API. Its domain has no leading dot, so
   WebView2 and WebKitGTK keep it host-only, as macOS does. WebView2 and WebKitGTK show
   `alert()`, `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
+- On Linux the web views keep cookies in memory only (`src-tauri/src/linux_cookies.rs`), so
+  the session cookie that the server sets is not written to disk outside the Secret Service.
+  The app hands the session to the main window each time it opens the window. Other cookies of
+  the web UI (for example the sidebar state) reset when the app quits. Local storage stays on
+  disk. At launch the app deletes the `cookies` file that older builds wrote to
+  `~/.local/share/app.onyx.desktop.v2/`.
 - The web sign-in window (SAML, cloud workspaces, older servers) is titled "Onyx web sign-in"
   and sends the web view's own user agent. On macOS it sends Safari's, because Google refuses
   WKWebView's default one. The native sign-in window hides while the web sign-in window is open, and
@@ -516,7 +522,10 @@ Linux needs some desktop services:
   the shortcut.
 - **Tray icon**: it needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
   tray icon without the AppIndicator extension (`gnome-shell-extension-appindicator`, on by
-  default on Ubuntu).
+  default on Ubuntu). The icon file goes to `$XDG_RUNTIME_DIR/tray-icon`. When that directory
+  is not set or the app cannot write to it (for example after `su`, or in some SSH and VDI
+  sessions), it goes to `~/.cache/app.onyx.desktop.v2/tray-icon`. If the tray icon still
+  fails, the app logs the error and runs without it. Launch the app again to show its window.
 - The launcher's transparent corners need a compositing window manager. Without one, the
   corners show black. With no compositor and software rendering, WebKitGTK can also leave a
   stale rectangle on screen until the next repaint.

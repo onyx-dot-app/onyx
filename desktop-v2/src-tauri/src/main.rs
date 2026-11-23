@@ -7,6 +7,8 @@ mod commands;
 mod config;
 mod dialog;
 mod launcher;
+#[cfg(any(target_os = "linux", test))]
+mod linux_cookies;
 mod login_item;
 #[cfg(target_os = "macos")]
 mod macos_cookies;
@@ -125,9 +127,13 @@ fn main() {
     // Launch at login on macOS (login_item.rs).
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_autostart::Builder::new().build());
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(linux_cookies::plugin());
     let app = builder
         .setup(|app| {
             init_logging(app.handle());
+            #[cfg(target_os = "linux")]
+            linux_cookies::remove_old_cookies(app.handle());
             let config_path = app.path().app_config_dir()?.join("config.json");
             app.manage(offline::Offline::default());
             let handle = app.handle();
@@ -140,7 +146,13 @@ fn main() {
             #[cfg(target_os = "macos")]
             app.set_menu(menu::build(handle)?)?;
             app.on_menu_event(|app, event| menu::handle(app, event.id().as_ref()));
+            #[cfg(target_os = "macos")]
             menu::build_tray(handle)?;
+            // The app keeps running without a tray; a second launch shows it.
+            #[cfg(not(target_os = "macos"))]
+            if let Err(e) = menu::build_tray(handle) {
+                log::error!("could not create the tray icon: {e}");
+            }
 
             policy::sync_hotkey(handle);
             if app.state::<AppState>().hotkey().is_some() {
