@@ -5853,7 +5853,7 @@
         "message": "Die Konfiguration konnte nicht geladen werden. Bitte laden Sie die Seite neu."
       },
       "noImageModels": {
-        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt.",
+        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt. Öffnen Sie den Tab „Alle“, um jedes Modell Ihrer verbundenen Anbieter zu sehen.",
         "title": "Keine Bildmodelle verfügbar"
       },
       "providers": {
@@ -5909,6 +5909,10 @@
       },
       "deselectError": {
         "message": "Auswahl konnte nicht aufgehoben werden"
+      },
+      "modelFilter": {
+        "all": "Alle",
+        "recommended": "Empfohlen"
       }
     },
     "indexSettings": {

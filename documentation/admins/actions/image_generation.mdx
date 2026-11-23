@@ -14,10 +14,12 @@ any chat model in Onyx can invoke the action.
 Image models come from the LLM providers you have already connected. Onyx does not ask for an API key again.
 The Image Generation page lists each connected provider and the models it serves.
 
-**Add Models** lists the models of each provider under the provider's name: the image models in the Onyx model catalog,
-for example GPT Image, Gemini image (Nano Banana), Imagen, and the Bedrock image models,
-and every other model on the provider. Not every model can generate images.
-Make sure that a model can before you connect it.
+**Add Models** lists the models of each provider under the provider's name. It has two tabs,
+and the **Recommended** tab opens by default. It shows the image models in the Onyx model catalog,
+for example GPT Image, Gemini image (Nano Banana), Imagen, and the Bedrock image models.
+Open the **All** tab to see every model on a provider,
+for example a new model or a model name that a gateway such as LiteLLM Proxy or OpenRouter defines.
+Not every model there can generate images. Make sure that a model can before you connect it.
 
 <Note>
   Only public LLM providers without agent restrictions can serve image generation,

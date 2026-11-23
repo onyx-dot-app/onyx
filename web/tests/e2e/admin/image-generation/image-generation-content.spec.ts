@@ -17,13 +17,14 @@ function llmProviders(linkedImageProviderId: string | null) {
           name: "gpt-image-2",
           display_name: "gpt-image-2",
           custom_display_name: null,
+          is_recommended: true,
           image_provider_id: linkedImageProviderId,
         },
         {
-          // A name no catalog knows; it is listed too.
-          name: "custom-image-model",
-          display_name: "custom-image-model",
+          name: "gpt-5",
+          display_name: "gpt-5",
           custom_display_name: null,
+          is_recommended: false,
           image_provider_id: null,
         },
       ],
@@ -78,7 +79,9 @@ test.describe("Image Generation models from LLM providers", () => {
     await loginAs(page, "admin");
   });
 
-  test("lists every image model under its provider", async ({ page }) => {
+  test("recommended tab hides non-image models until All is selected", async ({
+    page,
+  }) => {
     await mockImageGenApis(page);
     const imageGenPage = new AdminImageGenerationPage(page);
     await imageGenPage.goto();
@@ -88,7 +91,16 @@ test.describe("Image Generation models from LLM providers", () => {
       imageGenPage.availableModelCard(LLM_PROVIDER_ID, "gpt-image-2")
     ).toBeVisible();
     await expect(
-      imageGenPage.availableModelCard(LLM_PROVIDER_ID, "custom-image-model")
+      imageGenPage.availableModelCard(LLM_PROVIDER_ID, "gpt-5")
+    ).toHaveCount(0);
+
+    await expect(imageGenPage.recommendedTab).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await imageGenPage.allTab.click();
+    await expect(
+      imageGenPage.availableModelCard(LLM_PROVIDER_ID, "gpt-5")
     ).toBeVisible();
   });
 

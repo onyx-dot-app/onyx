@@ -25,6 +25,7 @@ import {
   Divider,
   MessageCard,
   SelectCard,
+  Tabs,
   Text,
   useCreateModal,
 } from "@opal/components";
@@ -44,6 +45,8 @@ import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { resolveModelDisplayName } from "@/lib/languageModels/hooks";
 import ProviderCard from "@/sections/admin/ProviderCard";
+
+type ModelFilter = "recommended" | "all";
 
 /** A linked model's name, as every model list shows it. */
 function linkedModelTitle(
@@ -178,6 +181,7 @@ export default function ImageGenerationContent() {
     errorHandlingFetcher
   );
   const [linkingModelKey, setLinkingModelKey] = useState<string | null>(null);
+  const [modelFilter, setModelFilter] = useState<ModelFilter>("recommended");
 
   const modal = useCreateModal();
   const [activeProvider, setActiveProvider] = useState<ImageProvider | null>(
@@ -303,6 +307,17 @@ export default function ImageGenerationContent() {
     refetchConfigs();
   };
 
+  // Add Models: Recommended shows the models the catalog (or the name) says
+  // generate images; All shows every model on the provider.
+  const shownProviders = llmProviders
+    .map((llmProvider) => ({
+      ...llmProvider,
+      models: llmProvider.models.filter(
+        (m) => modelFilter === "all" || m.is_recommended
+      ),
+    }))
+    .filter((llmProvider) => llmProvider.models.length > 0);
+
   // Available Models, alphabetical by the name each card shows.
   const listedConfigs = [...configs].sort((a, b) =>
     configTitle(a).localeCompare(configTitle(b))
@@ -412,63 +427,82 @@ export default function ImageGenerationContent() {
             title={t("availableModels.title")}
             description={t("availableModels.description")}
           />
-          {llmProviders.length === 0 ? (
-            <IllustrationContent
-              illustration={SvgEmpty}
-              title={t("noImageModels.title")}
-              description={t("noImageModels.description")}
-            />
-          ) : (
-            <Section gap={8} height="fit" alignItems="stretch">
-              {llmProviders.map((llmProvider) => {
-                const providerName =
-                  llmProvider.llm_provider_name ?? llmProvider.provider;
-                return (
-                  <Collapsible
-                    key={`llm-${llmProvider.llm_provider_id}`}
-                    title={providerName}
-                    font="main-ui-action"
-                    titleColor="text-03"
-                    gapping={2}
-                  >
-                    <CardGrid>
-                      {llmProvider.models.map((model) => {
-                        const title = linkedModelTitle(model);
-                        return (
-                          <AvailableModelCard
-                            key={model.name}
-                            icon={getModelIcon(
-                              llmProvider.provider,
-                              model.name
-                            )}
-                            title={title}
-                            description={
-                              title === model.name ? providerName : model.name
-                            }
-                            // Not image-gen-model-…: a connected model's card
-                            // under Available Models has that name.
-                            ariaLabel={`image-gen-available-${llmProvider.llm_provider_id}-${model.name}`}
-                            connected={model.image_provider_id !== null}
-                            onDisconnect={() => {
-                              const config = configs.find(
-                                (c) =>
-                                  c.image_provider_id ===
-                                  model.image_provider_id
-                              );
-                              if (config) void disconnectModel(config);
-                            }}
-                            onConnect={() =>
-                              void handleLink(llmProvider, model)
-                            }
-                          />
-                        );
-                      })}
-                    </CardGrid>
-                  </Collapsible>
-                );
-              })}
-            </Section>
-          )}
+          <Tabs
+            variant="pill"
+            value={modelFilter}
+            onValueChange={(value) =>
+              setModelFilter(value === "all" ? "all" : "recommended")
+            }
+            gap={3}
+          >
+            <Tabs.List>
+              <Tabs.Trigger value="recommended">
+                {t("modelFilter.recommended")}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="all">{t("modelFilter.all")}</Tabs.Trigger>
+            </Tabs.List>
+            <Tabs.Content value={modelFilter}>
+              {shownProviders.length === 0 ? (
+                <IllustrationContent
+                  illustration={SvgEmpty}
+                  title={t("noImageModels.title")}
+                  description={t("noImageModels.description")}
+                />
+              ) : (
+                <Section gap={8} height="fit" alignItems="stretch">
+                  {shownProviders.map((llmProvider) => {
+                    const providerName =
+                      llmProvider.llm_provider_name ?? llmProvider.provider;
+                    return (
+                      <Collapsible
+                        key={`llm-${llmProvider.llm_provider_id}`}
+                        title={providerName}
+                        font="main-ui-action"
+                        titleColor="text-03"
+                        gapping={2}
+                      >
+                        <CardGrid>
+                          {llmProvider.models.map((model) => {
+                            const title = linkedModelTitle(model);
+                            return (
+                              <AvailableModelCard
+                                key={model.name}
+                                icon={getModelIcon(
+                                  llmProvider.provider,
+                                  model.name
+                                )}
+                                title={title}
+                                description={
+                                  title === model.name
+                                    ? providerName
+                                    : model.name
+                                }
+                                // Not image-gen-model-…: a connected model's card
+                                // under Available Models has that name.
+                                ariaLabel={`image-gen-available-${llmProvider.llm_provider_id}-${model.name}`}
+                                connected={model.image_provider_id !== null}
+                                onDisconnect={() => {
+                                  const config = configs.find(
+                                    (c) =>
+                                      c.image_provider_id ===
+                                      model.image_provider_id
+                                  );
+                                  if (config) void disconnectModel(config);
+                                }}
+                                onConnect={() =>
+                                  void handleLink(llmProvider, model)
+                                }
+                              />
+                            );
+                          })}
+                        </CardGrid>
+                      </Collapsible>
+                    );
+                  })}
+                </Section>
+              )}
+            </Tabs.Content>
+          </Tabs>
         </Section>
       )}
 

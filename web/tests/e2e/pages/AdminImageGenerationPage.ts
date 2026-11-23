@@ -19,6 +19,14 @@ export class AdminImageGenerationPage {
     return this.page.getByText(name, { exact: true });
   }
 
+  get recommendedTab(): Locator {
+    return this.page.getByRole("tab", { name: "Recommended" });
+  }
+
+  get allTab(): Locator {
+    return this.page.getByRole("tab", { name: "All" });
+  }
+
   /** A model's card under Add Models. */
   availableModelCard(llmProviderId: number, modelName: string): Locator {
     return this.page.getByLabel(

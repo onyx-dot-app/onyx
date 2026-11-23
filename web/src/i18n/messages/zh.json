@@ -5853,7 +5853,7 @@
         "message": "加载配置失败。请刷新页面。"
       },
       "noImageModels": {
-        "description": "请在语言模型页面连接提供图像模型的 LLM 提供商。",
+        "description": "请在语言模型页面连接提供图像模型的 LLM 提供商。要查看已连接提供商的所有模型，请打开“全部”标签页。",
         "title": "没有可用的图像模型"
       },
       "providers": {
@@ -5909,6 +5909,10 @@
       },
       "deselectError": {
         "message": "取消选择失败"
+      },
+      "modelFilter": {
+        "all": "全部",
+        "recommended": "推荐"
       }
     },
     "indexSettings": {

@@ -49,9 +49,8 @@ def _create_llm_provider(admin_user: DATestUser, config: NightlyProviderConfig) 
 
 
 def _recommended_image_models(
-    admin_user: DATestUser, llm_provider_id: int, provider: str
+    admin_user: DATestUser, llm_provider_id: int
 ) -> list[str]:
-    recommended = set(iter_image_generation_models(provider))
     response = client.get(
         f"{API_SERVER_URL}/admin/image-generation/llm-providers",
         headers=admin_user.headers,
@@ -59,9 +58,7 @@ def _recommended_image_models(
     response.raise_for_status()
     for llm_provider in response.json():
         if llm_provider["llm_provider_id"] == llm_provider_id:
-            return [
-                m["name"] for m in llm_provider["models"] if m["name"] in recommended
-            ]
+            return [m["name"] for m in llm_provider["models"] if m["is_recommended"]]
     return []
 
 
@@ -138,9 +135,7 @@ def test_nightly_provider_image_generation(admin_user: DATestUser) -> None:
     llm_provider_id = _create_llm_provider(admin_user, config)
     failures: list[str] = []
     try:
-        model_names = _recommended_image_models(
-            admin_user, llm_provider_id, config.provider
-        )
+        model_names = _recommended_image_models(admin_user, llm_provider_id)
         if not model_names:
             skip_or_fail(
                 config.strict and bool(iter_image_generation_models(config.provider)),

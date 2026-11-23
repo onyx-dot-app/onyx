@@ -5853,7 +5853,7 @@
         "message": "구성을 불러오지 못했습니다. 페이지를 새로고침하세요."
       },
       "noImageModels": {
-        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요.",
+        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요. 연결된 공급자의 모든 모델을 보려면 전체 탭을 여세요.",
         "title": "사용 가능한 이미지 모델이 없습니다"
       },
       "providers": {
@@ -5909,6 +5909,10 @@
       },
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
+      },
+      "modelFilter": {
+        "all": "전체",
+        "recommended": "추천"
       }
     },
     "indexSettings": {

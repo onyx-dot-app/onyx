@@ -5853,7 +5853,7 @@
         "message": "No se pudo cargar la configuración. Actualiza la página."
       },
       "noImageModels": {
-        "description": "Conecta en la página Modelos de lenguaje un proveedor de LLM que ofrezca modelos de imagen.",
+        "description": "Conecta en la página Modelos de lenguaje un proveedor de LLM que ofrezca modelos de imagen. Para ver todos los modelos de tus proveedores conectados, abre la pestaña Todos.",
         "title": "No hay modelos de imagen disponibles"
       },
       "providers": {
@@ -5909,6 +5909,10 @@
       },
       "deselectError": {
         "message": "No se pudo anular la selección"
+      },
+      "modelFilter": {
+        "all": "Todos",
+        "recommended": "Recomendados"
       }
     },
     "indexSettings": {

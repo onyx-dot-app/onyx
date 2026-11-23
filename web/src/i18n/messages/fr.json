@@ -5853,7 +5853,7 @@
         "message": "Échec du chargement de la configuration. Actualisez la page."
       },
       "noImageModels": {
-        "description": "Connectez sur la page Modèles de langage un fournisseur LLM qui propose des modèles d'image.",
+        "description": "Connectez sur la page Modèles de langage un fournisseur LLM qui propose des modèles d'image. Pour voir tous les modèles de vos fournisseurs connectés, ouvrez l'onglet Tous.",
         "title": "Aucun modèle d'image disponible"
       },
       "providers": {
@@ -5909,6 +5909,10 @@
       },
       "deselectError": {
         "message": "Échec de la désélection"
+      },
+      "modelFilter": {
+        "all": "Tous",
+        "recommended": "Recommandés"
       }
     },
     "indexSettings": {

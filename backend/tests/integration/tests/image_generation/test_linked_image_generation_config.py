@@ -53,9 +53,11 @@ def _chat_model_names(admin_user: DATestUser, llm_provider_id: int) -> list[str]
 def test_lists_catalog_image_models_for_connected_provider(
     admin_user: DATestUser, llm_provider: DATestLLMProvider
 ) -> None:
-    models = {m["name"] for m in _provider_entry(admin_user, llm_provider.id)["models"]}
-    assert IMAGE_MODEL in models
-    assert CHAT_MODEL in models
+    models = {
+        m["name"]: m for m in _provider_entry(admin_user, llm_provider.id)["models"]
+    }
+    assert models[IMAGE_MODEL]["is_recommended"] is True
+    assert models[CHAT_MODEL]["is_recommended"] is False
     assert "gpt-image-1" not in models  # deprecated
 
 
