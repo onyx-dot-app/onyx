@@ -35,8 +35,8 @@ and grows slowly from it. With no stored share, it starts from its start
 share, and that share is its ceiling. It also grows slowly, because a fast
 growth from a cold start passes the rate of the service in a few minutes.
 
-A pause is a separate key that holds the time when it ends. A service that
-answers with a wait time (Retry-After) asks every caller to stop, so each
+A pause is a separate key whose TTL is the time left in the pause. A service
+that answers with a wait time (Retry-After) asks every caller to stop, so each
 caller reads the pause before it sends a request.
 
 One try does a small, bounded amount of work, whatever the number of
@@ -585,28 +585,6 @@ return {math.floor(factor * 1000 + 0.5), applied,
 """
 )
 
-# Sets a pause that ends ``ARGV[1]`` ms from now, unless the stored pause ends
-# later. Returns the ms until the pause ends.
-_PAUSE_SCRIPT = """
-local t = redis.call('TIME')
-local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-local until_ms = now + tonumber(ARGV[1])
-local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-if until_ms > current then
-  redis.call('SET', KEYS[1], tostring(until_ms), 'PX', tonumber(ARGV[1]))
-  current = until_ms
-end
-return math.max(0, current - now)
-"""
-
-# Returns the ms until the pause ends, or 0 with no pause.
-_PAUSE_LEFT_SCRIPT = """
-local t = redis.call('TIME')
-local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-return math.max(0, current - now)
-"""
-
 
 _last_unreachable_warning = 0.0
 _unreachable_warning_lock = threading.Lock()
@@ -803,30 +781,37 @@ class RedisRateWindows:
     def pause(self, key: str, seconds: float) -> float:
         """Pauses every caller that reads ``key`` for ``seconds`` from now. A
         pause that ends later stays. Returns the seconds until the pause
-        ends. The Redis clock times the pause, so clock skew between pods has
-        no effect."""
+        ends. The pause is the TTL of the key, so Redis keeps the time and
+        clock skew between pods has no effect. PEXPIRE with GT needs Redis
+        7.0 or later."""
         if seconds <= 0:
             return self.pause_left(key)
+        ms = max(1, int(seconds * 1000))
         try:
             # no-direct-redis: allow the pause is shared by every indexing and sync worker
-            result = self._redis.eval(
-                _PAUSE_SCRIPT, keys=[key], args=[str(max(1, int(seconds * 1000)))]
-            )
+            with self._redis.pipeline() as pipe:
+                left_ms = (
+                    pipe.set(key, 1, px=ms, nx=True)
+                    .pexpire(key, ms, gt=True)
+                    .pttl(key)
+                    .execute()[-1]
+                )
         except RedisError as error:
             _warn_redis_unreachable(error)
             return 0.0
-        return int(result) / 1000
+        return max(0, int(left_ms)) / 1000
 
     def pause_left(self, key: str) -> float:
         """The seconds until the pause of ``key`` ends, or 0 with no pause.
         When Redis cannot be reached, there is no pause."""
         try:
             # no-direct-redis: allow the pause is shared by every indexing and sync worker
-            result = self._redis.eval(_PAUSE_LEFT_SCRIPT, keys=[key], args=[])
+            left_ms = self._redis.pttl(key)
         except RedisError as error:
             _warn_redis_unreachable(error)
             return 0.0
-        return int(result) / 1000
+        # PTTL is -2 with no key and -1 with no TTL. A pause always has one.
+        return max(0, left_ms) / 1000
 
     def delete(self, window: RateWindow) -> None:
         """Removes the window's state. For tests."""

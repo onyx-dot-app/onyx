@@ -23,6 +23,7 @@ from onyx.connectors.source_api_limiter import (
     microsoft_app_key,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_rate_window import RedisRateWindows
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 _API = "graph"
@@ -152,6 +153,19 @@ def test_a_retry_after_pauses_every_caller_on_the_app(tenant_id: str) -> None:  
         )
         or 0
     ) >= 1
+
+
+def test_a_pause_keeps_the_later_end(tenant_id: str) -> None:
+    windows = RedisRateWindows(get_redis_client(tenant_id=tenant_id))
+    key = "pause:test"
+
+    assert windows.pause_left(key) == 0
+    assert 9 < windows.pause(key, 10) <= 10
+    # A shorter pause does not end the pause sooner.
+    assert 9 < windows.pause(key, 1) <= 10
+    # A longer pause ends later.
+    assert 19 < windows.pause(key, 20) <= 20
+    assert 19 < windows.pause_left(key) <= 20
 
 
 def test_a_download_lane_pause_does_not_stop_graph_calls(
