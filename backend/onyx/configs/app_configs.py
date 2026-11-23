@@ -2216,6 +2216,33 @@ DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
     os.environ.get("DB_READONLY_PASSWORD") or "password"
 )
 
+# Fallback of POSTGRES_PASSWORD and DB_READONLY_PASSWORD, also shipped in env.prod.template.
+DEFAULT_POSTGRES_PASSWORD = "password"
+
+
+def _default_postgres_password_vars(
+    postgres_password: str, readonly_password: str
+) -> list[str]:
+    return [
+        name
+        for name, value in (
+            ("POSTGRES_PASSWORD", postgres_password),
+            ("DB_READONLY_PASSWORD", readonly_password),
+        )
+        if value == DEFAULT_POSTGRES_PASSWORD
+    ]
+
+
+if default_postgres_vars := _default_postgres_password_vars(
+    POSTGRES_PASSWORD, DB_READONLY_PASSWORD
+):
+    logger.warning(
+        "%s uses the well-known default 'password'. Anyone who can reach the "
+        "Postgres port can read or modify all Onyx data. Set strong, unique "
+        "values before deploying to production.",
+        " and ".join(default_postgres_vars),
+    )
+
 # File Store Configuration
 # Which backend to use for file storage: "s3" (S3/MinIO) or "postgres" (PostgreSQL Large Objects)
 FILE_STORE_BACKEND = os.environ.get("FILE_STORE_BACKEND", "s3")
