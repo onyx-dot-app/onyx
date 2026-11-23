@@ -7,6 +7,9 @@ from onyx.natural_language_processing.embedding_providers.gemini import (
     format_gemini_embedding_text,
     is_gemini_embedding_2_model,
 )
+from onyx.natural_language_processing.embedding_providers.vertex_credentials import (
+    VERTEX_CREDENTIALS,
+)
 from onyx.natural_language_processing.embedding_request_policy import (
     EmbeddingRequestPolicy,
 )
@@ -36,7 +39,7 @@ async def embed_with_vertex(
 
     resolved_model = model or DEFAULT_VERTEX_MODEL
     # ADC discovery can contact the GKE metadata server.
-    resolved = await asyncio.to_thread(auth.resolve_credentials)
+    resolved = await asyncio.to_thread(VERTEX_CREDENTIALS.resolve, auth)
     client = genai.Client(
         vertexai=True,
         project=resolved.project_id,
