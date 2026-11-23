@@ -40,7 +40,7 @@ from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_catalog import (
-    can_generate_images,
+    iter_image_generation_models,
 )
 from onyx.llm.utils import collect_credential_values
 from onyx.server.manage.image_generation.models import (
@@ -316,10 +316,9 @@ def list_llm_provider_image_models(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ImageGenerationLLMProvider]:
-    """Connected unrestricted LLM providers with the models an admin turned
-    on for them on the Language Models page that can generate images (see
-    can_generate_images). A connected model stays listed after it is turned
-    off. A provider with no such model is left out."""
+    """Connected unrestricted LLM providers with every model they can serve.
+    Catalog image models are listed even when the provider's model list omits
+    them."""
     connected_by_model_id = {
         config.model_configuration_id: config.image_provider_id
         for config in get_all_image_generation_configs(db_session)
@@ -331,28 +330,30 @@ def list_llm_provider_image_models(
     ):
         if not is_usable_for_image_generation(llm_provider):
             continue
+        catalog_models = set(
+            iter_image_generation_models(llm_provider.provider, recommended_only=False)
+        )
+        stored_by_name = {mc.name: mc for mc in llm_provider.model_configurations}
         models: list[ImageGenerationProviderModel] = []
-        for stored in sorted(llm_provider.model_configurations, key=lambda mc: mc.name):
-            image_provider_id = connected_by_model_id.get(stored.id)
-            if not (stored.is_visible or image_provider_id):
-                continue
-            if not can_generate_images(llm_provider.provider, stored.name):
-                continue
+        for name in sorted(catalog_models | set(stored_by_name)):
+            stored = stored_by_name.get(name)
             models.append(
                 ImageGenerationProviderModel(
-                    name=stored.name,
+                    name=name,
                     display_name=model_display_name(
-                        stored.name,
+                        name,
                         llm_provider.provider,
-                        stored.display_name,
+                        stored.display_name if stored else None,
                         llm_provider.custom_config is not None,
                     ),
-                    custom_display_name=stored.custom_display_name,
-                    image_provider_id=image_provider_id,
+                    custom_display_name=(
+                        stored.custom_display_name if stored else None
+                    ),
+                    image_provider_id=(
+                        connected_by_model_id.get(stored.id) if stored else None
+                    ),
                 )
             )
-        if not models:
-            continue
         result.append(
             ImageGenerationLLMProvider(
                 llm_provider_id=llm_provider.id,
@@ -389,20 +390,6 @@ def link_config(
             OnyxErrorCode.VALIDATION_ERROR,
             "Only public LLM providers without agent restrictions can be used "
             "for image generation",
-        )
-
-    if not can_generate_images(llm_provider.provider, model_name):
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            f"{model_name} cannot generate images",
-        )
-    if not any(
-        mc.name == model_name and mc.is_visible
-        for mc in llm_provider.model_configurations
-    ):
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            f"Turn on {model_name} on the Language Models page first",
         )
 
     image_provider_id = _linked_image_provider_id(llm_provider.id, model_name)

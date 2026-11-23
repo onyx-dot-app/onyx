@@ -21,10 +21,9 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   once, inline right after the step that made it, in stream order. With code mode on, a program can generate
   images too, and they show the same way.
 - **An admin** opens the image generation admin page. It lists the image
-  models of each connected LLM provider under its name: the models an admin
-  turned on for the provider on the Language Models page that can generate
-  images, or that no catalog knows. A provider with no model that can generate
-  images (Anthropic) is not listed. One click links a model to its LLM provider with no
+  models of each connected LLM provider under its name: the catalog image
+  models and every stored model of the provider, which are not all image
+  models. One click links a model to its LLM provider with no
   credentials, and the first linked model becomes the default. Only public providers with no agent restrictions are listed
   or can be linked, because the tool is available to all users and agents.
   Making a linked provider private or agent-restricted unlinks its image
@@ -93,11 +92,10 @@ edits. Every call is traced with `LLMFlow.IMAGE_GENERATION` or
 `LLMFlow.IMAGE_EDIT` ([[observability]]).
 
 **Model list.** `GET /admin/image-generation/llm-providers` lists the
-provider's visible models (turned on on the Language Models page), and a
-linked model after it is turned off, but only those that
-`llm/model_catalog.py:can_generate_images` passes: a model a catalog knows must have
-an image mode, and a name no catalog knows passes. `POST /config/link` refuses
-a model that is not visible or does not pass. A linked config has the ID
+provider's catalog image models
+(`llm/model_catalog.py:iter_image_generation_models`) and every stored model,
+with no filter: an admin can link a chat model, which then fails to generate.
+A linked config has the ID
 `llm-<llm_provider_id>-<model slug>`. Linked image models get the
 `IMAGE_GENERATION` model flow, so chat model lists skip them.
 `web/src/views/admin/ImageGenerationPage/constants.ts` now only names the
