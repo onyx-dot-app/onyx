@@ -14,23 +14,41 @@ class VertexCredentialsCache:
             raise ValueError("Need max_entries >= 1.")
         self._max_entries = max_entries
         self._entries: OrderedDict[str, VertexEmbeddingCredentials] = OrderedDict()
+        # One lock per key that a thread resolves now.
+        self._resolving: dict[str, threading.Lock] = {}
         self._lock = threading.Lock()
 
     def resolve(self, auth: VertexEmbeddingAuth) -> VertexEmbeddingCredentials:
         """Blocking: a miss can contact the GKE metadata server."""
         key = auth.credentials_key()
         with self._lock:
-            cached = self._entries.get(key)
+            cached = self._get_locked(key)
             if cached is not None:
-                self._entries.move_to_end(key)
                 return cached
-        resolved = auth.resolve_credentials()
-        with self._lock:
-            winner = self._entries.setdefault(key, resolved)
+            resolving = self._resolving.setdefault(key, threading.Lock())
+        # One thread resolves a key. The others wait here and use its result.
+        with resolving:
+            with self._lock:
+                cached = self._get_locked(key)
+                if cached is not None:
+                    return cached
+            try:
+                # A failure is not cached, so the next call resolves again.
+                resolved = auth.resolve_credentials()
+            finally:
+                with self._lock:
+                    self._resolving.pop(key, None)
+            with self._lock:
+                self._entries[key] = resolved
+                while len(self._entries) > self._max_entries:
+                    self._entries.popitem(last=False)
+            return resolved
+
+    def _get_locked(self, key: str) -> VertexEmbeddingCredentials | None:
+        cached = self._entries.get(key)
+        if cached is not None:
             self._entries.move_to_end(key)
-            while len(self._entries) > self._max_entries:
-                self._entries.popitem(last=False)
-            return winner
+        return cached
 
     def clear(self) -> None:
         with self._lock:
