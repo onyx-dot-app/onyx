@@ -178,18 +178,16 @@ resource "aws_opensearch_domain" "main" {
   ]
 
   lifecycle {
-    # The master password is managed out-of-band (ESO / the app secret). AWS
-    # re-validates it on ANY domain update (even a tag change) and always shows it
-    # as a diff since it can't be read back — so Terraform re-sending it turns an
-    # unrelated tag update into a hard failure whenever the stored value doesn't
-    # meet OpenSearch's current complexity rules. Ignore it here; it's set on
-    # create and rotated externally thereafter.
-    #
-    # override_main_response_version is service-managed: AWS reports it on every
-    # domain but rejects it as an input on OpenSearch 3.x, so any diff on it
-    # fails the whole domain update.
     ignore_changes = [
+      # The master password is managed out-of-band (ESO / the app secret). AWS
+      # re-validates it on ANY domain update (even a tag change) and always shows it
+      # as a diff since it can't be read back — so Terraform re-sending it turns an
+      # unrelated tag update into a hard failure whenever the stored value doesn't
+      # meet OpenSearch's current complexity rules. Ignore it here; it's set on
+      # create and rotated externally thereafter.
       advanced_security_options[0].master_user_options[0].master_user_password,
+      # On OpenSearch 3.7 AWS returns override_main_response_version but rejects it
+      # as an input, so a diff on it fails the whole domain update.
       advanced_options["override_main_response_version"],
     ]
     precondition {
