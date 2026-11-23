@@ -71,6 +71,7 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.tool_implementations.postgres.models import (
+    CHAT_HISTORY_TABLES,
     PostgresQueryArgs,
     PostgresToolTable,
 )
@@ -227,14 +228,6 @@ _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "cited_only": _prop("boolean", "search_doc: true (default) = only docs the answer actually cited, in citation order; false = everything retrieved."),
 }
 # fmt: on
-
-_CHAT_HISTORY_TABLES = frozenset(
-    {
-        PostgresToolTable.CHAT_SESSION,
-        PostgresToolTable.CHAT_MESSAGE,
-        PostgresToolTable.SEARCH_DOC,
-    }
-)
 
 _NOUN_BY_TABLE: dict[PostgresToolTable, str] = {
     PostgresToolTable.DOCUMENT: "documents",
@@ -729,7 +722,7 @@ class PostgresTool(Tool):
         args = _parse_args(dict(invocation.arguments))
         # Every anonymous visitor shares one user row, so ownership scoping
         # cannot separate their chat histories.
-        if self._user.is_anonymous and args.table in _CHAT_HISTORY_TABLES:
+        if self._user.is_anonymous and args.table in CHAT_HISTORY_TABLES:
             raise _reject(
                 "Chat history is unavailable to anonymous users. Only the "
                 "'document' and 'hierarchy_node' tables can be queried."

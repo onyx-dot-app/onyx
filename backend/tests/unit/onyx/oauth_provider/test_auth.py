@@ -18,7 +18,10 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.mcp_server import api as mcp_api
 from onyx.mcp_server import auth as mcp_auth
 from onyx.oauth_provider import config as oauth_config
-from onyx.oauth_provider.auth import extract_oauth_provider_bearer
+from onyx.oauth_provider.auth import (
+    _is_mcp_oauth_access_route,
+    extract_oauth_provider_bearer,
+)
 from onyx.oauth_provider.models import OAuthProviderIntrospection
 from onyx.server.oauth_provider.api import _session_hash
 from shared_configs.contextvars import UsageCredentialIdentity
@@ -154,6 +157,21 @@ def test_conflicting_or_malformed_mcp_headers_fail_closed(
     with pytest.raises(OnyxError) as caught:
         extract_oauth_provider_bearer(request)
     assert caught.value.error_code == OnyxErrorCode.UNAUTHENTICATED
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "allowed"),
+    [
+        ("POST", "/api/search/postgres-query", True),
+        ("POST", "/search/postgres-query", True),
+        ("GET", "/api/chat/get-user-chat-sessions", False),
+    ],
+)
+def test_oauth_tokens_reach_only_the_mcp_tool_routes(
+    method: str, path: str, allowed: bool
+) -> None:
+    request = Request({"type": "http", "method": method, "path": path, "headers": []})
+    assert _is_mcp_oauth_access_route(request) is allowed
 
 
 def test_non_mcp_credentials_keep_existing_auth_path() -> None:

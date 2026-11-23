@@ -18,6 +18,16 @@ class PostgresToolTable(str, Enum):
     SEARCH_DOC = "search_doc"
 
 
+# The user's own chat history, as opposed to indexed knowledge.
+CHAT_HISTORY_TABLES = frozenset(
+    {
+        PostgresToolTable.CHAT_SESSION,
+        PostgresToolTable.CHAT_MESSAGE,
+        PostgresToolTable.SEARCH_DOC,
+    }
+)
+
+
 class PostgresQueryArgs(BaseModel):
     table: PostgresToolTable
     count: bool = False
