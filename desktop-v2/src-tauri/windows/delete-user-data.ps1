@@ -47,3 +47,12 @@ foreach ($root in $folders.AppData, $folders.'Local AppData') {
         Remove-OnyxTree $path
     }
 }
+
+# This user's session tokens. keyring names each credential
+# "<server>.app.onyx.desktop.v2". cmdkey works in Constrained Language Mode.
+# Its labels are translated, but the "LegacyGeneric:target=" prefix is not.
+foreach ($line in cmdkey.exe /list) {
+    if ($line -match '(LegacyGeneric:target=\S+\.app\.onyx\.desktop\.v2)\s*$') {
+        cmdkey.exe "/delete:$($Matches[1])" | Out-Null
+    }
+}
