@@ -13,10 +13,7 @@ from onyx.db.plugin import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
-from onyx.prompts.skill_prompts import (
-    BUILT_IN_SKILL_FILES_LINE,
-    CUSTOM_SKILL_FILES_LINE,
-)
+from onyx.prompts.skill_prompts import SKILL_FILES_LINE
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
     CHAT_SKILLS_MOUNT_PATH,
@@ -156,7 +153,7 @@ def read_chat_skills_md(
             key = (skill.version_id, skill.path)
             if sandbox and key in skill_md:
                 folder = f"{CHAT_SKILLS_PATH}/{skill.name}"
-                skill_md[key] = CUSTOM_SKILL_FILES_LINE.format(
+                skill_md[key] = SKILL_FILES_LINE.format(
                     folder=folder
                 ) + resolve_skill_dir_placeholder(skill_md[key], folder)
             continue
@@ -166,9 +163,7 @@ def read_chat_skills_md(
             logger.warning("Could not read built-in skill %s", skill.name)
             continue
         skill_md[(skill.version_id, skill.path)] = (
-            BUILT_IN_SKILL_FILES_LINE.format(
-                folder=f"{CHAT_SKILLS_MOUNT_PATH}/{skill.name}"
-            )
+            SKILL_FILES_LINE.format(folder=f"{CHAT_SKILLS_MOUNT_PATH}/{skill.name}")
             + instructions
         )
     return skill_md

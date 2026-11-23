@@ -338,8 +338,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         ) as lock:
 
             def keep_lock() -> None:
-                # A pod that takes an expired lock deletes the hidden folders:
-                # stop before the next change to the VM.
+                # After the lock expires, another pod can take it and delete
+                # this copy's hidden folder. Stop before the next change.
                 if not lock.owned():
                     raise HarnessSandboxError("lost the skills install lock")
                 lock.extend(_SKILLS_SYNC_LOCK_SECONDS)
@@ -353,7 +353,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     files = load(name)
                     if files is None:
                         continue
-                    # A swap whose reply is lost may still have happened.
+                    # Clear the record first: a swap whose reply is lost may
+                    # still have happened.
                     set_installed_skill(
                         tenant_cache, ref.sandbox_id, instance, name, None
                     )
