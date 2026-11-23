@@ -107,7 +107,9 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   the network drops for a short time. Closing the window stops the checks. For a TLS error,
   the window says that a company proxy that inspects secure traffic, or a missing company
   root certificate, is a common cause.
-- Sign out and **Change server** remove the session on this computer at once. If the server
+- **Change server** opens onboarding with the current server filled in. The same server keeps
+  the session. Another server ends the session, then sign-in opens.
+- Sign out, and saving another server, remove the session on this computer at once. If the server
   cannot be reached to end the session, a dialog says so, and the app tries the server
   sign-out again in the background while it runs. The token stays in memory only: it is not
   written back to the keychain, so after a quit the server session ends only when it expires. The launcher, onboarding and sign-in show one line for each of the same errors,
@@ -145,7 +147,7 @@ and the user can change it. Sample files for each platform are in [`deploy/`](de
 | `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the last valid `ServerURL` is used, else the user's saved server, and the server cannot change. |
 | `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. macOS only: Windows and Linux builds do not update themselves, so this key has no effect there. |
 | `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
-| `DisableLauncher` | bool | No launcher shortcut, the launcher does not open, and **Open Launcher** in the menus is turned off. An open launcher closes at the next policy read. |
+| `DisableLauncher` | bool | No launcher shortcut, the launcher does not open, **Open Launcher** in the menus is turned off, and Aonyx is hidden. An open launcher and Aonyx close at the next policy read. Aonyx comes back when the launcher turns on again. |
 | `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the Preferences switch is locked. See [Launch at login](#launch-at-login). |
 | `DisableNotifications` | bool | Turns off desktop notifications. |
 
@@ -449,6 +451,8 @@ How the app differs from macOS:
   chat.
 - On Linux, Aonyx leaves always-on-top while a file chooser of the main window is open, so it
   does not cover the chooser's buttons.
+- On Linux, the context menu of a link to the server has no **Open Link in New Window**: that
+  window would have no menu bar. **Open Link** opens it in the same window.
 - The main window keeps the native title bar and has its own menu bar: **File** (New Chat
   `Ctrl+N`, Open Launcher, Preferences `Ctrl+,`, Close Window `Ctrl+W`, Quit `Ctrl+Q`), **View**
   (Reload `Ctrl+R`, Back `Alt+Left`, Forward `Alt+Right`, zoom `Ctrl+0`/`Ctrl+=`/`Ctrl+-`, Full

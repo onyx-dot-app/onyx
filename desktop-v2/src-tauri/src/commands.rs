@@ -95,11 +95,48 @@ fn server_locked(state: &AppState) -> Result<(), String> {
     }
 }
 
-/// Onboarding calls this when it opens: why the server cannot be set, if so.
-#[tauri::command]
-pub fn get_server_lock(state: State<'_, AppState>) -> Option<String> {
-    server_lock_reason(&state.policy()).map(str::to_string)
+/// What onboarding shows when it opens.
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerSetup {
+    /// Why the server cannot be set, if so.
+    lock: Option<&'static str>,
+    /// Set when the server can be set but the managed policy is not valid.
+    policy_notice: Option<String>,
+    /// The server in use, if any: Change server starts from it.
+    current: Option<String>,
 }
+
+fn server_setup(policy: &policy::Policy, current: Option<String>) -> ServerSetup {
+    let lock = server_lock_reason(policy);
+    ServerSetup {
+        lock,
+        policy_notice: lock.is_none().then(|| policy.notice()).flatten(),
+        current,
+    }
+}
+
+/// Onboarding calls this when it opens.
+#[tauri::command]
+pub fn get_server_lock(state: State<'_, AppState>) -> ServerSetup {
+    server_setup(&state.policy(), state.server().ok())
+}
+
+/// The server onboarding chose, and whether it is the one in use. The server
+/// in use passes as it is: a managed one may use `http://` on any host. Any
+/// other server must pass the user rules.
+fn chosen_server(input: &str, current: Option<&str>) -> Result<(String, bool), String> {
+    if let (Some(current), Ok(server)) = (current, api::normalize_managed_server_url(input)) {
+        if server == current {
+            return Ok((server, true));
+        }
+    }
+    Ok((normalize_server_url(input)?, false))
+}
+
+/// Saves run one at a time, in order, so an older save that waits for a
+/// sign-out cannot overwrite a newer choice.
+static SAVING_SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Launcher commands refuse while managed policy turns the launcher off.
 fn launcher_enabled(app: &AppHandle, state: &AppState) -> Result<(), String> {
@@ -126,8 +163,19 @@ pub async fn save_server(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _saving = SAVING_SERVER.lock().await;
     server_locked(&state)?;
-    let server = normalize_server_url(&url)?;
+    let current = state.server().ok();
+    let (server, same) = chosen_server(&url, current.as_deref())?;
+    // The same server keeps the session and its windows.
+    if same {
+        windows::close(&app, windows::ONBOARDING);
+        windows::show_primary_except(&app, windows::ONBOARDING);
+        return Ok(());
+    }
+    if current.is_some() {
+        end_session(&app).await?;
+    }
     state.config.update(|c| c.server_url = Some(server))?;
     windows::open_login(&app)?;
     windows::close(&app, windows::ONBOARDING);
@@ -292,16 +340,11 @@ pub async fn sign_out(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Opens onboarding. The session ends only when onboarding saves another
+/// server (`save_server`).
 #[tauri::command]
 pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     server_locked(&state)?;
-    end_session(&app).await?;
-    // The session has ended either way; if the server cannot be cleared, the
-    // user still gets a window (sign-in for the same server) and the error.
-    if let Err(e) = state.config.update(|c| c.server_url = None) {
-        let _ = windows::open_login(&app);
-        return Err(e);
-    }
     windows::open_onboarding(&app)?;
     windows::close(&app, windows::LOGIN);
     windows::close(&app, windows::PREFERENCES);
@@ -654,11 +697,65 @@ pub fn fit_window(window: tauri::WebviewWindow, content_height: f64) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_component, managed_prefs, selected_agent, server_lock_reason, MANAGED,
-        SERVER_LOCKED_INVALID,
+        chosen_server, decode_component, managed_prefs, selected_agent, server_lock_reason,
+        server_setup, MANAGED, SERVER_LOCKED_INVALID,
     };
     use crate::api::Agent;
-    use crate::policy::Policy;
+    use crate::policy::{self, Policy, RawValue};
+
+    #[test]
+    fn onboarding_shows_why_an_unlocked_managed_server_was_ignored() {
+        for value in ["ftp://bad.example", "not a url"] {
+            let policy =
+                policy::parse(|key| (key == "ServerURL").then(|| RawValue::Str(value.to_string())));
+            let setup = server_setup(&policy, None);
+            assert_eq!(setup.lock, None, "{value}");
+            let notice = setup.policy_notice.expect("a notice");
+            assert!(notice.contains("server URL"), "{value}: {notice}");
+        }
+        // A locked server shows only the lock reason.
+        let locked = server_setup(&Policy::unreadable(), None);
+        assert_eq!(locked.lock, Some(SERVER_LOCKED_INVALID));
+        assert_eq!(locked.policy_notice, None);
+        assert_eq!(server_setup(&Policy::default(), None).policy_notice, None);
+    }
+
+    #[test]
+    fn onboarding_starts_from_the_server_in_use() {
+        let server = "https://onyx.example.com".to_string();
+        let setup = server_setup(&Policy::default(), Some(server.clone()));
+        assert_eq!(setup.current, Some(server));
+    }
+
+    #[test]
+    fn the_same_server_keeps_the_session() {
+        let current = Some("https://onyx.example.com");
+        for input in [
+            "https://onyx.example.com",
+            "onyx.example.com",
+            " HTTPS://Onyx.Example.com/app/ ",
+        ] {
+            assert_eq!(
+                chosen_server(input, current),
+                Ok(("https://onyx.example.com".to_string(), true)),
+                "{input}"
+            );
+        }
+        let other = Ok(("https://other.example.com".to_string(), false));
+        assert_eq!(chosen_server("https://other.example.com", current), other);
+        assert_eq!(chosen_server("https://other.example.com", None), other);
+    }
+
+    #[test]
+    fn a_managed_http_server_in_use_is_kept_but_no_other_http_server() {
+        let current = Some("http://onyx.corp");
+        assert_eq!(
+            chosen_server("http://onyx.corp/", current),
+            Ok(("http://onyx.corp".to_string(), true))
+        );
+        assert!(chosen_server("http://other.corp", current).is_err());
+        assert!(chosen_server("http://onyx.corp", None).is_err());
+    }
 
     fn agent(id: i64) -> Agent {
         Agent {

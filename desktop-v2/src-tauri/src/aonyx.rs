@@ -94,11 +94,40 @@ pub fn answer_finished(app: &AppHandle, id: u64, ok: bool) {
     }
 }
 
+/// Whether the pet belongs on screen: it was there when the user last left
+/// it, and the launcher it opens is not turned off by policy.
+fn wanted(saved: Option<bool>, launcher_disabled: bool) -> bool {
+    saved == Some(true) && !launcher_disabled
+}
+
 /// Shows the pet at startup if it was on screen when the app last ran.
 pub fn restore(app: &AppHandle) {
-    if app.state::<AppState>().config.get().aonyx == Some(true) {
+    let state = app.state::<AppState>();
+    if wanted(state.config.get().aonyx, state.policy().disable_launcher) {
         show(app);
     }
+}
+
+/// Shows or hides the pet after the launcher policy changed. The saved
+/// choice stays, so the pet comes back when the policy allows it.
+pub fn sync_policy(app: &AppHandle) {
+    let app = app.clone();
+    // Queued from another thread: a sync command (`get_prefs`) runs this on
+    // the main thread, where building the pet window deadlocks on Windows.
+    tauri::async_runtime::spawn(async move {
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let state = handle.state::<AppState>();
+            let disabled = state.policy().disable_launcher;
+            if wanted(state.config.get().aonyx, disabled) {
+                if !platform::is_visible(&handle) {
+                    show_now(&handle);
+                }
+            } else if disabled {
+                platform::hide(&handle);
+            }
+        });
+    });
 }
 
 /// The launcher's easter egg: shows the pet, or sends it away.
@@ -425,7 +454,15 @@ mod platform {
 mod tests {
     use std::sync::atomic::AtomicBool;
 
-    use super::on_top_change;
+    use super::{on_top_change, wanted};
+
+    #[test]
+    fn the_pet_stays_away_while_the_launcher_is_off() {
+        assert!(wanted(Some(true), false));
+        assert!(!wanted(Some(true), true));
+        assert!(!wanted(Some(false), false));
+        assert!(!wanted(None, false));
+    }
 
     #[test]
     fn steps_down_for_a_file_chooser_and_back_up_once_after_it() {
