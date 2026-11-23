@@ -61,7 +61,9 @@
     "linux": {
       "deb": {
         "depends": [
-          "libc6 (>= 2.35)"
+          "libc6 (>= 2.35)",
+          "ca-certificates",
+          "xdg-utils"
         ],
         "section": "utils",
         "desktopTemplate": "linux/onyx-v2.desktop",
