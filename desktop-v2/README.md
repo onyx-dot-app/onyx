@@ -134,15 +134,16 @@ in advance. With a managed server, the app skips onboarding and opens at sign-in
 The app reads the policy at launch, every 5 minutes, before each update check, and each time
 Preferences opens (`src-tauri/src/policy.rs`). A managed value wins over the user's own
 `config.json` value. Preferences shows managed values read-only, with "Managed by your
-organization". Sample files for each platform are in [`deploy/`](deploy/).
+organization". A `ServerURL` without `LockServerURL` shows "Default set by your organization",
+and the user can change it. Sample files for each platform are in [`deploy/`](deploy/).
 
 | Key | Type | Effect |
 |---|---|---|
-| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. |
-| `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the user's saved server stays and cannot change. |
-| `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. |
+| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. The app keeps only the scheme, host and port: `https://onyx.example.com/app` becomes `https://onyx.example.com`, so Onyx must run at the server root. A URL with a user name or password is not valid. |
+| `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the last valid `ServerURL` is used, else the user's saved server, and the server cannot change. |
+| `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. macOS only: Windows and Linux builds do not update themselves, so this key has no effect there. |
 | `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
-| `DisableLauncher` | bool | No launcher shortcut, and the launcher does not open. An open launcher closes at the next policy read. |
+| `DisableLauncher` | bool | No launcher shortcut, the launcher does not open, and **Open Launcher** in the menus is turned off. An open launcher closes at the next policy read. |
 | `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the Preferences switch is locked. See [Launch at login](#launch-at-login). |
 | `DisableNotifications` | bool | Turns off desktop notifications. |
 
@@ -157,11 +158,16 @@ valid.
 The app does not ignore a policy that it cannot read. It fails closed:
 
 - If the policy file or a value cannot be read, Preferences shows "Your organization's Onyx
-  policy is invalid".
+  policy is invalid. Some settings are locked."
 - If the Linux policy file exists but is not a valid JSON object (for example, it has a trailing
   comma), the server is locked and updates are off. A UTF-8 byte order mark is allowed.
 - An invalid `LockServerURL` or `Disable*` value counts as `true`.
-- An invalid `ServerURL`, `LauncherShortcut` or `LaunchAtLogin` value is ignored.
+- An invalid `ServerURL`, `LauncherShortcut` or `LaunchAtLogin` value is ignored. Preferences
+  names the ignored setting and does not lock other settings.
+- The app remembers the last valid `ServerURL`. If a later policy is invalid and has no valid
+  `ServerURL`, the app uses the remembered server, so one bad push does not stop sign-in.
+- If the server is locked and no server is known, onboarding shows that the policy is invalid
+  and the server field is turned off.
 
 ### Launch at login
 
@@ -282,7 +288,12 @@ separately.
 ### Linux
 
 The app reads `/etc/onyx-desktop/policy.json`, one JSON object with the same keys
-([`deploy/linux/policy.json`](deploy/linux/policy.json)). Make it readable by all users:
+([`deploy/linux/policy.json`](deploy/linux/policy.json)). Make it readable by all users, and
+writable only by root (for example, `root:root` with mode `644`). The app does not trust the file
+if it, or a directory above it, is not owned by root or is writable by group or others. A sticky
+directory such as `/tmp` is allowed. Each symlink on the path must also be owned by root, and the
+directories on the way to its target get the same check. A file that is not trusted counts as a policy that cannot be read (see
+[Invalid policy](#invalid-policy)).
 
 ```json
 {

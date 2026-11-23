@@ -454,6 +454,10 @@ fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
     let Some(host) = url.host_str() else {
         return Err("The server URL must include a host.".into());
     };
+    // Only the origin is kept, so credentials in the URL would be lost.
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("Remove the user name and password from the server URL.".into());
+    }
     // Passwords and session tokens cross this connection: plain http is only
     // for a server on this computer.
     if url.scheme() == "http" && !allow_any_http && !is_loopback_host(host) {
@@ -1490,6 +1494,19 @@ mod tests {
         );
         assert!(normalize_managed_server_url("ftp://onyx.corp.internal").is_err());
         assert!(normalize_server_url("  ").is_err());
+        // A page URL reduces to the server; credentials are refused.
+        assert_eq!(
+            normalize_managed_server_url("  HTTPS://Onyx.Example.com/some/path/?q=1#x  ").unwrap(),
+            "https://onyx.example.com"
+        );
+        for with_credentials in [
+            "https://user:pw@example.com",
+            "https://user@example.com",
+            "https://:pw@example.com",
+        ] {
+            assert!(normalize_server_url(with_credentials).is_err());
+            assert!(normalize_managed_server_url(with_credentials).is_err());
+        }
     }
 
     #[test]

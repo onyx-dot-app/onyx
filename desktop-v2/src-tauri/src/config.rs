@@ -35,6 +35,9 @@ pub struct Config {
     /// where `TOKEN_NEEDS_RECORD` is set.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub session_servers: BTreeSet<String>,
+    /// The last valid managed `ServerURL`, used while the policy is invalid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_server_url: Option<String>,
 }
 
 impl Config {
@@ -67,10 +70,21 @@ pub struct ConfigStore {
 
 impl ConfigStore {
     pub fn load(path: PathBuf) -> Self {
-        let config = fs::read_to_string(&path)
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default();
+        let config = match fs::read_to_string(&path) {
+            Ok(raw) => {
+                // Windows PowerShell 5.1 writes UTF-8 with a byte order mark.
+                let raw = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
+                serde_json::from_str(raw).unwrap_or_else(|e| {
+                    log::error!("{} is not valid; using defaults: {e}", path.display());
+                    Config::default()
+                })
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::default(),
+            Err(e) => {
+                log::error!("could not read {}; using defaults: {e}", path.display());
+                Config::default()
+            }
+        };
         Self {
             path,
             inner: Mutex::new(config),
@@ -154,5 +168,22 @@ mod tests {
         assert!(!ConfigStore::load(path)
             .get()
             .trusts_stored_token(SERVER, true));
+    }
+
+    #[test]
+    fn reads_a_config_file_with_a_byte_order_mark() {
+        let dir = std::env::temp_dir().join(format!("onyx-config-bom-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        fs::write(
+            &path,
+            "\u{feff}{\"serverUrl\": \"https://x.example.com\", \"hotkey\": \"Alt+Space\"}",
+        )
+        .unwrap();
+        let config = ConfigStore::load(path).get();
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(config.server_url.as_deref(), Some("https://x.example.com"));
+        assert_eq!(config.hotkey(), "Alt+Space");
     }
 }
