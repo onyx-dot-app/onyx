@@ -24,6 +24,7 @@ from pydantic import GetCoreSchemaHandler
 from pydantic.types import T
 from pydantic_core import core_schema
 
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.server.metrics.adaptive_pool_metrics import (
     record_pool_cut,
     record_pool_grow,
@@ -32,6 +33,17 @@ from onyx.server.metrics.adaptive_pool_metrics import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _log_function_failure(label: str, key: object, error: Exception) -> None:
+    """Logs the failure of one function of a parallel run. A stop signal is
+    no failure: a connector raises it to end its run on a stop or a cancel,
+    so it gets one INFO line and no traceback."""
+    if isinstance(error, ConnectorStopSignal):
+        logger.info("%s %s stopped: %s", label, key, error)
+        return
+    logger.error("%s %s failed due to %s", label, key, error, exc_info=error)
+
 
 R = TypeVar("R")
 KT = TypeVar("KT")  # Key type
@@ -348,7 +360,7 @@ def run_functions_tuples_in_parallel(
                 try:
                     results.append((index, future.result()))
                 except Exception as e:
-                    logger.exception("Function at index %s failed due to %s", index, e)
+                    _log_function_failure("Function at index", index, e)
                     results.append((index, None))
                     if not allow_failures:
                         raise
@@ -379,7 +391,7 @@ def run_functions_tuples_in_parallel(
                 try:
                     results.append((index, future.result()))
                 except Exception as e:
-                    logger.exception("Function at index %s failed due to %s", index, e)
+                    _log_function_failure("Function at index", index, e)
                     results.append((index, None))
 
                     if not allow_failures:
@@ -495,7 +507,7 @@ def run_functions_in_parallel(
             try:
                 results[result_id] = future.result()
             except Exception as e:
-                logger.exception("Function with ID %s failed due to %s", result_id, e)
+                _log_function_failure("Function with ID", result_id, e)
                 results[result_id] = None
 
                 if not allow_failures:

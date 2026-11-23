@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.utils import threadpool_concurrency
 from onyx.utils.threadpool_concurrency import (
@@ -16,6 +17,7 @@ from onyx.utils.threadpool_concurrency import (
     ThreadSafeDict,
     call_later,
     parallel_yield,
+    run_functions_tuples_in_parallel,
     run_in_background,
     run_with_timeout,
     wait_on_background,
@@ -565,3 +567,53 @@ def test_call_later_runs_due_callbacks_in_order_on_one_thread() -> None:
     assert {context for _, context, _ in ran} == {"caller"}
     assert len({thread for _, _, thread in ran}) == 1
     assert threading.get_ident() not in {thread for _, _, thread in ran}
+
+
+class _RecordingLogger:
+    def __init__(self) -> None:
+        self.lines: list[tuple[str, str]] = []
+        self.tracebacks: list[bool] = []
+
+    def __getattr__(self, level: str) -> Any:
+        def record(message: str, *args: Any, **kwargs: Any) -> None:
+            self.lines.append((level, message % args if args else message))
+            self.tracebacks.append(
+                level == "exception" or kwargs.get("exc_info") is not None
+            )
+
+        return record
+
+
+def _stop() -> None:
+    raise ConnectorStopSignal("Stop signal while waiting for the API budget")
+
+
+def _fail() -> None:
+    raise ValueError("a real error")
+
+
+@pytest.mark.parametrize("timeout", [None, 30.0])
+def test_a_stop_signal_logs_one_info_line_and_propagates(
+    monkeypatch: pytest.MonkeyPatch, timeout: float | None
+) -> None:
+    """A stop is no failure: no ERROR line and no traceback."""
+    recorder = _RecordingLogger()
+    monkeypatch.setattr(threadpool_concurrency, "logger", recorder)
+
+    with pytest.raises(ConnectorStopSignal):
+        run_functions_tuples_in_parallel([(_stop, ())], timeout=timeout)
+
+    assert [level for level, _ in recorder.lines] == ["info"]
+    assert recorder.tracebacks == [False]
+    assert "stopped" in recorder.lines[0][1]
+
+
+def test_a_real_error_keeps_its_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorder = _RecordingLogger()
+    monkeypatch.setattr(threadpool_concurrency, "logger", recorder)
+
+    with pytest.raises(ValueError):
+        run_functions_tuples_in_parallel([(_fail, ())])
+
+    assert [level for level, _ in recorder.lines] == ["error"]
+    assert recorder.tracebacks == [True]
