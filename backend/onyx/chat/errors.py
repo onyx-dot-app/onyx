@@ -189,13 +189,15 @@ def chat_error(
         )
     elif info.finish_reason is not None:
         details["finish_reason"] = info.finish_reason
-    return StreamingError(
+    packet = StreamingError(
         error=info.message,
         stack_trace=stack,
         error_code=info.error_code,
         is_retryable=info.is_retryable,
         details=details,
     )
+    packet._from_llm = True
+    return packet
 
 
 def unhandled_stream_error(error: Exception) -> StreamingError:
