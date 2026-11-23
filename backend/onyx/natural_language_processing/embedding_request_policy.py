@@ -74,13 +74,22 @@ class EmbeddingRequestPolicy(BaseModel):
                     self._add_provider_throttle_wait(time.monotonic() - start)
                 throttle_attempt += 1
 
-    async def send_async(self, request: Callable[[], Awaitable[_T]]) -> _T:
+    async def send_async(
+        self,
+        request: Callable[[], Awaitable[_T]],
+        takes_rate_limit: bool = True,
+    ) -> _T:
         """Sends one provider request under this policy. The rate limit and
-        provider throttling share one wait time limit per request."""
+        provider throttling share one wait time limit per request. With
+        `takes_rate_limit=False`, the request takes the rate limit itself
+        (`try_take_rate_limit`)."""
         started_at = time.monotonic()
         throttle_attempt = 0
         while True:
-            await self.acquire_rate_limit_async(started_at)
+            if takes_rate_limit and self.rate_limiter is not None:
+                await self.rate_limiter.acquire_async(
+                    self.should_stop, started_at, self._add_rate_limit_wait
+                )
             try:
                 return await request()
             except Exception as e:
@@ -96,14 +105,25 @@ class EmbeddingRequestPolicy(BaseModel):
                     self._add_provider_throttle_wait(time.monotonic() - start)
                 throttle_attempt += 1
 
-    async def acquire_rate_limit_async(self, started_at: float) -> None:
-        """Waits for the configured rate limit, if there is one. `send_async`
-        calls this before each request. A request that sends again by itself
-        calls it before each resend, with the time it started to wait."""
-        if self.rate_limiter is not None:
-            await self.rate_limiter.acquire_async(
-                self.should_stop, started_at, self._add_rate_limit_wait
-            )
+    def try_take_rate_limit(self) -> bool:
+        """Takes a permit of the configured rate limit without waiting. True
+        when there is no limit."""
+        return self.rate_limiter is None or self.rate_limiter.try_acquire() == 0
+
+    async def wait_for_full_rate_limit_async(
+        self, attempt: int, started_at: float
+    ) -> None:
+        """Waits after `try_take_rate_limit` found the window full."""
+        if self.rate_limiter is None:
+            return
+        start = time.monotonic()
+        try:
+            for sleep_seconds in self.rate_limiter.full_window_sleeps(
+                attempt, started_at, self.should_stop
+            ):
+                await asyncio.sleep(sleep_seconds)
+        finally:
+            self._add_rate_limit_wait(time.monotonic() - start)
 
     def _throttle_sleeps(self, attempt: int, started_at: float) -> Iterator[float]:
         return wait_sleeps(
