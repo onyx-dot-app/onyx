@@ -61,6 +61,8 @@ AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
 # (artifacts_download), in CHAT_FILES_DIR. The chat file copies never clean
 # it up.
 ARTIFACT_FILES_DIR = f"{CHAT_FILES_DIR}/artifacts"
+# The original files of the chat's search results, in CHAT_FILES_DIR.
+SEARCH_FILES_DIR = f"{CHAT_FILES_DIR}/search"
 # The longest file name, in UTF-8 bytes, of the VM's file system.
 _MAX_NAME_BYTES = 255
 # The longest file name, in characters, that the Python tool stages

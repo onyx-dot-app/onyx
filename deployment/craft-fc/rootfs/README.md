@@ -289,7 +289,7 @@ At boot, init:
 1. Mounts `/proc`, `/sys`, `/dev`, `/dev/pts`, `/dev/shm`, cgroup2 on
    `/sys/fs/cgroup` (all controllers on in `cgroup.subtree_control`), and
    tmpfs on `/run` and `/tmp`. It makes the Onyx directories
-   `/tmp/onyx/tool-results`, `/tmp/onyx/search-files` and `/tmp/onyx/artifacts`,
+   `/tmp/onyx/tool-results` and `/tmp/onyx/artifacts`,
    owned by the sandbox user (uid 1000). The template boot makes them and the
    template snapshot keeps them, so every VM restored from it has them.
    Then it sets kernel sysctls: `io_uring_disabled=2`, `kptr_restrict=2`,
@@ -390,8 +390,8 @@ you change `craft-init`, `attach.sh` or the drive layout, boot the result on a
 KVM host (see `../README.md`, "Boot test") and check:
 
 - `/proc/mounts` has the overlays and the read-only managed drive;
-- `/tmp` is a tmpfs, and `/tmp/onyx` and its directories `tool-results`,
-  `search-files` and `artifacts` are owned by uid 1000. A command (uid 1000)
+- `/tmp` is a tmpfs, and `/tmp/onyx` and its directories `tool-results`
+  and `artifacts` are owned by uid 1000. A command (uid 1000)
   can make and delete files in them. `TestRootfsDeliveryKVM` (full KVM lane)
   checks this;
 - commands run as uid 1000; with `--daemon-cmd "/craft-fc/bin/guest-daemon --command-user="`

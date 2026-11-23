@@ -1756,6 +1756,7 @@ def upsert_persona(
             user_email=user_email,
             external_group_ids=external_group_ids,
             user_id=user.id if user else None,
+            prior_emails=user.prior_emails if user else None,
         )
         if not attached_documents and document_ids:
             raise ValueError("documents not found or not accessible")

@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.server.features.build.sandbox.file_copy_state import copy_generation_key
 from onyx.server.features.build.sandbox.harness_base import (
     HarnessSandbox,
     SessionFiles,
@@ -46,10 +47,14 @@ def test_the_status_line_stays_bounded_for_any_file_count(
     monkeypatch.setattr(file_copies, "file_copy_pool", lambda: pool)
     sandbox = _SlowSetup()
     names = [f"attachments/file-{i:05}.csv" for i in range(files)]
+    session_id = uuid4()
     copies = TurnFileCopies(
-        HarnessSandboxRef(tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()),
+        HarnessSandboxRef(
+            tenant_id="tenant", sandbox_id=uuid4(), session_id=session_id
+        ),
         cast(HarnessSandbox, sandbox),
         [VmChatFile(file_id=f"f{i}", path=name) for i, name in enumerate(names)],
+        generation=cache.incr(copy_generation_key(session_id)),
     )
     try:
         assert sandbox.setting_up.wait(5)

@@ -32,8 +32,8 @@ const (
 	// The sandbox user owns the Onyx directories in /tmp (a tmpfs).
 	rdUser = `echo "uid=$(id -u) gid=$(id -g) home=$HOME user=$USER"; touch ws-probe && echo ws-ok; touch /tmp/probe && echo tmp-ok; touch /usr/local/share/ca-certificates/probe 2>/dev/null || echo ca-store-denied; pwd
 grep ' /tmp ' /proc/mounts | cut -d' ' -f3
-stat -c '%u:%g %a' /tmp/onyx /tmp/onyx/tool-results /tmp/onyx/search-files /tmp/onyx/artifacts | sort | uniq -c | sed 's/^ *//'
-for d in tool-results search-files artifacts; do touch /tmp/onyx/$d/p && rm /tmp/onyx/$d/p && echo $d-ok; done`
+stat -c '%u:%g %a' /tmp/onyx /tmp/onyx/tool-results /tmp/onyx/artifacts | sort | uniq -c | sed 's/^ *//'
+for d in tool-results artifacts; do touch /tmp/onyx/$d/p && rm /tmp/onyx/$d/p && echo $d-ok; done`
 )
 
 // TestRootfsDeliveryKVM checks rootfs delivery through the agent binary: the root
@@ -192,7 +192,7 @@ func TestRootfsDeliveryKVM(t *testing.T) {
 	}
 	ur, err := ptCollect(r)
 	want := fmt.Sprintf("uid=1000 gid=1000 home=/home/sandbox user=sandbox\nws-ok\ntmp-ok\nca-store-denied\n/home/onyx/workspaces/%s\n"+
-		"tmpfs\n4 1000:1000 755\ntool-results-ok\nsearch-files-ok\nartifacts-ok\n", sessionID)
+		"tmpfs\n3 1000:1000 755\ntool-results-ok\nartifacts-ok\n", sessionID)
 	if err != nil || ur.stdout != want {
 		t.Errorf("command user: got %q %v, want %q (stderr %q)", ur.stdout, err, want, ur.stderr)
 	}

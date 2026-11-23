@@ -106,12 +106,14 @@ from onyx.federated_connectors.federated_retrieval import (
     get_federated_retrieval_functions,
 )
 from onyx.file_store.file_store import FILE_SIZE_MISSING_SENTINEL
+from onyx.llm.cancellation import check_cancelled
 from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.factory import get_decision_client, get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolDefinition, ToolResult, ToolResultMessage
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.prompts.sandbox_tools import SEARCH_FILE_GUIDANCE
 from onyx.prompts.tool_prompts import CODE_MODE_SEARCH_USAGE
 from onyx.secondary_llm_flows.decision_rerank_expansion import (
     MAX_DECISION_QUESTIONS,
@@ -152,6 +154,10 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.tool_implementations.sandbox.models import (
+    SEARCH_FILE_MAX_BYTES,
+    SearchResultFile,
+)
 from onyx.tools.tool_implementations.search.constants import (
     ANALYZED_QUERY_MAX_CHARS,
     DECISION_TIMEOUT_S,
@@ -185,6 +191,7 @@ from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
 from onyx.tools.tool_implementations.utils import (
+    FILE_ASSOCIATED_GUIDANCE,
     SEARCH_RESULTS_CODE_MODE_RESULT,
     convert_inference_sections_to_llm_string,
 )
@@ -938,57 +945,89 @@ class SearchTool(Tool):
         context: ToolContext,
     ) -> ToolResult:
         shown = sections_for_model[:MAX_CHUNKS_FED_TO_CHAT]
-        # The connector files that the file store still has, which the chat
-        # stages for the Python tool.
+        # By file: the chunks of the shown sections that have it.
+        showing: dict[str, list[InferenceChunk]] = {}
+        for section in shown:
+            chunk = section.center_chunk
+            if chunk.file_id is not None:
+                showing.setdefault(chunk.file_id, []).append(chunk)
+        offer = context.sandbox_search_files
+        # A sandbox chat copies the shown results' files; a chat that stages
+        # files for the Python tool stages those of all its documents.
         file_ids = (
-            {doc.file_id for doc in search_docs if doc.file_id}
-            | {
-                section.center_chunk.file_id
-                for section in shown
-                if section.center_chunk.file_id
-            }
+            set(showing)
+            if offer is not None
+            else {doc.file_id for doc in search_docs if doc.file_id} | set(showing)
             if context.python_stages_search_files
             else set()
         )
-        openable: set[str] = set()
+        # By file that a tool of the chat can open: its recorded size. One
+        # query serves the result's names and the copy or the staging.
+        openable: dict[str, int | None] = {}
         if file_ids:
             with get_session_with_tenant(
                 tenant_id=get_current_tenant_id()
             ) as db_session:
                 openable = {
-                    record.file_id
+                    record.file_id: record.file_size
                     for record in get_filerecords_by_file_ids(
                         list(file_ids), db_session
                     )
                     if record.file_origin
                     in (FileOrigin.CONNECTOR, FileOrigin.CONNECTOR_FILE_UPLOAD)
                     and record.file_size != FILE_SIZE_MISSING_SENTINEL
+                    and (
+                        offer is None
+                        or (record.file_size or 0) <= SEARCH_FILE_MAX_BYTES
+                    )
                 }
-        # By openable file: its name in the sandbox, which the result and the
-        # staging share (`SearchDocsResponse.openable_file_names`). A file that
-        # the chat staged before keeps that name; another takes the title of
-        # the first shown section with it, else of the first document.
-        staged_names = {
-            file.file_id: file.filename
-            for file in context.chat_files
-            if file.file_id in openable
-        }
-        file_names: dict[str, str] = {}
-        for file_id, title in [
-            *(
-                (section.center_chunk.file_id, section.center_chunk.semantic_identifier)
-                for section in shown
-            ),
-            *((doc.file_id, doc.semantic_identifier) for doc in search_docs),
-        ]:
-            if (
-                file_id is not None
-                and file_id in openable
-                and file_id not in file_names
-            ):
-                file_names[file_id] = staged_names.get(file_id) or search_file_name(
-                    file_id, title
-                )
+        file_names: dict[str, str]
+        if offer is not None:
+            # A search stopped before it returns offers nothing.
+            check_cancelled()
+            # The copy names each file from the title that it is offered with.
+            file_names = offer(
+                {
+                    file_id: SearchResultFile(
+                        title=chunks[0].semantic_identifier,
+                        size=openable[file_id],
+                        document_ids=tuple(
+                            dict.fromkeys(chunk.document_id for chunk in chunks)
+                        ),
+                    )
+                    for file_id, chunks in showing.items()
+                    if file_id in openable
+                }
+            )
+            file_guidance = SEARCH_FILE_GUIDANCE
+        else:
+            # By openable file: its name in the sandbox, which the result and
+            # the staging share (`SearchDocsResponse.openable_file_names`). A
+            # file that the chat staged before keeps that name; another takes
+            # the title of the first shown section with it, else of the first
+            # document.
+            staged_names = {
+                file.file_id: file.filename
+                for file in context.chat_files
+                if file.file_id in openable
+            }
+            file_names = {}
+            for file_id, title in [
+                *(
+                    (file_id, chunks[0].semantic_identifier)
+                    for file_id, chunks in showing.items()
+                ),
+                *((doc.file_id, doc.semantic_identifier) for doc in search_docs),
+            ]:
+                if (
+                    file_id is not None
+                    and file_id in openable
+                    and file_id not in file_names
+                ):
+                    file_names[file_id] = staged_names.get(file_id) or search_file_name(
+                        file_id, title
+                    )
+            file_guidance = FILE_ASSOCIATED_GUIDANCE
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
             top_sections=shown,
             citation_start=citation_start,
@@ -996,6 +1035,7 @@ class SearchTool(Tool):
             include_link=self.include_link,
             note=scope_note or None,
             file_names=file_names,
+            file_guidance=file_guidance,
         )
         return ToolResult(
             # Displayed documents can exceed the subset sent to the model.
@@ -1007,7 +1047,8 @@ class SearchTool(Tool):
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
                 displayed_docs=displayed_docs,
-                openable_file_names=file_names,
+                # A sandbox chat copies files instead of staging them.
+                openable_file_names=file_names if offer is None else {},
             ),
             content=docs_str,
             metadata=planning_result,
