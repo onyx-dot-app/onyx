@@ -70,6 +70,7 @@ mod tests {
     #[test]
     fn removes_the_old_cookie_file_once() {
         let dir = std::env::temp_dir().join(format!("onyx-cookie-file-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("cookies"), "# Netscape HTTP Cookie File\n").unwrap();
         std::fs::write(dir.join("localstorage"), "kept").unwrap();
@@ -85,6 +86,7 @@ mod tests {
     #[test]
     fn a_missing_data_directory_is_not_an_error() {
         let dir = std::env::temp_dir().join(format!("onyx-no-data-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
         assert!(!remove_cookie_file(&dir).unwrap());
     }
 }

@@ -376,10 +376,17 @@ fn can_write_in(dir: &std::path::Path) -> bool {
     if std::fs::create_dir_all(dir).is_err() {
         return false;
     }
+    // `create_new` does not follow a file or link that is already there.
     let probe = dir.join(format!(".probe-{}", std::process::id()));
-    let written = std::fs::write(&probe, b"").is_ok();
-    let _ = std::fs::remove_file(&probe);
-    written
+    let created = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .is_ok();
+    if created {
+        let _ = std::fs::remove_file(&probe);
+    }
+    created
 }
 
 /// A left click on the tray icon (on release, as Windows menus open).
@@ -490,7 +497,7 @@ fn set_zoom(app: &AppHandle, id: &str) {
 // Unix paths: "/run/user/1000" is not absolute on Windows.
 #[cfg(all(test, unix))]
 mod tray_dir_tests {
-    use super::tray_icon_dir;
+    use super::{can_write_in, tray_icon_dir};
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -529,8 +536,23 @@ mod tray_dir_tests {
         std::fs::remove_dir_all(&base).unwrap();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn the_write_probe_does_not_follow_a_planted_link() {
+        let dir = temp_dir("probe-link");
+        let target = dir.join("target");
+        std::fs::write(&target, b"keep").unwrap();
+        let probe = dir.join(format!(".probe-{}", std::process::id()));
+        std::os::unix::fs::symlink(&target, &probe).unwrap();
+        assert!(!can_write_in(&dir));
+        assert_eq!(std::fs::read(&target).unwrap(), b"keep");
+        assert!(probe.symlink_metadata().is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("onyx-tray-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
