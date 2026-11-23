@@ -10709,7 +10709,7 @@
         "title": "Clúster de búsqueda - OpenSearch",
         "status": "Estado del clúster",
         "version": "OpenSearch {version}",
-        "health": "Estado {health}",
+        "noVersion": "OpenSearch",
         "updated": "Actualizado {time}",
         "dataNodes": "Nodos de datos",
         "shards": "Shards",

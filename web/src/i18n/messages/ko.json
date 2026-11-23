@@ -10709,7 +10709,7 @@
         "title": "검색 클러스터 - OpenSearch",
         "status": "클러스터 상태",
         "version": "OpenSearch {version}",
-        "health": "상태 {health}",
+        "noVersion": "OpenSearch",
         "updated": "{time} 업데이트됨",
         "dataNodes": "데이터 노드",
         "shards": "샤드",

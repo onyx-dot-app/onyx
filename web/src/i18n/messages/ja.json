@@ -10709,7 +10709,7 @@
         "title": "検索クラスター - OpenSearch",
         "status": "クラスターの状態",
         "version": "OpenSearch {version}",
-        "health": "状態 {health}",
+        "noVersion": "OpenSearch",
         "updated": "{time}に更新",
         "dataNodes": "データノード",
         "shards": "シャード",

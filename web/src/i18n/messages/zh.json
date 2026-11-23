@@ -10709,7 +10709,7 @@
         "title": "搜索集群 - OpenSearch",
         "status": "集群状态",
         "version": "OpenSearch {version}",
-        "health": "状态 {health}",
+        "noVersion": "OpenSearch",
         "updated": "{time}更新",
         "dataNodes": "数据节点",
         "shards": "分片",

@@ -10709,7 +10709,7 @@
         "title": "مجموعة البحث - OpenSearch",
         "status": "حالة المجموعة",
         "version": "OpenSearch {version}",
-        "health": "الحالة {health}",
+        "noVersion": "OpenSearch",
         "updated": "تم التحديث {time}",
         "dataNodes": "عُقد البيانات",
         "shards": "الأجزاء",
