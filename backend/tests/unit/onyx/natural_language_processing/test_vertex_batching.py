@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,6 +20,12 @@ from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider
 
 _BATCHING = "onyx.natural_language_processing.embedding_providers.vertex_batching"
+
+
+@pytest.fixture(autouse=True)
+def _default_batch_size() -> Iterator[None]:
+    with patch(f"{_BATCHING}.VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", 50):
+        yield
 
 
 def _sizes(batches: list[list[str]]) -> list[int]:
