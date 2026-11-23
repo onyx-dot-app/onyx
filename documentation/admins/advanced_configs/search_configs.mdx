@@ -171,13 +171,19 @@ ADC checks that variable before the metadata server.
 
 ##### Request Concurrency
 
-Onyx sends Gemini Embedding 2 requests to Vertex AI in parallel. Two environment variables limit the requests in flight.
-Set them on the API server and on the indexing workers. Each process has its own limits.
+Onyx sends embedding requests to Vertex AI in parallel. Gemini Embedding 2 takes one text in each request.
+The other models take a batch of up to `VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE` texts (default 50).
+A batch has at most 250 texts, the Vertex AI limit, also when the setting is higher.
+For `text-embedding-005` and `text-multilingual-embedding-002`,
+Onyx estimates the tokens of each text and keeps a batch below 20,000 tokens, the Vertex AI limit.
+If Vertex AI refuses a batch for its token count, Onyx divides the batch into two and sends each half again.
+Two environment variables limit the requests in flight. Set them on the API server and on the indexing workers.
+Each process has its own limits.
 
 | Environment variable | Default | Limits |
 | --- | --- | --- |
-| `VERTEXAI_EMBEDDING_MAX_CONCURRENCY` | 128 | The Gemini Embedding 2 requests in flight in one process, for all projects. |
-| `VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY` | 16 | The first limit for Gemini Embedding 2 requests to each Vertex AI project and location in one process. |
+| `VERTEXAI_EMBEDDING_MAX_CONCURRENCY` | 128 | The Vertex AI embedding requests in flight in one process, for all projects and models. |
+| `VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY` | 16 | The first limit for each Vertex AI project, location, and model in one process. |
 
 The limit for each project, location, and model increases while requests succeed.
 When Vertex AI sends a rate-limit error, the limit decreases by 30%, not more than one time each 2 seconds.
