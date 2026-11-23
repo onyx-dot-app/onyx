@@ -498,25 +498,26 @@ How the app differs from macOS:
     stops when the NSIS version is installed. Uninstall the other one first.
   - Both installers refuse to install an older version over a newer one. Uninstall the newer
     version first.
-  - The NSIS uninstaller option **Delete the application data** also deletes the session
-    tokens from the user's Credential Manager. It does this only when the uninstaller runs as
-    the signed-in Windows user, not when another administrator's credentials elevate it. A
-    plain uninstall keeps the app's data and the token.
+  - The NSIS uninstaller option **Delete the application data** deletes the
+    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` folders of the
+    user who runs the uninstaller. It does not go into junctions or symbolic links: it keeps
+    the links inside these folders, and when a folder is itself a link it removes only the
+    link. Link targets do not change. The option also deletes the session tokens from the
+    user's Credential Manager. It does this only when the uninstaller runs as the signed-in
+    Windows user, not when another administrator's credentials elevate it. A plain uninstall
+    keeps the app's data and the token.
   - An MSI uninstall keeps the app's data and the token. To also delete the data of the
     user who runs `msiexec`, set `DELETEAPPDATA=1`:
-    `msiexec /x {ProductCode} DELETEAPPDATA=1`. This deletes that user's
-    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` after the
-    uninstall succeeds. It does not go into junctions or symbolic links: it keeps the links
-    inside these folders, and when a folder is itself a link it removes only the link. Link
-    targets do not change. An upgrade never deletes data.
+    `msiexec /x {ProductCode} DELETEAPPDATA=1`. This deletes that user's two folders, as the
+    NSIS option does, and that user's session tokens in Credential Manager, after the
+    uninstall succeeds. An upgrade never deletes data.
   - An uninstall that runs as LocalSystem (SCCM, Intune) deletes no user data, also with
     `DELETEAPPDATA=1`: each user controls their own folders, so a delete as LocalSystem is not
     safe there. After such an uninstall, each user's data folders and session token stay
-    (the token in that user's Credential Manager). The `DELETEAPPDATA=1` uninstall also keeps
-    the token in Credential Manager. The app uses a stored token only when the user's
-    config records it, so the user must sign in again when the config is gone or the user
-    signed out. The app then deletes the old token. If the config is still there, a reinstall
-    uses the token.
+    (the token in that user's Credential Manager). The app uses a stored token only when the
+    user's config records it, so the user must sign in again when the config is gone or the
+    user signed out. The app then deletes the old token. If the config is still there, a
+    reinstall uses the token.
 - On Linux the `.deb` registers `onyx://` in its desktop file (`onyx-v2.desktop`). AppImage
   and other builds that do not run from `/usr/bin` register it for the current user at launch,
   so they get sign-in links too. This needs `xdg-mime`. At each launch, a `.deb` install makes

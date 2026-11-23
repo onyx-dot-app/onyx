@@ -9,6 +9,11 @@
 ; scripts can see why a silent install failed.
 !define ONYX_EXIT_NOT_ADMIN 740
 !define ONYX_EXIT_MSI_INSTALLED 1638
+!define ONYX_ATTRIBUTE_DIRECTORY 0x10
+!define ONYX_ATTRIBUTE_REPARSE_POINT 0x400
+
+; 1 when the uninstall deletes the application data.
+Var OnyxDeleteAppData
 
 ; The MSI installs into the same folder. Two installs there give two entries
 ; in Apps, and removing one breaks the other. $(^Name) because PRODUCTNAME is
@@ -86,12 +91,100 @@ Function un.OnyxRunsAsDesktopUser
   ${EndIf}
 FunctionEnd
 
+; Deletes the directory on the stack and its contents, as
+; delete-user-data.ps1 does for the MSI. The uninstaller runs as an
+; administrator, and the user can put links in these folders: a junction or
+; symbolic link stays, and its target does not change. RMDir /r follows them.
+; A directory is removed only when it is empty.
+Function un.OnyxDeleteTree
+  Exch $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  Push $R4
+  FindFirst $R1 $R2 "$R0\*"
+  ${DoWhile} $R2 != ""
+    ${If} $R2 != "."
+    ${AndIf} $R2 != ".."
+      StrCpy $R4 "$R0\$R2"
+      System::Call 'kernel32::GetFileAttributesW(w R4) i .R3'
+      ; INVALID_FILE_ATTRIBUTES (-1) also has the reparse point bit.
+      IntOp $R4 $R3 & ${ONYX_ATTRIBUTE_REPARSE_POINT}
+      ${If} $R4 <> 0
+        ; Gone, or a link.
+      ${Else}
+        IntOp $R4 $R3 & ${ONYX_ATTRIBUTE_DIRECTORY}
+        ${If} $R4 <> 0
+          Push "$R0\$R2"
+          Call un.OnyxDeleteTree
+        ${Else}
+          Delete "$R0\$R2"
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+    FindNext $R1 $R2
+  ${Loop}
+  FindClose $R1
+  ; Without /r: fails when the directory is not empty.
+  RMDir "$R0"
+  Pop $R4
+  Pop $R3
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+; Deletes the app folder on the stack. When the folder is itself a link, it
+; removes only the link: RMDir without /r does not go into it.
+Function un.OnyxDeleteAppFolder
+  Exch $R0
+  Push $R1
+  System::Call 'kernel32::GetFileAttributesW(w R0) i .R1'
+  ${If} $R1 <> -1
+    IntOp $R1 $R1 & ${ONYX_ATTRIBUTE_REPARSE_POINT}
+    ${If} $R1 <> 0
+      RMDir "$R0"
+    ${Else}
+      Push $R0
+      Call un.OnyxDeleteTree
+    ${EndIf}
+  ${EndIf}
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+; The template deletes the app folders with RMDir /r after the files, when
+; "Delete the application data" is checked. This hook takes the option over,
+; so that the template's delete never runs.
+!macro NSIS_HOOK_PREUNINSTALL
+  StrCpy $OnyxDeleteAppData 0
+  ${If} $DeleteAppDataCheckboxState = 1
+  ${AndIf} $UpdateMode <> 1
+    StrCpy $OnyxDeleteAppData 1
+  ${EndIf}
+  StrCpy $DeleteAppDataCheckboxState 0
+!macroend
+
 !macro NSIS_HOOK_POSTUNINSTALL
+  ${If} $OnyxDeleteAppData = 1
+    ; What the template deletes for this option, without its RMDir /r.
+    DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
+    DeleteRegKey /ifempty SHCTX "${MANUKEY}"
+    DeleteRegValue HKCU "${MANUPRODUCTKEY}" "Installer Language"
+    DeleteRegKey /ifempty HKCU "${MANUPRODUCTKEY}"
+    DeleteRegKey /ifempty HKCU "${MANUKEY}"
+    ; The folders of the user who runs the uninstaller, as in the template.
+    SetShellVarContext current
+    Push "$APPDATA\${BUNDLEID}"
+    Call un.OnyxDeleteAppFolder
+    Push "$LOCALAPPDATA\${BUNDLEID}"
+    Call un.OnyxDeleteAppFolder
+  ${EndIf}
+
   ; "Delete the application data" also removes the session tokens. Windows
   ; keeps them in the user's Credential Manager, not in the app's folders.
   ; Another account's credentials are never touched.
-  ${If} $DeleteAppDataCheckboxState = 1
-  ${AndIf} $UpdateMode <> 1
+  ${If} $OnyxDeleteAppData = 1
     Call un.OnyxRunsAsDesktopUser
   ${Else}
     StrCpy $0 0
