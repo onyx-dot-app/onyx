@@ -600,9 +600,7 @@ func (s *Store) Delete(sessionID, p string, recursive bool) (bool, error) {
 	return true, fsErr(root.Remove(rel))
 }
 
-// Rename moves the absolute path from to the name of to in the same
-// directory (no session). Without exchange, nothing may be at to. With
-// exchange, both must exist and trade places in one step.
+// Rename renames from to to in one directory, or with exchange swaps them.
 func (s *Store) Rename(sessionID, from, to string, exchange bool) error {
 	if sessionID != "" {
 		return fmt.Errorf("%w: a rename needs absolute paths and no session_id", ErrInvalid)
@@ -632,11 +630,8 @@ func (s *Store) Rename(sessionID, from, to string, exchange bool) error {
 	return renameAt(dir, path.Base(e.name), path.Base(toAbs), exchange)
 }
 
-// Link makes a symlink at the absolute path p (no session) to target,
-// stored as given, owned by the configured owner. It makes missing parents,
-// and replaces a link at p in one step. Another entry at p fails with
-// ErrExists and is not moved; one that a command puts there during the call
-// stays too.
+// Link makes or replaces a symlink at p. Any other entry at p fails with
+// ErrExists and stays where it is.
 func (s *Store) Link(sessionID, p, target string) error {
 	if sessionID != "" {
 		return fmt.Errorf("%w: a link needs an absolute path and no session_id", ErrInvalid)
@@ -711,8 +706,7 @@ func (s *Store) Link(sessionID, p, target string) error {
 	return fmt.Errorf("%w: %s is not a link", ErrExists, p)
 }
 
-// openDir opens a directory in root for *at calls. A FIFO or other entry
-// fails at once instead of blocking the open.
+// openDir opens a directory without blocking on a FIFO.
 func openDir(root *os.Root, name string) (*os.File, error) {
 	return root.OpenFile(name, os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NONBLOCK, 0)
 }

@@ -591,7 +591,7 @@ func (s *Store) CleanStaging(unmount func(string) error) error {
 
 // MkfsExt4 runs mkfs.ext4 -d: an ext4 with no journal (the drive is
 // read-only), with the given UUID and inode count. The root is root-owned
-// with the mode of dir, which -d alone does not copy.
+// with dir's mode.
 func MkfsExt4(ctx context.Context, path, dir string, size int64, uuid string, inodes int) error {
 	fi, err := os.Stat(dir)
 	if err != nil {

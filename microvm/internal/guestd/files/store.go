@@ -148,8 +148,7 @@ type Store struct {
 	// chown changes the owner of an open file; name is its path in its
 	// root, for errors. Tests replace it.
 	chown func(f *os.File, name string, uid, gid int) error
-	// linkChecked and linkSwapped run in Link after its type check and
-	// after its swap; tests use them to change the directory between steps.
+	// linkChecked and linkSwapped are test hooks between Link's steps.
 	linkChecked, linkSwapped func()
 
 	mu    sync.Mutex
@@ -265,11 +264,8 @@ func (s *Store) ownFile(f *os.File, name string) error {
 }
 
 // mkdirAll makes dir and its missing parents in root (mode 0755), each owned
-// by the configured owner. Directories that exist keep their owner, and a
-// link among them resolves in root as before. From the first directory this
-// call makes, each one is made in the one before it, opened as its own root,
-// so a link that a command puts in place of a new directory cannot move the
-// later ones. With noLinks, a link at any part of dir fails too.
+// by the configured owner. Each new directory opens as its own root before
+// the next is made in it. With noLinks, a link anywhere in dir fails.
 func (s *Store) mkdirAll(root *os.Root, dir string, noLinks bool) error {
 	if dir == "." {
 		return nil
@@ -515,12 +511,8 @@ func (s *Store) checkVMTree(dir string) error {
 	return nil
 }
 
-// mkdirVM makes dir and its missing parents (mode 0755), each owned by the
-// configured owner, as the files written in them are. It checks the deepest
-// existing parent first, so a link into a denied path gets no new
-// directories. The new directories are made one in the next from that
-// parent, and a link at any of them fails: a command that puts a link in
-// place of a new directory cannot send the later ones to a denied path.
+// mkdirVM makes dir and its missing parents, owned by the configured owner.
+// It refuses a denied path and a link at any new part.
 func (s *Store) mkdirVM(dir string) error {
 	existing := dir
 	for existing != "/" {

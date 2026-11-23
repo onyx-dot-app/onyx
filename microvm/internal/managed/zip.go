@@ -78,13 +78,10 @@ func cleanName(name string) (string, bool, error) {
 	return n, dir, nil
 }
 
-// UnlistableRootComment as the zip comment makes the drive root 0711: the
-// guest user opens paths under it but cannot list it. The comment is part
-// of the zip, so the image ID covers it.
+// UnlistableRootComment as a bundle's zip comment makes its drive root 0711.
 const UnlistableRootComment = "onyx-managed:root-mode=0711"
 
-// RootMode is the drive root mode for a bundle zip comment. Other comments
-// give 0755.
+// RootMode is the drive root mode for a bundle's zip comment.
 func RootMode(comment string) os.FileMode {
 	if comment == UnlistableRootComment {
 		return 0o711

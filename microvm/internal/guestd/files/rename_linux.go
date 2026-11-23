@@ -6,8 +6,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// renameAt renames from to to inside the open directory dir, or with
-// exchange swaps the two in one step.
+// renameAt renames from to to in dir, or with exchange swaps them.
 func renameAt(dir *os.File, from, to string, exchange bool) error {
 	flags := uint(unix.RENAME_NOREPLACE)
 	if exchange {
