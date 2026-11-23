@@ -213,6 +213,14 @@ def extract_folder_path_from_parent_reference(
     return None
 
 
+def build_parent_reference_path(drive_id: str, folder_path: str) -> str:
+    """Inverse of extract_folder_path_from_parent_reference.
+
+    ``folder_path`` must be percent-encoded.
+    """
+    return f"/drives/{drive_id}/root:/{folder_path}"
+
+
 class DriveItemData(BaseModel):
     """Lightweight representation of a Graph API drive item, parsed from JSON.
 
@@ -231,6 +239,7 @@ class DriveItemData(BaseModel):
     last_modified_by_display_name: str | None = None
     last_modified_by_email: str | None = None
     parent_reference_path: str | None = None
+    parent_id: str | None = None
     drive_id: str | None = None
     list_item_id: str | None = None
 
@@ -261,6 +270,7 @@ class DriveItemData(BaseModel):
                 or last_modified_by.get("userPrincipalName")
             ),
             parent_reference_path=parent_ref.get("path"),
+            parent_id=parent_ref.get("id"),
             drive_id=parent_ref.get("driveId"),
             list_item_id=sharepoint_ids.list_item_id if sharepoint_ids else None,
         )
