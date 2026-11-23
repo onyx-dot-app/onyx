@@ -6,11 +6,13 @@ import { Slot } from "@radix-ui/react-slot";
 import type { RichStr, Spacing } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
 import { Content, Section } from "@opal/layouts";
+import type { ContentExtrasFont } from "@opal/layouts/content/components";
 import {
   Button,
   FoldButton,
   type BadgeProps,
   type ButtonProps,
+  type TextColor,
 } from "@opal/components";
 import { Fold } from "@opal/components/fold/components";
 import { SvgExpand, SvgFold } from "@opal/icons";
@@ -19,6 +21,11 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 
 interface CollapsibleProps {
   title: string | RichStr;
+  /** The title's font, which sizes the whole header (see `Content`). Only
+   *  fonts that take the tag beside the title. */
+  font?: ContentExtrasFont;
+  /** The title's color; unset, `Content`'s own. */
+  titleColor?: Exclude<TextColor, "inherit">;
   description?: string | RichStr;
   /** Badge shown next to the title. */
   tag?: BadgeProps;
@@ -31,6 +38,9 @@ interface CollapsibleProps {
   disabled?: boolean;
   /** Controls before the fold button, such as an edit action. Clicks there do not toggle. */
   rightChildren?: React.ReactNode;
+  /** Space between the header and the body, as a spacing step (`N / 4` rem).
+   *  It folds away with the body. */
+  gapping?: Spacing;
   children?: React.ReactNode;
 }
 
@@ -38,7 +48,7 @@ interface CollapsibleProps {
  * A titled section: a header with a title, description and fold button, over
  * a body that opens and closes. It is a preset of the composable parts below:
  * the state of `Collapsible.Root`, and a body that is a `Collapsible.Content`
- * with `paddingTop={3}`.
+ * with `paddingTop={gapping}`.
  */
 function CollapsibleSection({
   defaultOpen = true,
@@ -69,9 +79,12 @@ type CollapsibleSectionLayoutProps = Omit<
 /** The section's header and body, reading the state from its root. */
 function CollapsibleSectionLayout({
   title,
+  font = "main-content-emphasis",
+  titleColor,
   description,
   tag,
   rightChildren,
+  gapping = 3,
   children,
 }: CollapsibleSectionLayoutProps) {
   const { open, disabled } = useCollapsibleContext("Section");
@@ -88,13 +101,14 @@ function CollapsibleSectionLayout({
     >
       <CollapsibleHeader name={title} rightChildren={rightChildren}>
         <Content
-          font="main-content-emphasis"
+          font={font}
+          titleColor={titleColor}
           title={title}
           description={description}
           badge={tag}
         />
       </CollapsibleHeader>
-      <CollapsibleContent paddingTop={3} keepMounted>
+      <CollapsibleContent paddingTop={gapping} keepMounted>
         {hasOpened && children}
       </CollapsibleContent>
     </div>

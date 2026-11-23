@@ -24,6 +24,7 @@ import {
 import {
   Button,
   Card,
+  Collapsible,
   Divider,
   InputSingleSelect,
   MessageCard,
@@ -664,16 +665,13 @@ export default function ImageGenerationContent() {
                     const providerName =
                       llmProvider.llm_provider_name ?? llmProvider.provider;
                     return (
-                      <Section
+                      <Collapsible
                         key={`llm-${llmProvider.llm_provider_id}`}
-                        gap={3}
-                        height="fit"
-                        alignItems="stretch"
-                        justifyContent="start"
+                        title={providerName}
+                        font="main-ui-action"
+                        titleColor="text-03"
+                        gapping={2}
                       >
-                        <Text font="main-ui-action" color="text-03">
-                          {providerName}
-                        </Text>
                         <CardGrid>
                           {llmProvider.models.map((model) => {
                             const title = linkedModelTitle(model);
@@ -698,7 +696,7 @@ export default function ImageGenerationContent() {
                             );
                           })}
                         </CardGrid>
-                      </Section>
+                      </Collapsible>
                     );
                   })}
                 </Section>
