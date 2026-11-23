@@ -15912,11 +15912,31 @@
       "general": {
         "title": "Général"
       },
+      "fonts": {
+        "title": "Polices"
+      },
       "transcriptWidth": {
         "title": "Largeur de la conversation",
         "description": "Définissez la largeur des messages du chat et de la barre de saisie sur cet appareil.",
         "standard": "Standard",
-        "wide": "Large"
+        "wide": "Large",
+        "placeholder": "Sélectionnez une largeur"
+      },
+      "responseFont": {
+        "default": "Par défaut",
+        "match": "Identique à l'interface",
+        "title": "Police des réponses",
+        "description": "Sélectionnez la police des réponses du chat.",
+        "placeholder": "Sélectionnez une police"
+      },
+      "interfaceFont": {
+        "title": "Police de l'interface",
+        "description": "Sélectionnez la police du texte de l'application.",
+        "default": "Par défaut",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "Système",
+        "placeholder": "Sélectionnez une police"
       }
     },
     "chats": {

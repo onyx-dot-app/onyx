@@ -15912,11 +15912,31 @@
       "general": {
         "title": "Allgemein"
       },
+      "fonts": {
+        "title": "Schriftarten"
+      },
       "transcriptWidth": {
         "title": "Breite des Chatverlaufs",
         "description": "Legen Sie fest, wie breit Chatnachrichten und die Eingabeleiste auf diesem Gerät sind.",
         "standard": "Standard",
-        "wide": "Breit"
+        "wide": "Breit",
+        "placeholder": "Breite auswählen"
+      },
+      "responseFont": {
+        "default": "Standard",
+        "match": "Wie Oberfläche",
+        "title": "Schriftart der Antworten",
+        "description": "Wählen Sie die Schriftart für Chat-Antworten.",
+        "placeholder": "Schriftart auswählen"
+      },
+      "interfaceFont": {
+        "title": "Schriftart der Oberfläche",
+        "description": "Wählen Sie die Schriftart für Texte in der App.",
+        "default": "Standard",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "System",
+        "placeholder": "Schriftart auswählen"
       }
     },
     "chats": {

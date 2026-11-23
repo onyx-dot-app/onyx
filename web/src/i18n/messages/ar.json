@@ -15912,11 +15912,31 @@
       "general": {
         "title": "عام"
       },
+      "fonts": {
+        "title": "الخطوط"
+      },
       "transcriptWidth": {
         "title": "عرض المحادثة",
         "description": "اضبط عرض رسائل الدردشة وشريط الإدخال على هذا الجهاز.",
         "standard": "قياسي",
-        "wide": "عريض"
+        "wide": "عريض",
+        "placeholder": "اختر عرضًا"
+      },
+      "responseFont": {
+        "default": "افتراضي",
+        "match": "مطابقة الواجهة",
+        "title": "خط الردود",
+        "description": "اختر الخط المستخدم لردود المحادثة.",
+        "placeholder": "اختر خطًا"
+      },
+      "interfaceFont": {
+        "title": "خط الواجهة",
+        "description": "اختر الخط المستخدم لنصوص التطبيق.",
+        "default": "افتراضي",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "النظام",
+        "placeholder": "اختر خطًا"
       }
     },
     "chats": {

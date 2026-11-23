@@ -17,6 +17,11 @@ import { useSettings } from "@/lib/settings/hooks";
 import { type Locale } from "@/i18n/config";
 import { LanguageSelect } from "@/lib/app/components";
 import { ThemePreference } from "@/lib/types";
+import {
+  DEFAULT_APPEARANCE_PREFERENCES,
+  INTERFACE_FONTS,
+  RESPONSE_FONTS,
+} from "@/lib/appearance/preferences";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useWideChat } from "@/providers/WideChatProvider";
@@ -46,11 +51,13 @@ const THEME_OPTIONS = [
 
 /**
  * The appearance preferences shown as a select, with their values. Each one
- * has `title`, `description` and one key per value under
+ * has `title`, `description`, `placeholder` and one key per value under
  * `settings.appearance.<preference>` in the message catalogs.
  */
 const APPEARANCE_SELECT_VALUES = {
   transcriptWidth: ["standard", "wide"],
+  interfaceFont: INTERFACE_FONTS,
+  responseFont: RESPONSE_FONTS,
 } as const;
 
 type AppearanceSelectPreference = keyof typeof APPEARANCE_SELECT_VALUES;
@@ -77,6 +84,7 @@ function AppearanceSelect<K extends AppearanceSelectPreference>({
     APPEARANCE_SELECT_VALUES[preference];
   const titleKey: `${AppearanceSelectPreference}.title` = `${preference}.title`;
   const descriptionKey: `${AppearanceSelectPreference}.description` = `${preference}.description`;
+  const placeholderKey: `${AppearanceSelectPreference}.placeholder` = `${preference}.placeholder`;
   const title = t(titleKey);
 
   return (
@@ -94,10 +102,13 @@ function AppearanceSelect<K extends AppearanceSelectPreference>({
           if (match !== undefined) onValueChange(match);
         }}
         defaultOption={values[0]}
-        placeholder={title}
+        placeholder={t(placeholderKey)}
         aria-label={title}
         options={values.map((option) => {
-          const optionKey: AppearanceSelectOptionKey = `${preference}.${option}`;
+          // TypeScript does not tie `option` to `preference`; the pair comes
+          // from APPEARANCE_SELECT_VALUES, so the key is one of the union.
+          const optionKey =
+            `${preference}.${option}` as AppearanceSelectOptionKey;
           return { value: option, title: t(optionKey) };
         })}
       />
@@ -127,6 +138,14 @@ export default function AppearanceSettings() {
     ["mountains", tBg("mountains.label")],
     ["night", tBg("night.label")],
   ]);
+
+  const interfaceFont =
+    user?.preferences?.interface_font ??
+    DEFAULT_APPEARANCE_PREFERENCES.interface_font;
+  const responseFont =
+    user?.preferences?.response_font ??
+    DEFAULT_APPEARANCE_PREFERENCES.response_font;
+
   return (
     <Section gap={8}>
       <SettingsSection title={t("appearance.general.title")}>
@@ -274,6 +293,31 @@ export default function AppearanceSettings() {
             onCheckedChange={setSmoothStreamingEnabled}
           />
         </InputHorizontal>
+      </SettingsSection>
+
+      <SettingsSection title={t("appearance.fonts.title")}>
+        <AppearanceSelect
+          preference="interfaceFont"
+          value={interfaceFont}
+          onValueChange={(font) => {
+            // The response also refreshes the appearance cookie.
+            void updatePreferences(
+              { interface_font: font },
+              "/api/user/appearance"
+            );
+          }}
+        />
+
+        <AppearanceSelect
+          preference="responseFont"
+          value={responseFont}
+          onValueChange={(font) => {
+            void updatePreferences(
+              { response_font: font },
+              "/api/user/appearance"
+            );
+          }}
+        />
       </SettingsSection>
     </Section>
   );

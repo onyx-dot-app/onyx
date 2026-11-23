@@ -15912,11 +15912,31 @@
       "general": {
         "title": "일반"
       },
+      "fonts": {
+        "title": "글꼴"
+      },
       "transcriptWidth": {
         "title": "대화 너비",
         "description": "이 기기에서 채팅 메시지와 입력창의 너비를 설정합니다.",
         "standard": "표준",
-        "wide": "넓게"
+        "wide": "넓게",
+        "placeholder": "너비 선택"
+      },
+      "responseFont": {
+        "default": "기본값",
+        "match": "인터페이스와 동일",
+        "title": "응답 글꼴",
+        "description": "채팅 응답에 사용할 글꼴을 선택하세요.",
+        "placeholder": "글꼴 선택"
+      },
+      "interfaceFont": {
+        "title": "인터페이스 글꼴",
+        "description": "앱 전체 텍스트에 사용할 글꼴을 선택하세요.",
+        "default": "기본값",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "시스템",
+        "placeholder": "글꼴 선택"
       }
     },
     "chats": {

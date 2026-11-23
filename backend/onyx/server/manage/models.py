@@ -12,6 +12,8 @@ from onyx.context.search.models import CCPairAccessMode, SavedSearchSettings
 from onyx.db.enums import (
     AccountType,
     DefaultAppMode,
+    InterfaceFont,
+    ResponseFont,
     SSOProviderType,
     SupportedLanguage,
     ThemePreference,
@@ -152,11 +154,13 @@ class UserPreferences(BaseModel):
     theme_preference: ThemePreference | None = None
     language: str | None = None
     chat_background: str | None = None
-    default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
+    default_app_mode: DefaultAppMode
+    interface_font: InterfaceFont
+    response_font: ResponseFont
 
     # Input preferences
     paste_as_tile: bool | None = None
-    interrupt_on_send: bool = False
+    interrupt_on_send: bool
 
     # Voice preferences
     voice_auto_send: bool | None = None
@@ -165,6 +169,41 @@ class UserPreferences(BaseModel):
 
     # controls which tools are enabled for the user for a specific assistant
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
+
+    @classmethod
+    def from_model(
+        cls,
+        preferences: UserPreferencesModel,
+        *,
+        pinned_assistants: list[int],
+        assistant_specific_configs: UserSpecificAssistantPreferences | None = None,
+    ) -> "UserPreferences":
+        """The response for saved preferences, or for the column defaults that
+        `fetch_user_preferences` returns when none are saved."""
+        return cls(
+            shortcut_enabled=preferences.shortcut_enabled,
+            chosen_assistants=preferences.chosen_assistants,
+            default_model=preferences.default_model,
+            hidden_assistants=preferences.hidden_assistants,
+            pinned_assistants=pinned_assistants,
+            visible_assistants=preferences.visible_assistants,
+            auto_scroll=preferences.auto_scroll,
+            temperature_override_enabled=preferences.temperature_override_enabled,
+            temperature_default=preferences.temperature_default,
+            reasoning_effort_default=preferences.reasoning_effort_default,
+            theme_preference=preferences.theme_preference,
+            language=preferences.language,
+            chat_background=preferences.chat_background,
+            default_app_mode=preferences.default_app_mode,
+            interface_font=preferences.interface_font,
+            response_font=preferences.response_font,
+            paste_as_tile=preferences.paste_as_tile,
+            interrupt_on_send=preferences.interrupt_on_send,
+            voice_auto_send=preferences.voice_auto_send,
+            voice_auto_playback=preferences.voice_auto_playback,
+            voice_playback_speed=preferences.voice_playback_speed,
+            assistant_specific_configs=assistant_specific_configs,
+        )
 
 
 class MemoryItem(BaseModel):
@@ -256,31 +295,12 @@ class UserInfo(BaseModel):
             is_verified=user.is_verified,
             account_type=user.account_type,
             password_configured=user.password_configured,
-            preferences=(
-                UserPreferences(
-                    shortcut_enabled=preferences.shortcut_enabled,
-                    chosen_assistants=preferences.chosen_assistants,
-                    default_model=preferences.default_model,
-                    hidden_assistants=preferences.hidden_assistants,
-                    pinned_assistants=[
-                        pinned.persona_id for pinned in user.pinned_personas
-                    ],
-                    visible_assistants=preferences.visible_assistants,
-                    auto_scroll=preferences.auto_scroll,
-                    temperature_override_enabled=preferences.temperature_override_enabled,
-                    temperature_default=preferences.temperature_default,
-                    reasoning_effort_default=preferences.reasoning_effort_default,
-                    theme_preference=preferences.theme_preference,
-                    language=preferences.language,
-                    chat_background=preferences.chat_background,
-                    default_app_mode=preferences.default_app_mode,
-                    paste_as_tile=preferences.paste_as_tile,
-                    interrupt_on_send=preferences.interrupt_on_send,
-                    voice_auto_send=preferences.voice_auto_send,
-                    voice_auto_playback=preferences.voice_auto_playback,
-                    voice_playback_speed=preferences.voice_playback_speed,
-                    assistant_specific_configs=assistant_specific_configs,
-                )
+            preferences=UserPreferences.from_model(
+                preferences,
+                pinned_assistants=[
+                    pinned.persona_id for pinned in user.pinned_personas
+                ],
+                assistant_specific_configs=assistant_specific_configs,
             ),
             team_name=team_name,
             tenant_id=tenant_id,
@@ -361,6 +381,13 @@ class ThemePreferenceRequest(BaseModel):
 class LanguageRequest(BaseModel):
     # None clears the preference so the user follows the workspace default.
     language: SupportedLanguage | None
+
+
+class AppearanceRequest(BaseModel):
+    """Appearance values to save. A missing or null field keeps the saved value."""
+
+    interface_font: InterfaceFont | None = None
+    response_font: ResponseFont | None = None
 
 
 class DefaultAppModeRequest(BaseModel):

@@ -56,12 +56,10 @@ module.exports = {
         "collapsible-up": "collapsible-up 0.2s ease-out",
       },
       fontFamily: {
-        // Resolve through the shared variable (root.css default; the web app
-        // overrides it with the loaded webfont plus locale-aware CJK
-        // fallbacks). A literal "Hanken Grotesk" stack never matches the
-        // next/font-loaded font, which registers under a hashed family name.
-        sans: ['var(--font-hanken-grotesk, "Hanken Grotesk", sans-serif)'],
-        hanken: ['var(--font-hanken-grotesk, "Hanken Grotesk", sans-serif)'],
+        // Resolve through the interface font variable (tokens.css), so a
+        // host can change the font by setting that one variable.
+        sans: ['var(--font-interface, "Hanken Grotesk", sans-serif)'],
+        interface: ['var(--font-interface, "Hanken Grotesk", sans-serif)'],
       },
       colors: {
         "text-05": "var(--text-05)",

@@ -631,6 +631,19 @@ export class ChatPage {
     ).toHaveCount(1);
   }
 
+  /** Assert the font the answer text of an AI message renders in. */
+  async expectAnswerFont(family: RegExp, index = 0): Promise<void> {
+    await expect(
+      this.aiMessage(index).locator(".response-text").first()
+    ).toHaveCSS("font-family", family);
+  }
+
+  async expectAnswerLetterSpacing(spacing: string, index = 0): Promise<void> {
+    await expect(
+      this.aiMessage(index).locator(".response-text").first()
+    ).toHaveCSS("letter-spacing", spacing);
+  }
+
   async expectAnswerHeading(text: string): Promise<void> {
     await expect(
       this.scrollContainer.getByRole("heading", { name: text, exact: true })

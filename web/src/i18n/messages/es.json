@@ -15912,11 +15912,31 @@
       "general": {
         "title": "General"
       },
+      "fonts": {
+        "title": "Fuentes"
+      },
       "transcriptWidth": {
         "title": "Ancho de la conversación",
         "description": "Define el ancho de los mensajes del chat y de la barra de entrada en este dispositivo.",
         "standard": "Estándar",
-        "wide": "Ancho"
+        "wide": "Ancho",
+        "placeholder": "Selecciona un ancho"
+      },
+      "responseFont": {
+        "default": "Predeterminada",
+        "match": "Igual que la interfaz",
+        "title": "Fuente de las respuestas",
+        "description": "Selecciona la fuente para las respuestas del chat.",
+        "placeholder": "Selecciona una fuente"
+      },
+      "interfaceFont": {
+        "title": "Fuente de la interfaz",
+        "description": "Selecciona la fuente para el texto de la aplicación.",
+        "default": "Predeterminada",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "Sistema",
+        "placeholder": "Selecciona una fuente"
       }
     },
     "chats": {

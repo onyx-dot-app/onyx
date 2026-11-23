@@ -467,6 +467,7 @@
   "PATCH /temperature-default": "basic",
   "PATCH /temperature-override-enabled": "basic",
   "PATCH /tool/{tool_id}/preferences": "basic",
+  "PATCH /user/appearance": "basic",
   "PATCH /user/assistant-list/update/{assistant_id}": "basic",
   "PATCH /user/assistant/{assistant_id}/preferences": "basic",
   "PATCH /user/chat-background": "basic",
