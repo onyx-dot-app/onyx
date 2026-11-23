@@ -22,9 +22,10 @@ from onyx.natural_language_processing.embedding_request_policy import (
     EmbeddingRequestPolicy,
     EmbeddingRetryBackoff,
 )
+from onyx.natural_language_processing.exceptions import EmbeddingRequestFailedError
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
-from shared_configs.enums import EmbeddingProvider
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 _KEY = "p/global/gemini-embedding-2"
 
@@ -376,6 +377,83 @@ def test_each_name_of_a_model_shares_one_limit(
 
     # The success counted on the limit of the base model.
     assert limit.limit == before + 1
+
+
+def test_requests_have_a_timeout() -> None:
+    response = MagicMock()
+    response.embeddings = [MagicMock(values=[0.1])]
+    client = MagicMock()
+    client.aio.models.embed_content = AsyncMock(return_value=response)
+    client.aio.aclose = AsyncMock()
+    with (
+        patch("google.auth.default", return_value=(MagicMock(spec=Credentials), "p")),
+        patch("google.genai.Client", return_value=client) as new_client,
+    ):
+        asyncio.run(
+            _cloud_embedding()._embed_vertex(
+                texts=["a"],
+                model="gemini-embedding-2",
+                embedding_type="RETRIEVAL_DOCUMENT",
+                reduced_dimension=None,
+            )
+        )
+    assert new_client.call_args.kwargs["http_options"].timeout == 60_000
+
+
+def _passage_embedding(retry_tries: int) -> CloudEmbedding:
+    return CloudEmbedding(
+        api_key=None,
+        provider=EmbeddingProvider.GOOGLE,
+        auth=_cloud_embedding().auth,
+        policy=EmbeddingRequestPolicy(
+            retry_backoff=EmbeddingRetryBackoff(scale_seconds=0, max_seconds=0),
+            retry_tries=retry_tries,
+            block_on_provider_rate_limit=True,
+        ),
+    )
+
+
+def _embed_passage(embedding: CloudEmbedding, client: MagicMock) -> None:
+    client.aio.aclose = AsyncMock()
+    with (
+        patch("google.auth.default", return_value=(MagicMock(spec=Credentials), "p")),
+        patch("google.genai.Client", return_value=client),
+        patch.object(vertex_scheduler.asyncio, "sleep", AsyncMock()),
+    ):
+        asyncio.run(
+            embedding.embed(
+                texts=["a"],
+                text_type=EmbedTextType.PASSAGE,
+                model_name="gemini-embedding-2",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        TimeoutError(),
+        genai_errors.ClientError(400, {"error": {"code": 400, "message": "bad"}}),
+    ],
+)
+def test_embed_does_not_resend_the_call_after_a_final_error(error: Exception) -> None:
+    client = MagicMock()
+    client.aio.models.embed_content = AsyncMock(side_effect=error)
+    with pytest.raises(EmbeddingRequestFailedError):
+        _embed_passage(_passage_embedding(retry_tries=3), client)
+    assert client.aio.models.embed_content.await_count == 1
+
+
+def test_embed_resends_the_call_after_a_longer_outage() -> None:
+    response = MagicMock()
+    response.embeddings = [MagicMock(values=[0.1])]
+    client = MagicMock()
+    # The scheduler sends three times, then the outer retry sends again.
+    client.aio.models.embed_content = AsyncMock(
+        side_effect=[_vertex_503(), _vertex_503(), _vertex_503(), response]
+    )
+    _embed_passage(_passage_embedding(retry_tries=2), client)
+    assert client.aio.models.embed_content.await_count == 4
 
 
 def test_embeddings_keep_the_input_order() -> None:
