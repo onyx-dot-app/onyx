@@ -18,6 +18,17 @@ export function connectAction(integration: MemberIntegration): ConnectAction {
   return null;
 }
 
+export function requiredSignIns(
+  integrations: readonly MemberIntegration[]
+): MemberIntegration[] {
+  return integrations.filter(
+    (integration) =>
+      integration.access.installation_policy === "REQUIRED" &&
+      integration.access.state === "sign_in" &&
+      connectAction(integration) !== null
+  );
+}
+
 /** The connection does not work and only an admin can fix it. */
 export function needsAdmin(integration: MemberIntegration): boolean {
   return (
@@ -34,7 +45,8 @@ export function needsAdmin(integration: MemberIntegration): boolean {
  */
 export async function connectWithOAuth(
   start: (returnPath: string) => Promise<string>,
-  returnPath: string
+  returnPath: string,
+  beforeRedirect?: () => void
 ): Promise<"connected" | "redirected"> {
   try {
     await launchOAuth(() => start(returnPath));
@@ -45,7 +57,9 @@ export async function connectWithOAuth(
       error.reason !== "popup_blocked"
     )
       throw error;
-    loadPage(await start(returnPath));
+    const url = await start(returnPath);
+    beforeRedirect?.();
+    loadPage(url);
     return "redirected";
   }
 }

@@ -13,7 +13,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.agents.runtime import Agent
-from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.tools.models import CapabilityEntry, ToolContext, ToolOptions
@@ -21,6 +20,7 @@ from onyx.tools.tool_constructor import should_disable_open_url_web_fetch
 from onyx.tools.tool_implementations.open_url.models import FailedFetch
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     WEB_FETCH_DISABLED_REASON,
+    OpenedPage,
     OpenURLTool,
 )
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -124,7 +124,7 @@ def test_open_url_without_content_reports_an_error(
 
     def fetch_nothing(
         _urls: list[str], _url_snippet_map: dict[str, str]
-    ) -> tuple[list[InferenceSection], list[FailedFetch]]:
+    ) -> tuple[list[OpenedPage], list[FailedFetch]]:
         return [], [FailedFetch(url=url, failure_reason="blocked")]
 
     monkeypatch.setattr(tool, "_fetch_web_content", fetch_nothing)

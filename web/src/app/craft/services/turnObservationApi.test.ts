@@ -3,8 +3,6 @@ import {
   fetchActiveTurn,
   fetchKnownTurn,
   fetchTurnEventStream,
-  fetchScheduledRunContext,
-  fetchScheduledRunEventStream,
   interruptMessageStream,
 } from "@/app/craft/services/apiServices";
 
@@ -20,14 +18,12 @@ it.each([
   ["active turn", () => fetchActiveTurn("session")],
   ["known turn", () => fetchKnownTurn("session", "turn")],
   ["turn events", () => fetchTurnEventStream("session", "turn")],
-  ["scheduled context", () => fetchScheduledRunContext("session")],
-  ["scheduled events", () => fetchScheduledRunEventStream("session")],
 ] as const)("preserves permission status for %s", async (_name, read) => {
-  jest
-    .mocked(fetch)
-    .mockResolvedValue(
-      new Response(JSON.stringify({ detail: "Access denied" }), { status: 403 })
-    );
+  jest.mocked(fetch).mockResolvedValue(
+    new Response(JSON.stringify({ detail: "Access denied" }), {
+      status: 403,
+    })
+  );
   await expect(read()).rejects.toMatchObject({ status: 403 });
 });
 

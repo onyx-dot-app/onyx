@@ -125,10 +125,51 @@ class OnyxFileExtensions:
 
     ALL_ALLOWED_EXTENSIONS = TEXT_AND_DOCUMENT_EXTENSIONS.union(IMAGE_EXTENSIONS)
 
+    # Text source code, scripts and config that chat uploads keep for the
+    # Python tool and sandboxes but never index. Not part of the indexable sets.
+    SANDBOX_ONLY_EXTENSIONS = {
+        ".py",
+        ".ipynb",
+        ".js",
+        ".mjs",
+        ".cjs",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".ps1",
+        ".rb",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".scala",
+        ".c",
+        ".h",
+        ".cc",
+        ".cpp",
+        ".hpp",
+        ".cs",
+        ".php",
+        ".swift",
+        ".r",
+        ".lua",
+        ".pl",
+        ".toml",
+        ".ini",
+        ".cfg",
+    }
+
 
 def get_file_ext(file_path_or_name: str | Path) -> str:
     _, extension = os.path.splitext(file_path_or_name)
     return extension.lower()
+
+
+def is_sandbox_only_file(file_name: str) -> bool:
+    return get_file_ext(file_name) in OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS
 
 
 def is_indexable_file_type(

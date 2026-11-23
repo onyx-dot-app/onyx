@@ -42,9 +42,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
   const fetchCSV = async (id: string) => {
     setIsFetching(true);
     try {
-      const response = await fetch(`/api/chat/file/${id}`, {
-        cache: "force-cache",
-      });
+      const response = await fetch(`/api/chat/file/${id}`);
       if (!response.ok) {
         throw new Error("Failed to fetch CSV file");
       }

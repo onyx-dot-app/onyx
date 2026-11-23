@@ -27,10 +27,31 @@ mod state;
 mod updater;
 mod windows;
 
+use std::sync::atomic::{AtomicI32, Ordering};
+
 use tauri::{Manager, RunEvent};
 
 use crate::config::ConfigStore;
 use crate::state::AppState;
+
+/// The code the last allowed exit request asked for.
+static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
+
+/// Ends the process before Tauri's teardown. The teardown destroys every
+/// window, and destroying an NSPanel (the launcher, Aonyx) raises an AppKit
+/// exception that aborts the app. Plugins have already seen `Exit` and saved
+/// their state (window positions); app settings are saved when they change.
+#[cfg(target_os = "macos")]
+fn exit_now(app: &tauri::AppHandle) -> ! {
+    aonyx::save_pending_position(app);
+    // Removes the tray icon and releases resources such as the single-instance socket.
+    app.cleanup_before_exit();
+    let code = EXIT_CODE.load(Ordering::SeqCst);
+    if code == tauri::RESTART_EXIT_CODE {
+        tauri::process::restart(&app.env());
+    }
+    std::process::exit(code)
+}
 
 fn main() {
     let builder = tauri::Builder::default()
@@ -148,6 +169,13 @@ fn main() {
         RunEvent::ExitRequested {
             api, code: None, ..
         } => api.prevent_exit(),
+        RunEvent::ExitRequested {
+            code: Some(code), ..
+        } => EXIT_CODE.store(code, Ordering::SeqCst),
+        // Every quit ends here: the Quit menu item, a Dock or Apple Event
+        // quit, `app.exit` and a restart from another thread.
+        #[cfg(target_os = "macos")]
+        RunEvent::Exit => exit_now(app),
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => windows::show_primary(app),
         _ => {}

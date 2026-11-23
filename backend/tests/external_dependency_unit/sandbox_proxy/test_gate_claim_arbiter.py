@@ -26,25 +26,17 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
     BuildSessionStatus,
-    ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationKind,
     PluginInstallationPolicy,
-    ScheduledTaskRunStatus,
-    ScheduledTaskTriggerSource,
 )
 from onyx.db.models import (
     ActionApproval,
     BuildSession,
     Integration,
     Notification,
-    ScheduledTask,
-    ScheduledTask__Integration,
-    ScheduledTaskRun,
     Skill,
 )
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
@@ -68,7 +60,6 @@ from tests.external_dependency_unit.craft.db_helpers import (
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
-    make_app_integration,
     make_mcp_integration,
     set_policy,
 )
@@ -137,7 +128,6 @@ class _UnusedMatcher(RequestEvaluator):
         request: Any,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
-        scheduled_task_id: UUID | None,  # noqa: ARG002
     ) -> Any:
         raise AssertionError("request_evaluator.evaluate unexpectedly used")
 
@@ -402,37 +392,6 @@ def _session_ctx(db_session: Session) -> SessionContext:
     )
 
 
-def _task_with_run(
-    db_session: Session, ctx: SessionContext, links: dict[int, dict[str, Any]]
-) -> tuple[ScheduledTask, ScheduledTaskRun]:
-    task = ScheduledTask(
-        user_id=ctx.user_id,
-        name="Report",
-        prompt="Create a report",
-        cron_expression="0 9 * * *",
-        editor_mode="advanced",
-    )
-    db_session.add(task)
-    db_session.flush()
-    run = ScheduledTaskRun(
-        task_id=task.id,
-        session_id=ctx.session_id,
-        status=ScheduledTaskRunStatus.RUNNING,
-        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
-    )
-    db_session.add(run)
-    db_session.add_all(
-        ScheduledTask__Integration(
-            scheduled_task_id=task.id,
-            integration_id=integration_id,
-            action_settings=settings,
-        )
-        for integration_id, settings in links.items()
-    )
-    db_session.commit()
-    return task, run
-
-
 def _recognized(integration: Integration, *actions: MatchedAction) -> AllMatchedActions:
     return AllMatchedActions(
         target=GatedTarget(
@@ -460,48 +419,6 @@ def _published(db_session: Session, integration: Integration) -> None:
         published=True,
         installation_policy=PluginInstallationPolicy.DEFAULT,
     )
-
-
-def test_gate_reads_task_settings_and_rejects_finished_run(
-    db_session: Session, integration_ids: list[int]
-) -> None:
-    integration, _ = make_mcp_integration(
-        db_session,
-        server_url=f"https://{uuid4().hex[:8]}.example.com/mcp",
-        name="Task MCP",
-        tools=("send_message",),
-    )
-    integration_ids.append(integration.id)
-    _published(db_session, integration)
-    ctx = _session_ctx(db_session)
-    task, run = _task_with_run(
-        db_session, ctx, {integration.id: {"actions": {"send_message": "allow"}}}
-    )
-    recognized = _recognized(integration, _action("send_message"))
-    addon = _build_addon()
-
-    active_ctx, resolved = addon._resolve_request_policies(ctx, recognized)
-    assert active_ctx.scheduled_context == (run.id, task.id)
-    assert resolved.governing_action.policy is ActionPolicy.ALWAYS
-
-    link = db_session.scalar(
-        select(ScheduledTask__Integration).where(
-            ScheduledTask__Integration.scheduled_task_id == task.id
-        )
-    )
-    assert link is not None
-    link.action_settings = {"actions": {"send_message": "ask"}}
-    db_session.commit()
-    _, resolved = addon._resolve_request_policies(ctx, recognized)
-    assert resolved.governing_action.policy is ActionPolicy.ASK
-
-    run.status = ScheduledTaskRunStatus.SUCCEEDED
-    db_session.commit()
-    with pytest.raises(
-        OnyxError, match="Scheduled execution is no longer active"
-    ) as exc:
-        addon._resolve_request_policies(ctx, recognized)
-    assert exc.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
 @pytest.mark.parametrize(
@@ -541,15 +458,13 @@ def test_woken_request_rechecks_persisted_approval_scope(
     addon = _build_addon(
         cache_factory=lambda tenant: get_cache_backend(tenant_id=tenant)
     )
-    initial_ctx, initial_actions = addon._resolve_request_policies(ctx, recognized)
+    initial_actions = addon._resolve_request_policies(ctx, recognized)
     set_policy(db_session, integration.id, "read", IntegrationActionPolicyValue.ASK)
     monkeypatch.setattr(addon._request_evaluator, "evaluate", lambda *_args: recognized)
     flow = MagicMock(spec=http.HTTPFlow)
     flow.request = MagicMock()
     flow.response = None
-    allowed = addon._recheck_approval(
-        flow, initial_ctx, initial_actions, approval.approval_id
-    )
+    allowed = addon._recheck_approval(flow, ctx, initial_actions, approval.approval_id)
     if source is ApprovalDecidedVia.SESSION_GRANT:
         assert allowed is None
         assert flow.response is not None
@@ -558,86 +473,3 @@ def test_woken_request_rechecks_persisted_approval_scope(
     else:
         assert allowed is not None
         assert flow.response is None
-
-
-@pytest.mark.parametrize("kind", [IntegrationKind.API, IntegrationKind.MCP])
-@pytest.mark.parametrize(
-    "source", [None, ApprovalDecidedVia.USER, ApprovalDecidedVia.SESSION_GRANT]
-)
-def test_removing_a_task_integration_blocks_all_approval_paths(
-    db_session: Session,
-    integration_ids: list[int],
-    monkeypatch: pytest.MonkeyPatch,
-    kind: IntegrationKind,
-    source: ApprovalDecidedVia | None,
-) -> None:
-    host = f"{uuid4().hex[:8]}.example.com"
-    integration = (
-        make_app_integration(
-            db_session,
-            app_type=ExternalAppType.CUSTOM,
-            upstream_url_patterns=[f"https://{host}/*"],
-        )[0]
-        if kind is IntegrationKind.API
-        else make_mcp_integration(
-            db_session, server_url=f"https://{host}/mcp", name="Task MCP"
-        )[0]
-    )
-    integration_ids.append(integration.id)
-    _published(db_session, integration)
-    ctx = _session_ctx(db_session)
-    policy = ActionPolicy.ALWAYS if source is None else ActionPolicy.ASK
-    task, _ = _task_with_run(
-        db_session,
-        ctx,
-        {integration.id: {"actions": {"send": "allow" if source is None else "ask"}}},
-    )
-    recognized = _recognized(integration, _action("send", policy))
-    addon = _build_addon()
-    active_ctx, initial_actions = addon._resolve_request_policies(ctx, recognized)
-    assert initial_actions.governing_action.policy is policy
-    assert addon._task_can_use_app(ctx, recognized.target)
-    approval = None
-    if source is not None:
-        approval = ActionApproval(
-            session_id=ctx.session_id,
-            integration_id=integration.id,
-            actions=[a.model_dump(mode="json") for a in recognized.actions],
-            app_name=integration.name,
-            payload={},
-            decision=ApprovalDecision.APPROVED,
-            decided_via=source,
-        )
-        db_session.add(approval)
-    db_session.execute(
-        delete(ScheduledTask__Integration).where(
-            ScheduledTask__Integration.scheduled_task_id == task.id
-        )
-    )
-    db_session.commit()
-
-    _, disabled = addon._resolve_request_policies(ctx, recognized)
-    assert disabled.governing_action.policy is ActionPolicy.DENY
-    assert not addon._task_can_use_app(ctx, recognized.target)
-    unknown = _recognized(
-        integration,
-        _action("unspecified" if kind is IntegrationKind.API else "new_tool"),
-    )
-    _, unknown_disabled = addon._resolve_request_policies(ctx, unknown)
-    assert unknown_disabled.governing_action.policy is ActionPolicy.DENY
-    if approval is not None:
-        monkeypatch.setattr(
-            addon._request_evaluator, "evaluate", lambda *_args: recognized
-        )
-        flow = MagicMock(spec=http.HTTPFlow)
-        flow.request = MagicMock()
-        flow.response = None
-        assert (
-            addon._recheck_approval(
-                flow, active_ctx, initial_actions, approval.approval_id
-            )
-            is None
-        )
-        assert flow.response is not None
-        assert flow.response.status_code == 403
-        assert flow.response.json()["error"] == "policy_denied"

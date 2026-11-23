@@ -20,6 +20,8 @@ export interface RunStepProps {
   title?: string | RichStr;
   /** The title once the step is done. Defaults to `title`. */
   doneTitle?: string | RichStr;
+  /** The title's identity: a new key swaps the title. Defaults to its text. */
+  titleKey?: React.Key;
   /** Rendered at the inline end of the header, before the toggle. */
   headerAccessory?: React.ReactNode;
   /** The step's body; `null` for a step with nothing to show. */
@@ -64,6 +66,7 @@ export function RunStep({
   icon,
   title,
   doneTitle,
+  titleKey,
   headerAccessory,
   body = null,
   defaultExpanded = false,
@@ -82,6 +85,7 @@ export function RunStep({
     <StepContainer
       stepIcon={statusIcon(status) ?? icon}
       header={status === "done" ? (doneTitle ?? title) : title}
+      headerKey={titleKey}
       headerAccessory={headerAccessory}
       isExpanded={isExpanded}
       onToggle={() => setOwnExpanded((prev) => !prev)}

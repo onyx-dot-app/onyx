@@ -356,6 +356,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       "modals.provider.providerTypeField.description"
                     )}
                     withLabel="provider_type"
+                    disabled={isEditing}
                   >
                     <InputSingleSelect
                       value={values.provider_type}

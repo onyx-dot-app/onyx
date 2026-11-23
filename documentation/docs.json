@@ -30,14 +30,14 @@
               "overview/core_features/code_interpreter",
               "overview/core_features/image_generation",
               "overview/core_features/voice_mode",
+              "overview/core_features/scheduled_tasks",
               {
                 "group": "Craft",
                 "icon": "hammer",
                 "pages": [
                   "overview/core_features/craft",
                   "overview/core_features/craft_skills",
-                  "overview/core_features/craft_apps",
-                  "overview/core_features/craft_scheduled_tasks"
+                  "overview/core_features/craft_apps"
                 ]
               }
             ]
@@ -942,7 +942,11 @@
     },
     {
       "source": "/overview/core_features/workflows",
-      "destination": "/overview/core_features/craft_scheduled_tasks"
+      "destination": "/overview/core_features/scheduled_tasks"
+    },
+    {
+      "source": "/overview/core_features/craft_scheduled_tasks",
+      "destination": "/overview/core_features/scheduled_tasks"
     },
     {
       "source": "/overview/onyx_anywhere/web_interface",
@@ -1011,6 +1015,15 @@
     }
   },
   "contextual": {
-    "options": []
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "mcp",
+      "add-mcp",
+      "cursor",
+      "vscode"
+    ]
   }
 }

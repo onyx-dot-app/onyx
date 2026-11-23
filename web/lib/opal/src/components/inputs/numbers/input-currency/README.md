@@ -34,7 +34,11 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 | `suffix`        | `string \| RichStr`                       | —                         | Muted text at the end of the field (`USD`). Hidden under the placeholder.  |
 | `error`         | `boolean`                                | `false`                   | Error chrome on the field                                                   |
 | `disabled`      | `boolean`                                | `false`                   | Disabled chrome, segments inert                                             |
+| `tooltip`       | `string \| RichStr`                      | —                         | Shown on hover, in any state                                                |
 | `id`            | `string`                                 | —                         | Applied to the whole segment for `<label htmlFor>`; the label then names it in place of "Whole amount" |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the field, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 ## Locale
 

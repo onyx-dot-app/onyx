@@ -1,10 +1,12 @@
-import { useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 
 interface UseEscapeInterruptArgs {
   /** Only listen while true (e.g. a response is streaming). */
   enabled: boolean;
   /** Fired on an unhandled Esc. */
   onInterrupt: () => void;
+  /** Only for an Esc pressed inside this element, such as a side panel. */
+  within?: RefObject<HTMLElement | null>;
 }
 
 const ESCAPE_RESERVED_LAYER_SELECTOR = [
@@ -25,7 +27,8 @@ function isVisibleElement(element: Element): boolean {
   return style.display !== "none" && style.visibility !== "hidden";
 }
 
-function hasVisibleEscapeReservedLayer(): boolean {
+/** Whether a visible dialog, menu or listbox takes Escape first. */
+export function hasVisibleEscapeReservedLayer(): boolean {
   return Array.from(
     document.querySelectorAll(ESCAPE_RESERVED_LAYER_SELECTOR)
   ).some(isVisibleElement);
@@ -39,6 +42,7 @@ function hasVisibleEscapeReservedLayer(): boolean {
 export function useEscapeInterrupt({
   enabled,
   onInterrupt,
+  within,
 }: UseEscapeInterruptArgs): void {
   // Held in a ref so the listener doesn't tear down on onInterrupt identity churn.
   const onInterruptRef = useRef(onInterrupt);
@@ -68,6 +72,14 @@ export function useEscapeInterrupt({
       if (reservedLayerEvents.has(event) || hasVisibleEscapeReservedLayer()) {
         return;
       }
+      if (
+        within &&
+        !(
+          event.target instanceof Node && within.current?.contains(event.target)
+        )
+      ) {
+        return;
+      }
 
       event.preventDefault();
       onInterruptRef.current();
@@ -79,5 +91,5 @@ export function useEscapeInterrupt({
       window.removeEventListener("keydown", rememberReservedLayer, true);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [enabled]);
+  }, [enabled, within]);
 }

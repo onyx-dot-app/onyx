@@ -86,11 +86,17 @@ export function ExecToolRenderer({
           // A command still running at its exec_end has only started
           phase: phase === "done" && end?.session_id ? "started" : phase,
         })
-      : t("sandbox.stdin.status", {
-          kind: start.chars ? "send" : "check",
-          phase,
-          sessionId: start.session_id,
-        });
+      : start.session_id
+        ? t("sandbox.stdin.status", {
+            kind: start.chars ? "send" : "check",
+            phase,
+            sessionId: start.session_id,
+          })
+        : // Interrupted or wrong-typed arguments have no session ID
+          t("sandbox.stdin.noSession.status", {
+            kind: start.chars ? "send" : "check",
+            phase,
+          });
 
   const content = (
     <SandboxCallContent renderType={renderType}>

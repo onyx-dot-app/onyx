@@ -18,6 +18,7 @@ import {
   type PolicyChoice,
 } from "@/lib/skills/installationPolicy";
 import { usePolicyOptions } from "@/lib/skills/hooks";
+import type { RichStr } from "@opal/types";
 
 interface SkillGroupAccessProps {
   rows: GroupAccessRow[];
@@ -29,6 +30,7 @@ interface SkillGroupAccessProps {
   onChoice: (groupId: number, choice: PolicyChoice) => void;
   onAdd: (group: MinimalUserGroupSnapshot) => void;
   onRemove: (groupId: number) => void;
+  requiredDescription?: string | RichStr;
 }
 
 /** Claude's "Group access": one row for each group and its setting. A group
@@ -41,11 +43,16 @@ export default function SkillGroupAccess({
   onChoice,
   onAdd,
   onRemove,
+  requiredDescription,
 }: SkillGroupAccessProps) {
   const t = useTranslations("skills.modals.share.groupAccess");
   const options = usePolicyOptions({
     inherit: { scope: "group", policy: company },
-  });
+  }).map((option) =>
+    option.value === "REQUIRED" && requiredDescription
+      ? { ...option, description: requiredDescription }
+      : option
+  );
   // A group with a share cannot be Not available.
   const sharedOptions = options.filter(
     (option) => option.value !== "NOT_AVAILABLE"

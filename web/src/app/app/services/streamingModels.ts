@@ -73,6 +73,7 @@ export enum PacketType {
   WRITE_STDIN_START = "write_stdin_start",
   EXEC_OUTPUT_DELTA = "exec_output_delta",
   EXEC_END = "exec_end",
+  FILE_TOOL_PROGRESS = "file_tool_progress",
   APPLY_PATCH_START = "apply_patch_start",
   APPLY_PATCH_END = "apply_patch_end",
   PUBLISH_FILES_START = "publish_files_start",
@@ -433,8 +434,9 @@ export interface ExecEnd extends BaseObj {
   session_id: string | null;
   wall_time_seconds: number | null;
   truncated: boolean;
-  // The saved output the model saw (head and tail when cut by tokens); null
-  // only with error
+  // The saved output the model saw (head and tail when cut to its character
+  // budget), or, when the output went to the sandbox VM, its head and tail
+  // with a plain note; null only with error
   output: string | null;
   // Set when the call failed and has no process result
   error: string | null;
@@ -442,6 +444,15 @@ export interface ExecEnd extends BaseObj {
 
 // The names of the backend's file tools (sandbox_tools.py)
 export type FileToolName = "apply_patch" | "edit" | "write";
+
+// What a file tool call's arguments hold while the model streams them; the
+// call's start packet follows
+export interface FileToolProgress extends BaseObj {
+  type: "file_tool_progress";
+  tool_name: FileToolName;
+  // The files the arguments name so far, in order
+  paths: string[];
+}
 
 export interface ApplyPatchStart extends BaseObj {
   type: "apply_patch_start";
@@ -479,14 +490,24 @@ export interface PublishFilesStart extends BaseObj {
 // /api/chat/file/{file_id}
 export interface PublishedFile {
   file_id: string;
-  // The file name, which the download keeps. Files of one name are versions
-  // of one file.
+  // The file name, which the download keeps
   name: string;
   title: string | null;
-  // Absolute in the sandbox; for display only
+  // Absolute and normalized in the sandbox
   path: string;
+  // The path to show: relative to the chat's working directory, or the whole
+  // path outside it
+  display_path: string;
   size: number;
   mime_type: string;
+  // The artifact: every publish of one path in the chat. Null in details
+  // saved without it; such a file is its own artifact.
+  artifact_id: string | null;
+  // The publish's number in its artifact, from 1. Null with artifact_id.
+  version: number | null;
+  // A JPEG of the first page of a PDF, PowerPoint or Word file that rendered
+  // when it was published, from /api/chat/file/{thumbnail_file_id}
+  thumbnail_file_id: string | null;
 }
 
 export interface PublishFilesEnd extends BaseObj {
@@ -606,6 +627,7 @@ export type ExecToolObj =
   | SectionEnd
   | PacketError;
 export type ApplyPatchToolObj =
+  | FileToolProgress
   | ApplyPatchStart
   | ApplyPatchEnd
   | SectionEnd

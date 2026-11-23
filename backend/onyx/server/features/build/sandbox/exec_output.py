@@ -1,6 +1,5 @@
-"""The limits of `HarnessSandbox` exec calls, and their output shaping: a
-byte cap per call (head and tail) and a token cap for the model (head and
-tail)."""
+"""The limits of `HarnessSandbox` exec calls, and their output: a byte cap
+per call that keeps the head and the tail."""
 
 import codecs
 import time
@@ -8,9 +7,6 @@ from collections import deque
 
 from onyx.microvm.models import OutputStream
 
-# Token estimate for the cap, as Codex does.
-BYTES_PER_TOKEN = 4
-DEFAULT_MAX_OUTPUT_TOKENS = 10_000
 EXEC_CALL_OUTPUT_MAX_BYTES = 1 << 20
 EXEC_DEFAULT_YIELD_MS = 10_000
 EXEC_MIN_YIELD_MS = 250
@@ -20,10 +16,6 @@ WRITE_STDIN_MAX_YIELD_MS = 30_000
 # An empty write_stdin (a poll) waits at least this long for new output.
 POLL_MIN_YIELD_MS = 5_000
 POLL_MAX_YIELD_MS = 300_000
-
-
-def _omitted_marker(count: int, unit: str) -> str:
-    return f"\n[... {count} {unit} omitted ...]\n"
 
 
 def _utf8_len(text: str) -> int:
@@ -40,28 +32,22 @@ class ExecOutputBuffer:
     of its command while the command's record stays.
 
     Each stream is decoded on its own (a character never mixes bytes of
-    stdout and stderr). Keeps the first and last half of `max_bytes` (UTF-8);
-    `add` returns the text to stream now: the head, up to what the result can
-    show (`max_output_tokens`). The result's output replaces that preview."""
+    stdout and stderr). Keeps the first and last half of `max_bytes` (UTF-8)
+    and counts the characters between them; `add` returns the text to stream
+    now, the part that went into the head. The result's output replaces
+    what streamed."""
 
-    def __init__(
-        self,
-        max_output_tokens: int | None = None,
-        max_bytes: int = EXEC_CALL_OUTPUT_MAX_BYTES,
-    ) -> None:
-        self.max_output_tokens = max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS
+    def __init__(self, max_bytes: int = EXEC_CALL_OUTPUT_MAX_BYTES) -> None:
         self.started_at = time.monotonic()
         # Set while the command's record stays.
         self.session_id: str | None = None
-        self._preview_budget = self.max_output_tokens * BYTES_PER_TOKEN
-        self._previewed = 0
         self._head_budget = max_bytes // 2
         self._tail_budget = max_bytes - self._head_budget
         self._head: list[str] = []
         self._head_bytes = 0
         self._tail: deque[str] = deque()
         self._tail_bytes = 0
-        self._dropped = 0
+        self._dropped_chars = 0
         self._lost = False
         self.total_bytes = 0
         self._decoders = {
@@ -99,12 +85,7 @@ class ExecOutputBuffer:
             self._tail.append(rest)
             self._tail_bytes += _utf8_len(rest)
             self._trim_tail()
-        preview = _utf8_prefix(head_part, self._preview_budget - self._previewed)
-        self._previewed += _utf8_len(preview)
-        if len(preview) < len(head_part):
-            # Closed: a later, smaller piece must not skip the cut text.
-            self._previewed = self._preview_budget
-        return preview
+        return head_part
 
     def _trim_tail(self) -> None:
         while self._tail_bytes > self._tail_budget:
@@ -114,13 +95,12 @@ class ExecOutputBuffer:
             if size <= over:
                 self._tail.popleft()
                 self._tail_bytes -= size
-                self._dropped += size
+                self._dropped_chars += len(first)
                 continue
             kept = first.encode("utf-8")[over:].decode("utf-8", errors="ignore")
-            removed = size - _utf8_len(kept)
             self._tail[0] = kept
-            self._tail_bytes -= removed
-            self._dropped += removed
+            self._tail_bytes -= size - _utf8_len(kept)
+            self._dropped_chars += len(first) - len(kept)
 
     def pending_bytes(self, stream: OutputStream) -> int:
         """Bytes of an incomplete character that the stream's decoder holds."""
@@ -136,36 +116,18 @@ class ExecOutputBuffer:
 
     @property
     def truncated(self) -> bool:
-        return self._dropped > 0 or self._lost
+        """The byte cap dropped output, or the daemon lost some."""
+        return self._dropped_chars > 0 or self._lost
 
-    def text(self) -> str:
-        head = "".join(self._head)
-        tail = "".join(self._tail)
-        if self._dropped:
-            return head + _omitted_marker(self._dropped, "bytes") + tail
-        return head + tail
+    @property
+    def omitted_chars(self) -> int:
+        """Characters between the head and the tail that the byte cap dropped."""
+        return self._dropped_chars
 
-    def cut(self) -> tuple[str, bool, int]:
-        """The output for the model (head and tail within its tokens),
-        whether a cap cut it, and the token count before the cut."""
-        full = self.text()
-        output, cut = cut_to_tokens(full, self.max_output_tokens)
-        return output, cut or self.truncated, estimate_tokens(full)
+    @property
+    def head(self) -> str:
+        return "".join(self._head)
 
-
-def estimate_tokens(text: str) -> int:
-    return (len(text.encode("utf-8")) + BYTES_PER_TOKEN - 1) // BYTES_PER_TOKEN
-
-
-def cut_to_tokens(text: str, max_tokens: int) -> tuple[str, bool]:
-    """Keep the head and tail of `text` within about `max_tokens`. Returns
-    the text and whether it was cut."""
-    max_bytes = max(max_tokens, 1) * BYTES_PER_TOKEN
-    data = text.encode("utf-8")
-    if len(data) <= max_bytes:
-        return text, False
-    half = max_bytes // 2
-    head = data[:half].decode("utf-8", errors="ignore")
-    tail = data[len(data) - half :].decode("utf-8", errors="ignore")
-    omitted = estimate_tokens(text) - estimate_tokens(head) - estimate_tokens(tail)
-    return head + _omitted_marker(max(omitted, 1), "tokens") + tail, True
+    @property
+    def tail(self) -> str:
+        return "".join(self._tail)

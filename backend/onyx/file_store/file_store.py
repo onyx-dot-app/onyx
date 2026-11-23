@@ -400,6 +400,7 @@ class FileStore(ABC):
         file_type: str,
         file_metadata: dict[str, Any] | None = None,
         file_id: str | None = None,
+        db_session: Session | None = None,
     ) -> str:
         """
         Save a file to the blob store
@@ -412,6 +413,10 @@ class FileStore(ABC):
         - file_metadata: Additional metadata for the file
         - file_id: Unique ID of the file to save. If not provided, a random UUID will be generated.
                    It is generally NOT recommended to provide this.
+        - db_session: Session that writes the file record. save_file commits
+                      it exactly once, after the record is written, so a
+                      `before_commit` hook on it runs in the record's
+                      transaction. If not provided, a new session is used.
 
         Returns:
             The unique ID of the file that was saved.

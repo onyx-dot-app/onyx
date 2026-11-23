@@ -2,7 +2,7 @@ import { authErrorRedirect } from "@/app/auth/libSS";
 import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
-import { isAppSignInHandoff } from "@/lib/auth/appHandoff";
+import { appSignInRedirect, isAppSignInHandoff } from "@/lib/auth/appHandoff";
 
 export const GET = async (request: NextRequest) => {
   // Wrapper around the FastAPI endpoint /auth/oidc/callback,
@@ -36,7 +36,14 @@ export const GET = async (request: NextRequest) => {
   const location = response.headers.get("location");
   if (isAppSignInHandoff(location)) {
     // Keep the backend's cookie cleanup (e.g. the PKCE verifier deletion).
-    const handoff = NextResponse.redirect(location, 302);
+    const handoff = NextResponse.redirect(
+      appSignInRedirect(
+        location,
+        request.headers.get("user-agent"),
+        getDomain(request)
+      ),
+      302
+    );
     for (const cookie of response.headers.getSetCookie()) {
       handoff.headers.append("set-cookie", cookie);
     }

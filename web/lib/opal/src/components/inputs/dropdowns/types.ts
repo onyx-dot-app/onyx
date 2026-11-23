@@ -72,6 +72,8 @@ type InputSingleBaseProps = Omit<
   onValueChange?: (value: string) => void;
   /** Disabled state */
   disabled?: boolean;
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
   /** External error state - overrides internal validation */
   isError?: boolean;
   /** Optional name for the field (for accessibility) */

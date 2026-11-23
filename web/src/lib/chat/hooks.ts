@@ -63,6 +63,10 @@ import {
   useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
+  chatPublishedFiles,
+  type LoadedPublishedFiles,
+} from "@/lib/chat/publishedFiles";
+import {
   awaitsDecision,
   type AwaitingUser,
   readToolApprovals,
@@ -75,7 +79,7 @@ import {
   useToolRequestUi,
   type WaitingToolRequest,
 } from "@/lib/chat/toolApprovals";
-import type { Packet } from "@/app/app/services/streamingModels";
+import type { Packet, PublishedFile } from "@/app/app/services/streamingModels";
 import { APPROVAL_PENDING_ERROR_CODE, type ChatStream } from "@/app/app/types";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
@@ -885,4 +889,53 @@ export function useSendChatMessageFromURL({
       deepResearch,
     });
   }, [pendingMessage, onSubmit, currentMessageFiles, deepResearch]);
+}
+
+// A chat's loads of its file list and its message tree
+export interface PublishedFilesSource {
+  loadedPublishedFiles: LoadedPublishedFiles;
+  messageTree: MessageTreeState;
+}
+
+const NO_PUBLISHED_FILES: PublishedFile[] = [];
+// The files of each message tree, keyed by the loads they came from
+const publishedFilesByTree = new WeakMap<
+  MessageTreeState,
+  { loaded: LoadedPublishedFiles; files: PublishedFile[] }
+>();
+
+/**
+ * The files the model published in a chat (`chatPublishedFiles`), built once
+ * per message tree and loads.
+ */
+export function publishedFilesOf(
+  source: PublishedFilesSource | undefined | null
+): PublishedFile[] {
+  if (!source) return NO_PUBLISHED_FILES;
+  const { loadedPublishedFiles: loaded, messageTree } = source;
+  const cached = publishedFilesByTree.get(messageTree);
+  if (cached && cached.loaded === loaded) return cached.files;
+  const files = chatPublishedFiles(loaded, messageTree);
+  publishedFilesByTree.set(messageTree, { loaded, files });
+  return files;
+}
+
+/**
+ * The files the model published in a chat: the open chat in the store, or a
+ * chat that the page holds, such as a shared chat. The array stays the same
+ * while its content does, so a packet that publishes nothing re-renders
+ * nothing.
+ */
+export function usePublishedFiles(
+  chat: "current" | PublishedFilesSource | null
+): PublishedFile[] {
+  return useChatSessionStore(
+    useShallow((state) =>
+      publishedFilesOf(
+        chat === "current"
+          ? state.sessions.get(state.currentSessionId ?? "")
+          : chat
+      )
+    )
+  );
 }

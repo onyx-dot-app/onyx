@@ -600,7 +600,10 @@ default agent, is Blocked.
    user who can use the agent and has access to the integration, when the
    agent links it (`integrations/chat_tools.py`). The user's on/off choice
    applies only on the default agent. The agent link, a plugin, and old
-   server grants give no access in chat.
+   server grants give no access in chat. While a scheduled run is in flight in
+   the chat, the task's links replace the agent's
+   (`integrations/policy.py:chat_integrations`,
+   [[craft-scheduled-tasks#task-choices-default-ask]]).
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
    setting resets connections.** `integrations/connections.py:sign_in_settings_for`
    includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL, the
@@ -627,7 +630,9 @@ default agent, is Blocked.
     or a redirect, and flags only 401 and 403. Both put a
     `CustomToolCallSummary` in `details`, which the chat renderer draws:
     `CustomTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
-    object in `tool_result`. Other `CustomTool` exceptions reach `Tool.run`,
+    object in `tool_result`. In a chat with a sandbox, a large output goes to
+    the VM, and the summary keeps only its preview in `spilled`
+    ([[code-execution]]). Other `CustomTool` exceptions reach `Tool.run`,
     which gives the model "Tool failed with error: <exception text>" and the
     user no error detail ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **A rejected credential is marked only if it is

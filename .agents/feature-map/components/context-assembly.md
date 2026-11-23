@@ -87,7 +87,7 @@ compaction candidate. The list on each model call:
 ```
 [system]                    base prompt, shared user-information framing, tool guidance   stable
 [user information]          SYSTEM message: per-user block                                stable
-[skills catalog]            SYSTEM message: the user's custom skills                      stable
+[skills catalog]            SYSTEM message: the user's chat skills                        stable
 [custom agent prompt]       USER message, fixed before conversation history               stable
 [project files and images]  USER message, JSON documents and image content blocks          stable
 [conversation summary]      SYSTEM message, when a compaction checkpoint applies          stable
@@ -287,7 +287,11 @@ counts what is sent, not the stored token counts.
    `agents/compaction.py:ContextLimitError` when the rest does not fit. That
    error is a `ValueError`, so `llm/exceptions.py:litellm_exception_to_safe_error`
    reports it as `UNKNOWN_ERROR`, not `CONTEXT_TOO_LONG`. A new large fixed
-   element makes this error more frequent.
+   element makes this error more frequent. In a chat with a sandbox, large
+   tool results go to a file in the VM before they reach the history
+   ([[code-execution]], `tools/tool_implementations/sandbox/spill.py`). This
+   makes the error less likely but does not prevent it: the limits count
+   characters, not tokens, and some tools are exempt from them.
 6. `forgotten-files-need-metadata` **A forgotten-files notice needs file
    metadata.** `chat/process_message.py:prepare_chat_turn` clears the metadata
    map when the persona has no file reader tool. Then a file that compaction or
@@ -295,9 +299,11 @@ counts what is sent, not the stored token counts.
    every attached file whose message is not in the working history.
 7. `file-notice-names-offered-tools` **A file notice names only tools the model
    has this step.** `chat/prompt_utils.py:_create_file_tool_metadata_message`
-   prefers `read_file`, then internal search, then the Python tool (only when
-   every file was staged for it). A notice that names a missing tool makes the
-   model guess or search the web.
+   prefers `read_file`, then internal search (only for files with
+   `FileToolMetadata.indexed`; `SKIPPED` uploads such as code files are not),
+   then the Python tool (only for files staged for it). A notice that names a
+   missing tool, or search for an unindexed file, makes the model guess or
+   search the web.
 8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
    several callers.** `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`
    call it with their own arguments, such as no custom agent
@@ -368,6 +374,14 @@ counts what is sent, not the stored token counts.
   Full results remain available while the runtime manages the context budget.
 - **Attached files stay where they were attached.** User attachments remain
   beside their question; project files and images remain in the preamble.
+  In a turn with the sandbox, each attachment's file message names its copy
+  in the VM with an "In the VM: attachments/<id prefix>-<name>" line, counted in the
+  message's tokens (`chat/files.py:build_file_context`), and the images of a
+  message get one more message with a line for each image
+  (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
+  alone (`chat/files.py:place_chat_files`), so a message keeps its lines
+  and the prefix stays cacheable. The `exec_command` description gains the
+  layout of `attachments/` once, when the chat gets its first file.
   Only user attachments enter the prompt as text, so turn preparation
   extracts text only for the files of user messages
   (`chat/process_message.py:prepare_chat_turn`, `text_file_ids`). Files of

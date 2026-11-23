@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ActionPolicy, IntegrationActionPolicyValue, IntegrationKind
 from onyx.db.integration import list_enabled_integrations_by_id
-from onyx.db.integration_policy import list_task_integration_links
 from onyx.db.models import Integration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -48,7 +47,6 @@ class RequestEvaluator(Protocol):
         request: http.Request,
         tenant_id: str,
         user_id: UUID,
-        scheduled_task_id: UUID | None,
     ) -> AllMatchedActions | McpProtocolRequest | None: ...
 
 
@@ -106,9 +104,7 @@ def _pick(
 
 class IntegrationRequestEvaluator(RequestEvaluator):
     """Matches a request against the integrations that the sandbox owner
-    turned on. A scheduled run matches only the task integrations that the
-    owner has access to, also one the owner turned off. The gate applies
-    the stored policies.
+    turned on. The gate applies the stored policies.
 
     * an MCP protocol message gives ``McpProtocolRequest``;
     * an MCP body that does not parse gives one blocked action;
@@ -125,7 +121,6 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         request: http.Request,
         tenant_id: str,
         user_id: UUID,
-        scheduled_task_id: UUID | None,
     ) -> AllMatchedActions | McpProtocolRequest | None:
         candidates = [
             target
@@ -134,18 +129,11 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         ]
         if not candidates:
             return None
-        usable = self._usable.get(tenant_id, user_id)
+        on = self._usable.get(tenant_id, user_id).on
+        candidates = [c for c in candidates if c.integration_id in on]
+        if not candidates:
+            return None
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            if scheduled_task_id is None:
-                ids = set(usable.on)
-            else:
-                ids = usable.accessible & {
-                    link.integration_id
-                    for link in list_task_integration_links(db, scheduled_task_id)
-                }
-            candidates = [c for c in candidates if c.integration_id in ids]
-            if not candidates:
-                return None
             integrations = {
                 integration.id: integration
                 for integration in list_enabled_integrations_by_id(

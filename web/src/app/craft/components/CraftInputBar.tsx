@@ -35,7 +35,7 @@ import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
 import type { CaretText } from "@/lib/contentEditable";
-import { useEntryPicker } from "@/lib/skills/hooks";
+import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
 import {
   CRAFT_PICKER_TRIGGER,
   filterPickerSections,
@@ -148,11 +148,18 @@ const CraftInputBar = memo(
       } = useUploadFilesContext();
 
       const { data: skillsData } = useUserSkills();
+      const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
+        useChatSkills({ builtIns: false });
       const { data: appsData } = useUserExternalApps();
       const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData, craftMcpData),
-        [skillsData, appsData, craftMcpData]
+        () =>
+          toPickerSections(
+            { builtins: skillsData?.builtins, customs: chatSkills.skills },
+            appsData,
+            craftMcpData
+          ),
+        [skillsData, chatSkills, appsData, craftMcpData]
       );
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(
@@ -370,6 +377,7 @@ const CraftInputBar = memo(
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}
+            onFocus={onChatSkillsFocus}
           />
           <EntryPickerPopover
             open={slashPicker.open}

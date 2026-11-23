@@ -1,6 +1,6 @@
 # Editing Presentations
 
-> **Path convention**: All commands run from the **session workspace**. Never `cd` into the skill directory. Prefix all skill scripts with `.opencode/skills/pptx/`. All generated files go in `outputs/`.
+> **Path convention**: Run all commands from your working directory, the chat session folder. Run skill scripts with their interpreter and the absolute path under `/mnt/skills/pptx/`. Write generated files to the working directory.
 
 ## Template-Based Workflow
 
@@ -10,10 +10,10 @@ When using an existing presentation as a template:
 
 1. **Analyze existing slides**:
    ```bash
-   python .opencode/skills/pptx/scripts/thumbnail.py template.pptx outputs/thumbnails
+   python /mnt/skills/pptx/scripts/thumbnail.py template.pptx thumbnails
    python -m markitdown template.pptx
    ```
-   Review `outputs/thumbnails.jpg` to see layouts, and markitdown output to see placeholder text.
+   Review `thumbnails.jpg` to see layouts, and markitdown output to see placeholder text.
 
 2. **Plan slide mapping**: For each content section, choose a template slide.
 
@@ -30,7 +30,7 @@ When using an existing presentation as a template:
 
    Match content type to layout style (e.g., key points → bullet slide, team info → multi-column, testimonials → quote slide).
 
-3. **Unpack**: `python .opencode/skills/pptx/scripts/office/unpack.py template.pptx outputs/unpacked/`
+3. **Unpack**: `python /mnt/skills/pptx/scripts/office/unpack.py template.pptx unpacked/`
 
 4. **Build presentation** (do this yourself, not with subagents):
    - Delete unwanted slides (remove from `<p:sldIdLst>`)
@@ -40,15 +40,15 @@ When using an existing presentation as a template:
 
 5. **First pack (do this EARLY)**: as soon as the structure is set and first-pass content is in, clean + pack so a viewable deck exists:
    ```bash
-   python .opencode/skills/pptx/scripts/clean.py outputs/unpacked/
-   python .opencode/skills/pptx/scripts/office/pack.py outputs/unpacked/ outputs/output.pptx --original template.pptx
+   python /mnt/skills/pptx/scripts/clean.py unpacked/
+   python /mnt/skills/pptx/scripts/office/pack.py unpacked/ output.pptx --original template.pptx
    ```
-   A turn that ends with edits stranded in `outputs/unpacked/` delivers **nothing** — the packed `.pptx` is the deliverable (SKILL.md → Build Order). Never do fine-grained restyling before the first pack exists.
+   A turn that ends with edits stranded in `unpacked/` delivers **nothing** — the packed `.pptx` is the deliverable (SKILL.md → Build Order). Never do fine-grained restyling before the first pack exists.
 
 6. **Refine content**: update text in each `slide{N}.xml`.
    **Use subagents here if available** — slides are separate XML files, so subagents can edit in parallel.
 
-7. **Re-clean + re-pack after each batch of edits** (same commands as step 5) — the packed deck in `outputs/` should always reflect your latest good state.
+7. **Re-clean + re-pack after each batch of edits** (same commands as step 5) — the packed deck in the working directory should always reflect your latest good state.
 
 ---
 
@@ -65,7 +65,7 @@ When using an existing presentation as a template:
 ### unpack.py
 
 ```bash
-python .opencode/skills/pptx/scripts/office/unpack.py input.pptx outputs/unpacked/
+python /mnt/skills/pptx/scripts/office/unpack.py input.pptx unpacked/
 ```
 
 Extracts PPTX, pretty-prints XML, escapes smart quotes.
@@ -73,8 +73,8 @@ Extracts PPTX, pretty-prints XML, escapes smart quotes.
 ### add_slide.py
 
 ```bash
-python .opencode/skills/pptx/scripts/add_slide.py outputs/unpacked/ slide2.xml      # Duplicate slide
-python .opencode/skills/pptx/scripts/add_slide.py outputs/unpacked/ slideLayout2.xml # From layout
+python /mnt/skills/pptx/scripts/add_slide.py unpacked/ slide2.xml      # Duplicate slide
+python /mnt/skills/pptx/scripts/add_slide.py unpacked/ slideLayout2.xml # From layout
 ```
 
 Prints `<p:sldId>` to add to `<p:sldIdLst>` at desired position.
@@ -82,7 +82,7 @@ Prints `<p:sldId>` to add to `<p:sldIdLst>` at desired position.
 ### clean.py
 
 ```bash
-python .opencode/skills/pptx/scripts/clean.py outputs/unpacked/
+python /mnt/skills/pptx/scripts/clean.py unpacked/
 ```
 
 Removes slides not in `<p:sldIdLst>`, unreferenced media, orphaned rels.
@@ -90,7 +90,7 @@ Removes slides not in `<p:sldIdLst>`, unreferenced media, orphaned rels.
 ### pack.py
 
 ```bash
-python .opencode/skills/pptx/scripts/office/pack.py outputs/unpacked/ outputs/output.pptx --original input.pptx
+python /mnt/skills/pptx/scripts/office/pack.py unpacked/ output.pptx --original input.pptx
 ```
 
 Validates the unpacked files against `--original`, then condenses the XML and zips the package.
@@ -100,10 +100,10 @@ Broken XML and the broken relationships that validation finds fail even when the
 ### thumbnail.py
 
 ```bash
-python .opencode/skills/pptx/scripts/thumbnail.py input.pptx outputs/thumbnails [--cols N]
+python /mnt/skills/pptx/scripts/thumbnail.py input.pptx thumbnails [--cols N]
 ```
 
-Creates `outputs/thumbnails.jpg` with slide filenames as labels. Default 3 columns, max 12 per grid.
+Creates `thumbnails.jpg` with slide filenames as labels. Default 3 columns, max 12 per grid.
 
 **Use for template analysis only** (choosing layouts). For visual QA, use `soffice` + `pdftoppm` to create full-resolution individual slide images—see SKILL.md.
 
@@ -111,13 +111,13 @@ Creates `outputs/thumbnails.jpg` with slide filenames as labels. Default 3 colum
 
 ## Slide Operations
 
-Slide order is in `outputs/unpacked/ppt/presentation.xml` → `<p:sldIdLst>`.
+Slide order is in `unpacked/ppt/presentation.xml` → `<p:sldIdLst>`.
 
 **Reorder**: Rearrange `<p:sldId>` elements.
 
 **Delete**: Remove `<p:sldId>`, then run `clean.py`.
 
-**See available layouts**: `ls outputs/unpacked/ppt/slideLayouts/`
+**See available layouts**: `ls unpacked/ppt/slideLayouts/`
 
 **Add**: Use `add_slide.py`. Never manually copy slide files—the script handles notes references, Content_Types.xml, and relationship IDs that manual copying misses.
 
@@ -133,7 +133,7 @@ Slide order is in `outputs/unpacked/ppt/presentation.xml` → `<p:sldIdLst>`.
 For each slide:
 1. Read the slide's XML
 2. Identify ALL placeholder content—text, images, charts, icons, captions
-3. Replace each placeholder with final content — for chart placeholders produce deck-styled PNGs per [charts.md](charts.md); for icon placeholders render PNGs with `.opencode/skills/pptx/scripts/icon.js` (see [pptxgenjs.md](pptxgenjs.md#icons)); insert either as slide media at the placeholder's size
+3. Replace each placeholder with final content — for chart placeholders produce deck-styled PNGs per [charts.md](charts.md); for icon placeholders render PNGs with `/mnt/skills/pptx/scripts/icon.js` (see [pptxgenjs.md](pptxgenjs.md#icons)); insert either as slide media at the placeholder's size
 
 **Use the Edit tool, not sed or Python scripts.** The Edit tool forces specificity about what to replace and where, yielding better reliability.
 

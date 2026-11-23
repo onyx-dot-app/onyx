@@ -1,14 +1,9 @@
 """API endpoints for Build Mode session management."""
 
-import json
-import time
-from collections.abc import Generator
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -23,22 +18,19 @@ from onyx.db.build_session import (
     session_runtime_stale,
     set_build_session_sharing_scope,
 )
-from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     Permission,
     SandboxStatus,
-    ScheduledTaskRunStatus,
 )
 from onyx.db.models import Sandbox, User
 from onyx.db.sandbox import (
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
-from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.serving import build_content_disposition
-from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.firecracker.purge import purge_harness_session
@@ -81,8 +73,6 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
 )
 from onyx.server.features.build.session.session_ready import ensure_session_ready
-from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
-from onyx.server.features.build.timeouts import POLL_INTERVAL_SECONDS
 from onyx.server.features.build.utils import sanitize_filename, validate_file
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -946,160 +936,3 @@ def delete_file_endpoint(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     return Response(status_code=204)
-
-
-# =============================================================================
-# Scheduled Task — session-view banner
-# =============================================================================
-
-
-class ScheduledRunContextResponse(BaseModel):
-    """Context surfaced by the session-view banner when a session came from a
-    scheduled run. Returned by ``GET /sessions/{id}/scheduled-run-context``.
-    """
-
-    run_id: str
-    task_id: str
-    task_name: str
-    status: ScheduledTaskRunStatus
-    started_at: datetime
-    finished_at: datetime | None
-    revision: int
-    viewed_revision: int | None
-
-
-@router.get("/{session_id}/scheduled-run-context")
-def get_session_scheduled_run_context(
-    session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> ScheduledRunContextResponse:
-    """Return the scheduled-task context for a session, if any.
-
-    The web UI calls this on every session view; a 200 response means
-    "render the banner above the transcript and apply scheduled-run state".
-    A 404 means "this is an interactive session, behave normally".
-    """
-    context = get_scheduled_run_context(
-        db_session=db_session,
-        session_id=session_id,
-        user_id=user.id,
-    )
-    if context is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
-    return ScheduledRunContextResponse(
-        run_id=str(context["run_id"]),
-        task_id=str(context["task_id"]),
-        task_name=context["task_name"],
-        status=context["status"],
-        started_at=context["started_at"],
-        finished_at=context["finished_at"],
-        revision=context["revision"],
-        viewed_revision=context["viewed_revision"],
-    )
-
-
-def _scheduled_run_is_running(
-    *,
-    db_session: Session,
-    session_id: UUID,
-    user_id: UUID,
-) -> bool:
-    context = get_scheduled_run_context(
-        db_session=db_session,
-        session_id=session_id,
-        user_id=user_id,
-    )
-    return context is not None and context["status"] == ScheduledTaskRunStatus.RUNNING
-
-
-def _format_stream_error(detail: str) -> str:
-    payload = {
-        "type": "error",
-        "message": detail,
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-    }
-    return f"event: message\ndata: {json.dumps(payload)}\n\n"
-
-
-@router.get("/{session_id}/scheduled-run-events")
-def get_session_scheduled_run_events(
-    session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StreamingResponse:
-    """Stream live ACP events for a running scheduled-origin Craft session."""
-    context = get_scheduled_run_context(
-        db_session=db_session,
-        session_id=session_id,
-        user_id=user.id,
-    )
-    if context is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
-    if context["status"] != ScheduledTaskRunStatus.RUNNING:
-        raise OnyxError(OnyxErrorCode.CONFLICT, "Scheduled run is not running")
-
-    user_id = user.id
-
-    def stream_generator() -> Generator[str, None, None]:
-        # The executor links ScheduledTaskRun.session_id just before it resolves
-        # and persists BuildSession.opencode_session_id. Keep the HTTP stream
-        # alive during that short handoff so a fast click from the run table can
-        # attach without a visible error.
-        while True:
-            with get_session_with_current_tenant() as stream_db_session:
-                if not _scheduled_run_is_running(
-                    db_session=stream_db_session,
-                    session_id=session_id,
-                    user_id=user_id,
-                ):
-                    return
-
-                session = get_build_session(session_id, user_id, stream_db_session)
-                if session is None:
-                    yield _format_stream_error("Session not found")
-                    return
-                if session.opencode_session_id:
-                    break
-
-            yield SSE_KEEPALIVE
-            time.sleep(POLL_INTERVAL_SECONDS)
-
-        try:
-            with get_session_with_current_tenant() as stream_db_session:
-                session_manager = SessionManager(stream_db_session)
-                for chunk in session_manager.subscribe_to_existing_session_events(
-                    session_id,
-                    user_id,
-                    keepalive_seconds=SSE_KEEPALIVE_INTERVAL,
-                ):
-                    yield chunk
-                    stream_db_session.expire_all()
-                    if not _scheduled_run_is_running(
-                        db_session=stream_db_session,
-                        session_id=session_id,
-                        user_id=user_id,
-                    ):
-                        return
-        except GeneratorExit:
-            logger.info(
-                "Scheduled run live stream disconnected for session %s", session_id
-            )
-            raise
-        except OnyxError as exc:
-            yield _format_stream_error(exc.detail)
-        except Exception as exc:
-            logger.exception(
-                "Scheduled run live stream failed for session %s", session_id
-            )
-            yield _format_stream_error(str(exc))
-
-    return StreamingResponse(
-        stream_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )

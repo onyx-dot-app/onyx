@@ -11,7 +11,7 @@ import {
 import { ALLOWED_URL_PROTOCOLS } from "@/lib/constants";
 import { DEFAULT_LOCALE } from "@/i18n/config";
 
-const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
+export const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 const BARE_EMAIL_REGEX = /^[^\s@/]+@[^\s@/:]+\.[^\s@/:]+$/;
 
 export const INTERACTIVE_SELECTOR =
@@ -151,30 +151,6 @@ export function isImageExtension(
   }
   const normalized = extension.toLowerCase();
   return (IMAGE_EXTENSIONS as readonly string[]).includes(normalized);
-}
-
-/**
- * Formats bytes to human-readable file size.
- */
-export function formatBytes(
-  bytes: number | undefined,
-  decimals: number = 2
-): string {
-  if (bytes == null) return "Unknown";
-  if (bytes === 0) return "0 Bytes";
-
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-
-  let unitIndex = Math.floor(Math.log(bytes) / Math.log(k));
-  if (unitIndex < 0) unitIndex = 0;
-  if (unitIndex >= sizes.length) unitIndex = sizes.length - 1;
-  return (
-    parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(dm)) +
-    " " +
-    sizes[unitIndex]
-  );
 }
 
 /**

@@ -20,7 +20,7 @@ CHANGE_CONTEXT_MARKER = "@@ "
 EMPTY_CHANGE_CONTEXT_MARKER = "@@"
 SUMMARY_HEADER = "Success. Updated the following files:"
 
-_HUNK_HEADER_MARKERS = (ADD_FILE_MARKER, DELETE_FILE_MARKER, UPDATE_FILE_MARKER)
+HUNK_HEADER_MARKERS = (ADD_FILE_MARKER, DELETE_FILE_MARKER, UPDATE_FILE_MARKER)
 # Models often wrap the patch in a shell heredoc; the wrapper is stripped.
 _HEREDOC_OPENERS = ("<<EOF", "<<'EOF'", '<<"EOF"')
 _SOURCE_LINE_ENDING = re.compile(r"\r\n|\r|\n")
@@ -157,7 +157,7 @@ def _next_hunk_boundary(
             index
             for index in range(start, stop)
             if normalize(lines[index]) == END_PATCH_MARKER
-            or normalize(lines[index]).startswith(_HUNK_HEADER_MARKERS)
+            or normalize(lines[index]).startswith(HUNK_HEADER_MARKERS)
         ),
         stop,
     )

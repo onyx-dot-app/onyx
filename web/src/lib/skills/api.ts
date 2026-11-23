@@ -8,11 +8,14 @@
 
 import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import type {
+  PluginUploadPreview,
+  PluginUploadTarget,
+} from "@/lib/plugins/types";
+import type {
   CustomSkill,
   GitHubSkillsImportResult,
   OrganizationLibraryDefaultAccess,
   OrganizationLibraryDefaultPolicy,
-  GitHubSkillsPreview,
   Skill,
   SkillBundleContents,
   SkillEditableDetail,
@@ -49,36 +52,6 @@ async function handle<T>(res: Response): Promise<T> {
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
-
-export async function previewGitHubSkills(
-  repository: string
-): Promise<GitHubSkillsPreview> {
-  const res = await fetch("/api/skills/github/preview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repository }),
-  });
-  return handle<GitHubSkillsPreview>(res);
-}
-
-export async function importGitHubSkills(
-  preview: Pick<GitHubSkillsPreview, "repository" | "revision" | "subpath">,
-  paths: string[],
-  sharing?: SkillShareUpdatePayload
-): Promise<GitHubSkillsImportResult> {
-  const res = await fetch("/api/skills/github/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      repository: preview.repository,
-      revision: preview.revision,
-      subpath: preview.subpath,
-      paths,
-      sharing,
-    }),
-  });
-  return handle<GitHubSkillsImportResult>(res);
-}
 
 export async function uploadSkillBundles(
   bundles: File[],
@@ -131,6 +104,45 @@ export async function bulkUpdateSkills(
   return result;
 }
 
+function pluginUploadForm(bundle: File, saveAsNew: boolean): FormData {
+  const form = new FormData();
+  form.append("bundle", bundle);
+  form.append("save_as_new", String(saveAsNew));
+  return form;
+}
+
+export async function inspectPluginUpload(
+  bundle: File,
+  saveAsNew: boolean
+): Promise<PluginUploadPreview> {
+  return handle<PluginUploadPreview>(
+    await fetch("/api/skills/plugins/inspect", {
+      method: "POST",
+      body: pluginUploadForm(bundle, saveAsNew),
+    })
+  );
+}
+
+export interface PluginUploadResult {
+  target: PluginUploadTarget;
+  plugin: CustomSkill;
+  enabled: boolean;
+  unchanged: boolean;
+  name_conflicts: string[];
+}
+
+export async function savePluginUpload(
+  bundle: File,
+  saveAsNew: boolean
+): Promise<PluginUploadResult> {
+  return handle<PluginUploadResult>(
+    await fetch("/api/skills/plugins", {
+      method: "POST",
+      body: pluginUploadForm(bundle, saveAsNew),
+    })
+  );
+}
+
 export interface CreateCustomSkillInput {
   name: string;
   description: string;
@@ -164,6 +176,18 @@ export function isSkillNameConflict(error: unknown): boolean {
     "errorCode" in error &&
     error.errorCode === "SKILL_NAME_CONFLICT"
   );
+}
+
+/** The skills that a turn-on would turn off, from a name-conflict error. */
+export function skillNameConflictNames(error: unknown): string[] {
+  if (!(error instanceof FetchError)) return [];
+  const names: unknown =
+    error.info && "conflict_names" in error.info
+      ? error.info.conflict_names
+      : undefined;
+  return Array.isArray(names)
+    ? names.filter((name): name is string => typeof name === "string")
+    : [];
 }
 
 export function isSkillVersionStale(error: unknown): boolean {

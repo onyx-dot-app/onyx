@@ -17,7 +17,6 @@ from onyx.agents.compaction import (
     compact_history,
     context_budget,
     count_tokens,
-    head_and_tail_tokens,
     history_boundaries,
     request_tokens,
     working_messages,
@@ -413,6 +412,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     source = convert_chat_history(
         [old_answer, question],
         files=[],
+        vm_paths={},
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
@@ -421,6 +421,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
+        vm_paths={},
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -546,16 +547,6 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
     )
-
-
-@pytest.mark.parametrize("max_tokens", [1, 3, 4, 7])
-def test_head_and_tail_tokens_keep_whole_characters(max_tokens: int) -> None:
-    text = "お誕生日おめでとう 🎉" * 4
-    head, tail, count = head_and_tail_tokens(text, max_tokens)
-    assert count == count_tokens(text) > max_tokens
-    assert "\ufffd" not in head + tail
-    assert text.startswith(head) and text.endswith(tail)
-    assert count_tokens(head) + count_tokens(tail) <= max_tokens
 
 
 def test_amending_a_summarized_result_drops_the_summary() -> None:
@@ -880,6 +871,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
+        vm_paths={},
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()
@@ -1060,7 +1052,7 @@ def test_compaction_drops_skill_messages_and_keeps_the_question_as_the_task() ->
         response_messages=[],
     )
     history: list[Message] = [
-        *convert_chat_history([question], files=[]).messages,
+        *convert_chat_history([question], files=[], vm_paths={}).messages,
         AssistantMessage(
             id="work", content=[TextContent(text="Earlier research context. " * 300)]
         ),

@@ -25,6 +25,8 @@ unchanged; this only re-shapes what the chat pipeline already yields.
 from collections.abc import Iterator
 from typing import Any
 
+from onyx.chat.renderer import CODE_ARGUMENT_TOOLS
+
 ONYX_CHAT_WIRE_VERSION = 2
 
 # A tool's start packet: its ACP kind and title.
@@ -33,7 +35,6 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
     "open_url_start": ("fetch", "Reading"),
     "image_generation_start": ("other", "Generating images"),
     "python_tool_start": ("execute", "Running Python"),
-    "tool_call_argument_delta": ("other", "Running tool"),
     "custom_tool_start": ("other", "Running tool"),
     "file_reader_start": ("read", "Reading file"),
     "postgres_tool_start": ("search", "Querying knowledge base"),
@@ -48,11 +49,14 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
     "apply_patch_start": ("edit", "Editing files"),
 }
 
-# A streamed argument opens its call before the start packet; its tool type
-# names it until the start arrives. Python streams its code.
-_ARGUMENT_TOOL_TYPES: dict[str, tuple[str, str]] = {
-    "python": ("execute", "Writing code"),
+# A pre-start packet (.agents/feature-map/components/streaming-protocol.md)
+# opens its call before the call's start packet: its ACP kind and title until
+# the start renames the call. Streamed code has its own.
+_PRE_STARTS: dict[str, tuple[str, str]] = {
+    "tool_call_argument_delta": ("other", "Running tool"),
+    "file_tool_progress": ("edit", "Editing files"),
 }
+_CODE_ARGUMENTS = ("execute", "Writing code")
 
 _MESSAGE_TYPES = {"message_start", "message_delta"}
 _REASONING_TYPES = {"reasoning_start", "reasoning_delta", "reasoning_done"}
@@ -133,12 +137,14 @@ class ChatAcpTranslator:
             return
 
         call_id = _call_id(placement)
-        if call_id not in self._open and packet_type in _TOOL_STARTS:
-            kind, title = _TOOL_STARTS[packet_type]
-            if packet_type == "tool_call_argument_delta":
-                kind, title = _ARGUMENT_TOOL_TYPES.get(
-                    str(packet.get("tool_type")), (kind, title)
-                )
+        opening = _TOOL_STARTS.get(packet_type) or _PRE_STARTS.get(packet_type)
+        if call_id not in self._open and opening is not None:
+            kind, title = (
+                _CODE_ARGUMENTS
+                if packet_type == "tool_call_argument_delta"
+                and packet.get("tool_type") in CODE_ARGUMENT_TOOLS
+                else opening
+            )
             self._open[call_id] = False
             yield {
                 "sessionUpdate": "tool_call",
@@ -158,11 +164,8 @@ class ChatAcpTranslator:
                 "toolCallId": call_id,
                 "_meta": _onyx_meta(packet=packet, placement=placement),
             }
-            if (
-                packet_type in _TOOL_STARTS
-                and packet_type != "tool_call_argument_delta"
-            ):
-                # The real start of a call its streamed arguments opened.
+            if packet_type in _TOOL_STARTS:
+                # The start of a call that a pre-start packet opened.
                 update["kind"], update["title"] = _TOOL_STARTS[packet_type]
             if packet_type == "section_end":
                 failed = self._open.pop(call_id)

@@ -139,6 +139,7 @@ from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import QUESTION_TOOL_NAMES, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolApprovalScope, ToolOptions
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -268,6 +269,27 @@ def request_response_stop(
 ) -> None:
     """Ask the run's owner to cancel it; the reason travels with the request."""
     cache.set(_stop_key(response_id), reason, ex=STOP_TTL_SECONDS)
+
+
+def cancel_parked_response(
+    cache: CacheBackend, tenant_id: str, response_id: int
+) -> bool:
+    """Cancel a response that still waits for approval. A response that an
+    approval resumed, or that ended, stays as it is: unlike Stop, this sends
+    no stop request that a resumed owner would obey. Returns whether it
+    ended here."""
+    with _ownership_lock(cache, response_id):
+        if cache.exists(_owner_key(response_id)):
+            return False
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            dumps = interrupt_response__no_commit(
+                session, response_id, cancelled=True, only_parked=True
+            )
+            session.commit()
+    if dumps is None:
+        return False
+    delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+    return True
 
 
 def stop_response(
@@ -431,6 +453,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._capped_runs: set[str] = set()
         # Saved child tool calls link to these tool rows by name.
         self._tool_ids = {tool.name: tool.id for tool in tools}
+        self._sandbox_tools = any(isinstance(tool, SandboxTool) for tool in tools)
         self.chat_session_id = chat_session_id
         self.response_id = response_id
         # Branch IDs stay newest first, as the branch queries order them.
@@ -672,7 +695,12 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             ]
             accepted = (
                 accept_picked_skills(
-                    picks, list_chat_skills(session, self._user), self._user.id, session
+                    picks,
+                    list_chat_skills(
+                        session, self._user, built_ins=self._sandbox_tools
+                    ),
+                    self._user.id,
+                    session,
                 )
                 if any(picks)
                 else [AcceptedPicks() for _ in received]

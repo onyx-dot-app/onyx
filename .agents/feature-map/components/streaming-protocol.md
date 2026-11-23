@@ -207,7 +207,37 @@ response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
 model writes it, with the tool name as `tool_type`. Native model reasoning streams
-as reasoning packets. Code mode (`code_mode_start`,
+as reasoning packets.
+
+Each call's streamed arguments report at most once per
+`chat/renderer.py:ARGUMENT_REPORT_INTERVAL_SECONDS`
+(`chat/renderer.py:_ArgumentStream` holds the fragments and decides when to
+report). The first fragment
+reports. A later fragment that arrives within the interval is held. There is
+no timer: held fragments report with the next fragment that arrives after the
+interval, at the next content block boundary, or at the call's end. A block
+boundary is the start of another content block of the message (another call,
+text or thinking), so live sections come in the same order as on replay.
+The call's end is the end of the model's stream, which ends every call of the
+message (`ToolCallEndEvent`). It reports the complete arguments, or, for
+invalid arguments, what the fragments parse to. A stream that stops without an
+end reports the held fragments when its message completes or its agent ends
+(`MessageRenderer.complete`, `MessageRenderer.finish`). The file tools (`write`, `edit`, `apply_patch`)
+report `file_tool_progress` instead of their arguments: `tool_name` and the
+whole `paths` so far without repeats (`chat/renderer.py:file_tool_progress`).
+The `FileToolProgress` docstring in `server/query_and_chat/streaming_models.py`
+says what each card shows. A report sends a packet only when its `paths`
+change, so the file text sends no packets. Replay sends no progress.
+
+Pre-start packets: `tool_call_argument_delta` and `file_tool_progress` open a
+call before its start packet, and clients do not count them as its start
+(`server/query_and_chat/acp_stream.py:_PRE_STARTS`,
+`web/src/lib/timeline/chat/hooks/packetProcessor.ts`). The call's start
+packet, such as `apply_patch_start`, follows them at the same placement. If
+the stream stops first, no start follows, and clients close the call on the
+stop.
+
+Code mode (`code_mode_start`,
 `code_mode_delta`) renders each tool call its program makes with that tool's
 own packets at `sub_turn_index` = call index, inside the code mode tab. A
 call that runs across observations keeps its `sub_turn_index` in each tab, so
@@ -238,29 +268,42 @@ before a restore, the live stream has no tab for it, so the closing record
 follows the observation's packets and section end in a new tab. The sandbox
 tools ([[code-execution]]) start with `exec_command_start`, `write_stdin_start`
 or `apply_patch_start`, stream the command output in `exec_output_delta`, and
-end with `exec_end` or `apply_patch_end`. An `edit` or `write` call also
+end with `exec_end` or `apply_patch_end`. A tool with its own end packet
+(`chat/renderer.py:OWN_END_PACKETS`: the sandbox tools and `publish_files`,
+each with its end packet type) always sends its own start packet. When its arguments are not valid, for
+example cut off or of a wrong type, the start packet has empty values (a file
+tool's patch is empty, with no file header), so the end packet never lands on a
+generic card (`ToolRenderer.start`). A failed call ends with that end packet's
+`error`. An `edit` or `write` call also
 renders as a patch card: `chat/renderer.py` builds `apply_patch_start.patch`
 from its arguments (`patch.display_patch`: an update of the old lines to the
 new ones, or an added file), live and on replay, and its `apply_patch_end`
 says whether `write` added or updated the file. `apply_patch_start.tool_name`
-names the file tool, which titles the call (`toolDisplayHelpers.getToolName`, as in parallel tabs). `exec_end.output` is the output
-that the model got (cut to its token budget), which replaces the streamed
-preview; `session_id` is set while the command runs, and `error` (with no
+names the file tool. `exec_end.output` is the output
+that the model got (cut to its character budget), which replaces the streamed
+preview. When the output went to a file in the sandbox VM, it is the head and
+tail of the output with a plain note instead ([[code-execution]]); `session_id` is set while the command runs, and `error` (with no
 output) when the call failed. A replayed call sends the start and `exec_end`
 only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `publish_files`
 call starts with `publish_files_start`: `files`, the `{path, title}` entries
-as the model wrote them, and `description` (`files` is empty when the
-arguments are not valid, so the card still shows). It ends with
+as the model wrote them, and `description`. It ends with
 `publish_files_end`:
 `files`, one `PublishedFile` per entry in the same order, or `error` and no
 files when the call published none (it publishes all or none). A
-`PublishedFile` has `file_id` (download it from `/chat/file/{file_id}`),
-`name` (the file name, which the download keeps, and the version key: files
-of one `name` are versions of one file, and each publish gives a new
-`file_id`), `title` (null when the model gave none), `path` (absolute and
-normalized in the VM, for display only), `size` in bytes and `mime_type`. Live and replay send the same two packets. The chat's
-published files are the `publish_files_end` packets of its responses: the
-packet is the only record that a client lists them from. A sandbox call that
+`PublishedFile` has `file_id` (download it from `/chat/file/{file_id}`; each
+publish gives a new one), `artifact_id` and `version` (every publish of one
+`path` in the chat is a version of one artifact, numbered from 1; both are
+null in details saved without them, and such a file is an artifact of its
+own), `name` (the file name, which the download keeps), `title` (null when the
+model gave none), `path` (absolute and normalized in the VM),
+`display_path` (the path to show: relative
+to the chat's working directory, or the whole path outside it; derived from
+`path`), `size` in bytes, `mime_type` and `thumbnail_file_id` (a JPEG of the
+first page of a PDF, PowerPoint or Word file that rendered, from
+`/chat/file/{thumbnail_file_id}`; else null). Live and replay send the same two packets. The
+`publish_files_end` packets of a response list its published files. The
+session load's `published_files` lists the latest version of each artifact in
+the whole chat, by first publish, also of messages outside a paged load's page ([[chat-persistence]]). A sandbox call that
 a Stop ended has no end packet; the client shows it as stopped. So does any
 nested call that its program left unfinished (state `unfinished`,
 `CodeModeRenderer._complete_child`). An `exec_end` with `completion`
@@ -325,7 +368,10 @@ its background task end ([[#pure-asgi-middleware]]).
    `model_index`.
 5. `not-every-line-is-a-packet` **Not every line is a packet, and heartbeats are
    the consumer's job.** Clients must check for `obj` before they read it, as
-   `web/src/hooks/useChatSessionController.ts` does on resume. On web, the name
+   `web/src/hooks/useChatSessionController.ts` does on resume. A
+   `ChatSessionNameInfo` line has no `obj` either; the server sends it only
+   when the request sets `accepts_chat_session_name`, so older readers such as
+   the widget never see it. On web, the name
    `PacketType` means two things: the enum of type strings in
    `web/src/app/app/services/streamingModels.ts`, and the union of line shapes in
    `web/src/app/app/services/lib.tsx`. `web/src/app/app/services/lib.tsx:sendMessage`

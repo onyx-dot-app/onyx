@@ -90,6 +90,35 @@ describe("skill bundle upload preparation", () => {
     ).rejects.toThrow("must contain SKILL.md at its top level");
   });
 
+  it("packages a plugin folder only when plugins are allowed", async () => {
+    const files = [
+      fileAt("/kit/.claude-plugin/plugin.json", "{}"),
+      fileAt("/kit/skills/review/SKILL.md", "instructions"),
+    ];
+    await expect(prepareSkillBundleUpload(files)).rejects.toThrow(
+      "must contain SKILL.md at its top level"
+    );
+
+    const prepared = await prepareSkillBundleUpload(files, {
+      allowPlugin: true,
+    });
+    expect(prepared.source).toBe("folder");
+    const reader = new ZipReader(new BlobReader(prepared.file));
+    expect((await reader.getEntries()).map((entry) => entry.filename)).toEqual([
+      ".claude-plugin/plugin.json",
+      "skills/review/SKILL.md",
+    ]);
+    await reader.close();
+  });
+
+  it("rejects a folder with neither SKILL.md nor a plugin manifest", async () => {
+    await expect(
+      prepareSkillBundleUpload([fileAt("/kit/skills/review/SKILL.md", "x")], {
+        allowPlugin: true,
+      })
+    ).rejects.toThrow("SKILL.md or a plugin.json manifest");
+  });
+
   it("rejects files from multiple roots", async () => {
     await expect(
       prepareSkillBundleUpload([

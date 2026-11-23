@@ -17,7 +17,7 @@ from onyx.tools.tool_implementations.question.models import (
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchFileChange,
     FileToolName,
-    PublishedFile,
+    PublishedFileView,
     PublishFileArgument,
 )
 
@@ -101,6 +101,7 @@ class StreamingType(Enum):
     WRITE_STDIN_START = "write_stdin_start"
     EXEC_OUTPUT_DELTA = "exec_output_delta"
     EXEC_END = "exec_end"
+    FILE_TOOL_PROGRESS = "file_tool_progress"
     APPLY_PATCH_START = "apply_patch_start"
     APPLY_PATCH_END = "apply_patch_end"
     PUBLISH_FILES_START = "publish_files_start"
@@ -352,6 +353,19 @@ class ToolCallArgumentDelta(BaseObj):
     argument_deltas: dict[str, Any]
 
 
+class FileToolProgress(BaseObj):
+    """The files a file tool call's arguments name while the model streams
+    them; the call's start packet follows. A call sends one only when the
+    files change. A `write` or `edit` card names its file; an `apply_patch`
+    card shows the count and list of files.
+    """
+
+    type: Literal["file_tool_progress"] = StreamingType.FILE_TOOL_PROGRESS.value
+    tool_name: FileToolName
+    # The files the arguments name so far, in order.
+    paths: list[str]
+
+
 ################################################
 # File Reader Packets
 ################################################
@@ -521,8 +535,9 @@ class ExecOutputDelta(BaseObj):
 
 class ExecEnd(BaseObj):
     type: Literal["exec_end"] = StreamingType.EXEC_END.value
-    # The output that the model got (cut to its token budget, head and tail).
-    # None only with an error.
+    # The output that the model got (cut to its character budget, head and
+    # tail), or, when it went to the sandbox VM, its head and tail with a
+    # plain note. None only with an error.
     output: str | None = None
     exit_code: int | None = None
     # None while the command runs, or when it ended in a way the sandbox
@@ -561,7 +576,7 @@ class PublishFilesStart(BaseObj):
 class PublishFilesEnd(BaseObj):
     type: Literal["publish_files_end"] = StreamingType.PUBLISH_FILES_END.value
     # In the order of the start's files; each downloads from /chat/file/{file_id}.
-    files: list[PublishedFile] = []
+    files: list[PublishedFileView] = []
     # Set when the call failed; it published no file then.
     error: str | None = None
 
@@ -685,6 +700,7 @@ PacketObj = Union[
     WriteStdinStart,
     ExecOutputDelta,
     ExecEnd,
+    FileToolProgress,
     ApplyPatchStart,
     ApplyPatchEnd,
     PublishFilesStart,

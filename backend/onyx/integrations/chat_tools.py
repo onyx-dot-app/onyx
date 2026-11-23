@@ -38,7 +38,7 @@ from onyx.integrations.models import (
 )
 from onyx.integrations.policy import (
     AgentIntegration,
-    agent_link_settings_by_integration,
+    chat_integrations,
     resolve_action_policies,
 )
 from onyx.integrations.registry import get_kind_handler
@@ -157,7 +157,7 @@ def build_integration_chat_tools(
     integration whose credential does not resolve gives no tool, and an API
     integration with no OpenAPI tool (a preset or custom app) gives none. A Blocked
     action gives no tool; an Ask action carries its approval scope."""
-    held = agent_link_settings_by_integration(
+    held = chat_integrations(
         db_session,
         user.id,
         request.persona_id,
@@ -165,6 +165,7 @@ def build_integration_chat_tools(
             link.integration_id: link.action_settings
             for link in request.integration_links
         },
+        request.chat_session_id,
         for_everyone_only=user.is_anonymous,
     )
     request = _keep_required_integrations(user, request, held)
@@ -217,7 +218,11 @@ def build_integration_chat_tools(
                 request,
                 actions=actions[integration_id],
                 connections=connections,
-                policy_rows=policies[integration_id],
+                policy_rows=(
+                    PolicyRows(admin=policies[integration_id].admin, user={})
+                    if agent_integration.task_link
+                    else policies[integration_id]
+                ),
                 granted_actions=grants[integration_id],
                 config=config,
             )

@@ -1662,6 +1662,7 @@
         "removingBadge": {
           "label": "Retrait en cours"
         },
+        "unknownSize": "Inconnue",
         "saveButton": {
           "label": "Enregistrer les modifications",
           "saving": "Enregistrement..."
@@ -1934,9 +1935,7 @@
           "size": "Taille",
           "other": "Autres",
           "countWithSize": "{count} ({size})",
-          "bytes": "octets",
-          "loadError": "Impossible de charger les types de document.",
-          "sizeValue": "{value} {unit}"
+          "loadError": "Impossible de charger les types de document."
         }
       },
       "toasts": {
@@ -10418,7 +10417,8 @@
             "public": "{count, plural, one {# outil trouvé} other {# outils trouvés}}. Le serveur ne nécessite aucune connexion.",
             "oauth": "Le serveur utilise la connexion OAuth.",
             "authUnknown": "Le serveur nécessite une connexion. Ajoutez un en-tête de clé API ou OAuth.",
-            "unreachable": "Onyx ne parvient pas à joindre ce serveur. Vérifiez l’URL."
+            "unreachable": "Onyx ne parvient pas à joindre ce serveur. Vérifiez l’URL.",
+            "forbidden": "Seul un administrateur peut vérifier ce serveur avant son ajout. Vous pouvez quand même l’ajouter."
           },
           "transport": {
             "title": "Transport",
@@ -10672,12 +10672,120 @@
         "saveFailed": "Impossible d'enregistrer le paramètre d'installation.",
         "title": "Paramètre d'Installation",
         "description": "Qui reçoit cette intégration. Non disponible la garde privée : seuls son propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent. Supprimez ces paramètres de groupe pour la limiter au propriétaire et aux partages.",
-        "notAvailable": "Privée. Seuls le propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent."
+        "notAvailable": "Privée. Seuls le propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent.",
+        "required": "Les membres qui se connectent avec leur propre compte doivent la connecter avant d'utiliser le chat et Craft."
       },
       "ownedBy": "Propriété de {owner}",
       "groupAccess": {
         "saved": "Paramètres de groupe de {name} enregistrés.",
         "saveFailed": "Impossible d’enregistrer le paramètre de groupe."
+      }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Utilisation actuelle des ressources et santé du cluster de recherche de votre instance Onyx",
+        "refresh": "Actualiser",
+        "refreshFailed": "Impossible d'actualiser l'état du cluster. La page affiche le dernier résultat.",
+        "loadFailed": "Impossible de lire l'état du cluster de recherche. Vérifiez qu'OpenSearch est accessible."
+      },
+      "cluster": {
+        "title": "Cluster de recherche - OpenSearch",
+        "status": "État du cluster",
+        "version": "OpenSearch {version}",
+        "health": "État {health}",
+        "updated": "Mis à jour {time}",
+        "dataNodes": "Nœuds de données",
+        "shards": "Shards",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "Copies",
+        "indexSize": "Taille de l'index",
+        "chunks": "Fragments",
+        "healthGreen": "Vert : toutes les copies de shards sont attribuées.",
+        "healthYellow": "Jaune : certains shards réplicas ne sont pas attribués. La recherche fonctionne, mais perdre un nœud de données peut perdre des données.",
+        "healthYellowSingleNode": "Jaune : les copies de réplique ont besoin d'un deuxième nœud de données. C'est normal pour un cluster à un seul nœud de données, et la recherche fonctionne.",
+        "healthRed": "Rouge : certains shards primaires ne sont pas attribués, donc une partie de l'index ne peut pas être recherchée."
+      },
+      "searches": {
+        "loadTitle": "Charge de recherche",
+        "loadUnit": "appels/s",
+        "timeTitle": "Latence de recherche",
+        "seconds": "{value} s",
+        "milliseconds": "{value} ms",
+        "loadFailed": "Impossible de lire les recherches récentes.",
+        "p90Note": "(90e centile)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time} : p90 {p90}, p10 {p10}",
+        "rateTooltip": "{rate} appels/s",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "s",
+        "failedInMinute": "{count, plural, one {# en échec} other {# en échec}}"
+      },
+      "nodes": {
+        "title": "Nœuds de données",
+        "disk": "Utilisation du disque",
+        "vector": "Mémoire des vecteurs",
+        "percent": "{value} %",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {# shard} other {# shards}}",
+        "unnamed": "Nœud {number}",
+        "copyName": "Copier le nom du nœud OpenSearch ({name})"
+      },
+      "indexes": {
+        "title": "Index",
+        "chunks": "Fragments",
+        "shards": "Shards",
+        "reindex": "Réindexation",
+        "detail": "Modèle d'embedding · {dim} dimensions",
+        "deleted": "{percent} % de fragments supprimés",
+        "detailQuantized": "Modèle d'embedding · {dim} dimensions · vecteurs {quantization}",
+        "reindexProgress": "{percent} % de l'actuel"
+      },
+      "issues": {
+        "title": "Problèmes et recommandations",
+        "none": "Aucun problème détecté.",
+        "criticalCount": "{count} critiques",
+        "warningCount": "{count, plural, one {# avertissement} other {# avertissements}}",
+        "nodeCount": "{count} nœuds de données",
+        "indexSettings": "Paramètres de l'index",
+        "sizingGuide": "Guide de dimensionnement",
+        "clusterRed": {
+          "title": "L'état du cluster est rouge",
+          "description": "Certains shards primaires ne sont pas attribués, donc une partie de l'index ne peut pas être recherchée. Consultez les journaux d'OpenSearch."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {# copie de shard n'est pas attribuée} other {# copies de shards ne sont pas attribuées}}",
+          "description": "OpenSearch n'a aucun nœud de données où les placer. Ajoutez des nœuds de données ou réduisez le nombre de réplicas."
+        },
+        "diskCritical": {
+          "title": "Disque à {value} % sur {nodes}",
+          "description": "OpenSearch cesse de placer des shards sur un nœud de données à 85 %. Ajoutez du stockage ou des nœuds de données."
+        },
+        "diskWarning": {
+          "title": "Disque à {value} % sur {nodes}",
+          "description": "Une réindexation a besoin de place pour un second index. Ajoutez du stockage ou des nœuds de données."
+        },
+        "vectorCritical": {
+          "title": "Mémoire des vecteurs à {value} % sur {nodes}",
+          "description": "Les vecteurs ne tiennent pas en mémoire, donc la recherche les lit sur le disque. Ajoutez de la mémoire ou des nœuds de données, ou utilisez une quantification de vecteurs plus petite."
+        },
+        "vectorWarning": {
+          "title": "Mémoire des vecteurs à {value} % sur {nodes}",
+          "description": "La recherche ralentit quand les vecteurs ne tiennent pas en mémoire. Ajoutez de la mémoire ou des nœuds de données, ou utilisez une quantification de vecteurs plus petite."
+        },
+        "heap": {
+          "title": "Heap JVM à {value} % sur {nodes}",
+          "description": "OpenSearch peut refuser des requêtes quand le heap est plein. Ajoutez de la mémoire ou des nœuds de données."
+        },
+        "indexMissing": {
+          "title": "L'index de recherche est absent",
+          "description": "OpenSearch n'a pas d'index pour les paramètres de recherche actuels, la recherche ne renvoie donc rien. Consultez les journaux d'OpenSearch, puis lancez une réindexation depuis les paramètres d'index."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# nœud de données n'a pas répondu} other {# nœuds de données n'ont pas répondu}}",
+          "description": "L'état omet ce que ces nœuds n'ont pas signalé, comme leur disque et leur mémoire. Vérifiez que chaque nœud de données fonctionne, puis actualisez."
+        },
+        "dismiss": "Ignorer"
       }
     }
   },
@@ -11666,9 +11774,6 @@
       "sessionNotFound": {
         "description": "Cette session de discussion n'existe pas ou a été supprimée.",
         "title": "Discussion introuvable"
-      },
-      "sourcesModal": {
-        "title": "Sources"
       }
     },
     "appChrome": {
@@ -12503,7 +12608,7 @@
               "between": "Envoyé du {start} au {end}"
             },
             "owner": "Propriétaire : {owner}",
-            "folder": "Dans le dossier {id}",
+            "folder": "Dans le dossier {name}",
             "nodeType": "Type : {type}",
             "author": "De : {author}",
             "message": "Message {id}",
@@ -12573,25 +12678,6 @@
         "toggleRow": {
           "ariaLabel": "Basculer la chronologie"
         },
-        "toolNames": {
-          "codeInterpreter": "Interpréteur de code",
-          "customTool": "Outil personnalisé",
-          "generateImage": "Générer une image",
-          "generatePlan": "Générer un plan",
-          "internalSearch": "Recherche interne",
-          "knowledgeBaseQuery": "Requête de la base de connaissances",
-          "memory": "Mémoire",
-          "openUrls": "Ouvrir des URL",
-          "researchAgent": "Agent de recherche",
-          "thinking": "Réflexion",
-          "tool": "Outil",
-          "webSearch": "Recherche web",
-          "terminal": "Terminal",
-          "applyPatch": "Appliquer le correctif",
-          "editFile": "Modifier le fichier",
-          "writeFile": "Écrire le fichier",
-          "publishFiles": "Publier des fichiers"
-        },
         "webSearch": {
           "searching": {
             "status": "Recherche sur le web"
@@ -12608,7 +12694,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session} failed {Impossible d'envoyer la saisie à la session} canceled {Annulé} done {Saisie envoyée à la session} other {Saisie envoyée à la session}}} check {{phase, select, running {Vérification de la session} failed {Impossible de vérifier la session} canceled {Annulé} done {Session vérifiée} other {Session vérifiée}}} other {Session}}"
+            }
           },
           "output": {
             "title": "Sortie"
@@ -12635,7 +12724,18 @@
             "failed": {
               "status": "Échec de la modification"
             },
-            "title": "Correctif"
+            "title": "Correctif",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {Écriture de {path}…} other {Modification de {path}…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {Écriture d’un fichier…} other {Modification d’un fichier…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {Application du correctif…} one {Application du correctif à # fichier…} other {Application du correctif à # fichiers…}}"
+              }
+            }
           },
           "stopped": {
             "status": "Arrêté"
@@ -12750,61 +12850,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# ligne} other {# lignes}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "Copier le contenu"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# colonne} other {# colonnes}} • {rowCount, plural, one {# ligne} other {# lignes}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# ligne} other {# lignes}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# ligne} other {# lignes}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Document Word • # mot} other {Document Word • # mots}}",
-          "headerDescriptionFallback": "Document Word",
-          "legacyDocMessage": "L'ancien format .doc ne peut pas être prévisualisé. Téléchargez le fichier pour le consulter.",
-          "loadError": {
-            "message": "Impossible de prévisualiser ce document. Téléchargez le fichier pour le consulter."
-          }
-        },
-        "downloadButton": {
-          "label": "Télécharger le fichier",
-          "tooltip": "Télécharger"
-        },
         "exceptionTrace": {
           "defaultTitle": "Trace complète de l'exception"
-        },
-        "header": {
-          "fallbackTitle": "Document"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# ligne} other {# lignes}}"
-        },
-        "loadError": {
-          "message": "Échec du chargement du document."
-        },
-        "pdf": {
-          "iframeTitle": "Lecteur PDF"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# ligne} other {# lignes}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "Ce format de fichier ne peut pas être prévisualisé."
-        },
-        "xlsx": {
-          "headerDescription": "Feuille de calcul - {count, plural, one {# feuille} other {# feuilles}}",
-          "parseError": {
-            "message": "Impossible de prévisualiser cette feuille de calcul."
-          },
-          "sheetCount": "{count, plural, one {# feuille} other {# feuilles}}"
-        },
-        "zoomControls": {
-          "level": "{zoom} %",
-          "zoomInTooltip": "Zoom avant",
-          "zoomOutTooltip": "Zoom arrière"
         }
       },
       "share": {
@@ -12951,6 +12998,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# fichier sélectionné} other {# fichiers sélectionnés}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "Document"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# ligne} other {# lignes}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# ligne} other {# lignes}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# ligne} other {# lignes}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# mot} other {# mots}}"
+      },
+      "copyButton": {
+        "tooltip": "Copier le contenu"
+      },
+      "downloadButton": {
+        "label": "Télécharger le fichier",
+        "tooltip": "Télécharger"
+      },
+      "retryButton": {
+        "label": "Réessayer"
+      },
+      "error": {
+        "title": "Impossible de charger l’aperçu",
+        "description": "L’aperçu n’a pas pu être chargé. Réessayez ou téléchargez le fichier pour l’ouvrir."
+      },
+      "renderError": {
+        "title": "Impossible de prévisualiser ce fichier",
+        "description": "Le fichier ne peut pas être affiché ici. Téléchargez le fichier pour l’ouvrir."
+      },
+      "unsupported": {
+        "title": "L’aperçu de ce type de fichier n’est pas disponible actuellement",
+        "description": "Téléchargez le fichier pour consulter son contenu."
+      },
+      "tooLarge": {
+        "title": "Fichier trop volumineux pour l’aperçu",
+        "description": "Les fichiers jusqu’à {size, number} Mo peuvent être prévisualisés ici. Téléchargez le fichier pour l’ouvrir."
+      },
+      "spreadsheet": {
+        "headerDescription": "Feuille de calcul - {count, plural, one {# feuille} other {# feuilles}}",
+        "truncated": "Aperçu limité à {rows, number} lignes, {columns, number} colonnes et {cells, number} cellules. Téléchargez le fichier original pour toutes les données.",
+        "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier.",
+        "empty": "Aucun contenu"
+      },
+      "image": {
+        "loading": {
+          "label": "Chargement de l'image..."
+        },
+        "actualSize": {
+          "label": "Taille réelle"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "Commandes PDF"
+        },
+        "thumbnails": {
+          "toggle": "Afficher ou masquer les miniatures",
+          "label": "Miniatures des pages",
+          "resize": "Redimensionner les miniatures"
+        },
+        "page": {
+          "previous": "Page précédente",
+          "next": "Page suivante",
+          "counter": "{current, number} / {total, number}",
+          "preview": "Aperçu de la page {page, number}",
+          "select": "Aller à la page {page, number}"
+        },
+        "zoom": {
+          "out": "Zoom arrière",
+          "in": "Zoom avant",
+          "label": "Zoom",
+          "fitWidth": "Ajuster à la largeur",
+          "fitPage": "Ajuster à la page"
+        },
+        "error": {
+          "description": "Le fichier PDF n'a pas pu être chargé."
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "Commandes de présentation"
+        },
+        "thumbnails": {
+          "toggle": "Afficher ou masquer les miniatures des diapositives",
+          "resize": "Redimensionner les miniatures des diapositives"
+        },
+        "slides": {
+          "label": "Diapositives"
+        },
+        "previous": {
+          "label": "Diapositive précédente"
+        },
+        "next": {
+          "label": "Diapositive suivante"
+        },
+        "slide": {
+          "counter": "Diapositive {current} sur {total}"
+        },
+        "empty": {
+          "label": "Aucune diapositive dans cette présentation"
         }
       }
     },
@@ -13291,12 +13446,57 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "Version mise à jour · {details}"
-        },
         "preview": {
           "ariaLabel": "Aperçu de {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "Aperçu de {name}"
+        }
+      },
+      "viewAllButton": {
+        "label": "Voir les {count} fichiers"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "Fichiers",
+        "description": "Fichiers publiés par le modèle dans cette discussion",
+        "empty": "Cette discussion n'a pas encore de fichiers",
+        "tile": {
+          "ariaLabel": "Ouvrir {name}"
+        },
+        "search": {
+          "placeholder": "Rechercher des fichiers",
+          "empty": "Aucun fichier ne correspond à la recherche"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate> (v{version} sur {latest})"
+      },
+      "sourcesTab": {
+        "label": "Sources"
+      },
+      "toggleButton": {
+        "label": "Afficher ou masquer le panneau"
+      },
+      "downloadButton": {
+        "label": "Télécharger",
+        "tooltip": "Télécharger le fichier"
+      },
+      "reloadButton": {
+        "label": "Actualiser les fichiers",
+        "error": "Impossible de recharger les fichiers. Réessayez."
+      },
+      "expandButton": {
+        "label": "Agrandir le panneau"
+      },
+      "restoreButton": {
+        "label": "Restaurer le panneau"
+      },
+      "resizeHandle": {
+        "label": "Redimensionner le panneau"
       }
     }
   },
@@ -13572,10 +13772,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {# ligne} other {# lignes}}"
-      },
-      "size": {
-        "bytes": "{count} octets",
-        "kilobytes": "{size} Ko"
       },
       "viewFullButton": {
         "tooltip": "Voir le texte intégral"
@@ -13991,7 +14187,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "Poursuivez la conversation...",
-        "scheduledRunPlaceholder": "Exécution planifiée en cours...",
         "subagentPlaceholder": "Passez à l'agent principal pour envoyer un message"
       },
       "openSidebar": {
@@ -14009,8 +14204,7 @@
       },
       "toast": {
         "operationWait": "Veuillez attendre la fin de l'opération en cours.",
-        "sandboxWait": "Veuillez attendre l'initialisation du bac à sable",
-        "scheduledRunWait": "Veuillez attendre la fin de l'exécution planifiée."
+        "sandboxWait": "Veuillez attendre l'initialisation du bac à sable"
       },
       "loadError": {
         "title": "Impossible de charger la session",
@@ -14461,23 +14655,6 @@
         "button": "Réveiller le bac à sable"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "Planifiée"
-      },
-      "startedAt": {
-        "label": "Démarrée {time}"
-      },
-      "status": {
-        "awaitingApproval": "Cette exécution planifiée attend une approbation. Les messages de suivi seront débloqués après sa reprise et sa fin.",
-        "running": "Cette exécution planifiée est toujours en cours. Les messages de suivi seront débloqués à la fin.",
-        "startedBy": "Cette session a été lancée par la tâche planifiée {task} à {time}."
-      },
-      "viewTask": {
-        "ariaLabel": "Voir la tâche planifiée {task}. {status}",
-        "label": "Voir la tâche"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "Application externe {id}"
@@ -14750,7 +14927,8 @@
         },
         "tabs": {
           "dailyWeekly": "Quotidien / Hebdomadaire",
-          "interval": "Intervalle"
+          "interval": "Intervalle",
+          "advanced": "Avancé"
         },
         "weekdays": {
           "fri": "Ven",
@@ -14760,6 +14938,21 @@
           "thu": "Jeu",
           "tue": "Mar",
           "wed": "Mer"
+        },
+        "advanced": {
+          "cronLabel": "Expression cron",
+          "hint": "Cinq champs : minute, heure, jour, mois, jour de la semaine. L'expression s'exécute en UTC.",
+          "placeholder": "Par exemple, 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "L'intervalle doit être un nombre entier d'au moins 1.",
+          "minutesIntervalTooLong": "Utilisez des heures pour les intervalles de plus de 59 minutes.",
+          "hoursIntervalTooLong": "Utilisez une planification quotidienne pour les intervalles de plus de 23 heures.",
+          "dayIntervalTimeRequired": "Choisissez une heure pour les intervalles en jours.",
+          "timeRequired": "Choisissez une heure.",
+          "weekdayOutOfRange": "Les jours de la semaine doivent être compris entre 0 et 6 (dim..sam).",
+          "cronRequired": "Saisissez une expression cron.",
+          "cronFieldCount": "Cron doit comporter exactement 5 champs (minute heure jour mois jour de la semaine)."
         }
       },
       "unviewedResults": "Nouveaux résultats"
@@ -14917,18 +15110,6 @@
       "browser": {
         "label": "Apps"
       },
-      "list": {
-        "label": "Onglets de résultats"
-      },
-      "close": {
-        "label": "Fermer {name}"
-      },
-      "reordered": {
-        "label": "Onglet déplacé à la position {position} sur {count}"
-      },
-      "open": {
-        "label": "Ouvrir un onglet"
-      },
       "outputs": {
         "label": "Résultats"
       }
@@ -15054,8 +15235,7 @@
       "scope": {
         "turn": "Résultats du tour {turn, number}",
         "all": "Toutes les sorties"
-      },
-      "unseen": "Nouveau ou mis à jour"
+      }
     },
     "turnOutputs": {
       "showAll": "Voir les {count} résultats",
@@ -15124,6 +15304,28 @@
       "description": "Cette session ne peut pas utiliser {names}. Vos skills doivent tenir dans {maxSize} et {maxFiles, number} fichiers. Désactivez les skills dont vous n’avez pas besoin pour libérer de la place.",
       "manage": "Gérer les skills",
       "dismiss": "Ignorer"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "Onglets de résultats"
+      },
+      "close": {
+        "label": "Fermer {name}"
+      },
+      "reordered": {
+        "label": "Onglet déplacé à la position {position} sur {count}"
+      },
+      "open": {
+        "label": "Ouvrir un onglet"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "Télécharger"
+      },
+      "unseen": "Nouveau ou mis à jour"
     }
   },
   "knowledge": {
@@ -16148,6 +16350,9 @@
         },
         "discordBot": {
           "label": "Bot Discord"
+        },
+        "serviceStatus": {
+          "label": "État du service"
         }
       },
       "sections": {
@@ -16225,6 +16430,9 @@
       },
       "customize": {
         "label": "Personnaliser"
+      },
+      "scheduledTasks": {
+        "label": "Tâches planifiées"
       }
     },
     "chatButton": {
@@ -16454,84 +16662,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "Annuler"
-        },
         "doneButton": {
           "label": "Terminé"
         },
-        "header": {
-          "chooseDescription": "Choisissez des compétences dans {repository}.",
-          "completeDescription": "Vérifiez ce qui a été ajouté à vos compétences.",
-          "completeTitle": "Importation GitHub terminée",
-          "description": "Importez une ou plusieurs compétences depuis un dépôt GitHub.",
-          "title": "Importer depuis GitHub"
-        },
-        "importError": {
-          "message": "Impossible d'importer les compétences.",
-          "title": "Impossible d'importer les compétences"
-        },
-        "loadError": {
-          "message": "Impossible de charger le dépôt.",
-          "title": "Impossible de charger le dépôt"
-        },
-        "privateRepos": {
-          "askAdmin": "Les dépôts publics s'importent directement. Demandez à un administrateur de configurer GitHub avant d'importer des dépôts privés.",
-          "connect": "Les dépôts publics s'importent directement. Connectez GitHub pour importer des dépôts privés.",
-          "connectButton": {
-            "label": "Connecter GitHub"
-          },
-          "connected": "Les dépôts publics s'importent directement. Les dépôts privés utilisent votre connexion GitHub.",
-          "needsConnection": "Les dépôts publics s'importent directement. Les dépôts privés exigent une connexion GitHub.",
-          "setUp": "Les dépôts publics s'importent directement. Configurez GitHub avant d'importer des dépôts privés.",
-          "setUpButton": {
-            "label": "Configurer GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "Dépôt"
-        },
-        "result": {
-          "disabledCount": "{count} importée(s) mais désactivée(s), car une autre compétence du même nom est activée.",
-          "enabledCount": "{count} activée(s) automatiquement.",
-          "failedCount": "{count} non importée(s).",
-          "importedSection": {
-            "title": "Importées"
-          },
-          "importedTitle": "{count, plural, one {# compétence importée} other {# compétences importées}}",
-          "noneTitle": "Aucune compétence importée",
-          "notImportedSection": {
-            "title": "Non importées"
-          },
-          "notSelectedCount": "{count} non sélectionnée(s)."
-        },
-        "selectAll": {
-          "ariaLabel": "Sélectionner toutes les compétences importables"
-        },
-        "selection": {
-          "label": "Sélection : {selected} sur {total, plural, one {# compétence importable} other {# compétences importables}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "Sélectionner {name}"
-        },
-        "skillTag": {
-          "disabled": "Désactivée",
-          "enabled": "Activée"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {Importer la compétence} other {Importer # compétences}}",
-          "importingLabel": "Importation…",
-          "searchLabel": "Rechercher dans le dépôt",
-          "searchingLabel": "Recherche…"
-        },
-        "unavailableFallback": "Cette compétence ne peut pas être importée.",
-        "unavailableTag": {
-          "label": "Importation impossible"
+          "importingLabel": "Importation…"
         },
         "sharing": {
-          "title": "Accès aux compétences importées",
-          "configureButton": "Configurer l’accès",
-          "description": "Ces paramètres d’accès s’appliquent à {count, plural, one {la compétence sélectionnée} other {toutes les # compétences sélectionnées}}."
+          "configureButton": "Configurer l’accès"
         }
       },
       "nameConflict": {
@@ -16648,10 +16787,22 @@
           "remove": "Retirer {name}",
           "shared": "Partagé avec ce groupe",
           "settingOnly": "Paramètre de groupe uniquement"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Choisissez comment ce plugin est installé pour toutes les personnes qui y ont accès."
+          },
+          "published": {
+            "description": "Publié. Tout le monde dans l’organisation peut utiliser ce plugin."
+          },
+          "publishWarning": {
+            "description": "Après l’enregistrement, tout le monde dans l’organisation peut utiliser ce plugin. Vous ne pouvez plus le rendre privé. Seul un administrateur peut le supprimer.",
+            "reviewDescription": "Le plugin reste privé jusqu’à ce qu’un administrateur approuve la demande. Après l’approbation, vous ne pouvez plus le rendre privé."
+          },
+          "publishOff": {
+            "description": "Un administrateur a désactivé la publication dans l’organisation. Demandez à un administrateur de publier ce plugin."
+          }
         }
-      },
-      "placeholders": {
-        "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"
       },
       "tabs": {
         "details": "Détails",
@@ -16663,7 +16814,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Créée par",
-          "date": "Date"
+          "date": "Date",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Actuelle",
@@ -16686,7 +16838,9 @@
           "back": "Toutes les versions",
           "loadError": {
             "title": "Impossible de charger cette version"
-          }
+          },
+          "skills": "Compétences · {count}",
+          "integrations": "Intégrations · {count}"
         },
         "status": {
           "pending": "Examen en attente",
@@ -16698,15 +16852,14 @@
           "failedToast": "Impossible de publier cette mise à jour.",
           "sentForReviewToast": "La version {number} a été envoyée à un administrateur pour examen.",
           "offNotice": "La publication est désactivée. Demandez à un administrateur de publier cette mise à jour."
-        }
+        },
+        "noManifestVersion": "Aucune",
+        "manifestVersion": "plugin.json {version}",
+        "locked": "Ce plugin se synchronise depuis GitHub, donc vous le modifiez dans GitHub."
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "Importez une ou plusieurs compétences depuis un dépôt.",
-          "title": "Importer depuis GitHub"
-        },
         "scratch": {
           "description": "Rédigez les instructions et ajoutez des fichiers annexes dans {appName}.",
           "title": "Partir de zéro"
@@ -16717,6 +16870,10 @@
         "upload": {
           "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
           "title": "Téléverser une compétence"
+        },
+        "marketplace": {
+          "title": "Ajouter un marketplace",
+          "description": "Ajoutez depuis un dépôt et synchronisez ses plugins."
         }
       },
       "empty": {
@@ -16747,10 +16904,12 @@
         "body": "Continuer désactivera la compétence actuellement activée et activera celle-ci.",
         "description": "Une seule compétence nommée « {name} » peut être activée à la fois.",
         "submit": {
-          "label": "Changer de compétence",
+          "label": "Changer",
           "pendingLabel": "Changement..."
         },
-        "title": "Changer la compétence « {name} » ?"
+        "title": "Activer « {name} » ?",
+        "descriptionNamed": "{names} utilise déjà un nom de compétence que « {name} » utilise aussi. Un seul peut être activé à la fois.",
+        "bodyNamed": "Activer « {name} » désactive {names}."
       },
       "toasts": {
         "disableFailed": "Échec de la désactivation de {name}",
@@ -16772,6 +16931,9 @@
         },
         "upload": {
           "label": "Glissez-déposez ou cliquez pour téléverser"
+        },
+        "chooseFolder": {
+          "label": "Choisir un dossier"
         }
       },
       "filesPicker": {
@@ -16795,7 +16957,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "Impossible de lire le fichier téléversé."
+          "readFailed": "Impossible de lire le fichier téléversé.",
+          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}"
         }
       }
     },
@@ -16811,7 +16974,6 @@
       "enable": "Activer pour moi",
       "disable": "Désactiver pour moi",
       "delete": "Supprimer",
-      "selectSkill": "Sélectionner {name}",
       "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
       "failed": "Impossible de mettre à jour les compétences. Réessayez.",
       "partialFailure": "{count, plural, one {# compétence n’a pas pu être mise à jour} other {# compétences n’ont pas pu être mises à jour}}",
@@ -16939,7 +17101,9 @@
       "sections": {
         "organization": "Bibliothèque de l’organisation",
         "mine": "Mes envois",
-        "shared": "Partagés avec vous"
+        "shared": "Partagés avec vous",
+        "marketplace": "D'une marketplace",
+        "private": "Privé à un autre utilisateur"
       },
       "detail": {
         "title": "Plugin",
@@ -16955,19 +17119,51 @@
           "location": "Emplacement",
           "owner": "Propriétaire",
           "skills": "Compétences",
-          "description": "Description"
+          "description": "Description",
+          "version": "Version dans plugin.json",
+          "author": "Auteur",
+          "homepage": "Page d'accueil",
+          "license": "Licence",
+          "notUsed": "Non utilisé dans Onyx",
+          "marketplace": "Marketplace {name}, {scope, select, personal {personnel} other {entreprise}} ({repository})"
         },
         "skills": {
           "off": "Désactivée",
-          "invalid": "Non valide"
+          "invalid": "Non valide",
+          "read": "Lire",
+          "readAriaLabel": "Lire la compétence {name}",
+          "readFailed": "Impossible de lire cette compétence.",
+          "noInstructions": "Cette compétence n’a pas d’instructions."
         },
         "switch": {
           "title": "Utiliser ce plugin",
-          "description": "Lorsque cette option est activée, l'agent par défaut peut utiliser ce plugin.",
           "label": "Utiliser {name}",
           "required": "Votre administrateur a rendu ce plugin obligatoire. Vous ne pouvez pas le désactiver.",
           "unavailable": "Vous ne pouvez pas activer ou désactiver ce plugin.",
-          "failed": "Impossible de modifier le plugin."
+          "failed": "Impossible de modifier le plugin.",
+          "on": "Activé. L’agent par défaut peut utiliser ce plugin.",
+          "off": "Désactivé. Activez-le pour que l’agent par défaut puisse utiliser ce plugin.",
+          "nameHeld": "Désactivé, car {names} utilise le même nom de compétence. Activez ce plugin pour l’utiliser à la place."
+        },
+        "actions": {
+          "share": "Partager",
+          "menu": "Plus d’actions",
+          "uploadVersion": "Importer une nouvelle version",
+          "remove": "Supprimer le plugin"
+        },
+        "remove": {
+          "entityType": "plugin",
+          "description": "Toutes les personnes qui utilisent ce plugin le perdent. Cette action est irréversible.",
+          "submit": "Supprimer",
+          "pending": "Suppression…",
+          "done": "{name} a été supprimé.",
+          "failed": "Impossible de supprimer le plugin."
+        },
+        "syncedFrom": "Synchronisé depuis {repository}",
+        "managed": {
+          "title": "Géré par la marketplace {name}",
+          "description": "Onyx synchronise ce plugin depuis {repository}. Modifiez-le dans GitHub, puis synchronisez la marketplace.",
+          "open": "Ouvrir les marketplaces"
         }
       },
       "connection": {
@@ -17064,6 +17260,263 @@
           "label": "Terminé"
         }
       }
+    },
+    "needs": {
+      "intro": "Un plugin ne donne jamais accès à une intégration. Chaque ligne montre votre propre état de l'intégration. Le plugin fonctionne sans les intégrations qui ne sont pas activées.",
+      "state": {
+        "on": "Activé",
+        "turn_on": "Désactivé",
+        "sign_in": "Non connecté",
+        "no_access": "Pas d'accès",
+        "turned_off": "Désactivé par l'admin",
+        "not_added": "Non ajouté",
+        "more_than_one": "Plusieurs correspondances",
+        "not_supported": "Non pris en charge"
+      },
+      "note": {
+        "askAdmin": "Demandez à un admin",
+        "turnedOff": "Désactivé par votre admin",
+        "moreThanOne": "Plusieurs intégrations correspondent",
+        "notSupported": "Non pris en charge dans Onyx"
+      },
+      "localServer": "Serveur local",
+      "noUrl": "Aucune URL de serveur",
+      "turnOn": {
+        "label": "Activer",
+        "ariaLabel": "Activer {name}",
+        "failed": "Impossible d'activer {name}."
+      },
+      "add": {
+        "label": "Ajouter l'intégration",
+        "ariaLabel": "Ajouter l'intégration {name}"
+      },
+      "urlProblem": {
+        "variable": "L'URL utilise une variable. Onyx ne remplit pas les variables.",
+        "credential": "L'URL contient un identifiant. Onyx ne le conserve pas.",
+        "invalid": "L'URL n'est pas une URL http ou https valide."
+      }
+    },
+    "upload": {
+      "title": "Importer un Plugin",
+      "description": "Importez un plugin Claude Code ou Codex. Choisissez un fichier .zip ou glissez ici le dossier du plugin.",
+      "reading": "Lecture…",
+      "requirements": {
+        "title": "Onyx utilise ces parties d'un plugin :",
+        "skills": "Les skills dans skills/'<name>'/SKILL.md",
+        "mcp": "Les serveurs MCP dans .mcp.json ou plugin.json",
+        "other": "Onyx n'utilise pas les commandes, les agents, les hooks ni les autres parties."
+      },
+      "skillOnly": {
+        "title": "Cet import est un skill",
+        "description": "Il n'a pas de plugin.json. Continuez pour l'ajouter comme skill.",
+        "continue": "Continuer"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "Met à jour {name} vers la version Onyx {version}",
+        "newPlugin": "Nouveau plugin : {name}"
+      },
+      "willBeOff": "Le plugin est enregistré désactivé. {names} a déjà une compétence du même nom.",
+      "saveAsNew": {
+        "label": "Enregistrer comme Nouveau Plugin",
+        "description": "Le plugin qui porte ce nom reste inchangé."
+      },
+      "sections": {
+        "skills": "Skills · {count}",
+        "integrations": "Intégrations · {count}",
+        "unused": "Non utilisé dans Onyx",
+        "warnings": "Avertissements"
+      },
+      "integrationsNote": "L'enregistrement active les intégrations que vous pouvez déjà utiliser. Un plugin ne donne jamais accès à une intégration.",
+      "integrationsNoteOff": "Le plugin est désactivé après l'enregistrement, donc aucune intégration n'est activée.",
+      "unusedParts": {
+        "commands": "Commandes",
+        "agents": "Agents",
+        "hooks": "Hooks",
+        "lsp_servers": "Serveurs LSP",
+        "output_styles": "Styles de sortie",
+        "bin": "Exécutables (bin)",
+        "themes": "Thèmes",
+        "monitors": "Moniteurs"
+      },
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "readFailed": "Impossible de lire le plugin.",
+      "saveFailed": "Impossible d'enregistrer le plugin.",
+      "saved": {
+        "newPlugin": "{name} ajouté.",
+        "newVersion": "{name} mis à jour vers la version Onyx {version}.",
+        "unchanged": "Aucun changement. {name} est déjà à la version Onyx {version}.",
+        "off": "{name} ajouté. Il est désactivé car {names} a déjà une compétence du même nom."
+      }
+    },
+    "turnOn": {
+      "title": "{name} est activé",
+      "description": "Certaines intégrations dont ce plugin a besoin ne vous sont pas disponibles.",
+      "note": "Le plugin fonctionne sans elles. Un plugin ne donne jamais accès à une intégration.",
+      "done": "Terminé"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "Prêt",
+        "blocked": "Impossible d'installer",
+        "not_supported": "Non pris en charge"
+      },
+      "scope": {
+        "personal": "Personnel",
+        "company": "Entreprise"
+      },
+      "source": {
+        "repository": "Dépôt",
+        "folder": "Dossier",
+        "root": "Racine du dépôt",
+        "ref": "Branche, tag ou commit",
+        "defaultBranch": "Branche par défaut",
+        "commit": "Commit"
+      },
+      "preview": {
+        "title": "{name} : {count, plural, one {# plugin à ajouter} other {# plugins à ajouter}}",
+        "empty": "Ce marketplace n’a aucune entrée.",
+        "failedTitle": "Onyx ne peut pas lire ce marketplace",
+        "version": "v{version}",
+        "willInstall": "Sera installé",
+        "skills": "{count, plural, one {Compétence} other {Compétences}} : {names}",
+        "showUnusable": "{count, plural, one {Afficher # entrée qu'Onyx ne peut pas utiliser} other {Afficher # entrées qu'Onyx ne peut pas utiliser}}",
+        "hideUnusable": "Masquer les entrées qu'Onyx ne peut pas utiliser",
+        "summary": "{ready} Prêts · {blocked} Impossible à installer · {unsupported} Non pris en charge"
+      },
+      "add": {
+        "menuItem": "Ajouter un marketplace",
+        "title": "Ajouter un marketplace",
+        "description": "Ajoutez depuis un dépôt. Onyx lit son fichier .claude-plugin/marketplace.json, et chaque entrée devient un plugin.",
+        "confirmTitle": "Confirmer le marketplace",
+        "confirmDescription": "Vérifiez qu’il s’agit de la source et des plugins souhaités, puis ajoutez le marketplace.",
+        "repository": {
+          "title": "Dépôt",
+          "description": "Saisissez owner/repo ou l’URL du dépôt.",
+          "placeholder": "Par exemple, anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "Dossier",
+          "description": "Le dossier qui contient .claude-plugin/marketplace.json. Laissez vide pour utiliser la racine du dépôt.",
+          "placeholder": "Par exemple, plugins"
+        },
+        "ref": {
+          "title": "Branche, tag ou commit",
+          "description": "Laissez vide pour utiliser la branche par défaut.",
+          "placeholder": "Par exemple, main"
+        },
+        "scope": {
+          "title": "Type de marketplace",
+          "personalDescription": "Vous seul recevez les plugins de ce marketplace.",
+          "companyDescription": "Votre organisation reçoit les plugins de ce marketplace, comme pour les plugins publiés."
+        },
+        "defaultAccess": {
+          "title": "Accès par défaut",
+          "description": "Le paramètre d’installation de chaque plugin de ce marketplace. Vous pouvez le modifier plus tard pour un plugin."
+        },
+        "privateNote": "Onyx lit un dépôt privé avec votre connexion GitHub. Connectez GitHub dans Intégrations avant d’ajouter un dépôt privé.",
+        "continue": "Continuer",
+        "previewing": "Lecture…",
+        "back": "Retour",
+        "submit": "Ajouter un marketplace",
+        "adding": "Ajout…",
+        "cancel": "Annuler",
+        "previewFailed": "Impossible de lire le dépôt.",
+        "addFailed": "Impossible d’ajouter le marketplace.",
+        "added": "{name} ajouté. Ses plugins apparaissent après la première synchronisation.",
+        "duplicate": {
+          "personal": "Vous avez déjà ajouté ce marketplace.",
+          "company": "Votre organisation reçoit déjà ce marketplace."
+        }
+      },
+      "sync": {
+        "now": "Synchroniser maintenant",
+        "requested": "Synchronisation de {name} démarrée.",
+        "failed": "Impossible de démarrer la synchronisation.",
+        "lastSync": "Dernière synchronisation {date}",
+        "never": "Pas encore synchronisé",
+        "state": {
+          "syncing": "Synchronisation en cours",
+          "failed": "Échec de la synchronisation",
+          "not_synced": "Non synchronisé",
+          "synced": "Synchronisé"
+        }
+      },
+      "columns": {
+        "marketplace": "Marketplace",
+        "sync": "Synchronisation",
+        "items": "Plugins"
+      },
+      "items": "{count, plural, one {# plugin} other {# plugins}}",
+      "tableLabel": "Marketplaces",
+      "open": "Ouvrir {name}",
+      "menu": "Actions pour {name}",
+      "loadFailed": "Impossible de charger les marketplaces.",
+      "empty": {
+        "title": "Aucun marketplace pour l’instant",
+        "description": "Ajoutez un dépôt GitHub pour obtenir ses plugins."
+      },
+      "page": {
+        "title": "Marketplaces",
+        "description": "Les dépôts GitHub dont vous obtenez des plugins, avec leur source. Synchronisez un marketplace pour obtenir les changements de GitHub."
+      },
+      "attention": {
+        "failedTitle": "La dernière synchronisation de {name} a échoué"
+      },
+      "defaultAccess": {
+        "title": "Accès par défaut",
+        "description": "Le paramètre d’installation de chaque plugin de {name} qui n’a pas de paramètre propre.",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "saved": "Accès par défaut enregistré.",
+        "failed": "Impossible d’enregistrer l’accès par défaut."
+      },
+      "replaceLogin": {
+        "label": "Remplacer la connexion",
+        "description": "Synchroniser le dépôt en votre nom. Onyx utilise votre connexion GitHub si vous en avez une.",
+        "done": "Onyx synchronise maintenant {name} en votre nom.",
+        "doneWithoutGithub": "Onyx synchronise maintenant {name} en votre nom, mais vous n'avez pas connecté GitHub. Onyx ne peut lire qu'un dépôt public. Connectez GitHub dans Intégrations.",
+        "failed": "Impossible de remplacer la connexion."
+      },
+      "remove": {
+        "label": "Supprimer",
+        "title": "Supprimer {name} ?",
+        "description": "Cela supprime la marketplace et {count, plural, one {son plugin} other {ses # plugins}}. Les membres perdent ces plugins.",
+        "listLabel": "Plugins à supprimer",
+        "noPlugins": "Ce marketplace n’a aucun plugin.",
+        "confirm": "Supprimer",
+        "done": "{name} supprimé.",
+        "failed": "Impossible de supprimer le marketplace.",
+        "loadFailed": "Impossible de charger les plugins de ce marketplace.",
+        "retry": "Réessayer",
+        "personalDescription": "Cela supprime la marketplace et {count, plural, one {son plugin} other {ses # plugins}}. Vous perdez ces plugins."
+      },
+      "detail": {
+        "title": "Marketplace",
+        "description": "La source, la synchronisation et les entrées de ce marketplace.",
+        "loadFailed": "Impossible de charger le marketplace.",
+        "scope": "Type",
+        "login": "Synchronise en tant que",
+        "noLogin": "Aucune. Remplacez la connexion pour synchroniser de nouveau.",
+        "lastSync": "Dernière synchronisation",
+        "entries": "Entrées ({count})",
+        "noEntries": "La dernière synchronisation n’a trouvé aucune entrée.",
+        "close": "Fermer"
+      },
+      "readOnly": "Votre administrateur gère cette marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx n'exécute que des skills et des serveurs MCP.",
+        "pastLimit": "Onyx n'a pas lu ce dépôt.",
+        "external_repository_limit": "Onyx synchronise au plus {limit} dépôts externes par marketplace.",
+        "external_repository_limit_without_login": "Connectez GitHub pour synchroniser plus de {limit} dépôts externes.",
+        "limitTitle": "Certains plugins viennent de dépôts qu'Onyx n'a pas lus"
+      },
+      "errors": {
+        "rateLimited": "La limite de l'API GitHub est atteinte. Réessayez dans quelques minutes. Connectez GitHub pour augmenter la limite.",
+        "rateLimitedUntil": "La limite de l'API GitHub est atteinte. Elle se réinitialise à {time}. Connectez GitHub pour augmenter la limite."
+      }
     }
   },
   "integrations": {
@@ -17123,6 +17576,18 @@
         "done": "{name} est maintenant disponible pour l'organisation.",
         "failed": "Impossible de publier l'intégration."
       }
+    },
+    "requiredGate": {
+      "title": "Connectez vos outils de travail",
+      "description": "Votre administrateur exige ces intégrations. Connectez chacune d'elles pour continuer.",
+      "adminDescription": "Les membres doivent connecter ces intégrations avant d'utiliser Onyx. Vous pouvez continuer sans elles, car vous êtes administrateur.",
+      "connected": "Connectée",
+      "progress": "{connected} sur {total} connectées",
+      "askAdmin": "Impossible de connecter {name} ? Demandez de l'aide à votre administrateur. Vous pouvez passer cette étape pour l'instant.",
+      "skip": "Passer pour l'instant",
+      "continue": "Continuer",
+      "signOut": "Se déconnecter",
+      "signOutFailed": "Impossible de se déconnecter. Réessayez."
     }
   },
   "customize": {
@@ -17150,20 +17615,26 @@
         "label": "Ajouter",
         "upload": "Importer une compétence",
         "create": "Créer une compétence",
-        "github": "Importer depuis GitHub"
+        "uploadPlugin": "Importer un plugin",
+        "marketplace": "Ajouter un marketplace",
+        "manageMarketplaces": "Gérer les marketplaces"
       },
       "groups": {
         "mine": "Créées par vous",
         "organization": "De votre organisation",
         "shared": "Partagées avec vous",
-        "builtin": "Intégrées"
+        "builtin": "Intégrées",
+        "marketplace": "Des marketplaces",
+        "private": "Privés à d'autres utilisateurs"
       },
       "source": {
         "mine": "par vous",
         "organization": "de votre organisation",
         "sharedBy": "partagée par {email}",
         "shared": "partagée avec vous",
-        "builtin": "intégrée"
+        "builtin": "intégrée",
+        "marketplace": "de {name} ({scope, select, personal {personnel} other {entreprise}})",
+        "privateTo": "privé à {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17225,13 +17696,16 @@
       },
       "empty": {
         "title": "Aucun plugin pour le moment",
-        "description": "Créez une compétence. Chaque compétence est un plugin."
+        "description": "Importez un plugin, ajoutez une marketplace depuis GitHub ou créez une compétence. Chaque compétence est un plugin.",
+        "upload": "Importer un plugin"
       },
       "noMatches": {
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
       },
-      "intro": "Un plugin regroupe des compétences que vous activez ensemble. Chaque compétence ajoutée a son propre plugin. Les intégrations se trouvent dans l'onglet Intégrations."
+      "intro": "Un plugin regroupe des compétences et les intégrations dont elles ont besoin. Importez un plugin Claude Code ou Codex, ajoutez une marketplace depuis GitHub ou ajoutez une compétence. Chaque compétence que vous ajoutez est dans son propre plugin.",
+      "integrations": "{available} intégrations disponibles sur {needed}",
+      "nameHeld": "Désactivé : {names} utilise le même nom de compétence"
     },
     "skillPage": {
       "title": "Compétence",
@@ -17321,9 +17795,163 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Compétences · {count}"
+        "skills": "Compétences · {count}",
+        "integrations": "Intégrations · {count}"
       }
     },
     "search": "Rechercher"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "Nouveaux résultats",
+    "runStatus": "{status, select, QUEUED {En file d'attente} RUNNING {En cours} AWAITING_APPROVAL {En attente d'approbation} SUCCEEDED {Réussie} FAILED {Échouée} CANCELLED {Annulée} SKIPPED {Ignorée} other {Inconnu}}",
+    "taskStatus": "{status, select, ACTIVE {Active} other {En pause}}",
+    "schedule": {
+      "cron": "Cron (UTC) : {cron}",
+      "everyMinutes": "{count, plural, one {Toutes les minutes} other {Toutes les # minutes}}",
+      "everyHours": "{count, plural, one {Toutes les heures} other {Toutes les # heures}}",
+      "everyDays": "{count, plural, one {Tous les jours à {time}} other {Tous les # jours à {time}}}",
+      "daily": "Tous les jours à {time}",
+      "weekly": "{days} à {time}"
+    },
+    "list": {
+      "title": "Tâches planifiées",
+      "description": "Exécutez un prompt selon une planification. Chaque exécution s'ouvre comme un chat que vous pouvez lire et poursuivre.",
+      "search": "Rechercher des tâches",
+      "new": "Nouvelle tâche",
+      "never": "Jamais",
+      "notScheduled": "Non planifiée",
+      "loadFailed": "Impossible de charger vos tâches planifiées.",
+      "open": "Ouvrir {name}",
+      "columns": {
+        "name": "Nom",
+        "schedule": "Planification",
+        "lastRun": "Dernière exécution",
+        "nextRun": "Prochaine exécution",
+        "status": "Statut"
+      },
+      "empty": {
+        "title": "Aucune tâche planifiée pour le moment",
+        "description": "Créez une tâche pour exécuter un prompt selon une planification."
+      },
+      "noMatches": {
+        "title": "Aucune tâche correspondante",
+        "description": "Essayez une autre recherche ou un autre filtre."
+      },
+      "filter": {
+        "label": "Filtrer les tâches",
+        "all": "Toutes les tâches",
+        "unviewed": "Nouveaux résultats"
+      }
+    },
+    "actions": {
+      "runNow": "Exécuter une fois",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "menu": "Actions pour {name}",
+      "toasts": {
+        "runQueued": "Une exécution de « {name} » a démarré.",
+        "runFailed": "Impossible de démarrer l'exécution.",
+        "resumed": "Tâche reprise.",
+        "paused": "Tâche mise en pause.",
+        "statusFailed": "Impossible de modifier le statut de la tâche.",
+        "deleted": "« {name} » supprimée.",
+        "deleteFailed": "Impossible de supprimer la tâche."
+      },
+      "confirmDelete": {
+        "title": "Supprimer « {name} » ?",
+        "description": "La tâche cesse de s'exécuter et son historique d'exécution est supprimé.",
+        "submit": "Supprimer"
+      }
+    },
+    "runs": {
+      "label": "Historique des exécutions",
+      "open": "Ouvrir l'exécution de {time}",
+      "loading": "Chargement des exécutions…",
+      "loadFailed": "Impossible de charger l'historique des exécutions.",
+      "loadMore": "Charger plus",
+      "markAllViewed": "Tout marquer comme vu",
+      "markAllViewedFailed": "Impossible de marquer les exécutions comme vues. Réessayez.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {Exécuter une fois} other {Planification}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Annulée : l'exécution suivante a démarré avant que quiconque réponde à l'approbation.} approval_timeout {Annulée : personne n'a répondu à l'approbation dans les 24 heures.} user_cancelled {Arrêtée par vous.} agent_permission_required {Une action nécessitait une approbation.} agent_exception {Échec : l’exécution a rencontré une erreur.} stuck {Échec : l’exécution n’a pas démarré à temps.} timeout {Échec : l’exécution a atteint la limite d’une heure.} other {Échouée : {errorClass}}}",
+      "columns": {
+        "started": "Début",
+        "status": "Statut",
+        "duration": "Durée",
+        "trigger": "Déclencheur",
+        "detail": "Détails"
+      },
+      "closed": {
+        "queued": "Cette exécution n'a pas encore démarré, il n'y a donc aucun chat à ouvrir.",
+        "skipped": "Cette exécution a été ignorée, il n'y a donc aucun chat à ouvrir.",
+        "noChat": "Cette exécution n’a pas de chat à ouvrir."
+      },
+      "empty": {
+        "title": "Aucune exécution pour le moment",
+        "description": "La tâche ajoute une exécution à chaque déclenchement. Utilisez Exécuter une fois pour en démarrer une maintenant."
+      }
+    },
+    "detail": {
+      "title": "Tâche planifiée",
+      "back": "Tâches planifiées",
+      "loadFailed": "Impossible de charger cette tâche planifiée.",
+      "tabs": {
+        "runs": "Exécutions",
+        "overview": "Aperçu"
+      },
+      "overview": {
+        "prompt": "Prompt",
+        "schedule": "Planification",
+        "nextRun": "Prochaine exécution",
+        "notScheduled": "Non planifiée",
+        "lastRun": "Dernière exécution",
+        "never": "Jamais"
+      },
+      "switch": {
+        "title": "Exécuter selon la planification",
+        "label": "Exécuter {name} selon la planification"
+      },
+      "menu": "Plus d’actions"
+    },
+    "editor": {
+      "newTitle": "Nouvelle tâche planifiée",
+      "editTitle": "Modifier la tâche planifiée",
+      "description": "Chaque exécution envoie le prompt à un nouveau chat avec l'agent par défaut.",
+      "back": "Retour",
+      "loadFailed": "Impossible de charger cette tâche planifiée.",
+      "save": "Enregistrer",
+      "saveAndRun": "Enregistrer et exécuter maintenant",
+      "errors": {
+        "nameRequired": "Saisissez un nom.",
+        "promptRequired": "Saisissez un prompt."
+      },
+      "toasts": {
+        "created": "Tâche planifiée créée.",
+        "createdAndRun": "Tâche planifiée créée. La première exécution a démarré.",
+        "updated": "Tâche planifiée mise à jour.",
+        "saveFailed": "Impossible d'enregistrer la tâche planifiée."
+      },
+      "fields": {
+        "name": {
+          "label": "Nom",
+          "placeholder": "Par exemple, synthèse hebdomadaire des escalades clients"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "description": "Chaque exécution envoie ce message à un nouveau chat.",
+          "placeholder": "Décrivez ce qu'il faut faire à chaque exécution"
+        },
+        "schedule": {
+          "label": "Planification"
+        }
+      }
+    },
+    "banner": {
+      "title": "Exécution planifiée de {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {Cette exécution attend votre approbation ci-dessous.} other {Cette exécution est en cours.}}",
+      "startedAt": "Démarrée {time}",
+      "viewTask": "Voir la tâche"
+    }
   }
 }

@@ -20,7 +20,8 @@ export type ScheduledTaskRunStatus =
   | "SUCCEEDED"
   | "FAILED"
   | "SKIPPED"
-  | "AWAITING_APPROVAL";
+  | "AWAITING_APPROVAL"
+  | "CANCELLED";
 
 export type ScheduledTaskTriggerSource = "SCHEDULED" | "MANUAL_RUN_NOW";
 
@@ -55,7 +56,7 @@ export interface ScheduledRunSummary {
   trigger_source: ScheduledTaskTriggerSource;
   started_at: string;
   finished_at: string | null;
-  session_id: string | null;
+  chat_session_id: string | null;
   summary: string | null;
   skip_reason: string | null;
   error_class: string | null;
@@ -124,17 +125,6 @@ export interface ScheduledRunListResponse {
 export interface RunNowResponse {
   run_id: string;
   status: ScheduledTaskRunStatus;
-}
-
-export interface ScheduledRunContextResponse {
-  run_id: string;
-  task_id: string;
-  task_name: string;
-  status: ScheduledTaskRunStatus;
-  started_at: string;
-  finished_at: string | null;
-  revision: number;
-  viewed_revision: number | null;
 }
 
 export interface UnviewedTaskCountResponse {

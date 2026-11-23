@@ -1,6 +1,5 @@
 "use client";
 
-import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
@@ -31,7 +30,6 @@ import {
 import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import { RunStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import {
-  buildSessionPath,
   RUNS_MAX_PAGE_SIZE,
   RUNS_PAGE_SIZE,
 } from "@/app/craft/v1/tasks/constants";
@@ -47,6 +45,7 @@ import {
   isRunUnviewed,
   type RunReasonTranslate,
 } from "@/app/craft/v1/tasks/utils";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -252,7 +251,7 @@ function buildColumns(
 
 export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   const t = useTranslations("craft.tasks.runHistory");
-  const navigation = useNavigation();
+  const appPosition = useAppPosition();
   const [olderPages, setOlderPages] = useState<ScheduledRunSummary[][]>([]);
   const [olderNextCursor, setOlderNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -422,8 +421,8 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
         getRowId={(row) => row.id}
         selectionBehavior="single-select"
         onRowClick={(row) => {
-          if (!getNonClickableReason(row, tReason) && row.session_id) {
-            navigation.go(buildSessionPath(row.session_id));
+          if (!getNonClickableReason(row, tReason) && row.chat_session_id) {
+            appPosition.openChat(row.chat_session_id);
           }
         }}
       />

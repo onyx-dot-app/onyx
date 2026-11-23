@@ -565,6 +565,25 @@ def test_closing_record_lists_what_ran_after_the_last_observation() -> None:
     assert _details(later.run("load('done')\n")).result == "True"
 
 
+def test_a_closing_record_keeps_the_observation_budget_and_its_full_output() -> None:
+    response = Response()
+    invocation = response.invocation(
+        {"code": "yield_control()\nprint('z' * 1_500)\n", "max_output_chars": 300}
+    )
+    outcome = response.execute.run(invocation, ToolContext())
+    assert isinstance(outcome, ToolResult)
+    response.record(invocation, outcome)
+    until(lambda: response.ended(1))
+
+    amended = response.finish()["call_1"]
+
+    closing = _details(amended).closing
+    assert closing is not None and len(closing.stdout) < 400
+    assert "z" * 1_500 not in amended.content
+    assert isinstance(amended.full_value, str)
+    assert "z" * 1_500 in amended.full_value
+
+
 def test_a_failed_program_lists_the_calls_of_every_observation() -> None:
     response = Response()
     response.run(

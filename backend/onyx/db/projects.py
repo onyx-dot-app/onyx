@@ -4,7 +4,7 @@ from typing import List
 from uuid import UUID
 
 from fastapi import UploadFile
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -27,18 +27,12 @@ class CategorizedFilesResult(BaseModel):
     user_files: list[UserFile]
     rejected_files: list[RejectedFile]
     id_to_temp_id: dict[str, str]
-    # Filenames that should be stored but not indexed.
-    skip_indexing_filenames: set[str] = Field(default_factory=set)
     # Allow SQLAlchemy ORM models inside this result container
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def indexable_files(self) -> list[UserFile]:
-        return [
-            uf
-            for uf in self.user_files
-            if (uf.name or "") not in self.skip_indexing_filenames
-        ]
+        return [uf for uf in self.user_files if uf.status != UserFileStatus.SKIPPED]
 
 
 def build_hashed_file_key(file: UploadFile) -> str:
@@ -54,7 +48,12 @@ def create_user_files(
     link_url: str | None = None,
     temp_id_map: dict[str, str] | None = None,
     incognito_session_id: UUID | None = None,
+    temp_ids: list[str] | None = None,
 ) -> CategorizedFilesResult:
+    """`temp_ids`: the client's temporary ID of each of `files`, in order.
+    When given, it sets the ID of each file, also an empty one. `temp_id_map`,
+    by `build_hashed_file_key`, serves a client that sends no `temp_ids`;
+    files of one name and size share its key."""
     # Categorize the files
     categorized_files = categorize_uploaded_files(files, db_session)
     # NOTE: At the moment, zip metadata is not used for user files.
@@ -63,25 +62,32 @@ def create_user_files(
     user_files = []
     rejected_files = categorized_files.rejected
     id_to_temp_id: dict[str, str] = {}
+    temp_id_by_upload = (
+        dict(zip(files, temp_ids, strict=True)) if temp_ids is not None else None
+    )
     # Pair returned storage paths with the same set of acceptable files we uploaded
-    for file_path, file in zip(
-        upload_response.file_paths, categorized_files.acceptable, strict=True
+    for file_path, file, token_count, should_skip in zip(
+        upload_response.file_paths,
+        categorized_files.acceptable,
+        categorized_files.acceptable_token_counts,
+        categorized_files.acceptable_skip_indexing,
+        strict=True,
     ):
         new_id = uuid.uuid4()
-        new_temp_id = (
-            temp_id_map.get(build_hashed_file_key(file)) if temp_id_map else None
-        )
+        if temp_id_by_upload is not None:
+            new_temp_id: str | None = temp_id_by_upload[file]
+        elif temp_id_map is not None:
+            new_temp_id = temp_id_map.get(build_hashed_file_key(file))
+        else:
+            new_temp_id = None
         if new_temp_id is not None:
             id_to_temp_id[str(new_id)] = new_temp_id
-        should_skip = (file.filename or "") in categorized_files.skip_indexing
         new_file = UserFile(
             id=new_id,
             user_id=user.id,
             file_id=file_path,
             name=file.filename,
-            token_count=categorized_files.acceptable_file_to_token_count[
-                file.filename or ""
-            ],
+            token_count=token_count,
             link_url=link_url,
             content_type=file.content_type,
             file_type=file.content_type,
@@ -106,7 +112,6 @@ def create_user_files(
         user_files=user_files,
         rejected_files=rejected_files,
         id_to_temp_id=id_to_temp_id,
-        skip_indexing_filenames=categorized_files.skip_indexing,
     )
 
 

@@ -247,11 +247,14 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
     writes the user, and `_invalidate_license_cache_after_seat_change` after a
     seat change ([[billing#seat-lock-before-write]],
     [[billing#two-seat-counts]]).
-13. `logout-clears-craft-storage` **Logout clears Craft browser storage by
-    prefix.** `web/src/lib/users/svc.ts:logout` removes every `sessionStorage`
-    key that starts with `onyx:craft:` or `onyx:draft:craft:` and clears the
-    Craft thumbnail cache. New Craft browser storage must use the
-    `onyx:craft:` prefix, or it survives logout ([[craft-frontend]]).
+13. `logout-clears-craft-storage` **Logout clears Craft and chat panel
+    browser storage by prefix.** `web/src/lib/users/svc.ts:logout` removes
+    every `sessionStorage` key that starts with `onyx:craft:`,
+    `onyx:draft:craft:` or `onyx:chat:output-panel:v1:` (the chat's right panel
+    width, `web/src/lib/chat/rightPanel.ts:CHAT_PANEL_STORAGE_PREFIX`) and
+    clears the Craft thumbnail cache. New Craft browser storage must use the
+    `onyx:craft:` prefix, or it survives logout ([[craft-frontend]],
+    [[chat-frontend]]).
 
 ---
 
@@ -264,6 +267,10 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
   the `CONFLICT` body lists them. The delete dialog transfers all of them to
   one user through `POST /manage/admin/transfer-private-plugins`, then
   deletes. Published plugins stay with no author ([[skills#plugin-tables]]).
+  A personal GitHub marketplace of the user is removed with its plugins
+  (copies of the repository); `delete_user_from_db__no_commit` returns a
+  `UserDeleteCleanup` that `finish_user_delete` runs after the commit
+  ([[skills#github-marketplaces]]).
 - **Anonymous access can turn itself off.** `auth/users.py` reads
   `anonymous_user_enabled` from the same cache key as the settings store, and
   the key expires ([[chat-preferences]] Known issues).

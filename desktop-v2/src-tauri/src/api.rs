@@ -300,6 +300,8 @@ pub struct SsoOption {
     /// The provider row this button starts (`None` for the legacy Google
     /// sign-in and for the server's login page).
     pub provider: Option<String>,
+    /// Google sign-in, which shows the Google logo.
+    pub google: bool,
     /// Server path that starts the browser sign-in. Kept in the app: the page
     /// only names the button it was given.
     #[serde(skip)]
@@ -311,6 +313,8 @@ struct SsoProvider {
     name: String,
     display_name: String,
     authorize_url: String,
+    #[serde(default)]
+    provider_type: String,
     /// Set by servers whose provider sign-in takes the native-app parameters.
     #[serde(default)]
     native_app_sso: bool,
@@ -346,6 +350,7 @@ fn sso_options(parsed: &AuthTypeResponse) -> Vec<SsoOption> {
                 label: p.display_name.clone(),
                 browser,
                 provider: Some(p.name.clone()),
+                google: p.provider_type == "GOOGLE_OAUTH",
                 authorize_path: browser.then(|| p.authorize_url.clone()),
             }
         })
@@ -357,6 +362,7 @@ fn sso_options(parsed: &AuthTypeResponse) -> Vec<SsoOption> {
             label: "Continue with Google".into(),
             browser: true,
             provider: None,
+            google: true,
             authorize_path: Some(LEGACY_OAUTH_AUTHORIZE.into()),
         });
     }
@@ -368,6 +374,7 @@ fn sso_options(parsed: &AuthTypeResponse) -> Vec<SsoOption> {
             label: "Continue with Google or SSO".into(),
             browser: false,
             provider: None,
+            google: false,
             authorize_path: None,
         });
     }
@@ -1310,6 +1317,18 @@ mod tests {
             options(&row("")),
             vec![("Continue with Google".into(), false, None)]
         );
+    }
+
+    #[test]
+    fn google_sign_in_shows_the_google_logo() {
+        let json = r#"{"oauth_enabled":true,"sso_providers":[
+            {"name":"google","display_name":"Continue with Google","authorize_url":"/api/auth/oidc/google/authorize","provider_type":"GOOGLE_OAUTH"},
+            {"name":"okta","display_name":"Okta","authorize_url":"/api/auth/oidc/okta/authorize","provider_type":"OIDC"}]}"#;
+        let parsed: AuthTypeResponse = serde_json::from_str(json).unwrap();
+        let google: Vec<bool> = sso_options(&parsed).iter().map(|o| o.google).collect();
+        assert_eq!(google, vec![true, false]);
+        let legacy: AuthTypeResponse = serde_json::from_str(r#"{"oauth_enabled":true}"#).unwrap();
+        assert!(sso_options(&legacy)[0].google);
     }
 
     #[test]

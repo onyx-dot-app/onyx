@@ -24,7 +24,7 @@ import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
-import { useEntryPicker } from "@/lib/skills/hooks";
+import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
 import type { CaretText } from "@/lib/contentEditable";
 import {
   CRAFT_PICKER_TRIGGER,
@@ -79,6 +79,7 @@ export default function ScheduleTaskForm({
 }: ScheduleTaskFormProps) {
   const t = useTranslations("craft.tasks.form");
   const tActionPolicies = useTranslations("craft.actionPolicies");
+  const tScheduleEditor = useTranslations("craft.tasks.scheduleEditor");
   const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
@@ -94,11 +95,18 @@ export default function ScheduleTaskForm({
 
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
+  const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
+    useChatSkills({ builtIns: false });
   const { data: externalAppsData } = useUserExternalApps();
   const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
-    () => toPickerSections(skillsData, externalAppsData, craftMcpData),
-    [skillsData, externalAppsData, craftMcpData]
+    () =>
+      toPickerSections(
+        { builtins: skillsData?.builtins, customs: chatSkills.skills },
+        externalAppsData,
+        craftMcpData
+      ),
+    [skillsData, chatSkills, externalAppsData, craftMcpData]
   );
   const pickPromptEntry = useCallback(
     (entry: PickerEntry, token: CaretText) => {
@@ -144,7 +152,9 @@ export default function ScheduleTaskForm({
   const nameError = trimmedName.length === 0 ? t("errors.nameRequired") : null;
   const promptError =
     trimmedPrompt.length === 0 ? t("errors.promptRequired") : null;
-  const scheduleError = !compiled.ok ? compiled.error : null;
+  const scheduleError = !compiled.ok
+    ? tScheduleEditor(`errors.${compiled.error}`)
+    : null;
 
   const shownNameError = nameTouched ? nameError : null;
   const shownPromptError = promptTouched ? promptError : null;
@@ -310,6 +320,7 @@ export default function ScheduleTaskForm({
                 setPrompt(e.target.value);
                 promptPicker.onInput(e);
               }}
+              onFocus={onChatSkillsFocus}
               onBlur={() => setPromptTouched(true)}
               placeholder={t("fields.prompt.placeholder")}
               rows={6}

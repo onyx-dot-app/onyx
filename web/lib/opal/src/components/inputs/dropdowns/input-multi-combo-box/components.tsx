@@ -8,6 +8,9 @@ import type { InputMultiComboBoxProps } from "@opal/components/inputs/dropdowns/
  * text filters the options, and `mode="open"` also commits the raw text via
  * the create row. Focus opens the list. The family's pick-only sibling is
  * `InputMultiSelect`.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
  */
 function InputMultiComboBox(props: InputMultiComboBoxProps) {
   return <MultiSelectField {...props} trigger="type-in" />;

@@ -16,7 +16,7 @@ import { Section } from "@opal/layouts";
 import { PreviewUnavailable } from "@/app/craft/components/output-panel/PreviewUnavailable";
 import { binaryPreviewKind } from "@/app/craft/services/filePreview";
 import BinaryFilePreview from "@/app/craft/components/output-panel/BinaryFilePreview";
-import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
 import MarkdownFilePreview from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
