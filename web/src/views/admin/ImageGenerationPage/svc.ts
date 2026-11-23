@@ -23,7 +23,6 @@ export interface ImageGenerationProviderModel {
   name: string;
   display_name: string;
   custom_display_name: string | null;
-  is_recommended: boolean;
   image_provider_id: string | null;
 }
 

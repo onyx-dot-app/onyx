@@ -156,22 +156,6 @@ def test_image_generation_models_skip_pruned_and_dated_snapshots() -> None:
     assert all("/" not in model for model in models)
 
 
-def test_is_recommended_image_model_follows_the_listing_provider() -> None:
-    gateway = "custom_image_gateway"
-    assert model_catalog.is_recommended_image_model(gateway, "gpt-image-2")
-    assert not model_catalog.is_recommended_image_model(gateway, "dall-e-3")
-    assert not model_catalog.is_recommended_image_model(
-        gateway, "gpt-image-2-2026-04-21"
-    )
-    assert not model_catalog.is_recommended_image_model(
-        LlmProviderNames.OPENAI, "dall-e-3"
-    )
-    assert model_catalog.is_recommended_image_model(gateway, "openai/gpt-image-2")
-    assert not model_catalog.is_recommended_image_model(
-        gateway, "openai/gpt-image-2-2026-04-21"
-    )
-
-
 def test_supplement_status_retires_listed_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

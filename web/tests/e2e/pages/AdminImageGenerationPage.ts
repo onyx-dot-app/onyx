@@ -10,7 +10,7 @@ export class AdminImageGenerationPage {
 
   async goto(): Promise<void> {
     await this.page.goto(ADMIN_ROUTES.IMAGE_GENERATION.path);
-    await expect(this.page.getByText("Available Models").first()).toBeVisible({
+    await expect(this.page.getByText("Add Models").first()).toBeVisible({
       timeout: 20000,
     });
   }
@@ -19,19 +19,20 @@ export class AdminImageGenerationPage {
     return this.page.getByText(name, { exact: true });
   }
 
+  /** A model's card under Add Models. */
+  availableModelCard(llmProviderId: number, modelName: string): Locator {
+    return this.page.getByLabel(
+      `image-gen-available-${llmProviderId}-${modelName}`,
+      { exact: true }
+    );
+  }
+
+  /** A connected model's card under Available Models. */
   modelCard(llmProviderId: number, modelName: string): Locator {
     return this.page.getByLabel(
       `image-gen-model-${llmProviderId}-${modelName}`,
       { exact: true }
     );
-  }
-
-  get recommendedTab(): Locator {
-    return this.page.getByRole("tab", { name: "Recommended" });
-  }
-
-  get allTab(): Locator {
-    return this.page.getByRole("tab", { name: "All" });
   }
 
   get dialog(): Locator {

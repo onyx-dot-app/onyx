@@ -5760,13 +5760,13 @@
     "imageGeneration": {
       "availableModels": {
         "description": "نماذج الصور لدى موفري LLM المتصلين. اربط نموذجًا لاستخدامه في الدردشة.",
-        "title": "النماذج المتاحة"
-      },
-      "configureSuccess": {
-        "message": "تم تهيئة الموفر بنجاح"
+        "title": "إضافة نماذج",
+        "connected": {
+          "label": "متصل"
+        }
       },
       "connectedModels": {
-        "title": "النماذج المتصلة"
+        "title": "النماذج المتاحة"
       },
       "deselectError": {
         "message": "فشل إلغاء التحديد"
@@ -5808,9 +5808,6 @@
         "submitButton": {
           "label": "قطع الاتصال"
         }
-      },
-      "disconnectSuccess": {
-        "message": "تم قطع الاتصال بـ {title}"
       },
       "emptyState": {
         "title": "اربط نموذج توليد صور لاستخدامه في المحادثة."
@@ -5893,9 +5890,6 @@
       "linkError": {
         "message": "تعذّر ربط النموذج"
       },
-      "linkSuccess": {
-        "message": "تم ربط {title}"
-      },
       "loadError": {
         "message": "فشل تحميل التهيئة. يرجى تحديث الصفحة."
       },
@@ -5904,12 +5898,8 @@
         "placeholder": "اختر نموذجًا افتراضيًا",
         "title": "نموذج توليد الصور"
       },
-      "modelFilter": {
-        "all": "الكل",
-        "recommended": "موصى بها"
-      },
       "noImageModels": {
-        "description": "اربط موفر LLM يقدم نماذج صور في صفحة نماذج اللغة. لعرض كل النماذج لدى الموفرين المتصلين، افتح علامة التبويب الكل.",
+        "description": "اربط موفر LLM يقدم نماذج صور في صفحة نماذج اللغة.",
         "title": "لا توجد نماذج صور متاحة"
       },
       "providers": {

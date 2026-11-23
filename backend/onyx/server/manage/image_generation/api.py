@@ -41,7 +41,6 @@ from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_catalog import (
     can_generate_images,
-    is_recommended_image_model,
     iter_image_generation_models,
 )
 from onyx.llm.utils import collect_credential_values
@@ -320,8 +319,8 @@ def list_llm_provider_image_models(
 ) -> list[ImageGenerationLLMProvider]:
     """Connected unrestricted LLM providers with the models they serve that can
     generate images (see can_generate_images). Catalog image models are listed
-    even when the provider's model list omits them, and are marked
-    recommended. A provider with no such model is left out."""
+    even when the provider's model list omits them. A provider with no such
+    model is left out."""
     connected_by_model_id = {
         config.model_configuration_id: config.image_provider_id
         for config in get_all_image_generation_configs(db_session)
@@ -353,9 +352,6 @@ def list_llm_provider_image_models(
                     ),
                     custom_display_name=(
                         stored.custom_display_name if stored else None
-                    ),
-                    is_recommended=is_recommended_image_model(
-                        llm_provider.provider, name
                     ),
                     image_provider_id=(
                         connected_by_model_id.get(stored.id) if stored else None

@@ -21,9 +21,8 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   once, inline right after the step that made it, in stream order. With code mode on, a program can generate
   images too, and they show the same way.
 - **An admin** opens the image generation admin page. It lists the image
-  models of each connected LLM provider. The recommended view, the default,
-  shows the non-deprecated catalog image models; the full view adds the
-  models that no catalog knows. A provider with no model that can generate
+  models of each connected LLM provider under its name: the catalog image
+  models and the models that no catalog knows. A provider with no model that can generate
   images (Anthropic) is not listed. One click links a model to its LLM provider with no
   credentials, and the first linked model becomes the default. Only public providers with no agent restrictions are listed
   or can be linked, because the tool is available to all users and agents.
@@ -93,11 +92,10 @@ edits. Every call is traced with `LLMFlow.IMAGE_GENERATION` or
 `LLMFlow.IMAGE_EDIT` ([[observability]]).
 
 **Model catalogue.** `llm/model_catalog.py:iter_image_generation_models` gives
-the recommended models: catalog entries with an image mode and no deprecated
-status, without supplement-only entries (upstream pruned them) or dated
-snapshots that have an undated alias.
-`GET /admin/image-generation/llm-providers` adds the dated snapshots and the
-stored models for the unfiltered view, but only those that
+the catalog image models: entries with an image mode and no deprecated status,
+without supplement-only entries (upstream pruned them).
+`GET /admin/image-generation/llm-providers` lists them with the provider's
+stored models, but only those that
 `llm/model_catalog.py:can_generate_images` passes: a model a catalog knows must have
 an image mode, and a name no catalog knows passes. `POST /config/link` refuses
 the rest. A linked config has the ID

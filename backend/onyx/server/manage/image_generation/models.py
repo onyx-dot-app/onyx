@@ -66,8 +66,6 @@ class ImageGenerationProviderModel(BaseModel):
     name: str
     display_name: str
     custom_display_name: str | None
-    # Catalog or model name says this is an image generation model.
-    is_recommended: bool
     image_provider_id: str | None  # Set when this model is already connected
 
 

@@ -17,15 +17,13 @@ function llmProviders(linkedImageProviderId: string | null) {
           name: "gpt-image-2",
           display_name: "gpt-image-2",
           custom_display_name: null,
-          is_recommended: true,
           image_provider_id: linkedImageProviderId,
         },
         {
-          // A name no catalog knows, so only the All tab lists it.
+          // A name no catalog knows; it is listed too.
           name: "custom-image-model",
           display_name: "custom-image-model",
           custom_display_name: null,
-          is_recommended: false,
           image_provider_id: null,
         },
       ],
@@ -80,28 +78,17 @@ test.describe("Image Generation models from LLM providers", () => {
     await loginAs(page, "admin");
   });
 
-  test("recommended tab hides unlisted models until All is selected", async ({
-    page,
-  }) => {
+  test("lists every image model under its provider", async ({ page }) => {
     await mockImageGenApis(page);
     const imageGenPage = new AdminImageGenerationPage(page);
     await imageGenPage.goto();
 
     await expect(imageGenPage.providerTitle("Team OpenAI")).toBeVisible();
     await expect(
-      imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2")
+      imageGenPage.availableModelCard(LLM_PROVIDER_ID, "gpt-image-2")
     ).toBeVisible();
     await expect(
-      imageGenPage.modelCard(LLM_PROVIDER_ID, "custom-image-model")
-    ).toHaveCount(0);
-
-    await expect(imageGenPage.recommendedTab).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
-    await imageGenPage.allTab.click();
-    await expect(
-      imageGenPage.modelCard(LLM_PROVIDER_ID, "custom-image-model")
+      imageGenPage.availableModelCard(LLM_PROVIDER_ID, "custom-image-model")
     ).toBeVisible();
   });
 
@@ -112,12 +99,18 @@ test.describe("Image Generation models from LLM providers", () => {
     const imageGenPage = new AdminImageGenerationPage(page);
     await imageGenPage.goto();
 
-    const card = imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2");
-    await imageGenPage.connect(card);
+    const available = imageGenPage.availableModelCard(
+      LLM_PROVIDER_ID,
+      "gpt-image-2"
+    );
+    await imageGenPage.connect(available);
 
-    await expect(imageGenPage.currentDefaultBadge(card)).toBeVisible({
+    const connected = imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2");
+    await expect(imageGenPage.currentDefaultBadge(connected)).toBeVisible({
       timeout: 10000,
     });
+    // The model stays in the grid and says it is connected.
+    await expect(available).toContainText("Connected");
     await expect(imageGenPage.dialog).toHaveCount(0);
     expect(linkBodies).toEqual([
       {

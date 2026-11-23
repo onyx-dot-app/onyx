@@ -5760,13 +5760,13 @@
     "imageGeneration": {
       "availableModels": {
         "description": "Bildmodelle Ihrer verbundenen LLM-Anbieter. Verbinden Sie eines, um es im Chat zu verwenden.",
-        "title": "Verfügbare Modelle"
-      },
-      "configureSuccess": {
-        "message": "Anbieter erfolgreich konfiguriert"
+        "title": "Modelle hinzufügen",
+        "connected": {
+          "label": "Verbunden"
+        }
       },
       "connectedModels": {
-        "title": "Verbundene Modelle"
+        "title": "Verfügbare Modelle"
       },
       "deselectError": {
         "message": "Auswahl konnte nicht aufgehoben werden"
@@ -5808,9 +5808,6 @@
         "submitButton": {
           "label": "Trennen"
         }
-      },
-      "disconnectSuccess": {
-        "message": "{title} getrennt"
       },
       "emptyState": {
         "title": "Verbinden Sie ein Modell zur Bilderzeugung, um es im Chat zu verwenden."
@@ -5893,9 +5890,6 @@
       "linkError": {
         "message": "Modell konnte nicht verbunden werden"
       },
-      "linkSuccess": {
-        "message": "{title} verbunden"
-      },
       "loadError": {
         "message": "Die Konfiguration konnte nicht geladen werden. Bitte laden Sie die Seite neu."
       },
@@ -5904,12 +5898,8 @@
         "placeholder": "Standardmodell auswählen",
         "title": "Modell zur Bilderzeugung"
       },
-      "modelFilter": {
-        "all": "Alle",
-        "recommended": "Empfohlen"
-      },
       "noImageModels": {
-        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt. Öffnen Sie den Tab „Alle“, um jedes Modell Ihrer verbundenen Anbieter zu sehen.",
+        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt.",
         "title": "Keine Bildmodelle verfügbar"
       },
       "providers": {

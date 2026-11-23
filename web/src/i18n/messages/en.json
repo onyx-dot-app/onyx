@@ -5760,13 +5760,13 @@
     "imageGeneration": {
       "availableModels": {
         "description": "Image models on your connected LLM providers. Connect one to use it in chat.",
-        "title": "Available Models"
-      },
-      "configureSuccess": {
-        "message": "Provider configured successfully"
+        "title": "Add Models",
+        "connected": {
+          "label": "Connected"
+        }
       },
       "connectedModels": {
-        "title": "Connected Models"
+        "title": "Available Models"
       },
       "deselectError": {
         "message": "Failed to deselect"
@@ -5808,9 +5808,6 @@
         "submitButton": {
           "label": "Disconnect"
         }
-      },
-      "disconnectSuccess": {
-        "message": "{title} disconnected"
       },
       "emptyState": {
         "title": "Connect an image generation model to use in chat."
@@ -5893,9 +5890,6 @@
       "linkError": {
         "message": "Failed to connect model"
       },
-      "linkSuccess": {
-        "message": "{title} connected"
-      },
       "loadError": {
         "message": "Failed to load configuration. Please refresh the page."
       },
@@ -5904,12 +5898,8 @@
         "placeholder": "Select a default model",
         "title": "Image Generation Model"
       },
-      "modelFilter": {
-        "all": "All",
-        "recommended": "Recommended"
-      },
       "noImageModels": {
-        "description": "Connect an LLM provider that serves image models on the Language Models page. To see every model on your connected providers, open the All tab.",
+        "description": "Connect an LLM provider that serves image models on the Language Models page.",
         "title": "No image models available"
       },
       "providers": {

@@ -5760,13 +5760,13 @@
     "imageGeneration": {
       "availableModels": {
         "description": "接続済みの LLM プロバイダーの画像モデルです。チャットで使うには接続してください。",
-        "title": "利用可能なモデル"
-      },
-      "configureSuccess": {
-        "message": "プロバイダーを設定しました"
+        "title": "モデルを追加",
+        "connected": {
+          "label": "接続済み"
+        }
       },
       "connectedModels": {
-        "title": "接続済みモデル"
+        "title": "利用可能なモデル"
       },
       "deselectError": {
         "message": "選択を解除できませんでした"
@@ -5808,9 +5808,6 @@
         "submitButton": {
           "label": "接続を解除"
         }
-      },
-      "disconnectSuccess": {
-        "message": "{title} の接続を解除しました"
       },
       "emptyState": {
         "title": "チャットで使用する画像生成モデルを接続してください。"
@@ -5893,9 +5890,6 @@
       "linkError": {
         "message": "モデルを接続できませんでした"
       },
-      "linkSuccess": {
-        "message": "{title} を接続しました"
-      },
       "loadError": {
         "message": "設定を読み込めませんでした。ページを再読み込みしてください。"
       },
@@ -5904,12 +5898,8 @@
         "placeholder": "デフォルトのモデルを選択",
         "title": "画像生成モデル"
       },
-      "modelFilter": {
-        "all": "すべて",
-        "recommended": "おすすめ"
-      },
       "noImageModels": {
-        "description": "言語モデルページで、画像モデルを提供する LLM プロバイダーを接続してください。接続済みプロバイダーのすべてのモデルを表示するには、[すべて] タブを開いてください。",
+        "description": "言語モデルページで、画像モデルを提供する LLM プロバイダーを接続してください。",
         "title": "利用できる画像モデルがありません"
       },
       "providers": {

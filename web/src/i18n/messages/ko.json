@@ -5760,13 +5760,13 @@
     "imageGeneration": {
       "availableModels": {
         "description": "연결된 LLM 공급자의 이미지 모델입니다. 채팅에서 사용하려면 연결하세요.",
-        "title": "사용 가능한 모델"
-      },
-      "configureSuccess": {
-        "message": "제공업체를 설정했습니다"
+        "title": "모델 추가",
+        "connected": {
+          "label": "연결됨"
+        }
       },
       "connectedModels": {
-        "title": "연결된 모델"
+        "title": "사용 가능한 모델"
       },
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
@@ -5808,9 +5808,6 @@
         "submitButton": {
           "label": "연결 해제"
         }
-      },
-      "disconnectSuccess": {
-        "message": "{title} 연결을 해제했습니다"
       },
       "emptyState": {
         "title": "채팅에서 사용할 이미지 생성 모델을 연결하세요."
@@ -5893,9 +5890,6 @@
       "linkError": {
         "message": "모델을 연결하지 못했습니다"
       },
-      "linkSuccess": {
-        "message": "{title} 연결됨"
-      },
       "loadError": {
         "message": "구성을 불러오지 못했습니다. 페이지를 새로고침하세요."
       },
@@ -5904,12 +5898,8 @@
         "placeholder": "기본 모델 선택",
         "title": "이미지 생성 모델"
       },
-      "modelFilter": {
-        "all": "전체",
-        "recommended": "추천"
-      },
       "noImageModels": {
-        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요. 연결된 공급자의 모든 모델을 보려면 전체 탭을 여세요.",
+        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요.",
         "title": "사용 가능한 이미지 모델이 없습니다"
       },
       "providers": {

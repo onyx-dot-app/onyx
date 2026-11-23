@@ -5760,13 +5760,13 @@
     "imageGeneration": {
       "availableModels": {
         "description": "Modelos de imagem dos seus provedores de LLM conectados. Conecte um para usá-lo no chat.",
-        "title": "Modelos disponíveis"
-      },
-      "configureSuccess": {
-        "message": "Provedor configurado com sucesso"
+        "title": "Adicionar modelos",
+        "connected": {
+          "label": "Conectado"
+        }
       },
       "connectedModels": {
-        "title": "Modelos conectados"
+        "title": "Modelos disponíveis"
       },
       "deselectError": {
         "message": "Falha ao desmarcar"
@@ -5808,9 +5808,6 @@
         "submitButton": {
           "label": "Desconectar"
         }
-      },
-      "disconnectSuccess": {
-        "message": "{title} desconectado"
       },
       "emptyState": {
         "title": "Conecte um modelo de geração de imagens para usar no chat."
@@ -5893,9 +5890,6 @@
       "linkError": {
         "message": "Falha ao conectar o modelo"
       },
-      "linkSuccess": {
-        "message": "{title} conectado"
-      },
       "loadError": {
         "message": "Falha ao carregar a configuração. Atualize a página."
       },
@@ -5904,12 +5898,8 @@
         "placeholder": "Selecione um modelo padrão",
         "title": "Modelo de geração de imagens"
       },
-      "modelFilter": {
-        "all": "Todos",
-        "recommended": "Recomendados"
-      },
       "noImageModels": {
-        "description": "Conecte na página Modelos de linguagem um provedor de LLM que ofereça modelos de imagem. Para ver todos os modelos dos seus provedores conectados, abra a guia Todos.",
+        "description": "Conecte na página Modelos de linguagem um provedor de LLM que ofereça modelos de imagem.",
         "title": "Nenhum modelo de imagem disponível"
       },
       "providers": {

@@ -29,7 +29,6 @@ import {
   InputSingleSelect,
   MessageCard,
   SelectCard,
-  Tabs,
   Text,
   useCreateModal,
   type SelectDivider,
@@ -39,6 +38,7 @@ import {
   ConfirmationModalLayout,
   Content,
   ContentAction,
+  ReverseContent,
   IllustrationContent,
   InputHorizontal,
   Section,
@@ -47,6 +47,7 @@ import {
 import { SvgDisconnected, SvgEmpty } from "@opal/illustrations";
 import {
   SvgArrowExchange,
+  SvgCheckCircle,
   SvgSettings,
   SvgSlash,
   SvgUnplug,
@@ -60,8 +61,6 @@ import { SimpleModelSelector } from "@/lib/languageModels/components";
 import type { ModelOptionProvider } from "@/lib/languageModels/types";
 
 const NO_DEFAULT_VALUE = "__none__";
-
-type ModelFilter = "recommended" | "all";
 
 interface DisconnectTarget {
   image_provider_id: string;
@@ -95,8 +94,9 @@ interface ConnectedModelCardProps {
   onEdit?: () => void;
 }
 
-/** A connected model, as the Language Models page shows a provider. The
- *  default is set only in the Image Generation Model select. */
+/** A connected model, as the Language Models page shows a provider. A click
+ *  disconnects it, as its unplug button does. The default is set only in the
+ *  Image Generation Model select. */
 function ConnectedModelCard({
   icon,
   title,
@@ -119,7 +119,7 @@ function ConnectedModelCard({
         padding={2}
         rounding={4}
         aria-label={ariaLabel}
-        onClick={onEdit}
+        onClick={onDisconnect}
       >
         <ContentAction
           font="main-ui-action"
@@ -174,19 +174,60 @@ interface AvailableModelCardProps {
   title: string;
   description: string;
   ariaLabel: string;
+  /** Already connected: a plain card that says so, with no action. */
+  connected: boolean;
   onConnect: () => void;
 }
 
-/** A model that can be connected, as the Language Models page shows a new
- *  provider. */
+/** A model of a provider, as the Language Models page shows a new provider.
+ *  A connected model stays in the grid as a plain card that says so. */
 function AvailableModelCard({
   icon,
   title,
   description,
   ariaLabel,
+  connected,
   onConnect,
 }: AvailableModelCardProps) {
   const t = useTranslations("admin.shared");
+  const tPage = useTranslations("admin.imageGeneration");
+
+  // A connected model has nothing to do, so its card is not interactive. A
+  // plain card paints the same surface as a filled select card.
+  if (connected) {
+    return (
+      <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
+        <ContentAction
+          font="main-ui-action"
+          icon={icon}
+          title={title}
+          description={description}
+          titleMaxLines={1}
+          descriptionMaxLines={1}
+          padding={2}
+          rightChildren={
+            <Section
+              flexDirection="row"
+              justifyContent="end"
+              alignItems="start"
+              width="fit"
+              height="fit"
+              padding={2}
+            >
+              <ReverseContent
+                font="main-ui-body"
+                icon={SvgCheckCircle}
+                title={tPage("availableModels.connected.label")}
+                color="success"
+                titleColor="text-03"
+              />
+            </Section>
+          }
+        />
+      </Card>
+    );
+  }
+
   return (
     <SelectCard
       state="empty"
@@ -260,7 +301,6 @@ export default function ImageGenerationContent() {
     SWR_KEYS.imageGenLlmProviders,
     errorHandlingFetcher
   );
-  const [modelFilter, setModelFilter] = useState<ModelFilter>("recommended");
   const [linkingModelKey, setLinkingModelKey] = useState<string | null>(null);
 
   const modal = useCreateModal();
@@ -290,18 +330,6 @@ export default function ImageGenerationContent() {
     }
     return providers;
   }, []);
-
-  const availableGroups = useMemo(() => {
-    return llmProviders
-      .map((llmProvider) => ({
-        ...llmProvider,
-        models: llmProvider.models.filter(
-          (m) =>
-            !m.image_provider_id && (modelFilter === "all" || m.is_recommended)
-        ),
-      }))
-      .filter((group) => group.models.length > 0);
-  }, [llmProviders, modelFilter]);
 
   const configTitle = useCallback(
     (config: ImageGenerationConfigView): string =>
@@ -371,9 +399,6 @@ export default function ImageGenerationContent() {
         model.name,
         !defaultConfig
       );
-      toast.success(
-        t("linkSuccess.message", { title: linkedModelTitle(model) })
-      );
       await Promise.all([refetchConfigs(), refetchLlmProviders()]);
     } catch (error) {
       toast.error(
@@ -430,9 +455,6 @@ export default function ImageGenerationContent() {
       }
 
       await deleteImageGenerationConfig(disconnectProvider.image_provider_id);
-      toast.success(
-        t("disconnectSuccess.message", { title: disconnectProvider.title })
-      );
       refetchAll();
     } catch (error) {
       console.error("Failed to disconnect image generation provider:", error);
@@ -445,7 +467,6 @@ export default function ImageGenerationContent() {
   };
 
   const handleModalSuccess = () => {
-    toast.success(t("configureSuccess.message"));
     setEditConfig(null);
     refetchConfigs();
   };
@@ -638,71 +659,55 @@ export default function ImageGenerationContent() {
             title={t("availableModels.title")}
             description={t("availableModels.description")}
           />
-          <Tabs
-            variant="pill"
-            value={modelFilter}
-            onValueChange={(value) =>
-              setModelFilter(value === "all" ? "all" : "recommended")
-            }
-            gap={3}
-          >
-            <Tabs.List>
-              <Tabs.Trigger value="recommended">
-                {t("modelFilter.recommended")}
-              </Tabs.Trigger>
-              <Tabs.Trigger value="all">{t("modelFilter.all")}</Tabs.Trigger>
-            </Tabs.List>
-            <Tabs.Content value={modelFilter}>
-              {availableGroups.length === 0 ? (
-                <IllustrationContent
-                  illustration={SvgEmpty}
-                  title={t("noImageModels.title")}
-                  description={t("noImageModels.description")}
-                />
-              ) : (
-                <Section gap={8} height="fit" alignItems="stretch">
-                  {availableGroups.map((llmProvider) => {
-                    const providerName =
-                      llmProvider.llm_provider_name ?? llmProvider.provider;
-                    return (
-                      <Collapsible
-                        key={`llm-${llmProvider.llm_provider_id}`}
-                        title={providerName}
-                        font="main-ui-action"
-                        titleColor="text-03"
-                        gapping={2}
-                      >
-                        <CardGrid>
-                          {llmProvider.models.map((model) => {
-                            const title = linkedModelTitle(model);
-                            return (
-                              <AvailableModelCard
-                                key={model.name}
-                                icon={getModelIcon(
-                                  llmProvider.provider,
-                                  model.name
-                                )}
-                                title={title}
-                                description={
-                                  title === model.name
-                                    ? providerName
-                                    : model.name
-                                }
-                                ariaLabel={`image-gen-model-${llmProvider.llm_provider_id}-${model.name}`}
-                                onConnect={() =>
-                                  void handleLink(llmProvider, model)
-                                }
-                              />
-                            );
-                          })}
-                        </CardGrid>
-                      </Collapsible>
-                    );
-                  })}
-                </Section>
-              )}
-            </Tabs.Content>
-          </Tabs>
+          {llmProviders.length === 0 ? (
+            <IllustrationContent
+              illustration={SvgEmpty}
+              title={t("noImageModels.title")}
+              description={t("noImageModels.description")}
+            />
+          ) : (
+            <Section gap={8} height="fit" alignItems="stretch">
+              {llmProviders.map((llmProvider) => {
+                const providerName =
+                  llmProvider.llm_provider_name ?? llmProvider.provider;
+                return (
+                  <Collapsible
+                    key={`llm-${llmProvider.llm_provider_id}`}
+                    title={providerName}
+                    font="main-ui-action"
+                    titleColor="text-03"
+                    gapping={2}
+                  >
+                    <CardGrid>
+                      {llmProvider.models.map((model) => {
+                        const title = linkedModelTitle(model);
+                        return (
+                          <AvailableModelCard
+                            key={model.name}
+                            icon={getModelIcon(
+                              llmProvider.provider,
+                              model.name
+                            )}
+                            title={title}
+                            description={
+                              title === model.name ? providerName : model.name
+                            }
+                            // Not image-gen-model-…: a connected model's card
+                            // under Available Models has that name.
+                            ariaLabel={`image-gen-available-${llmProvider.llm_provider_id}-${model.name}`}
+                            connected={model.image_provider_id !== null}
+                            onConnect={() =>
+                              void handleLink(llmProvider, model)
+                            }
+                          />
+                        );
+                      })}
+                    </CardGrid>
+                  </Collapsible>
+                );
+              })}
+            </Section>
+          )}
         </Section>
       )}
 

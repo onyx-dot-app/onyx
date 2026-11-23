@@ -70,7 +70,6 @@ async function mockImageGenApis(
                 name: "gpt-image-2",
                 display_name: "gpt-image-2",
                 custom_display_name: null,
-                is_recommended: true,
                 image_provider_id: null,
               },
             ],
