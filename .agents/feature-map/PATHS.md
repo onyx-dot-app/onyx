@@ -272,12 +272,13 @@ covers new files that match it.
 | `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/chatScroll/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
 | `web/src/lib/timeline/` | chat-frontend, craft-frontend |
+| `web/src/lib/outputPanel/`, `web/src/sections/output-panel/` | chat-frontend, craft-frontend |
 | `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
 | `web/src/app/app/components/files/`, `web/src/sections/modals/UserFilesModal.tsx`, `web/src/sections/cards/FileCard.tsx` | file-store-and-user-files |
-| `web/src/sections/modals/PreviewModal/` | chat-frontend |
+| `web/src/sections/modals/PreviewModal/`, `web/src/sections/file-preview/`, `web/src/lib/filePreview/` | chat-frontend |
 | `web/src/sections/Suggestions.tsx` | chat-frontend |
 | `web/src/lib/richInputTile.ts`, `web/src/lib/contentEditable.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
@@ -309,6 +310,7 @@ covers new files that match it.
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts`, `web/src/app/craft/services/outputInventorySnapshots.ts`, `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts`, `web/src/app/craft/services/filePreview.ts` | craft-frontend |
 | `web/tools/prepare-pdf-assets.cjs`, `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts`, `web/src/lib/spreadsheetPreview.ts` | craft-frontend |
 | `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
+| `web/src/lib/pptx/` | chat-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
 | `web/src/app/app/scheduled-tasks/`, `web/src/sections/scheduledTasks/`, `web/src/lib/scheduledTasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |

@@ -1665,6 +1665,7 @@
         "removingBadge": {
           "label": "Quitando"
         },
+        "unknownSize": "Desconocido",
         "saveButton": {
           "label": "Guardar los cambios",
           "saving": "Guardando..."
@@ -1937,9 +1938,7 @@
           "size": "Tamaño",
           "other": "Otros",
           "countWithSize": "{count} ({size})",
-          "bytes": "bytes",
-          "loadError": "No se pudieron cargar los tipos de documento.",
-          "sizeValue": "{value} {unit}"
+          "loadError": "No se pudieron cargar los tipos de documento."
         }
       },
       "toasts": {
@@ -11798,9 +11797,6 @@
       "sessionNotFound": {
         "description": "Esta sesión de chat no existe o fue eliminada.",
         "title": "Chat no encontrado"
-      },
-      "sourcesModal": {
-        "title": "Fuentes"
       }
     },
     "appChrome": {
@@ -12705,25 +12701,6 @@
         "toggleRow": {
           "ariaLabel": "Alternar la línea de tiempo"
         },
-        "toolNames": {
-          "codeInterpreter": "Intérprete de código",
-          "customTool": "Herramienta personalizada",
-          "generateImage": "Generar imagen",
-          "generatePlan": "Generar plan",
-          "internalSearch": "Búsqueda interna",
-          "knowledgeBaseQuery": "Consulta de la base de conocimiento",
-          "memory": "Memoria",
-          "openUrls": "Abrir URL",
-          "researchAgent": "Agente de investigación",
-          "thinking": "Pensando",
-          "tool": "Herramienta",
-          "webSearch": "Búsqueda web",
-          "terminal": "Terminal",
-          "applyPatch": "Aplicar parche",
-          "editFile": "Editar archivo",
-          "writeFile": "Escribir archivo",
-          "publishFiles": "Publicar archivos"
-        },
         "webSearch": {
           "searching": {
             "status": "Buscando en la web"
@@ -12740,7 +12717,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Enviando entrada a la sesión {sessionId}} failed {No se pudo enviar la entrada a la sesión {sessionId}} canceled {Cancelado} done {Entrada enviada a la sesión {sessionId}} other {Entrada enviada a la sesión {sessionId}}}} check {{phase, select, running {Revisando la sesión {sessionId}} failed {No se pudo revisar la sesión {sessionId}} canceled {Cancelado} done {Sesión {sessionId} revisada} other {Sesión {sessionId} revisada}}} other {Sesión {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {Enviando entrada a la sesión {sessionId}} failed {No se pudo enviar la entrada a la sesión {sessionId}} canceled {Cancelado} done {Entrada enviada a la sesión {sessionId}} other {Entrada enviada a la sesión {sessionId}}}} check {{phase, select, running {Revisando la sesión {sessionId}} failed {No se pudo revisar la sesión {sessionId}} canceled {Cancelado} done {Sesión {sessionId} revisada} other {Sesión {sessionId} revisada}}} other {Sesión {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {Enviando entrada a la sesión} failed {No se pudo enviar la entrada a la sesión} canceled {Cancelado} done {Entrada enviada a la sesión} other {Entrada enviada a la sesión}}} check {{phase, select, running {Revisando la sesión} failed {No se pudo revisar la sesión} canceled {Cancelado} done {Sesión revisada} other {Sesión revisada}}} other {Sesión}}"
+            }
           },
           "output": {
             "title": "Salida"
@@ -12767,7 +12747,18 @@
             "failed": {
               "status": "La edición falló"
             },
-            "title": "Parche"
+            "title": "Parche",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {Escribiendo {path}…} other {Editando {path}…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {Escribiendo un archivo…} other {Editando un archivo…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {Aplicando parche a archivos…} one {Aplicando parche a # archivo…} other {Aplicando parche a # archivos…}}"
+              }
+            }
           },
           "stopped": {
             "status": "Detenido"
@@ -12882,61 +12873,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# línea} other {# líneas}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "Copiar el contenido"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# columna} other {# columnas}} • {rowCount, plural, one {# fila} other {# filas}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# fila} other {# filas}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# fila} other {# filas}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Documento de Word • # palabra} other {Documento de Word • # palabras}}",
-          "headerDescriptionFallback": "Documento de Word",
-          "legacyDocMessage": "No se puede previsualizar el formato antiguo .doc. Descarga el archivo para verlo.",
-          "loadError": {
-            "message": "No se pudo previsualizar este documento. Descarga el archivo para verlo."
-          }
-        },
-        "downloadButton": {
-          "label": "Descargar el archivo",
-          "tooltip": "Descargar"
-        },
         "exceptionTrace": {
           "defaultTitle": "Traza completa de la excepción"
-        },
-        "header": {
-          "fallbackTitle": "Documento"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# línea} other {# líneas}}"
-        },
-        "loadError": {
-          "message": "No se pudo cargar el documento."
-        },
-        "pdf": {
-          "iframeTitle": "Visor de PDF"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# línea} other {# líneas}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "Este formato de archivo no admite la vista previa."
-        },
-        "xlsx": {
-          "headerDescription": "Hoja de cálculo - {count, plural, one {# hoja} other {# hojas}}",
-          "parseError": {
-            "message": "No se pudo previsualizar esta hoja de cálculo."
-          },
-          "sheetCount": "{count, plural, one {# hoja} other {# hojas}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "Acercar",
-          "zoomOutTooltip": "Alejar"
         }
       },
       "share": {
@@ -13083,6 +13021,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# archivo seleccionado} other {# archivos seleccionados}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "Documento"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# línea} other {# líneas}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# línea} other {# líneas}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# línea} other {# líneas}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# palabra} other {# palabras}}"
+      },
+      "copyButton": {
+        "tooltip": "Copiar el contenido"
+      },
+      "downloadButton": {
+        "label": "Descargar el archivo",
+        "tooltip": "Descargar"
+      },
+      "retryButton": {
+        "label": "Reintentar"
+      },
+      "error": {
+        "title": "No se pudo cargar la vista previa",
+        "description": "No se pudo cargar la vista previa. Inténtalo de nuevo o descarga el archivo para abrirlo."
+      },
+      "renderError": {
+        "title": "No se puede previsualizar este archivo",
+        "description": "El archivo no se puede mostrar aquí. Descarga el archivo para abrirlo."
+      },
+      "unsupported": {
+        "title": "La vista previa de este tipo de archivo no está disponible actualmente",
+        "description": "Descarga el archivo para ver su contenido."
+      },
+      "tooLarge": {
+        "title": "Archivo demasiado grande para la vista previa",
+        "description": "Aquí se pueden previsualizar archivos de hasta {size, number} MB. Descarga el archivo para abrirlo."
+      },
+      "spreadsheet": {
+        "headerDescription": "Hoja de cálculo - {count, plural, one {# hoja} other {# hojas}}",
+        "truncated": "Vista previa limitada a {rows, number} filas, {columns, number} columnas y {cells, number} celdas. Descarga el original para ver todos los datos.",
+        "malformed": "Este CSV contiene un campo entre comillas no válido. Descarga el original para revisarlo.",
+        "empty": "Sin contenido"
+      },
+      "image": {
+        "loading": {
+          "label": "Cargando imagen..."
+        },
+        "actualSize": {
+          "label": "Tamaño real"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "Controles de PDF"
+        },
+        "thumbnails": {
+          "toggle": "Mostrar u ocultar miniaturas",
+          "label": "Miniaturas de páginas",
+          "resize": "Cambiar el tamaño de las miniaturas"
+        },
+        "page": {
+          "previous": "Página anterior",
+          "next": "Página siguiente",
+          "counter": "{current, number} / {total, number}",
+          "preview": "Vista previa de la página {page, number}",
+          "select": "Ir a la página {page, number}"
+        },
+        "zoom": {
+          "out": "Alejar",
+          "in": "Acercar",
+          "label": "Zoom",
+          "fitWidth": "Ajustar al ancho",
+          "fitPage": "Ajustar a la página"
+        },
+        "error": {
+          "description": "No se pudo cargar el archivo PDF."
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "Controles de presentación"
+        },
+        "thumbnails": {
+          "toggle": "Mostrar u ocultar miniaturas de diapositivas",
+          "resize": "Cambiar el tamaño de las miniaturas"
+        },
+        "slides": {
+          "label": "Diapositivas"
+        },
+        "previous": {
+          "label": "Diapositiva anterior"
+        },
+        "next": {
+          "label": "Diapositiva siguiente"
+        },
+        "slide": {
+          "counter": "Diapositiva {current} de {total}"
+        },
+        "empty": {
+          "label": "Esta presentación no tiene diapositivas"
         }
       }
     },
@@ -13423,12 +13469,57 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "Versión actualizada · {details}"
-        },
         "preview": {
           "ariaLabel": "Vista previa de {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "Vista previa de {name}"
+        }
+      },
+      "viewAllButton": {
+        "label": "Ver los {count} archivos"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "Archivos",
+        "description": "Archivos que el modelo publicó en este chat",
+        "empty": "Este chat aún no tiene archivos",
+        "tile": {
+          "ariaLabel": "Abrir {name}"
+        },
+        "search": {
+          "placeholder": "Buscar archivos",
+          "empty": "Ningún archivo coincide con la búsqueda"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate> (v{version} de {latest})"
+      },
+      "sourcesTab": {
+        "label": "Fuentes"
+      },
+      "toggleButton": {
+        "label": "Mostrar u ocultar el panel"
+      },
+      "downloadButton": {
+        "label": "Descargar",
+        "tooltip": "Descargar archivo"
+      },
+      "reloadButton": {
+        "label": "Actualizar archivos",
+        "error": "No se pudieron volver a cargar los archivos. Inténtalo de nuevo."
+      },
+      "expandButton": {
+        "label": "Expandir panel"
+      },
+      "restoreButton": {
+        "label": "Restaurar panel"
+      },
+      "resizeHandle": {
+        "label": "Cambiar tamaño del panel"
       }
     }
   },
@@ -13704,10 +13795,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {# línea} other {# líneas}}"
-      },
-      "size": {
-        "bytes": "{count} bytes",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "Ver texto completo"
@@ -15046,18 +15133,6 @@
       "browser": {
         "label": "Apps"
       },
-      "list": {
-        "label": "Pestañas de resultados"
-      },
-      "close": {
-        "label": "Cerrar {name}"
-      },
-      "reordered": {
-        "label": "Pestaña movida a la posición {position} de {count}"
-      },
-      "open": {
-        "label": "Abrir una pestaña"
-      },
       "outputs": {
         "label": "Resultados"
       }
@@ -15183,8 +15258,7 @@
       "scope": {
         "turn": "Resultados del turno {turn, number}",
         "all": "Todos los resultados"
-      },
-      "unseen": "Nuevo o actualizado"
+      }
     },
     "turnOutputs": {
       "showAll": "Ver los {count} resultados",
@@ -15253,6 +15327,28 @@
       "description": "Esta sesión no puede usar {names}. Tus skills deben caber en {maxSize} y {maxFiles, number} archivos. Desactiva los skills que no necesites para liberar espacio.",
       "manage": "Gestionar skills",
       "dismiss": "Descartar"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "Pestañas de resultados"
+      },
+      "close": {
+        "label": "Cerrar {name}"
+      },
+      "reordered": {
+        "label": "Pestaña movida a la posición {position} de {count}"
+      },
+      "open": {
+        "label": "Abrir una pestaña"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "Descargar"
+      },
+      "unseen": "Nuevo o actualizado"
     }
   },
   "knowledge": {

@@ -20,16 +20,16 @@ const CHAT_FILE_PREFIX = "/api/chat/file";
  */
 export async function fetchChatFile(
   fileId: string,
-  parsed: boolean = false
+  parsed: boolean = false,
+  signal?: AbortSignal
 ): Promise<Response> {
   const response = await fetch(
     `${CHAT_FILE_PREFIX}/${encodeURIComponent(fileId)}${
       parsed ? "?parsed=true" : ""
     }`,
-    {
-      method: "GET",
-      cache: "force-cache",
-    }
+    // The server marks a file immutable; the default cache mode reuses it
+    // and fetches a failed load again.
+    { method: "GET", signal }
   );
 
   if (!response.ok) {

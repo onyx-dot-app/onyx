@@ -124,7 +124,9 @@ over an MCP server on a shared host, and the lowest id wins between API
 integrations. For an external app, `external_apps/matching/engine.py:url_matches_patterns`
 full-matches the URL against the app's patterns and `recognize_actions` maps
 the request to catalog actions. A request that matches no catalog action gets
-one synthetic `unspecified` action. An MCP server attributes by host and path
+one synthetic `unspecified` action. A GraphQL request that also invokes a root
+field no matched action covers gets `unspecified` next to the matched actions,
+so an unknown mutation cannot ride on a known read's Allow. An MCP server attributes by host and path
 prefix (`sandbox_proxy/resolvers/mcp_matching.py:match_request`) and returns
 the prefix length in `RequestMatch`; the evaluator picks the longest prefix
 across servers, and a tie matches nothing. The kind then parses the JSON-RPC

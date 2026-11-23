@@ -1159,7 +1159,7 @@ def test_a_repeated_save_lists_each_published_file_once(
     response = _response(db_session, conversation)
     record = _record(response)
     published = PublishedFile(
-        file_id=f"chat-artifact-{conversation.id}-{uuid4().hex}",
+        file_id=str(uuid4()),
         name="report.md",
         path="/home/sandbox/report.md",
         size=9,

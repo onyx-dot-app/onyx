@@ -9,10 +9,12 @@ durable cache records (`harness_state`), so any API pod can serve
 a user's sandbox keeps (Onyx delete hooks call them through `purge`).
 """
 
+import posixpath
 import random
 import secrets
 import time
 from collections.abc import Callable, Generator, Iterable, Sequence
+from contextlib import nullcontext
 from typing import IO
 from uuid import UUID, uuid4
 
@@ -22,7 +24,11 @@ from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.cancellation import CancellationSignal, current_cancellation
+from onyx.llm.cancellation import (
+    CancellationSignal,
+    check_cancelled,
+    current_cancellation,
+)
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentError,
@@ -56,6 +62,7 @@ from onyx.microvm.models import (
     ExecGap,
     ExecOutput,
     ExecResult,
+    ExecStarted,
     FileListing,
     FileType,
     OutputStream,
@@ -135,6 +142,10 @@ from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
     INTERRUPT_CHAR,
     ONYX_VM_FILES_ROOT,
+    RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES,
+    RENDER_FIRST_PAGE_ROOT,
+    RENDER_FIRST_PAGE_SIZE_PX,
+    RENDER_FIRST_PAGE_SUFFIXES,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
@@ -147,7 +158,6 @@ from onyx.server.features.build.sandbox.harness_base import (
     onyx_vm_path,
     session_relative_path,
     session_tool_results,
-    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
@@ -160,6 +170,7 @@ from onyx.server.features.build.sandbox.models import (
     SandboxPathInfo,
     SandboxProvisionContentionError,
     SkillsBundle,
+    session_workspace,
 )
 from onyx.utils.logger import setup_logger
 
@@ -205,6 +216,8 @@ _SANDBOX_FILE_TYPES: dict[FileType, SandboxFileType] = {
     FileType.DIRECTORY: "directory",
     FileType.OTHER: "other",
 }
+# The tail of a failed render command's output that its log keeps.
+_RENDER_LOG_OUTPUT_BYTES = 2000
 _STAT_ERRORS: dict[StatError, SandboxPathFault] = {
     StatError.ESCAPES: "escapes",
     StatError.LOOP: "loop",
@@ -1034,6 +1047,175 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             raise HarnessSandboxError("This chat session was deleted.")
         _, daemon = self._session_vm(ref)
         return _SessionFiles(daemon, tenant_cache, ref)
+
+    # Renders
+
+    def render_first_page(
+        self, ref: HarnessSandboxRef, path: str, *, until: float
+    ) -> bytes | None:
+        suffix = posixpath.splitext(path)[1].lower()
+        if suffix not in RENDER_FIRST_PAGE_SUFFIXES:
+            return None
+        cancellation = current_cancellation()
+        try:
+            daemon, session_id, target = self._file_target(ref, path)
+        except Exception:
+            # A failure after a Stop is the Stop.
+            check_cancelled()
+            logger.warning(
+                "sandbox_fc_render_failed sandbox=%s path=%r",
+                ref.sandbox_id,
+                path,
+                exc_info=True,
+            )
+            return None
+        source = (
+            posixpath.join(session_workspace(ref.session_id), target)
+            if session_id
+            else target
+        )
+        scratch = f"{RENDER_FIRST_PAGE_ROOT}/{secrets.token_hex(16)}"
+        steps: list[tuple[list[str], dict[str, str]]] = [(["mkdir", "-p", scratch], {})]
+        if suffix != ".pdf":
+            steps.append(
+                (
+                    [
+                        "soffice",
+                        # A profile of its own, so renders run side by side.
+                        f"-env:UserInstallation=file://{scratch}/profile",
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        scratch,
+                        source,
+                    ],
+                    {"SAL_USE_VCLPLUGIN": "svp"},
+                )
+            )
+            # LibreOffice names the PDF after the source, without its suffix.
+            stem = posixpath.splitext(posixpath.basename(source))[0]
+            source = f"{scratch}/{stem}.pdf"
+        steps.append(
+            (
+                [
+                    "pdftoppm",
+                    "-jpeg",
+                    "-f",
+                    "1",
+                    "-l",
+                    "1",
+                    "-scale-to",
+                    str(RENDER_FIRST_PAGE_SIZE_PX),
+                    "-singlefile",
+                    source,
+                    f"{scratch}/page",
+                ],
+                {},
+            )
+        )
+        # The execution ID of the step that runs, once it started.
+        running: list[str] = []
+
+        def kill() -> None:
+            if running:
+                daemon.cancel(running[0])
+
+        try:
+            for argv, env in steps:
+                check_cancelled()
+                remaining = until - time.monotonic()
+                if remaining <= 0:
+                    logger.warning(
+                        "sandbox_fc_render_failed sandbox=%s path=%r step=%s: "
+                        "the render budget is spent",
+                        ref.sandbox_id,
+                        path,
+                        argv[0],
+                    )
+                    return None
+                running.clear()
+                result: ExecResult | None = None
+                output = b""
+                try:
+                    with (
+                        nullcontext()
+                        if cancellation is None
+                        else cancellation.on_cancel(kill)
+                    ):
+                        for event in daemon.run(
+                            ExecCommand(
+                                argv=argv,
+                                env=env,
+                                deadline_seconds=remaining,
+                                session_id=session_id,
+                            )
+                        ):
+                            if isinstance(event, ExecStarted):
+                                running.append(event.execution_id)
+                                # A cancel before the start found nothing to
+                                # kill: the step's clean-up below kills it.
+                                if cancellation is not None and cancellation.cancelled:
+                                    break
+                            elif isinstance(event, ExecOutput):
+                                output = (output + event.data)[
+                                    -_RENDER_LOG_OUTPUT_BYTES:
+                                ]
+                            elif isinstance(event, ExecResult):
+                                result = event
+                finally:
+                    # A step without a result may still run: kill it, so it
+                    # writes nothing in the scratch directory after its delete.
+                    if result is None:
+                        try:
+                            kill()
+                        except Exception:
+                            logger.warning(
+                                "sandbox_fc_render_kill_failed sandbox=%s execution=%s",
+                                ref.sandbox_id,
+                                running,
+                                exc_info=True,
+                            )
+                check_cancelled()
+                if (
+                    result is None
+                    or result.completion is not ExecCompletion.EXITED
+                    or result.exit_code != 0
+                ):
+                    logger.warning(
+                        "sandbox_fc_render_failed sandbox=%s path=%r step=%s: %s",
+                        ref.sandbox_id,
+                        path,
+                        argv[0],
+                        "the command ended without a result"
+                        if result is None
+                        else f"{result.completion.value} with exit code "
+                        f"{result.exit_code}: "
+                        f"{output.decode(errors='replace').strip()}",
+                    )
+                    return None
+            return self.read_file(
+                ref, f"{scratch}/page.jpg", max_bytes=RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES
+            )
+        except Exception:
+            check_cancelled()
+            logger.warning(
+                "sandbox_fc_render_failed sandbox=%s path=%r",
+                ref.sandbox_id,
+                path,
+                exc_info=True,
+            )
+            return None
+        finally:
+            try:
+                daemon.delete_file(session_id="", path=scratch, recursive=True)
+            except Exception:
+                logger.warning(
+                    "sandbox_fc_render_cleanup_failed sandbox=%s dir=%s",
+                    ref.sandbox_id,
+                    scratch,
+                    exc_info=True,
+                )
 
     # Purge (delete hooks). Each step runs even when an earlier one failed;
     # the call raises at the end if any step failed.

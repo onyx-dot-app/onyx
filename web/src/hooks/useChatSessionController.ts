@@ -43,6 +43,7 @@ import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useNavigation } from "@opal/navigation";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
+import { startChatLoad } from "@/lib/chat/publishedFiles";
 import type { ComposedMessage } from "@/lib/chat/types";
 
 interface UseChatSessionControllerProps {
@@ -218,6 +219,7 @@ export default function useChatSessionController({
       const toolOptionsVersion =
         useChatSessionStore.getState().sessions.get(existingChatSessionId)
           ?.toolOptionsVersion ?? 0;
+      const loadSequence = startChatLoad();
       let response: Response;
       try {
         response = await fetch(chatPageUrl(existingChatSessionId), {
@@ -363,11 +365,15 @@ export default function useChatSessionController({
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
         useChatSessionStore
           .getState()
-          .updateSessionData(chatSession.chat_session_id, {
-            hasOlderMessages,
-            olderMessagesFailed: false,
-            approvalsVersion: chatSession.approvals_version,
-          });
+          .applyLoadedSession(
+            chatSession.chat_session_id,
+            chatSession,
+            loadSequence,
+            {
+              hasOlderMessages,
+              olderMessagesFailed: false,
+            }
+          );
         chatSessionIdRef.current = chatSession.chat_session_id;
       }
 

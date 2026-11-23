@@ -49,8 +49,11 @@
   its own.
 - **An API caller** reads a session with `GET /chat/get-chat-session/{id}`. The
   response holds the messages and, for each answer, the packets that rebuild
-  it. A send that names a parent off the active branch fails with "not on the
-  latest mainline".
+  it. A latest-page load and a shared chat's load also hold
+  `published_files`: the latest version of each artifact (every publish of
+  one path) that the model or its subagents published in the chat, on every
+  branch. A send that names a
+  parent off the active branch fails with "not on the latest mainline".
 
 ---
 
@@ -108,6 +111,19 @@ GET /chat/get-chat-session/{id}
                                            (db/chat_response.py:waiting_approval_reply_ids)
   get_chat_messages_by_session             that page, or all branches without
                                            `limit`; two ToolCall levels
+  get_chat_published_files                 latest-page and shared loads only; one
+                                           query of the chat's chat_artifact rows
+                                           (by chat_session_id: the root chat,
+                                           which subagents share) joined to
+                                           their versions and file records: the
+                                           latest version of each artifact
+                                           (DISTINCT ON the artifact), by first
+                                           publish (ChatArtifact.created_at,
+                                           then ID), with its artifact_id and
+                                           version. The path comes from the
+                                           artifact, the title from the
+                                           version. Versions whose object is
+                                           missing (file_size -1) are left out
   translate_assistant_message_to_packets   runtime rows: read_chat_execution,
                                            read_response_replay_data ->
                                            chat/presentation.py:replay_response;
@@ -396,14 +412,21 @@ directory until the VM stops.
 Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
-its child sessions: message files (`save_chat_turn` also adds each
+its child sessions: first the files and thumbnails of the root session's
+`chat_artifact` versions, through `delete_chat_artifact_files` (this covers a
+response that ended without its save, such as an interrupted parked one),
+then message files (`save_chat_turn` also adds each
 `publish_files` call's `PublishedFiles` to the response's `ChatMessage.files`
-in its one save), then by file ID prefix under the root session ID the
-checkpoint blobs and the published files (`CHAT_ARTIFACT_FILE_PREFIX`; this
-covers a response that ended without its save, such as an interrupted parked
-one), then messages (tool calls,
+in its one save), then the checkpoint blobs by file ID prefix under the root
+session ID, then messages (tool calls,
 response items and checkpoints cascade), then `SearchDoc` rows no message links
-to. The EE task
+to. `delete_chat_artifact_files` deletes each thumbnail before its file (a
+published file's delete cascades to its version, which links the thumbnail),
+and keeps the file when the thumbnail delete fails, so the next hard delete
+retries both. It raises after a failure, which stops the hard delete before
+the message files. The failed-publish clean-up
+(`delete_unpublished_chat_artifacts`) uses it too, and keeps the artifact of
+a kept file. The EE task
 `ee/onyx/background/celery/tasks/ttl_management/tasks.py:perform_ttl_management_task`
 hard-deletes in batches the sessions whose last activity, child sessions
 included, is older than the window (`db/chat.py:get_chat_sessions_older_than`).

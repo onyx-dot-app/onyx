@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { useTranslations } from "next-intl";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Text, Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
@@ -31,17 +32,6 @@ export interface ExpandableTextDisplayProps {
   isStreaming?: boolean;
   /** Renders plain text (without `renderContent`) in the monospace font, e.g. for command output */
   monospace?: boolean;
-}
-
-type ExpandableTextTranslator = ReturnType<
-  typeof useTranslations<"common.expandableText">
->;
-
-/** Calculate content size in human-readable format */
-function getContentSize(text: string, t: ExpandableTextTranslator): string {
-  const bytes = new Blob([text]).size;
-  if (bytes < 1024) return t("size.bytes", { count: bytes });
-  return t("size.kilobytes", { size: (bytes / 1024).toFixed(2) });
 }
 
 /** Count lines in text */
@@ -133,6 +123,7 @@ export default function ExpandableTextDisplay({
   monospace = false,
 }: ExpandableTextDisplayProps) {
   const t = useTranslations("common.expandableText");
+  const formatBytes = useFormatBytes();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isMeasuredTruncated, setIsMeasuredTruncated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -146,8 +137,8 @@ export default function ExpandableTextDisplay({
     [isModalOpen, content]
   );
   const contentSize = useMemo(
-    () => (isModalOpen ? getContentSize(content, t) : ""),
-    [isModalOpen, content, t]
+    () => (isModalOpen ? formatBytes(new Blob([content]).size) : ""),
+    [isModalOpen, content, formatBytes]
   );
   const displaySubtitle = subtitle ?? contentSize;
 

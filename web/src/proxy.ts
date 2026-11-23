@@ -75,13 +75,9 @@ const CSP_HEADER = [
   strictCspEnabled
     ? "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com;"
     : "",
-  // connect-src blob: for the DOCX preview modal, which fetches the document
-  // back out of a blob: URL to render it. The Sentry origin (when configured) is
-  // derived from the DSN above.
+  // The Sentry origin (when configured) is derived from the DSN above.
   strictCspEnabled
-    ? `connect-src 'self' blob:${
-        sentryConnectSrc ? ` ${sentryConnectSrc}` : ""
-      };`
+    ? `connect-src 'self'${sentryConnectSrc ? ` ${sentryConnectSrc}` : ""};`
     : "",
   // img-src stays broad: chat markdown and connector content render remote
   // images.
@@ -89,9 +85,9 @@ const CSP_HEADER = [
   // cdn.onyx.app serves the Craft page's animated background video.
   strictCspEnabled ? "media-src 'self' blob: data: https://cdn.onyx.app;" : "",
   // worker-src blob: covers pdf.js-style workers and the PostHog session
-  // recorder; frame-src blob: covers in-app PDF preview.
+  // recorder.
   strictCspEnabled ? "worker-src 'self' blob:;" : "",
-  strictCspEnabled ? "frame-src 'self' blob:;" : "",
+  strictCspEnabled ? "frame-src 'self';" : "",
 ]
   .filter(Boolean)
   .join(" ");

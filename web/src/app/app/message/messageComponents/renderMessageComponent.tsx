@@ -86,7 +86,10 @@ function isExecToolPacket(packet: Packet) {
 }
 
 function isApplyPatchToolPacket(packet: Packet) {
-  return packet.obj.type === PacketType.APPLY_PATCH_START;
+  return (
+    packet.obj.type === PacketType.APPLY_PATCH_START ||
+    packet.obj.type === PacketType.FILE_TOOL_PROGRESS
+  );
 }
 
 function isPublishFilesToolPacket(packet: Packet) {

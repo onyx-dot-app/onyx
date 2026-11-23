@@ -205,17 +205,12 @@ export function RunCard<S extends RunCardStep>({
             </Section>
           }
         >
-          {/* Every title change swaps through one animation instead of
-              flashing: each new activity while working ("Thinking..." to
-              "Searching..."), and the finished or stopped title after. */}
+          {/* The header swaps when the run's state changes: working,
+              stopped or done. While working, a new activity ("Thinking..."
+              to "Searching...") updates the text in place, so the shimmer
+              never restarts. */}
           <Presence.Swap
-            swapKey={
-              isRunning
-                ? `working:${workingText}`
-                : stopped
-                  ? "stopped"
-                  : "done"
-            }
+            swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
           >
             {isRunning ? (
               <StreamingHeader headerText={workingText} />

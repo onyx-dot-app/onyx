@@ -9,7 +9,7 @@ import {
 
 type FilePickerButtonProps = DistributiveOmit<
   ButtonProps,
-  "onClick" | "href" | "type"
+  "onClick" | "href" | "download" | "type"
 > & {
   /** The accessible name of the file input, which tests also select it by. */
   inputLabel: string;

@@ -1665,6 +1665,7 @@
         "removingBadge": {
           "label": "移除中"
         },
+        "unknownSize": "未知",
         "saveButton": {
           "label": "保存更改",
           "saving": "保存中..."
@@ -1937,9 +1938,7 @@
           "size": "大小",
           "other": "其他",
           "countWithSize": "{count}（{size}）",
-          "bytes": "字节",
-          "loadError": "无法加载文档类型。",
-          "sizeValue": "{value} {unit}"
+          "loadError": "无法加载文档类型。"
         }
       },
       "toasts": {
@@ -11798,9 +11797,6 @@
       "sessionNotFound": {
         "description": "此聊天会话不存在或已被删除。",
         "title": "未找到聊天"
-      },
-      "sourcesModal": {
-        "title": "来源"
       }
     },
     "appChrome": {
@@ -12705,25 +12701,6 @@
         "toggleRow": {
           "ariaLabel": "切换时间线"
         },
-        "toolNames": {
-          "codeInterpreter": "代码解释器",
-          "customTool": "自定义工具",
-          "generateImage": "生成图片",
-          "generatePlan": "生成计划",
-          "internalSearch": "内部搜索",
-          "knowledgeBaseQuery": "知识库查询",
-          "memory": "记忆",
-          "openUrls": "打开 URL",
-          "researchAgent": "研究智能体",
-          "thinking": "思考",
-          "tool": "工具",
-          "webSearch": "网页搜索",
-          "terminal": "终端",
-          "applyPatch": "应用补丁",
-          "editFile": "编辑文件",
-          "writeFile": "写入文件",
-          "publishFiles": "发布文件"
-        },
         "webSearch": {
           "searching": {
             "status": "正在搜索网页"
@@ -12740,7 +12717,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {正在向会话 {sessionId} 发送输入} failed {无法向会话 {sessionId} 发送输入} canceled {已取消} done {已向会话 {sessionId} 发送输入} other {已向会话 {sessionId} 发送输入}}} check {{phase, select, running {正在检查会话 {sessionId}} failed {无法检查会话 {sessionId}} canceled {已取消} done {已检查会话 {sessionId}} other {已检查会话 {sessionId}}}} other {会话 {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {正在向会话 {sessionId} 发送输入} failed {无法向会话 {sessionId} 发送输入} canceled {已取消} done {已向会话 {sessionId} 发送输入} other {已向会话 {sessionId} 发送输入}}} check {{phase, select, running {正在检查会话 {sessionId}} failed {无法检查会话 {sessionId}} canceled {已取消} done {已检查会话 {sessionId}} other {已检查会话 {sessionId}}}} other {会话 {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {正在向会话发送输入} failed {无法向会话发送输入} canceled {已取消} done {已向会话发送输入} other {已向会话发送输入}}} check {{phase, select, running {正在检查会话} failed {无法检查会话} canceled {已取消} done {已检查会话} other {已检查会话}}} other {会话}}"
+            }
           },
           "output": {
             "title": "输出"
@@ -12767,7 +12747,18 @@
             "failed": {
               "status": "编辑失败"
             },
-            "title": "补丁"
+            "title": "补丁",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {正在写入 {path}…} other {正在编辑 {path}…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {正在写入文件…} other {正在编辑文件…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {正在修补文件…} one {正在修补 # 个文件…} other {正在修补 # 个文件…}}"
+              }
+            }
           },
           "stopped": {
             "status": "已停止"
@@ -12882,61 +12873,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "复制内容"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# 列} other {# 列}} • {rowCount, plural, one {# 行} other {# 行}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# 行} other {# 行}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# 行} other {# 行}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Word 文档 • # 个字} other {Word 文档 • # 个字}}",
-          "headerDescriptionFallback": "Word 文档",
-          "legacyDocMessage": "无法预览旧版 .doc 格式。请下载文件后查看。",
-          "loadError": {
-            "message": "无法预览此文档。请下载文件后查看。"
-          }
-        },
-        "downloadButton": {
-          "label": "下载文件",
-          "tooltip": "下载"
-        },
         "exceptionTrace": {
           "defaultTitle": "完整异常跟踪"
-        },
-        "header": {
-          "fallbackTitle": "文档"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# 行} other {# 行}}"
-        },
-        "loadError": {
-          "message": "加载文档失败。"
-        },
-        "pdf": {
-          "iframeTitle": "PDF 查看器"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "不支持预览此文件格式。"
-        },
-        "xlsx": {
-          "headerDescription": "电子表格 - {count, plural, one {# 个工作表} other {# 个工作表}}",
-          "parseError": {
-            "message": "无法预览此电子表格。"
-          },
-          "sheetCount": "{count, plural, one {# 个工作表} other {# 个工作表}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "放大",
-          "zoomOutTooltip": "缩小"
         }
       },
       "share": {
@@ -13083,6 +13021,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {已选择 # 个文件} other {已选择 # 个文件}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "文档"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# 行} other {# 行}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# 个字} other {# 个字}}"
+      },
+      "copyButton": {
+        "tooltip": "复制内容"
+      },
+      "downloadButton": {
+        "label": "下载文件",
+        "tooltip": "下载"
+      },
+      "retryButton": {
+        "label": "重试"
+      },
+      "error": {
+        "title": "无法加载预览",
+        "description": "未能加载预览。请重试或下载文件后打开。"
+      },
+      "renderError": {
+        "title": "无法预览此文件",
+        "description": "无法在此处显示该文件。请下载文件后打开。"
+      },
+      "unsupported": {
+        "title": "暂不支持预览此文件类型",
+        "description": "下载文件以查看其内容。"
+      },
+      "tooLarge": {
+        "title": "文件过大，无法预览",
+        "description": "此处支持预览最大 {size, number} MB 的文件。请下载文件后打开。"
+      },
+      "spreadsheet": {
+        "headerDescription": "电子表格 - {count, plural, one {# 个工作表} other {# 个工作表}}",
+        "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
+        "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。",
+        "empty": "无内容"
+      },
+      "image": {
+        "loading": {
+          "label": "正在加载图片..."
+        },
+        "actualSize": {
+          "label": "实际大小"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "PDF 控件"
+        },
+        "thumbnails": {
+          "toggle": "显示或隐藏页面缩略图",
+          "label": "页面缩略图",
+          "resize": "调整页面缩略图宽度"
+        },
+        "page": {
+          "previous": "上一页",
+          "next": "下一页",
+          "counter": "{current, number} / {total, number}",
+          "preview": "第 {page, number} 页预览",
+          "select": "转到第 {page, number} 页"
+        },
+        "zoom": {
+          "out": "缩小",
+          "in": "放大",
+          "label": "缩放",
+          "fitWidth": "适合宽度",
+          "fitPage": "适合页面"
+        },
+        "error": {
+          "description": "无法加载该 PDF 文件。"
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "演示文稿控件"
+        },
+        "thumbnails": {
+          "toggle": "显示或隐藏幻灯片缩略图",
+          "resize": "调整幻灯片缩略图宽度"
+        },
+        "slides": {
+          "label": "幻灯片"
+        },
+        "previous": {
+          "label": "上一张幻灯片"
+        },
+        "next": {
+          "label": "下一张幻灯片"
+        },
+        "slide": {
+          "counter": "幻灯片 {current} / {total}"
+        },
+        "empty": {
+          "label": "此演示文稿中没有幻灯片"
         }
       }
     },
@@ -13423,12 +13469,57 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "更新版本 · {details}"
-        },
         "preview": {
           "ariaLabel": "预览 {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "{name} 的预览"
+        }
+      },
+      "viewAllButton": {
+        "label": "查看全部 {count} 个文件"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "文件",
+        "description": "模型在此聊天中发布的文件",
+        "empty": "此聊天还没有文件",
+        "tile": {
+          "ariaLabel": "打开 {name}"
+        },
+        "search": {
+          "placeholder": "搜索文件",
+          "empty": "没有与搜索匹配的文件"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate>（第 {version} 版，共 {latest} 版）"
+      },
+      "sourcesTab": {
+        "label": "来源"
+      },
+      "toggleButton": {
+        "label": "显示或隐藏面板"
+      },
+      "downloadButton": {
+        "label": "下载",
+        "tooltip": "下载文件"
+      },
+      "reloadButton": {
+        "label": "刷新文件",
+        "error": "无法重新加载文件。请重试。"
+      },
+      "expandButton": {
+        "label": "展开面板"
+      },
+      "restoreButton": {
+        "label": "还原面板"
+      },
+      "resizeHandle": {
+        "label": "调整面板大小"
       }
     }
   },
@@ -13704,10 +13795,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {# 行} other {# 行}}"
-      },
-      "size": {
-        "bytes": "{count} 字节",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "查看全文"
@@ -15046,18 +15133,6 @@
       "browser": {
         "label": "应用"
       },
-      "list": {
-        "label": "输出标签页"
-      },
-      "close": {
-        "label": "关闭{name}"
-      },
-      "reordered": {
-        "label": "标签页已移至第{position}个，共{count}个"
-      },
-      "open": {
-        "label": "打开标签页"
-      },
       "outputs": {
         "label": "输出"
       }
@@ -15183,8 +15258,7 @@
       "scope": {
         "turn": "第 {turn, number} 轮输出",
         "all": "所有输出"
-      },
-      "unseen": "新增或已更新"
+      }
     },
     "turnOutputs": {
       "showAll": "查看全部 {count} 个输出",
@@ -15253,6 +15327,28 @@
       "description": "此会话无法使用 {names}。你的技能必须在 {maxSize} 和 {maxFiles, number} 个文件以内。关闭不需要的技能以腾出空间。",
       "manage": "管理技能",
       "dismiss": "关闭"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "输出标签页"
+      },
+      "close": {
+        "label": "关闭{name}"
+      },
+      "reordered": {
+        "label": "标签页已移至第{position}个，共{count}个"
+      },
+      "open": {
+        "label": "打开标签页"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "下载"
+      },
+      "unseen": "新增或已更新"
     }
   },
   "knowledge": {
