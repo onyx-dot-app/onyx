@@ -355,17 +355,31 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// The directory for the Linux tray icon file, or `None` for the library
-/// default (`$XDG_RUNTIME_DIR/tray-icon`). With no runtime directory the
-/// default is `/tmp/tray-icon`, which only its first user can write to.
+/// default (`$XDG_RUNTIME_DIR/tray-icon`). Without a usable runtime directory
+/// (unset, relative, missing or read-only) it is the per-user cache directory:
+/// the library would fall back to `/tmp/tray-icon`, which only its first user
+/// can write to, or fail.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn tray_icon_dir(
     runtime_dir: Option<&std::path::Path>,
     cache_dir: Option<std::path::PathBuf>,
 ) -> Option<std::path::PathBuf> {
-    if runtime_dir.is_some_and(std::path::Path::is_absolute) {
+    if runtime_dir.is_some_and(|dir| dir.is_absolute() && can_write_in(&dir.join("tray-icon"))) {
         return None;
     }
     cache_dir.map(|dir| dir.join("tray-icon"))
+}
+
+/// Whether `dir` exists or can be made, and takes new files.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn can_write_in(dir: &std::path::Path) -> bool {
+    if std::fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    let probe = dir.join(format!(".probe-{}", std::process::id()));
+    let written = std::fs::write(&probe, b"").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    written
 }
 
 /// A left click on the tray icon (on release, as Windows menus open).
@@ -480,12 +494,11 @@ mod tray_dir_tests {
     use std::path::{Path, PathBuf};
 
     #[test]
-    fn tray_icon_dir_keeps_the_runtime_dir_default() {
+    fn tray_icon_dir_keeps_a_usable_runtime_dir() {
+        let runtime = temp_dir("runtime");
         let cache = Some(PathBuf::from("/home/a/.cache/app"));
-        assert_eq!(
-            tray_icon_dir(Some(Path::new("/run/user/1000")), cache),
-            None
-        );
+        assert_eq!(tray_icon_dir(Some(&runtime), cache), None);
+        std::fs::remove_dir_all(&runtime).unwrap();
     }
 
     #[test]
@@ -495,6 +508,31 @@ mod tray_dir_tests {
         assert_eq!(tray_icon_dir(None, Some(cache.clone())), expected);
         // dirs::runtime_dir ignores a relative XDG_RUNTIME_DIR.
         assert_eq!(tray_icon_dir(Some(Path::new("run")), Some(cache)), expected);
+    }
+
+    #[test]
+    fn tray_icon_dir_is_per_user_when_the_runtime_dir_is_unusable() {
+        let base = temp_dir("unusable");
+        // A file where the directory should be: no directory can be made under it.
+        let not_a_dir = base.join("runtime");
+        std::fs::write(&not_a_dir, b"").unwrap();
+        let cache = base.join("cache");
+        let expected = Some(cache.join("tray-icon"));
+        assert_eq!(
+            tray_icon_dir(Some(&not_a_dir), Some(cache.clone())),
+            expected
+        );
+        assert_eq!(
+            tray_icon_dir(Some(&not_a_dir.join("missing")), Some(cache)),
+            expected
+        );
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("onyx-tray-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
     }
 
     #[test]
