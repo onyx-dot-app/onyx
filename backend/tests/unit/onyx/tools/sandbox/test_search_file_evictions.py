@@ -84,11 +84,16 @@ def _folder_bytes(
     writing: dict[str, int],
     plan: tuple[list[str], list[_File]],
 ) -> int:
-    """The bytes in attachments/search/ after the plan's deletes and writes."""
+    """The most bytes that attachments/search/ can hold after the plan's
+    deletes, whichever of the running and planned writes land. A write that
+    fails keeps what is at its path."""
     evicted, fitting = plan
     sizes = {path: entry.size for path, entry in held.items() if path not in evicted}
-    sizes.update(writing)
-    sizes.update((write.path, write.size) for write in fitting)
+    for path, size in [
+        *writing.items(),
+        *((write.path, write.size) for write in fitting),
+    ]:
+        sizes[path] = max(sizes.get(path, 0), size)
     return sum(sizes.values())
 
 
@@ -137,3 +142,39 @@ def test_one_of_two_grown_replacements_fits_under_the_cap(
         assert plan == ([], [])
     else:
         assert plan == (["attachments/search/b"], [_write("a", 70 * mib)])
+
+
+@pytest.mark.parametrize("replaced_protected", [False, True])
+def test_a_shrunk_replacement_makes_no_room_until_it_lands(
+    monkeypatch: pytest.MonkeyPatch, replaced_protected: bool
+) -> None:
+    mib = 1024 * 1024
+    monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 1024 * mib)
+    held = {
+        entry.path: entry
+        for entry in (_entry("offered", 900 * mib, 90), _entry("big", 100 * mib, 60))
+    }
+    protected = {"attachments/search/offered"}
+    if replaced_protected:
+        protected.add("attachments/search/big")
+    plan = _evictions(
+        held, {}, [_write("big", 10 * mib), _write("new", 100 * mib)], protected
+    )
+    assert _folder_bytes(held, {}, plan) <= 1024 * mib
+    assert plan == ([], [_write("big", 10 * mib)])
+
+
+@pytest.mark.parametrize("replaced_protected", [False, True])
+def test_a_running_shrunk_replacement_keeps_its_listed_bytes(
+    replaced_protected: bool,
+) -> None:
+    held = {
+        entry.path: entry for entry in (_entry("offered", 6, 90), _entry("big", 4, 60))
+    }
+    protected = {"attachments/search/offered"}
+    if replaced_protected:
+        protected.add("attachments/search/big")
+    writing = {"attachments/search/big": 1}
+    plan = _evictions(held, writing, [_write("new", 3)], protected)
+    assert _folder_bytes(held, writing, plan) <= 10
+    assert plan == ([], [])

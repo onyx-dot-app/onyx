@@ -856,18 +856,22 @@ def _evictions(
     may not show yet. A `protected` path (the turn's offers) stays. The writes
     that fit next to the protected files and earlier writes go ahead, in
     order; deletes make room only for them, so no write means no delete. A
-    path's current bytes count until a write that goes ahead replaces them."""
-    # By path: the bytes that stay.
+    write can fail and keep what is at its path, so until it lands its path
+    counts the larger of its current bytes and the write's."""
+    # By path: the most bytes that can stay.
     kept = {path: entry.size for path, entry in held.items() if path in protected}
-    kept.update(writing)
+    for path, size in writing.items():
+        kept[path] = max(size, held[path].size if path in held else 0)
     room = MAX_CHAT_SEARCH_BYTES - sum(kept.values())
     fitting: list[_File] = []
     for write in writes:
-        growth = write.size - kept.get(write.path, 0)
+        listed = held[write.path].size if write.path in held else 0
+        charge = max(write.size, kept.get(write.path, listed))
+        growth = charge - kept.get(write.path, 0)
         if growth <= room:
             fitting.append(write)
             room -= growth
-            kept[write.path] = write.size
+            kept[write.path] = charge
     if not fitting:
         return [], []
     others = [entry for path, entry in held.items() if path not in kept]
