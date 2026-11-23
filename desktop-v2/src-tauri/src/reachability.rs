@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn health_reports_refused_and_server_errors() {
-        let api = Api::new().unwrap();
+        let api = Api::new("0.0.0-test").unwrap();
         let down = format!("http://127.0.0.1:{CLOSED_PORT}");
         assert_eq!(
             tauri::async_runtime::block_on(api.health(&down)),

@@ -245,7 +245,10 @@ pub fn build_window_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         &[&PredefinedMenuItem::about(
             app,
             Some("About Onyx"),
-            Some(about_metadata(&app.package_info().version.to_string())),
+            Some(about_metadata(
+                &app.package_info().version.to_string(),
+                app.default_window_icon().cloned(),
+            )),
         )?],
     )?;
     Menu::with_items(app, &[&file, &view, &help])
@@ -286,10 +289,12 @@ pub fn sync_launcher_items(app: &AppHandle) {
 
 /// Windows shows the About dialog only for an item with metadata.
 #[cfg(any(not(target_os = "macos"), test))]
-fn about_metadata(version: &str) -> AboutMetadata<'static> {
+fn about_metadata<'a>(version: &str, icon: Option<Image<'a>>) -> AboutMetadata<'a> {
     AboutMetadata {
         name: Some("Onyx".into()),
         version: Some(version.into()),
+        // Linux shows a missing image without one.
+        icon,
         ..Default::default()
     }
 }
@@ -621,9 +626,11 @@ mod tests {
 
     #[test]
     fn the_about_item_has_the_name_and_version() {
-        let metadata = about_metadata("1.2.3");
+        let icon = Image::new_owned(vec![0; 4], 1, 1);
+        let metadata = about_metadata("1.2.3", Some(icon));
         assert_eq!(metadata.name.as_deref(), Some("Onyx"));
         assert_eq!(metadata.version.as_deref(), Some("1.2.3"));
+        assert!(metadata.icon.is_some());
     }
 
     fn click(button: MouseButton, button_state: MouseButtonState) -> TrayIconEvent {

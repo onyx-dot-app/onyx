@@ -73,7 +73,10 @@ async fn finish(app: &AppHandle, server: &str, token: &str, epoch: u64) {
     // Stale if a sign-out, server change or password sign-in came first.
     match app.state::<AppState>().commit_sign_in(server, token, epoch) {
         // The other SSO flow, if the user started both, has nothing to finish.
-        Ok(true) => cancel(app),
+        Ok(true) => {
+            log::info!("signed in with SSO");
+            cancel(app);
+        }
         Ok(false) => {
             log::warn!("dropped an SSO sign-in that finished after its session ended");
             return;

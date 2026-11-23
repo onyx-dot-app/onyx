@@ -167,6 +167,7 @@ pub async fn save_server(
     server_locked(&state)?;
     let current = state.server().ok();
     let (server, same) = chosen_server(&url, current.as_deref())?;
+    let logged = main_window::log_safe(&server);
     // The same server keeps the session and its windows.
     if same {
         windows::close(&app, windows::ONBOARDING);
@@ -177,6 +178,7 @@ pub async fn save_server(
         end_session(&app).await?;
     }
     state.config.update(|c| c.server_url = Some(server))?;
+    log::info!("saved the server {logged}");
     windows::open_login(&app)?;
     windows::close(&app, windows::ONBOARDING);
     Ok(())
@@ -219,6 +221,7 @@ pub async fn login(
     if !state.commit_sign_in(&server, &token, epoch)? {
         return Err("Sign-in was cancelled.".into());
     }
+    log::info!("signed in with a password");
     // A pending SSO sign-in (possibly another account) must not replace this one.
     crate::sso::cancel(&app);
     main_window::open(&app, &server, &token, "/app").await?;
@@ -319,6 +322,7 @@ async fn end_session(app: &AppHandle) -> Result<(), String> {
         None => true,
     };
     cleared?;
+    log::info!("signed out of {}", main_window::log_safe(&server));
     main_window::close(app, &server);
     windows::reset_launcher(app);
     if !revoked {

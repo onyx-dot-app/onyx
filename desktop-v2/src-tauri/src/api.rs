@@ -12,7 +12,11 @@ use url::Url;
 
 use crate::reachability::{self, Unreachable};
 
-const USER_AGENT: &str = concat!("OnyxDesktop/", env!("CARGO_PKG_VERSION"));
+/// `version` is the app version from the Tauri config, which builds set;
+/// the Cargo.toml version is only a placeholder.
+fn user_agent(version: &str) -> String {
+    format!("OnyxDesktop/{version}")
+}
 
 /// The `origin` of launcher questions (the server's `MessageOrigin`).
 const ORIGIN: &str = "desktop";
@@ -612,9 +616,10 @@ async fn probe(client: &Client, url: &str) -> Result<(), Unreachable> {
 impl Api {
     /// Fails if the TLS library cannot start (for example, a broken OpenSSL
     /// configuration).
-    pub fn new() -> Result<Self, String> {
+    pub fn new(version: &str) -> Result<Self, String> {
+        let user_agent = user_agent(version);
         let http = Client::builder()
-            .user_agent(USER_AGENT)
+            .user_agent(&user_agent)
             .connect_timeout(Duration::from_secs(10))
             .redirect(reqwest::redirect::Policy::custom(|attempt| {
                 if redirect_allowed(attempt.previous(), attempt.url()) {
@@ -626,7 +631,7 @@ impl Api {
             .build()
             .map_err(|e| e.to_string())?;
         let probe = Client::builder()
-            .user_agent(USER_AGENT)
+            .user_agent(user_agent)
             .connect_timeout(Duration::from_secs(10))
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -1185,8 +1190,8 @@ mod tests {
     use super::{
         body_chunks, file_state, is_file_id, multipart_body, normalize_managed_server_url,
         normalize_server_url, parse_agents, parse_settings, parse_version, redirect_allowed,
-        saved_server_allowed, sso_options, upload_limit, upload_outcome, Agent, Api, AttachedFile,
-        AuthTypeResponse, FileState, ServerSettings, MAX_UPLOAD_BYTES,
+        saved_server_allowed, sso_options, upload_limit, upload_outcome, user_agent, Agent, Api,
+        AttachedFile, AuthTypeResponse, FileState, ServerSettings, MAX_UPLOAD_BYTES,
     };
     use crate::reachability::Unreachable;
     use url::Url;
@@ -1225,7 +1230,7 @@ mod tests {
 
     fn post(url: &str) -> Result<reqwest::StatusCode, reqwest::Error> {
         tauri::async_runtime::block_on(async {
-            Api::new()
+            Api::new("0.0.0-test")
                 .unwrap()
                 .http
                 .post(url)
@@ -1302,7 +1307,7 @@ mod tests {
 
     fn send(server: &str) -> bool {
         tauri::async_runtime::block_on(async {
-            Api::new()
+            Api::new("0.0.0-test")
                 .unwrap()
                 .send_message(server, "token", "chat", "hello", false, &[])
                 .await
@@ -1651,9 +1656,14 @@ mod tests {
     }
 
     #[test]
+    fn the_user_agent_names_the_app_version() {
+        assert_eq!(user_agent("0.1.0"), "OnyxDesktop/0.1.0");
+    }
+
+    #[test]
     fn health_fails_for_a_page_that_is_not_onyx() {
         let (server, _) = serve(|_| html_page());
-        let api = Api::new().unwrap();
+        let api = Api::new("0.0.0-test").unwrap();
         assert_eq!(
             tauri::async_runtime::block_on(api.health(&server)),
             Err(Unreachable::NotOnyx)
@@ -1674,7 +1684,7 @@ mod tests {
                 html_page()
             }
         });
-        let api = Api::new().unwrap();
+        let api = Api::new("0.0.0-test").unwrap();
         assert_eq!(
             tauri::async_runtime::block_on(api.health(&server)),
             Err(Unreachable::ApiNotRouted)
@@ -1724,7 +1734,7 @@ mod tests {
             response.push_str("0\r\n\r\n");
             response
         });
-        let api = Api::new().unwrap();
+        let api = Api::new("0.0.0-test").unwrap();
         assert_eq!(
             tauri::async_runtime::block_on(api.health(&server)),
             Err(Unreachable::NotOnyx)
@@ -1736,7 +1746,7 @@ mod tests {
         let (server, _) = serve(|_| {
             "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{\"pass".to_string()
         });
-        let api = Api::new().unwrap();
+        let api = Api::new("0.0.0-test").unwrap();
         let message = tauri::async_runtime::block_on(api.auth_methods(&server))
             .err()
             .unwrap();
@@ -1753,9 +1763,12 @@ mod tests {
     #[test]
     fn an_old_server_without_desktop_sign_in_is_still_named() {
         let (server, _) = serve(|_| json("404 Not Found", r#"{"detail":"Not Found"}"#));
-        let message =
-            tauri::async_runtime::block_on(Api::new().unwrap().login(&server, "a@b.c", "pw"))
-                .unwrap_err();
+        let message = tauri::async_runtime::block_on(
+            Api::new("0.0.0-test")
+                .unwrap()
+                .login(&server, "a@b.c", "pw"),
+        )
+        .unwrap_err();
         assert!(message.contains("v4.2"), "{message}");
     }
 
@@ -1771,7 +1784,7 @@ mod tests {
                 root()
             }
         });
-        tauri::async_runtime::block_on(Api::new().unwrap().health(&server))
+        tauri::async_runtime::block_on(Api::new("0.0.0-test").unwrap().health(&server))
     }
 
     #[test]
