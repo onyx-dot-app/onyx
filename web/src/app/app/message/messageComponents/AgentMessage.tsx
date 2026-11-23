@@ -550,9 +550,13 @@ const AgentMessage = React.memo(function AgentMessage({
   let nextAnswerRef = 0;
 
   return (
-    // One cursor for the whole turn, across its sections. It hides while the
-    // turn waits for the user to approve a tool call or answer a question.
-    <ResponseCursorScope hidden={toolRequests.awaiting !== null}>
+    // One cursor for the whole turn, across its sections. It stays until the
+    // answer has finished, and hides while the turn waits for the user to
+    // approve a tool call or answer a question.
+    <ResponseCursorScope
+      working={!isComplete}
+      hidden={toolRequests.awaiting !== null}
+    >
       <div
         className="flex flex-col gap-3"
         data-testid={isComplete ? "onyx-ai-message" : undefined}
