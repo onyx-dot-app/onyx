@@ -173,9 +173,12 @@ ADC checks that variable before the metadata server.
 
 Onyx sends embedding requests to Vertex AI in parallel. Gemini Embedding 2 takes one text in each request.
 The other models take a batch of up to `VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE` texts (default 50).
-For `text-embedding-005` and `text-multilingual-embedding-002`, a batch also stays below 20,000 tokens,
-the Vertex AI limit. Two environment variables limit the requests in flight.
-Set them on the API server and on the indexing workers. Each process has its own limits.
+A batch has at most 250 texts, the Vertex AI limit, also when the setting is higher.
+For `text-embedding-005` and `text-multilingual-embedding-002`,
+Onyx estimates the tokens of each text and keeps a batch below 20,000 tokens, the Vertex AI limit.
+If Vertex AI refuses a batch for its token count, Onyx divides the batch into two and sends each half again.
+Two environment variables limit the requests in flight. Set them on the API server and on the indexing workers.
+Each process has its own limits.
 
 | Environment variable | Default | Limits |
 | --- | --- | --- |
