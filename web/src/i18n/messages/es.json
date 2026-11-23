@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Navegando"
+            "status": "{count, plural, =0 {Navegando} one {Navegando # página} other {Navegando # páginas}}"
           },
           "read": {
-            "status": "Navegado"
+            "status": "{count, plural, =0 {Navegado} one {Se navegó # página} other {Se navegaron # páginas}}"
           }
         },
         "fileReader": {
@@ -12521,7 +12521,7 @@
             "label": "Publicando archivos"
           },
           "browsing": {
-            "label": "Navegando"
+            "label": "{count, plural, =0 {Navegando} one {Navegando # página} other {Navegando # páginas}}"
           }
         },
         "internalSearch": {

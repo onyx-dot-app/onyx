@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "جارٍ التصفح"
+            "status": "{count, plural, =0 {جارٍ التصفح} one {جارٍ تصفح صفحة واحدة} other {جارٍ تصفح # صفحات}}"
           },
           "read": {
-            "status": "تم التصفح"
+            "status": "{count, plural, =0 {تم التصفح} one {تم تصفح صفحة واحدة} other {تم تصفح # صفحات}}"
           }
         },
         "fileReader": {
@@ -12521,7 +12521,7 @@
             "label": "جارٍ نشر الملفات"
           },
           "browsing": {
-            "label": "جارٍ التصفح"
+            "label": "{count, plural, =0 {جارٍ التصفح} one {جارٍ تصفح صفحة واحدة} other {جارٍ تصفح # صفحات}}"
           }
         },
         "internalSearch": {

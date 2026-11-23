@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Seiten werden aufgerufen"
+            "status": "{count, plural, =0 {Seiten werden aufgerufen} one {# Seite wird aufgerufen} other {# Seiten werden aufgerufen}}"
           },
           "read": {
-            "status": "Seiten aufgerufen"
+            "status": "{count, plural, =0 {Seiten aufgerufen} one {# Seite aufgerufen} other {# Seiten aufgerufen}}"
           }
         },
         "fileReader": {
@@ -12521,7 +12521,7 @@
             "label": "Dateien werden veröffentlicht"
           },
           "browsing": {
-            "label": "Seiten werden aufgerufen"
+            "label": "{count, plural, =0 {Seiten werden aufgerufen} one {# Seite wird aufgerufen} other {# Seiten werden aufgerufen}}"
           }
         },
         "internalSearch": {

@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "탐색 중"
+            "status": "{count, plural, =0 {탐색 중} other {# 페이지 탐색 중}}"
           },
           "read": {
-            "status": "탐색함"
+            "status": "{count, plural, =0 {탐색함} other {# 페이지 탐색함}}"
           }
         },
         "fileReader": {
@@ -12521,7 +12521,7 @@
             "label": "파일 게시 중"
           },
           "browsing": {
-            "label": "탐색 중"
+            "label": "{count, plural, =0 {탐색 중} other {# 페이지 탐색 중}}"
           }
         },
         "internalSearch": {

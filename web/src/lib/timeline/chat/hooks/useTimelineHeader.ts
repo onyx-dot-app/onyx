@@ -18,6 +18,19 @@ import {
   type TimelineTranslate,
 } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
+/** The pages an open-URL step browses: the fetched ones once they arrive. */
+function browsedPageCount(packets: Packet[]): number {
+  let urls = 0;
+  let documents = 0;
+  for (const { obj } of packets) {
+    if (obj.type === PacketType.FETCH_TOOL_URLS) urls = obj.urls.length;
+    if (obj.type === PacketType.FETCH_TOOL_DOCUMENTS) {
+      documents = obj.documents.length;
+    }
+  }
+  return documents || urls;
+}
+
 /** Header text for the activity of one step, or null for no tool activity. */
 function stepHeaderText(
   packets: Packet[],
@@ -46,7 +59,7 @@ function stepHeaderText(
       );
     }
     case PacketType.FETCH_TOOL_START:
-      return t("header.browsing.label");
+      return t("header.browsing.label", { count: browsedPageCount(packets) });
     case PacketType.PYTHON_TOOL_START:
       return t("header.executingCode.label");
     case PacketType.IMAGE_GENERATION_TOOL_START:

@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "正在浏览"
+            "status": "{count, plural, =0 {正在浏览} other {正在浏览 # 个页面}}"
           },
           "read": {
-            "status": "已浏览"
+            "status": "{count, plural, =0 {已浏览} other {已浏览 # 个页面}}"
           }
         },
         "fileReader": {
@@ -12521,7 +12521,7 @@
             "label": "正在发布文件"
           },
           "browsing": {
-            "label": "正在浏览"
+            "label": "{count, plural, =0 {正在浏览} other {正在浏览 # 个页面}}"
           }
         },
         "internalSearch": {

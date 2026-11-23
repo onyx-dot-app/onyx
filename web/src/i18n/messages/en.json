@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Browsing"
+            "status": "{count, plural, =0 {Browsing} one {Browsing # page} other {Browsing # pages}}"
           },
           "read": {
-            "status": "Browsed"
+            "status": "{count, plural, =0 {Browsed} one {Browsed # page} other {Browsed # pages}}"
           }
         },
         "fileReader": {
@@ -12521,7 +12521,7 @@
             "label": "Publishing files"
           },
           "browsing": {
-            "label": "Browsing"
+            "label": "{count, plural, =0 {Browsing} one {Browsing # page} other {Browsing # pages}}"
           }
         },
         "internalSearch": {

@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Navigation"
+            "status": "{count, plural, =0 {Navigation} one {Navigation sur # page} other {Navigation sur # pages}}"
           },
           "read": {
-            "status": "Navigation terminée"
+            "status": "{count, plural, =0 {Navigation terminée} one {# page parcourue} other {# pages parcourues}}"
           }
         },
         "fileReader": {
@@ -12521,7 +12521,7 @@
             "label": "Publication des fichiers"
           },
           "browsing": {
-            "label": "Navigation"
+            "label": "{count, plural, =0 {Navigation} one {Navigation sur # page} other {Navigation sur # pages}}"
           }
         },
         "internalSearch": {

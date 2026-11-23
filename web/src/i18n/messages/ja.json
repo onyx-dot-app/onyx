@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "閲覧中"
+            "status": "{count, plural, =0 {閲覧中} other {# ページを閲覧中}}"
           },
           "read": {
-            "status": "閲覧しました"
+            "status": "{count, plural, =0 {閲覧しました} other {# ページを閲覧しました}}"
           }
         },
         "fileReader": {
@@ -12521,7 +12521,7 @@
             "label": "ファイルを公開しています"
           },
           "browsing": {
-            "label": "閲覧中"
+            "label": "{count, plural, =0 {閲覧中} other {# ページを閲覧中}}"
           }
         },
         "internalSearch": {
