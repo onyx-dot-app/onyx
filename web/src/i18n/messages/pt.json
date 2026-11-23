@@ -5765,17 +5765,11 @@
       "configureSuccess": {
         "message": "Provedor configurado com sucesso"
       },
-      "connectButton": {
-        "label": "Conectar"
-      },
       "connectedModels": {
         "title": "Modelos conectados"
       },
       "deselectError": {
         "message": "Falha ao desmarcar"
-      },
-      "disconnectButton": {
-        "ariaLabel": "Desconectar {title}"
       },
       "disconnectError": {
         "message": "Falha ao desconectar"
@@ -5817,9 +5811,6 @@
       },
       "disconnectSuccess": {
         "message": "{title} desconectado"
-      },
-      "editButton": {
-        "ariaLabel": "Editar {title}"
       },
       "emptyState": {
         "title": "Conecte um modelo de geração de imagens para usar no chat."
@@ -5904,9 +5895,6 @@
       },
       "linkSuccess": {
         "message": "{title} conectado"
-      },
-      "linkedModel": {
-        "description": "De {provider}"
       },
       "loadError": {
         "message": "Falha ao carregar a configuração. Atualize a página."

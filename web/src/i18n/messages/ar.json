@@ -5765,17 +5765,11 @@
       "configureSuccess": {
         "message": "تم تهيئة الموفر بنجاح"
       },
-      "connectButton": {
-        "label": "اتصال"
-      },
       "connectedModels": {
         "title": "النماذج المتصلة"
       },
       "deselectError": {
         "message": "فشل إلغاء التحديد"
-      },
-      "disconnectButton": {
-        "ariaLabel": "قطع اتصال {title}"
       },
       "disconnectError": {
         "message": "فشل قطع الاتصال"
@@ -5817,9 +5811,6 @@
       },
       "disconnectSuccess": {
         "message": "تم قطع الاتصال بـ {title}"
-      },
-      "editButton": {
-        "ariaLabel": "تعديل {title}"
       },
       "emptyState": {
         "title": "اربط نموذج توليد صور لاستخدامه في المحادثة."
@@ -5904,9 +5895,6 @@
       },
       "linkSuccess": {
         "message": "تم ربط {title}"
-      },
-      "linkedModel": {
-        "description": "من {provider}"
       },
       "loadError": {
         "message": "فشل تحميل التهيئة. يرجى تحديث الصفحة."

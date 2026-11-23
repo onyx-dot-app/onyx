@@ -40,6 +40,7 @@ from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_catalog import (
+    can_generate_images,
     is_recommended_image_model,
     iter_image_generation_models,
 )
@@ -61,6 +62,7 @@ from onyx.server.manage.llm.api import (
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
+    model_display_name,
 )
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
@@ -316,9 +318,10 @@ def list_llm_provider_image_models(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ImageGenerationLLMProvider]:
-    """Connected unrestricted LLM providers with every model they can serve. Catalog image
-    models are listed even when the provider's model list omits them, and are
-    marked recommended."""
+    """Connected unrestricted LLM providers with the models they serve that can
+    generate images (see can_generate_images). Catalog image models are listed
+    even when the provider's model list omits them, and are marked
+    recommended. A provider with no such model is left out."""
     connected_by_model_id = {
         config.model_configuration_id: config.image_provider_id
         for config in get_all_image_generation_configs(db_session)
@@ -336,14 +339,20 @@ def list_llm_provider_image_models(
         stored_by_name = {mc.name: mc for mc in llm_provider.model_configurations}
         models: list[ImageGenerationProviderModel] = []
         for name in sorted(catalog_models | set(stored_by_name)):
+            if not can_generate_images(llm_provider.provider, name):
+                continue
             stored = stored_by_name.get(name)
             models.append(
                 ImageGenerationProviderModel(
                     name=name,
-                    display_name=(
-                        (stored.custom_display_name or stored.display_name)
-                        if stored
-                        else None
+                    display_name=model_display_name(
+                        name,
+                        llm_provider.provider,
+                        stored.display_name if stored else None,
+                        llm_provider.custom_config is not None,
+                    ),
+                    custom_display_name=(
+                        stored.custom_display_name if stored else None
                     ),
                     is_recommended=is_recommended_image_model(
                         llm_provider.provider, name
@@ -353,6 +362,8 @@ def list_llm_provider_image_models(
                     ),
                 )
             )
+        if not models:
+            continue
         result.append(
             ImageGenerationLLMProvider(
                 llm_provider_id=llm_provider.id,
@@ -389,6 +400,12 @@ def link_config(
             OnyxErrorCode.VALIDATION_ERROR,
             "Only public LLM providers without agent restrictions can be used "
             "for image generation",
+        )
+
+    if not can_generate_images(llm_provider.provider, model_name):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"{model_name} cannot generate images",
         )
 
     image_provider_id = _linked_image_provider_id(llm_provider.id, model_name)

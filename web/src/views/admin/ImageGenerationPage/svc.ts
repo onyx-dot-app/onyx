@@ -10,6 +10,8 @@ export interface ImageGenerationConfigView {
   image_provider_id: string; // Primary key
   model_configuration_id: number;
   model_name: string;
+  display_name: string;
+  custom_display_name: string | null;
   llm_provider_id: number;
   llm_provider_name: string | null;
   llm_provider_type: string;
@@ -19,7 +21,8 @@ export interface ImageGenerationConfigView {
 
 export interface ImageGenerationProviderModel {
   name: string;
-  display_name: string | null;
+  display_name: string;
+  custom_display_name: string | null;
   is_recommended: boolean;
   image_provider_id: string | null;
 }

@@ -5765,17 +5765,11 @@
       "configureSuccess": {
         "message": "プロバイダーを設定しました"
       },
-      "connectButton": {
-        "label": "接続"
-      },
       "connectedModels": {
         "title": "接続済みモデル"
       },
       "deselectError": {
         "message": "選択を解除できませんでした"
-      },
-      "disconnectButton": {
-        "ariaLabel": "{title} を切断"
       },
       "disconnectError": {
         "message": "接続を解除できませんでした"
@@ -5817,9 +5811,6 @@
       },
       "disconnectSuccess": {
         "message": "{title} の接続を解除しました"
-      },
-      "editButton": {
-        "ariaLabel": "{title} を編集"
       },
       "emptyState": {
         "title": "チャットで使用する画像生成モデルを接続してください。"
@@ -5904,9 +5895,6 @@
       },
       "linkSuccess": {
         "message": "{title} を接続しました"
-      },
-      "linkedModel": {
-        "description": "{provider} から"
       },
       "loadError": {
         "message": "設定を読み込めませんでした。ページを再読み込みしてください。"

@@ -371,6 +371,31 @@ class ModelDisplayNameCode(StrEnum):
     OPENAI_DECISIONS = "openai_decisions"
 
 
+def model_display_name(
+    model_name: str,
+    provider_name: str,
+    stored_display_name: str | None,
+    use_stored_display_name: bool = False,
+) -> str:
+    """The name a model shows before an admin renames it. Dynamic and
+    custom-config providers name their own models; the rest parse the LiteLLM
+    name, with the region of a cross-region model."""
+    if (
+        provider_name in DYNAMIC_LLM_PROVIDERS or use_stored_display_name
+    ) and stored_display_name:
+        return stored_display_name
+    from onyx.llm.model_name_parser import parse_litellm_model_name
+
+    if provider_name and not model_name.startswith(f"{provider_name}/"):
+        model_name = f"{provider_name}/{model_name}"
+    parsed = parse_litellm_model_name(model_name)
+    return (
+        f"{parsed.display_name} ({parsed.region})"
+        if parsed.region
+        else parsed.display_name
+    )
+
+
 class ModelConfigurationView(BaseModel):
     id: int | None = None
     name: str
@@ -499,11 +524,8 @@ class ModelConfigurationView(BaseModel):
             model_name = f"{provider_name}/{model_name}"
         parsed = parse_litellm_model_name(model_name)
 
-        # Include region in display name for Bedrock cross-region models
-        display_name = (
-            f"{parsed.display_name} ({parsed.region})"
-            if parsed.region
-            else parsed.display_name
+        display_name = model_display_name(
+            model_configuration_model.name, provider_name, None
         )
 
         return cls(

@@ -5765,17 +5765,11 @@
       "configureSuccess": {
         "message": "Provider configured successfully"
       },
-      "connectButton": {
-        "label": "Connect"
-      },
       "connectedModels": {
         "title": "Connected Models"
       },
       "deselectError": {
         "message": "Failed to deselect"
-      },
-      "disconnectButton": {
-        "ariaLabel": "Disconnect {title}"
       },
       "disconnectError": {
         "message": "Failed to disconnect"
@@ -5817,9 +5811,6 @@
       },
       "disconnectSuccess": {
         "message": "{title} disconnected"
-      },
-      "editButton": {
-        "ariaLabel": "Edit {title}"
       },
       "emptyState": {
         "title": "Connect an image generation model to use in chat."
@@ -5904,9 +5895,6 @@
       },
       "linkSuccess": {
         "message": "{title} connected"
-      },
-      "linkedModel": {
-        "description": "From {provider}"
       },
       "loadError": {
         "message": "Failed to load configuration. Please refresh the page."

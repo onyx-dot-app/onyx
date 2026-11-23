@@ -5765,17 +5765,11 @@
       "configureSuccess": {
         "message": "제공업체를 설정했습니다"
       },
-      "connectButton": {
-        "label": "연결"
-      },
       "connectedModels": {
         "title": "연결된 모델"
       },
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
-      },
-      "disconnectButton": {
-        "ariaLabel": "{title} 연결 해제"
       },
       "disconnectError": {
         "message": "연결 해제에 실패했습니다"
@@ -5817,9 +5811,6 @@
       },
       "disconnectSuccess": {
         "message": "{title} 연결을 해제했습니다"
-      },
-      "editButton": {
-        "ariaLabel": "{title} 편집"
       },
       "emptyState": {
         "title": "채팅에서 사용할 이미지 생성 모델을 연결하세요."
@@ -5904,9 +5895,6 @@
       },
       "linkSuccess": {
         "message": "{title} 연결됨"
-      },
-      "linkedModel": {
-        "description": "{provider}에서 제공"
       },
       "loadError": {
         "message": "구성을 불러오지 못했습니다. 페이지를 새로고침하세요."

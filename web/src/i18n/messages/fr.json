@@ -5765,17 +5765,11 @@
       "configureSuccess": {
         "message": "Fournisseur configuré avec succès"
       },
-      "connectButton": {
-        "label": "Connecter"
-      },
       "connectedModels": {
         "title": "Modèles connectés"
       },
       "deselectError": {
         "message": "Échec de la désélection"
-      },
-      "disconnectButton": {
-        "ariaLabel": "Déconnecter {title}"
       },
       "disconnectError": {
         "message": "Échec de la déconnexion"
@@ -5817,9 +5811,6 @@
       },
       "disconnectSuccess": {
         "message": "{title} déconnecté"
-      },
-      "editButton": {
-        "ariaLabel": "Modifier {title}"
       },
       "emptyState": {
         "title": "Connectez un modèle de génération d'images à utiliser dans la discussion."
@@ -5904,9 +5895,6 @@
       },
       "linkSuccess": {
         "message": "{title} connecté"
-      },
-      "linkedModel": {
-        "description": "Depuis {provider}"
       },
       "loadError": {
         "message": "Échec du chargement de la configuration. Actualisez la page."

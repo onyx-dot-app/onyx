@@ -16,8 +16,11 @@ The Image Generation page lists each connected provider that has image models, a
 
 **Available Models** has two tabs. The **Recommended** tab opens by default.
 It shows the image models in the Onyx model catalog that the vendor has not retired, for example GPT Image,
-Gemini image (Nano Banana), Imagen, and the Bedrock image models. Open the **All** tab to see every model on a provider,
+Gemini image (Nano Banana), Imagen, and the Bedrock image models.
+Open the **All** tab to also see the models that the catalog does not know,
 for example a new model or a model name that a gateway such as LiteLLM Proxy or OpenRouter defines.
+The page does not show a model that the catalog lists as unable to generate images, such as a chat model.
+A provider with no model that can generate images, such as Anthropic, does not show.
 
 <Note>
   Only public LLM providers without agent restrictions can serve image generation,
@@ -46,9 +49,9 @@ for example a new model or a model name that a gateway such as LiteLLM Proxy or 
 
   <Step title="Set the Default Model">
     Select the model in **Image Generation Model** at the top of the page. Only one model can be the default.
+    Under **Connected Models**, the default model shows a **Default** tag.
 
-    - To clear the default, select **No Default**. Image generation is turned off until you set
-    another default.
+    - To clear the default, select **No Default**. Image generation is turned off until you set another default.
     - If you disconnect the current default model, the dialog asks you to choose a replacement default or
     **No Default**, which turns image generation off.
     - Disconnecting a model does not disconnect its LLM provider.

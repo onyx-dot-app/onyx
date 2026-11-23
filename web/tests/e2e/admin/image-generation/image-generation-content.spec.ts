@@ -15,13 +15,16 @@ function llmProviders(linkedImageProviderId: string | null) {
       models: [
         {
           name: "gpt-image-2",
-          display_name: null,
+          display_name: "gpt-image-2",
+          custom_display_name: null,
           is_recommended: true,
           image_provider_id: linkedImageProviderId,
         },
         {
-          name: "gpt-5",
-          display_name: null,
+          // A name no catalog knows, so only the All tab lists it.
+          name: "custom-image-model",
+          display_name: "custom-image-model",
+          custom_display_name: null,
           is_recommended: false,
           image_provider_id: null,
         },
@@ -34,6 +37,8 @@ const LINKED_CONFIG = {
   image_provider_id: LINKED_IMAGE_PROVIDER_ID,
   model_configuration_id: 300,
   model_name: "gpt-image-2",
+  display_name: "gpt-image-2",
+  custom_display_name: null,
   llm_provider_id: LLM_PROVIDER_ID,
   llm_provider_name: "Team OpenAI",
   llm_provider_type: "openai",
@@ -75,7 +80,7 @@ test.describe("Image Generation models from LLM providers", () => {
     await loginAs(page, "admin");
   });
 
-  test("recommended tab hides non-image models until All is selected", async ({
+  test("recommended tab hides unlisted models until All is selected", async ({
     page,
   }) => {
     await mockImageGenApis(page);
@@ -86,9 +91,9 @@ test.describe("Image Generation models from LLM providers", () => {
     await expect(
       imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2")
     ).toBeVisible();
-    await expect(imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-5")).toHaveCount(
-      0
-    );
+    await expect(
+      imageGenPage.modelCard(LLM_PROVIDER_ID, "custom-image-model")
+    ).toHaveCount(0);
 
     await expect(imageGenPage.recommendedTab).toHaveAttribute(
       "aria-selected",
@@ -96,7 +101,7 @@ test.describe("Image Generation models from LLM providers", () => {
     );
     await imageGenPage.allTab.click();
     await expect(
-      imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-5")
+      imageGenPage.modelCard(LLM_PROVIDER_ID, "custom-image-model")
     ).toBeVisible();
   });
 

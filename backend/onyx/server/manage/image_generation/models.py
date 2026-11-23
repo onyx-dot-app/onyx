@@ -2,6 +2,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from onyx.server.manage.llm.models import model_display_name
+
 if TYPE_CHECKING:
     from onyx.db.models import ImageGenerationConfig as ImageGenerationConfigModel
 
@@ -62,7 +64,8 @@ class ImageGenerationConfigLink(BaseModel):
 
 class ImageGenerationProviderModel(BaseModel):
     name: str
-    display_name: str | None
+    display_name: str
+    custom_display_name: str | None
     # Catalog or model name says this is an image generation model.
     is_recommended: bool
     image_provider_id: str | None  # Set when this model is already connected
@@ -102,6 +105,8 @@ class ImageGenerationConfigView(BaseModel):
     image_provider_id: str  # Primary key - static unique key for UI-DB mapping
     model_configuration_id: int
     model_name: str  # From model_configuration.name
+    display_name: str
+    custom_display_name: str | None
     llm_provider_id: int  # From model_configuration.llm_provider_id
     llm_provider_name: str | None  # From model_configuration.llm_provider.name
     llm_provider_type: str  # From model_configuration.llm_provider.provider
@@ -117,6 +122,13 @@ class ImageGenerationConfigView(BaseModel):
             image_provider_id=config.image_provider_id,
             model_configuration_id=config.model_configuration_id,
             model_name=config.model_configuration.name,
+            display_name=model_display_name(
+                config.model_configuration.name,
+                config.model_configuration.llm_provider.provider,
+                config.model_configuration.display_name,
+                config.model_configuration.llm_provider.custom_config is not None,
+            ),
+            custom_display_name=config.model_configuration.custom_display_name,
             llm_provider_id=config.model_configuration.llm_provider_id,
             llm_provider_name=config.model_configuration.llm_provider.name,
             llm_provider_type=config.model_configuration.llm_provider.provider,

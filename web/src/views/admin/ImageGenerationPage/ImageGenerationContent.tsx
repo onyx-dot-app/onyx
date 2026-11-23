@@ -4,6 +4,7 @@ import { PageLoader } from "@opal/loaders";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useLabelBadge } from "@/lib/badges/components";
+import { Hoverable } from "@opal/core";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -26,6 +27,7 @@ import {
   Divider,
   InputSingleSelect,
   MessageCard,
+  SelectCard,
   Tabs,
   Text,
   useCreateModal,
@@ -48,10 +50,13 @@ import {
   SvgSlash,
   SvgUnplug,
 } from "@opal/icons";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
 import { getModelIcon } from "@/lib/languageModels/utils";
+import { resolveModelDisplayName } from "@/lib/languageModels/hooks";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
+import type { ModelOptionProvider } from "@/lib/languageModels/types";
 
 const NO_DEFAULT_VALUE = "__none__";
 
@@ -66,86 +71,129 @@ interface DisconnectTarget {
   isDefault: boolean;
 }
 
-function linkedModelTitle(model: ImageGenerationProviderModel): string {
-  return model.display_name || model.name;
+/** A linked model's name, as every model list shows it. */
+function linkedModelTitle(
+  model: Pick<
+    ImageGenerationProviderModel,
+    "name" | "display_name" | "custom_display_name"
+  >
+): string {
+  return resolveModelDisplayName(model);
 }
 
 interface ConnectedModelCardProps {
   icon: IconFunctionComponent;
-  title: string | RichStr;
-  description: string | RichStr;
+  title: string;
+  description: string;
   ariaLabel: string;
   isDefault: boolean;
+  /** Keeps the disconnect button shown while its confirm is open. */
+  disconnecting: boolean;
   onDisconnect: () => void;
+  /** Edits an own-key model's credentials; linked models have none. */
   onEdit?: () => void;
 }
 
+/** A connected model, as the Language Models page shows a provider. The
+ *  default is set only in the Image Generation Model select. */
 function ConnectedModelCard({
   icon,
   title,
   description,
   ariaLabel,
   isDefault,
+  disconnecting,
   onDisconnect,
   onEdit,
 }: ConnectedModelCardProps) {
-  const t = useTranslations("admin.imageGeneration");
+  const t = useTranslations("admin.shared");
   const defaultBadge = useLabelBadge("default");
-  const ariaTitle = typeof title === "string" ? title : title.raw;
   return (
-    <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
-      <ContentAction
-        font="main-ui-action"
-        icon={icon}
-        title={title}
-        description={description}
-        titleMaxLines={1}
-        descriptionMaxLines={1}
+    <Hoverable.Root
+      group="ImageGenConnectedModel"
+      interaction={disconnecting ? "hover" : "rest"}
+    >
+      <SelectCard
+        state="filled"
         padding={2}
-        badge={isDefault ? defaultBadge : undefined}
-        rightChildren={
-          <Section flexDirection="row" width="fit" height="fit" gap={0}>
-            <Button
-              icon={SvgUnplug}
-              prominence="tertiary"
-              aria-label={t("disconnectButton.ariaLabel", { title: ariaTitle })}
-              onClick={onDisconnect}
-            />
-            {onEdit && (
-              <Button
-                icon={SvgSettings}
-                prominence="tertiary"
-                aria-label={t("editButton.ariaLabel", { title: ariaTitle })}
-                onClick={onEdit}
-              />
-            )}
-          </Section>
-        }
-      />
-    </Card>
+        rounding={4}
+        aria-label={ariaLabel}
+        onClick={onEdit}
+      >
+        <ContentAction
+          font="main-ui-action"
+          icon={icon}
+          title={title}
+          description={description}
+          titleMaxLines={1}
+          descriptionMaxLines={1}
+          padding={2}
+          badge={isDefault ? defaultBadge : undefined}
+          rightChildren={
+            <Section flexDirection="row" width="fit" height="fit" gap={0}>
+              <Hoverable.Item
+                group="ImageGenConnectedModel"
+                variant="appear-on-hover"
+              >
+                <Button
+                  icon={SvgUnplug}
+                  prominence="tertiary"
+                  aria-label={t("providerCard.disconnectButton.ariaLabel", {
+                    title,
+                  })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDisconnect();
+                  }}
+                />
+              </Hoverable.Item>
+              {onEdit && (
+                <Button
+                  icon={SvgSettings}
+                  prominence="tertiary"
+                  aria-label={t("providerCard.editButton.ariaLabel", {
+                    title,
+                  })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                />
+              )}
+            </Section>
+          }
+        />
+      </SelectCard>
+    </Hoverable.Root>
   );
 }
 
 interface AvailableModelCardProps {
   icon: IconFunctionComponent;
-  title: string | RichStr;
-  description: string | RichStr;
+  title: string;
+  description: string;
   ariaLabel: string;
-  disabled: boolean;
   onConnect: () => void;
 }
 
+/** A model that can be connected, as the Language Models page shows a new
+ *  provider. */
 function AvailableModelCard({
   icon,
   title,
   description,
   ariaLabel,
-  disabled,
   onConnect,
 }: AvailableModelCardProps) {
-  const t = useTranslations("admin.imageGeneration");
+  const t = useTranslations("admin.shared");
   return (
-    <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
+    <SelectCard
+      state="empty"
+      padding={2}
+      rounding={4}
+      aria-label={ariaLabel}
+      onClick={onConnect}
+    >
       <ContentAction
         font="main-ui-action"
         icon={icon}
@@ -158,14 +206,16 @@ function AvailableModelCard({
           <Button
             rightIcon={SvgArrowExchange}
             prominence="tertiary"
-            disabled={disabled}
-            onClick={onConnect}
+            onClick={(e) => {
+              e.stopPropagation();
+              onConnect();
+            }}
           >
-            {t("connectButton.label")}
+            {t("providerCard.connectButton.label")}
           </Button>
         }
       />
-    </Card>
+    </SelectCard>
   );
 }
 
@@ -252,25 +302,45 @@ export default function ImageGenerationContent() {
       .filter((group) => group.models.length > 0);
   }, [llmProviders, modelFilter]);
 
-  const titleByImageProviderId = useMemo(() => {
-    const titles = new Map<string, string>();
-    for (const group of IMAGE_PROVIDER_GROUPS) {
-      for (const p of group.providers) titles.set(p.image_provider_id, p.title);
-    }
-    for (const llmProvider of llmProviders) {
-      for (const m of llmProvider.models) {
-        if (m.image_provider_id)
-          titles.set(m.image_provider_id, linkedModelTitle(m));
-      }
-    }
-    return titles;
-  }, [llmProviders]);
-
   const configTitle = useCallback(
     (config: ImageGenerationConfigView): string =>
-      titleByImageProviderId.get(config.image_provider_id) ?? config.model_name,
-    [titleByImageProviderId]
+      (config.llm_provider_owned
+        ? legacyProviderById.get(config.image_provider_id)?.title
+        : undefined) ??
+      linkedModelTitle({
+        name: config.model_name,
+        display_name: config.display_name,
+        custom_display_name: config.custom_display_name,
+      }),
+    [legacyProviderById]
   );
+
+  // The connected models as the shared model selector takes them, one
+  // provider per LLM provider row.
+  const selectorProviders = useMemo((): ModelOptionProvider[] => {
+    const byProvider = new Map<number, ModelOptionProvider>();
+    for (const config of configs) {
+      const provider = byProvider.get(config.llm_provider_id) ?? {
+        id: config.llm_provider_id,
+        name: config.llm_provider_name,
+        provider: config.llm_provider_type,
+        model_configurations: [],
+      };
+      provider.model_configurations.push({
+        id: config.model_configuration_id,
+        name: config.model_name,
+        is_visible: true,
+        max_input_tokens: null,
+        supports_image_input: false,
+        supports_reasoning: false,
+        display_name: config.display_name,
+        custom_display_name: config.custom_display_name,
+        effectiveDisplayName: configTitle(config),
+      });
+      byProvider.set(config.llm_provider_id, provider);
+    }
+    return [...byProvider.values()];
+  }, [configs, configTitle]);
 
   const connectedDeprecatedProviders = useMemo(() => {
     return IMAGE_PROVIDER_GROUPS.flatMap((group) => group.providers).filter(
@@ -291,6 +361,7 @@ export default function ImageGenerationContent() {
     llmProvider: ImageGenerationLLMProvider,
     model: ImageGenerationProviderModel
   ) => {
+    if (linkingModelKey !== null) return;
     const modelKey = `${llmProvider.llm_provider_id}:${model.name}`;
     setLinkingModelKey(modelKey);
     try {
@@ -427,9 +498,12 @@ export default function ImageGenerationContent() {
     return <PageLoader />;
   }
 
-  const handleDefaultChange = (value: string) => {
-    if (value !== NO_DEFAULT_VALUE) {
-      void handleSelect(value);
+  const handleDefaultChange = (modelConfigurationId: number | null) => {
+    const config = configs.find(
+      (c) => c.model_configuration_id === modelConfigurationId
+    );
+    if (config) {
+      void handleSelect(config.image_provider_id);
     } else if (defaultConfig) {
       void handleDeselect(defaultConfig.image_provider_id);
     }
@@ -452,11 +526,16 @@ export default function ImageGenerationContent() {
             center
             withLabel
           >
-            <InputSingleSelect
-              value={defaultConfig?.image_provider_id ?? NO_DEFAULT_VALUE}
-              onValueChange={handleDefaultChange}
+            <SimpleModelSelector
+              providers={selectorProviders}
+              value={defaultConfig?.model_configuration_id ?? null}
+              onChange={handleDefaultChange}
+              nullable
+              globalDefault={{
+                label: t("disconnectModal.noDefaultOption.label"),
+                description: t("disconnectModal.noDefaultOption.description"),
+              }}
               placeholder={t("model.placeholder")}
-              options={[...configGroups(configs, configTitle), noDefaultOption]}
             />
           </InputHorizontal>
         </Card>
@@ -494,6 +573,8 @@ export default function ImageGenerationContent() {
                   ? legacyProviderById.get(imageProviderId)
                   : undefined;
                 const title = configTitle(config);
+                const providerName =
+                  config.llm_provider_name ?? config.llm_provider_type;
                 return (
                   <ConnectedModelCard
                     key={imageProviderId}
@@ -505,11 +586,7 @@ export default function ImageGenerationContent() {
                     description={
                       legacyProvider
                         ? t(legacyProvider.descriptionKey)
-                        : t("linkedModel.description", {
-                            provider:
-                              config.llm_provider_name ??
-                              config.llm_provider_type,
-                          })
+                        : providerName
                     }
                     ariaLabel={
                       config.llm_provider_owned
@@ -517,6 +594,10 @@ export default function ImageGenerationContent() {
                         : `image-gen-model-${config.llm_provider_id}-${config.model_name}`
                     }
                     isDefault={config.is_default}
+                    disconnecting={
+                      disconnectModal.isOpen &&
+                      disconnectProvider?.image_provider_id === imageProviderId
+                    }
                     onDisconnect={() => {
                       setDisconnectProvider({
                         image_provider_id: imageProviderId,
@@ -606,13 +687,10 @@ export default function ImageGenerationContent() {
                                 title={title}
                                 description={
                                   title === model.name
-                                    ? t("linkedModel.description", {
-                                        provider: providerName,
-                                      })
+                                    ? providerName
                                     : model.name
                                 }
                                 ariaLabel={`image-gen-model-${llmProvider.llm_provider_id}-${model.name}`}
-                                disabled={linkingModelKey !== null}
                                 onConnect={() =>
                                   void handleLink(llmProvider, model)
                                 }

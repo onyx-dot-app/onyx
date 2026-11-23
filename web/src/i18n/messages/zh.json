@@ -5765,17 +5765,11 @@
       "configureSuccess": {
         "message": "提供商配置成功"
       },
-      "connectButton": {
-        "label": "连接"
-      },
       "connectedModels": {
         "title": "已连接的模型"
       },
       "deselectError": {
         "message": "取消选择失败"
-      },
-      "disconnectButton": {
-        "ariaLabel": "断开 {title}"
       },
       "disconnectError": {
         "message": "断开连接失败"
@@ -5817,9 +5811,6 @@
       },
       "disconnectSuccess": {
         "message": "已断开 {title} 的连接"
-      },
-      "editButton": {
-        "ariaLabel": "编辑 {title}"
       },
       "emptyState": {
         "title": "连接一个图像生成模型，以便在对话中使用。"
@@ -5904,9 +5895,6 @@
       },
       "linkSuccess": {
         "message": "已连接 {title}"
-      },
-      "linkedModel": {
-        "description": "来自 {provider}"
       },
       "loadError": {
         "message": "加载配置失败。请刷新页面。"

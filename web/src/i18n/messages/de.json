@@ -5765,17 +5765,11 @@
       "configureSuccess": {
         "message": "Anbieter erfolgreich konfiguriert"
       },
-      "connectButton": {
-        "label": "Verbinden"
-      },
       "connectedModels": {
         "title": "Verbundene Modelle"
       },
       "deselectError": {
         "message": "Auswahl konnte nicht aufgehoben werden"
-      },
-      "disconnectButton": {
-        "ariaLabel": "{title} trennen"
       },
       "disconnectError": {
         "message": "Trennung fehlgeschlagen"
@@ -5817,9 +5811,6 @@
       },
       "disconnectSuccess": {
         "message": "{title} getrennt"
-      },
-      "editButton": {
-        "ariaLabel": "{title} bearbeiten"
       },
       "emptyState": {
         "title": "Verbinden Sie ein Modell zur Bilderzeugung, um es im Chat zu verwenden."
@@ -5904,9 +5895,6 @@
       },
       "linkSuccess": {
         "message": "{title} verbunden"
-      },
-      "linkedModel": {
-        "description": "Von {provider}"
       },
       "loadError": {
         "message": "Die Konfiguration konnte nicht geladen werden. Bitte laden Sie die Seite neu."

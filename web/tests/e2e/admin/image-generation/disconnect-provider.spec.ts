@@ -9,6 +9,8 @@ const FAKE_CONNECTED_CONFIG = {
   image_provider_id: "openai_gpt_image_1_5",
   model_configuration_id: 100,
   model_name: "gpt-image-1.5",
+  display_name: "gpt-image-1.5",
+  custom_display_name: null,
   llm_provider_id: 100,
   llm_provider_type: "openai",
   llm_provider_owned: true,
@@ -20,6 +22,8 @@ const FAKE_DEFAULT_CONFIG = {
   image_provider_id: "openai_gpt_image_1",
   model_configuration_id: 101,
   model_name: "gpt-image-1",
+  display_name: "gpt-image-1",
+  custom_display_name: null,
   llm_provider_id: 101,
   llm_provider_type: "openai",
   llm_provider_owned: true,
@@ -64,7 +68,8 @@ async function mockImageGenApis(
             models: [
               {
                 name: "gpt-image-2",
-                display_name: null,
+                display_name: "gpt-image-2",
+                custom_display_name: null,
                 is_recommended: true,
                 image_provider_id: null,
               },

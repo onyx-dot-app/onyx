@@ -333,6 +333,28 @@ def is_recommended_image_model(provider: str, model_name: str) -> bool:
     return not listed_elsewhere and resolve_model_mode(model_name) == "image_generation"
 
 
+def can_generate_images(provider: str, model_name: str) -> bool:
+    """Whether a model can generate images. The provider's catalog decides,
+    else another provider's catalog that lists the name (e.g. a proxy that
+    serves ``gpt-image-2``). A name that no catalog lists (a custom model, a
+    proxy alias, a new release) can, as far as Onyx knows."""
+    prefix, _, bare_name = model_name.partition("/")
+    if bare_name and prefix in _catalog():
+        model_name = bare_name
+    entry = _vendored_model_entry(provider, model_name)
+    if entry is not None:
+        return _catalog_mode(entry, model_name) == "image_generation"
+    entries = [
+        other_entry
+        for other in _catalog()
+        if (other_entry := _vendored_model_entry(other, model_name)) is not None
+    ]
+    return not entries or any(
+        _catalog_mode(other_entry, model_name) == "image_generation"
+        for other_entry in entries
+    )
+
+
 def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
     """A model's vendored catalog entry for the provider (direct or alias)."""
     section = _catalog().get(provider)

@@ -22,8 +22,9 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   images too, and they show the same way.
 - **An admin** opens the image generation admin page. It lists the image
   models of each connected LLM provider. The recommended view, the default,
-  shows the non-deprecated catalog image models; the full view shows every
-  model on the provider. One click links a model to its LLM provider with no
+  shows the non-deprecated catalog image models; the full view adds the
+  models that no catalog knows. A provider with no model that can generate
+  images (Anthropic) is not listed. One click links a model to its LLM provider with no
   credentials, and the first linked model becomes the default. Only public providers with no agent restrictions are listed
   or can be linked, because the tool is available to all users and agents.
   Making a linked provider private or agent-restricted unlinks its image
@@ -95,8 +96,11 @@ edits. Every call is traced with `LLMFlow.IMAGE_GENERATION` or
 the recommended models: catalog entries with an image mode and no deprecated
 status, without supplement-only entries (upstream pruned them) or dated
 snapshots that have an undated alias.
-`GET /admin/image-generation/llm-providers` adds the dated snapshots and every
-stored model of the provider for the unfiltered view. A linked config has the ID
+`GET /admin/image-generation/llm-providers` adds the dated snapshots and the
+stored models for the unfiltered view, but only those that
+`llm/model_catalog.py:can_generate_images` passes: a model a catalog knows must have
+an image mode, and a name no catalog knows passes. `POST /config/link` refuses
+the rest. A linked config has the ID
 `llm-<llm_provider_id>-<model slug>`. Linked image models get the
 `IMAGE_GENERATION` model flow, so chat model lists skip them.
 `web/src/views/admin/ImageGenerationPage/constants.ts` now only names the
