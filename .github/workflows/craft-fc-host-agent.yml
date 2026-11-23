@@ -4,7 +4,7 @@
 # Pull requests and pushes to main build and check the image, with no push.
 # Two paths publish it to Docker Hub:
 # - a manual dispatch on main, with a numeric version (for example 0.5.0);
-# - craft-runtime-release.yml on each stable and beta Onyx tag, with the
+# - craft-runtime-release.yml on each stable, beta and nightly Onyx tag, with the
 #   Onyx tag as the image tag (for example v5.3.0). The chart defaults to it.
 # A publish first audits the image (OS packages and Go modules), the guest
 # kernel and Firecracker pins (ods audit craft-fc). The build job also runs
@@ -204,12 +204,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${RELEASE}" = true ]; then
-            pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+            pattern='^(v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?|nightly-latest-[0-9]{8})$'
           else
             pattern='^[0-9]+\.[0-9]+\.[0-9]+$'
           fi
           if ! [[ "${IMAGE_TAG}" =~ ${pattern} ]]; then
-            echo "::error::${IMAGE_TAG} is not a version: use 0.1.0 for a dispatch, or an Onyx tag such as v5.3.0 for a release."
+            echo "::error::${IMAGE_TAG} is not a version: use 0.1.0 for a dispatch, or an Onyx tag such as v5.3.0 or nightly-latest-20261123 for a release."
             exit 1
           fi
 
