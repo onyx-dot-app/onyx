@@ -239,8 +239,11 @@ calls the index directly for admin document inspection.
    `ToolContext.sandbox_search_files` offers the shown results' files (at most
    `SEARCH_FILE_MAX_BYTES`) to the turn's copy into the VM, and the result
    gives the path in attachments/search/ that the copy returns
-   (`SEARCH_FILE_GUIDANCE`, [[code-execution]]). In a chat without a sandbox
-   that stages files (`ToolContext.python_stages_search_files`), it gives the
+   (`SEARCH_FILE_GUIDANCE`, [[code-execution]]); that file can be missing
+   when the model reads it, because the copy can still run or can skip it
+   (no access, over a limit or the cap, a failed write, or no response from
+   the VM), so the guidance tells the model to try again or search again.
+   In a chat without a sandbox that stages files (`ToolContext.python_stages_search_files`), it gives the
    staged name (`FILE_ASSOCIATED_GUIDANCE`) from the same map that the
    staging reads. A file that `ToolContext.chat_files` already has keeps its
    staged name. Other names come from `harness_base.search_file_name`
