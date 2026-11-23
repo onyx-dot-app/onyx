@@ -32,7 +32,10 @@ Exec contract (`exec_command` / `write_stdin`):
 """
 
 import abc
+import os
 import posixpath
+import string
+import unicodedata
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from typing import IO
 from uuid import UUID
@@ -53,6 +56,11 @@ CHAT_FILES_DIR = "attachments"
 # The chat's project files and its agent's files, in CHAT_FILES_DIR.
 PROJECT_FILES_DIR = f"{CHAT_FILES_DIR}/project"
 AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
+# The longest file name, in UTF-8 bytes, of the VM's file system.
+_MAX_NAME_BYTES = 255
+# Characters that a shell reads, also inside double quotes, which chat file
+# names never keep: the tools tell the model to use the paths in commands.
+_SHELL_CHARACTERS = frozenset("$`'\"\\;&|()<>!*?[]{}~#")
 
 # Parent of the files that Onyx writes outside every session directory (for
 # example large tool results). No session save keeps them; they go when the
@@ -94,6 +102,34 @@ EXEC_DEFAULT_ENV: dict[str, str] = {
 }
 
 INTERRUPT_CHAR = "\x03"
+
+
+def chat_file_name(file_id: str, name: str | None) -> str:
+    """The name of a file store file in a directory of chat files, a function
+    of the file alone, so it never names another file: `<the first 8 hex
+    digits of the file ID>-<name>`. The name is the last part of `name` (the
+    file ID without one), NFC, with control characters and
+    _SHELL_CHARACTERS replaced by `_`; its stem is cut so that the whole name
+    fits _MAX_NAME_BYTES."""
+    base = "file"
+    for raw in (name or "", file_id):
+        cleaned = "".join(
+            "_"
+            if char in _SHELL_CHARACTERS or unicodedata.category(char) == "Cc"
+            else char
+            for char in posixpath.basename(
+                unicodedata.normalize("NFC", raw).replace("\\", "/")
+            )
+        )
+        if cleaned not in ("", ".", ".."):
+            base = cleaned
+            break
+    prefix = "".join(c for c in file_id if c in string.hexdigits)[:8].lower()
+    stem, extension = os.path.splitext(base)
+    if len(extension.encode()) > _MAX_NAME_BYTES // 2:
+        stem, extension = base, ""
+    room = _MAX_NAME_BYTES - len(f"{prefix}-{extension}".encode())
+    return f"{prefix}-{stem.encode()[:room].decode(errors='ignore')}{extension}"
 
 
 def session_tool_results(session_id: UUID) -> str:

