@@ -9836,7 +9836,7 @@
       },
       "tierTooltip": "LLM Gateway nécessite le forfait Business ou Enterprise.",
       "scopeNote": {
-        "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → LLM Gateway."
+        "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → Accès tiers → LLM Gateway."
       },
       "toasts": {
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
@@ -11816,11 +11816,6 @@
       "exportPlaintext": {
         "label": "Texte brut"
       },
-      "fullWidth": {
-        "ariaLabel": "Basculer le chat en pleine largeur",
-        "fitTooltip": "Largeur ajustée",
-        "fullTooltip": "Pleine largeur"
-      },
       "incognitoExit": {
         "ariaLabel": "Quitter le chat incognito",
         "tooltip": "Quitter le chat incognito"
@@ -13579,11 +13574,6 @@
       },
       "plant": {
         "label": "Plantes"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "Aa"
       }
     },
     "commandMenu": {
@@ -15798,11 +15788,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "anonyme",
-        "description": "Adresse e-mail de votre compte.",
-        "title": "E-mail"
-      },
       "password": {
         "changeButton": "Modifier le mot de passe",
         "description": "Mettez à jour le mot de passe de votre compte.",
@@ -15835,8 +15820,7 @@
           "mismatch": "Les mots de passe ne correspondent pas",
           "newRequired": "Le nouveau mot de passe est requis"
         }
-      },
-      "title": "Comptes"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15921,13 +15905,21 @@
         "title": "Arrière-plan du chat"
       },
       "colorMode": {
-        "auto": "Auto",
+        "auto": "Système",
         "dark": "Sombre",
-        "description": "Sélectionnez le mode de couleur préféré pour l'interface.",
+        "description": "Sélectionnez le thème préféré pour l'interface.",
         "light": "Clair",
-        "title": "Mode de couleur"
+        "title": "Thème"
       },
-      "title": "Apparence"
+      "general": {
+        "title": "Général"
+      },
+      "transcriptWidth": {
+        "title": "Largeur de la conversation",
+        "description": "Définissez la largeur des messages du chat et de la barre de saisie sur cet appareil.",
+        "standard": "Standard",
+        "wide": "Large"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15961,7 +15953,6 @@
         "description": "Animez les réponses diffusées caractère par caractère. Désactivez pour afficher les segments au fur et à mesure de leur arrivée.",
         "title": "Diffusion fluide"
       },
-      "title": "Chats",
       "toasts": {
         "saveFailed": "Échec de l'enregistrement des préférences"
       },
@@ -15974,6 +15965,7 @@
     },
     "connectors": {
       "connectButton": "Connecter",
+      "disconnectAriaLabel": "Déconnecter {name}",
       "disconnectModal": {
         "continueNote": "Vous pouvez toujours poursuivre les sessions existantes faisant référence au contenu {name}.",
         "description": "{appName} ne pourra plus accéder au contenu de votre compte {name} ni le rechercher.",
@@ -15981,11 +15973,9 @@
         "submit": "Déconnecter",
         "title": "Déconnecter *{name}*"
       },
-      "emptyMessage": "Aucun connecteur configuré pour votre organisation.",
       "status": {
         "connected": "Connecté",
-        "notConnected": "Non connecté",
-        "paused": "En pause"
+        "notConnected": "Non connecté"
       },
       "title": "Connecteurs",
       "toasts": {
@@ -16049,7 +16039,6 @@
         "description": "Sélectionnez la langue de l'interface.",
         "title": "Langue d'affichage"
       },
-      "title": "Langue",
       "toasts": {
         "updateFailed": "Impossible de mettre à jour la préférence de langue"
       }
@@ -16062,23 +16051,20 @@
         "placeholder": "Sélectionnez une section"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "Comptes et accès"
-        },
-        "chatPreferences": {
-          "label": "Préférences de chat"
-        },
-        "connectors": {
-          "label": "Connecteurs"
-        },
-        "general": {
-          "label": "Général"
-        },
-        "llmGateway": {
-          "label": "Passerelle LLM"
+        "appearance": {
+          "label": "Apparence"
         },
         "usage": {
           "label": "Utilisation"
+        },
+        "account": {
+          "label": "Compte"
+        },
+        "chatPreferences": {
+          "label": "Préférences de discussion"
+        },
+        "thirdPartyAccess": {
+          "label": "Accès tiers"
         }
       }
     },
@@ -16127,9 +16113,9 @@
       }
     },
     "personalPreferences": {
-      "description": "Indiquez vos préférences personnalisées en langage naturel.",
+      "description": "{appName} en tient compte dans toutes vos conversations.",
       "placeholder": "Décrivez comment vous souhaitez que le système se comporte et le ton qu'il doit utiliser.",
-      "title": "Préférences personnelles"
+      "title": "Instructions"
     },
     "profile": {
       "fullName": {
@@ -16154,7 +16140,6 @@
         "publicTooltip": "Impossible de supprimer les raccourcis d'invite de l'organisation.",
         "removeAriaLabel": "Supprimer le raccourci"
       },
-      "title": "Raccourcis d'invite",
       "toasts": {
         "bothRequired": "Le raccourci et l'expansion sont tous deux requis",
         "deleteFailed": "Échec de la suppression du raccourci",
@@ -16177,9 +16162,6 @@
       "empty": {
         "description": "L'utilisation et les coûts de vos modèles apparaîtront ici dès que vous commencerez à discuter.",
         "title": "Aucune utilisation enregistrée pour l'instant"
-      },
-      "header": {
-        "title": "Utilisation"
       },
       "loadError": {
         "description": "Une erreur s'est produite lors de la récupération de votre utilisation. Réessayez dans un instant.",
@@ -16240,9 +16222,16 @@
       },
       "playbackSpeed": {
         "description": "Ajustez la vitesse de lecture vocale.",
-        "title": "Vitesse de lecture"
+        "title": "Vitesse de lecture",
+        "value": "{speed}x"
       },
       "title": "Voix"
+    },
+    "modelPreferences": {
+      "title": "Préférences de modèle"
+    },
+    "interactions": {
+      "title": "Interactions"
     }
   },
   "sidebar": {

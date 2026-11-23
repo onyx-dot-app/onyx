@@ -9836,7 +9836,7 @@
       },
       "tierTooltip": "O LLM Gateway requer o plano Business ou Enterprise.",
       "scopeNote": {
-        "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → LLM Gateway."
+        "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → Acesso de terceiros → LLM Gateway."
       },
       "toasts": {
         "settingsUpdateFailed": "Falha ao atualizar as configurações"
@@ -11816,11 +11816,6 @@
       "exportPlaintext": {
         "label": "Texto simples"
       },
-      "fullWidth": {
-        "ariaLabel": "Alternar chat de largura total",
-        "fitTooltip": "Ajustar largura",
-        "fullTooltip": "Largura total"
-      },
       "incognitoExit": {
         "ariaLabel": "Sair do chat anônimo",
         "tooltip": "Sair do chat anônimo"
@@ -13579,11 +13574,6 @@
       },
       "plant": {
         "label": "Plantas"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "Aa"
       }
     },
     "commandMenu": {
@@ -15798,11 +15788,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "anônimo",
-        "description": "O endereço de e-mail da sua conta.",
-        "title": "E-mail"
-      },
       "password": {
         "changeButton": "Alterar senha",
         "description": "Atualize a senha da sua conta.",
@@ -15835,8 +15820,7 @@
           "mismatch": "As senhas não coincidem",
           "newRequired": "A nova senha é obrigatória"
         }
-      },
-      "title": "Contas"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15921,13 +15905,21 @@
         "title": "Fundo do chat"
       },
       "colorMode": {
-        "auto": "Automático",
+        "auto": "Sistema",
         "dark": "Escuro",
-        "description": "Selecione o modo de cor preferido para a interface.",
+        "description": "Selecione o tema preferido para a interface.",
         "light": "Claro",
-        "title": "Modo de cor"
+        "title": "Tema"
       },
-      "title": "Aparência"
+      "general": {
+        "title": "Geral"
+      },
+      "transcriptWidth": {
+        "title": "Largura da conversa",
+        "description": "Defina a largura das mensagens do chat e da barra de entrada neste dispositivo.",
+        "standard": "Padrão",
+        "wide": "Largo"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15961,7 +15953,6 @@
         "description": "Anime as respostas transmitidas caractere por caractere. Desative para renderizar os blocos conforme chegam.",
         "title": "Transmissão suave"
       },
-      "title": "Chats",
       "toasts": {
         "saveFailed": "Falha ao salvar preferências"
       },
@@ -15974,6 +15965,7 @@
     },
     "connectors": {
       "connectButton": "Conectar",
+      "disconnectAriaLabel": "Desconectar {name}",
       "disconnectModal": {
         "continueNote": "Você ainda pode continuar sessões existentes que referenciam conteúdo do {name}.",
         "description": "O {appName} não poderá mais acessar ou pesquisar conteúdo da sua conta do {name}.",
@@ -15981,11 +15973,9 @@
         "submit": "Desconectar",
         "title": "Desconectar *{name}*"
       },
-      "emptyMessage": "Nenhum conector configurado para sua organização.",
       "status": {
         "connected": "Conectado",
-        "notConnected": "Não conectado",
-        "paused": "Pausado"
+        "notConnected": "Não conectado"
       },
       "title": "Conectores",
       "toasts": {
@@ -16049,7 +16039,6 @@
         "description": "Selecione o idioma da interface.",
         "title": "Idioma da interface"
       },
-      "title": "Idioma",
       "toasts": {
         "updateFailed": "Não foi possível atualizar a preferência de idioma"
       }
@@ -16062,23 +16051,20 @@
         "placeholder": "Selecione uma seção"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "Contas e acesso"
+        "appearance": {
+          "label": "Aparência"
+        },
+        "usage": {
+          "label": "Uso"
+        },
+        "account": {
+          "label": "Conta"
         },
         "chatPreferences": {
           "label": "Preferências de chat"
         },
-        "connectors": {
-          "label": "Conectores"
-        },
-        "general": {
-          "label": "Geral"
-        },
-        "llmGateway": {
-          "label": "Gateway LLM"
-        },
-        "usage": {
-          "label": "Uso"
+        "thirdPartyAccess": {
+          "label": "Acesso de terceiros"
         }
       }
     },
@@ -16127,9 +16113,9 @@
       }
     },
     "personalPreferences": {
-      "description": "Forneça suas preferências personalizadas em linguagem natural.",
+      "description": "O {appName} as leva em conta em todos os seus chats.",
       "placeholder": "Descreva como você quer que o sistema se comporte e o tom que ele deve usar.",
-      "title": "Preferências pessoais"
+      "title": "Instruções"
     },
     "profile": {
       "fullName": {
@@ -16154,7 +16140,6 @@
         "publicTooltip": "Não é possível excluir atalhos de prompt de toda a organização.",
         "removeAriaLabel": "Remover atalho"
       },
-      "title": "Atalhos de prompt",
       "toasts": {
         "bothRequired": "O atalho e a expansão são obrigatórios",
         "deleteFailed": "Falha ao excluir atalho",
@@ -16177,9 +16162,6 @@
       "empty": {
         "description": "O uso e os custos dos seus modelos aparecerão aqui quando você começar a conversar.",
         "title": "Nenhum uso registrado ainda"
-      },
-      "header": {
-        "title": "Uso"
       },
       "loadError": {
         "description": "Algo deu errado ao buscar seu uso. Tente novamente em instantes.",
@@ -16240,9 +16222,16 @@
       },
       "playbackSpeed": {
         "description": "Ajuste a velocidade da reprodução de voz.",
-        "title": "Velocidade de reprodução"
+        "title": "Velocidade de reprodução",
+        "value": "{speed}x"
       },
       "title": "Voz"
+    },
+    "modelPreferences": {
+      "title": "Preferências de modelo"
+    },
+    "interactions": {
+      "title": "Interações"
     }
   },
   "sidebar": {

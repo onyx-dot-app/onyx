@@ -34,7 +34,7 @@ import { SidebarStateProvider, ToastProvider } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
-import { FullWidthChatProvider } from "@/providers/FullWidthChatProvider";
+import { WideChatProvider } from "@/providers/WideChatProvider";
 import { IncognitoProvider } from "@/providers/IncognitoProvider";
 import { UnsavedChangesNavigationProvider } from "@/providers/UnsavedChangesNavigationProvider";
 import { CraftStreamingProvider } from "@/providers/CraftStreamingProvider";
@@ -84,7 +84,7 @@ export default function AppProvider({ children }: AppProviderProps) {
               <ModalProvider>
                 <SidebarPersistenceProvider>
                   <QueryControllerProvider>
-                    <FullWidthChatProvider>
+                    <WideChatProvider>
                       <IncognitoProvider>
                         <UnsavedChangesNavigationProvider>
                           <ToastProvider
@@ -98,7 +98,7 @@ export default function AppProvider({ children }: AppProviderProps) {
                           </ToastProvider>
                         </UnsavedChangesNavigationProvider>
                       </IncognitoProvider>
-                    </FullWidthChatProvider>
+                    </WideChatProvider>
                   </QueryControllerProvider>
                 </SidebarPersistenceProvider>
               </ModalProvider>

@@ -64,6 +64,7 @@ Key props (`InputSingleComboBoxProps` also passes DOM input attributes through):
 | `options`       | `SelectOptions` | `[]`       | Loose options and dividers, in order             |
 | `mode`          | `"closed" \| "open"`                | `"closed"` | Set openness                                         |
 | `placeholder`   | `string`                            | —          | Trigger placeholder (required)                       |
+| `aria-label`    | `string`                            | `placeholder` | The accessible name, such as the field's title    |
 | `isError`       | `boolean`                           | —          | External error state (overrides internal validation) |
 | `rightChildren` | `React.ReactNode`                   | —          | Extra trigger-side controls                          |
 | `tooltip`       | `string \| RichStr`                 | —          | Shown on hover, in any state                         |

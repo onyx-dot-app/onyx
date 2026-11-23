@@ -50,9 +50,7 @@ import {
   SvgDownload,
   SvgEyeOff,
   SvgFileText,
-  SvgFitWidth,
   SvgFolderIn,
-  SvgFullWidth,
   SvgHash,
   SvgMoreHorizontal,
   SvgSearchMenu,
@@ -70,7 +68,6 @@ import { AppChromeLoader } from "@/layouts/chromes/AppChromeLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
-import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import { PANEL_TOGGLE_RESERVE } from "@/lib/outputPanel/layout";
@@ -89,7 +86,6 @@ function Header() {
   const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
-  const { fullWidthChat, toggleFullWidthChat } = useFullWidthChat();
   const {
     incognitoAvailable,
     incognitoEnabled,
@@ -119,6 +115,12 @@ function Header() {
     removeSession,
   } = useChatSessions();
   const navigation = useNavigation();
+
+  const showIncognitoStart =
+    appPosition.isNewSession() &&
+    incognitoAvailable &&
+    !incognitoEnabled &&
+    !incognitoLocked;
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
@@ -510,34 +512,17 @@ function Header() {
           - more-options buttons
         */}
               <div className="flex flex-1 justify-end items-center">
-                {(appPosition.isChat() || appPosition.isNewSession()) && (
+                {(showIncognitoStart ||
+                  (incognitoEnabled &&
+                    (appPosition.isChat() || appPosition.isNewSession()))) && (
                   <FrostedDiv className="flex shrink flex-row items-center">
-                    {appPosition.isNewSession() &&
-                      incognitoAvailable &&
-                      !incognitoEnabled &&
-                      !incognitoLocked && (
-                        <Button
-                          icon={SvgEyeOff}
-                          prominence="tertiary"
-                          onClick={toggleIncognito}
-                          aria-label={t("incognitoStart.ariaLabel")}
-                          tooltip={t("incognitoStart.tooltip")}
-                        />
-                      )}
-                    {/* On mobile widths the reading-width cap never applies
-                        (chat is always full width), so the toggle is hidden. */}
-                    {!isMobile && (
+                    {showIncognitoStart && (
                       <Button
-                        icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
+                        icon={SvgEyeOff}
                         prominence="tertiary"
-                        onClick={toggleFullWidthChat}
-                        tooltip={
-                          fullWidthChat
-                            ? t("fullWidth.fitTooltip")
-                            : t("fullWidth.fullTooltip")
-                        }
-                        aria-label={t("fullWidth.ariaLabel")}
-                        aria-pressed={fullWidthChat}
+                        onClick={toggleIncognito}
+                        aria-label={t("incognitoStart.ariaLabel")}
+                        tooltip={t("incognitoStart.tooltip")}
                       />
                     )}
                     {incognitoEnabled && (

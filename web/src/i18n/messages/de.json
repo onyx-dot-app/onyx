@@ -9836,7 +9836,7 @@
       },
       "tierTooltip": "Das LLM Gateway erfordert den Business- oder Enterprise-Tarif.",
       "scopeNote": {
-        "title": "Jeder Benutzer konfiguriert sein eigenes Token und die Verbindungsdetails unter Einstellungen → LLM Gateway."
+        "title": "Jeder Benutzer konfiguriert sein eigenes Token und die Verbindungsdetails unter Einstellungen → Zugriff durch Drittanbieter → LLM Gateway."
       },
       "toasts": {
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden"
@@ -11816,11 +11816,6 @@
       "exportPlaintext": {
         "label": "Nur Text"
       },
-      "fullWidth": {
-        "ariaLabel": "Chat in voller Breite umschalten",
-        "fitTooltip": "Breite anpassen",
-        "fullTooltip": "Volle Breite"
-      },
       "incognitoExit": {
         "ariaLabel": "Inkognito-Chat verlassen",
         "tooltip": "Inkognito-Chat verlassen"
@@ -13579,11 +13574,6 @@
       },
       "plant": {
         "label": "Pflanzen"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "Aa"
       }
     },
     "commandMenu": {
@@ -15798,11 +15788,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "anonym",
-        "description": "Ihre Konto-E-Mail-Adresse.",
-        "title": "E-Mail"
-      },
       "password": {
         "changeButton": "Passwort ändern",
         "description": "Aktualisieren Sie das Passwort Ihres Kontos.",
@@ -15835,8 +15820,7 @@
           "mismatch": "Die Passwörter stimmen nicht überein",
           "newRequired": "Neues Passwort ist erforderlich"
         }
-      },
-      "title": "Konten"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15921,13 +15905,21 @@
         "title": "Chat-Hintergrund"
       },
       "colorMode": {
-        "auto": "Automatisch",
+        "auto": "System",
         "dark": "Dunkel",
-        "description": "Wählen Sie Ihren bevorzugten Farbmodus für die Benutzeroberfläche.",
+        "description": "Wählen Sie Ihr bevorzugtes Design für die Benutzeroberfläche.",
         "light": "Hell",
-        "title": "Farbmodus"
+        "title": "Design"
       },
-      "title": "Erscheinungsbild"
+      "general": {
+        "title": "Allgemein"
+      },
+      "transcriptWidth": {
+        "title": "Breite des Chatverlaufs",
+        "description": "Legen Sie fest, wie breit Chatnachrichten und die Eingabeleiste auf diesem Gerät sind.",
+        "standard": "Standard",
+        "wide": "Breit"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15961,7 +15953,6 @@
         "description": "Animiert gestreamte Antworten Zeichen für Zeichen. Deaktivieren Sie diese Option, um Textblöcke sofort bei Eintreffen anzuzeigen.",
         "title": "Sanftes Streaming"
       },
-      "title": "Chats",
       "toasts": {
         "saveFailed": "Einstellungen konnten nicht gespeichert werden"
       },
@@ -15974,6 +15965,7 @@
     },
     "connectors": {
       "connectButton": "Verbinden",
+      "disconnectAriaLabel": "Verbindung zu {name} trennen",
       "disconnectModal": {
         "continueNote": "Sie können bestehende Sitzungen, die auf Inhalte von {name} verweisen, weiterhin fortsetzen.",
         "description": "{appName} kann nicht mehr auf Inhalte aus Ihrem {name}-Konto zugreifen oder diese durchsuchen.",
@@ -15981,11 +15973,9 @@
         "submit": "Trennen",
         "title": "*{name}* trennen"
       },
-      "emptyMessage": "Für Ihre Organisation sind keine Konnektoren eingerichtet.",
       "status": {
         "connected": "Verbunden",
-        "notConnected": "Nicht verbunden",
-        "paused": "Pausiert"
+        "notConnected": "Nicht verbunden"
       },
       "title": "Konnektoren",
       "toasts": {
@@ -16049,7 +16039,6 @@
         "description": "Wählen Sie die Sprache für die Benutzeroberfläche.",
         "title": "Anzeigesprache"
       },
-      "title": "Sprache",
       "toasts": {
         "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
       }
@@ -16062,23 +16051,20 @@
         "placeholder": "Bereich auswählen"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "Konten & Zugriff"
+        "appearance": {
+          "label": "Erscheinungsbild"
+        },
+        "usage": {
+          "label": "Nutzung"
+        },
+        "account": {
+          "label": "Konto"
         },
         "chatPreferences": {
           "label": "Chat-Einstellungen"
         },
-        "connectors": {
-          "label": "Konnektoren"
-        },
-        "general": {
-          "label": "Allgemein"
-        },
-        "llmGateway": {
-          "label": "LLM Gateway"
-        },
-        "usage": {
-          "label": "Nutzung"
+        "thirdPartyAccess": {
+          "label": "Zugriff durch Drittanbieter"
         }
       }
     },
@@ -16127,9 +16113,9 @@
       }
     },
     "personalPreferences": {
-      "description": "Geben Sie Ihre individuellen Präferenzen in natürlicher Sprache an.",
+      "description": "{appName} berücksichtigt diese Hinweise in all Ihren Chats.",
       "placeholder": "Beschreiben Sie, wie sich das System verhalten soll und welchen Ton es verwenden soll.",
-      "title": "Persönliche Präferenzen"
+      "title": "Anweisungen"
     },
     "profile": {
       "fullName": {
@@ -16154,7 +16140,6 @@
         "publicTooltip": "Organisationsweite Prompt-Shortcuts können nicht gelöscht werden.",
         "removeAriaLabel": "Shortcut entfernen"
       },
-      "title": "Prompt-Shortcuts",
       "toasts": {
         "bothRequired": "Shortcut und Erweiterung sind beide erforderlich",
         "deleteFailed": "Shortcut konnte nicht gelöscht werden",
@@ -16177,9 +16162,6 @@
       "empty": {
         "description": "Ihre Modellnutzung und Kosten erscheinen hier, sobald Sie mit dem Chatten beginnen.",
         "title": "Noch keine Nutzung erfasst"
-      },
-      "header": {
-        "title": "Nutzung"
       },
       "loadError": {
         "description": "Beim Abrufen Ihrer Nutzung ist ein Fehler aufgetreten. Versuchen Sie es gleich erneut.",
@@ -16240,9 +16222,16 @@
       },
       "playbackSpeed": {
         "description": "Passen Sie die Geschwindigkeit der Sprachwiedergabe an.",
-        "title": "Wiedergabegeschwindigkeit"
+        "title": "Wiedergabegeschwindigkeit",
+        "value": "{speed}x"
       },
       "title": "Sprachfunktionen"
+    },
+    "modelPreferences": {
+      "title": "Modelleinstellungen"
+    },
+    "interactions": {
+      "title": "Interaktionen"
     }
   },
   "sidebar": {

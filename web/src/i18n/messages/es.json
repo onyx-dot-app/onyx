@@ -9836,7 +9836,7 @@
       },
       "tierTooltip": "LLM Gateway requiere el plan Business o Enterprise.",
       "scopeNote": {
-        "title": "Cada usuario configura su propio token y los datos de conexión en Configuración → LLM Gateway."
+        "title": "Cada usuario configura su propio token y los datos de conexión en Configuración → Acceso de terceros → LLM Gateway."
       },
       "toasts": {
         "settingsUpdateFailed": "No se pudo actualizar la configuración"
@@ -11816,11 +11816,6 @@
       "exportPlaintext": {
         "label": "Texto sin formato"
       },
-      "fullWidth": {
-        "ariaLabel": "Alternar chat de ancho completo",
-        "fitTooltip": "Ajustar ancho",
-        "fullTooltip": "Ancho completo"
-      },
       "incognitoExit": {
         "ariaLabel": "Salir del chat de incógnito",
         "tooltip": "Salir del chat de incógnito"
@@ -13579,11 +13574,6 @@
       },
       "plant": {
         "label": "Plantas"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "Aa"
       }
     },
     "commandMenu": {
@@ -15798,11 +15788,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "anónimo",
-        "description": "La dirección de correo electrónico de tu cuenta.",
-        "title": "Correo electrónico"
-      },
       "password": {
         "changeButton": "Cambiar contraseña",
         "description": "Actualiza la contraseña de tu cuenta.",
@@ -15835,8 +15820,7 @@
           "mismatch": "Las contraseñas no coinciden",
           "newRequired": "La nueva contraseña es obligatoria"
         }
-      },
-      "title": "Cuentas"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15921,13 +15905,21 @@
         "title": "Fondo del chat"
       },
       "colorMode": {
-        "auto": "Automático",
+        "auto": "Sistema",
         "dark": "Oscuro",
-        "description": "Selecciona el modo de color que prefieras para la interfaz.",
+        "description": "Selecciona el tema que prefieras para la interfaz.",
         "light": "Claro",
-        "title": "Modo de color"
+        "title": "Tema"
       },
-      "title": "Apariencia"
+      "general": {
+        "title": "General"
+      },
+      "transcriptWidth": {
+        "title": "Ancho de la conversación",
+        "description": "Define el ancho de los mensajes del chat y de la barra de entrada en este dispositivo.",
+        "standard": "Estándar",
+        "wide": "Ancho"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15961,7 +15953,6 @@
         "description": "Anima las respuestas en tiempo real carácter por carácter. Desactívalo para mostrar los fragmentos a medida que llegan.",
         "title": "Transmisión fluida"
       },
-      "title": "Chats",
       "toasts": {
         "saveFailed": "No se pudieron guardar las preferencias"
       },
@@ -15974,6 +15965,7 @@
     },
     "connectors": {
       "connectButton": "Conectar",
+      "disconnectAriaLabel": "Desconectar {name}",
       "disconnectModal": {
         "continueNote": "Aún puedes continuar las sesiones existentes que hacen referencia a contenido de {name}.",
         "description": "{appName} ya no podrá acceder ni buscar contenido de tu cuenta de {name}.",
@@ -15981,11 +15973,9 @@
         "submit": "Desconectar",
         "title": "Desconectar *{name}*"
       },
-      "emptyMessage": "No hay conectores configurados para tu organización.",
       "status": {
         "connected": "Conectado",
-        "notConnected": "No conectado",
-        "paused": "Pausado"
+        "notConnected": "No conectado"
       },
       "title": "Conectores",
       "toasts": {
@@ -16049,7 +16039,6 @@
         "description": "Selecciona el idioma de la interfaz.",
         "title": "Idioma de la interfaz"
       },
-      "title": "Idioma",
       "toasts": {
         "updateFailed": "No se pudo actualizar la preferencia de idioma"
       }
@@ -16062,23 +16051,20 @@
         "placeholder": "Selecciona una sección"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "Cuentas y acceso"
-        },
-        "chatPreferences": {
-          "label": "Preferencias de chat"
-        },
-        "connectors": {
-          "label": "Conectores"
-        },
-        "general": {
-          "label": "General"
-        },
-        "llmGateway": {
-          "label": "Puerta de enlace LLM"
+        "appearance": {
+          "label": "Apariencia"
         },
         "usage": {
           "label": "Uso"
+        },
+        "account": {
+          "label": "Cuenta"
+        },
+        "chatPreferences": {
+          "label": "Preferencias del chat"
+        },
+        "thirdPartyAccess": {
+          "label": "Acceso de terceros"
         }
       }
     },
@@ -16127,9 +16113,9 @@
       }
     },
     "personalPreferences": {
-      "description": "Indica tus preferencias personalizadas en lenguaje natural.",
+      "description": "{appName} las tiene en cuenta en todos tus chats.",
       "placeholder": "Describe cómo quieres que se comporte el sistema y qué tono debe usar.",
-      "title": "Preferencias personales"
+      "title": "Instrucciones"
     },
     "profile": {
       "fullName": {
@@ -16154,7 +16140,6 @@
         "publicTooltip": "No se pueden eliminar los atajos de prompt de toda la organización.",
         "removeAriaLabel": "Quitar atajo"
       },
-      "title": "Atajos de prompt",
       "toasts": {
         "bothRequired": "Se requieren tanto el atajo como la expansión",
         "deleteFailed": "No se pudo eliminar el atajo",
@@ -16177,9 +16162,6 @@
       "empty": {
         "description": "El uso y los costes de tus modelos aparecerán aquí cuando empieces a chatear.",
         "title": "Aún no hay uso registrado"
-      },
-      "header": {
-        "title": "Uso"
       },
       "loadError": {
         "description": "Algo salió mal al obtener tu uso. Inténtalo de nuevo en un momento.",
@@ -16240,9 +16222,16 @@
       },
       "playbackSpeed": {
         "description": "Ajusta la velocidad de reproducción de voz.",
-        "title": "Velocidad de reproducción"
+        "title": "Velocidad de reproducción",
+        "value": "{speed}x"
       },
       "title": "Voz"
+    },
+    "modelPreferences": {
+      "title": "Preferencias de modelo"
+    },
+    "interactions": {
+      "title": "Interacciones"
     }
   },
   "sidebar": {

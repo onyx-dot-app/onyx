@@ -9836,7 +9836,7 @@
       },
       "tierTooltip": "The LLM Gateway requires the Business or Enterprise plan.",
       "scopeNote": {
-        "title": "Each user configures their own token and connection details under Settings → LLM Gateway."
+        "title": "Each user configures their own token and connection details under Settings → 3rd Party Access → LLM Gateway."
       },
       "toasts": {
         "settingsUpdateFailed": "Failed to update settings"
@@ -11816,11 +11816,6 @@
       "exportPlaintext": {
         "label": "Plaintext"
       },
-      "fullWidth": {
-        "ariaLabel": "Toggle full width chat",
-        "fitTooltip": "Fit width",
-        "fullTooltip": "Full width"
-      },
       "incognitoExit": {
         "ariaLabel": "Exit incognito chat",
         "tooltip": "Exit Incognito Chat"
@@ -13579,11 +13574,6 @@
       },
       "plant": {
         "label": "Plants"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "Aa"
       }
     },
     "commandMenu": {
@@ -15798,11 +15788,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "anonymous",
-        "description": "Your account email address.",
-        "title": "Email"
-      },
       "password": {
         "changeButton": "Change Password",
         "description": "Update your account password.",
@@ -15835,8 +15820,7 @@
           "mismatch": "Passwords do not match",
           "newRequired": "New password is required"
         }
-      },
-      "title": "Accounts"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15921,13 +15905,21 @@
         "title": "Chat Background"
       },
       "colorMode": {
-        "auto": "Auto",
+        "auto": "System",
         "dark": "Dark",
-        "description": "Select your preferred color mode for the UI.",
+        "description": "Select your preferred theme for the UI.",
         "light": "Light",
-        "title": "Color Mode"
+        "title": "Theme"
       },
-      "title": "Appearance"
+      "general": {
+        "title": "General"
+      },
+      "transcriptWidth": {
+        "title": "Transcript Width",
+        "description": "Set how wide chat messages and the input bar are on this device.",
+        "standard": "Standard",
+        "wide": "Wide"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15961,7 +15953,6 @@
         "description": "Animate streamed responses character-by-character. Disable to render chunks as they arrive.",
         "title": "Smooth Streaming"
       },
-      "title": "Chats",
       "toasts": {
         "saveFailed": "Failed to save preferences"
       },
@@ -15974,6 +15965,7 @@
     },
     "connectors": {
       "connectButton": "Connect",
+      "disconnectAriaLabel": "Disconnect {name}",
       "disconnectModal": {
         "continueNote": "You can still continue existing sessions referencing {name} content.",
         "description": "{appName} will no longer be able to access or search content from your {name} account.",
@@ -15981,11 +15973,9 @@
         "submit": "Disconnect",
         "title": "Disconnect *{name}*"
       },
-      "emptyMessage": "No connectors set up for your organization.",
       "status": {
         "connected": "Connected",
-        "notConnected": "Not connected",
-        "paused": "Paused"
+        "notConnected": "Not connected"
       },
       "title": "Connectors",
       "toasts": {
@@ -16049,7 +16039,6 @@
         "description": "Select the language for the UI.",
         "title": "Display Language"
       },
-      "title": "Language",
       "toasts": {
         "updateFailed": "Failed to update language preference"
       }
@@ -16062,23 +16051,20 @@
         "placeholder": "Select a section"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "Accounts & Access"
+        "appearance": {
+          "label": "Appearance"
+        },
+        "usage": {
+          "label": "Usage"
+        },
+        "account": {
+          "label": "Account"
         },
         "chatPreferences": {
           "label": "Chat Preferences"
         },
-        "connectors": {
-          "label": "Connectors"
-        },
-        "general": {
-          "label": "General"
-        },
-        "llmGateway": {
-          "label": "LLM Gateway"
-        },
-        "usage": {
-          "label": "Usage"
+        "thirdPartyAccess": {
+          "label": "3rd Party Access"
         }
       }
     },
@@ -16127,9 +16113,9 @@
       }
     },
     "personalPreferences": {
-      "description": "Provide your custom preferences in natural language.",
+      "description": "{appName} keeps these in mind across your chats.",
       "placeholder": "Describe how you want the system to behave and the tone it should use.",
-      "title": "Personal Preferences"
+      "title": "Instructions"
     },
     "profile": {
       "fullName": {
@@ -16154,7 +16140,6 @@
         "publicTooltip": "Cannot delete organization-wide prompt shortcuts.",
         "removeAriaLabel": "Remove shortcut"
       },
-      "title": "Prompt Shortcuts",
       "toasts": {
         "bothRequired": "Both shortcut and expansion are required",
         "deleteFailed": "Failed to delete shortcut",
@@ -16178,9 +16163,6 @@
         "description": "Your model usage and costs will show up here once you start chatting.",
         "title": "No usage recorded yet"
       },
-      "header": {
-        "title": "Usage"
-      },
       "loadError": {
         "description": "Something went wrong fetching your usage. Try again in a moment.",
         "title": "Couldn't load usage"
@@ -16193,7 +16175,7 @@
         "otherProvider": {
           "label": "Other"
         },
-        "title": "Model prices",
+        "title": "Model Prices",
         "unavailable": "Prices unavailable",
         "priceRow": "{input} in · {output} out · {cache} cache"
       },
@@ -16226,7 +16208,7 @@
       },
       "usageThisPeriod": {
         "description": "{amount} spent",
-        "title": "Usage this period"
+        "title": "Usage This Period"
       }
     },
     "voice": {
@@ -16240,9 +16222,16 @@
       },
       "playbackSpeed": {
         "description": "Adjust the speed of voice playback.",
-        "title": "Playback Speed"
+        "title": "Playback Speed",
+        "value": "{speed}x"
       },
       "title": "Voice"
+    },
+    "modelPreferences": {
+      "title": "Model Preferences"
+    },
+    "interactions": {
+      "title": "Interactions"
     }
   },
   "sidebar": {
