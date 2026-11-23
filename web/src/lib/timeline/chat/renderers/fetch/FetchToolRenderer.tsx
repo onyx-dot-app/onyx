@@ -21,8 +21,8 @@ import {
 import { Text } from "@opal/components";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 
-const urlToSourceInfo = (url: string, index: number): SourceInfo => ({
-  id: `url-${index}`,
+const urlToSourceInfo = (url: string): SourceInfo => ({
+  id: `url-${url}`,
   title: url,
   sourceType: ValidSources.Web,
   sourceUrl: url,
@@ -61,11 +61,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
 }) => {
   const t = useTranslations("chat.messages.timeline");
   const fetchState = constructCurrentFetchState(packets);
-  const { urls, documents, hasStarted, isLoading, isComplete } = fetchState;
-  // The pages the step browses: the fetched ones once they arrive.
-  // While fetching, the pages it asked for; once done, only the pages it
-  // read, so URLs that failed do not count as browsed.
-  const pageCount = documents.length || urls.length;
+  const { urls, documents, pendingUrls, pageCount, hasStarted } = fetchState;
+  // Once done, only the pages it read, so URLs that failed do not count as
+  // browsed.
   const readCount = documents.length;
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
@@ -83,10 +81,15 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     ]);
   }
 
-  const displayDocuments = documents.length > 0;
-  // The URLs show as soon as the step names them; the fetched pages replace
-  // them when they arrive.
-  const displayUrls = !displayDocuments && urls.length > 0;
+  // The URLs show as soon as the step names them. Each opened page replaces
+  // its URL as it opens. A step that opened nothing keeps its URLs.
+  const sources: SourceInfo[] =
+    documents.length > 0
+      ? [
+          ...documents.map(documentToSourceInfo),
+          ...pendingUrls.map(urlToSourceInfo),
+        ]
+      : urls.map(urlToSourceInfo);
 
   // HIGHLIGHT mode: header embedded in content, no StepContainer
   if (isHighlight) {
@@ -103,27 +106,18 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 {t("fetch.reading.status", { count: pageCount })}
               </Text>
             </div>
-            {displayDocuments ? (
+            {sources.length > 0 && (
               <SearchChipList
-                items={documents}
+                items={sources}
                 initialCount={INITIAL_URLS_TO_SHOW}
                 expansionCount={URLS_PER_EXPANSION}
-                getKey={(doc: OnyxDocument) => doc.document_id}
-                toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
-                onClick={(doc: OnyxDocument) => {
-                  if (doc.link) openExternalLink(doc.link);
+                getKey={(source: SourceInfo) => source.id}
+                toSourceInfo={(source: SourceInfo) => source}
+                onClick={(source: SourceInfo) => {
+                  if (source.sourceUrl) openExternalLink(source.sourceUrl);
                 }}
               />
-            ) : displayUrls ? (
-              <SearchChipList
-                items={urls}
-                initialCount={INITIAL_URLS_TO_SHOW}
-                expansionCount={URLS_PER_EXPANSION}
-                getKey={(url: string) => url}
-                toSourceInfo={urlToSourceInfo}
-                onClick={(url: string) => openExternalLink(url)}
-              />
-            ) : null}
+            )}
           </div>
         ),
       },
@@ -140,13 +134,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
       content: (
         <RetrievalBody
           queries={[]}
-          results={
-            displayDocuments
-              ? documents.map(documentToSourceInfo)
-              : displayUrls
-                ? urls.map(urlToSourceInfo)
-                : []
-          }
+          results={sources}
           isComplete={stopPacketSeen}
           compact
         />

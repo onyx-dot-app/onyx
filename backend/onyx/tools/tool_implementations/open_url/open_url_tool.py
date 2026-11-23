@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel
@@ -47,9 +48,6 @@ from onyx.tools.tool_implementations.open_url.models import (
 from onyx.tools.tool_implementations.open_url.url_normalization import (
     _default_url_normalizer,
     normalize_url_candidates,
-)
-from onyx.tools.tool_implementations.open_url.utils import (
-    filter_web_contents_with_no_title_or_content,
 )
 from onyx.tools.tool_implementations.utils import SEARCH_RESULTS_CODE_MODE_RESULT
 from onyx.tools.tool_implementations.web_search.providers import (
@@ -393,6 +391,28 @@ class OpenedPage(NamedTuple):
     text: str
 
 
+def _report_opened(
+    invocation: ToolInvocation, sections: list[InferenceSection]
+) -> None:
+    """Shows opened pages in the call's display, as soon as they open."""
+    if not sections:
+        return
+    for section in sections:
+        chunk = section.center_chunk
+        if not chunk.semantic_identifier and chunk.source_links:
+            chunk.semantic_identifier = chunk.source_links[0]
+    invocation.update(
+        ToolProgress(
+            details=SearchDocsResponse(
+                search_docs=convert_inference_sections_to_search_docs(
+                    sections, is_internet=False
+                ),
+                citation_mapping={},
+            )
+        )
+    )
+
+
 class OpenURLTool(Tool):
     merge_list_argument = "urls"
     merge_list_limit = MAX_URLS_PER_CALL
@@ -524,7 +544,13 @@ class OpenURLTool(Tool):
                     [
                         (
                             self._fetch_web_content,
-                            (urls, context.url_snippet_map),
+                            (
+                                urls,
+                                context.url_snippet_map,
+                                lambda _url, page: _report_opened(
+                                    invocation, [page.section]
+                                ),
+                            ),
                         )
                     ],
                     allow_failures=True,
@@ -561,9 +587,27 @@ class OpenURLTool(Tool):
                 def _retrieve_indexed_with_filters(
                     requests: list[IndexedDocumentRequest],
                 ) -> IndexedRetrievalResult:
-                    return self._retrieve_indexed_documents_with_filters(
+                    result = self._retrieve_indexed_documents_with_filters(
                         requests, filters
                     )
+                    # The merge below prefers an indexed page with content.
+                    _report_opened(
+                        invocation,
+                        [
+                            section
+                            for section in result.sections
+                            if section.combined_content
+                        ],
+                    )
+                    return result
+
+                # An indexed copy of a URL wins over its crawl, so a crawled
+                # page shows at once only when its URL has no indexed copy.
+                indexed_urls = {normalize_web_content_url(url) for url in url_to_doc_id}
+
+                def _report_crawled(url: str, page: OpenedPage) -> None:
+                    if url not in indexed_urls:
+                        _report_opened(invocation, [page.section])
 
                 if self._web_fetch_disabled:
                     # Indexed-only: never crawl. Unresolved URLs are seeded as
@@ -593,7 +637,7 @@ class OpenURLTool(Tool):
                             (_retrieve_indexed_with_filters, (all_requests,)),
                             (
                                 self._fetch_web_content,
-                                (urls, context.url_snippet_map),
+                                (urls, context.url_snippet_map, _report_crawled),
                             ),
                         ],
                         allow_failures=True,
@@ -644,19 +688,11 @@ class OpenURLTool(Tool):
             logger.warning("OpenURL tool failed: %s", failure_msg)
             return ToolResult(content=failure_msg, is_error=True)
 
-        for section in inference_sections:
-            chunk = section.center_chunk
-            if not chunk.semantic_identifier and chunk.source_links:
-                chunk.semantic_identifier = chunk.source_links[0]
-
-        # Convert sections to search docs, preserving source information
+        # All the pages, also those that opened before the end. The display
+        # shows each page once.
+        _report_opened(invocation, inference_sections)
         search_docs = convert_inference_sections_to_search_docs(
             inference_sections, is_internet=False
-        )
-        invocation.update(
-            ToolProgress(
-                details=SearchDocsResponse(search_docs=search_docs, citation_mapping={})
-            )
         )
 
         # Note that with this call, some contents may be truncated or dropped so what the LLM sees may not be the entire set
@@ -914,10 +950,15 @@ class OpenURLTool(Tool):
         return merged_sections
 
     def _fetch_web_content(
-        self, urls: list[str], url_snippet_map: dict[str, str]
+        self,
+        urls: list[str],
+        url_snippet_map: dict[str, str],
+        on_page: Callable[[str, OpenedPage], None] | None = None,
     ) -> tuple[list[OpenedPage], list[FailedFetch]]:
         """The fetched pages, each with an excerpt around its snippet and its
-        whole text cut to OPEN_URL_MAX_CHARS, and the failed fetches."""
+        whole text cut to OPEN_URL_MAX_CHARS, and the failed fetches.
+        on_page gets each page and its normalized URL as soon as it is
+        fetched."""
         if not urls:
             return [], []
 
@@ -931,7 +972,6 @@ class OpenURLTool(Tool):
                 ],
             )
 
-        raw_web_contents = self._provider.contents(urls)
         # Track per-URL failure reasons (preferred) but de-dupe by URL since the
         # same URL can show up in both the "empty" and "scrape unsuccessful"
         # branches below.
@@ -944,16 +984,15 @@ class OpenURLTool(Tool):
             if existing is None or (reason and not existing.failure_reason):
                 failed_by_url[url] = FailedFetch(url=url, failure_reason=reason)
 
-        # Treat "no title and no content" as a failure for that URL, but don't
-        # include the empty entry in downstream prompting/sections.
-        for content in raw_web_contents:
-            if not content.title.strip() and not content.full_content.strip():
-                _mark_failed(content.link, content.failure_reason)
-
-        web_contents = filter_web_contents_with_no_title_or_content(raw_web_contents)
         pages: list[OpenedPage] = []
 
-        for content in web_contents:
+        for content in self._provider.iter_contents(urls):
+            # Treat "no title and no content" as a failure for that URL, but
+            # don't include the empty entry in downstream prompting/sections.
+            if not content.title.strip() and not content.full_content.strip():
+                _mark_failed(content.link, content.failure_reason)
+                continue
+
             # Check if content is insufficient (e.g., "Loading..." or too short)
             text_stripped = content.full_content.strip()
             is_insufficient = (
@@ -968,16 +1007,17 @@ class OpenURLTool(Tool):
                 and content.full_content
                 and not is_insufficient
             ):
-                pages.append(
-                    OpenedPage(
-                        inference_section_from_internet_page_scrape(
-                            content, url_snippet_map.get(content.link, "")
-                        ),
-                        truncate_search_result_content(
-                            content.full_content, OPEN_URL_MAX_CHARS
-                        ),
-                    )
+                page = OpenedPage(
+                    inference_section_from_internet_page_scrape(
+                        content, url_snippet_map.get(content.link, "")
+                    ),
+                    truncate_search_result_content(
+                        content.full_content, OPEN_URL_MAX_CHARS
+                    ),
                 )
+                pages.append(page)
+                if on_page is not None:
+                    on_page(content.link, page)
             else:
                 _mark_failed(content.link or "", content.failure_reason)
 
