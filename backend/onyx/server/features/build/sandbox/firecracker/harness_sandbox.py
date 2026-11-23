@@ -290,7 +290,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         ):
             if get_skills_image(tenant_cache, ref.sandbox_id) == image:
                 return
-            # A swap whose links then fail must not pass for the old drive.
+            # Clear the record first, so a failed swap or link step makes the
+            # next sync try again.
             set_skills_image(tenant_cache, ref.sandbox_id, None)
             agent = self._client_factory.client(placed.node.address)
             put = agent.put_managed_image(bundle.zip_bytes)
