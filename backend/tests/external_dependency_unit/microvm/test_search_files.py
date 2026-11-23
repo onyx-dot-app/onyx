@@ -99,7 +99,7 @@ from tests.external_dependency_unit.microvm.fake_agent import (
     RunningFakeAgent,
 )
 from tests.external_dependency_unit.microvm.test_file_copies import (
-    _TimedOutDeletes,
+    _FailedDeletes,
     _wrap,
     _Wrapped,
 )
@@ -915,7 +915,13 @@ def test_a_truncated_listing_evicts_nothing(
     assert _search_files(node, ref) == {old_path: b"old file", result.file_name: b"new"}
 
 
-def test_an_eviction_that_gets_no_response_stops_the_intake(
+@pytest.mark.parametrize(
+    "error",
+    [TimeoutError("no response"), PermissionError("the daemon refuses")],
+    ids=["no_response", "refused"],
+)
+def test_an_eviction_that_fails_stops_the_intake(
+    error: Exception,
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
     chat: SandboxChat,
@@ -925,7 +931,8 @@ def test_an_eviction_that_gets_no_response_stops_the_intake(
     internal: SearchPipelineController,
     idle: Callable[[], bool],
 ) -> None:
-    """The first delete times out: no other delete and no write follow."""
+    """The first delete fails: no other delete and no write follow, so the
+    chat's search files do not go over the cap."""
     file = make_file(b"new")
     internal.add_search_results(QUERY, [file.result()])
     ref = chat.ref(db_session)
@@ -938,18 +945,18 @@ def test_an_eviction_that_gets_no_response_stops_the_intake(
         node.agent.files[_key(ref, path)] = b"old!"
         node.agent.file_times[_key(ref, path)] = time.time() - age
     monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 4)
-    timed_out: list[_TimedOutDeletes] = []
+    failed: list[_FailedDeletes] = []
 
     def wrap(files: SessionFiles) -> SessionFiles:
-        timed_out.append(_TimedOutDeletes(files))
-        return timed_out[-1]
+        failed.append(_FailedDeletes(files, error))
+        return failed[-1]
 
     _wrap(monkeypatch, sandbox, wrap)
     llm = _searched(chat, db_session, ("found", QUERY))
     [result] = _results(llm, "found")
     assert result.file_name is not None
     _wait_until(idle)
-    assert [path for files in timed_out for path in files.deleted] == old_paths[:1]
+    assert [path for files in failed for path in files.deleted] == old_paths[:1]
     assert not any(
         path.startswith("attachments/search/") for path in node.agent.write_paths
     )

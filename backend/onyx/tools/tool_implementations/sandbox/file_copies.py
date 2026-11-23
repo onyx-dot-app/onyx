@@ -47,7 +47,8 @@ The rules:
   MAX_CHAT_SEARCH_BYTES next to the turn's offered files and its earlier
   writes, then deletes the chat's oldest other search files (by
   modification time) to make room for them, and for nothing else; a
-  truncated or failed listing deletes nothing. Only this eviction deletes
+  truncated or failed listing deletes nothing. A failed delete stops the
+  intake: no other file is deleted or written. Only this eviction deletes
   search files. Accepted: an eviction can delete a file that a later
   command of an earlier turn's result opens, and a file ID whose bytes
   change at the same size keeps the old copy.
@@ -1120,15 +1121,15 @@ class TurnSearchFiles:
                     break
                 try:
                     files.delete(path)
-                except Exception as error:
+                except Exception:
                     logger.warning(
                         "sandbox_file_delete_failed sandbox=%s path=%s",
                         target.ref.sandbox_id,
                         path,
                         exc_info=True,
                     )
-                    if _no_response(error):
-                        return
+                    # The writes fit only if every eviction deletes its file.
+                    return
             logger.info(
                 "sandbox_search_files_intake session=%s in_place=%d "
                 "copying=%d not_copied=%d no_access=%d evicted=%d",

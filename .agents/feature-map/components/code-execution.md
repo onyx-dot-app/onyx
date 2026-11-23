@@ -527,11 +527,12 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         MAX_CHAT_SEARCH_BYTES next to this turn's
                                         offers and running writes, deletes the
                                         oldest other search files only to make
-                                        room for them (file_copies._evictions),
-                                        and writes them with the chat file copy's
-                                        retries, busy mark and slots. A file that
-                                        is not written gives its budget back. An
-                                        offered file that is refused, over a
+                                        room for them (file_copies._evictions; a
+                                        failed delete stops the intake with no
+                                        write), and writes them with the chat file
+                                        copy's retries, busy mark and slots. A file
+                                        that is not written gives its budget back.
+                                        An offered file that is refused, over a
                                         limit, dropped or failed keeps its path;
                                         SEARCH_FILE_GUIDANCE tells the model to
                                         search again in a later turn.

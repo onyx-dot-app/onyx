@@ -1744,16 +1744,17 @@ def test_vms_with_a_hung_session_setup_do_not_delay_another_vm(
         release.set()
 
 
-class _TimedOutDeletes(_Wrapped):
-    """Session files whose deletes time out."""
+class _FailedDeletes(_Wrapped):
+    """Session files whose deletes raise `error`."""
 
-    def __init__(self, files: SessionFiles) -> None:
+    def __init__(self, files: SessionFiles, error: Exception) -> None:
         super().__init__(files)
+        self.error = error
         self.deleted: list[str] = []
 
     def delete(self, path: str) -> bool:
         self.deleted.append(path)
-        raise TimeoutError("the VM does not respond")
+        raise self.error
 
 
 def test_a_delete_that_times_out_is_tried_again_by_the_next_turn(
@@ -1774,10 +1775,10 @@ def test_a_delete_that_times_out_is_tried_again_by_the_next_turn(
         ]
     )
     _wait_until(idle)
-    timed_out: list[_TimedOutDeletes] = []
+    timed_out: list[_FailedDeletes] = []
 
     def wrap(files: SessionFiles) -> SessionFiles:
-        timed_out.append(_TimedOutDeletes(files))
+        timed_out.append(_FailedDeletes(files, TimeoutError("no response")))
         return timed_out[-1]
 
     session_files = sandbox.session_files
