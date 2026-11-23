@@ -1,0 +1,436 @@
+---
+title: "Plugins"
+description: "Use MCP servers, OpenAPI plugins, and Craft Apps to work with live data and take actions"
+icon: "plug"
+---
+
+import BuiltInActionsTable from '/snippets/built-in-actions-table.mdx';
+
+Plugins connect Onyx agents to the tools that your team uses. With a plugin, an agent can read live data,
+such as a Linear issue, or take an action, such as post a Slack reply.
+
+A plugin holds skills. An integration is an MCP server or an app that the agent calls.
+Each integration has its own access: your admin makes it available to everyone, or its owner shares it with you.
+You turn each integration on, and you connect your account to each integration that needs it.
+
+<Note>
+  MCP servers, OpenAPI apps and Craft Apps are integrations. Find them in **Customize → Integrations** in the sidebar,
+  and in Chat under **Actions → Integrations**.
+</Note>
+
+## Integration types
+
+| Type | What it does | Where you can use it |
+| --- | --- | --- |
+| **MCP** | Connects to a [Model Context Protocol](https://modelcontextprotocol.io/) server, such as Linear, Notion, or Atlassian | Chat, custom agents, and Craft |
+| **OpenAPI** | Calls a REST API that your admin describes with an OpenAPI schema | Chat and custom agents |
+| **Craft App** | Lets Craft act as you in Slack, Gmail, Google Calendar, Google Drive, Notion, Linear, GitHub, HubSpot, or Zendesk | Craft only |
+
+For Craft Apps, see [Craft Apps](/overview/core_features/craft_apps).
+
+### Integrations and Onyx knowledge
+
+Integrations and [connectors](/overview/core_features/connectors) give agents different access.
+
+- **Onyx knowledge** is an index of company documents. Onyx applies the source permissions,
+  so you find only documents that you can access. Search is read only.
+- **Integrations** call the external service live. When you connect your own account,
+  the service applies your permissions. The integration can read only what your account can read,
+  and it can change content only if your account and your admin allow it.
+
+## Find a plugin
+
+Select **Customize** in the Chat sidebar or the Craft sidebar. Customize has three tabs: **Skills**,
+**Integrations** and **Plugins**. It opens on **Skills**. A plugin packages skills that you turn on together.
+Each skill that you add comes in its own plugin. You can also [upload a plugin](#upload-a-plugin)
+from Claude Code or Codex, or [add a marketplace](#add-a-marketplace) from GitHub.
+A plugin can name the integrations that it needs, but it does not hold them.
+Integrations are on the **Integrations** tab. The **Plugins** tab shows each plugin that you can use, in these groups:
+
+| Group | Plugins |
+| --- | --- |
+| **Created by you** | The plugins that you added, also after you publish them |
+| **From marketplaces** | The plugins of your personal marketplaces and of company marketplaces. Each row names its marketplace. |
+| **From your organization** | The plugins that your admin published for the organization |
+| **Shared with you** | The plugins that other people added and shared with you |
+
+Each row shows how many skills the plugin holds.
+The row of a plugin that needs integrations shows how many of them you can use,
+for example **3 of 5 integrations available**. Search by name,
+or use the filter to show only the plugins that are on or off.
+A plugin can be off because a plugin that is on has the same skill name. Its row then names that plugin.
+
+Admins see only the plugins that they can use here. The private plugins of other users are on the admin **Skills** page.
+
+The **Skills** tab lists each skill, and the **Integrations** tab lists each integration with its state.
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugins_directory.webp" alt="The Plugins tab of Customize, with an uploaded plugin that shows 3 of 5 integrations available and skills in the Created by you group"/>
+
+Click a plugin to open it. A plugin that holds only one skill opens that skill. The plugin page has these tabs.
+A tab with nothing to show does not appear.
+
+| Tab | What it shows |
+| --- | --- |
+| **Overview** | Whether the plugin is on and why, the description, the group, the owner, and for an uploaded plugin the version in `plugin.json`, the author, the license and the parts that Onyx does not use |
+| **Skills** | The skills of the plugin. Click **Read** to read the instructions of a skill. |
+| **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action. The count in the tab counts only the integrations that Onyx supports. |
+| **Versions** | The versions of a plugin that you own or can edit, with the version in `plugin.json`. Click a version to see its skills and integrations. |
+
+If you own or can edit the plugin, the page header has **Share** and a **...** menu with **Upload New Version**.
+If you can delete the plugin, the menu also has **Delete Plugin**. You can delete a plugin that you added,
+until it is published. Only an admin can delete a published plugin.
+
+A plugin from a marketplace shows **Synced from *owner/repo*** below its title.
+
+## Upload a plugin
+
+You can upload a Claude Code or Codex plugin. Onyx uses two parts of the plugin:
+
+- the skills in `skills/<name>/SKILL.md`,
+- the MCP servers in `.mcp.json` or in `mcpServers` of `plugin.json`.
+
+Onyx does not use commands, agents, hooks, LSP servers, output styles, executables (`bin/`), themes or monitors.
+The upload shows these parts under **Not used in Onyx**. A plugin with no skill and no MCP server is refused.
+
+<Steps>
+  <Step title="Open the upload dialog">
+    Select **Customize → Plugins**, then click **Add → Upload plugin**.
+  </Step>
+
+  <Step title="Choose the plugin">
+    Drop the `.zip` file or the plugin folder. You can also click the upload button to choose a `.zip` file,
+    or click **Choose a folder** to choose the plugin folder. The plugin must have `.claude-plugin/plugin.json`,
+    `.codex-plugin/plugin.json` or `plugin.json` at the root or in one top-level folder.
+  </Step>
+
+  <Step title="Check the preview">
+    Onyx shows the name, the version, the skills, each integration that the plugin needs with your state,
+    the parts that Onyx does not use, and the warnings. If the zip is not valid, the dialog shows the reason.
+  </Step>
+
+  <Step title="Save">
+    Click **Save**. Onyx opens the plugin page.
+  </Step>
+</Steps>
+
+A zip that holds a `SKILL.md` and no `plugin.json` is a skill. The dialog shows **This upload is a skill**.
+Click **Continue** to add it with the skill flow. See [Craft Skills](/overview/core_features/craft_skills).
+
+### Upload a new version
+
+The name in `plugin.json` decides where the upload goes. The preview shows the result above the skills:
+
+| Preview | Result |
+| --- | --- |
+| **Updates *name* to Onyx version *n*** | You own or can edit a plugin with the same name. The upload becomes its next version. Onyx numbers versions 1, 2, 3. The badge **plugin.json *x.y.z*** is the version that the plugin itself gives. |
+| **New plugin: *name*** | No plugin that you own or can edit has this name. Onyx adds a new plugin to your uploads and turns it on, unless another skill that is on has the name of one of its skills. |
+
+To add a version from the plugin page, click **...** → **Upload New Version**.
+An upload with the same files as the current version adds no version, and Onyx says **No changes**.
+If two uploads of a new plugin run at the same time, the second one becomes a version of the first.
+
+To keep the plugin that has this name as it is, select **Save as a New Plugin**.
+Onyx then saves the upload as a new plugin with the next free name, for example `eng-toolkit-2`.
+A new version does not change whether the plugin is on.
+
+### Integrations that a plugin needs
+
+A plugin never gives access to an integration. Each integration owns its access.
+Onyx matches each MCP server of the plugin to an integration by its URL. The scheme and the host are not case sensitive,
+and a trailing slash or a default port does not change the match.
+The plugin works without the integrations that you cannot use.
+
+The **Integrations** tab of the plugin page shows one state and one action for each integration:
+
+| State | What you see |
+| --- | --- |
+| **On** | Nothing to do. The agent can use the integration. |
+| **Off** | **Turn on** turns the integration on for you, everywhere. |
+| **Not signed in** | **Connect** opens the sign-in of the integration. |
+| **No access** | **Ask an admin**. The integration is not shared with you. |
+| **Turned off** | **Turned off by your admin**. |
+| **Not added** | No integration has this URL. If you can add integrations, **Add integration** opens the **Add an Integration** page with the name and the URL filled in. For an admin, the page is the admin page and the owner is the organization. After you click **Add**, Onyx opens the plugin again. Other users see **Ask an admin**. |
+| **More than one match** | More than one integration has this URL, so Onyx cannot choose. Ask an admin. |
+| **Not supported** | **Not supported in Onyx**. The server runs a local command, has no type, has a `${...}` variable in its URL, or has a user name or password in its URL. |
+
+When you turn a plugin on, or save a new plugin, Onyx also turns on each needed integration that you can already use.
+Onyx does not sign you in. If an integration that the plugin needs is still not on,
+a dialog lists the integrations with their states and actions.
+
+### Turn a plugin on or off
+
+The plugin page has the **Use this plugin** switch in its header. The **Overview** tab shows whether the plugin is on.
+In the **Plugins** tab, a plugin that is off shows **Turn on**, and the row menu has **Turn on** or **Turn off**.
+The default agent uses only the plugins that you turn on.
+
+| Install setting | The switch |
+| --- | --- |
+| **Required** | Always on. You cannot turn it off. |
+| **Installed** | On until you turn it off. |
+| **Available** | Off until you turn it on. |
+
+An admin sets the install setting of each plugin in the Organization library.
+
+Only one plugin that is on can have a given skill name.
+If you turn on a plugin with a skill name that another plugin uses, a dialog names the plugin that turns off.
+A published plugin keeps its skill name before your own plugins.
+So when an admin publishes a plugin with the name of a skill in your plugin, your plugin turns off,
+and its row and its page name the plugin that holds the skill name.
+
+## Add a marketplace
+
+A marketplace is a GitHub repository with a `.claude-plugin/marketplace.json` file, as Claude Code uses.
+Each entry of the file becomes one plugin. A sync gets the changes from GitHub.
+
+<Steps>
+  <Step title="Open the dialog">
+    Select **Customize → Plugins**, then click **Add → Add marketplace**.
+  </Step>
+
+  <Step title="Add from a repository">
+    Enter the repository as `owner/repo` or as its GitHub URL.
+    If `marketplace.json` is not at the root of the repository,
+    enter the **Folder** that holds `.claude-plugin/marketplace.json`. To use a branch,
+    tag or commit that is not the default branch, enter it in **Branch, Tag or Commit**. Click **Continue**.
+  </Step>
+
+  <Step title="Confirm the source and the plugins">
+    Onyx shows the source that it read: the repository, the folder, the branch, tag or commit, and the commit. Below it,
+    Onyx shows each entry with its name, description, version and state. For each entry that Onyx can add,
+    **Will install** lists its skills and the integrations that it needs. If Onyx cannot read the marketplace,
+    the dialog shows the reason. Click **Back** to change the source.
+  </Step>
+
+  <Step title="Add the marketplace">
+    Click **Add marketplace**. Onyx adds the marketplace and starts the first sync.
+    The plugins show on the **Plugins** tab when the sync is done.
+  </Step>
+</Steps>
+
+Each entry has one state:
+
+| State | What it means |
+| --- | --- |
+| **Ready** | Onyx adds the entry as a plugin. |
+| **Cannot install** | Onyx cannot add the entry, for example because its folder is missing or its plugin is not valid. The entry shows the reason. |
+| **Not supported** | The entry comes from a source that Onyx does not read, such as npm or a Git host that is not GitHub, or the plugin has only commands, agents or hooks. The entry says why. |
+
+The confirm step counts the entries in each state and shows the ready entries first.
+Click **Show N entries that Onyx cannot use** to see the others. If you already added the marketplace,
+or your organization already gets it, the confirm step says so and you cannot add it again.
+
+An entry can point to a folder of the same repository, or to another repository on github.com.
+Onyx reads the same plugin parts as for an [upload](#upload-a-plugin).
+A marketplace that syncs without a GitHub connection reads at most 20 other repositories. With a GitHub connection,
+it reads at most 200. Entries past the limit show **Cannot install**,
+and one note above the entries says how to raise the limit.
+
+Without a GitHub connection, GitHub also limits how often Onyx can read it. When GitHub refuses a read,
+Onyx shows when the limit resets. Connect GitHub to raise the limit.
+
+A public repository needs no sign-in. Onyx reads a private repository with your connection of the GitHub integration.
+Connect GitHub in **Customize → Integrations** before you add a private repository.
+
+### Personal and company marketplaces
+
+A marketplace that you add is personal. Its plugins are yours. Each new plugin starts off.
+Turn on the plugins that you want, one at a time.
+A user with the organization-wide manage plugins permission can also add a company marketplace.
+The confirm step then shows **Marketplace Type** and **Default Access** above the entries.
+You cannot add a source as personal when a company marketplace already has it.
+Each plugin of a company marketplace is available to the organization, as a published plugin is.
+**Default Access** sets its install setting: **Available**, **Installed**, **Required** or **Not available**.
+Members cannot turn off a **Required** plugin, and it keeps its skill names before your own plugins.
+An admin can change the setting of one plugin later.
+
+### Manage your marketplaces
+
+Select **Customize → Plugins**, then click **Add → Manage marketplaces**.
+The page lists each marketplace with its source, its plugins and its sync:
+
+| Column | What it shows |
+| --- | --- |
+| **Marketplace** | The name, the source as `owner/repo`, with the folder and `@ref` when you set them, and **Personal** or **Company** |
+| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Not synced**, with the time of the last sync or the reason of the failure |
+| **Items** | The number of plugins |
+
+Click a row to see the source, the GitHub login, the last commit and each entry with its state.
+The **...** menu of a row has these actions:
+
+| Action | What it does |
+| --- | --- |
+| **Sync now** | Reads the repository again and applies the changes. It is off while a sync runs. |
+| **Default Access** | Changes the install setting of the plugins of a company marketplace. |
+| **Replace login** | Makes you the login. Onyx reads the repository with your GitHub connection, or without one for a public repository. Use it when the login is gone. If you have not connected GitHub, Onyx warns you that it can read only a public repository. |
+| **Remove** | Deletes the marketplace and its plugins. The dialog names each plugin that it deletes before you confirm. |
+
+Onyx syncs a marketplace only when you add it, when you click **Sync now**, and after you replace the login.
+One sync of a marketplace runs at a time. A sync applies these changes:
+
+- A new entry adds a plugin. The plugin has the name of the entry in `marketplace.json`.
+- A changed entry adds a version to its plugin. An entry with the same files adds nothing.
+- An entry that is gone deletes its plugin, with its shares and settings.
+- A blocked or not supported entry keeps its plugin and its versions.
+
+If a sync fails, the page shows the reason above the list. The plugins stay as they are. Fix the cause,
+then click **Sync now**.
+
+### Plugins from a marketplace
+
+The content of a plugin from a marketplace comes only from GitHub. To change a skill, change it in the repository,
+then sync the marketplace. Onyx refuses to edit, upload a version of, restore, publish or delete the plugin.
+The **Versions** tab shows **This plugin syncs from GitHub,
+so you change it in GitHub.** The **Overview** tab names the marketplace and links to **Marketplaces**.
+You can still turn the plugin on or off. You can share a plugin of a company marketplace and change its install setting.
+A plugin of a personal marketplace is only for you: you cannot share it or change its install setting.
+Remove the marketplace to delete its plugins.
+
+## Turn an integration on or off
+
+Select **Customize → Integrations**. Each row shows one state:
+
+| State | What you see |
+| --- | --- |
+| **On** | The switch is on. You can use the integration in Chat and in Craft. |
+| **Turn on** | The switch is off. Turn it on to use the integration. |
+| **Sign in** | The switch is on, and **Connect** shows. Connect your account to use the integration. |
+| **Turned off** | **Turned off by an admin.** Nobody can use the integration until an admin turns it on again. |
+
+An integration that is on is on everywhere: in default Chat and in Craft.
+Your admin sets an install setting for each integration. A **Required** integration is always on,
+and its switch is locked. An **Installed** integration is on until you turn it off.
+An **Available** integration is off until you turn it on. A custom agent uses each integration that it links to,
+with the switch on or off, if you have access and are signed in.
+
+Click an integration to open its page, with the tabs **Overview** (the type, the sign-in, the owner, the state,
+and the **Use This Integration** switch), **Configuration** (your connection) and **Actions** (how each action runs).
+
+## Connect an integration
+
+The **Configuration** tab of an integration page shows the status of your connection:
+
+| Status | What you see | Who fixes it |
+| --- | --- | --- |
+| **Connected** | A check mark | Nobody |
+| **Not connected** | **Connect** | You |
+| **Needs reconnect** | The reason, for example a change to the sign-in settings, and **Reconnect** | You |
+| **Not set up** | **Ask your admin** | An admin, or the owner of a personal integration |
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Actions tab of the Weather API integration with one action set to Allow and one set to Ask with its Always allow switch"/>
+
+To connect:
+
+1. Click **Connect** or **Reconnect**.
+2. Do one of these steps:
+    - For an OAuth sign-in, sign in with the service in the new tab. The tab closes when the sign-in is done.
+      If your browser blocks the new tab, the sign-in continues in the same tab, then Onyx opens the integration again.
+    - For an API key, enter the values that the form asks for, then click **Connect**. Only you use these values.
+
+Sign in with the account that the agent should use. The agent acts as that account.
+An integration that is not connected gives the agent no actions until you connect it.
+
+### Always allow an action
+
+Your admin sets each action of an integration to **Allow**, **Ask**, or **Blocked**.
+An action set to **Ask** asks for your approval in chat.
+The **Actions** tab of the integration page lists each action with its setting. If your admin lets users save it,
+turn on **Always allow** for an action that asks, and it runs with no prompt. Some actions always ask,
+and their switch stays off with the reason. An action set to **Blocked** never runs.
+
+### Disconnect
+
+Click **Disconnect** on an integration that you connected with your own account. Onyx deletes your connection.
+The integration stays available to you.
+
+## Add your own integration
+
+If you have the manage actions permission, click **Add → Add integration** in **Customize**.
+Onyx opens the **Add an Integration** page. Choose the type, fill in the details, then click **Add**.
+Onyx makes a private integration. You are its owner. Only you can use it until you share it.
+
+### Share or publish your integration
+
+Click **...** on the row of a private integration that you own or manage, or on its page:
+
+- Click **Share** to give specific people access. On the Enterprise plan, you can also add groups.
+  A share gives use of the integration only. If the integration uses one account for everybody,
+  each person with access uses the account that you connected. The dialog tells you so.
+- Click **Publish to Org** to make the integration available to the whole organization.
+  Only a user with the organization-wide manage actions permission can publish. For other users,
+  **Publish to Org** is off. Ask an admin to publish the integration.
+
+## Use integrations in Chat
+
+Click the actions button in the message bar, then select **Integrations**.
+The menu lists the integrations of the current agent. Turn an integration on or off for the agent.
+Onyx keeps your choice for the agent, so new chats with the agent use it too.
+An existing chat in which you did not change an integration or tool also uses the choice for the agent.
+A **Required** integration is always on. An integration that needs sign-in shows **Connect** or **Reconnect**.
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/chat_actions_plugins_flyout.webp" alt="The actions menu in Chat with the Integrations menu open"/>
+
+The agent decides when to call an integration action. To guide it, name the integration or the service in your message.
+For example: "Use DeepWiki to explain how the `onyx-dot-app/onyx` repository handles authentication."
+
+If Chat shows **integrations need sign-in**, click it and connect the listed integrations.
+Until you connect an integration, the agent does not get its actions. You can continue chatting with other tools.
+
+### Approve tool calls
+
+Your admin sets an approval policy for each MCP tool. When the agent calls a tool with the **Ask** policy,
+the answer pauses. An approval card shows **Approval requested** with the tool name and the arguments of the call.
+The card shows below the last message of the chat. If more cards wait, they show in the order of the requests.
+When you compare models, each card names its model. Select one of these options:
+
+| Option | Effect |
+| --- | --- |
+| **Approve once** | The call runs with the arguments that the card shows. |
+| **Approve for this chat** | The call runs. Later calls of the same tool in this chat run without a card. |
+| **Reject** | The call does not run. The agent is told that you rejected the call. |
+
+The request does not expire. It waits until you decide, also when you close the chat or reload the page.
+After the answer stops to wait for your decision, you cannot send a new message in the chat.
+
+After your decision, the card becomes a one-line record of the result, and the answer continues.
+The record moves to the tool call in the answer. It stays when the answer finishes and when you open the chat again.
+If your admin disables the tool before you approve, the call does not run, and the card shows **Disabled**.
+If you stop the answer while it runs, Onyx rejects the call, and the card shows **Not approved**.
+After the answer stops to wait for your decision, **Stop** is not available. To end the wait, reject the call.
+
+A subagent that works in the background can also ask for approval. Its card names the subagent.
+The request waits until you decide, also after the answer that started the subagent finishes or stops.
+You can send new messages while it waits. After your decision, the subagent continues in the background.
+
+The Onyx web app, the mobile app, the website widget, and the Onyx CLI show approval requests.
+The Slack and Discord bots cannot show approval requests, so they do not get tools that need approval,
+except the tools that their agent had before integrations were added. Incognito chats can block approvals,
+if your admin sets them to keep no content. There, a tool that needs approval does not run, and the agent is told why.
+
+Tools with the **Allow** policy run without a card. By default, an OpenAPI `GET` operation runs without a card,
+and the OpenAPI plugins made before integrations were added keep running without a card.
+If your admin sets one of these tools to the **Ask** policy, its calls show a card.
+Check the result in the service after a change.
+
+<Note>
+  The default agent uses each integration that you turned on.
+  A custom agent uses the integrations that the agent builder linked, if you have access to them.
+  See [Agents](/overview/core_features/agents).
+</Note>
+
+## Built-in actions
+
+Onyx also includes built-in actions that do not need a plugin:
+
+<BuiltInActionsTable />
+
+## For admins
+
+<CardGroup cols={2}>
+  <Card title="Manage plugins" icon="plug" href="/admins/plugins/overview">
+    Add plugins and set workspace availability.
+  </Card>
+
+  <Card title="Craft Apps" icon="hammer" href="/overview/core_features/craft_apps">
+    Let Craft act as you in Slack, Gmail, Notion, and more.
+  </Card>
+</CardGroup>

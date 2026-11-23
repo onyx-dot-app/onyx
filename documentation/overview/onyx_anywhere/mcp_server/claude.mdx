@@ -1,0 +1,80 @@
+---
+title: "Claude"
+description: "Connect Claude Desktop and claude.ai to the Onyx MCP server as a custom connector."
+icon: "message"
+---
+
+<Note>
+  Claude connects to Onyx from Anthropic's cloud, not from your computer.
+  Your Onyx MCP URL must be reachable from the internet, not only through a VPN.
+</Note>
+
+## Add the Onyx connector
+
+<Steps>
+  <Step title="Open Add custom connector">
+    Open **Customize > Connectors** and select **+ Add > Add custom connector**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_add_custom_connector.webp" alt="Claude Customize page on the Connectors tab with the Add menu open and Add custom connector shown."/>
+  </Step>
+
+  <Step title="Enter the Onyx MCP URL">
+    Name the connector **Onyx**, enter your Onyx MCP URL, and select **Continue**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_connector_url.webp" alt="Add custom connector dialog with the name Onyx and an Onyx MCP server URL, and the Continue button."/>
+
+    If Claude says a connector with this URL already exists in your organization,
+    close the dialog and go to **Sign in to Onyx**.
+  </Step>
+
+  <Step title="Keep the detected sign-in settings">
+    Keep **Sign in now** and **Use Claude's published identity**, which Claude marks **Detected**. Select **Add**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_auth_settings.webp" alt="Add custom connector authentication settings with Sign in now and Use Claude's published identity selected and marked Detected." />
+  </Step>
+
+  <Step title="Sign in to Onyx">
+    Sign in and select **Allow access**. If the sign-in does not open,
+    select **Connect** for Onyx under **Customize > Connectors > Yours**.
+    A check mark in **Status** shows that Onyx is connected.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_connectors_yours.webp" alt="Claude Connectors list on the Yours tab with the custom Onyx connector authorized as Individual and a check mark in Status."/>
+  </Step>
+
+  <Step title="Check that Onyx is on">
+    In the message box, select **+ > Connectors** and check that Onyx is on.
+    Then send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection).
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_enable_in_chat.webp" alt="Claude message box with the + menu open on Connectors and the Onyx connector toggle turned on."/>
+  </Step>
+</Steps>
+
+## Add Onyx for an organization
+
+An organization owner can add Onyx one time for all members.
+
+<Steps>
+  <Step title="Open Add custom connector">
+    Open **Organization settings > Connectors** and select **Add > Custom > Web**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_org_add_custom.webp" alt="Claude Organization settings Connectors page with the Add menu open on Custom and the Web option shown."/>
+  </Step>
+
+  <Step title="Enter the Onyx MCP URL">
+    Name the connector **Onyx**, enter your Onyx MCP URL, and select **Continue**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_org_connector_url.webp" alt="Organization Add custom connector dialog with the name Onyx, an Onyx MCP server URL, and the Continue button."/>
+  </Step>
+
+  <Step title="Keep the detected sign-in settings">
+    Keep **Sign in now** and **Use Claude's published identity**, as in the [personal setup](#add-the-onyx-connector).
+    Select **Add**.
+  </Step>
+</Steps>
+
+Members then open **Customize > Connectors**, select **Connect** next to Onyx, and sign in with their own Onyx account.
+
+## Disconnect
+
+Removing the connector in Claude does not revoke access.
+Revoke it in Onyx under [Connected apps](/overview/onyx_anywhere/mcp_server#manage-connected-apps).

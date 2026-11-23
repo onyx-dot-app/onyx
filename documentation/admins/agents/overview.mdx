@@ -1,0 +1,142 @@
+---
+title: "Custom Agents"
+description: "Managing AI agents"
+icon: "robot"
+---
+
+Onyx Agents are customized AI assistants with their own instructions, knowledge, and Actions.
+Any user can create an Agent. Admins manage which Agents are featured and listed for the organization.
+
+<Note>
+  In older Onyx versions Agents were called **Assistants** or **Personas**. The product now uses **Agents** everywhere.
+</Note>
+
+## Managing Agents
+
+Open **Admin Panel > Agents** to see all Agents in your organization.
+
+From this page, you can:
+
+- **Set as Featured** or **Remove Featured**. Featured Agents appear at the top of the Explore Agents list.
+  Onyx also pins them to the sidebar for new users who have access.
+- **Unlist** or **Relist** an Agent. Unlisted Agents do not appear in Explore Agents,
+  but users who have the link can still use them.
+
+<img className="rounded-image" src="/assets/admins/agents/agents_dashboard.webp" alt="Onyx Agents Overview page showing available agents"/>
+
+<Tip>
+  Use **Admin Panel > Chat Preferences** to pick the default Agent for new chats,
+  or to require every chat to start in an Agent.
+</Tip>
+
+## Creating Agents
+
+<Steps>
+  <Step title="Name and Prompt your Agent">
+    In the chat sidebar, open **Agents** and click **New Agent**.
+    Write the Agent's **Instructions** and add **Conversation Starters** to show users example prompts for this Agent.
+
+    <img className="rounded-image" src="/assets/admins/agents/create_agent_1.webp" alt="Onyx Agent Configuration page"/>
+  </Step>
+
+  <Step title="Attach Knowledge to your Agent">
+    Use the **Knowledge** section to control what the Agent can search.
+
+    <img className="rounded-image" src="/assets/admins/agents/create_agent_2.webp" alt="Onyx Agent Knowledge configuration"/>
+
+    If knowledge is enabled but nothing is selected, the Agent searches everything the current user can access:
+
+    - Files the user uploaded to Onyx
+    - All documents from public connectors
+    - Documents the user can access in the source for permission-synced connectors
+
+    See the [Connectors](/admins/connectors/overview) page for details on access.
+
+    Select items under **Knowledge** to narrow the Agent to only that content.
+    A narrow scope often improves answer quality in large organizations.
+
+    You can select knowledge in two ways:
+
+    - Pick [Document Sets](/admins/managing_features/document_sets). Document Sets also let admins
+    grant an Agent access to private connectors.
+    - Pick a source type, then browse its folders and files. Selecting a folder includes all of its sub-folders.
+
+    <img className="rounded-image" src="/assets/admins/agents/agent_hierarchy_knowledge.webp" alt="Onyx Agent hierarchical knowledge selection showing folder and file browsing"/>
+
+    Sharing an Agent does not share its documents. Each user only sees search results they are allowed to see.
+  </Step>
+
+  <Step title="Give your Agent Actions">
+    Use **Actions** to let the Agent do work. Turn on the built-in tools that the Agent needs, such as Web Search,
+    Image Generation, and Code Interpreter.
+
+    Then use **Integrations** to give the Agent the MCP servers and apps from [Plugins](/admins/plugins/overview).
+    Select **Add an integration** and pick an integration. The list shows each integration that you can use.
+    To remove an integration, click its delete icon.
+
+    An Agent gives no access to its integrations.
+    A person who can use the Agent but not one of its integrations chats without that integration.
+    When the Agent is shared,
+    the editor shows a warning on each integration that is not available to the whole organization.
+
+    <img className="rounded-image" src="/assets/admins/agents/agent_actions.webp" alt="Onyx Agent Configuration page"/>
+  </Step>
+
+  <Step title="Agent Configuration (Advanced)">
+    Set who can use the Agent. Make it available to **Anyone in your organization**,
+    or share it with specific users or groups. An Agent that is only shared with you is private.
+
+    Set the **Default Model** for the Agent.
+
+    In **More Info**, you can also set a **Knowledge Cutoff Date**, add **Prompt Reminders**,
+    or **Overwrite System Prompts** to remove the base Onyx system prompt.
+
+    <img className="rounded-image" src="/assets/admins/agents/agent_advanced.webp" alt="Onyx Agent advanced configuration options"/>
+  </Step>
+</Steps>
+
+## Action Settings
+
+Each integration of an Agent lists its actions. Each action has one setting:
+
+| Setting | Effect |
+| --- | --- |
+| **Use the agent default** | The action uses the **Default for Other Actions** row of the integration. This is the default. |
+| **Use the integration setting** | The action follows the policy that an admin set on the integration. |
+| **Allow** | The action runs without a prompt in this Agent. |
+| **Ask** | Onyx asks the user before the action runs. |
+| **Blocked** | The Agent cannot use the action. |
+
+The first row of each integration, **Default for Other Actions**,
+applies to each action set to **Use the agent default**. It also applies to actions that the integration adds later.
+Its own default is **Use the integration setting**.
+
+**Allow** is not available when:
+
+- An admin set the action to **Blocked** on the integration.
+- The integration does not let users save **Always allow**. Then the admin policy is final.
+
+The Agent editor shows why **Allow** is not available. If an Agent already has **Allow** on a locked action,
+the editor shows it and you can change it, but the action follows the integration policy.
+
+Under each action, the editor shows the setting that applies, for example **Asks (integration setting)**.
+To run an action that asks with no prompt:
+
+- If the integration setting asks, an admin sets the action to **Allow** on the integration,
+  or each user picks **Always allow**. Admins see a link to the **Actions** tab of the integration.
+- If the Agent setting asks, change the Agent setting, or each user picks **Always allow**.
+  An integration setting of **Allow** does not remove an Agent setting of **Ask**.
+
+Users can pick **Always allow** only when the integration lets them save it.
+See [Approvals](/admins/plugins/overview#approvals).
+
+After you save the Agent, users find it on the **Explore Agents** page in the chat sidebar. On Business, Enterprise,
+and Cloud, Agent owners and admins can open usage statistics for an Agent.
+
+<img className="rounded-image" src="/assets/admins/agents/explore_agents.webp" alt="Onyx Explore Agents page"/>
+
+## Who Can Create Agents
+
+- **Community Edition**: every user can create Agents.
+- **Business, Enterprise, and Cloud**: admins can limit Agent creation to specific users or groups with the
+  **Add Agents** permission. See [Users and Groups](/admins/user_management/users_and_groups).
