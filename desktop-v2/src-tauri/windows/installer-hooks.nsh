@@ -1,5 +1,6 @@
 ; Hooks for Tauri's NSIS installer (bundle.windows.nsis.installerHooks).
-; The template inserts them in its Install and Uninstall sections.
+; The template inserts the macros in its Install and Uninstall sections and
+; includes this file before it defines its pages.
 
 ; keyring names each session token's credential "<server>.<identifier>".
 !define ONYX_CREDENTIAL_SUFFIX ".app.onyx.desktop.v2"
@@ -8,6 +9,26 @@
 ; scripts can see why a silent install failed.
 !define ONYX_EXIT_NOT_ADMIN 740
 !define ONYX_EXIT_MSI_INSTALLED 1638
+
+; The MSI installs into the same folder. Two installs there give two entries
+; in Apps, and removing one breaks the other. $(^Name) because PRODUCTNAME is
+; defined after this file is included.
+!macro OnyxStopIfMsiInstalled
+  Call FindWixInstall
+  ${If} $R6 != ""
+    MessageBox MB_ICONSTOP "$(^Name) is already installed from the MSI package. Uninstall it in Settings > Apps, then run this installer again." /SD IDOK
+    SetErrorLevel ${ONYX_EXIT_MSI_INSTALLED}
+    Quit
+  ${EndIf}
+!macroend
+
+; The template's reinstall page uninstalls an MSI install when the user goes on,
+; so an interactive (or /P) install stops before the first page. A silent
+; install shows no pages and stops in NSIS_HOOK_PREINSTALL.
+!define MUI_CUSTOMFUNCTION_GUIINIT OnyxGuiInit
+Function OnyxGuiInit
+  !insertmacro OnyxStopIfMsiInstalled
+FunctionEnd
 
 !macro NSIS_HOOK_PREINSTALL
   ; A standard user cannot write to Program Files. Without this check, a
@@ -19,14 +40,7 @@
     Quit
   ${EndIf}
 
-  ; The MSI installs into the same folder. Two installs there give two
-  ; entries in Apps, and removing one breaks the other.
-  Call FindWixInstall
-  ${If} $R6 != ""
-    MessageBox MB_ICONSTOP "${PRODUCTNAME} is already installed from the MSI package. Uninstall it in Settings > Apps, then run this installer again." /SD IDOK
-    SetErrorLevel ${ONYX_EXIT_MSI_INSTALLED}
-    Quit
-  ${EndIf}
+  !insertmacro OnyxStopIfMsiInstalled
 !macroend
 
 ; Sets $0 to 1 if the uninstaller runs as the user who owns the desktop, else
