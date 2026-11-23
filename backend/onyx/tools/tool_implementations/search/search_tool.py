@@ -939,8 +939,7 @@ class SearchTool(Tool):
     ) -> ToolResult:
         shown = sections_for_model[:MAX_CHUNKS_FED_TO_CHAT]
         # The connector files that the file store still has, which the chat
-        # stages for the Python tool; one query serves the result's names and
-        # the staging (`SearchDocsResponse.openable_file_ids`).
+        # stages for the Python tool.
         file_ids = (
             {doc.file_id for doc in search_docs if doc.file_id}
             | {
@@ -965,16 +964,31 @@ class SearchTool(Tool):
                     in (FileOrigin.CONNECTOR, FileOrigin.CONNECTOR_FILE_UPLOAD)
                     and record.file_size != FILE_SIZE_MISSING_SENTINEL
                 }
-        # By file: the title of the first section that shows it.
-        titles = {
-            section.center_chunk.file_id: section.center_chunk.semantic_identifier
-            for section in reversed(shown)
-            if section.center_chunk.file_id in openable
+        # By openable file: its name in the sandbox, which the result and the
+        # staging share (`SearchDocsResponse.openable_file_names`). A file that
+        # the chat staged before keeps that name; another takes the title of
+        # the first shown section with it, else of the first document.
+        staged_names = {
+            file.file_id: file.filename
+            for file in context.chat_files
+            if file.file_id in openable
         }
-        file_names = {
-            file_id: search_file_name(file_id, title)
-            for file_id, title in titles.items()
-        }
+        file_names: dict[str, str] = {}
+        for file_id, title in [
+            *(
+                (section.center_chunk.file_id, section.center_chunk.semantic_identifier)
+                for section in shown
+            ),
+            *((doc.file_id, doc.semantic_identifier) for doc in search_docs),
+        ]:
+            if (
+                file_id is not None
+                and file_id in openable
+                and file_id not in file_names
+            ):
+                file_names[file_id] = staged_names.get(file_id) or search_file_name(
+                    file_id, title
+                )
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
             top_sections=shown,
             citation_start=citation_start,
@@ -993,7 +1007,7 @@ class SearchTool(Tool):
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
                 displayed_docs=displayed_docs,
-                openable_file_ids=sorted(openable),
+                openable_file_names=file_names,
             ),
             content=docs_str,
             metadata=planning_result,

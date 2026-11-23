@@ -526,9 +526,9 @@ text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
 (`chat/files.py:build_python_chat_files_from_search_docs`), only when the chat
 offers the Python tool (`ToolContext.python_stages_search_files`). The search
-tool lists the connector files in `SearchDocsResponse.openable_file_ids`
-(one file record query that also names the files in the result), so staging
-reads no file records; `PythonTool` applies the
+tool maps each connector file to its name in `SearchDocsResponse.openable_file_names`
+(one file record query; the result's text uses the same names), so staging
+reads no file records and names no file itself; `PythonTool` applies the
 staging caps. Files already in
 `ChatAgent.chat_files` from an earlier step are not loaded again. Search documents
 and citations are retained without Python. `chat/agent.py:ChatAgent._update_tool_context` merges them into

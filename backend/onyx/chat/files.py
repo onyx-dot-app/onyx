@@ -1,6 +1,6 @@
 import io
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -16,7 +16,6 @@ from onyx.chat.models import (
 )
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.context.search.models import SearchDoc
 from onyx.db.enums import UserFileStatus
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import ChatMessage, Persona, UserFile
@@ -47,7 +46,6 @@ from onyx.server.features.build.sandbox.harness_base import (
     CHAT_FILES_DIR,
     PROJECT_FILES_DIR,
     chat_file_name,
-    search_file_name,
 )
 from onyx.server.query_and_chat.chat_utils import (
     is_code_interpreter_staged_file,
@@ -664,31 +662,22 @@ def load_chat_files(
 
 
 def build_python_chat_files_from_search_docs(
-    search_docs: list[SearchDoc],
+    file_names: Mapping[str, str],
 ) -> list[ChatFile]:
-    """Load the files of search documents for the code interpreter; callers
-    pass the documents whose files the chat can open
-    (`SearchDocsResponse.openable_file_ids`)."""
+    """Load search result files for the code interpreter, by file ID, under
+    the names that the search results give them
+    (`SearchDocsResponse.openable_file_names`)."""
     file_store = get_default_file_store()
 
     chat_files: list[ChatFile] = []
-    seen_file_ids: set[str] = set()
-    for doc in search_docs:
-        if doc.file_id is None or doc.file_id in seen_file_ids:
-            continue
-        seen_file_ids.add(doc.file_id)
-
+    for file_id, filename in file_names.items():
         try:
-            content = file_store.read_file(doc.file_id, mode="b").read()
+            content = file_store.read_file(file_id, mode="b").read()
         except Exception as e:
             logger.warning(
-                "Failed to read bytes for file_id=%r: %s; skipping.", doc.file_id, e
+                "Failed to read bytes for file_id=%r: %s; skipping.", file_id, e
             )
             continue
-
-        filename = search_file_name(doc.file_id, doc.semantic_identifier)
-        chat_files.append(
-            ChatFile(filename=filename, content=content, file_id=doc.file_id)
-        )
+        chat_files.append(ChatFile(filename=filename, content=content, file_id=file_id))
 
     return chat_files

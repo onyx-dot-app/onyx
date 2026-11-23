@@ -2,6 +2,7 @@ import json
 import re
 import threading
 import time
+from collections.abc import Mapping
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -15,7 +16,7 @@ from onyx.agents.tools import (
     ToolProgress,
 )
 from onyx.chat.tool_results import ResultSources, tool_result_sources
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
@@ -929,19 +930,18 @@ def test_files_that_a_search_finds_reach_a_later_python_call(
         result.details = result.details.model_copy(
             update={
                 "search_docs": documents,
-                "openable_file_ids": [document.file_id for document in documents],
+                "openable_file_names": {
+                    f"file-{document.document_id}": f"{document.document_id}.csv"
+                    for document in documents
+                },
             }
         )
         return result
 
-    def read_files(documents: list[SearchDoc]) -> list[ChatFile]:
+    def read_files(file_names: Mapping[str, str]) -> list[ChatFile]:
         return [
-            ChatFile(
-                filename=f"{document.document_id}.csv",
-                content=b"",
-                file_id=document.file_id,
-            )
-            for document in documents
+            ChatFile(filename=filename, content=b"", file_id=file_id)
+            for file_id, filename in file_names.items()
         ]
 
     monkeypatch.setattr(cells, "build_python_chat_files_from_search_docs", read_files)

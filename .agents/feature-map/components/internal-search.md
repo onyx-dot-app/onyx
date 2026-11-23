@@ -225,18 +225,21 @@ calls the index directly for admin document inspection.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
    list means none. Do not feed `details` fields back into the prompt. In chat,
    `ChatAgent._finalize_tool` stages, for the Python tool when the chat offers
-   it, the files of `search_docs` that `SearchDocsResponse.openable_file_ids`
-   lists ([[code-execution]]). `SearchTool._build_search_result` fills that
-   list with one file record query over the documents' `SearchDoc.file_id`
+   it, the files that `SearchDocsResponse.openable_file_names` maps to their
+   names ([[code-execution]]). `SearchTool._build_search_result` fills that
+   map with one file record query over the documents' `SearchDoc.file_id`
    (which `populate_file_ids_on_sections` fills): connector files that the
    file store still has. The field is live only; saved and streamed results
    lack it, and `SearchDoc.file_id` stays on every document. The model's
    string names a shown result's file, with its excerpt
    (`FILE_ASSOCIATED_GUIDANCE`), only when the chat stages it
    (`ToolContext.python_stages_search_files`, which `ChatAgent` sets): it passes
-   `file_names` to `convert_inference_sections_to_llm_string`, named by
-   `harness_base.search_file_name` (`chat_file_name` with a hash prefix of the
-   file ID). Other results, deep research and the search API show
+   the same map as `file_names` to `convert_inference_sections_to_llm_string`,
+   so the result and the staging name a file alike. A file that
+   `ToolContext.chat_files` already has keeps its staged name; another is named
+   by `harness_base.search_file_name` (`chat_file_name` with a hash prefix of
+   the file ID) from the raw title of the first shown chunk with it, else of
+   the first document. Other results, deep research and the search API show
    `combined_content`. The saved result
    (`chat/response.py:_saved_message`) drops `search_docs` and the planning
    metadata. The `ToolCall` row keeps the selected documents, so replay and

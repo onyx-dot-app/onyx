@@ -3,6 +3,7 @@
 import json
 import queue
 import threading
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from functools import partial
 from unittest.mock import Mock
@@ -498,16 +499,16 @@ def test_search_stages_files_only_when_python_needs_them(
     search = SearchDocsResponse(
         search_docs=[document],
         citation_mapping={1: "reference"},
-        openable_file_ids=["source-file"],
+        openable_file_names={"source-file": "reference.txt"},
     )
     staged = ChatFile(
         filename="reference.txt", content=b"Evidence", file_id="source-file"
     )
-    loaded: list[SearchDoc] = []
+    loaded: dict[str, str] = {}
 
-    def stage(docs: list[SearchDoc]) -> list[ChatFile]:
-        loaded.extend(docs)
-        return [staged] if docs else []
+    def stage(file_names: Mapping[str, str]) -> list[ChatFile]:
+        loaded.update(file_names)
+        return [staged] if file_names else []
 
     monkeypatch.setattr(
         "onyx.chat.agent.build_python_chat_files_from_search_docs", stage
@@ -563,7 +564,11 @@ def test_search_stages_files_only_when_python_needs_them(
     assert [context.python_stages_search_files for context in contexts] == [
         python_enabled
     ] * 2
-    assert loaded == ([document] if python_enabled and not already_available else [])
+    assert loaded == (
+        {"source-file": "reference.txt"}
+        if python_enabled and not already_available
+        else {}
+    )
     assert agent.chat_files == ([staged] if python_enabled or already_available else [])
     results = [
         item for item in agent.state.messages if isinstance(item, ToolResultMessage)
@@ -653,7 +658,7 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
     stage_calls = 0
 
-    def stage(_docs: list[SearchDoc]) -> list[ChatFile]:
+    def stage(_file_names: Mapping[str, str]) -> list[ChatFile]:
         nonlocal stage_calls
         stage_calls += 1
         entered.set()
