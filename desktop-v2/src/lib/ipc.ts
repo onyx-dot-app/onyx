@@ -63,8 +63,16 @@ export const checkServer = (url: string): Promise<ServerInfo> =>
 export const saveServer = (url: string): Promise<void> =>
   invoke("save_server", { url });
 
-// Why managed policy stops the user from setting the server, or null.
-export const getServerLock = (): Promise<string | null> => invoke("get_server_lock");
+export interface ServerSetup {
+  // Why managed policy stops the user from setting the server, or null.
+  lock: string | null;
+  // Set when the server can be set but the managed policy is not valid.
+  policyNotice: string | null;
+  // The server in use, or null on first run.
+  current: string | null;
+}
+
+export const getServerLock = (): Promise<ServerSetup> => invoke("get_server_lock");
 
 export interface SsoOption {
   label: string;

@@ -410,7 +410,13 @@ fn show_sign_in(app: &AppHandle) {
 }
 
 pub fn show_primary(app: &AppHandle) {
-    for label in PRIMARY {
+    show_primary_except(app, "");
+}
+
+/// Like `show_primary`, but never brings `closing` forward: a window that is
+/// being closed can still be found for a moment.
+pub fn show_primary_except(app: &AppHandle, closing: &str) {
+    for label in PRIMARY.into_iter().filter(|label| *label != closing) {
         if let Some(window) = app.get_webview_window(label) {
             bring_forward(app, &window);
             return;

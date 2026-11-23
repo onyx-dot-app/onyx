@@ -95,6 +95,8 @@ function Offline() {
       await changeServer();
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
+      // This window stays open until onboarding saves another server.
       setLeaving(false);
     }
   }
