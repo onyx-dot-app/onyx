@@ -194,9 +194,13 @@ function Preferences() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Each open reads managed policy again.
+  // Each open reads managed policy again. Opening Preferences again while
+  // it is still open only focuses the window, so focus reads it too.
   useEffect(() => {
-    void getPrefs().then(setPrefs);
+    const load = () => void getPrefs().then(setPrefs);
+    load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
   }, []);
 
   async function run(action: () => Promise<void>) {
@@ -252,6 +256,9 @@ function Preferences() {
                   : "Default set by your organization"
               }
             />
+          ) : null}
+          {prefs?.serverNextLaunch ? (
+            <ManagedNote text="Your organization set another server. Restart Onyx to use it." />
           ) : null}
           {prefs?.serverLocked ? null : (
             <Section flexDirection="row" justifyContent="start" height="fit">
