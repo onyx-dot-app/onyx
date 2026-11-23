@@ -173,7 +173,10 @@ class MemoryItem(BaseModel):
 
 
 class UserPersonalization(BaseModel):
+    # Full name.
     name: str = ""
+    # The name Onyx calls the user; empty means it uses the full name.
+    preferred_name: str = ""
     role: str = ""
     use_memories: bool = True
     enable_memory_tool: bool = True
@@ -215,6 +218,10 @@ class UserInfo(BaseModel):
     token_expires_at: datetime | None = None
     is_cloud_superuser: bool = False
     team_name: str | None = None
+    # The workspace of this request. Set only on multi-tenant deployments.
+    tenant_id: str | None = None
+    # Build the photo URL from this; None means the user has no photo.
+    profile_image_file_id: str | None = None
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
     tenant_info: TenantInfo | None = None
@@ -234,6 +241,7 @@ class UserInfo(BaseModel):
         token_expires_at: datetime | None = None,
         is_cloud_superuser: bool = False,
         team_name: str | None = None,
+        tenant_id: str | None = None,
         is_anonymous_user: bool | None = None,
         tenant_info: TenantInfo | None = None,
         assistant_specific_configs: UserSpecificAssistantPreferences | None = None,
@@ -275,6 +283,8 @@ class UserInfo(BaseModel):
                 )
             ),
             team_name=team_name,
+            tenant_id=tenant_id,
+            profile_image_file_id=user.profile_image_file_id,
             token_expires_at=token_expires_at,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
@@ -286,6 +296,7 @@ class UserInfo(BaseModel):
             ),
             personalization=UserPersonalization(
                 name=user.personal_name or "",
+                preferred_name=user.preferred_name or "",
                 role=user.personal_role or "",
                 use_memories=preferences.use_memories,
                 enable_memory_tool=preferences.enable_memory_tool,
@@ -373,13 +384,25 @@ class VoiceSettingsUpdateRequest(BaseModel):
     )
 
 
+MAX_PREFERRED_NAME_LENGTH = 100
+
+
 class PersonalizationUpdateRequest(BaseModel):
-    name: str | None = None
-    role: str | None = None
+    """None keeps the saved value. Serialization aliases name the `User` and
+    `UserPreferences` columns."""
+
+    name: str | None = Field(default=None, serialization_alias="personal_name")
+    # An empty string clears the preferred name.
+    preferred_name: str | None = Field(
+        default=None, max_length=MAX_PREFERRED_NAME_LENGTH
+    )
+    role: str | None = Field(default=None, serialization_alias="personal_role")
     use_memories: bool | None = None
     enable_memory_tool: bool | None = None
     memories: list[MemoryItem] | None = None
-    user_preferences: str | None = Field(default=None, max_length=500)
+    user_preferences: str | None = Field(
+        default=None, max_length=500, serialization_alias="instructions"
+    )
 
     @field_validator("memories", mode="before")
     @classmethod
@@ -389,6 +412,10 @@ class PersonalizationUpdateRequest(BaseModel):
         if value is not None and len(value) > MAX_MEMORIES_PER_USER:
             raise ValueError(f"Maximum of {MAX_MEMORIES_PER_USER} memories allowed")
         return value
+
+
+class UserProfileImageResponse(BaseModel):
+    profile_image_file_id: str
 
 
 class SlackBotCreationRequest(BaseModel):

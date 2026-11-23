@@ -187,6 +187,11 @@ export class AppSidebarPage {
     await this.page.waitForLoadState("networkidle");
   }
 
+  /** The profile photo in the account menu tab. */
+  get accountAvatarPhoto(): Locator {
+    return this.page.locator("#onyx-user-dropdown img[src*='/profile-image']");
+  }
+
   get newProjectTab(): Locator {
     return this.page.getByRole("button", { name: "New Project" });
   }

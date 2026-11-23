@@ -1,0 +1,37 @@
+/**
+ * Page Object Model for the onboarding name prompt that a user without a
+ * name sees above the chat input on /app.
+ */
+
+import { type Page, type Locator, expect } from "@playwright/test";
+import type { UserPersonalization } from "@/lib/types";
+
+export class OnboardingNamePromptPage {
+  readonly page: Page;
+  readonly namePrompt: Locator;
+  readonly confirmation: Locator;
+  readonly chatInput: Locator;
+
+  constructor(page: Page) {
+    this.page = page;
+    this.namePrompt = page.locator('[aria-label="non-admin-name-prompt"]');
+    this.confirmation = page.locator('[aria-label="non-admin-confirmation"]');
+    this.chatInput = page.locator("#onyx-chat-input");
+  }
+
+  /** The signed-in user's saved personalization, read from `/api/me`. */
+  async fetchPersonalization(): Promise<UserPersonalization> {
+    const response = await this.page.request.get("/api/me");
+    expect(response.ok()).toBe(true);
+    const me = (await response.json()) as {
+      personalization: UserPersonalization;
+    };
+    return me.personalization;
+  }
+
+  /** Reload /app and wait for the chat input. */
+  async reload(): Promise<void> {
+    await this.page.reload();
+    await expect(this.chatInput).toBeVisible({ timeout: 15000 });
+  }
+}

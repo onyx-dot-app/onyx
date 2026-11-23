@@ -16127,8 +16127,68 @@
       },
       "workRole": {
         "description": "Indiquez votre rôle pour mieux adapter les réponses.",
-        "placeholder": "Votre rôle",
-        "title": "Rôle professionnel"
+        "placeholder": "Choisissez un rôle",
+        "title": "Qu’est-ce qui décrit le mieux votre travail ?",
+        "other": {
+          "placeholder": "Saisissez votre rôle",
+          "title": "Votre travail"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "Choisissez une image de 10 Mo maximum.",
+          "invalidType": "Choisissez une image PNG, JPEG ou WebP."
+        },
+        "description": "PNG, JPEG ou WebP, jusqu’à 10 Mo.",
+        "toasts": {
+          "updateFailed": "Impossible de mettre à jour votre photo de profil. Réessayez."
+        },
+        "title": "Photo de profil",
+        "editButton": {
+          "ariaLabel": "Modifier la photo de profil"
+        },
+        "uploadButton": {
+          "ariaLabel": "Importer une photo de profil"
+        },
+        "menu": {
+          "label": "Options de la photo de profil",
+          "replace": {
+            "label": "Remplacer la photo"
+          },
+          "remove": {
+            "label": "Supprimer"
+          }
+        },
+        "cropModal": {
+          "title": "Recadrer la photo",
+          "description": "Faites glisser ou utilisez les touches fléchées pour repositionner. Utilisez le curseur ou la molette pour zoomer.",
+          "area": {
+            "ariaLabel": "Zone de recadrage"
+          },
+          "zoom": {
+            "ariaLabel": "Zoom"
+          },
+          "zoomIn": {
+            "ariaLabel": "Zoom avant"
+          },
+          "zoomOut": {
+            "ariaLabel": "Zoom arrière"
+          },
+          "reset": {
+            "label": "Réinitialiser"
+          },
+          "cancel": {
+            "label": "Annuler"
+          },
+          "save": {
+            "label": "Enregistrer"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} utilise ce nom lorsqu’il s’adresse à vous.",
+        "placeholder": "Ajoutez un nom",
+        "title": "Comment {appName} doit-il vous appeler ?"
       }
     },
     "promptShortcuts": {
@@ -16230,6 +16290,21 @@
     },
     "interactions": {
       "title": "Interactions"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "Gestionnaire du groupe",
+        "description": "Votre niveau d’accès dans cet espace de travail.",
+        "admin": "Administrateur",
+        "basic": "Utilisateur standard",
+        "title": "Votre rôle"
+      },
+      "tenantId": {
+        "description": "Communiquez cet ID au support lorsque vous demandez de l’aide.",
+        "copyTooltip": "Copier l’ID du locataire",
+        "title": "ID du locataire"
+      },
+      "title": "Organisation"
     }
   },
   "sidebar": {
@@ -17964,6 +18039,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {Cette exécution attend votre approbation ci-dessous.} other {Cette exécution est en cours.}}",
       "startedAt": "Démarrée {time}",
       "viewTask": "Voir la tâche"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "Marketing"
+      },
+      "finance": {
+        "label": "Finance"
+      },
+      "other": {
+        "label": "Autre"
+      },
+      "engineering": {
+        "label": "Ingénierie"
+      },
+      "customerSupportSuccess": {
+        "label": "Support et succès client"
+      },
+      "peopleHr": {
+        "label": "Personnes et RH"
+      },
+      "dataAnalytics": {
+        "label": "Données et analyse"
+      },
+      "legal": {
+        "label": "Juridique"
+      },
+      "design": {
+        "label": "Design"
+      },
+      "product": {
+        "label": "Produit"
+      },
+      "operations": {
+        "label": "Opérations"
+      },
+      "sales": {
+        "label": "Ventes"
+      },
+      "leadership": {
+        "label": "Direction"
+      }
     }
   }
 }

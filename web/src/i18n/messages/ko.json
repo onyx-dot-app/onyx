@@ -16127,8 +16127,68 @@
       },
       "workRole": {
         "description": "직무를 알려주면 응답을 더 잘 맞출 수 있습니다.",
-        "placeholder": "직무",
-        "title": "직무"
+        "placeholder": "직무 선택",
+        "title": "어떤 업무를 하시나요?",
+        "other": {
+          "placeholder": "직무를 입력하세요",
+          "title": "내 업무"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "10MB 이하의 이미지를 선택하세요.",
+          "invalidType": "PNG, JPEG 또는 WebP 이미지를 선택하세요."
+        },
+        "description": "PNG, JPEG 또는 WebP, 최대 10MB.",
+        "toasts": {
+          "updateFailed": "프로필 사진을 업데이트하지 못했습니다. 다시 시도하세요."
+        },
+        "title": "프로필 사진",
+        "editButton": {
+          "ariaLabel": "프로필 사진 변경"
+        },
+        "uploadButton": {
+          "ariaLabel": "프로필 사진 업로드"
+        },
+        "menu": {
+          "label": "프로필 사진 옵션",
+          "replace": {
+            "label": "사진 바꾸기"
+          },
+          "remove": {
+            "label": "삭제"
+          }
+        },
+        "cropModal": {
+          "title": "사진 자르기",
+          "description": "드래그하거나 화살표 키로 위치를 조정하세요. 슬라이더나 스크롤로 확대/축소하세요.",
+          "area": {
+            "ariaLabel": "자르기 영역"
+          },
+          "zoom": {
+            "ariaLabel": "확대/축소"
+          },
+          "zoomIn": {
+            "ariaLabel": "확대"
+          },
+          "zoomOut": {
+            "ariaLabel": "축소"
+          },
+          "reset": {
+            "label": "초기화"
+          },
+          "cancel": {
+            "label": "취소"
+          },
+          "save": {
+            "label": "저장"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName}이(가) 대화할 때 이 이름을 사용합니다.",
+        "placeholder": "이름 추가",
+        "title": "{appName}이(가) 어떻게 불러 드릴까요?"
       }
     },
     "promptShortcuts": {
@@ -16230,6 +16290,21 @@
     },
     "interactions": {
       "title": "상호작용"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "그룹 관리자",
+        "description": "이 워크스페이스에서의 액세스 수준입니다.",
+        "admin": "관리자",
+        "basic": "기본 사용자",
+        "title": "내 역할"
+      },
+      "tenantId": {
+        "description": "도움을 요청할 때 이 ID를 지원팀에 알려 주세요.",
+        "copyTooltip": "테넌트 ID 복사",
+        "title": "테넌트 ID"
+      },
+      "title": "조직"
     }
   },
   "sidebar": {
@@ -17964,6 +18039,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {이 실행은 아래에서 승인을 기다리고 있습니다.} other {이 실행은 진행 중입니다.}}",
       "startedAt": "{time}에 시작됨",
       "viewTask": "작업 보기"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "마케팅"
+      },
+      "finance": {
+        "label": "재무"
+      },
+      "other": {
+        "label": "기타"
+      },
+      "engineering": {
+        "label": "엔지니어링"
+      },
+      "customerSupportSuccess": {
+        "label": "고객 지원 및 성공"
+      },
+      "peopleHr": {
+        "label": "인사"
+      },
+      "dataAnalytics": {
+        "label": "데이터 및 분석"
+      },
+      "legal": {
+        "label": "법무"
+      },
+      "design": {
+        "label": "디자인"
+      },
+      "product": {
+        "label": "프로덕트"
+      },
+      "operations": {
+        "label": "운영"
+      },
+      "sales": {
+        "label": "영업"
+      },
+      "leadership": {
+        "label": "경영진"
+      }
     }
   }
 }

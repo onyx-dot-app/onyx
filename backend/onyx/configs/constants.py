@@ -507,6 +507,7 @@ class FileOrigin(str, Enum):
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
     SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"
+    USER_PROFILE_IMAGE = "user_profile_image"
 
 
 # Files that a chat produced for its readers: generated images and code

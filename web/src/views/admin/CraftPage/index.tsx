@@ -26,13 +26,13 @@ import {
 import SvgNoResult from "@opal/illustrations/no-result";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import { buildUserProfileImageUrl } from "@/lib/users/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useAdminUsers from "@/hooks/useAdminUsers";
-import type { User } from "@/lib/types";
 import type { UserRow } from "@/views/admin/UsersPage/types";
 import GroupsCell from "@/views/admin/UsersPage/GroupsCell";
 import AccessCell from "./AccessCell";
@@ -81,15 +81,14 @@ export default function CraftPage() {
         kind: "qualifier",
         content: "icon",
         avatar: true,
-        icon: (row) => {
-          const user = {
-            email: row.email,
-            personalization: row.personal_name
-              ? { name: row.personal_name }
-              : undefined,
-          } as User;
-          return (props) => <UserAvatar user={user} size={props.size} />;
-        },
+        icon: (row) => (props) => (
+          <UserAvatar
+            name={row.personal_name}
+            email={row.email}
+            imageUrl={buildUserProfileImageUrl(row)}
+            size={props.size}
+          />
+        ),
       },
       {
         kind: "data",

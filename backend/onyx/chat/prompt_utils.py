@@ -77,6 +77,7 @@ from onyx.prompts.user_info import (
     ORGANIZATION_PROFILE_PROMPT,
     QUERY_LANGUAGE_PROMPT,
     TEAM_INFORMATION_PROMPT,
+    USER_FULL_NAME_PROMPT,
     USER_INFORMATION_FRAMING,
     USER_INFORMATION_HEADER,
     USER_LANGUAGE_PROMPT,
@@ -417,9 +418,16 @@ def build_user_information_prompt(user_memory_context: UserMemoryContext | None)
             )
             if role_line:
                 role_line = "\n" + role_line
+            full_name = ctx.user_info.full_name
+            full_name_line = (
+                "\n" + USER_FULL_NAME_PROMPT.format(user_full_name=full_name).strip()
+                if full_name and full_name != ctx.user_info.name
+                else ""
+            )
             sections.append(
                 BASIC_INFORMATION_PROMPT.format(
                     user_name=ctx.user_info.name or "",
+                    user_full_name=full_name_line,
                     user_email=ctx.user_info.email or "",
                     user_role=role_line,
                 )

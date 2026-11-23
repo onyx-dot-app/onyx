@@ -16127,8 +16127,68 @@
       },
       "workRole": {
         "description": "Share your role to better tailor responses.",
-        "placeholder": "Your role",
-        "title": "Work Role"
+        "placeholder": "Choose a role",
+        "title": "What Best Describes Your Work?",
+        "other": {
+          "placeholder": "Enter your role",
+          "title": "Your Work"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "Choose an image of 10 MB or less.",
+          "invalidType": "Choose a PNG, JPEG, or WebP image."
+        },
+        "description": "PNG, JPEG, or WebP, up to 10 MB.",
+        "toasts": {
+          "updateFailed": "Could not update your profile photo. Try again."
+        },
+        "title": "Profile Photo",
+        "editButton": {
+          "ariaLabel": "Change profile photo"
+        },
+        "uploadButton": {
+          "ariaLabel": "Upload a profile photo"
+        },
+        "menu": {
+          "label": "Profile photo options",
+          "replace": {
+            "label": "Replace photo"
+          },
+          "remove": {
+            "label": "Remove"
+          }
+        },
+        "cropModal": {
+          "title": "Crop photo",
+          "description": "Drag or use the arrow keys to reposition. Use the slider or scroll to zoom.",
+          "area": {
+            "ariaLabel": "Crop area"
+          },
+          "zoom": {
+            "ariaLabel": "Zoom"
+          },
+          "zoomIn": {
+            "ariaLabel": "Zoom in"
+          },
+          "zoomOut": {
+            "ariaLabel": "Zoom out"
+          },
+          "reset": {
+            "label": "Reset"
+          },
+          "cancel": {
+            "label": "Cancel"
+          },
+          "save": {
+            "label": "Save"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} uses this name when it talks to you.",
+        "placeholder": "Add a name",
+        "title": "What Should {appName} Call You?"
       }
     },
     "promptShortcuts": {
@@ -16230,6 +16290,21 @@
     },
     "interactions": {
       "title": "Interactions"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "Group Manager",
+        "description": "Your access level in this workspace.",
+        "admin": "Admin",
+        "basic": "Basic User",
+        "title": "Your Role"
+      },
+      "tenantId": {
+        "description": "Share this ID with support when you ask for help.",
+        "copyTooltip": "Copy tenant ID",
+        "title": "Tenant ID"
+      },
+      "title": "Organization"
     }
   },
   "sidebar": {
@@ -17964,6 +18039,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {This run waits for your approval below.} other {This run is in progress.}}",
       "startedAt": "Started {time}",
       "viewTask": "View task"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "Marketing"
+      },
+      "finance": {
+        "label": "Finance"
+      },
+      "other": {
+        "label": "Other"
+      },
+      "engineering": {
+        "label": "Engineering"
+      },
+      "customerSupportSuccess": {
+        "label": "Customer support & success"
+      },
+      "peopleHr": {
+        "label": "People & HR"
+      },
+      "dataAnalytics": {
+        "label": "Data & analytics"
+      },
+      "legal": {
+        "label": "Legal"
+      },
+      "design": {
+        "label": "Design"
+      },
+      "product": {
+        "label": "Product"
+      },
+      "operations": {
+        "label": "Operations"
+      },
+      "sales": {
+        "label": "Sales"
+      },
+      "leadership": {
+        "label": "Leadership"
+      }
     }
   }
 }

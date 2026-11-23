@@ -11,6 +11,8 @@
 
 import { test, expect } from "./fixtures";
 import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
+import { CHECKERED_PNG } from "@tests/e2e/fixtures/images";
+import { apiLogin } from "@tests/e2e/utils/auth";
 import type { Browser } from "@playwright/test";
 import type { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
@@ -442,6 +444,54 @@ test.describe("Users page: delete user", () => {
     await usersPage.goto();
     await usersPage.search(email);
     await expect(usersPage.page.getByText("No users found")).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Profile photo (creates ephemeral data)
+// ---------------------------------------------------------------------------
+
+test.describe("Users page: profile photo", () => {
+  let photoUserEmail: string;
+
+  test.beforeAll(async ({ browser }) => {
+    photoUserEmail = uniqueEmail("photo");
+    await withApiContext(browser, async (api) => {
+      await api.registerUser(photoUserEmail, TEST_PASSWORD);
+    });
+    // The user uploads their own photo, so log in as them.
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    try {
+      const page = await context.newPage();
+      await apiLogin(page, photoUserEmail, TEST_PASSWORD);
+      const uploaded = await page.request.post("/api/user/profile-image", {
+        multipart: {
+          file: {
+            name: "me.png",
+            mimeType: "image/png",
+            buffer: CHECKERED_PNG,
+          },
+        },
+      });
+      expect(uploaded.ok()).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("shows the photo as the user's avatar", async ({ usersPage }) => {
+    await usersPage.goto();
+    await usersPage.search(photoUserEmail);
+    await expect(usersPage.getRowAvatarPhoto(photoUserEmail)).toBeVisible();
+  });
+
+  test.afterAll(async ({ browser }) => {
+    await withApiContext(browser, async (api) => {
+      await softCleanup(() => api.deactivateUser(photoUserEmail));
+      await softCleanup(() => api.deleteUser(photoUserEmail));
+    });
   });
 });
 
