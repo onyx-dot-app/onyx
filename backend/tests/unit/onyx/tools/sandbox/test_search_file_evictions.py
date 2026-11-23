@@ -77,3 +77,63 @@ def test_a_rewritten_path_counts_once() -> None:
         [],
         [_write("same", 10)],
     )
+
+
+def _folder_bytes(
+    held: dict[str, FileEntry],
+    writing: dict[str, int],
+    plan: tuple[list[str], list[_File]],
+) -> int:
+    """The bytes in attachments/search/ after the plan's deletes and writes."""
+    evicted, fitting = plan
+    sizes = {path: entry.size for path, entry in held.items() if path not in evicted}
+    sizes.update(writing)
+    sizes.update((write.path, write.size) for write in fitting)
+    return sum(sizes.values())
+
+
+@pytest.mark.parametrize("replaced_protected", [False, True])
+def test_a_skipped_replacement_keeps_its_old_copy_under_the_cap(
+    replaced_protected: bool,
+) -> None:
+    held = {
+        entry.path: entry
+        for entry in (_entry("offered", 8, 90), _entry("small", 1, 60))
+    }
+    protected = {"attachments/search/offered"}
+    if replaced_protected:
+        protected.add("attachments/search/small")
+    plan = _evictions(held, {}, [_write("small", 3), _write("new", 2)], protected)
+    assert _folder_bytes(held, {}, plan) <= 10
+    if replaced_protected:
+        # The old copy stays, so the new file does not fit.
+        assert plan == ([], [])
+    else:
+        assert plan == (["attachments/search/small"], [_write("new", 2)])
+
+
+@pytest.mark.parametrize("replaced_protected", [False, True])
+def test_one_of_two_grown_replacements_fits_under_the_cap(
+    monkeypatch: pytest.MonkeyPatch, replaced_protected: bool
+) -> None:
+    mib = 1024 * 1024
+    monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 1024 * mib)
+    held = {
+        entry.path: entry
+        for entry in (
+            _entry("offered", 900 * mib, 90),
+            _entry("a", 60 * mib, 60),
+            _entry("b", 60 * mib, 30),
+        )
+    }
+    protected = {"attachments/search/offered"}
+    if replaced_protected:
+        protected |= {"attachments/search/a", "attachments/search/b"}
+    plan = _evictions(
+        held, {}, [_write("a", 70 * mib), _write("b", 70 * mib)], protected
+    )
+    assert _folder_bytes(held, {}, plan) <= 1024 * mib
+    if replaced_protected:
+        assert plan == ([], [])
+    else:
+        assert plan == (["attachments/search/b"], [_write("a", 70 * mib)])

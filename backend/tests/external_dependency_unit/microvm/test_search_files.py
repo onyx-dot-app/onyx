@@ -53,7 +53,10 @@ from onyx.server.features.build.sandbox.firecracker import harness_state, purge
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
 )
-from onyx.server.features.build.sandbox.harness_base import search_file_name
+from onyx.server.features.build.sandbox.harness_base import (
+    SessionFiles,
+    search_file_name,
+)
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.server.query_and_chat.chat_backend import delete_chat_session_by_id
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -95,7 +98,11 @@ from tests.external_dependency_unit.microvm.fake_agent import (
     InsecureClientFactory,
     RunningFakeAgent,
 )
-from tests.external_dependency_unit.microvm.test_file_copies import _wrap, _Wrapped
+from tests.external_dependency_unit.microvm.test_file_copies import (
+    _TimedOutDeletes,
+    _wrap,
+    _Wrapped,
+)
 from tests.external_dependency_unit.microvm.test_sandbox_tools import (
     SandboxChat,
     _stop_when,
@@ -207,9 +214,12 @@ def cc_pair(db_session: Session) -> Iterator[ConnectorCredentialPair]:
 
 
 @pytest.fixture
-def make_file(db_session: Session, cc_pair: ConnectorCredentialPair) -> MakeFile:
+def make_file(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> Iterator[MakeFile]:
     """A connector file in the file store, and the public document that has
-    it."""
+    it. Teardown deletes both, whatever a test did to the document's links."""
+    made: list[ConnectorFile] = []
 
     def make(data: bytes) -> ConnectorFile:
         name = uuid4().hex[:8]
@@ -238,9 +248,21 @@ def make_file(db_session: Session, cc_pair: ConnectorCredentialPair) -> MakeFile
             )
         )
         db_session.commit()
-        return ConnectorFile(file_id, document_id, f"{name}.csv", data)
+        made.append(ConnectorFile(file_id, document_id, f"{name}.csv", data))
+        return made[-1]
 
-    return make
+    yield make
+    db_session.rollback()
+    document_ids = [file.document_id for file in made]
+    db_session.execute(
+        delete(DocumentByConnectorCredentialPair).where(
+            DocumentByConnectorCredentialPair.id.in_(document_ids)
+        )
+    )
+    db_session.execute(delete(DbDocument).where(DbDocument.id.in_(document_ids)))
+    db_session.commit()
+    for file in made:
+        get_default_file_store().delete_file(file.file_id, error_on_missing=False)
 
 
 @pytest.fixture
@@ -891,6 +913,47 @@ def test_a_truncated_listing_evicts_nothing(
     assert result.file_name is not None
     _wait_until(idle)
     assert _search_files(node, ref) == {old_path: b"old file", result.file_name: b"new"}
+
+
+def test_an_eviction_that_gets_no_response_stops_the_intake(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    chat: SandboxChat,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    make_file: MakeFile,
+    internal: SearchPipelineController,
+    idle: Callable[[], bool],
+) -> None:
+    """The first delete times out: no other delete and no write follow."""
+    file = make_file(b"new")
+    internal.add_search_results(QUERY, [file.result()])
+    ref = chat.ref(db_session)
+    sandbox.ensure_running(ref)
+    old_paths = [
+        "attachments/search/00000000-older.csv",
+        "attachments/search/00000000-old.csv",
+    ]
+    for age, path in zip((200, 100), old_paths, strict=True):
+        node.agent.files[_key(ref, path)] = b"old!"
+        node.agent.file_times[_key(ref, path)] = time.time() - age
+    monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 4)
+    timed_out: list[_TimedOutDeletes] = []
+
+    def wrap(files: SessionFiles) -> SessionFiles:
+        timed_out.append(_TimedOutDeletes(files))
+        return timed_out[-1]
+
+    _wrap(monkeypatch, sandbox, wrap)
+    llm = _searched(chat, db_session, ("found", QUERY))
+    [result] = _results(llm, "found")
+    assert result.file_name is not None
+    _wait_until(idle)
+    assert [path for files in timed_out for path in files.deleted] == old_paths[:1]
+    assert not any(
+        path.startswith("attachments/search/") for path in node.agent.write_paths
+    )
+    assert _search_files(node, ref) == dict.fromkeys(old_paths, b"old!")
 
 
 def test_when_the_turns_files_fill_the_cap_only_what_fits_is_written(

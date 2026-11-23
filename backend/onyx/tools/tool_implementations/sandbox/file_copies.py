@@ -853,27 +853,22 @@ def _evictions(
     the turn's earlier writes that are queued or running, which the listing
     may not show yet. A `protected` path (the turn's offers) stays. The writes
     that fit next to the protected files and earlier writes go ahead, in
-    order; deletes make room only for them, so no write means no delete."""
-    replaced = {write.path for write in writes}
-    kept = {
-        path: entry.size
-        for path, entry in held.items()
-        if path in protected and path not in replaced
-    }
-    kept.update((path, size) for path, size in writing.items() if path not in replaced)
+    order; deletes make room only for them, so no write means no delete. A
+    path's current bytes count until a write that goes ahead replaces them."""
+    # By path: the bytes that stay.
+    kept = {path: entry.size for path, entry in held.items() if path in protected}
+    kept.update(writing)
     room = MAX_CHAT_SEARCH_BYTES - sum(kept.values())
     fitting: list[_File] = []
     for write in writes:
-        if write.size <= room:
+        growth = write.size - kept.get(write.path, 0)
+        if growth <= room:
             fitting.append(write)
-            room -= write.size
+            room -= growth
+            kept[write.path] = write.size
     if not fitting:
         return [], []
-    others = [
-        entry
-        for path, entry in held.items()
-        if path not in kept and path not in replaced
-    ]
+    others = [entry for path, entry in held.items() if path not in kept]
     excess = sum(entry.size for entry in others) - room
     evicted: list[str] = []
     for entry in sorted(others, key=lambda entry: entry.modified_at or _UNKNOWN_AGE):
@@ -1124,13 +1119,15 @@ class TurnSearchFiles:
                     break
                 try:
                     files.delete(path)
-                except Exception:
+                except Exception as error:
                     logger.warning(
                         "sandbox_file_delete_failed sandbox=%s path=%s",
                         target.ref.sandbox_id,
                         path,
                         exc_info=True,
                     )
+                    if _no_response(error):
+                        return
             logger.info(
                 "sandbox_search_files_intake session=%s in_place=%d "
                 "copying=%d not_copied=%d no_access=%d evicted=%d",
