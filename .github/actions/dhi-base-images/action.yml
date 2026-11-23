@@ -83,8 +83,8 @@ runs:
       run: |
         {
           echo "DHI_NODE_BUILD_ARGS<<EOF"
-          echo "NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:dee4bb11f4cb32ad31000287af8795f772ac801338a166a0e9fbbadd9674a2f8"
-          echo "NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:84adaf3bdd9fa350e753078db2928a1584e481e11225d14f96014b17ffc96c5a"
+          echo "NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:96e25a7d16cd1dff155387709b78bf6fc3d97fe229bd0ee776c569b7908a9b3f"
+          echo "NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:68cfc68e498c79d892098e70ed7878ac551a079e632b6ad50c3e50bad6479aaa"
           echo "EOF"
           echo "DHI_PYTHON_BUILD_ARGS<<EOF"
           echo "PYTHON_BUILDER_IMAGE=dhi.io/python:3.13-debian13-dev@sha256:3a4e14a0dc4300490df0d33f49c6d5a1bc76bd7e48de1214656f5fd77a84504b"
