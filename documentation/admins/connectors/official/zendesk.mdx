@@ -1,0 +1,94 @@
+---
+title: "Zendesk"
+description: "Access tickets and conversations from Zendesk"
+---
+
+## How it works
+
+The Zendesk connector indexes content from your Zendesk instance. One connector indexes one content type:
+
+- **Articles**: Published articles from your Help Center
+- **Tickets**: Support tickets with their comments and metadata
+
+To index both articles and tickets, create two connectors with the same Zendesk account.
+
+The connector keeps author information, labels, tags, and other metadata. After the first run,
+it fetches only new and changed content. It also removes documents from Onyx when Zendesk deletes them.
+
+Permission sync is not available. **Document Access** can be **Everyone in Your Organization** or **Specific Groups**.
+**Specific Groups** is a paid feature: the Business and Enterprise tiers on Onyx Cloud,
+and the Enterprise Edition when self-hosted.
+
+The connector is available in all editions.
+
+## Content Types
+
+### Articles
+
+- Includes article content, labels, and content tags
+- Tracks author information and update timestamps
+- Skips articles that carry a label listed in the `ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS` environment variable
+  (self-hosted only)
+
+### Tickets
+
+- Includes ticket metadata (status, priority, tags, type)
+- Tracks submitter and commenter information
+- Excludes deleted tickets
+- **Note**: Requires an active Zendesk Support product
+
+## Current Limitations
+
+- Articles: Cannot filter by category or section
+
+## Setting up
+
+### Authorization
+
+The Zendesk connector needs 3 values:
+- **Zendesk Subdomain**: Your Zendesk subdomain, for example `your-company` from `your-company.zendesk.com`
+- **Zendesk Account Email**: The email address of the API token owner
+- **API Token**: A Zendesk API token
+
+See below for how to create the API token:
+
+<video className="rounded-image" src="/assets/admins/connectors/zendesk/ZendeskAPI.mp4" autoPlay muted loop playsInline aria-label="Zendesk settings page showing how to generate an API token" />
+
+<Note>
+  Onyx indexes only what the token owner can read in Zendesk.
+  Use an agent or admin account that can read the articles or tickets you want to index.
+</Note>
+
+### Indexing
+
+<Steps>
+  <Step title="Add the credential">
+    In the Admin Panel, go to **Connectors** and select **Zendesk**. Under **Authentication Account**,
+    select **New Zendesk Account** and enter the subdomain, account email, and API token from the section above.
+  </Step>
+
+  <Step title="Configure the content">
+    - **Zendesk Subdomain**: Enter the subdomain again.
+    - **Content Type**: Choose **articles** or **tickets**.
+    - **API Calls per Minute** (under **Advanced Options**): Limit the request rate if your Zendesk plan has a low
+    API rate limit. Leave empty for no limit.
+  </Step>
+
+  <Step title="Set access and create">
+    Under **Connector Settings**, choose **Document Access** and click **Create Connector**.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Your Zendesk token does not have sufficient permissions (HTTP 403)">
+    The token owner cannot read the content type you selected.
+    Check that the account has access to the Help Center (articles) or to Zendesk Support (tickets),
+    and that API token access is enabled in Zendesk Admin Center.
+  </Accordion>
+
+  <Accordion title="Indexing is slow or hits rate limits">
+    Set **API Calls per Minute** under **Advanced Options** to a value below your Zendesk plan's rate limit.
+  </Accordion>
+</AccordionGroup>
