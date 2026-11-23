@@ -746,8 +746,8 @@ class SandboxDaemonClient:
             raise sandbox_daemon_error(e) from e
 
     def link_file(self, *, path: str, target: str) -> None:
-        """Make a symlink at the absolute VM path to target (stored as given),
-        replacing a link there. Another entry at path raises FILE_EXISTS."""
+        """Make or replace a symlink at an absolute VM path. Any other entry
+        there raises FILE_EXISTS."""
         try:
             self._stub.LinkFile(
                 sandboxd_pb2.LinkFileRequest(path=path, target=target),

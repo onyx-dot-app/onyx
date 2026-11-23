@@ -313,9 +313,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
 
     @staticmethod
     def _link_built_ins(daemon: SandboxDaemonClient, bundle: SkillsBundle) -> None:
-        """Link each skill folder of the drive into CHAT_SKILLS_PATH, and
-        delete the links to folders that the drive no longer has. A folder of
-        that name that is not a link (one the model made) stays."""
+        """Link each drive skill into CHAT_SKILLS_PATH and delete stale
+        links. A real folder of the same name stays."""
         with zipfile.ZipFile(io.BytesIO(bundle.zip_bytes)) as zf:
             names = {path.split("/", 1)[0] for path in zf.namelist()}
         try:

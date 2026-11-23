@@ -228,9 +228,8 @@ class HarnessSandbox(abc.ABC):
 
     @abc.abstractmethod
     def sync_skills(self, ref: HarnessSandboxRef, bundle: SkillsBundle) -> None:
-        """Show the bundle's files read-only at CHAT_SKILLS_MOUNT_PATH, with a
-        link to each skill folder in CHAT_SKILLS_PATH. Skips the transfer when
-        this VM instance already shows the same bundle."""
+        """Mount the bundle read-only at CHAT_SKILLS_MOUNT_PATH and link its
+        skills into CHAT_SKILLS_PATH, once per VM instance and bundle."""
 
     @abc.abstractmethod
     def install_skills(
