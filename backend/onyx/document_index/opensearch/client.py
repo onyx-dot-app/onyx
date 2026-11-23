@@ -855,7 +855,8 @@ class OpenSearchClient(AbstractContextManager):
         oldest node's, which limits what the cluster can index.
 
         Returns:
-            None if the cluster does not report an OpenSearch version.
+            None if the cluster does not report an OpenSearch version, or if a
+            node did not answer, since the oldest version is then unknown.
         """
         version_info: dict[str, Any] = self._client.info()["version"]
         if version_info.get("distribution") == "opensearch":
@@ -863,14 +864,20 @@ class OpenSearchClient(AbstractContextManager):
         if version_info.get("number") != ELASTICSEARCH_COMPATIBILITY_VERSION:
             return None
         response: dict[str, Any] = self._client.nodes.info(
-            params={"filter_path": "nodes.*.version"}
+            params={"filter_path": "_nodes.failed,nodes.*.version"}
         )
-        versions: list[tuple[int, int]] = [
-            _major_minor(node["version"])
+        if response.get("_nodes", {}).get("failed", 0):
+            return None
+        numbers: list[str] = [
+            node["version"]
             for node in response.get("nodes", {}).values()
             if node.get("version")
         ]
-        return min(versions) if versions else None
+        # Nodes of a real Elasticsearch 7.10.2 cluster report 7.10.2 too;
+        # OpenSearch nodes report their own version.
+        if not numbers or ELASTICSEARCH_COMPATIBILITY_VERSION in numbers:
+            return None
+        return min(_major_minor(number) for number in numbers)
 
     def close(self) -> None:
         """Closes the client.
