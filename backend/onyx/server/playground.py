@@ -19,9 +19,14 @@ Restrict a whole feature (every write on the router):
         dependencies=[Depends(restrict_in_playground(PlaygroundRestrictedFeature.SSO))],
     )
 
-Allow one action on a restricted router: give that route its own feature and
-leave it out of PLAYGROUND_RESTRICTIONS. The route's feature replaces the
-router's feature for that route only:
+Allow one action on a restricted router: add a member for that action to
+PlaygroundRestrictedFeature, remove it from PLAYGROUND_RESTRICTIONS, and give
+the route that member. The route's feature replaces the router's feature for
+that route only. With a new member LLM_DEFAULT_MODEL, for example:
+
+    PLAYGROUND_RESTRICTIONS = frozenset(PlaygroundRestrictedFeature) - {
+        PlaygroundRestrictedFeature.LLM_DEFAULT_MODEL
+    }
 
     @router.post(
         "/default",

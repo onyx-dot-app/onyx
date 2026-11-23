@@ -217,6 +217,23 @@ def test_playground_refuses_the_llm_gateway(
     assert exc_info.value.error_code == OnyxErrorCode.PLAYGROUND_RESTRICTED
 
 
+def test_playground_refuses_the_llm_gateway_before_the_tier_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On a Community-tier playground the playground check answers, not the
+    tier gate."""
+    monkeypatch.setattr(playground, "IS_PLAYGROUND", True)
+    with pytest.raises(OnyxError) as exc_info:
+        _patch_settings(
+            {"llm_gateway_enabled": True},
+            Settings(llm_gateway_enabled=False),
+            monkeypatch,
+            ee=True,
+            tier=Tier.COMMUNITY,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.PLAYGROUND_RESTRICTED
+
+
 def test_playground_keeps_other_settings_writable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

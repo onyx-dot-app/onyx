@@ -116,6 +116,28 @@ def admin_patch_settings(
                 f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
             )
 
+        # A restricted switch reads as off from load_settings, so any True here
+        # is an attempt to turn it on. Checked before the tier gates, so the
+        # playground answers with its own code whatever the tier.
+        if (
+            is_restricted_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS)
+            and merged.anonymous_user_enabled
+        ):
+            raise OnyxError(
+                OnyxErrorCode.PLAYGROUND_RESTRICTED,
+                "Anonymous access is off on the playground. "
+                + PLAYGROUND_RESTRICTED_MESSAGE,
+            )
+        if (
+            is_restricted_in_playground(PlaygroundRestrictedFeature.LLM_GATEWAY)
+            and merged.llm_gateway_enabled
+        ):
+            raise OnyxError(
+                OnyxErrorCode.PLAYGROUND_RESTRICTED,
+                "The LLM gateway is off on the playground. "
+                + PLAYGROUND_RESTRICTED_MESSAGE,
+            )
+
         # Search Mode is Business+, Chat Retention is Enterprise-only. Same error
         # code (FEATURE_NOT_AVAILABLE / 402) the tier_gate middleware uses, so the
         # FE has one shape to handle for tier-rejected writes.
@@ -142,27 +164,6 @@ def admin_patch_settings(
             raise OnyxError(
                 OnyxErrorCode.FEATURE_NOT_AVAILABLE,
                 "The LLM gateway requires the Business or Enterprise plan.",
-            )
-
-        # A restricted switch reads as off from load_settings, so any True here
-        # is an attempt to turn it on.
-        if (
-            is_restricted_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS)
-            and merged.anonymous_user_enabled
-        ):
-            raise OnyxError(
-                OnyxErrorCode.PLAYGROUND_RESTRICTED,
-                "Anonymous access is off on the playground. "
-                + PLAYGROUND_RESTRICTED_MESSAGE,
-            )
-        if (
-            is_restricted_in_playground(PlaygroundRestrictedFeature.LLM_GATEWAY)
-            and merged.llm_gateway_enabled
-        ):
-            raise OnyxError(
-                OnyxErrorCode.PLAYGROUND_RESTRICTED,
-                "The LLM gateway is off on the playground. "
-                + PLAYGROUND_RESTRICTED_MESSAGE,
             )
 
         routing_id = merged.model_routing_model_configuration_id
