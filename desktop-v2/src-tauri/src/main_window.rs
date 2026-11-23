@@ -923,8 +923,8 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify, classify_popup, download_notice, download_path, is_web_sign_in, log_safe,
-        open_error_kind, return_path, server_url_join, LinkAction,
+        classify, classify_popup, download_notice, is_web_sign_in, log_safe, open_error_kind,
+        return_path, server_url_join, LinkAction,
     };
     use url::Url;
 
@@ -945,6 +945,7 @@ mod tests {
 
     #[test]
     fn download_destinations_become_local_paths() {
+        use super::download_path;
         assert_eq!(
             download_path("file:///home/me/Downloads/report%20(1).csv"),
             std::path::PathBuf::from("/home/me/Downloads/report (1).csv")
