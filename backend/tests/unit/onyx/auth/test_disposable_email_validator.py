@@ -2,12 +2,14 @@
 Tests for disposable email validation.
 """
 
+import io
+import json
 import threading
 from collections.abc import Generator
 from unittest import mock
 
-import httpx
 import pytest
+import requests
 
 from onyx.auth.disposable_email_validator import (
     disposable_domain_blocklist,
@@ -24,13 +26,14 @@ def _response(
     status_code: int,
     json_body: list[object] | None = None,
     headers: dict[str, str] | None = None,
-) -> httpx.Response:
-    return httpx.Response(
-        status_code,
-        json=json_body,
-        headers=headers,
-        request=httpx.Request("GET", _TEST_URL),
-    )
+) -> requests.Response:
+    response = requests.Response()
+    response.status_code = status_code
+    body = json.dumps(json_body).encode() if json_body is not None else b""
+    response.raw = io.BytesIO(body)
+    response.headers.update(headers or {})
+    response.url = _TEST_URL
+    return response
 
 
 @pytest.fixture(autouse=True)
@@ -44,10 +47,9 @@ def no_network() -> Generator[None, None, None]:
             "onyx.auth.disposable_email_validator.DISPOSABLE_EMAIL_DOMAINS_URL",
             _TEST_URL,
         ),
-        mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client,
+        mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch,
     ):
-        client = mock_client.return_value.__enter__.return_value
-        client.get.return_value = _response(200, json_body=[])
+        fetch.return_value = _response(200, json_body=[])
         yield
 
 
@@ -69,9 +71,8 @@ class TestConditionalFetch:
     def test_first_fetch_sends_no_conditional_headers_and_stores_validators(
         self, fresh_validator: RemoteDomainBlocklist
     ) -> None:
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-            client.get.return_value = _response(
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+            fetch.return_value = _response(
                 200,
                 json_body=["fetched-domain.example"],
                 headers={"ETag": _ETAG, "Last-Modified": _LAST_MODIFIED},
@@ -79,7 +80,7 @@ class TestConditionalFetch:
 
             domains = _refresh_and_get(fresh_validator)
 
-        sent_headers = client.get.call_args.kwargs["headers"]
+        sent_headers = fetch.call_args.kwargs["headers"]
         assert "If-None-Match" not in sent_headers
         assert "If-Modified-Since" not in sent_headers
 
@@ -90,9 +91,8 @@ class TestConditionalFetch:
     def test_304_keeps_cached_domains(
         self, fresh_validator: RemoteDomainBlocklist
     ) -> None:
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-            client.get.return_value = _response(
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+            fetch.return_value = _response(
                 200,
                 json_body=["fetched-domain.example"],
                 headers={"ETag": _ETAG, "Last-Modified": _LAST_MODIFIED},
@@ -100,10 +100,10 @@ class TestConditionalFetch:
             _refresh_and_get(fresh_validator)
 
             # Answer the next refresh with a 304
-            client.get.return_value = _response(304)
+            fetch.return_value = _response(304)
             domains = _refresh_and_get(fresh_validator)
 
-        sent_headers = client.get.call_args.kwargs["headers"]
+        sent_headers = fetch.call_args.kwargs["headers"]
         assert sent_headers["If-None-Match"] == _ETAG
         assert sent_headers["If-Modified-Since"] == _LAST_MODIFIED
 
@@ -113,16 +113,15 @@ class TestConditionalFetch:
     def test_fetch_error_keeps_previously_fetched_domains(
         self, fresh_validator: RemoteDomainBlocklist
     ) -> None:
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-            client.get.return_value = _response(
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+            fetch.return_value = _response(
                 200,
                 json_body=["fetched-domain.example"],
                 headers={"ETag": _ETAG},
             )
             _refresh_and_get(fresh_validator)
 
-            client.get.side_effect = httpx.ConnectError("network down")
+            fetch.side_effect = requests.ConnectionError("network down")
             domains = _refresh_and_get(fresh_validator)
 
         assert "fetched-domain.example" in domains
@@ -132,9 +131,8 @@ class TestConditionalFetch:
     def test_fetch_error_without_prior_fetch_returns_fallback(
         self, fresh_validator: RemoteDomainBlocklist
     ) -> None:
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-            client.get.side_effect = httpx.ConnectError("network down")
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+            fetch.side_effect = requests.ConnectionError("network down")
             domains = _refresh_and_get(fresh_validator)
 
         assert domains == fresh_validator._fallback_domains
@@ -143,14 +141,13 @@ class TestConditionalFetch:
         self, fresh_validator: RemoteDomainBlocklist
     ) -> None:
         """A list with non-string members must not replace the last good one."""
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-            client.get.return_value = _response(
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+            fetch.return_value = _response(
                 200, json_body=["fetched-domain.example"], headers={"ETag": _ETAG}
             )
             _refresh_and_get(fresh_validator)
 
-            client.get.return_value = _response(
+            fetch.return_value = _response(
                 200, json_body=[None, False, 0], headers={"ETag": '"newer"'}
             )
             domains = _refresh_and_get(fresh_validator)
@@ -166,19 +163,16 @@ class TestConditionalFetch:
             name="test",
             url=_TEST_URL,
             fallback_domains=set(),
-            parse=lambda response: set(response.json()),
+            parse=lambda body: set(json.loads(body)),
         )
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-            client.get.return_value = _response(
-                200, json_body=[], headers={"ETag": _ETAG}
-            )
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+            fetch.return_value = _response(200, json_body=[], headers={"ETag": _ETAG})
             assert _refresh_and_get(blocklist) == set()
 
-            client.get.return_value = _response(304)
+            fetch.return_value = _response(304)
             assert _refresh_and_get(blocklist) == set()
 
-        assert client.get.call_args.kwargs["headers"]["If-None-Match"] == _ETAG
+        assert fetch.call_args.kwargs["headers"]["If-None-Match"] == _ETAG
         assert blocklist._etag == _ETAG
 
     def test_fallback_domains_are_normalized(self) -> None:
@@ -186,7 +180,7 @@ class TestConditionalFetch:
             name="test",
             url="",
             fallback_domains={" Example.COM "},
-            parse=lambda _response: set(),
+            parse=lambda _body: set(),
         )
 
         assert blocklist.contains_email_domain("user@example.com") is True
@@ -198,20 +192,19 @@ class TestStaleWhileRevalidate:
     def test_stale_cache_is_served_while_refresh_runs(
         self, fresh_validator: RemoteDomainBlocklist
     ) -> None:
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-            client.get.return_value = _response(
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+            fetch.return_value = _response(
                 200, json_body=["old-domain.example"], headers={"ETag": _ETAG}
             )
             _refresh_and_get(fresh_validator)
 
             release = threading.Event()
 
-            def slow_get(*_args: object, **_kwargs: object) -> httpx.Response:
+            def slow_get(*_args: object, **_kwargs: object) -> requests.Response:
                 assert release.wait(timeout=5)
                 return _response(200, json_body=["new-domain.example"])
 
-            client.get.side_effect = slow_get
+            fetch.side_effect = slow_get
 
             # Expire the cache: the next call must return the stale set
             # immediately while the refresh runs in the background
@@ -233,16 +226,14 @@ class TestStaleWhileRevalidate:
     def test_cold_start_returns_fallback_and_shares_one_refresh(
         self, fresh_validator: RemoteDomainBlocklist
     ) -> None:
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
             release = threading.Event()
 
-            def slow_get(*_args: object, **_kwargs: object) -> httpx.Response:
+            def slow_get(*_args: object, **_kwargs: object) -> requests.Response:
                 assert release.wait(timeout=5)
                 return _response(200, json_body=["fetched-domain.example"])
 
-            client.get.side_effect = slow_get
+            fetch.side_effect = slow_get
 
             # Both calls return the fallback immediately; the second call
             # must not start a second refresh
@@ -258,25 +249,24 @@ class TestStaleWhileRevalidate:
             thread.join(timeout=5)
             assert not thread.is_alive()
 
-            assert client.get.call_count == 1
+            assert fetch.call_count == 1
             assert "fetched-domain.example" in fresh_validator.get_domains()
 
     def test_no_redundant_refresh_when_cache_became_fresh(
         self, fresh_validator: RemoteDomainBlocklist
     ) -> None:
-        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
-            client = mock_client.return_value.__enter__.return_value
-            client.get.return_value = _response(
+        with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+            fetch.return_value = _response(
                 200, json_body=["fetched-domain.example"], headers={"ETag": _ETAG}
             )
             _refresh_and_get(fresh_validator)
-            assert client.get.call_count == 1
+            assert fetch.call_count == 1
 
             # A caller that saw a stale cache before this refresh finished
             # must not trigger a second fetch now that the cache is fresh
             thread = fresh_validator._start_refresh()
             thread.join(timeout=5)
-            assert client.get.call_count == 1
+            assert fetch.call_count == 1
 
 
 def _join_refresh(blocklist: RemoteDomainBlocklist) -> None:

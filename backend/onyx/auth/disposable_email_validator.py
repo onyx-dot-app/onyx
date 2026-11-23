@@ -6,9 +6,9 @@ and caches them for performance. It's used during user registration to prevent
 abuse from temporary email services.
 """
 
-import httpx
+import json
 
-from onyx.auth.domain_blocklist import RemoteDomainBlocklist
+from onyx.auth.domain_blocklist import RemoteDomainBlocklist, normalize_domains
 from onyx.configs.app_configs import DISPOSABLE_EMAIL_DOMAINS_URL
 
 # Hardcoded fallback list of common disposable domains
@@ -30,14 +30,14 @@ FALLBACK_DISPOSABLE_DOMAINS = frozenset(
 )
 
 
-def _parse_json_list(response: httpx.Response) -> set[str]:
+def _parse_json_list(body: bytes) -> set[str]:
     """The list is a JSON array of domains."""
-    domains_list = response.json()
+    domains_list = json.loads(body)
     if not isinstance(domains_list, list):
         raise ValueError(f"Expected a JSON list of domains, got {type(domains_list)}")
     if not all(isinstance(domain, str) for domain in domains_list):
         raise ValueError("Expected only strings in the JSON list of domains")
-    return {domain.lower().strip() for domain in domains_list if domain.strip()}
+    return normalize_domains(domains_list)
 
 
 def disposable_domain_blocklist() -> RemoteDomainBlocklist:
