@@ -232,14 +232,20 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
       toast.setAutoDismiss(t.id, EXPANDED_DURATION_MS);
     }
   }, []);
-  if (allToasts.length === 0) return null;
+  const empty = allToasts.length === 0;
 
+  // The stack stays mounted while empty: it is the live region that reads
+  // each new toast, and a region that appears with its text is often skipped.
   return (
     <div
-      data-testid="toast-container"
+      data-testid={empty ? undefined : "toast-container"}
       className="opal-toast-viewport fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
     >
-      <div className="opal-toast-stack">
+      <div
+        className="opal-toast-stack"
+        aria-live="polite"
+        aria-relevant="additions text"
+      >
         {[...allToasts].reverse().map((t, index) => (
           <ToastCard
             key={t.id}
