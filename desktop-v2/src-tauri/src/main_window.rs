@@ -248,7 +248,9 @@ fn open_new_window(
     }
 }
 
-/// Downloads from any app window ask where to save, like a browser.
+/// Downloads from any app window ask where to save, like a browser. On Linux
+/// they save to the Downloads folder, and a notification tells where
+/// (`watch_downloads`).
 fn handle_download(event: DownloadEvent) -> bool {
     match event {
         DownloadEvent::Requested { destination, .. } => choose_download_path(destination),
@@ -260,6 +262,107 @@ fn handle_download(event: DownloadEvent) -> bool {
             true
         }
         _ => true,
+    }
+}
+
+/// Notifies once for each finished download. wry adds its download handler
+/// to the web context that all windows share, once for each window it
+/// builds, so `handle_download` runs several times for one download on Linux.
+#[cfg(target_os = "linux")]
+fn watch_downloads(app: &AppHandle, view: &webkit2gtk::WebView) {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    use webkit2gtk::{DownloadExt, WebContextExt, WebViewExt};
+
+    static WATCHING: std::sync::Once = std::sync::Once::new();
+    WATCHING.call_once(|| {
+        let Some(context) = view.context() else {
+            return;
+        };
+        let app = app.clone();
+        context.connect_download_started(move |_, download| {
+            let failed = Rc::new(Cell::new(false));
+            download.connect_failed({
+                let failed = failed.clone();
+                move |_, _| failed.set(true)
+            });
+            let app = app.clone();
+            download.connect_finished(move |download| {
+                let success = !failed.get();
+                let path = download.destination().map(|d| download_path(&d));
+                notify_download(&app, path.as_deref(), success);
+            });
+        });
+    });
+}
+
+/// The local path of a download's destination. WebKitGTK 4.x reports a
+/// `file://` URI; a plain path is kept as it is.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+fn download_path(destination: &str) -> std::path::PathBuf {
+    Url::parse(destination)
+        .ok()
+        .filter(|url| url.scheme() == "file")
+        .and_then(|url| url.to_file_path().ok())
+        .unwrap_or_else(|| std::path::PathBuf::from(destination))
+}
+
+/// The notification text for a finished download.
+#[cfg(any(target_os = "linux", test))]
+fn download_notice(path: Option<&std::path::Path>, success: bool) -> (String, String) {
+    let name = path
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().into_owned());
+    let folder = path
+        .and_then(|p| p.parent())
+        .map(|d| d.display().to_string());
+    match (success, name, folder) {
+        (true, Some(name), Some(folder)) => (
+            format!("Downloaded {name}"),
+            format!("Saved to {folder}. Click to show it in its folder."),
+        ),
+        (true, _, _) => (
+            "Download finished".into(),
+            "Saved to your Downloads folder.".into(),
+        ),
+        (false, Some(name), _) => ("Download failed".into(), format!("Could not save {name}.")),
+        (false, None, _) => ("Download failed".into(), "Could not save the file.".into()),
+    }
+}
+
+/// The extra key that carries a downloaded file's path in its notification.
+#[cfg(target_os = "linux")]
+const DOWNLOAD_KEY: &str = "download";
+
+#[cfg(target_os = "linux")]
+fn notify_download(app: &AppHandle, path: Option<&std::path::Path>, success: bool) {
+    use tauri_plugin_notification::NotificationExt;
+
+    if app.state::<AppState>().policy().disable_notifications {
+        return;
+    }
+    static CLICKS: std::sync::Once = std::sync::Once::new();
+    CLICKS.call_once(|| {
+        let handle = app.clone();
+        let _ = app.notification().on_action(move |performed| {
+            let path = performed
+                .notification()
+                .and_then(|n| n.extra().get(DOWNLOAD_KEY))
+                .and_then(|p| p.as_str());
+            if let (Some(path), "tap") = (path, performed.action_id()) {
+                if let Err(e) = handle.opener().reveal_item_in_dir(path) {
+                    log::warn!("could not show the download in its folder: {e}");
+                }
+            }
+        });
+    });
+    let (title, body) = download_notice(path, success);
+    let mut builder = app.notification().builder().title(title).body(body);
+    if let (true, Some(path)) = (success, path) {
+        builder = builder.extra(DOWNLOAD_KEY, path.display().to_string());
+    }
+    if let Err(e) = builder.show() {
+        log::warn!("could not show the download notification: {e}");
     }
 }
 
@@ -345,6 +448,110 @@ fn choose_download_path(destination: &mut std::path::PathBuf) -> bool {
 #[cfg(target_os = "linux")]
 fn choose_download_path(_destination: &mut std::path::PathBuf) -> bool {
     true
+}
+
+/// WebKitGTK refuses a clipboard write once the click's user activation has
+/// passed, which the web UI's copy after a request needs (WebView2 and
+/// WKWebView allow it). Reading the clipboard stays behind WebKit's paste
+/// rules. The context menu keeps WebKit's standard items only: its custom ones
+/// (Copy Link with Highlight) link into the embedded page.
+#[cfg(target_os = "linux")]
+fn configure_webkit(window: &tauri::WebviewWindow) {
+    use webkit2gtk::{ContextMenuExt, ContextMenuItemExt, SettingsExt, WebViewExt};
+
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
+        let view = webview.inner();
+        watch_downloads(&app, &view);
+        if let Some(settings) = WebViewExt::settings(&view) {
+            settings.set_javascript_can_access_clipboard(true);
+        }
+        view.connect_context_menu(|_, menu, _, _| {
+            for item in menu.items() {
+                if !is_standard_menu_action(item.stock_action()) {
+                    menu.remove(&item);
+                }
+            }
+            false
+        });
+    });
+    if let Err(e) = result {
+        log::warn!("could not set up the web view: {e}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn is_standard_menu_action(action: webkit2gtk::ContextMenuAction) -> bool {
+    !matches!(
+        action,
+        webkit2gtk::ContextMenuAction::Custom | webkit2gtk::ContextMenuAction::__Unknown(_)
+    )
+}
+
+/// WebView2 takes key presses while the page has focus, so the menu bar's
+/// accelerators never see them. Its accelerator event runs the menu item.
+#[cfg(windows)]
+fn forward_menu_keys(window: &tauri::WebviewWindow) {
+    use webview2_com::AcceleratorKeyPressedEventHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
+        COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
+    };
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
+    };
+
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
+        let held = |key: VIRTUAL_KEY| unsafe { GetKeyState(i32::from(key.0)) } < 0;
+        let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else {
+                return Ok(());
+            };
+            let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
+            let mut key = 0u32;
+            // SAFETY: WebView2 calls this on the UI thread with live event args.
+            unsafe {
+                args.KeyEventKind(&mut kind)?;
+                args.VirtualKey(&mut key)?;
+            }
+            if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+            {
+                return Ok(());
+            }
+            let modifiers = crate::menu::Modifiers {
+                ctrl: held(VK_CONTROL),
+                alt: held(VK_MENU),
+                shift: held(VK_SHIFT),
+            };
+            if let Some(id) = crate::menu::key_action(key, modifiers) {
+                // SAFETY: as above.
+                unsafe { args.SetHandled(true)? };
+                // After the WebView2 callback returns: an item can build or
+                // close a web view. `run_on_main_thread` runs at once when called
+                // on the main thread, so it is called from another thread.
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let handle = app.clone();
+                    let _ = app.run_on_main_thread(move || crate::menu::handle(&handle, id));
+                });
+            }
+            Ok(())
+        }));
+        let mut token = 0i64;
+        // SAFETY: the controller is live on the UI thread, where with_webview runs.
+        if let Err(e) = unsafe {
+            webview
+                .controller()
+                .add_AcceleratorKeyPressed(&handler, &mut token)
+        } {
+            log::warn!("could not watch for menu keys: {e}");
+        }
+    });
+    if let Err(e) = result {
+        log::warn!("could not watch for menu keys: {e}");
+    }
 }
 
 fn hand_over_session(
@@ -474,6 +681,10 @@ pub async fn open_url(
     // WebView2 and WebKitGTK show alert(), confirm() and prompt() themselves.
     #[cfg(target_os = "macos")]
     crate::macos_dialogs::install(&window);
+    #[cfg(windows)]
+    forward_menu_keys(&window);
+    #[cfg(target_os = "linux")]
+    configure_webkit(&window);
     #[cfg(target_os = "linux")]
     crate::aonyx::step_aside_for_file_choosers(&window);
 
@@ -712,8 +923,8 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify, classify_popup, is_web_sign_in, log_safe, open_error_kind, return_path,
-        server_url_join, LinkAction,
+        classify, classify_popup, download_notice, is_web_sign_in, log_safe, open_error_kind,
+        return_path, server_url_join, LinkAction,
     };
     use url::Url;
 
@@ -728,6 +939,35 @@ mod tests {
             with: None,
         };
         assert!(!open_error_kind(&forbidden).contains("secret"));
+    }
+
+    // Unix paths: only Linux reports a download as a file:// URI.
+    #[cfg(unix)]
+    #[test]
+    fn download_destinations_become_local_paths() {
+        use super::download_path;
+        assert_eq!(
+            download_path("file:///home/me/Downloads/report%20(1).csv"),
+            std::path::PathBuf::from("/home/me/Downloads/report (1).csv")
+        );
+        assert_eq!(
+            download_path("/home/me/Downloads/a.csv"),
+            std::path::PathBuf::from("/home/me/Downloads/a.csv")
+        );
+    }
+
+    #[test]
+    fn a_finished_download_says_where_it_is() {
+        let path = std::path::Path::new("/home/me/Downloads/report (1).csv");
+        assert_eq!(
+            download_notice(Some(path), true),
+            (
+                "Downloaded report (1).csv".to_string(),
+                "Saved to /home/me/Downloads. Click to show it in its folder.".to_string()
+            )
+        );
+        assert_eq!(download_notice(Some(path), false).0, "Download failed");
+        assert_eq!(download_notice(None, true).0, "Download finished");
     }
 
     const ORIGIN: &str = "http://localhost:3000";

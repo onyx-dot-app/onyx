@@ -451,7 +451,16 @@ How the app differs from macOS:
 - The main window keeps the native title bar and has its own menu bar: **File** (New Chat
   `Ctrl+N`, Open Launcher, Preferences `Ctrl+,`, Close Window `Ctrl+W`, Quit `Ctrl+Q`), **View**
   (Reload `Ctrl+R`, Back `Alt+Left`, Forward `Alt+Right`, zoom `Ctrl+0`/`Ctrl+=`/`Ctrl+-`, Full
-  Screen `F11`) and **Help** (About). Other windows have no menu bar.
+  Screen `F11`) and **Help** (About). Other windows have no menu bar. On Windows the shortcuts
+  also work while the page has focus: the app reads them from WebView2's accelerator key event.
+- On Windows a left click on the tray icon opens Onyx and a right click opens the tray menu.
+- Downloads on Linux do not open a save dialog: WebKitGTK asks on the GTK main thread, where a
+  blocking dialog would deadlock. The file goes to the Downloads folder (a name that is already
+  in use gets a number). A notification then names the file and its folder; click it to show
+  the file in its folder. A failed download also shows a notification.
+- On Linux the main window lets the page write the clipboard after a request finishes (for
+  example **Create Share Link**). Reading the clipboard still needs a paste. The text context
+  menu shows WebKit's standard items only.
 - No auto-update: the update feed has macOS builds only, so the app does not check for updates
   and has no **Check for Updates…** item. Install a new version by hand.
 - The session cookie goes in through wry's cookie API. Its domain has no leading dot, so
