@@ -26,6 +26,7 @@ from onyx.db.document import (
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import SyncType
 from onyx.db.fleet_telemetry import (
+    StandardUserCounts,
     attempt_rows,
     connector_rows,
     email_domain_rows,
@@ -34,7 +35,7 @@ from onyx.db.fleet_telemetry import (
     license_row,
     limit_statement_time,
     stage_rows,
-    standard_user_count,
+    standard_user_counts,
 )
 from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from onyx.db.sync_record import insert_sync_record
@@ -127,12 +128,12 @@ VALUES ('6f1c62c4-6e4b-4f35-9d4b-1d2f0c7b8a10', 1, 'IN_PROGRESS');
 INSERT INTO port_attempt (id, cc_pair_id, search_settings_id, status, error_msg)
 VALUES (1, 1, 1, 'FAILED', 'PRIVATE port failure');
 INSERT INTO license (license_data) VALUES ('PRIVATE LICENSE');
-INSERT INTO "user" (email, created_at, account_type)
+INSERT INTO "user" (email, created_at, account_type, is_active)
 VALUES
-  ('PRIVATE.FIRST@Poc.Example.COM', '2020-01-01', 'STANDARD'),
-  ('PRIVATE.SECOND@onyx.app', '2021-01-01', 'STANDARD'),
-  ('PRIVATE.THIRD@poc.example.com', '2022-01-01', 'STANDARD'),
-  ('PRIVATE.BOT@excluded.example.com', '2019-01-01', 'BOT');
+  ('PRIVATE.FIRST@Poc.Example.COM', '2020-01-01', 'STANDARD', true),
+  ('PRIVATE.SECOND@onyx.app', '2021-01-01', 'STANDARD', true),
+  ('PRIVATE.THIRD@poc.example.com', '2022-01-01', 'STANDARD', false),
+  ('PRIVATE.BOT@excluded.example.com', '2019-01-01', 'BOT', true);
 """
 
 
@@ -144,11 +145,11 @@ def schema(db_session: Session) -> Generator[str, None, None]:
         db_session.execute(
             text(f'CREATE TABLE "{name}".{table} (LIKE public.{table} INCLUDING ALL)')
         )
-    # The collector reads three columns of the user table.
+    # The collector reads four columns of the user table.
     db_session.execute(
         text(
             f'CREATE TABLE "{name}"."user" '
-            "(email text, created_at timestamptz, account_type text)"
+            "(email text, created_at timestamptz, account_type text, is_active boolean)"
         )
     )
     db_session.execute(text(f'SET LOCAL search_path TO "{name}"'))
@@ -174,7 +175,7 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
         }
         domains: list[dict[str, Any]] = email_domain_rows(db_session)
         license: dict[str, Any] = license_row(db_session)
-        users: int = standard_user_count(db_session)
+        users: StandardUserCounts = standard_user_counts(db_session)
     # Finished work outside the window and synthetic seeds are not read. Changed
     # rows come first, oldest first, then running rows from before the window.
     assert list(attempts) == [1, 2]
@@ -216,7 +217,7 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
     ]
     assert license["license_present"] is True
     # Only standard accounts count. The seeded bot does not.
-    assert users == 3
+    assert users == StandardUserCounts(total=3, active=2)
 
 
 def test_sync_canceled_by_a_new_run_is_read_as_canceled(schema: str) -> None:
