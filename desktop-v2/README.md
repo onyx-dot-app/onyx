@@ -95,9 +95,10 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   or a 5xx error. The API check passes only for the Onyx version JSON. Any other answer (a
   network sign-in page, another site) shows "does not look like an Onyx server", and the
   web UI's own `/api` route shows that `/api` does not reach the API server. These reasons,
-  and a 5xx error, also replace a page that already loaded. On Linux, a main-window load that
-  WebKitGTK cannot finish (for example, connection refused) shows this window instead of
-  WebKitGTK's error page. If the app's own check passes but the web view still fails (for
+  and a 5xx error, also replace a page that already loaded. On Linux and Windows, a main-window load
+  that the web view cannot finish (for example, connection refused) shows this window instead
+  of the web view's error page. A certificate error also shows this window, not the web
+  view's certificate page, so the user cannot continue to the page. If the app's own check passes but the web view still fails (for
   example, a certificate that only the web view does not trust), the window checks again
   only on **Retry**. Otherwise it checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
   the network comes back, and on **Retry**. When the server answers, the main window loads the
