@@ -334,7 +334,6 @@ func (s *Store) build(ctx context.Context, id, zipPath string, size int64) (Imag
 	if err != nil {
 		return Image{}, err
 	}
-	// The stage root is the drive root: root-owned, mode from the zip comment.
 	if err := os.Chmod(stage, RootMode(zr.Comment)); err != nil {
 		return Image{}, err
 	}

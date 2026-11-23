@@ -40,7 +40,6 @@ func TestRenameMovesOrSwapsInOneDirectory(t *testing.T) {
 	skills := dir + "/skills"
 	write(skills+"/.copy-1/SKILL.md", "v1")
 
-	// The first copy: a plain rename.
 	if err := s.Rename("", skills+"/.copy-1", skills+"/report", false); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +47,6 @@ func TestRenameMovesOrSwapsInOneDirectory(t *testing.T) {
 		t.Fatalf("report holds %q", got)
 	}
 
-	// A new version swaps with the old folder in one step.
 	write(skills+"/.copy-2/SKILL.md", "v2")
 	if err := s.Rename("", skills+"/.copy-2", skills+"/report", true); err != nil {
 		t.Fatal(err)
@@ -94,7 +92,6 @@ func TestRenameAndLinkFailAtOnceUnderAFIFO(t *testing.T) {
 	if err := os.MkdirAll(onyx, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A FIFO with no writer: opening it to read would wait for one.
 	if err := syscall.Mkfifo(filepath.Join(onyx, "pipe"), 0o644); err != nil {
 		t.Fatal(err)
 	}

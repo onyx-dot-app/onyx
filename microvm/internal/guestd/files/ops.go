@@ -649,14 +649,10 @@ func (s *Store) Link(sessionID, p, target string) error {
 		return err
 	}
 	defer func() { _ = e.root.Close() }()
-	// A path in the onyx root opens on that root, with its parents still to
-	// make.
 	parent := path.Dir(e.name)
 	if err := s.mkdirAll(e.root, parent, false); err != nil {
 		return err
 	}
-	// A folder or file the model made stays where it is: never moved aside
-	// to learn its type.
 	if fi, err := e.root.Lstat(e.name); err == nil && fi.Mode()&fs.ModeSymlink == 0 {
 		return fmt.Errorf("%w: %s is not a link", ErrExists, p)
 	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -671,8 +667,6 @@ func (s *Store) Link(sessionID, p, target string) error {
 	if err := e.root.Symlink(target, path.Join(parent, tmp)); err != nil {
 		return fsErr(err)
 	}
-	// Delete the temporary name only while it holds this call's link: a
-	// command can move another entry there between the steps below.
 	drop := func() {
 		if got, err := e.root.Readlink(path.Join(parent, tmp)); err == nil && got == target {
 			_ = e.root.Remove(path.Join(parent, tmp))
@@ -687,7 +681,6 @@ func (s *Store) Link(sessionID, p, target string) error {
 	if s.linkChecked != nil {
 		s.linkChecked()
 	}
-	// Nothing at p: the link goes in, unless an entry appears first.
 	err = renameAt(dir, tmp, name, false)
 	if err == nil || !errors.Is(err, ErrExists) {
 		if err != nil {
@@ -695,8 +688,6 @@ func (s *Store) Link(sessionID, p, target string) error {
 		}
 		return err
 	}
-	// A link at p: swap, and keep the swap only if it took out a link (a
-	// command can replace the link after the check above).
 	if err := renameAt(dir, tmp, name, true); err != nil {
 		drop()
 		return err
@@ -709,8 +700,6 @@ func (s *Store) Link(sessionID, p, target string) error {
 		_ = e.root.Remove(path.Join(parent, tmp))
 		return nil
 	}
-	// A command can delete the new link first; then the entry moves back
-	// without a swap.
 	err = renameAt(dir, tmp, name, true)
 	if errors.Is(err, ErrNotFound) {
 		err = renameAt(dir, tmp, name, false)

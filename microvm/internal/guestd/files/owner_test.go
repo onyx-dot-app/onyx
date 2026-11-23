@@ -271,7 +271,6 @@ func TestNoSessionWriteGivesNewDirectoriesToTheOwner(t *testing.T) {
 	}
 	log := &chownLog{}
 	log.use(s)
-	// So the sandbox user can add files to a folder that Onyx wrote.
 	spec := WriteSpec{Path: dir + "/skills/report/run.py", Size: 1, Overwrite: true, MakeParents: true}
 	if _, _, err := s.Write(context.Background(), "", spec, strings.NewReader("x")); err != nil {
 		t.Fatal(err)
@@ -297,8 +296,6 @@ func TestNoSessionWriteMakesNoFolderThroughASwappedInLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A command owns the new folder, so it can put a link in its place
-	// before the next folder is made.
 	s.chown = func(_ *os.File, name string, _, _ int) error {
 		if name == "x" {
 			if err := os.Rename(filepath.Join(home, "x"), filepath.Join(dir, "x-moved")); err != nil {
@@ -334,8 +331,6 @@ func TestNoSessionWriteMakesNoFolderInADeniedPathThroughARelativeLink(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A command owns the new folder, so it can put a link to a denied path
-	// next to it (inside the same root) in its place.
 	s.chown = func(_ *os.File, name string, _, _ int) error {
 		if name == "x" {
 			if err := os.Rename(filepath.Join(dir, "x"), filepath.Join(dir, "x-moved")); err != nil {

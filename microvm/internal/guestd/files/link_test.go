@@ -30,7 +30,6 @@ func TestLinkMakesAndReplacesOnlyLinks(t *testing.T) {
 		return got
 	}
 
-	// The target need not exist, and missing parents are made.
 	if err := s.Link("", link, "/mnt/skills/pptx"); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +43,6 @@ func TestLinkMakesAndReplacesOnlyLinks(t *testing.T) {
 		t.Fatalf("replaced link to %q", got)
 	}
 
-	// In the onyx root too, with its parents.
 	if err := s.Link("", onyx+"/a/b/link", "/mnt/skills/pptx"); err != nil {
 		t.Fatal(err)
 	}
@@ -52,10 +50,8 @@ func TestLinkMakesAndReplacesOnlyLinks(t *testing.T) {
 		t.Fatalf("onyx link to %q, %v", got, err)
 	}
 
-	// A file or folder that is not a link is never swapped aside.
 	s.linkSwapped = func() { t.Fatal("Link swapped an entry that is not a link") }
 
-	// A regular file stays, with its content.
 	notes := dir + "/skills/notes"
 	if err := os.WriteFile(notes, []byte("keep"), 0o644); err != nil {
 		t.Fatal(err)
@@ -67,7 +63,6 @@ func TestLinkMakesAndReplacesOnlyLinks(t *testing.T) {
 		t.Fatalf("file after a refused link: %q %v", b, err)
 	}
 
-	// A real folder stays.
 	report := dir + "/skills/report"
 	if err := os.Mkdir(report, 0o755); err != nil {
 		t.Fatal(err)
@@ -110,8 +105,6 @@ func TestLinkKeepsAnEntryThatACommandMovesInDuringTheSwap(t *testing.T) {
 	if err := os.Symlink("/mnt/skills/old", skills+"/pptx"); err != nil {
 		t.Fatal(err)
 	}
-	// After the check sees a link, a command replaces it with a file; after
-	// the swap, it renames another file over the new link.
 	s.linkChecked = func() {
 		if err := os.Remove(skills + "/pptx"); err != nil {
 			t.Fatal(err)
@@ -165,8 +158,6 @@ func TestLinkPutsBackAnEntryWhenACommandDeletesTheNewLink(t *testing.T) {
 	if err := os.Symlink("/mnt/skills/old", skills+"/pptx"); err != nil {
 		t.Fatal(err)
 	}
-	// After the check sees a link, a command replaces it with a folder;
-	// after the swap, it deletes the new link.
 	s.linkChecked = func() {
 		if err := os.Remove(skills + "/pptx"); err != nil {
 			t.Fatal(err)

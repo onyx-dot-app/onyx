@@ -274,7 +274,6 @@ func (s *Store) mkdirAll(root *os.Root, dir string, noLinks bool) error {
 	if dir == "." {
 		return nil
 	}
-	// rel is the path in cur of the directories walked so far.
 	cur, rel := root, ""
 	defer func() {
 		if cur != root {
