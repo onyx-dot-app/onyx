@@ -4,7 +4,6 @@ import React, {
   createContext,
   useContext,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -67,16 +66,8 @@ export interface ResponseProps {
  */
 function useTurnCursor(
   rootRef: React.RefObject<HTMLDivElement | null>,
-  cursorRef: React.RefObject<HTMLSpanElement | null>,
-  hiddenRef: React.RefObject<boolean>,
-  working: boolean
+  cursorRef: React.RefObject<HTMLSpanElement | null>
 ): void {
-  // Read each frame, so a change does not restart the placement loop.
-  const workingRef = useRef(working);
-  useEffect(() => {
-    workingRef.current = working;
-  }, [working]);
-
   useEffect(() => {
     const root = rootRef.current;
     const cursor = cursorRef.current;
@@ -96,14 +87,16 @@ function useTurnCursor(
       // Hidden (e.g. while the turn waits for the user): fade out in place,
       // also where the turn would hold it, and keep checking so the cursor
       // returns once it may show again.
-      if (hiddenRef.current && (anchor || placed)) {
+      // The root's `data-cursor-hidden` says it may not show.
+      if (root.hasAttribute("data-cursor-hidden") && (anchor || placed)) {
         cursor.style.opacity = "0";
         visible = false;
         frame = requestAnimationFrame(place);
         return;
       }
       if (!anchor) {
-        if (workingRef.current && placed) {
+        // The root's `data-working` says the turn still works.
+        if (placed && root.hasAttribute("data-working")) {
           // Hold where it is until the next marker arrives or the turn ends.
           frame = requestAnimationFrame(place);
           return;
@@ -142,7 +135,7 @@ function useTurnCursor(
       observer.disconnect();
       if (frame !== null) cancelAnimationFrame(frame);
     };
-  }, [rootRef, cursorRef, hiddenRef]);
+  }, [rootRef, cursorRef]);
 }
 
 interface ResponseCursorScopeProps {
@@ -170,17 +163,17 @@ export function ResponseCursorScope({
   const inScope = useContext(InCursorScopeContext);
   const rootRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
-  // Read by the placement loop on each frame.
-  const hiddenRef = useRef(hidden);
-  useLayoutEffect(() => {
-    hiddenRef.current = hidden;
-  });
-  useTurnCursor(rootRef, cursorRef, hiddenRef, working);
+  useTurnCursor(rootRef, cursorRef);
 
   if (inScope) return <>{children}</>;
   return (
     <InCursorScopeContext.Provider value>
-      <div ref={rootRef} className="relative">
+      <div
+        ref={rootRef}
+        className="relative"
+        data-working={working || undefined}
+        data-cursor-hidden={hidden || undefined}
+      >
         {children}
         {/* The outer element places and fades the cursor; the inner one
             pulses. A pulse animates opacity, which would override the fade. */}
