@@ -928,8 +928,6 @@ mod tests {
     };
     use url::Url;
 
-    // Unix paths: only Linux reports a download as a file:// URI.
-    #[cfg(unix)]
     #[test]
     fn opener_errors_log_no_url() {
         let error = tauri_plugin_opener::Error::Io(std::io::Error::other(
@@ -943,6 +941,8 @@ mod tests {
         assert!(!open_error_kind(&forbidden).contains("secret"));
     }
 
+    // Unix paths: only Linux reports a download as a file:// URI.
+    #[cfg(unix)]
     #[test]
     fn download_destinations_become_local_paths() {
         use super::download_path;
