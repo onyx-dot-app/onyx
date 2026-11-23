@@ -480,20 +480,20 @@ async def query_metadata(
         "title_desc",
     ]
     | None = None,
-    source_type: list[str] | None = None,
-    title_contains: list[str] | None = None,
+    source_type: str | list[str] | None = None,
+    title_contains: str | list[str] | None = None,
     updated_after: str | None = None,
     updated_before: str | None = None,
-    owned_by: list[str] | None = None,
-    parent_hierarchy_node_id: list[int] | None = None,
-    name_contains: list[str] | None = None,
-    parent_id: list[int] | None = None,
-    node_type: list[str] | None = None,
-    description_contains: list[str] | None = None,
+    owned_by: str | list[str] | None = None,
+    parent_hierarchy_node_id: int | list[int] | None = None,
+    name_contains: str | list[str] | None = None,
+    parent_id: int | list[int] | None = None,
+    node_type: str | list[str] | None = None,
+    description_contains: str | list[str] | None = None,
     created_after: str | None = None,
     created_before: str | None = None,
-    chat_session_id: list[str] | None = None,
-    content_contains: list[str] | None = None,
+    chat_session_id: str | list[str] | None = None,
+    content_contains: str | list[str] | None = None,
     message_type: Literal["user", "assistant"] | None = None,
     sent_after: str | None = None,
     sent_before: str | None = None,
@@ -528,8 +528,8 @@ async def query_metadata(
     need a token that allows `read:chat`; apps connected with only
     `read:search` get an error for them.
 
-    List filters match any of their values; different filters are all
-    applied. Dates are ISO 8601 (`2026-06-01`); `*_before` bounds are
+    List filters take one value or a list, and a list matches any of its
+    values; different filters are all applied. Dates are ISO 8601 (`2026-06-01`); `*_before` bounds are
     exclusive. `count` returns only the number of matches. `limit` is the row
     or page size (default 25, max 100). `agent` keeps document queries inside
     that Onyx agent's knowledge, resolved the same way as for

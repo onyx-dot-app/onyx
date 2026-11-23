@@ -71,6 +71,12 @@ async def test_sends_only_the_given_arguments(stub: _Stub) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_list_filter_takes_one_value(stub: _Stub) -> None:
+    await search_module.query_metadata(table="document", title_contains="pricing")
+    assert stub.requests[0]["arguments"]["title_contains"] == "pricing"
+
+
+@pytest.mark.asyncio
 async def test_agent_resolves_to_its_persona(stub: _Stub) -> None:
     await search_module.query_metadata(table="document", agent="Support")
     assert stub.requests[0]["persona_id"] == 7

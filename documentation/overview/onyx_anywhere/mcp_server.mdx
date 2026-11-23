@@ -221,7 +221,7 @@ Use `search_indexed_documents` for questions about content.
 | `agent` | string | No | Name of an accessible Onyx agent. Document queries stay inside that agent's knowledge. |
 
 Each table has its own filters, such as `source_type`, `title_contains`, `owned_by`, and `updated_after` for documents.
-The tool description lists all of them. Filters that take a list match any of the values in the list.
+The tool description lists all of them. Filters that take a list also take one value. A list matches any of its values.
 All filters in one call apply together. Dates use ISO 8601, such as `2026-06-01`.
 A `*_before` date is not included in the range.
 
