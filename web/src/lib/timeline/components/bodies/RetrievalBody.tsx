@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Tag, Text } from "@opal/components";
+import { Badge, Presence, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgSearch } from "@opal/icons";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -68,6 +68,20 @@ export function RetrievalBody({
     results !== null && (compact || results.length > 0 || queries.length > 0);
   const resultList = results ?? [];
   const hiddenResults = Math.max(0, resultList.length - visibleResults);
+  // Chips shown on the first render show at once (saved history). Chips
+  // shown later, from "+ n more" or a result that streams in, open their
+  // space and rise in. Chips hidden behind "+ n more" were not shown.
+  const [initialQueryCount] = useState(() =>
+    Math.min(queries.length, INITIAL_QUERIES_TO_SHOW)
+  );
+  const [initialResultIds] = useState(
+    () =>
+      new Set(
+        (results ?? [])
+          .slice(0, INITIAL_RESULTS_TO_SHOW)
+          .map((source) => source.id)
+      )
+  );
 
   return (
     // 0.25rem between the queries, "Read" and the results, and between the
@@ -83,7 +97,14 @@ export function RetrievalBody({
             wrap
           >
             {queries.slice(0, visibleQueries).map((query, index) => (
-              <Badge key={index} icon={SvgSearch} title={query} size={6} />
+              <Presence
+                key={index}
+                appear={index >= initialQueryCount}
+                width="fit"
+                grow
+              >
+                <Badge icon={SvgSearch} title={query} size={6} />
+              </Presence>
             ))}
             {hiddenQueries > 0 && (
               <Tag
@@ -116,13 +137,19 @@ export function RetrievalBody({
             {resultList.slice(0, visibleResults).map((source) => {
               const url = source.sourceUrl;
               return (
-                <Tag
+                <Presence
                   key={source.id}
-                  icon={sourceIcon(source)}
-                  title={source.title}
-                  truncate
-                  onClick={url ? () => openExternalLink(url) : undefined}
-                />
+                  appear={!initialResultIds.has(source.id)}
+                  width="fit"
+                  grow
+                >
+                  <Tag
+                    icon={sourceIcon(source)}
+                    title={source.title}
+                    truncate
+                    onClick={url ? () => openExternalLink(url) : undefined}
+                  />
+                </Presence>
               );
             })}
             {hiddenResults > 0 && (
