@@ -190,10 +190,11 @@ def _prop(
 def _any_of_prop(
     item_type: str, description: str, enum: list[str] | None = None
 ) -> dict[str, Any]:
+    # One value or a list: code mode type-checks calls against this schema.
+    value = _prop(item_type, "One value.", enum)
     return {
-        "type": "array",
-        "items": _prop(item_type, "One value.", enum),
-        "description": f"{description} A list matches any of its values (up to {_MAX_ANY_OF_VALUES}).",
+        "anyOf": [value, {"type": "array", "items": value}],
+        "description": f"{description} One value, or a list that matches any of its values (up to {_MAX_ANY_OF_VALUES}).",
     }
 
 
