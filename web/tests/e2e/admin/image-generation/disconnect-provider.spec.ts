@@ -151,54 +151,21 @@ test.describe("Image Generation Provider Disconnect", () => {
     });
   });
 
-  test("should show replacement dropdown when disconnecting default provider with alternatives", async ({
+  test("should disconnect the default provider with no confirmation", async ({
     page,
   }) => {
     const configs = [{ ...FAKE_CONNECTED_CONFIG }, { ...FAKE_DEFAULT_CONFIG }];
     await mockImageGenApis(page, configs);
-
-    await page.goto(IMAGE_GENERATION_URL);
-    await page.waitForSelector("text=Add Models", {
-      timeout: 20000,
-    });
-
-    const defaultCard = getProviderCard(page, "openai_gpt_image_1");
-    await defaultCard.waitFor({ state: "visible", timeout: 10000 });
-
-    // Disconnect button is always visible
-    await defaultCard.hover();
-    const disconnectButton = defaultCard.getByRole("button", {
-      name: "Disconnect GPT Image 1",
-    });
-    await expect(disconnectButton).toBeVisible();
-    await expect(disconnectButton).toBeEnabled();
-
-    await disconnectButton.click();
-
-    const confirmDialog = page.getByRole("dialog");
-    await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-
-    // Should show replacement dropdown since there's an alternative
-    await expect(
-      confirmDialog.getByText("Session history will be preserved")
-    ).toBeVisible();
-
-    // Disconnect button should be enabled because first replacement is auto-selected
-    const confirmButton = confirmDialog.getByRole("button", {
-      name: "Disconnect",
-    });
-    await expect(confirmButton).toBeEnabled();
-
-    await expectElementScreenshot(confirmDialog, {
-      name: "image-gen-disconnect-default-with-alt-modal",
-    });
-  });
-
-  test("should show connect message when disconnecting default provider with no alternatives", async ({
-    page,
-  }) => {
-    // Only the default config — no other providers configured
-    await mockImageGenApis(page, [{ ...FAKE_DEFAULT_CONFIG }]);
+    await page.route(
+      "**/api/admin/image-generation/config/openai_gpt_image_1",
+      async (route) => {
+        if (route.request().method() === "DELETE") {
+          await route.fulfill({ status: 200, json: {} });
+        } else {
+          await route.continue();
+        }
+      }
+    );
 
     await page.goto(IMAGE_GENERATION_URL);
     await page.waitForSelector("text=Add Models", {
@@ -209,28 +176,18 @@ test.describe("Image Generation Provider Disconnect", () => {
     await defaultCard.waitFor({ state: "visible", timeout: 10000 });
 
     await defaultCard.hover();
-    const disconnectButton = defaultCard.getByRole("button", {
-      name: "Disconnect GPT Image 1",
-    });
-    await disconnectButton.click();
+    const deleteRequest = page.waitForRequest(
+      (request) =>
+        request.method() === "DELETE" &&
+        request.url().endsWith("/image-generation/config/openai_gpt_image_1")
+    );
+    await defaultCard
+      .getByRole("button", { name: "Disconnect GPT Image 1" })
+      .click();
 
-    const confirmDialog = page.getByRole("dialog");
-    await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-
-    // Should show message about connecting another provider
-    await expect(
-      confirmDialog.getByText("Connect another provider")
-    ).toBeVisible();
-
-    // Disconnect button should be enabled
-    const confirmButton = confirmDialog.getByRole("button", {
-      name: "Disconnect",
-    });
-    await expect(confirmButton).toBeEnabled();
-
-    await expectElementScreenshot(confirmDialog, {
-      name: "image-gen-disconnect-no-alt-modal",
-    });
+    // The default disconnects at once too; no replacement is asked for.
+    await deleteRequest;
+    await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
   test("should not show disconnect button for unconfigured providers", async ({

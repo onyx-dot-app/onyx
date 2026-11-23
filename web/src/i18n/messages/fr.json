@@ -5771,41 +5771,6 @@
       "disconnectError": {
         "message": "Échec de la déconnexion"
       },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "Connectez un autre fournisseur pour continuer à utiliser la génération d'images."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** est actuellement le modèle de génération d'images par défaut."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** est actuellement le modèle de génération d'images par défaut. L'historique des sessions sera conservé."
-        },
-        "header": {
-          "description": "Cette action supprimera les identifiants enregistrés de ce fournisseur.",
-          "title": "Déconnecter *{title}*"
-        },
-        "linkedHeader": {
-          "description": "Le fournisseur LLM et ses identifiants restent connectés."
-        },
-        "noDefaultOption": {
-          "description": "(Désactiver la génération d'images)",
-          "label": "Aucun modèle par défaut"
-        },
-        "nonDefault": {
-          "description": "Les modèles **{title}** ne seront plus utilisés pour générer des images."
-        },
-        "replacement": {
-          "label": "Définir un nouveau modèle par défaut",
-          "placeholder": "Sélectionnez un modèle de remplacement"
-        },
-        "sessionHistory": {
-          "description": "L'historique des sessions sera conservé."
-        },
-        "submitButton": {
-          "label": "Déconnecter"
-        }
-      },
       "form": {
         "apiKey": {
           "idle": "Saisissez votre clé d'API.",

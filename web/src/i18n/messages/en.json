@@ -5771,41 +5771,6 @@
       "disconnectError": {
         "message": "Failed to disconnect"
       },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "Connect another provider to continue using image generation."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** is currently the default image generation model."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** is currently the default image generation model. Session history will be preserved."
-        },
-        "header": {
-          "description": "This will remove the stored credentials for this provider.",
-          "title": "Disconnect *{title}*"
-        },
-        "linkedHeader": {
-          "description": "The LLM provider and its credentials stay connected."
-        },
-        "noDefaultOption": {
-          "description": "(Disable Image Generation)",
-          "label": "No Default"
-        },
-        "nonDefault": {
-          "description": "**{title}** models will no longer be used to generate images."
-        },
-        "replacement": {
-          "label": "Set New Default",
-          "placeholder": "Select a replacement model"
-        },
-        "sessionHistory": {
-          "description": "Session history will be preserved."
-        },
-        "submitButton": {
-          "label": "Disconnect"
-        }
-      },
       "form": {
         "apiKey": {
           "idle": "Enter your API key.",

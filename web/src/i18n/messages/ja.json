@@ -5771,41 +5771,6 @@
       "disconnectError": {
         "message": "接続を解除できませんでした"
       },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "画像生成を続けて使用するには、別のプロバイダーを接続してください。"
-        },
-        "defaultNoReplacement": {
-          "description": "現在、**{title}** がデフォルトの画像生成モデルです。"
-        },
-        "defaultWithReplacement": {
-          "description": "現在、**{title}** がデフォルトの画像生成モデルです。セッション履歴は保持されます。"
-        },
-        "header": {
-          "description": "このプロバイダーに保存されている認証情報を削除します。",
-          "title": "*{title}* の接続を解除"
-        },
-        "linkedHeader": {
-          "description": "LLMプロバイダーとその認証情報は接続されたままです。"
-        },
-        "noDefaultOption": {
-          "description": "(画像生成を無効にする)",
-          "label": "デフォルトなし"
-        },
-        "nonDefault": {
-          "description": "**{title}** のモデルは画像生成に使用されなくなります。"
-        },
-        "replacement": {
-          "label": "新しいデフォルトを設定",
-          "placeholder": "代わりのモデルを選択"
-        },
-        "sessionHistory": {
-          "description": "セッション履歴は保持されます。"
-        },
-        "submitButton": {
-          "label": "接続を解除"
-        }
-      },
       "form": {
         "apiKey": {
           "idle": "API キーを入力してください。",

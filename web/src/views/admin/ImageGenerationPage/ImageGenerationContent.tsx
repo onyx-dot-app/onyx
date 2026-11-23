@@ -1,7 +1,7 @@
 "use client";
 
 import { PageLoader } from "@opal/loaders";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -23,16 +23,13 @@ import {
   Button,
   Collapsible,
   Divider,
-  InputSingleSelect,
   MessageCard,
   SelectCard,
   Text,
   useCreateModal,
-  type SelectDivider,
 } from "@opal/components";
 import {
   CardGrid,
-  ConfirmationModalLayout,
   Content,
   ContentAction,
   ReverseContent,
@@ -41,29 +38,12 @@ import {
   toast,
 } from "@opal/layouts";
 import { SvgDisconnected, SvgEmpty } from "@opal/illustrations";
-import {
-  SvgArrowExchange,
-  SvgCheckCircle,
-  SvgSlash,
-  SvgUnplug,
-} from "@opal/icons";
+import { SvgArrowExchange, SvgCheckCircle } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { resolveModelDisplayName } from "@/lib/languageModels/hooks";
 import ProviderCard from "@/sections/admin/ProviderCard";
-
-const NO_DEFAULT_VALUE = "__none__";
-
-interface DisconnectTarget {
-  image_provider_id: string;
-  title: string;
-  llmProviderOwned: boolean;
-  /** Whether it is the default. Tracks the live default while the confirm is
-   *  open and freezes on close, so the copy holds while the card fades out. */
-  isDefault: boolean;
-}
 
 /** A linked model's name, as every model list shows it. */
 function linkedModelTitle(
@@ -176,25 +156,6 @@ function AvailableModelCard({
   );
 }
 
-function configGroups(
-  configs: ImageGenerationConfigView[],
-  configTitle: (config: ImageGenerationConfigView) => string
-): SelectDivider[] {
-  const groups = new Map<string, ImageGenerationConfigView[]>();
-  for (const config of configs) {
-    const name = config.llm_provider_name ?? config.llm_provider_type;
-    groups.set(name, [...(groups.get(name) ?? []), config]);
-  }
-  return Array.from(groups.entries()).map(([title, groupConfigs]) => ({
-    title,
-    options: groupConfigs.map((c) => ({
-      value: c.image_provider_id,
-      title: configTitle(c),
-      icon: getModelIcon(c.llm_provider_type, c.model_name),
-    })),
-  }));
-}
-
 export default function ImageGenerationContent() {
   const t = useTranslations("admin.imageGeneration");
   const {
@@ -224,13 +185,6 @@ export default function ImageGenerationContent() {
   );
   const [editConfig, setEditConfig] =
     useState<ImageGenerationConfigView | null>(null);
-  const [disconnectProvider, setDisconnectProvider] =
-    useState<DisconnectTarget | null>(null);
-  const [replacementProviderId, setReplacementProviderId] = useState<
-    string | null
-  >(null);
-  // The target stays set on close so the modal can animate out; opening resets it.
-  const disconnectModal = useCreateModal();
 
   const connectedProviderIds = useMemo(() => {
     return new Set(configs.map((c) => c.image_provider_id));
@@ -311,28 +265,17 @@ export default function ImageGenerationContent() {
     }
   };
 
-  // Only the default asks first: it needs a replacement default (or none).
-  // Any other model disconnects at once.
-  const openDisconnect = async (config: ImageGenerationConfigView) => {
-    if (defaultConfig?.image_provider_id !== config.image_provider_id) {
-      try {
-        await deleteImageGenerationConfig(config.image_provider_id);
-        refetchAll();
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("disconnectError.message")
-        );
-      }
-      return;
+  // Disconnects at once, also the default: image generation is then off
+  // until another model is the default.
+  const disconnectModel = async (config: ImageGenerationConfigView) => {
+    try {
+      await deleteImageGenerationConfig(config.image_provider_id);
+      refetchAll();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("disconnectError.message")
+      );
     }
-    setDisconnectProvider({
-      image_provider_id: config.image_provider_id,
-      title: configTitle(config),
-      llmProviderOwned: config.llm_provider_owned,
-      isDefault: defaultConfig?.image_provider_id === config.image_provider_id,
-    });
-    setReplacementProviderId(null);
-    disconnectModal.toggle(true);
   };
 
   const handleDeselect = async (imageProviderId: string) => {
@@ -355,66 +298,10 @@ export default function ImageGenerationContent() {
     modal.toggle(true);
   };
 
-  const handleDisconnect = async () => {
-    if (!disconnectProvider) return;
-    try {
-      // If a replacement was selected (not "No Default"), activate it first
-      if (replacementProviderId && replacementProviderId !== NO_DEFAULT_VALUE) {
-        await setDefaultImageGenerationConfig(replacementProviderId);
-      }
-
-      await deleteImageGenerationConfig(disconnectProvider.image_provider_id);
-      refetchAll();
-    } catch (error) {
-      console.error("Failed to disconnect image generation provider:", error);
-      toast.error(
-        error instanceof Error ? error.message : t("disconnectError.message")
-      );
-    } finally {
-      disconnectModal.toggle(false);
-    }
-  };
-
   const handleModalSuccess = () => {
     setEditConfig(null);
     refetchConfigs();
   };
-
-  // Compute replacement options when disconnecting an active provider
-  const isDisconnectingDefault = disconnectProvider?.isDefault;
-
-  const replacementGroups = useMemo(() => {
-    if (!disconnectProvider) return [];
-    return configGroups(
-      configs.filter(
-        (c) => c.image_provider_id !== disconnectProvider.image_provider_id
-      ),
-      configTitle
-    );
-  }, [disconnectProvider, configs, configTitle]);
-
-  const needsReplacement = !!isDisconnectingDefault;
-  const hasReplacements = replacementGroups.length > 0;
-
-  // Auto-select first replacement when modal opens
-  useEffect(() => {
-    if (needsReplacement && !replacementProviderId && hasReplacements) {
-      const firstOption = replacementGroups[0]?.options[0];
-      if (firstOption) setReplacementProviderId(firstOption.value);
-    }
-  }, [disconnectProvider]);
-
-  // Follow the live default while the confirm is open, so a default that
-  // changes meanwhile still asks for a replacement. Closing freezes it, so the
-  // copy holds while the card fades out.
-  useEffect(() => {
-    if (!disconnectModal.isOpen || !disconnectProvider) return;
-    const isDefault =
-      defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
-    if (isDefault !== disconnectProvider.isDefault) {
-      setDisconnectProvider({ ...disconnectProvider, isDefault });
-    }
-  }, [disconnectModal.isOpen, disconnectProvider, defaultConfig]);
 
   // Available Models, alphabetical by the name each card shows.
   const listedConfigs = [...configs].sort((a, b) =>
@@ -433,13 +320,6 @@ export default function ImageGenerationContent() {
   if (configsLoading || llmProvidersLoading) {
     return <PageLoader />;
   }
-
-  const noDefaultOption = {
-    value: NO_DEFAULT_VALUE,
-    title: t("disconnectModal.noDefaultOption.label"),
-    description: t("disconnectModal.noDefaultOption.description"),
-    icon: SvgSlash,
-  };
 
   return (
     <>
@@ -503,11 +383,7 @@ export default function ImageGenerationContent() {
                     }
                     onSelect={() => void handleSelect(imageProviderId)}
                     onDeselect={() => void handleDeselect(imageProviderId)}
-                    onDisconnect={() => void openDisconnect(config)}
-                    disconnectModalOpen={
-                      disconnectModal.isOpen &&
-                      disconnectProvider?.image_provider_id === imageProviderId
-                    }
+                    onDisconnect={() => void disconnectModel(config)}
                     onEdit={
                       legacyProvider
                         ? () => handleEdit(legacyProvider)
@@ -579,7 +455,7 @@ export default function ImageGenerationContent() {
                                   c.image_provider_id ===
                                   model.image_provider_id
                               );
-                              if (config) void openDisconnect(config);
+                              if (config) void disconnectModel(config);
                             }}
                             onConnect={() =>
                               void handleLink(llmProvider, model)
@@ -595,87 +471,6 @@ export default function ImageGenerationContent() {
           )}
         </Section>
       )}
-
-      <disconnectModal.Provider>
-        {disconnectProvider && (
-          <ConfirmationModalLayout
-            icon={SvgUnplug}
-            title={markdown(
-              t("disconnectModal.header.title", {
-                title: disconnectProvider.title,
-              })
-            )}
-            description={
-              disconnectProvider.llmProviderOwned
-                ? t("disconnectModal.header.description")
-                : t("disconnectModal.linkedHeader.description")
-            }
-            onClose={() => disconnectModal.toggle(false)}
-            submit={
-              <Button
-                variant="danger"
-                onClick={() => void handleDisconnect()}
-                disabled={
-                  needsReplacement && hasReplacements && !replacementProviderId
-                }
-              >
-                {t("disconnectModal.submitButton.label")}
-              </Button>
-            }
-          >
-            {needsReplacement ? (
-              hasReplacements ? (
-                <Section alignItems="start">
-                  <Text as="p" color="text-03">
-                    {markdown(
-                      t("disconnectModal.defaultWithReplacement.description", {
-                        title: disconnectProvider.title,
-                      })
-                    )}
-                  </Text>
-                  <Section alignItems="start" gap={1}>
-                    <Text as="p" color="text-04">
-                      {t("disconnectModal.replacement.label")}
-                    </Text>
-                    <InputSingleSelect
-                      value={replacementProviderId ?? ""}
-                      onValueChange={(v) => setReplacementProviderId(v)}
-                      placeholder={t("disconnectModal.replacement.placeholder")}
-                      options={[...replacementGroups, noDefaultOption]}
-                    />
-                  </Section>
-                </Section>
-              ) : (
-                <>
-                  <Text as="p" color="text-03">
-                    {markdown(
-                      t("disconnectModal.defaultNoReplacement.description", {
-                        title: disconnectProvider.title,
-                      })
-                    )}
-                  </Text>
-                  <Text as="p" color="text-03">
-                    {t("disconnectModal.connectAnother.description")}
-                  </Text>
-                </>
-              )
-            ) : (
-              <>
-                <Text as="p" color="text-03">
-                  {markdown(
-                    t("disconnectModal.nonDefault.description", {
-                      title: disconnectProvider.title,
-                    })
-                  )}
-                </Text>
-                <Text as="p" color="text-03">
-                  {t("disconnectModal.sessionHistory.description")}
-                </Text>
-              </>
-            )}
-          </ConfirmationModalLayout>
-        )}
-      </disconnectModal.Provider>
 
       {activeProvider && (
         <modal.Provider>

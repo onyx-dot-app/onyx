@@ -5771,41 +5771,6 @@
       "disconnectError": {
         "message": "فشل قطع الاتصال"
       },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "اربط موفرًا آخر لمواصلة استخدام توليد الصور."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** هو حاليًا نموذج توليد الصور الافتراضي."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** هو حاليًا نموذج توليد الصور الافتراضي. سيُحتفظ بسجل الجلسات."
-        },
-        "header": {
-          "description": "سيزيل هذا بيانات الاعتماد المخزنة لهذا الموفر.",
-          "title": "قطع الاتصال بـ *{title}*"
-        },
-        "linkedHeader": {
-          "description": "يبقى مزوّد LLM وبيانات اعتماده متصلين."
-        },
-        "noDefaultOption": {
-          "description": "(تعطيل توليد الصور)",
-          "label": "بدون افتراضي"
-        },
-        "nonDefault": {
-          "description": "لن تُستخدم نماذج **{title}** لتوليد الصور بعد الآن."
-        },
-        "replacement": {
-          "label": "تعيين افتراضي جديد",
-          "placeholder": "اختر نموذجًا بديلًا"
-        },
-        "sessionHistory": {
-          "description": "سيُحتفظ بسجل الجلسات."
-        },
-        "submitButton": {
-          "label": "قطع الاتصال"
-        }
-      },
       "form": {
         "apiKey": {
           "idle": "أدخل مفتاح API الخاص بك.",

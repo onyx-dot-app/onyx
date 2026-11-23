@@ -5771,41 +5771,6 @@
       "disconnectError": {
         "message": "断开连接失败"
       },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "连接另一个提供商以继续使用图像生成。"
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** 当前是默认的图像生成模型。"
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** 当前是默认的图像生成模型。会话历史将会保留。"
-        },
-        "header": {
-          "description": "此操作会移除为此提供商存储的凭证。",
-          "title": "断开 *{title}* 的连接"
-        },
-        "linkedHeader": {
-          "description": "LLM 提供商及其凭据将保持连接。"
-        },
-        "noDefaultOption": {
-          "description": "（禁用图像生成）",
-          "label": "无默认"
-        },
-        "nonDefault": {
-          "description": "将不再使用 **{title}** 模型生成图像。"
-        },
-        "replacement": {
-          "label": "设置新的默认模型",
-          "placeholder": "选择替代模型"
-        },
-        "sessionHistory": {
-          "description": "会话历史将会保留。"
-        },
-        "submitButton": {
-          "label": "断开连接"
-        }
-      },
       "form": {
         "apiKey": {
           "idle": "输入您的 API 密钥。",

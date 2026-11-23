@@ -5771,41 +5771,6 @@
       "disconnectError": {
         "message": "No se pudo desconectar"
       },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "Conecta otro proveedor para seguir usando la generación de imágenes."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** es ahora mismo el modelo predeterminado de generación de imágenes."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** es ahora mismo el modelo predeterminado de generación de imágenes. Se conservará el historial de sesiones."
-        },
-        "header": {
-          "description": "Esto eliminará las credenciales guardadas de este proveedor.",
-          "title": "Desconectar *{title}*"
-        },
-        "linkedHeader": {
-          "description": "El proveedor de LLM y sus credenciales siguen conectados."
-        },
-        "noDefaultOption": {
-          "description": "(Desactivar la generación de imágenes)",
-          "label": "Sin predeterminado"
-        },
-        "nonDefault": {
-          "description": "Los modelos de **{title}** ya no se usarán para generar imágenes."
-        },
-        "replacement": {
-          "label": "Definir el nuevo predeterminado",
-          "placeholder": "Selecciona un modelo de reemplazo"
-        },
-        "sessionHistory": {
-          "description": "Se conservará el historial de sesiones."
-        },
-        "submitButton": {
-          "label": "Desconectar"
-        }
-      },
       "form": {
         "apiKey": {
           "idle": "Introduce tu clave de API.",
