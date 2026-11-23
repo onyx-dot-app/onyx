@@ -17703,7 +17703,7 @@
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。仅包含一个技能的插件显示在“技能”标签页中。",
+      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。根目录中仅有一个 SKILL.md 的插件显示在“技能”标签页中。",
       "integrations": "{needed} 个集成中有 {available} 个可用",
       "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },

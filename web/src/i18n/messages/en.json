@@ -17703,7 +17703,7 @@
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. A plugin that is only one skill is on the Skills tab.",
+      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. A plugin that holds only a SKILL.md at its root is on the Skills tab.",
       "integrations": "{available} of {needed} integrations available",
       "nameHeld": "Off: {names} uses the same skill name"
     },

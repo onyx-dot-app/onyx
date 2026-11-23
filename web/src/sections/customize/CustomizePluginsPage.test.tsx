@@ -53,7 +53,7 @@ test("an admin's list leaves out the private plugins of other members", async ()
   expect(screen.queryByText("their-kit")).not.toBeInTheDocument();
 });
 
-test("a plugin that is only one skill is left out", async () => {
+test("a plugin that is only a root SKILL.md is left out", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
     "/api/skills": {
