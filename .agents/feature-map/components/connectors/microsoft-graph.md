@@ -154,7 +154,7 @@ the `@odata.deltaLink`: the walk drops items modified after the window end, so
 a run that continued from that link would miss them.
 
 **SharePoint conversion.** `SharepointConnector.resolve_targets` converts a
-batch of stubs in a thread pool of `SHAREPOINT_CONVERSION_WORKERS` (16). A file
+batch of stubs in a thread pool of `SHAREPOINT_CONVERSION_WORKERS` (4; the download host caps the rate, not the threads). A file
 target makes one download from its listed link while the link is younger than
 `connectors/sharepoint/listing.py:DOWNLOAD_URL_MAX_AGE` (45 minutes; links live about one hour),
 which is no Graph call. An older link, a link that does not decrypt, and a

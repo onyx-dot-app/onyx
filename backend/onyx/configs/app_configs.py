@@ -1435,9 +1435,12 @@ except ValueError:
 # Files and site pages the SharePoint connector converts at once in one
 # docconversion task. Each conversion makes one download, and with permission
 # sync one or more permission reads, so this sets the requests in flight. The
-# shared Graph limiter paces them when ENABLE_SOURCE_API_LIMITER is on.
+# shared Graph limiter paces them when ENABLE_SOURCE_API_LIMITER is on. The
+# SharePoint download host caps the rate, not the threads: on a test tenant,
+# 4 threads converted as many documents per minute as 16, with a quarter of
+# the limiter waiters and less memory.
 SHAREPOINT_CONVERSION_WORKERS = max(
-    1, _int_env("SHAREPOINT_CONVERSION_WORKERS", 16) or 16
+    1, _int_env("SHAREPOINT_CONVERSION_WORKERS", 4) or 4
 )
 
 # Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
