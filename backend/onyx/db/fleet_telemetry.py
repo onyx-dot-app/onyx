@@ -1,7 +1,7 @@
 """Bounded reads for fleet telemetry snapshots."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -511,14 +511,21 @@ def email_domain_rows(db_session: Session) -> list[dict[str, Any]]:
     return [dict(row) for row in db_session.execute(statement).mappings()]
 
 
-def standard_user_count(db_session: Session) -> int:
-    """How many standard accounts exist. Never who they are."""
-    statement = (
-        select(func.count())
-        .select_from(User)
-        .where(User.account_type == AccountType.STANDARD)
-    )
-    return db_session.execute(statement).scalar_one()
+class StandardUserCounts(NamedTuple):
+    total: int
+    active: int
+
+
+def standard_user_counts(db_session: Session) -> StandardUserCounts:
+    """How many standard accounts exist, and how many are not deactivated.
+    Never who they are."""
+    is_active: KeyedColumnElement[Any] = User.__table__.c.is_active
+    statement = select(
+        func.count(),
+        func.count().filter(is_active.is_(True)),
+    ).where(User.account_type == AccountType.STANDARD)
+    total, active = db_session.execute(statement).one()
+    return StandardUserCounts(total=total, active=active)
 
 
 def license_row(db_session: Session) -> dict[str, Any]:

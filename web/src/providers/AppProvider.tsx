@@ -14,12 +14,13 @@
  *
  * 1. **SettingsProvider** - Application settings and feature flags
  * 2. **UserProvider** - Current user authentication and profile
- * 3. **AppBackgroundProvider** - App background image/URL based on user preferences
- * 4. **ProviderContextProvider** - LLM provider configuration
- * 5. **ModalProvider** - Global modal state management
- * 6. **SidebarStateProvider** - Sidebar open/closed state
- * 7. **QueryControllerProvider** - Search/Chat mode + query lifecycle
- * 8. **UnsavedChangesNavigationProvider** - Cross-layout navigation guards
+ * 3. **AppearancePreferencesProvider** - Applies the user's saved appearance preferences
+ * 4. **AppBackgroundProvider** - App background image/URL based on user preferences
+ * 5. **ProviderContextProvider** - LLM provider configuration
+ * 6. **ModalProvider** - Global modal state management
+ * 7. **SidebarStateProvider** - Sidebar open/closed state
+ * 8. **QueryControllerProvider** - Search/Chat mode + query lifecycle
+ * 9. **UnsavedChangesNavigationProvider** - Cross-layout navigation guards
  */
 
 "use client";
@@ -32,9 +33,10 @@ import { SettingsProvider } from "@/providers/SettingsProvider";
 import { ModalProvider } from "@/components/context/ModalContext";
 import { SidebarStateProvider, ToastProvider } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
+import { AppearancePreferencesProvider } from "@/providers/AppearancePreferencesProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
-import { FullWidthChatProvider } from "@/providers/FullWidthChatProvider";
+import { WideChatProvider } from "@/providers/WideChatProvider";
 import { IncognitoProvider } from "@/providers/IncognitoProvider";
 import { UnsavedChangesNavigationProvider } from "@/providers/UnsavedChangesNavigationProvider";
 import { CraftStreamingProvider } from "@/providers/CraftStreamingProvider";
@@ -78,33 +80,35 @@ export default function AppProvider({ children }: AppProviderProps) {
   return (
     <SettingsProvider>
       <UserProvider>
-        <CraftStreamingProvider>
-          <AppBackgroundProvider>
-            <ProviderContextProvider>
-              <ModalProvider>
-                <SidebarPersistenceProvider>
-                  <QueryControllerProvider>
-                    <FullWidthChatProvider>
-                      <IncognitoProvider>
-                        <UnsavedChangesNavigationProvider>
-                          <ToastProvider
-                            errorAppendix={
-                              NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK
-                                ? "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
-                                : undefined
-                            }
-                          >
-                            {children}
-                          </ToastProvider>
-                        </UnsavedChangesNavigationProvider>
-                      </IncognitoProvider>
-                    </FullWidthChatProvider>
-                  </QueryControllerProvider>
-                </SidebarPersistenceProvider>
-              </ModalProvider>
-            </ProviderContextProvider>
-          </AppBackgroundProvider>
-        </CraftStreamingProvider>
+        <AppearancePreferencesProvider>
+          <CraftStreamingProvider>
+            <AppBackgroundProvider>
+              <ProviderContextProvider>
+                <ModalProvider>
+                  <SidebarPersistenceProvider>
+                    <QueryControllerProvider>
+                      <WideChatProvider>
+                        <IncognitoProvider>
+                          <UnsavedChangesNavigationProvider>
+                            <ToastProvider
+                              errorAppendix={
+                                NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK
+                                  ? "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
+                                  : undefined
+                              }
+                            >
+                              {children}
+                            </ToastProvider>
+                          </UnsavedChangesNavigationProvider>
+                        </IncognitoProvider>
+                      </WideChatProvider>
+                    </QueryControllerProvider>
+                  </SidebarPersistenceProvider>
+                </ModalProvider>
+              </ProviderContextProvider>
+            </AppBackgroundProvider>
+          </CraftStreamingProvider>
+        </AppearancePreferencesProvider>
       </UserProvider>
     </SettingsProvider>
   );

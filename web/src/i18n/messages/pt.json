@@ -8099,6 +8099,13 @@
         },
         "setDefaultButton": {
           "label": "Definir como padrão"
+        },
+        "deleteButton": {
+          "ariaLabel": "Excluir {title}",
+          "tooltip": "Excluir"
+        },
+        "reconnectButton": {
+          "label": "Reconectar"
         }
       }
     },
@@ -9058,6 +9065,9 @@
       "provider": {
         "connected": {
           "label": "Conectado"
+        },
+        "disconnected": {
+          "suffix": "(desconectado)"
         }
       },
       "setupModal": {
@@ -9075,8 +9085,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} conectado",
-        "disconnected": "{label} desconectado",
         "unexpectedError": "Ocorreu um erro inesperado."
       },
       "providers": {
@@ -9117,6 +9125,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "A chave de API e as configurações de **{label}** serão excluídas. Para enviar traces novamente, configure-o do início.",
+        "description": "Remove a chave de API e as configurações deste provedor.",
+        "submit": {
+          "label": "Excluir"
+        },
+        "title": "Excluir {label}",
+        "envBody": "A chave de API e as configurações de **{label}** serão excluídas. O rastreamento continua desativado. Para enviar traces novamente com a configuração das variáveis de ambiente, reconecte-o."
       }
     },
     "usage": {
@@ -9819,7 +9836,7 @@
       },
       "tierTooltip": "O LLM Gateway requer o plano Business ou Enterprise.",
       "scopeNote": {
-        "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → LLM Gateway."
+        "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → Acesso de terceiros → LLM Gateway."
       },
       "toasts": {
         "settingsUpdateFailed": "Falha ao atualizar as configurações"
@@ -11777,33 +11794,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "Excluir"
-      },
-      "deleteModal": {
-        "description": "Tem certeza de que deseja excluir este chat? Esta ação não pode ser desfeita.",
-        "submitButton": {
-          "label": "Excluir"
-        },
-        "title": "Excluir chat"
-      },
-      "exportAs": {
-        "label": "Exportar como…"
-      },
-      "exportFailed": {
-        "message": "Falha ao exportar o chat. Tente novamente."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "Texto simples"
-      },
-      "fullWidth": {
-        "ariaLabel": "Alternar chat de largura total",
-        "fitTooltip": "Ajustar largura",
-        "fullTooltip": "Largura total"
-      },
       "incognitoExit": {
         "ariaLabel": "Sair do chat anônimo",
         "tooltip": "Sair do chat anônimo"
@@ -11830,14 +11820,14 @@
       "modeButton": {
         "ariaLabel": "Alterar modo do aplicativo"
       },
-      "moveToProject": {
-        "label": "Mover para projeto"
-      },
       "openSidebar": {
         "ariaLabel": "Abrir barra lateral"
       },
       "share": {
-        "label": "Compartilhar"
+        "label": "Compartilhar…"
+      },
+      "shareMenu": {
+        "label": "Compartilhar ou exportar"
       }
     },
     "banners": {
@@ -11882,6 +11872,14 @@
       "licenseExpiry": {
         "source": {
           "label": "Licença"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "Cluster de busca"
+        },
+        "cta": {
+          "label": "Abrir status do serviço"
         }
       },
       "nextButton": {
@@ -13498,6 +13496,26 @@
       "resizeHandle": {
         "label": "Redimensionar painel"
       }
+    },
+    "export": {
+      "failed": {
+        "message": "Falha ao exportar o chat. Tente novamente."
+      },
+      "plaintext": {
+        "label": "Texto simples"
+      },
+      "asMarkdown": {
+        "label": "Exportar como Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "Exportar como texto simples"
+      },
+      "menu": {
+        "label": "Exportar como…"
+      }
     }
   },
   "common": {
@@ -13554,11 +13572,6 @@
       },
       "plant": {
         "label": "Plantas"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "Aa"
       }
     },
     "commandMenu": {
@@ -15759,7 +15772,8 @@
       "scrollRight": "Rolar abas para a direita"
     },
     "toast": {
-      "moreCount": "+{count} mais"
+      "moreCount": "+{count} mais",
+      "closeAll": "Fechar tudo"
     },
     "sidebar": {
       "open": "Abrir barra lateral",
@@ -15773,11 +15787,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "anônimo",
-        "description": "O endereço de e-mail da sua conta.",
-        "title": "E-mail"
-      },
       "password": {
         "changeButton": "Alterar senha",
         "description": "Atualize a senha da sua conta.",
@@ -15810,8 +15819,7 @@
           "mismatch": "As senhas não coincidem",
           "newRequired": "A nova senha é obrigatória"
         }
-      },
-      "title": "Contas"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15904,62 @@
         "title": "Fundo do chat"
       },
       "colorMode": {
-        "auto": "Automático",
+        "auto": "Sistema",
         "dark": "Escuro",
-        "description": "Selecione o modo de cor preferido para a interface.",
+        "description": "Selecione o tema preferido para a interface.",
         "light": "Claro",
-        "title": "Modo de cor"
+        "title": "Tema"
       },
-      "title": "Aparência"
+      "general": {
+        "title": "Geral"
+      },
+      "fonts": {
+        "title": "Fontes"
+      },
+      "transcriptWidth": {
+        "title": "Largura da conversa",
+        "description": "Defina a largura das mensagens do chat e da barra de entrada neste dispositivo.",
+        "standard": "Padrão",
+        "wide": "Largo",
+        "placeholder": "Selecione uma largura"
+      },
+      "responseFont": {
+        "default": "Padrão",
+        "match": "Igual à interface",
+        "title": "Fonte das respostas",
+        "description": "Selecione a fonte para as respostas do chat.",
+        "placeholder": "Selecione uma fonte"
+      },
+      "interfaceFont": {
+        "title": "Fonte da interface",
+        "description": "Selecione a fonte para o texto do aplicativo.",
+        "default": "Padrão",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "Sistema",
+        "placeholder": "Selecione uma fonte"
+      },
+      "accessibility": {
+        "title": "Acessibilidade"
+      },
+      "motion": {
+        "title": "Movimento",
+        "description": "Siga a configuração de movimento do seu sistema ou reduza as animações em todo o aplicativo.",
+        "placeholder": "Selecione uma configuração de movimento",
+        "system": "Sistema",
+        "reduced": "Reduzido"
+      },
+      "popupDismissal": {
+        "title": "Notificações",
+        "description": "Escolha se as notificações fecham sozinhas ou ficam na tela até você fechá-las.",
+        "placeholder": "Selecione quando as notificações fecham",
+        "auto_dismiss": "Fechar automaticamente",
+        "stay_on_screen": "Manter na tela"
+      },
+      "dynamicConversations": {
+        "title": "Conversas dinâmicas",
+        "description": "Carrega e descarrega mensagens enquanto você rola conversas longas. Isso melhora o desempenho, mas leitores de tela não conseguem acessar mensagens descarregadas. Desative para manter todas as mensagens carregadas."
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +15993,6 @@
         "description": "Anime as respostas transmitidas caractere por caractere. Desative para renderizar os blocos conforme chegam.",
         "title": "Transmissão suave"
       },
-      "title": "Chats",
       "toasts": {
         "saveFailed": "Falha ao salvar preferências"
       },
@@ -15949,6 +16005,7 @@
     },
     "connectors": {
       "connectButton": "Conectar",
+      "disconnectAriaLabel": "Desconectar {name}",
       "disconnectModal": {
         "continueNote": "Você ainda pode continuar sessões existentes que referenciam conteúdo do {name}.",
         "description": "O {appName} não poderá mais acessar ou pesquisar conteúdo da sua conta do {name}.",
@@ -15956,11 +16013,9 @@
         "submit": "Desconectar",
         "title": "Desconectar *{name}*"
       },
-      "emptyMessage": "Nenhum conector configurado para sua organização.",
       "status": {
         "connected": "Conectado",
-        "notConnected": "Não conectado",
-        "paused": "Pausado"
+        "notConnected": "Não conectado"
       },
       "title": "Conectores",
       "toasts": {
@@ -16024,7 +16079,6 @@
         "description": "Selecione o idioma da interface.",
         "title": "Idioma da interface"
       },
-      "title": "Idioma",
       "toasts": {
         "updateFailed": "Não foi possível atualizar a preferência de idioma"
       }
@@ -16037,23 +16091,20 @@
         "placeholder": "Selecione uma seção"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "Contas e acesso"
+        "appearance": {
+          "label": "Aparência"
+        },
+        "usage": {
+          "label": "Uso"
+        },
+        "account": {
+          "label": "Conta"
         },
         "chatPreferences": {
           "label": "Preferências de chat"
         },
-        "connectors": {
-          "label": "Conectores"
-        },
-        "general": {
-          "label": "Geral"
-        },
-        "llmGateway": {
-          "label": "Gateway LLM"
-        },
-        "usage": {
-          "label": "Uso"
+        "thirdPartyAccess": {
+          "label": "Acesso de terceiros"
         }
       }
     },
@@ -16102,9 +16153,9 @@
       }
     },
     "personalPreferences": {
-      "description": "Forneça suas preferências personalizadas em linguagem natural.",
+      "description": "O {appName} as leva em conta em todos os seus chats.",
       "placeholder": "Descreva como você quer que o sistema se comporte e o tom que ele deve usar.",
-      "title": "Preferências pessoais"
+      "title": "Instruções"
     },
     "profile": {
       "fullName": {
@@ -16118,8 +16169,68 @@
       },
       "workRole": {
         "description": "Compartilhe seu cargo para personalizar melhor as respostas.",
-        "placeholder": "Seu cargo",
-        "title": "Cargo"
+        "placeholder": "Escolha um cargo",
+        "title": "O que melhor descreve seu trabalho?",
+        "other": {
+          "placeholder": "Digite seu cargo",
+          "title": "Seu trabalho"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "Escolha uma imagem de até 10 MB.",
+          "invalidType": "Escolha uma imagem PNG, JPEG ou WebP."
+        },
+        "description": "PNG, JPEG ou WebP, até 10 MB.",
+        "toasts": {
+          "updateFailed": "Não foi possível atualizar sua foto do perfil. Tente novamente."
+        },
+        "title": "Foto do perfil",
+        "editButton": {
+          "ariaLabel": "Alterar foto do perfil"
+        },
+        "uploadButton": {
+          "ariaLabel": "Enviar uma foto do perfil"
+        },
+        "menu": {
+          "label": "Opções da foto do perfil",
+          "replace": {
+            "label": "Substituir foto"
+          },
+          "remove": {
+            "label": "Remover"
+          }
+        },
+        "cropModal": {
+          "title": "Recortar foto",
+          "description": "Arraste ou use as teclas de seta para reposicionar. Use o controle deslizante ou a rolagem para ampliar.",
+          "area": {
+            "ariaLabel": "Área de recorte"
+          },
+          "zoom": {
+            "ariaLabel": "Zoom"
+          },
+          "zoomIn": {
+            "ariaLabel": "Ampliar"
+          },
+          "zoomOut": {
+            "ariaLabel": "Reduzir"
+          },
+          "reset": {
+            "label": "Redefinir"
+          },
+          "cancel": {
+            "label": "Cancelar"
+          },
+          "save": {
+            "label": "Salvar"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "O {appName} usa este nome quando fala com você.",
+        "placeholder": "Adicione um nome",
+        "title": "Como o {appName} deve chamar você?"
       }
     },
     "promptShortcuts": {
@@ -16129,7 +16240,6 @@
         "publicTooltip": "Não é possível excluir atalhos de prompt de toda a organização.",
         "removeAriaLabel": "Remover atalho"
       },
-      "title": "Atalhos de prompt",
       "toasts": {
         "bothRequired": "O atalho e a expansão são obrigatórios",
         "deleteFailed": "Falha ao excluir atalho",
@@ -16152,9 +16262,6 @@
       "empty": {
         "description": "O uso e os custos dos seus modelos aparecerão aqui quando você começar a conversar.",
         "title": "Nenhum uso registrado ainda"
-      },
-      "header": {
-        "title": "Uso"
       },
       "loadError": {
         "description": "Algo deu errado ao buscar seu uso. Tente novamente em instantes.",
@@ -16215,9 +16322,31 @@
       },
       "playbackSpeed": {
         "description": "Ajuste a velocidade da reprodução de voz.",
-        "title": "Velocidade de reprodução"
+        "title": "Velocidade de reprodução",
+        "value": "{speed}x"
       },
       "title": "Voz"
+    },
+    "modelPreferences": {
+      "title": "Preferências de modelo"
+    },
+    "interactions": {
+      "title": "Interações"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "Gerente do grupo",
+        "description": "Seu nível de acesso neste espaço de trabalho.",
+        "admin": "Administrador",
+        "basic": "Usuário básico",
+        "title": "Sua função"
+      },
+      "tenantId": {
+        "description": "Compartilhe este ID com o suporte ao pedir ajuda.",
+        "copyTooltip": "Copiar ID do locatário",
+        "title": "ID do locatário"
+      },
+      "title": "Organização"
     }
   },
   "sidebar": {
@@ -17703,7 +17832,7 @@
         "title": "Nenhum plugin correspondente",
         "clear": "Mostrar todos os plugins"
       },
-      "intro": "Um plugin agrupa habilidades e as integrações de que elas precisam. Envie um plugin do Claude Code ou do Codex, adicione um marketplace do GitHub ou adicione uma habilidade. Cada habilidade que você adiciona vem em seu próprio plugin.",
+      "intro": "Um plugin agrupa habilidades e as integrações de que elas precisam. Envie um plugin do Claude Code ou do Codex, adicione um marketplace do GitHub ou adicione uma habilidade. Um plugin que só contém um SKILL.md na raiz fica na aba Habilidades.",
       "integrations": "{available} de {needed} integrações disponíveis",
       "nameHeld": "Desativado: {names} usa o mesmo nome de habilidade"
     },
@@ -17952,6 +18081,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {Esta execução aguarda sua aprovação abaixo.} other {Esta execução está em andamento.}}",
       "startedAt": "Iniciada {time}",
       "viewTask": "Ver tarefa"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "Marketing"
+      },
+      "finance": {
+        "label": "Finanças"
+      },
+      "other": {
+        "label": "Outro"
+      },
+      "engineering": {
+        "label": "Engenharia"
+      },
+      "customerSupportSuccess": {
+        "label": "Suporte e sucesso do cliente"
+      },
+      "peopleHr": {
+        "label": "Pessoas e RH"
+      },
+      "dataAnalytics": {
+        "label": "Dados e análise"
+      },
+      "legal": {
+        "label": "Jurídico"
+      },
+      "design": {
+        "label": "Design"
+      },
+      "product": {
+        "label": "Produto"
+      },
+      "operations": {
+        "label": "Operações"
+      },
+      "sales": {
+        "label": "Vendas"
+      },
+      "leadership": {
+        "label": "Liderança"
+      }
     }
   }
 }

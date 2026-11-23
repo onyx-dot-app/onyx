@@ -25,8 +25,8 @@
   transition: opacity 0.45s ease;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .craft-comet {
+.craft-comet {
+  @variant motion-reduce {
     animation: none;
     /* Longer static segment so the live state still reads. */
     stroke-dasharray: 34 66;

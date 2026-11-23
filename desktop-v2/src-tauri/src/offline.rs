@@ -35,6 +35,8 @@ pub struct OfflineStatus {
     next_retry_ms: Option<u64>,
     /// Managed policy locks the server, so Change server is hidden.
     server_locked: bool,
+    /// No automatic checks: only Retry checks again.
+    retry_by_hand: bool,
 }
 
 struct Pending {
@@ -42,6 +44,10 @@ struct Pending {
     /// The main-window path to load when the server is back.
     path: String,
     status: OfflineStatus,
+    /// The web view failed while the server answers the app's own checks
+    /// (for example, a certificate only the web view rejects). Automatic
+    /// checks would pass and reload the failing page, so only Retry checks.
+    retry_by_hand: bool,
 }
 
 /// Main-window navigations, by id. A load belongs to the navigation that was
@@ -66,6 +72,12 @@ impl Loads {
 
     fn finished(&mut self) {
         self.finished = self.finished.max(self.committed);
+    }
+
+    /// The id of the latest navigation.
+    #[cfg(any(target_os = "linux", test))]
+    fn current(&self) -> u64 {
+        self.latest
     }
 
     fn is_latest(&self, id: u64) -> bool {
@@ -99,6 +111,16 @@ impl Offline {
 /// recovery. Does nothing if the session `epoch` ended meanwhile (sign-out,
 /// server change). On error the main window is shown again.
 pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Result<(), String> {
+    show_with(app, path, reason, epoch, false)
+}
+
+fn show_with(
+    app: &AppHandle,
+    path: &str,
+    reason: Unreachable,
+    epoch: u64,
+    retry_by_hand: bool,
+) -> Result<(), String> {
     let state = app.state::<AppState>();
     let Ok(server) = state.server() else {
         return Ok(());
@@ -115,6 +137,7 @@ pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Res
             Some(p) => {
                 p.path = path.to_string();
                 p.status.reason = reason;
+                p.retry_by_hand |= retry_by_hand;
                 None
             }
             None => {
@@ -128,7 +151,9 @@ pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Res
                         checking: false,
                         next_retry_ms: None,
                         server_locked,
+                        retry_by_hand,
                     },
+                    retry_by_hand,
                 });
                 Some(id)
             }
@@ -249,20 +274,38 @@ fn update(app: &AppHandle, id: Option<u64>, change: impl FnOnce(&mut OfflineStat
     true
 }
 
+/// Takes the `retry_by_hand` flag of window `id`.
+fn take_retry_by_hand(app: &AppHandle, id: u64) -> bool {
+    let offline = app.state::<Offline>();
+    let mut pending = offline.pending();
+    match pending.as_mut() {
+        Some(p) if p.id == id => std::mem::take(&mut p.retry_by_hand),
+        _ => false,
+    }
+}
+
 async fn monitor(app: AppHandle, id: u64) {
     let mut step = 0;
     loop {
+        let by_hand = take_retry_by_hand(&app, id);
         let delay = Duration::from_secs(BACKOFF_SECS[step.min(BACKOFF_SECS.len() - 1)]);
         let delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
+        // Made before the page can send Retry, so no wake is lost.
+        let offline = app.state::<Offline>();
+        let wake = offline.wake.notified();
         if !update(&app, Some(id), |s| {
             s.checking = false;
-            s.next_retry_ms = Some(delay_ms);
+            s.next_retry_ms = (!by_hand).then_some(delay_ms);
+            s.retry_by_hand = by_hand;
         }) {
             return;
         }
-        let woken = tokio::time::timeout(delay, app.state::<Offline>().wake.notified())
-            .await
-            .is_ok();
+        let woken = if by_hand {
+            wake.await;
+            true
+        } else {
+            tokio::time::timeout(delay, wake).await.is_ok()
+        };
         // A manual retry starts the backoff over.
         step = if woken { 0 } else { step + 1 };
         if !update(&app, Some(id), |s| {
@@ -308,7 +351,10 @@ fn recover(app: &AppHandle, id: u64) {
             }
         }
     };
-    log::info!("server reachable again; loading {path}");
+    log::info!(
+        "server reachable again; loading {}",
+        main_window::log_safe(&path)
+    );
     windows::close(app, windows::OFFLINE);
     windows::route_to(app, &path);
 }
@@ -370,7 +416,7 @@ pub fn watch_load(app: &AppHandle, url: &Url) {
                 return;
             }
             let finished = offline.loads().has_finished(load);
-            if finished && !matches!(reason, Unreachable::ServerError { .. }) {
+            if finished && !reason.server_answered() {
                 return;
             }
             // wry reports iframe navigations here too, so recovery reopens
@@ -391,6 +437,84 @@ fn top_level_path(app: &AppHandle, server: &str) -> Option<String> {
     (url.origin() == server.origin()).then(|| path_of(&url))
 }
 
+/// The reason to show for a main-window load that the web view could not
+/// finish, and whether only Retry checks again. If the app's own check fails
+/// too, its reason shows and checks run as usual. If it passes, the failure
+/// is the web view's own.
+#[cfg(any(target_os = "linux", test))]
+fn webview_failure(health: Result<(), Unreachable>) -> (Unreachable, bool) {
+    match health {
+        Err(reason) => (reason, false),
+        Ok(()) => (Unreachable::Unknown, true),
+    }
+}
+
+/// WebKitGTK shows its own error page for a failed load, and that page
+/// finishes loading like any other, so failed loads are caught here.
+#[cfg(target_os = "linux")]
+pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
+    use webkit2gtk::WebViewExt;
+
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
+        let view = webview.inner();
+        let failed_app = app.clone();
+        view.connect_load_failed(move |_, _, uri, error| {
+            // Downloads, blocked navigations and stopped loads are not outages.
+            let ignored = error.matches(webkit2gtk::NetworkError::Cancelled)
+                || error.kind::<webkit2gtk::PolicyError>().is_some()
+                || error.kind::<webkit2gtk::DownloadError>().is_some()
+                || error.kind::<webkit2gtk::PluginError>().is_some();
+            if !ignored {
+                log::warn!("the main window could not load {uri}: {error}");
+                webview_failed(&failed_app, uri, None);
+            }
+            false
+        });
+        view.connect_load_failed_with_tls_errors(move |_, uri, _, flags| {
+            log::warn!("the main window rejected the certificate of {uri}: {flags:?}");
+            webview_failed(&app, uri, Some(Unreachable::Tls));
+            // Handled, so WebKit does not also emit `load-failed`.
+            true
+        });
+    });
+    if let Err(e) = result {
+        log::warn!("could not watch the main window for failed loads: {e}");
+    }
+}
+
+/// A main-window load of `uri` failed in the web view. Shows the offline
+/// window if `uri` is on the server.
+#[cfg(target_os = "linux")]
+fn webview_failed(app: &AppHandle, uri: &str, known: Option<Unreachable>) {
+    let state = app.state::<AppState>();
+    let epoch = state.epoch();
+    let (Ok(server), Ok(url)) = (state.server(), Url::parse(uri)) else {
+        return;
+    };
+    if Url::parse(&server).ok().map(|s| s.origin()) != Some(url.origin()) {
+        return;
+    }
+    let path = path_of(&url);
+    let load = app.state::<Offline>().loads().current();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let (reason, by_hand) = match known {
+            Some(reason) => (reason, true),
+            None => webview_failure(app.state::<AppState>().api.health(&server).await),
+        };
+        // A newer navigation replaced the failed page.
+        if !app.state::<Offline>().loads().is_latest(load)
+            || app.get_webview_window(main_window::LABEL).is_none()
+        {
+            return;
+        }
+        if let Err(e) = show_with(&app, &path, reason, epoch, by_hand) {
+            log::warn!("the main window keeps the failed page: {e}");
+        }
+    });
+}
+
 /// The main window committed a new document (`PageLoadEvent::Started`).
 pub fn load_committed(app: &AppHandle) {
     app.state::<Offline>().loads().committed();
@@ -402,8 +526,9 @@ pub fn load_finished(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{path_of, Loads};
+    use super::{path_of, webview_failure, Loads};
     use crate::main_window::server_url_join;
+    use crate::reachability::Unreachable;
     use url::Url;
 
     #[test]
@@ -449,6 +574,25 @@ mod tests {
         loads.committed();
         loads.finished();
         assert!(loads.has_finished(second));
+    }
+
+    #[test]
+    fn a_newer_navigation_is_no_longer_the_current_one() {
+        let mut loads = Loads::default();
+        loads.navigated();
+        let failed = loads.current();
+        assert!(loads.is_latest(failed));
+        loads.navigated();
+        assert!(!loads.is_latest(failed));
+    }
+
+    #[test]
+    fn a_web_view_failure_waits_for_retry_only_if_the_server_answers() {
+        assert_eq!(
+            webview_failure(Err(Unreachable::Refused)),
+            (Unreachable::Refused, false)
+        );
+        assert_eq!(webview_failure(Ok(())), (Unreachable::Unknown, true));
     }
 
     #[test]

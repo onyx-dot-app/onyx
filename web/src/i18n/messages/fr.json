@@ -8099,6 +8099,13 @@
         },
         "setDefaultButton": {
           "label": "Définir par défaut"
+        },
+        "deleteButton": {
+          "ariaLabel": "Supprimer {title}",
+          "tooltip": "Supprimer"
+        },
+        "reconnectButton": {
+          "label": "Reconnecter"
         }
       }
     },
@@ -9058,6 +9065,9 @@
       "provider": {
         "connected": {
           "label": "Connecté"
+        },
+        "disconnected": {
+          "suffix": "(déconnecté)"
         }
       },
       "setupModal": {
@@ -9075,8 +9085,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} connecté",
-        "disconnected": "{label} déconnecté",
         "unexpectedError": "Une erreur inattendue est survenue."
       },
       "providers": {
@@ -9117,6 +9125,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "La clé API et les paramètres de **{label}** seront supprimés. Pour envoyer de nouveau des traces, reconfigurez-le depuis le début.",
+        "description": "Supprime la clé API et les paramètres de ce fournisseur.",
+        "submit": {
+          "label": "Supprimer"
+        },
+        "title": "Supprimer {label}",
+        "envBody": "La clé API et les paramètres de **{label}** seront supprimés. Le traçage reste désactivé. Pour envoyer de nouveau des traces avec la configuration des variables d'environnement, reconnectez-le."
       }
     },
     "usage": {
@@ -9819,7 +9836,7 @@
       },
       "tierTooltip": "LLM Gateway nécessite le forfait Business ou Enterprise.",
       "scopeNote": {
-        "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → LLM Gateway."
+        "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → Accès tiers → LLM Gateway."
       },
       "toasts": {
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
@@ -11777,33 +11794,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "Supprimer"
-      },
-      "deleteModal": {
-        "description": "Voulez-vous vraiment supprimer ce chat ? Cette action est irréversible.",
-        "submitButton": {
-          "label": "Supprimer"
-        },
-        "title": "Supprimer le chat"
-      },
-      "exportAs": {
-        "label": "Exporter sous…"
-      },
-      "exportFailed": {
-        "message": "Échec de l'exportation du chat. Veuillez réessayer."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "Texte brut"
-      },
-      "fullWidth": {
-        "ariaLabel": "Basculer le chat en pleine largeur",
-        "fitTooltip": "Largeur ajustée",
-        "fullTooltip": "Pleine largeur"
-      },
       "incognitoExit": {
         "ariaLabel": "Quitter le chat incognito",
         "tooltip": "Quitter le chat incognito"
@@ -11830,14 +11820,14 @@
       "modeButton": {
         "ariaLabel": "Changer le mode de l'application"
       },
-      "moveToProject": {
-        "label": "Déplacer vers un projet"
-      },
       "openSidebar": {
         "ariaLabel": "Ouvrir la barre latérale"
       },
       "share": {
-        "label": "Partager"
+        "label": "Partager…"
+      },
+      "shareMenu": {
+        "label": "Partager ou exporter"
       }
     },
     "banners": {
@@ -11882,6 +11872,14 @@
       "licenseExpiry": {
         "source": {
           "label": "Licence"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "Cluster de recherche"
+        },
+        "cta": {
+          "label": "Ouvrir l'état du service"
         }
       },
       "nextButton": {
@@ -13498,6 +13496,26 @@
       "resizeHandle": {
         "label": "Redimensionner le panneau"
       }
+    },
+    "export": {
+      "failed": {
+        "message": "Échec de l'exportation du chat. Veuillez réessayer."
+      },
+      "plaintext": {
+        "label": "Texte brut"
+      },
+      "asMarkdown": {
+        "label": "Exporter en Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "Exporter en texte brut"
+      },
+      "menu": {
+        "label": "Exporter sous…"
+      }
     }
   },
   "common": {
@@ -13554,11 +13572,6 @@
       },
       "plant": {
         "label": "Plantes"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "Aa"
       }
     },
     "commandMenu": {
@@ -15759,7 +15772,8 @@
       "scrollRight": "Faire défiler les onglets vers la droite"
     },
     "toast": {
-      "moreCount": "+{count} de plus"
+      "moreCount": "+{count} de plus",
+      "closeAll": "Tout fermer"
     },
     "sidebar": {
       "open": "Ouvrir la barre latérale",
@@ -15773,11 +15787,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "anonyme",
-        "description": "Adresse e-mail de votre compte.",
-        "title": "E-mail"
-      },
       "password": {
         "changeButton": "Modifier le mot de passe",
         "description": "Mettez à jour le mot de passe de votre compte.",
@@ -15810,8 +15819,7 @@
           "mismatch": "Les mots de passe ne correspondent pas",
           "newRequired": "Le nouveau mot de passe est requis"
         }
-      },
-      "title": "Comptes"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15904,62 @@
         "title": "Arrière-plan du chat"
       },
       "colorMode": {
-        "auto": "Auto",
+        "auto": "Système",
         "dark": "Sombre",
-        "description": "Sélectionnez le mode de couleur préféré pour l'interface.",
+        "description": "Sélectionnez le thème préféré pour l'interface.",
         "light": "Clair",
-        "title": "Mode de couleur"
+        "title": "Thème"
       },
-      "title": "Apparence"
+      "general": {
+        "title": "Général"
+      },
+      "fonts": {
+        "title": "Polices"
+      },
+      "transcriptWidth": {
+        "title": "Largeur de la conversation",
+        "description": "Définissez la largeur des messages du chat et de la barre de saisie sur cet appareil.",
+        "standard": "Standard",
+        "wide": "Large",
+        "placeholder": "Sélectionnez une largeur"
+      },
+      "responseFont": {
+        "default": "Par défaut",
+        "match": "Identique à l'interface",
+        "title": "Police des réponses",
+        "description": "Sélectionnez la police des réponses du chat.",
+        "placeholder": "Sélectionnez une police"
+      },
+      "interfaceFont": {
+        "title": "Police de l'interface",
+        "description": "Sélectionnez la police du texte de l'application.",
+        "default": "Par défaut",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "Système",
+        "placeholder": "Sélectionnez une police"
+      },
+      "accessibility": {
+        "title": "Accessibilité"
+      },
+      "motion": {
+        "title": "Animations",
+        "description": "Suivez le réglage de mouvement de votre système ou réduisez les animations dans toute l'application.",
+        "placeholder": "Sélectionnez un réglage d'animation",
+        "system": "Système",
+        "reduced": "Réduites"
+      },
+      "popupDismissal": {
+        "title": "Affichage des notifications",
+        "description": "Choisissez si les notifications se ferment d'elles-mêmes ou restent affichées jusqu'à ce que vous les fermiez.",
+        "placeholder": "Sélectionnez quand les notifications se ferment",
+        "auto_dismiss": "Fermeture automatique",
+        "stay_on_screen": "Rester à l'écran"
+      },
+      "dynamicConversations": {
+        "title": "Conversations dynamiques",
+        "description": "Charge et décharge les messages lorsque vous faites défiler de longues conversations. Cela améliore les performances, mais les lecteurs d'écran ne peuvent pas accéder aux messages déchargés. Désactivez cette option pour garder tous les messages chargés."
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +15993,6 @@
         "description": "Animez les réponses diffusées caractère par caractère. Désactivez pour afficher les segments au fur et à mesure de leur arrivée.",
         "title": "Diffusion fluide"
       },
-      "title": "Chats",
       "toasts": {
         "saveFailed": "Échec de l'enregistrement des préférences"
       },
@@ -15949,6 +16005,7 @@
     },
     "connectors": {
       "connectButton": "Connecter",
+      "disconnectAriaLabel": "Déconnecter {name}",
       "disconnectModal": {
         "continueNote": "Vous pouvez toujours poursuivre les sessions existantes faisant référence au contenu {name}.",
         "description": "{appName} ne pourra plus accéder au contenu de votre compte {name} ni le rechercher.",
@@ -15956,11 +16013,9 @@
         "submit": "Déconnecter",
         "title": "Déconnecter *{name}*"
       },
-      "emptyMessage": "Aucun connecteur configuré pour votre organisation.",
       "status": {
         "connected": "Connecté",
-        "notConnected": "Non connecté",
-        "paused": "En pause"
+        "notConnected": "Non connecté"
       },
       "title": "Connecteurs",
       "toasts": {
@@ -16024,7 +16079,6 @@
         "description": "Sélectionnez la langue de l'interface.",
         "title": "Langue d'affichage"
       },
-      "title": "Langue",
       "toasts": {
         "updateFailed": "Impossible de mettre à jour la préférence de langue"
       }
@@ -16037,23 +16091,20 @@
         "placeholder": "Sélectionnez une section"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "Comptes et accès"
-        },
-        "chatPreferences": {
-          "label": "Préférences de chat"
-        },
-        "connectors": {
-          "label": "Connecteurs"
-        },
-        "general": {
-          "label": "Général"
-        },
-        "llmGateway": {
-          "label": "Passerelle LLM"
+        "appearance": {
+          "label": "Apparence"
         },
         "usage": {
           "label": "Utilisation"
+        },
+        "account": {
+          "label": "Compte"
+        },
+        "chatPreferences": {
+          "label": "Préférences de discussion"
+        },
+        "thirdPartyAccess": {
+          "label": "Accès tiers"
         }
       }
     },
@@ -16102,9 +16153,9 @@
       }
     },
     "personalPreferences": {
-      "description": "Indiquez vos préférences personnalisées en langage naturel.",
+      "description": "{appName} en tient compte dans toutes vos conversations.",
       "placeholder": "Décrivez comment vous souhaitez que le système se comporte et le ton qu'il doit utiliser.",
-      "title": "Préférences personnelles"
+      "title": "Instructions"
     },
     "profile": {
       "fullName": {
@@ -16118,8 +16169,68 @@
       },
       "workRole": {
         "description": "Indiquez votre rôle pour mieux adapter les réponses.",
-        "placeholder": "Votre rôle",
-        "title": "Rôle professionnel"
+        "placeholder": "Choisissez un rôle",
+        "title": "Qu’est-ce qui décrit le mieux votre travail ?",
+        "other": {
+          "placeholder": "Saisissez votre rôle",
+          "title": "Votre travail"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "Choisissez une image de 10 Mo maximum.",
+          "invalidType": "Choisissez une image PNG, JPEG ou WebP."
+        },
+        "description": "PNG, JPEG ou WebP, jusqu’à 10 Mo.",
+        "toasts": {
+          "updateFailed": "Impossible de mettre à jour votre photo de profil. Réessayez."
+        },
+        "title": "Photo de profil",
+        "editButton": {
+          "ariaLabel": "Modifier la photo de profil"
+        },
+        "uploadButton": {
+          "ariaLabel": "Importer une photo de profil"
+        },
+        "menu": {
+          "label": "Options de la photo de profil",
+          "replace": {
+            "label": "Remplacer la photo"
+          },
+          "remove": {
+            "label": "Supprimer"
+          }
+        },
+        "cropModal": {
+          "title": "Recadrer la photo",
+          "description": "Faites glisser ou utilisez les touches fléchées pour repositionner. Utilisez le curseur ou la molette pour zoomer.",
+          "area": {
+            "ariaLabel": "Zone de recadrage"
+          },
+          "zoom": {
+            "ariaLabel": "Zoom"
+          },
+          "zoomIn": {
+            "ariaLabel": "Zoom avant"
+          },
+          "zoomOut": {
+            "ariaLabel": "Zoom arrière"
+          },
+          "reset": {
+            "label": "Réinitialiser"
+          },
+          "cancel": {
+            "label": "Annuler"
+          },
+          "save": {
+            "label": "Enregistrer"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} utilise ce nom lorsqu’il s’adresse à vous.",
+        "placeholder": "Ajoutez un nom",
+        "title": "Comment {appName} doit-il vous appeler ?"
       }
     },
     "promptShortcuts": {
@@ -16129,7 +16240,6 @@
         "publicTooltip": "Impossible de supprimer les raccourcis d'invite de l'organisation.",
         "removeAriaLabel": "Supprimer le raccourci"
       },
-      "title": "Raccourcis d'invite",
       "toasts": {
         "bothRequired": "Le raccourci et l'expansion sont tous deux requis",
         "deleteFailed": "Échec de la suppression du raccourci",
@@ -16152,9 +16262,6 @@
       "empty": {
         "description": "L'utilisation et les coûts de vos modèles apparaîtront ici dès que vous commencerez à discuter.",
         "title": "Aucune utilisation enregistrée pour l'instant"
-      },
-      "header": {
-        "title": "Utilisation"
       },
       "loadError": {
         "description": "Une erreur s'est produite lors de la récupération de votre utilisation. Réessayez dans un instant.",
@@ -16215,9 +16322,31 @@
       },
       "playbackSpeed": {
         "description": "Ajustez la vitesse de lecture vocale.",
-        "title": "Vitesse de lecture"
+        "title": "Vitesse de lecture",
+        "value": "{speed}x"
       },
       "title": "Voix"
+    },
+    "modelPreferences": {
+      "title": "Préférences de modèle"
+    },
+    "interactions": {
+      "title": "Interactions"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "Gestionnaire du groupe",
+        "description": "Votre niveau d’accès dans cet espace de travail.",
+        "admin": "Administrateur",
+        "basic": "Utilisateur standard",
+        "title": "Votre rôle"
+      },
+      "tenantId": {
+        "description": "Communiquez cet ID au support lorsque vous demandez de l’aide.",
+        "copyTooltip": "Copier l’ID du locataire",
+        "title": "ID du locataire"
+      },
+      "title": "Organisation"
     }
   },
   "sidebar": {
@@ -17703,7 +17832,7 @@
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
       },
-      "intro": "Un plugin regroupe des compétences et les intégrations dont elles ont besoin. Importez un plugin Claude Code ou Codex, ajoutez une marketplace depuis GitHub ou ajoutez une compétence. Chaque compétence que vous ajoutez est dans son propre plugin.",
+      "intro": "Un plugin regroupe des compétences et les intégrations dont elles ont besoin. Importez un plugin Claude Code ou Codex, ajoutez une marketplace depuis GitHub ou ajoutez une compétence. Un plugin qui ne contient qu’un fichier SKILL.md à sa racine se trouve dans l’onglet Compétences.",
       "integrations": "{available} intégrations disponibles sur {needed}",
       "nameHeld": "Désactivé : {names} utilise le même nom de compétence"
     },
@@ -17952,6 +18081,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {Cette exécution attend votre approbation ci-dessous.} other {Cette exécution est en cours.}}",
       "startedAt": "Démarrée {time}",
       "viewTask": "Voir la tâche"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "Marketing"
+      },
+      "finance": {
+        "label": "Finance"
+      },
+      "other": {
+        "label": "Autre"
+      },
+      "engineering": {
+        "label": "Ingénierie"
+      },
+      "customerSupportSuccess": {
+        "label": "Support et succès client"
+      },
+      "peopleHr": {
+        "label": "Personnes et RH"
+      },
+      "dataAnalytics": {
+        "label": "Données et analyse"
+      },
+      "legal": {
+        "label": "Juridique"
+      },
+      "design": {
+        "label": "Design"
+      },
+      "product": {
+        "label": "Produit"
+      },
+      "operations": {
+        "label": "Opérations"
+      },
+      "sales": {
+        "label": "Ventes"
+      },
+      "leadership": {
+        "label": "Direction"
+      }
     }
   }
 }

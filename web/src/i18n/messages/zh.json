@@ -8099,6 +8099,13 @@
         },
         "setDefaultButton": {
           "label": "设为默认"
+        },
+        "deleteButton": {
+          "ariaLabel": "删除 {title}",
+          "tooltip": "删除"
+        },
+        "reconnectButton": {
+          "label": "重新连接"
         }
       }
     },
@@ -9058,6 +9065,9 @@
       "provider": {
         "connected": {
           "label": "已连接"
+        },
+        "disconnected": {
+          "suffix": "（已断开连接）"
         }
       },
       "setupModal": {
@@ -9075,8 +9085,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} 已连接",
-        "disconnected": "{label} 已断开连接",
         "unexpectedError": "发生意外错误。"
       },
       "providers": {
@@ -9117,6 +9125,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "**{label}** 的 API 密钥和设置将被删除。如需再次发送追踪,请重新进行设置。",
+        "description": "删除此提供商的 API 密钥和设置。",
+        "submit": {
+          "label": "删除"
+        },
+        "title": "删除 {label}",
+        "envBody": "**{label}** 的 API 密钥和设置将被删除。追踪保持关闭。如需使用环境变量配置再次发送追踪,请重新连接。"
       }
     },
     "usage": {
@@ -9819,7 +9836,7 @@
       },
       "tierTooltip": "LLM 网关需要商业版或企业版套餐。",
       "scopeNote": {
-        "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
+        "title": "每个用户在 设置 → 第三方访问 → LLM 网关 中配置自己的令牌和连接信息。"
       },
       "toasts": {
         "settingsUpdateFailed": "更新设置失败"
@@ -11777,33 +11794,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "删除"
-      },
-      "deleteModal": {
-        "description": "确定要删除此聊天吗？此操作无法撤销。",
-        "submitButton": {
-          "label": "删除"
-        },
-        "title": "删除聊天"
-      },
-      "exportAs": {
-        "label": "导出为…"
-      },
-      "exportFailed": {
-        "message": "导出聊天失败。请重试。"
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "纯文本"
-      },
-      "fullWidth": {
-        "ariaLabel": "切换全宽聊天",
-        "fitTooltip": "适应宽度",
-        "fullTooltip": "全宽"
-      },
       "incognitoExit": {
         "ariaLabel": "退出无痕聊天",
         "tooltip": "退出无痕聊天"
@@ -11830,14 +11820,14 @@
       "modeButton": {
         "ariaLabel": "更改应用模式"
       },
-      "moveToProject": {
-        "label": "移动到项目"
-      },
       "openSidebar": {
         "ariaLabel": "打开侧边栏"
       },
       "share": {
-        "label": "分享"
+        "label": "分享…"
+      },
+      "shareMenu": {
+        "label": "分享或导出"
       }
     },
     "banners": {
@@ -11882,6 +11872,14 @@
       "licenseExpiry": {
         "source": {
           "label": "许可证"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "搜索集群"
+        },
+        "cta": {
+          "label": "打开服务状态"
         }
       },
       "nextButton": {
@@ -13498,6 +13496,26 @@
       "resizeHandle": {
         "label": "调整面板大小"
       }
+    },
+    "export": {
+      "failed": {
+        "message": "导出聊天失败。请重试。"
+      },
+      "plaintext": {
+        "label": "纯文本"
+      },
+      "asMarkdown": {
+        "label": "导出为 Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "导出为纯文本"
+      },
+      "menu": {
+        "label": "导出为…"
+      }
     }
   },
   "common": {
@@ -13554,11 +13572,6 @@
       },
       "plant": {
         "label": "植物"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "文"
       }
     },
     "commandMenu": {
@@ -15759,7 +15772,8 @@
       "scrollRight": "向右滚动标签"
     },
     "toast": {
-      "moreCount": "还有 {count} 条"
+      "moreCount": "还有 {count} 条",
+      "closeAll": "全部关闭"
     },
     "sidebar": {
       "open": "打开侧边栏",
@@ -15773,11 +15787,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "匿名",
-        "description": "您的账户电子邮件地址。",
-        "title": "电子邮件"
-      },
       "password": {
         "changeButton": "修改密码",
         "description": "更新您的账户密码。",
@@ -15810,8 +15819,7 @@
           "mismatch": "两次输入的密码不一致",
           "newRequired": "新密码为必填项"
         }
-      },
-      "title": "账户"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15904,62 @@
         "title": "对话背景"
       },
       "colorMode": {
-        "auto": "自动",
+        "auto": "跟随系统",
         "dark": "深色",
-        "description": "选择您偏好的界面配色模式。",
+        "description": "选择您偏好的界面主题。",
         "light": "浅色",
-        "title": "配色模式"
+        "title": "主题"
       },
-      "title": "外观"
+      "general": {
+        "title": "常规"
+      },
+      "fonts": {
+        "title": "字体"
+      },
+      "transcriptWidth": {
+        "title": "对话宽度",
+        "description": "设置此设备上聊天消息和输入栏的宽度。",
+        "standard": "标准",
+        "wide": "宽",
+        "placeholder": "选择宽度"
+      },
+      "responseFont": {
+        "default": "默认",
+        "match": "与界面一致",
+        "title": "回复字体",
+        "description": "选择对话回复使用的字体。",
+        "placeholder": "选择字体"
+      },
+      "interfaceFont": {
+        "title": "界面字体",
+        "description": "选择应用中文本使用的字体。",
+        "default": "默认",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "系统",
+        "placeholder": "选择字体"
+      },
+      "accessibility": {
+        "title": "无障碍"
+      },
+      "motion": {
+        "title": "动效",
+        "description": "跟随系统的动效设置，或在整个应用中减少动画。",
+        "placeholder": "选择动效设置",
+        "system": "跟随系统",
+        "reduced": "减少"
+      },
+      "popupDismissal": {
+        "title": "通知",
+        "description": "选择通知是自动关闭，还是保留到您手动关闭。",
+        "placeholder": "选择通知何时关闭",
+        "auto_dismiss": "自动关闭",
+        "stay_on_screen": "保留在屏幕上"
+      },
+      "dynamicConversations": {
+        "title": "动态对话",
+        "description": "在滚动浏览长对话时加载和卸载消息。这样可以提升性能，但屏幕阅读器无法访问已卸载的消息。关闭此选项可保持所有消息处于加载状态。"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +15993,6 @@
         "description": "以逐字动画的方式显示流式回复。禁用后，内容块到达时会直接渲染。",
         "title": "平滑流式输出"
       },
-      "title": "对话",
       "toasts": {
         "saveFailed": "保存偏好设置失败"
       },
@@ -15949,6 +16005,7 @@
     },
     "connectors": {
       "connectButton": "连接",
+      "disconnectAriaLabel": "断开与 {name} 的连接",
       "disconnectModal": {
         "continueNote": "您仍然可以继续引用 {name} 内容的现有会话。",
         "description": "{appName} 将无法再访问或搜索您 {name} 账户中的内容。",
@@ -15956,11 +16013,9 @@
         "submit": "断开连接",
         "title": "断开 *{name}* 连接"
       },
-      "emptyMessage": "您的组织尚未设置任何连接器。",
       "status": {
         "connected": "已连接",
-        "notConnected": "未连接",
-        "paused": "已暂停"
+        "notConnected": "未连接"
       },
       "title": "连接器",
       "toasts": {
@@ -16024,7 +16079,6 @@
         "description": "选择界面语言。",
         "title": "显示语言"
       },
-      "title": "语言",
       "toasts": {
         "updateFailed": "更新语言偏好设置失败"
       }
@@ -16037,23 +16091,20 @@
         "placeholder": "选择一个部分"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "账户与访问"
-        },
-        "chatPreferences": {
-          "label": "聊天偏好设置"
-        },
-        "connectors": {
-          "label": "连接器"
-        },
-        "general": {
-          "label": "常规"
-        },
-        "llmGateway": {
-          "label": "LLM 网关"
+        "appearance": {
+          "label": "外观"
         },
         "usage": {
           "label": "使用情况"
+        },
+        "account": {
+          "label": "账户"
+        },
+        "chatPreferences": {
+          "label": "对话偏好设置"
+        },
+        "thirdPartyAccess": {
+          "label": "第三方访问"
         }
       }
     },
@@ -16102,9 +16153,9 @@
       }
     },
     "personalPreferences": {
-      "description": "用自然语言填写您的自定义偏好。",
+      "description": "{appName} 会在您的所有对话中考虑这些内容。",
       "placeholder": "描述您希望系统如何表现，以及应使用的语气。",
-      "title": "个人偏好"
+      "title": "指令"
     },
     "profile": {
       "fullName": {
@@ -16118,8 +16169,68 @@
       },
       "workRole": {
         "description": "填写您的职位，以便更好地定制回复。",
-        "placeholder": "您的职位",
-        "title": "职位"
+        "placeholder": "选择职位",
+        "title": "哪项最能描述您的工作？",
+        "other": {
+          "placeholder": "输入您的职位",
+          "title": "您的工作"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "请选择不超过 10 MB 的图片。",
+          "invalidType": "请选择 PNG、JPEG 或 WebP 图片。"
+        },
+        "description": "PNG、JPEG 或 WebP，最大 10 MB。",
+        "toasts": {
+          "updateFailed": "无法更新您的个人资料照片。请重试。"
+        },
+        "title": "个人资料照片",
+        "editButton": {
+          "ariaLabel": "更改头像"
+        },
+        "uploadButton": {
+          "ariaLabel": "上传头像"
+        },
+        "menu": {
+          "label": "头像选项",
+          "replace": {
+            "label": "更换照片"
+          },
+          "remove": {
+            "label": "移除"
+          }
+        },
+        "cropModal": {
+          "title": "裁剪照片",
+          "description": "拖动或使用方向键调整位置。使用滑块或滚动进行缩放。",
+          "area": {
+            "ariaLabel": "裁剪区域"
+          },
+          "zoom": {
+            "ariaLabel": "缩放"
+          },
+          "zoomIn": {
+            "ariaLabel": "放大"
+          },
+          "zoomOut": {
+            "ariaLabel": "缩小"
+          },
+          "reset": {
+            "label": "重置"
+          },
+          "cancel": {
+            "label": "取消"
+          },
+          "save": {
+            "label": "保存"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} 与您交流时会使用这个名字。",
+        "placeholder": "添加名字",
+        "title": "{appName} 应该怎么称呼您？"
       }
     },
     "promptShortcuts": {
@@ -16129,7 +16240,6 @@
         "publicTooltip": "无法删除组织范围的提示词快捷方式。",
         "removeAriaLabel": "移除快捷方式"
       },
-      "title": "提示词快捷方式",
       "toasts": {
         "bothRequired": "快捷方式和展开内容都必须填写",
         "deleteFailed": "删除快捷方式失败",
@@ -16152,9 +16262,6 @@
       "empty": {
         "description": "开始聊天后，您的模型使用情况和费用将显示在此处。",
         "title": "尚未记录使用情况"
-      },
-      "header": {
-        "title": "使用情况"
       },
       "loadError": {
         "description": "获取使用情况时出错。请稍后重试。",
@@ -16215,9 +16322,31 @@
       },
       "playbackSpeed": {
         "description": "调整语音播放速度。",
-        "title": "播放速度"
+        "title": "播放速度",
+        "value": "{speed}x"
       },
       "title": "语音"
+    },
+    "modelPreferences": {
+      "title": "模型偏好"
+    },
+    "interactions": {
+      "title": "交互"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "群组管理员",
+        "description": "您在此工作区中的访问级别。",
+        "admin": "管理员",
+        "basic": "普通用户",
+        "title": "您的角色"
+      },
+      "tenantId": {
+        "description": "寻求帮助时，请将此 ID 提供给支持团队。",
+        "copyTooltip": "复制租户 ID",
+        "title": "租户 ID"
+      },
+      "title": "组织"
     }
   },
   "sidebar": {
@@ -17703,7 +17832,7 @@
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。您添加的每个技能都在其自己的插件中。",
+      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。根目录中仅有一个 SKILL.md 的插件显示在“技能”标签页中。",
       "integrations": "{needed} 个集成中有 {available} 个可用",
       "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },
@@ -17952,6 +18081,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {此运行正在等待您在下方批准。} other {此运行正在进行中。}}",
       "startedAt": "开始于 {time}",
       "viewTask": "查看任务"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "市场营销"
+      },
+      "finance": {
+        "label": "财务"
+      },
+      "other": {
+        "label": "其他"
+      },
+      "engineering": {
+        "label": "工程"
+      },
+      "customerSupportSuccess": {
+        "label": "客户支持与成功"
+      },
+      "peopleHr": {
+        "label": "人力资源"
+      },
+      "dataAnalytics": {
+        "label": "数据与分析"
+      },
+      "legal": {
+        "label": "法务"
+      },
+      "design": {
+        "label": "设计"
+      },
+      "product": {
+        "label": "产品"
+      },
+      "operations": {
+        "label": "运营"
+      },
+      "sales": {
+        "label": "销售"
+      },
+      "leadership": {
+        "label": "管理层"
+      }
     }
   }
 }

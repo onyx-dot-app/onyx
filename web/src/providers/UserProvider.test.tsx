@@ -1,5 +1,5 @@
 // Guards the /api/me contract: unresolved reads as loading and failed auth fetches self-heal.
-import { act, render, screen } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor } from "@tests/setup/test-utils";
 // Relative import: jest's moduleNameMapper swaps the @/ path for the global stub.
 import { UserProvider, useUser } from "./UserProvider";
 import { FetchError } from "@/lib/fetcher";
@@ -24,10 +24,14 @@ jest.mock("@/lib/auth/hooks", () => ({
 }));
 jest.mock("@/lib/users/svc", () => ({
   updateUserPersonalization: jest.fn(),
-  setUserDefaultModel: jest.fn(),
 }));
 jest.mock("next-themes", () => ({
   useTheme: () => ({ theme: "light", setTheme: jest.fn() }),
+}));
+const mockToastError = jest.fn();
+jest.mock("@opal/layouts", () => ({
+  ...jest.requireActual("@opal/layouts"),
+  toast: { error: (...args: unknown[]) => mockToastError(...args) },
 }));
 
 const mockedUseCurrentUser = jest.mocked(useCurrentUser);
@@ -174,5 +178,220 @@ describe("UserProvider /api/me retry", () => {
     rerender(probeTree());
     act(() => jest.advanceTimersByTime(2_000));
     expect(mutateUser).toHaveBeenCalledTimes(2);
+  });
+});
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function meResponse(preferences: Partial<User["preferences"]>): Response {
+  return new Response(
+    JSON.stringify({ id: "u1", email: "john@example.com", preferences }),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  );
+}
+
+function PreferencesProbe() {
+  const { user, refreshUser, updatePreferences } = useUser();
+  return (
+    <>
+      <span>
+        {user
+          ? `auto-scroll ${user.preferences.auto_scroll}, shortcuts ${user.preferences.shortcut_enabled}`
+          : "none"}
+      </span>
+      <button
+        onClick={() =>
+          void updatePreferences({ auto_scroll: true }, "/api/auto-scroll")
+        }
+      >
+        enable auto-scroll
+      </button>
+      <button
+        onClick={() =>
+          void updatePreferences(
+            { shortcut_enabled: true },
+            "/api/shortcut-enabled?shortcut_enabled=true"
+          )
+        }
+      >
+        enable shortcuts
+      </button>
+      <button onClick={() => void refreshUser()}>refresh</button>
+    </>
+  );
+}
+
+describe("UserProvider updatePreferences", () => {
+  // What GET /api/me returns once the queued responses run out.
+  let serverPreferences: Partial<User["preferences"]>;
+  let meResponses: Array<Promise<Response>>;
+  let patchResponses: Map<string, Deferred<Response>>;
+
+  function patchResponse(endpoint: string): Deferred<Response> {
+    const response = patchResponses.get(endpoint) ?? deferred<Response>();
+    patchResponses.set(endpoint, response);
+    return response;
+  }
+
+  function click(name: string) {
+    act(() => screen.getByRole("button", { name }).click());
+  }
+
+  beforeEach(() => {
+    mockToastError.mockClear();
+    // Failed saves log the error.
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    mockedUseCurrentUser.mockImplementation(
+      jest.requireActual<typeof import("@/lib/users/hooks")>(
+        "@/lib/users/hooks"
+      ).useCurrentUser
+    );
+    serverPreferences = { auto_scroll: false, shortcut_enabled: false };
+    meResponses = [];
+    patchResponses = new Map();
+    jest.spyOn(global, "fetch").mockImplementation((input, init) => {
+      if (init?.method === "PATCH") return patchResponse(String(input)).promise;
+      return (
+        meResponses.shift() ?? Promise.resolve(meResponse(serverPreferences))
+      );
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  async function renderLoaded() {
+    render(
+      <UserProvider>
+        <PreferencesProbe />
+      </UserProvider>
+    );
+    await screen.findByText("auto-scroll false, shortcuts false");
+  }
+
+  it("shows the change at once and keeps it after the save", async () => {
+    await renderLoaded();
+
+    click("enable auto-scroll");
+    expect(
+      screen.getByText("auto-scroll true, shortcuts false")
+    ).toBeInTheDocument();
+
+    await act(async () =>
+      patchResponse("/api/auto-scroll").resolve(new Response(null))
+    );
+    expect(
+      screen.getByText("auto-scroll true, shortcuts false")
+    ).toBeInTheDocument();
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/auto-scroll",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ auto_scroll: true }),
+      })
+    );
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it("keeps both of two overlapping saves", async () => {
+    await renderLoaded();
+
+    click("enable shortcuts");
+    click("enable auto-scroll");
+    expect(
+      screen.getByText("auto-scroll true, shortcuts true")
+    ).toBeInTheDocument();
+
+    await act(async () =>
+      patchResponse("/api/shortcut-enabled?shortcut_enabled=true").resolve(
+        new Response(null)
+      )
+    );
+    await act(async () =>
+      patchResponse("/api/auto-scroll").resolve(new Response(null))
+    );
+
+    expect(
+      screen.getByText("auto-scroll true, shortcuts true")
+    ).toBeInTheDocument();
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it("shows the server state and the error toast when the server rejects a save", async () => {
+    await renderLoaded();
+
+    click("enable shortcuts");
+    click("enable auto-scroll");
+    // The first save lands; the second fails.
+    serverPreferences = { auto_scroll: false, shortcut_enabled: true };
+    await act(async () =>
+      patchResponse("/api/shortcut-enabled?shortcut_enabled=true").resolve(
+        new Response(null)
+      )
+    );
+    await act(async () =>
+      patchResponse("/api/auto-scroll").resolve(
+        new Response(null, { status: 500 })
+      )
+    );
+
+    expect(
+      await screen.findByText("auto-scroll false, shortcuts true")
+    ).toBeInTheDocument();
+    expect(mockToastError).toHaveBeenCalledWith("Failed to save preferences");
+  });
+
+  it("shows the server state and the error toast when the request fails", async () => {
+    await renderLoaded();
+
+    click("enable auto-scroll");
+    await act(async () =>
+      patchResponse("/api/auto-scroll").reject(new TypeError("offline"))
+    );
+
+    expect(
+      await screen.findByText("auto-scroll false, shortcuts false")
+    ).toBeInTheDocument();
+    expect(mockToastError).toHaveBeenCalledWith("Failed to save preferences");
+  });
+
+  it("keeps the saved change when an older /api/me response lands later", async () => {
+    await renderLoaded();
+    const staleMe = deferred<Response>();
+    meResponses.push(staleMe.promise);
+
+    click("refresh");
+    click("enable auto-scroll");
+    // It differs from the cached user, so applying it would re-render.
+    await act(async () =>
+      staleMe.resolve(
+        meResponse({ auto_scroll: false, shortcut_enabled: true })
+      )
+    );
+    serverPreferences = { auto_scroll: true, shortcut_enabled: false };
+    await act(async () =>
+      patchResponse("/api/auto-scroll").resolve(new Response(null))
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("auto-scroll true, shortcuts false")
+      ).toBeInTheDocument()
+    );
   });
 });

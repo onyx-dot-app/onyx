@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Linked into the MSI through bundle.windows.wix.componentGroupRefs. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Fragment>
+        <!-- The NSIS installer's uninstall entry. Both installers use the same
+             folder, so the MSI refuses to install beside an NSIS install. -->
+        <Property Id="ONYX_NSIS_INSTALL">
+            <RegistrySearch Id="OnyxNsisInstall"
+                            Root="HKLM"
+                            Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\Onyx v2"
+                            Name="UninstallString"
+                            Type="raw"
+                            Win64="yes" />
+        </Property>
+        <Condition Message="Onyx v2 is already installed from the setup program (.exe). Uninstall it in Settings &gt; Apps, then run this installer again.">
+            <![CDATA[Installed OR NOT ONYX_NSIS_INSTALL]]>
+        </Condition>
+        <ComponentGroup Id="OnyxInstallerGuards" />
+    </Fragment>
+</Wix>

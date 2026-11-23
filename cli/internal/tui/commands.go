@@ -56,7 +56,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdOpenWebPage(m, "/admin/indexing/status"), nil
 
 	case "/settings":
-		return cmdOpenWebPage(m, "/app/settings/general"), nil
+		return cmdOpenWebPage(m, "/app/settings"), nil
 
 	case "/experiments":
 		m.viewport.addInfo(config.ExperimentsText(m.config.Features))

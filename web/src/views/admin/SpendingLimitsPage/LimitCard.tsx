@@ -20,7 +20,7 @@ import {
   SvgPlusCircle,
   SvgUnplug,
 } from "@opal/icons";
-import { richNodes } from "@opal/utils";
+import { prefersReducedMotion, richNodes } from "@opal/utils";
 import { formatCurrencyFromCents, formatTokenCount } from "@/lib/format";
 import {
   resetSpendingLimitUsage,
@@ -206,7 +206,10 @@ export default function LimitCard({
   useEffect(() => {
     if (revealKey === undefined) return;
     setExpanded(true);
-    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    rootRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
   }, [revealKey]);
 
   const errors = validateDraft(draft);

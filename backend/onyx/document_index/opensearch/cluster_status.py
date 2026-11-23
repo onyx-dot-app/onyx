@@ -3,6 +3,13 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy.orm import Session
+
+from onyx.db.models import SearchSettings
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    get_secondary_search_settings,
+)
 from onyx.document_index.opensearch.client import (
     OpenSearchClient,
     vector_usage_percent,
@@ -31,6 +38,27 @@ from onyx.document_index.opensearch.resource_health import (
 DISK_WARNING_PERCENT: int = 75
 # Above 100% the vectors that search reads no longer fit in the file cache.
 VECTOR_CRITICAL_PERCENT: int = 100
+
+
+def _index_ref(search_settings: SearchSettings, is_current: bool) -> OnyxIndexRef:
+    return OnyxIndexRef(
+        index_name=search_settings.index_name,
+        is_current=is_current,
+        model_name=search_settings.model_name,
+        model_dim=search_settings.final_embedding_dim,
+        vector_quantization=search_settings.vector_quantization,
+    )
+
+
+def onyx_index_refs(db_session: Session) -> list[OnyxIndexRef]:
+    """The index that serves search and, during a reindex, the one it builds."""
+    indexes: list[OnyxIndexRef] = [
+        _index_ref(get_current_search_settings(db_session), is_current=True)
+    ]
+    secondary: SearchSettings | None = get_secondary_search_settings(db_session)
+    if secondary is not None:
+        indexes.append(_index_ref(secondary, is_current=False))
+    return indexes
 
 
 def _int(row: dict[str, str], key: str) -> int:

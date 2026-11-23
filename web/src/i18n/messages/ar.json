@@ -8099,6 +8099,13 @@
         },
         "setDefaultButton": {
           "label": "تعيين كافتراضي"
+        },
+        "deleteButton": {
+          "ariaLabel": "حذف {title}",
+          "tooltip": "حذف"
+        },
+        "reconnectButton": {
+          "label": "إعادة الاتصال"
         }
       }
     },
@@ -9058,6 +9065,9 @@
       "provider": {
         "connected": {
           "label": "متصل"
+        },
+        "disconnected": {
+          "suffix": "(غير متصل)"
         }
       },
       "setupModal": {
@@ -9075,8 +9085,6 @@
         }
       },
       "toasts": {
-        "connected": "تم الاتصال بـ {label}",
-        "disconnected": "تم قطع الاتصال بـ {label}",
         "unexpectedError": "حدث خطأ غير متوقع."
       },
       "providers": {
@@ -9117,6 +9125,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "سيتم حذف مفتاح API وإعدادات **{label}**. لإرسال التتبعات مرة أخرى، قم بإعداده من البداية.",
+        "description": "إزالة مفتاح API وإعدادات هذا المزوّد.",
+        "submit": {
+          "label": "حذف"
+        },
+        "title": "حذف {label}",
+        "envBody": "سيتم حذف مفتاح API وإعدادات **{label}**. يبقى التتبع متوقفًا. لإرسال التتبعات مرة أخرى باستخدام إعدادات متغيرات البيئة، أعد الاتصال."
       }
     },
     "usage": {
@@ -9819,7 +9836,7 @@
       },
       "tierTooltip": "تتطلب بوابة LLM خطة Business أو Enterprise.",
       "scopeNote": {
-        "title": "يقوم كل مستخدم بتكوين رمزه الخاص وتفاصيل الاتصال ضمن الإعدادات → بوابة LLM."
+        "title": "يقوم كل مستخدم بتكوين رمزه الخاص وتفاصيل الاتصال ضمن الإعدادات → وصول الجهات الخارجية → بوابة LLM."
       },
       "toasts": {
         "settingsUpdateFailed": "فشل تحديث الإعدادات"
@@ -11777,33 +11794,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "حذف"
-      },
-      "deleteModal": {
-        "description": "هل أنت متأكد من رغبتك في حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
-        "submitButton": {
-          "label": "حذف"
-        },
-        "title": "حذف المحادثة"
-      },
-      "exportAs": {
-        "label": "تصدير باسم…"
-      },
-      "exportFailed": {
-        "message": "فشل تصدير المحادثة. يرجى المحاولة مرة أخرى."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "نص عادي"
-      },
-      "fullWidth": {
-        "ariaLabel": "تبديل عرض المحادثة الكامل",
-        "fitTooltip": "ملاءمة العرض",
-        "fullTooltip": "عرض كامل"
-      },
       "incognitoExit": {
         "ariaLabel": "الخروج من محادثة التخفي",
         "tooltip": "الخروج من محادثة التخفي"
@@ -11830,14 +11820,14 @@
       "modeButton": {
         "ariaLabel": "تغيير وضع التطبيق"
       },
-      "moveToProject": {
-        "label": "نقل إلى مشروع"
-      },
       "openSidebar": {
         "ariaLabel": "فتح الشريط الجانبي"
       },
       "share": {
-        "label": "مشاركة"
+        "label": "مشاركة…"
+      },
+      "shareMenu": {
+        "label": "مشاركة أو تصدير"
       }
     },
     "banners": {
@@ -11882,6 +11872,14 @@
       "licenseExpiry": {
         "source": {
           "label": "الترخيص"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "مجموعة البحث"
+        },
+        "cta": {
+          "label": "فتح حالة الخدمة"
         }
       },
       "nextButton": {
@@ -13498,6 +13496,26 @@
       "resizeHandle": {
         "label": "تغيير حجم اللوحة"
       }
+    },
+    "export": {
+      "failed": {
+        "message": "فشل تصدير المحادثة. يرجى المحاولة مرة أخرى."
+      },
+      "plaintext": {
+        "label": "نص عادي"
+      },
+      "asMarkdown": {
+        "label": "تصدير بتنسيق Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "تصدير كنص عادي"
+      },
+      "menu": {
+        "label": "تصدير باسم…"
+      }
     }
   },
   "common": {
@@ -13554,11 +13572,6 @@
       },
       "plant": {
         "label": "نباتات"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "اب"
       }
     },
     "commandMenu": {
@@ -15759,7 +15772,8 @@
       "scrollRight": "تمرير التبويبات لليمين"
     },
     "toast": {
-      "moreCount": "+{count} أخرى"
+      "moreCount": "+{count} أخرى",
+      "closeAll": "إغلاق الكل"
     },
     "sidebar": {
       "open": "فتح الشريط الجانبي",
@@ -15773,11 +15787,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "مجهول",
-        "description": "عنوان البريد الإلكتروني لحسابك.",
-        "title": "البريد الإلكتروني"
-      },
       "password": {
         "changeButton": "تغيير كلمة المرور",
         "description": "تحديث كلمة مرور حسابك.",
@@ -15810,8 +15819,7 @@
           "mismatch": "كلمتا المرور غير متطابقتين",
           "newRequired": "كلمة المرور الجديدة مطلوبة"
         }
-      },
-      "title": "الحسابات"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15904,62 @@
         "title": "خلفية المحادثة"
       },
       "colorMode": {
-        "auto": "تلقائي",
+        "auto": "النظام",
         "dark": "داكن",
-        "description": "اختر وضع الألوان المفضل لواجهة الاستخدام.",
+        "description": "اختر السمة المفضلة لواجهة الاستخدام.",
         "light": "فاتح",
-        "title": "وضع الألوان"
+        "title": "السمة"
       },
-      "title": "المظهر"
+      "general": {
+        "title": "عام"
+      },
+      "fonts": {
+        "title": "الخطوط"
+      },
+      "transcriptWidth": {
+        "title": "عرض المحادثة",
+        "description": "اضبط عرض رسائل الدردشة وشريط الإدخال على هذا الجهاز.",
+        "standard": "قياسي",
+        "wide": "عريض",
+        "placeholder": "اختر عرضًا"
+      },
+      "responseFont": {
+        "default": "افتراضي",
+        "match": "مطابقة الواجهة",
+        "title": "خط الردود",
+        "description": "اختر الخط المستخدم لردود المحادثة.",
+        "placeholder": "اختر خطًا"
+      },
+      "interfaceFont": {
+        "title": "خط الواجهة",
+        "description": "اختر الخط المستخدم لنصوص التطبيق.",
+        "default": "افتراضي",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "النظام",
+        "placeholder": "اختر خطًا"
+      },
+      "accessibility": {
+        "title": "إمكانية الوصول"
+      },
+      "motion": {
+        "title": "الحركة",
+        "description": "اتبع إعداد الحركة في نظامك، أو قلّل الرسوم المتحركة في التطبيق بأكمله.",
+        "placeholder": "اختر إعداد الحركة",
+        "system": "النظام",
+        "reduced": "مخفّضة"
+      },
+      "popupDismissal": {
+        "title": "الإشعارات",
+        "description": "اختر ما إذا كانت الإشعارات تُغلق تلقائيًا أو تبقى حتى تغلقها بنفسك.",
+        "placeholder": "اختر متى تُغلق الإشعارات",
+        "auto_dismiss": "إغلاق تلقائي",
+        "stay_on_screen": "البقاء على الشاشة"
+      },
+      "dynamicConversations": {
+        "title": "المحادثات الديناميكية",
+        "description": "تحميل الرسائل وإلغاء تحميلها أثناء التمرير في المحادثات الطويلة. يحسّن هذا الأداء، لكن قارئات الشاشة لا يمكنها الوصول إلى الرسائل التي أُلغي تحميلها. أوقف هذا الخيار لإبقاء جميع الرسائل محمّلة."
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +15993,6 @@
         "description": "عرض الإجابات المتدفقة حرفًا بحرف. عطّل هذا لعرض الأجزاء فور وصولها.",
         "title": "التدفق السلس"
       },
-      "title": "المحادثات",
       "toasts": {
         "saveFailed": "فشل حفظ التفضيلات"
       },
@@ -15949,6 +16005,7 @@
     },
     "connectors": {
       "connectButton": "ربط",
+      "disconnectAriaLabel": "قطع الاتصال بـ {name}",
       "disconnectModal": {
         "continueNote": "لا يزال بإمكانك متابعة الجلسات الحالية التي تشير إلى محتوى {name}.",
         "description": "لن يتمكن {appName} بعد الآن من الوصول إلى محتوى حساب {name} الخاص بك أو البحث فيه.",
@@ -15956,11 +16013,9 @@
         "submit": "قطع الاتصال",
         "title": "قطع الاتصال بـ *{name}*"
       },
-      "emptyMessage": "لا توجد موصلات معدّة لمؤسستك.",
       "status": {
         "connected": "متصل",
-        "notConnected": "غير متصل",
-        "paused": "متوقف مؤقتًا"
+        "notConnected": "غير متصل"
       },
       "title": "الموصلات",
       "toasts": {
@@ -16024,7 +16079,6 @@
         "description": "اختر لغة واجهة الاستخدام.",
         "title": "لغة العرض"
       },
-      "title": "اللغة",
       "toasts": {
         "updateFailed": "فشل تحديث تفضيل اللغة"
       }
@@ -16037,23 +16091,20 @@
         "placeholder": "اختر قسمًا"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "الحسابات والوصول"
+        "appearance": {
+          "label": "المظهر"
+        },
+        "usage": {
+          "label": "الاستخدام"
+        },
+        "account": {
+          "label": "الحساب"
         },
         "chatPreferences": {
           "label": "تفضيلات المحادثة"
         },
-        "connectors": {
-          "label": "الموصلات"
-        },
-        "general": {
-          "label": "عام"
-        },
-        "llmGateway": {
-          "label": "بوابة LLM"
-        },
-        "usage": {
-          "label": "الاستخدام"
+        "thirdPartyAccess": {
+          "label": "وصول الجهات الخارجية"
         }
       }
     },
@@ -16102,9 +16153,9 @@
       }
     },
     "personalPreferences": {
-      "description": "قدّم تفضيلاتك المخصصة بلغة طبيعية.",
+      "description": "يأخذ {appName} هذه التعليمات في الاعتبار في جميع محادثاتك.",
       "placeholder": "صف كيف تريد أن يتصرف النظام والأسلوب الذي يجب أن يستخدمه.",
-      "title": "التفضيلات الشخصية"
+      "title": "التعليمات"
     },
     "profile": {
       "fullName": {
@@ -16118,8 +16169,68 @@
       },
       "workRole": {
         "description": "شارك دورك الوظيفي لتخصيص الإجابات بشكل أفضل.",
-        "placeholder": "دورك الوظيفي",
-        "title": "الدور الوظيفي"
+        "placeholder": "اختر دورًا وظيفيًا",
+        "title": "ما الذي يصف عملك على أفضل وجه؟",
+        "other": {
+          "placeholder": "أدخل دورك الوظيفي",
+          "title": "عملك"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "اختر صورة بحجم 10 ميغابايت أو أقل.",
+          "invalidType": "اختر صورة بتنسيق PNG أو JPEG أو WebP."
+        },
+        "description": "PNG أو JPEG أو WebP، بحد أقصى 10 ميغابايت.",
+        "toasts": {
+          "updateFailed": "تعذّر تحديث صورة ملفك الشخصي. حاول مرة أخرى."
+        },
+        "title": "صورة الملف الشخصي",
+        "editButton": {
+          "ariaLabel": "تغيير صورة الملف الشخصي"
+        },
+        "uploadButton": {
+          "ariaLabel": "تحميل صورة للملف الشخصي"
+        },
+        "menu": {
+          "label": "خيارات صورة الملف الشخصي",
+          "replace": {
+            "label": "استبدال الصورة"
+          },
+          "remove": {
+            "label": "إزالة"
+          }
+        },
+        "cropModal": {
+          "title": "قص الصورة",
+          "description": "اسحب الصورة أو استخدم مفاتيح الأسهم لتغيير موضعها. استخدم شريط التمرير أو عجلة الماوس للتكبير.",
+          "area": {
+            "ariaLabel": "منطقة القص"
+          },
+          "zoom": {
+            "ariaLabel": "التكبير"
+          },
+          "zoomIn": {
+            "ariaLabel": "تكبير"
+          },
+          "zoomOut": {
+            "ariaLabel": "تصغير"
+          },
+          "reset": {
+            "label": "إعادة تعيين"
+          },
+          "cancel": {
+            "label": "إلغاء"
+          },
+          "save": {
+            "label": "حفظ"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "يستخدم {appName} هذا الاسم عندما يتحدث إليك.",
+        "placeholder": "أضف اسمًا",
+        "title": "بماذا يجب أن يناديك {appName}؟"
       }
     },
     "promptShortcuts": {
@@ -16129,7 +16240,6 @@
         "publicTooltip": "لا يمكن حذف اختصارات المطالبات على مستوى المؤسسة.",
         "removeAriaLabel": "إزالة الاختصار"
       },
-      "title": "اختصارات المطالبات",
       "toasts": {
         "bothRequired": "الاختصار والنص الموسّع كلاهما مطلوبان",
         "deleteFailed": "فشل حذف الاختصار",
@@ -16152,9 +16262,6 @@
       "empty": {
         "description": "سيظهر استخدامك للنماذج وتكاليفها هنا بمجرد بدء المحادثة.",
         "title": "لم يُسجل استخدام بعد"
-      },
-      "header": {
-        "title": "الاستخدام"
       },
       "loadError": {
         "description": "حدث خطأ أثناء جلب استخدامك. حاول مرة أخرى بعد قليل.",
@@ -16215,9 +16322,31 @@
       },
       "playbackSpeed": {
         "description": "اضبط سرعة تشغيل الصوت.",
-        "title": "سرعة التشغيل"
+        "title": "سرعة التشغيل",
+        "value": "{speed}x"
       },
       "title": "الصوت"
+    },
+    "modelPreferences": {
+      "title": "تفضيلات النموذج"
+    },
+    "interactions": {
+      "title": "التفاعلات"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "مدير مجموعة",
+        "description": "مستوى وصولك في مساحة العمل هذه.",
+        "admin": "مسؤول",
+        "basic": "مستخدم أساسي",
+        "title": "دورك"
+      },
+      "tenantId": {
+        "description": "شارك هذا المعرّف مع الدعم عند طلب المساعدة.",
+        "copyTooltip": "نسخ معرّف المستأجر",
+        "title": "معرّف المستأجر"
+      },
+      "title": "المؤسسة"
     }
   },
   "sidebar": {
@@ -17703,7 +17832,7 @@
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
       },
-      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تأتي كل مهارة تضيفها في إضافة خاصة بها.",
+      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تظهر الإضافة التي تحتوي فقط على ملف SKILL.md في جذرها في علامة تبويب المهارات.",
       "integrations": "{available} من {needed} من التكاملات متاحة",
       "nameHeld": "متوقف: يستخدم {names} اسم المهارة نفسه"
     },
@@ -17952,6 +18081,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {ينتظر هذا التشغيل موافقتك أدناه.} other {هذا التشغيل قيد التنفيذ.}}",
       "startedAt": "بدأ {time}",
       "viewTask": "عرض المهمة"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "التسويق"
+      },
+      "finance": {
+        "label": "المالية"
+      },
+      "other": {
+        "label": "أخرى"
+      },
+      "engineering": {
+        "label": "الهندسة"
+      },
+      "customerSupportSuccess": {
+        "label": "دعم العملاء ونجاحهم"
+      },
+      "peopleHr": {
+        "label": "الموارد البشرية"
+      },
+      "dataAnalytics": {
+        "label": "البيانات والتحليلات"
+      },
+      "legal": {
+        "label": "الشؤون القانونية"
+      },
+      "design": {
+        "label": "التصميم"
+      },
+      "product": {
+        "label": "المنتج"
+      },
+      "operations": {
+        "label": "العمليات"
+      },
+      "sales": {
+        "label": "المبيعات"
+      },
+      "leadership": {
+        "label": "القيادة"
+      }
     }
   }
 }

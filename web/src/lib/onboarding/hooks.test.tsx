@@ -3,12 +3,20 @@ import { renderHook, act } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { OnboardingStep } from "@/lib/onboarding/types";
+import { updateUserPersonalization } from "@/lib/users/svc";
+
+interface MockUser {
+  id: string;
+  personalization: { name: string; preferred_name: string };
+}
 
 // Mock underlying dependencies used by the inlined useOnboardingState
+let mockUser: MockUser | null = null;
+const mockRefreshUser = jest.fn<Promise<void>, []>();
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
-    user: null,
-    refreshUser: jest.fn(),
+    user: mockUser,
+    refreshUser: mockRefreshUser,
   }),
 }));
 
@@ -31,6 +39,7 @@ jest.mock("@/lib/languageModels/hooks", () => ({
 }));
 
 jest.mock("@/lib/users/svc", () => ({
+  ...jest.requireActual("@/lib/users/svc"),
   updateUserPersonalization: jest.fn(),
 }));
 
@@ -66,6 +75,7 @@ describe("useShowOnboarding", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    mockUser = null;
     // Reset mock to defaults
     mockProviderStatus.llmProviders = [];
     mockProviderStatus.isLoadingProviders = false;
@@ -196,6 +206,50 @@ describe("useShowOnboarding", () => {
       OnboardingStep.PreStep
     );
     expect(result.current.onboardingActions).toBeDefined();
+  });
+
+  it("keeps filling the full name after the first save gives the user one", async () => {
+    jest.useFakeTimers();
+    try {
+      mockUser = {
+        id: "user-1",
+        personalization: { name: "", preferred_name: "" },
+      };
+      const save = jest
+        .mocked(updateUserPersonalization)
+        .mockResolvedValue({ ok: true } as Response);
+      // The refresh returns the name that the first save stored.
+      mockRefreshUser.mockImplementation(async () => {
+        mockUser = {
+          id: "user-1",
+          personalization: { name: "Jo", preferred_name: "Jo" },
+        };
+      });
+      const { result, rerender } = renderUseShowOnboarding();
+
+      act(() => result.current.onboardingActions.updateName("Jo"));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(500);
+      });
+      expect(mockRefreshUser).toHaveBeenCalledTimes(1);
+      rerender({
+        activeAgent: undefined,
+        isLoadingChatSessions: false,
+        chatSessionsCount: 0,
+        userId: "user-1",
+      });
+
+      act(() => result.current.onboardingActions.updateName("John Smith"));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(500);
+      });
+      expect(save).toHaveBeenLastCalledWith({
+        preferred_name: "John Smith",
+        name: "John Smith",
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   describe("localStorage persistence", () => {

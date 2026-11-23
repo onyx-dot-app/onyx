@@ -3,6 +3,7 @@
 const COMMANDS: &[&str] = &[
     "check_server",
     "save_server",
+    "get_server_lock",
     "login",
     "get_auth_methods",
     "sign_in_with_sso",
@@ -29,6 +30,7 @@ const COMMANDS: &[&str] = &[
     "aonyx_menu",
     "get_offline_status",
     "retry_connection",
+    "fit_window",
 ];
 
 fn main() {

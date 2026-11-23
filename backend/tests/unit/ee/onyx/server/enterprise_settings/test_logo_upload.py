@@ -15,13 +15,10 @@ import pytest
 from fastapi import UploadFile
 from PIL import Image
 
-from ee.onyx.server.enterprise_settings.store import (
-    MAX_LOGO_PIXELS,
-    MAX_LOGO_SIZE_BYTES,
-    upload_logo,
-)
+from ee.onyx.server.enterprise_settings.store import MAX_LOGO_SIZE_BYTES, upload_logo
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.file import MAX_UPLOAD_IMAGE_PIXELS
 
 
 @pytest.fixture
@@ -58,7 +55,7 @@ def _compression_bomb_bytes() -> bytes:
     a few KB, so only a dimension check can stop it."""
     buffer = io.BytesIO()
     side = 5000
-    assert side * side > MAX_LOGO_PIXELS
+    assert side * side > MAX_UPLOAD_IMAGE_PIXELS
     Image.new("L", (side, side)).save(buffer, format="PNG")
     return buffer.getvalue()
 

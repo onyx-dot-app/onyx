@@ -91,8 +91,10 @@ interface PaneSliderProps {
   disabled?: boolean;
   /** 16px-tall variant matching the mock's popover sliders. */
   compact?: boolean;
+  /** The thumb's accessible name. */
+  "aria-label"?: string;
   onValueChange: (value: number) => void;
-  onValueCommit: (value: number) => void;
+  onValueCommit?: (value: number) => void;
 }
 
 export function PaneSlider({
@@ -102,6 +104,7 @@ export function PaneSlider({
   step,
   disabled,
   compact,
+  "aria-label": ariaLabel,
   onValueChange,
   onValueCommit,
 }: PaneSliderProps) {
@@ -117,14 +120,19 @@ export function PaneSlider({
       step={step}
       disabled={disabled}
       onValueChange={(vals) => vals[0] !== undefined && onValueChange(vals[0])}
-      onValueCommit={(vals) => vals[0] !== undefined && onValueCommit(vals[0])}
+      onValueCommit={(vals) =>
+        vals[0] !== undefined && onValueCommit?.(vals[0])
+      }
     >
       <SliderPrimitive.Track
         className={cn(SLIDER_TRACK_CLASS, "relative grow")}
       >
         <SliderPrimitive.Range className={cn(SLIDER_FILL_CLASS, "absolute")} />
       </SliderPrimitive.Track>
-      <SliderPrimitive.Thumb className={SLIDER_THUMB_CLASS} />
+      <SliderPrimitive.Thumb
+        className={SLIDER_THUMB_CLASS}
+        aria-label={ariaLabel}
+      />
     </SliderPrimitive.Root>
   );
 }
