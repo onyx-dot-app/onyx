@@ -7,6 +7,7 @@ import {
 } from "@/app/app/services/messageTree";
 import { FetchError } from "@/lib/fetcher";
 import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
+import { startChatLoad } from "@/lib/chat/publishedFiles";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -219,12 +220,13 @@ const refreshingSessions = new Map<
  * Load and follow a turn the server started while this session had no
  * reader. Incognito keeps its content locally: only its answers that hold
  * approval requests or questions take their saved copies, which only a chat
- * that saves content has.
+ * that saves content has. `savedLoad` is a latest page that the caller
+ * loaded already, with its load sequence (`startChatLoad`).
  */
 export function refreshChatSession(
   sessionId: string,
   errorMessage: string,
-  savedSession?: BackendChatSession
+  savedLoad?: { page: BackendChatSession; loadSequence: number }
 ): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   if (!session) return Promise.resolve();
@@ -244,7 +246,9 @@ export function refreshChatSession(
   };
   const refresh = (async () => {
     try {
-      const saved = savedSession ?? (await fetchSettledChatSession(sessionId));
+      const loadSequence = savedLoad?.loadSequence ?? startChatLoad();
+      const saved =
+        savedLoad?.page ?? (await fetchSettledChatSession(sessionId));
       const store = useChatSessionStore.getState();
       const current = store.sessions.get(sessionId);
       if (!current || !ownsRefresh()) return;
@@ -267,7 +271,9 @@ export function refreshChatSession(
               ? undefined
               : current.messageTree.get(answer.latestChildNodeId)?.messageId;
           if (next == null) continue;
-          const page = await fetchSettledChatSession(sessionId, next);
+          const page = await fetchSettledChatSession(sessionId, {
+            beforeMessageId: next,
+          });
           for (const [nodeId, copy] of savedAnswers(page, [answer]))
             copies.set(nodeId, copy);
         }
@@ -276,9 +282,8 @@ export function refreshChatSession(
         const messageTree = new Map(latest.messageTree);
         for (const [nodeId, copy] of copies)
           if (asksUser(copy.packets)) messageTree.set(nodeId, copy);
-        store.updateSessionData(sessionId, {
+        store.applyLoadedSession(sessionId, saved, loadSequence, {
           messageTree,
-          approvalsVersion: saved.approvals_version,
         });
         if (saved.current_stream)
           followChatStream(sessionId, saved.current_stream, errorMessage);
@@ -292,11 +297,10 @@ export function refreshChatSession(
         stream
       );
       const busy = Boolean(saved.is_processing || saved.current_stream);
-      store.updateSessionData(sessionId, {
+      store.applyLoadedSession(sessionId, saved, loadSequence, {
         messageTree,
         hasOlderMessages: merged.hasOlderMessages,
         selectedNodeIdForDocDisplay: merged.selectedNodeIdForDocDisplay,
-        approvalsVersion: saved.approvals_version,
         chatState: busy ? "streaming" : "input",
         sendAcknowledged: stream ? Promise.resolve(stream) : undefined,
         readerFinished: undefined,
@@ -442,12 +446,16 @@ export async function settleChatSession({
       return;
     }
     if (refreshHistory || mode === "recovery") {
+      const loadSequence = startChatLoad();
       const settled = session?.incognito
         ? undefined
         : await fetchSettledChatSession(sessionId);
       if (!ownsSettlement()) return;
       if (settled?.is_processing || settled?.current_stream) {
-        await refreshChatSession(sessionId, errorMessage, settled);
+        await refreshChatSession(sessionId, errorMessage, {
+          page: settled,
+          loadSequence,
+        });
         return;
       }
       const store = useChatSessionStore.getState();
@@ -459,9 +467,8 @@ export async function settleChatSession({
         const latestType = getLatestMessageChain(merged.messageTree).at(
           -1
         )?.type;
-        store.updateSessionData(sessionId, {
+        store.applyLoadedSession(sessionId, settled, loadSequence, {
           ...merged,
-          approvalsVersion: settled.approvals_version,
           uncaughtError:
             latestType === "assistant" || latestType === "error"
               ? null

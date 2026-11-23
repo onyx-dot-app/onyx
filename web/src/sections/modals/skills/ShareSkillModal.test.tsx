@@ -78,6 +78,58 @@ describe("ShareSkillModal", () => {
     mockUpdateSkillShares.mockReset().mockResolvedValue({});
   });
 
+  it("saves shares of a synced skill without publish or transfer", async () => {
+    mockIsAdmin = false;
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: null,
+        content_locked: true,
+        user_shares: [
+          {
+            user: { id: "invitee", email: "invitee@example.com" },
+            permission: "VIEWER",
+          },
+        ],
+      })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByText(
+        "This plugin syncs from GitHub, so you change it in GitHub."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /transfer ownership/i })
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Update access for invitee@example.com",
+      })
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Remove Access" })
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
+        installation_policy: undefined,
+        public_permission: undefined,
+        user_shares: [],
+        group_shares: [],
+      })
+    );
+  });
+
   it("saves an admin's installation policy without changing sharing", async () => {
     const user = setupUser();
     render(

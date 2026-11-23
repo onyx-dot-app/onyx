@@ -3,6 +3,7 @@ import {
   SvgExa,
   SvgFirecrawl,
   SvgGoogle,
+  SvgParallel,
   SvgSearXNG,
   SvgSerper,
   SvgTavily,
@@ -69,6 +70,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     apiKeyUrl: "https://www.firecrawl.dev/app/api-keys",
     logo: SvgFirecrawl,
   },
+  parallel: {
+    label: "Parallel",
+    subtitle: "Parallel Search API",
+    apiKeyUrl: "https://platform.parallel.ai",
+    logo: SvgParallel,
+  },
 };
 
 export const SEARCH_PROVIDER_ORDER = Object.keys(
@@ -131,6 +138,7 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     requiresApiKey: true,
     requiredConfigKeys: ["base_url"],
   },
+  parallel: { requiresApiKey: true, requiredConfigKeys: [] },
 };
 
 const DEFAULT_SEARCH_CAPABILITIES: SearchProviderCapabilities = {

@@ -34,7 +34,7 @@ from onyx.chat.models import (
 from onyx.chat.response import response_snapshot
 from onyx.db.models import SAVED_TOOL_RESULT_TYPES
 from onyx.deep_research.models import ResearchMessageMetadata
-from onyx.llm.models import Message, ToolResult
+from onyx.llm.models import Message, ToolResult, ToolResultFields
 from onyx.tools.file_snapshot import SavedLoadedFile
 from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
@@ -123,7 +123,7 @@ class CheckpointSerializer:
         data = _dump(message, exclude={"metadata", "details", "cacheable"})
         data["metadata"] = self.encode_payload(message.metadata)
         data["cacheable"] = message.cacheable
-        if isinstance(message, ToolResult):
+        if isinstance(message, ToolResultFields):
             data["details"] = self.encode_payload(message.details)
         return data
 
@@ -269,7 +269,7 @@ def serialize_checkpoint(
         return MessagePayload(
             metadata=serializer.encode_payload(message.metadata),
             details=serializer.encode_payload(message.details)
-            if isinstance(message, ToolResult)
+            if isinstance(message, ToolResultFields)
             else None,
             cacheable=message.cacheable,
         )
@@ -347,7 +347,7 @@ def _restore_checkpoint_state(
         for message, payload in zip(messages, payloads, strict=True):
             message.metadata = serializer.decode_payload(payload.metadata)
             message.cacheable = payload.cacheable
-            if isinstance(message, ToolResult):
+            if isinstance(message, ToolResultFields):
                 message.details = serializer.decode_payload(payload.details)
             elif payload.details is not None:
                 raise ValueError("Only tool results can have tool details")

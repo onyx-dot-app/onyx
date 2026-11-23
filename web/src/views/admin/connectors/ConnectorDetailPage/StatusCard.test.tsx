@@ -821,7 +821,7 @@ describe("Indexing card bars section and D", () => {
     expect(within(card).queryByRole("progressbar")).toBeNull();
     expect(within(card).queryByText(/document types?/i)).toBeNull();
     expect(
-      within(card).queryByText(/\b\d+(\.\d+)?\s*(KB|MB|GB|TB)\b/)
+      within(card).queryByText(/\b\d+(\.\d+)?\s*(byte|kB|MB|GB|TB)\b/)
     ).toBeNull();
     expect(
       within(card).queryByRole("button", { name: copy(KEYS.viewDetails) })
@@ -1435,13 +1435,13 @@ describe("Indexing card document types", () => {
 
     expect(await within(card).findByText(typesLabel(2))).toBeInTheDocument();
     expect(
-      within(card).queryByText(/^(Bytes|KB|MB|GB|TB)$/, { exact: true })
+      within(card).queryByText(/^(byte|kB|MB|GB|TB)$/, { exact: true })
     ).toBeNull();
 
     await expand(card);
     // The type without a full size leaves its cell blank.
     expect(within(card).getAllByText("121.5 MB").length).toBeGreaterThan(0);
-    expect(within(card).queryByText(/900 Bytes/)).toBeNull();
+    expect(within(card).queryByText(/900 byte/)).toBeNull();
   });
 
   it("unfolded: segments sort by count with the twelfth type and beyond folded into Other, always last", async () => {

@@ -56,6 +56,8 @@ class SearchResult(BaseModel):
     link: str | None
     source_type: str
     updated_at: str | None
+    # Source fields such as a Jira reporter. Null when the document has none.
+    metadata: dict[str, str | list[str]] | None = None
 
 
 class SearchResponse(BaseModel):

@@ -70,6 +70,8 @@ export interface SsoOption {
   browser: boolean;
   // The provider row the button starts; null for the legacy Google sign-in.
   provider: string | null;
+  // Google sign-in, which shows the Google logo.
+  google: boolean;
 }
 
 export interface AuthMethods {

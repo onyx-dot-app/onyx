@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { ChatMessageLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
-import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { useOptionalScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
 import {
   useChatSessionStore,
   useIsLoadingOlderMessages,

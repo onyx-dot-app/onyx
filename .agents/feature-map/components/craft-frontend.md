@@ -105,8 +105,7 @@ attach finds that the turn is not active. `reconcileCompletedTranscript` needs
 a terminal outcome: the `turn_completed` packet, or `fetchKnownTurn` when the
 packet was missed. It then reads messages, checks for a successor turn
 (another tab), reads history again if one started during the read, starts an
-inventory read, and replaces the live stream items with saved history. A
-scheduled run settles on its saved run status instead.
+inventory read, and replaces the live stream items with saved history.
 
 **Live timeline.** The stream processor also turns each packet into ACP
 timeline events (`web/src/lib/timeline/craft/events.ts:craftPacketToEvents`)
@@ -143,6 +142,37 @@ open panel marks the active file's card as viewed.
 keyed by path, inventory revision and an explicit reload counter.
 `web/src/app/craft/components/OutputPanel.tsx` keeps a few recent file viewers
 mounted but hidden and `inert`, so switching tabs does not fetch them again.
+The panel's frame, tab strip, URL bar, home and tiles are presentational
+parts in `web/src/sections/output-panel/`, which the chat's right panel also
+uses ([[chat-frontend]]): `OutputPanelLayout`, `PanelTabStrip`
+(`web/src/app/craft/components/output-panel/ResourceTabStrip.tsx` wraps it
+with Craft's tab kinds and "+" menu), `PanelUrlBar`
+(`web/src/app/craft/components/output-panel/UrlBar.tsx` adds Craft's
+reload, upload, download, export and share actions), `WorkspaceHome`, and
+`OutputTileFrame` and `OutputImageThumbnail`
+(`web/src/sections/output-panel/OutputTile.tsx`; Craft's tile variants stay in
+`web/src/app/craft/components/output-panel/OutputTile.tsx`), in an Opal
+`CardGrid` with `columns="two-to-three"`. Both panels
+also share the resize and full screen code:
+`web/src/sections/output-panel/PanelResize.tsx`
+(`useOutputPanelWorkspace` measures the workspace, runs the edge drag, arrow
+keys and double-click reset, saves a drag where its pointer ends, also when
+the browser cancels it, ignores a double click whose second press dragged,
+cancels a drag when the mode, the narrow rule or the session changes, makes
+the covered page inert after it moves focus out, and restores a full panel
+on Escape in the capture phase, so that Escape leaves full screen before it
+stops a run; also `PanelResizeHandle` and `PanelSizeButton`, which neither
+panel shows on a narrow workspace).
+The chat's panel measures only while open; Craft keeps measuring while
+closed (`measureWhileClosed`), because its layout waits for the width.
+The width rules are in `web/src/lib/outputPanel/layout.ts`
+(the panel modes, the minimum chat and panel widths, and when the panel
+covers the page). `web/src/app/craft/components/CraftWorkspace.tsx` uses
+them. A change to any of these parts changes both panels. The tab rules
+(open, close by recent use, reorder, and the five most recent file viewers
+that stay mounted) are in `web/src/lib/outputPanel/tabs.ts`, and session storage of panel preferences
+is in `web/src/lib/outputPanel/preferences.ts`; Craft and the chat share
+both.
 
 **Transcript timeline.** `BuildMessageList` splits a turn's reducer entries
 into rail blocks (consecutive tool calls and thinking) and inline items
@@ -175,8 +205,7 @@ uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
    the queue.** `claimQueuedMessage` in
    `web/src/app/craft/hooks/useBuildSessionStore.ts` requires `turnSettlement.phase ===
    "ready"` for the current generation. A connection loss, a mounted
-   component, a status change or an approval pause must not grant it. A failed
-   or skipped scheduled run reloads history but never releases the queue.
+   component, a status change or an approval pause must not grant it.
 2. `atomic-queue-claim` **The claim is atomic.** It happens inside one `set`
    call, so repeated store events or two mounted hooks cannot send one prompt
    twice. Do not read the queue head and send it outside the claim.
@@ -266,9 +295,6 @@ uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
 - **An expired turn record needs a page reload.** If the server forgot a
   turn before settlement read it, the session stays in recovery until the
   page reloads. Saved history stays.
-- **The store handles a run status that the backend never sets.**
-  The store and the task pages treat `AWAITING_APPROVAL` as in
-  flight, but no backend code writes it ([[craft-scheduled-tasks]]).
 
 ---
 

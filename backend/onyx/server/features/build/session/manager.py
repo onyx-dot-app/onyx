@@ -56,7 +56,6 @@ from onyx.db.sandbox import (
     get_snapshots_for_session,
     update_sandbox_heartbeat,
 )
-from onyx.db.scheduled_task import get_scheduled_task_id_for_session
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -315,11 +314,7 @@ class SessionManager:
         user: User,
     ) -> None:
         llm_config = self.session_llm_config(session, user)
-        mcp_servers = resolve_craft_mcp_servers(
-            self._db_session,
-            user,
-            get_scheduled_task_id_for_session(self._db_session, session.id),
-        )
+        mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
         expected = json.dumps(
             build_provider_opencode_config(
                 llm_config,
@@ -497,11 +492,7 @@ class SessionManager:
             if sandbox.status == SandboxStatus.RUNNING:
                 try:
                     llm_config = self.session_llm_config(session, user)
-                    mcp_servers = resolve_craft_mcp_servers(
-                        self._db_session,
-                        user,
-                        get_scheduled_task_id_for_session(self._db_session, session.id),
-                    )
+                    mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
                     # Rewrite the per-session opencode.json (provider catalog +
                     # current MCP set) and AGENTS.md BEFORE disposing so the
                     # fresh instance re-reads the current config.
@@ -547,8 +538,8 @@ class SessionManager:
     ) -> Sandbox:
         """Ensure the user has a RUNNING sandbox, creating/waking as needed.
 
-        Headless entry point for flows (e.g. scheduled tasks) that need the
-        sandbox up but aren't going through ``create_session``.
+        Headless entry point for flows that need the sandbox up but aren't
+        going through ``create_session``.
 
         Behavior by current sandbox status:
         - No sandbox row: creates one and provisions it.
@@ -601,7 +592,6 @@ class SessionManager:
         user_id: UUID,
         name: str | None = None,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
-        task_id: UUID | None = None,
     ) -> BuildSession:
         """Create a new build session with a ready sandbox.
 
@@ -615,10 +605,8 @@ class SessionManager:
             user_id: The user ID
             name: Optional session name
             origin: Provenance of the session. INTERACTIVE (default) sessions
-                appear in the Craft sidebar; SCHEDULED (scheduled-tasks
-                executor) and SLACK (Slack bot) sessions are excluded.
-            task_id: The task of a scheduled run. The run row names the
-                session only after creation, so the executor passes it.
+                appear in the Craft sidebar; SCHEDULED and SLACK (Slack bot)
+                sessions are excluded.
 
         Raises:
             ValueError: If the user is missing
@@ -661,7 +649,7 @@ class SessionManager:
             build_session.nextjs_port,
         )
 
-        self._reconcile_session(sandbox, build_session, user, llm_config, task_id)
+        self._reconcile_session(sandbox, build_session, user, llm_config)
         return build_session
 
     def get_or_create_empty_session(
@@ -776,7 +764,6 @@ class SessionManager:
         session: BuildSession,
         user: User,
         llm_config: CraftLLMProviderConfig,
-        task_id: UUID | None = None,
     ) -> None:
         """Build the workspace and OpenCode session for a committed
         ``INITIALIZING`` session, then mark it ``ACTIVE`` (a no-op if the
@@ -792,12 +779,7 @@ class SessionManager:
             connectable_apps_section = build_connectable_apps_list(
                 list_connectable_apps(self._db_session, user)
             )
-            mcp_servers = resolve_craft_mcp_servers(
-                self._db_session,
-                user,
-                task_id
-                or get_scheduled_task_id_for_session(self._db_session, session_id),
-            )
+            mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
             nextjs_port = session.nextjs_port
             opencode_session_id = session.opencode_session_id
             user_name = user.personal_name
@@ -1193,10 +1175,11 @@ class SessionManager:
     ) -> Generator[str, None, None]:
         """Attach to an existing opencode session and stream translated ACP SSE.
 
-        Used by scheduled-run viewers: the Celery executor is already driving
-        the prompt, so this path only subscribes to the pod-wide event stream and
-        filters by the session's persisted opencode session id. It deliberately
-        does not persist events because the executor remains the durable writer.
+        Used by live-stream viewers: the interactive turn executor is already
+        driving the prompt, so this path only subscribes to the pod-wide event
+        stream and filters by the session's persisted opencode session id. It
+        deliberately does not persist events because the executor remains the
+        durable writer.
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -1233,14 +1216,12 @@ class SessionManager:
             for acp_event in raw_events:
                 yield _streaming.event_to_sse(acp_event)
 
-    # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
+    # ----- Persistence helpers -----
     #
     # `yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
     # the agent to completion and yields raw sandbox events. It does NO database
-    # writes, no SSE formatting — making it composable: the SSE endpoint wraps
-    # it with `persist_sandbox_event` + an SSE formatter, and the headless
-    # scheduled-tasks executor reuses `persist_sandbox_event` directly so the
-    # persisted transcript is identical to an interactive run.
+    # writes, no SSE formatting — making it composable: the interactive turn
+    # executor wraps it with `persist_sandbox_event`.
 
     def prompt_slot(
         self,

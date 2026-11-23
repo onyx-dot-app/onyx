@@ -11,7 +11,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Button, Dropdown, Tag, Text } from "@opal/components";
-import { toast } from "@opal/layouts";
+import { CardGrid, toast } from "@opal/layouts";
 import { SvgLoader, SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
@@ -20,7 +20,7 @@ import {
   saveOutputInventorySnapshot,
   clearOutputInventorySnapshot,
 } from "@/app/craft/services/outputInventorySnapshots";
-import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 import {
   OutputTile,
   OutputFolderTile,
@@ -361,7 +361,7 @@ function OutputsBrowser({
       ) : (
         <div className="flex w-full flex-col gap-3">
           {folders.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 @[24rem]:grid-cols-3">
+            <CardGrid columns="two-to-three">
               {folders.map((name) => (
                 <OutputFolderTile
                   key={name}
@@ -376,10 +376,10 @@ function OutputsBrowser({
                   onOpen={() => setFolder(folder ? `${folder}/${name}` : name)}
                 />
               ))}
-            </div>
+            </CardGrid>
           )}
           {sessionId && (visibleFiles.length > 0 || apps.length > 0) && (
-            <div className="grid grid-cols-2 gap-2 @[24rem]:grid-cols-3">
+            <CardGrid columns="two-to-three">
               {apps.map((app) =>
                 app.deleted ? (
                   <OutputUnavailableTile key={app.id} card={app} />
@@ -419,7 +419,7 @@ function OutputsBrowser({
                   />
                 );
               })}
-            </div>
+            </CardGrid>
           )}
         </div>
       )}

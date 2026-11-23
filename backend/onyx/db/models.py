@@ -5615,6 +5615,72 @@ class FileContent(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class ChatArtifact(Base):
+    """A file that the model published from its sandbox (publish_files) into a
+    root chat, across its versions (ChatArtifactVersion): every publish of one
+    VM path in the chat. Its files inherit the chat's access, and a hard chat
+    delete deletes them
+    (db/chat.py:delete_messages_and_files_from_chat_session) before the
+    cascade from the chat removes the rows."""
+
+    __tablename__ = "chat_artifact"
+    # Also the index of the chat's artifacts
+    __table_args__ = (UniqueConstraint("chat_session_id", "path"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    # The root chat: a subagent run publishes into its root chat.
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The absolute, normalized VM path
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    # The first publish
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    # The latest publish
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ChatArtifactVersion(Base):
+    """One publish of a ChatArtifact: its file, numbered from 1 in publish
+    order."""
+
+    __tablename__ = "chat_artifact_version"
+
+    artifact_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_artifact.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A JPEG of the file's first page (FileOrigin.CHAT_ARTIFACT_THUMBNAIL),
+    # with the version's access and deletes. A version stays valid without
+    # it, so a deleted thumbnail only clears the link.
+    thumbnail_file_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Skill(Base):
     """A built-in skill. Old custom rows stay in the table for a rollback, with
     columns this model does not map (``alembic/env.py``)."""
@@ -5648,8 +5714,9 @@ class Skill(Base):
 
 
 class Marketplace(Base):
-    """Where a plugin comes from: a user's "My uploads" or the tenant's
-    Organization library. A marketplace grants no access."""
+    """Where a plugin comes from: a user's "My uploads", the tenant's
+    Organization library, or a GitHub repository (personal with an owner,
+    company without). A marketplace grants no access."""
 
     __tablename__ = "plugin_marketplace"
 
@@ -5680,11 +5747,49 @@ class Marketplace(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # GitHub source: owner/repo, plus '' for no folder or ref.
+    repository: Mapped[str | None] = mapped_column(String, nullable=True)
+    folder: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    ref: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    login_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "user.id", ondelete="SET NULL", name="fk_plugin_marketplace_login_user"
+        ),
+        nullable=True,
+    )
+    last_synced_revision: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_synced_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_sync_result: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "(kind = 'user_uploads') = (owner_user_id IS NOT NULL)",
-            name="ck_plugin_marketplace_owner_iff_user_uploads",
+            "(kind = 'user_uploads' AND owner_user_id IS NOT NULL) "
+            "OR (kind = 'organization_library' AND owner_user_id IS NULL) "
+            "OR (kind = 'github' AND repository IS NOT NULL)",
+            name="ck_plugin_marketplace_owner_by_kind",
+        ),
+        Index(
+            "uq_plugin_marketplace_personal_source",
+            "owner_user_id",
+            "repository",
+            "folder",
+            "ref",
+            unique=True,
+            postgresql_where=text("kind = 'github' AND owner_user_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_plugin_marketplace_company_source",
+            "repository",
+            "folder",
+            "ref",
+            unique=True,
+            postgresql_where=text("kind = 'github' AND owner_user_id IS NULL"),
         ),
         Index(
             "uq_plugin_marketplace_organization_library",
@@ -5789,6 +5894,8 @@ class PluginVersion(Base):
     )
     unpacked_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     file_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manifest: Mapped[dict[str, Any] | None] = mapped_column(PGJSONB(), nullable=True)
+    needs: Mapped[list[dict[str, Any]] | None] = mapped_column(PGJSONB(), nullable=True)
     created_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="SET NULL"),
@@ -8452,10 +8559,10 @@ class ActionApproval(Base):
 
 
 class ScheduledTask(Base):
-    """A user-defined recurring Craft prompt + schedule.
+    """A user-defined recurring prompt + schedule.
 
-    Each fire spawns a fresh `BuildSession` (via the executor) and records a
-    `ScheduledTaskRun` row pointing back at the session. Soft-deleted tasks
+    Each fire runs the prompt in a new hidden chat and records a
+    `ScheduledTaskRun` row that links the chat. Soft-deleted tasks
     are excluded from dispatch but retained so users can still open past
     runs.
     """
@@ -8524,10 +8631,8 @@ class ScheduledTask(Base):
 class ScheduledTaskRun(Base):
     """One firing of a ScheduledTask.
 
-    `session_id` is nullable for the brief window between the dispatcher
-    inserting this row and the executor creating the BuildSession. On
-    session delete the FK is cleared (SET NULL) so the run row survives
-    as part of the task's run history.
+    `chat_session_id` is set in the commit that creates the run's chat and
+    makes the run RUNNING. It also marks that chat as hidden from history.
     """
 
     __tablename__ = "scheduled_task_run"
@@ -8540,10 +8645,10 @@ class ScheduledTaskRun(Base):
         ForeignKey("scheduled_task.id", ondelete="CASCADE"),
         nullable=False,
     )
-    session_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("build_session.id", ondelete="SET NULL"),
-        nullable=True,
+    # No foreign key: adding one would lock chat_session. A hard-deleted chat
+    # leaves the id, and the dispatcher cancels a run whose chat is gone.
+    chat_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
     )
 
     status: Mapped[ScheduledTaskRunStatus] = mapped_column(
@@ -8589,9 +8694,6 @@ class ScheduledTaskRun(Base):
 
     # Relationships
     task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")
-    session: Mapped[BuildSession | None] = relationship(
-        "BuildSession", foreign_keys=[session_id]
-    )
 
     __table_args__ = (
         Index(
@@ -8600,9 +8702,7 @@ class ScheduledTaskRun(Base):
             desc("started_at"),
         ),
         Index("ix_scheduled_task_run_status", "status"),
-        # Session-view banner lookup: get_scheduled_run_context filters by
-        # session_id on every session open.
-        Index("ix_scheduled_task_run_session", "session_id"),
+        Index("ix_scheduled_task_run_chat_session", "chat_session_id"),
     )
 
 

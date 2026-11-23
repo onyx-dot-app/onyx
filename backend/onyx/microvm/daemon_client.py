@@ -285,9 +285,17 @@ def _file_entry(msg: sandboxd_pb2.FileInfo) -> FileEntry:
     )
 
 
-def _write_content(data: bytes | IO[bytes]) -> tuple[int, Iterator[bytes]]:
+def _write_content(
+    data: bytes | IO[bytes] | list[bytes],
+) -> tuple[int, Iterator[bytes]]:
     """The size and data chunks of a write: the whole file from its start,
     read one chunk at a time. The daemon checks the size."""
+    if isinstance(data, list):
+        return sum(map(len, data)), (
+            part[start : start + _WRITE_CHUNK_BYTES]
+            for part in data
+            for start in range(0, len(part), _WRITE_CHUNK_BYTES)
+        )
     source = BytesIO(data) if isinstance(data, bytes) else data
     if not source.seekable():
         raise ValueError("a sandbox write needs bytes or a seekable file")
@@ -604,15 +612,18 @@ class SandboxDaemonClient:
         *,
         session_id: str,
         path: str,
-        data: bytes | IO[bytes],
+        data: bytes | IO[bytes] | list[bytes],
         mode: int = 0,
         overwrite: bool = True,
         make_parents: bool = True,
+        timeout_seconds: float | None = None,
     ) -> WrittenFile:
         """Atomic write: the daemon renames the file into place only when all
-        bytes arrived. `data` is bytes, or a seekable binary file that is
+        bytes arrived. `data` is bytes, a seekable binary file that is
         streamed whole, from its start, in chunks, so it is never whole in
-        memory. Without overwrite, FILE_EXISTS raises."""
+        memory, or the file's bytes in parts, sent without joining them.
+        Without overwrite, FILE_EXISTS raises. `timeout_seconds` replaces the
+        transfer timeout."""
         size, chunks = _write_content(data)
         header = sandboxd_pb2.WriteFileHeader(
             session_id=session_id,
@@ -630,7 +641,11 @@ class SandboxDaemonClient:
 
         try:
             r: sandboxd_pb2.WriteFileResponse = self._stub.WriteFile(
-                requests(), metadata=self._authed(), timeout=_TRANSFER_TIMEOUT_SECONDS
+                requests(),
+                metadata=self._authed(),
+                timeout=_TRANSFER_TIMEOUT_SECONDS
+                if timeout_seconds is None
+                else timeout_seconds,
             )
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e

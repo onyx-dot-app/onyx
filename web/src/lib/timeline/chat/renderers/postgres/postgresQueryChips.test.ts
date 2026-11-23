@@ -2,6 +2,7 @@ import { PostgresToolQuery } from "@/app/app/services/streamingModels";
 import {
   formatQueryDate,
   postgresQueryChips,
+  postgresQueryFolderId,
   PostgresQueryLabel,
 } from "./postgresQueryChips";
 
@@ -14,6 +15,24 @@ const labels = (query: PostgresToolQuery) =>
   );
 
 describe("postgresQueryChips", () => {
+  test("a folder shows its name once known, else its id", () => {
+    const query: PostgresToolQuery = {
+      table: "document",
+      parent_hierarchy_node_id: 42,
+    };
+    expect(postgresQueryFolderId(query)).toBe(42);
+    expect(labels(query)).toEqual(["table.document", "folder(42)"]);
+    expect(
+      postgresQueryChips(query, label, "en-US", sourceName, "Engineering").map(
+        (chip) => chip.label
+      )
+    ).toEqual(["table.document", "folder(Engineering)"]);
+    expect(
+      postgresQueryFolderId({ table: "hierarchy_node", parent_id: 7 })
+    ).toBe(7);
+    expect(postgresQueryFolderId({ table: "document" })).toBeNull();
+  });
+
   test("a filtered document listing", () => {
     expect(
       labels({

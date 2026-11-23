@@ -14,6 +14,7 @@ from onyx.db.enums import (
 )
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
+from onyx.external_apps.providers.actions import EndpointSpec, GraphQLOp
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.utils.logger import setup_logger
 
@@ -127,6 +128,23 @@ def url_matches_patterns(url: str, regexes: Iterable[str]) -> bool:
     return False
 
 
+def _has_unknown_graphql_field(
+    matched_endpoints: Iterable[EndpointSpec], context: MatchContext
+) -> bool:
+    """Whether a GraphQL request also invokes a root field that no matched
+    action covers. A document or batch can mix a known read with an unknown
+    mutation, and the unknown field must not take the read's policy."""
+    known = {
+        (rule.operation_type, rule.field)
+        for endpoint in matched_endpoints
+        for rule in endpoint.matches
+        if isinstance(rule, GraphQLOp)
+    }
+    if not known:
+        return False
+    return any(invocation not in known for invocation in context.graphql_invocations)
+
+
 def recognize_actions(
     app_type: ExternalAppType,
     request: ProxiedRequest,
@@ -135,6 +153,11 @@ def recognize_actions(
     resolves saved policies."""
     context = MatchContext(request)
     catalog = get_endpoint_catalog(app_type)
+    matched_endpoints = [
+        endpoint
+        for endpoint in catalog
+        if any(rule_matches(rule, context) for rule in endpoint.matches)
+    ]
     matched = [
         MatchedAction(
             action_type=endpoint.id,
@@ -142,16 +165,15 @@ def recognize_actions(
             description=endpoint.description,
             policy=endpoint.default_policy,
         )
-        for endpoint in catalog
-        if any(rule_matches(rule, context) for rule in endpoint.matches)
+        for endpoint in matched_endpoints
     ]
-    if not matched:
-        matched = [
+    if not matched or _has_unknown_graphql_field(matched_endpoints, context):
+        matched.append(
             MatchedAction(
                 action_type=WHOLE_DOMAIN_ACTION_TYPE,
                 display_name="Perform action",
                 description=f"{request.method} {request.path}",
                 policy=ActionPolicy.ASK,
             )
-        ]
+        )
     return tuple(sorted(matched, key=lambda a: POLICY_SEVERITY[a.policy], reverse=True))

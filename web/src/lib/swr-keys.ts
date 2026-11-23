@@ -90,6 +90,8 @@ export const SWR_KEYS = {
   // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
   opensearchResourceHealth: "/api/manage/admin/opensearch-health",
+  serviceStatusOpenSearch: "/api/admin/service-status/opensearch",
+  serviceStatusSearches: "/api/admin/service-status/opensearch/searches",
   version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
@@ -100,6 +102,10 @@ export const SWR_KEYS = {
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
+  // A chat file's preview data, not a URL: see `useChatFilePreview`
+  chatFilePreview: (fileId: string) => `chat-file-preview:${fileId}`,
+  // The start of a text file, for its tile in the chat's Files list
+  chatFileTileText: (fileId: string) => `chat-file-tile-text:${fileId}`,
   chatSessionStatus: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/status`,
   pendingChatMessages: (sessionId: string) =>
@@ -157,6 +163,7 @@ export const SWR_KEYS = {
   documentSets: "/api/manage/document-set",
   documentSetsEditable: "/api/manage/document-set?get_editable=true",
   tags: "/api/query/valid-tags",
+  hierarchyNode: (nodeId: number) => `/api/hierarchy-nodes/${nodeId}`,
   connectorStatus: "/api/manage/connector-status",
 
   // ── Credentials & Connectors ──────────────────────────────────────────────
@@ -286,7 +293,10 @@ export const SWR_KEYS = {
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
   chatSkills: "/api/skills/chat",
+  userSkill: (skillId: string) => `/api/skills/${skillId}`,
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  pluginSkill: (pluginId: string, path: string) =>
+    `/api/skills/${pluginId}/plugin-skill?path=${encodeURIComponent(path)}`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
   skillReviewRequests: "/api/skills/review-requests",
@@ -296,6 +306,8 @@ export const SWR_KEYS = {
   skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
   skillVersion: (skillId: string, versionId: string) =>
     `/api/skills/custom/${skillId}/versions/${versionId}`,
+  marketplaces: "/api/marketplaces",
+  marketplace: (marketplaceId: string) => `/api/marketplaces/${marketplaceId}`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
@@ -543,6 +555,26 @@ export const SWR_KEYS = {
     `/api/build/scheduled-tasks/${taskId}/runs`,
   scheduledTaskHasUnviewedRuns: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
-  scheduledRunContext: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/scheduled-run-context`,
+
+  // ── Scheduled Tasks (chat) ────────────────────────────────────────────────
+  // `chatScheduledTaskRuns` is a base URL, as `scheduledTaskRuns` above.
+  chatScheduledTasks: "/api/scheduled-tasks",
+  chatScheduledTasksUnviewedCount: "/api/scheduled-tasks/unviewed-count",
+  chatScheduledTaskCatalog: "/api/scheduled-tasks/action-policies",
+  chatScheduledTask: (taskId: string) => `/api/scheduled-tasks/${taskId}`,
+  chatScheduledTaskActionPolicies: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/action-policies`,
+  chatScheduledTaskRuns: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/runs`,
+  chatScheduledTaskRunsPage: (
+    taskId: string,
+    limit: number,
+    cursor: string | null = null
+  ) =>
+    `/api/scheduled-tasks/${taskId}/runs?limit=${limit}` +
+    (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""),
+  chatScheduledTaskHasUnviewedRuns: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
+  chatScheduledRun: (chatSessionId: string) =>
+    `/api/scheduled-tasks/chat-sessions/${chatSessionId}/run`,
 } as const;

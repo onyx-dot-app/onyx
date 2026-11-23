@@ -55,7 +55,9 @@ function getDescription(file: ProjectFile, labels: FileStatusLabels): string {
     return labels.processing;
   if (s === UserFileStatus.UPLOADING) return labels.uploading;
   if (s === UserFileStatus.DELETING) return labels.deleting;
-  if (s === UserFileStatus.COMPLETED) return typeLabel;
+  // SKIPPED files are stored but not indexed, and are ready to use.
+  if (s === UserFileStatus.COMPLETED || s === UserFileStatus.SKIPPED)
+    return typeLabel;
   return file.status ?? typeLabel;
 }
 

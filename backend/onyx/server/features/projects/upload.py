@@ -36,6 +36,7 @@ def upload_files_to_user_files_with_indexing(
     db_session: Session,
     background_tasks: BackgroundTasks | None = None,
     incognito_session_id: UUID | None = None,
+    temp_ids: list[str] | None = None,
 ) -> CategorizedFilesResult:
     if project_id is not None and user is not None:
         if not check_project_ownership(project_id, user.id, db_session):
@@ -48,6 +49,7 @@ def upload_files_to_user_files_with_indexing(
         db_session,
         temp_id_map=temp_id_map,
         incognito_session_id=incognito_session_id,
+        temp_ids=temp_ids,
     )
     user_files = categorized_files_result.user_files
     rejected_files = categorized_files_result.rejected_files
@@ -85,5 +87,4 @@ def upload_files_to_user_files_with_indexing(
         user_files=user_files,
         rejected_files=rejected_files,
         id_to_temp_id=id_to_temp_id,
-        skip_indexing_filenames=categorized_files_result.skip_indexing_filenames,
     )

@@ -215,6 +215,9 @@ calls the index directly for admin document inspection.
    `tools/tool_implementations/search/search_tool.py:SearchTool._run_slack_search` gets no `effective_filters`, so time,
    document-set and agent filters do not limit Slack results. The token decides
    what comes back ([[federated-search#slack-results-have-no-acl]]).
+   Federated sources cannot apply tags, so a search with tag filters skips the
+   Slack lane and all federated retrieval (`SearchTool.run` and
+   `context/search/retrieval/search_runner.py:search_chunks`).
 4. `llm-and-rich-responses-differ` **The result `content` and `details` serve
    different readers.** The model reads the trimmed, cited string in `content`.
    `SearchDocsResponse.search_docs` holds every top section before selection,

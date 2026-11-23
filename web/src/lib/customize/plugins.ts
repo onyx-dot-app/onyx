@@ -1,15 +1,17 @@
 import { pluginSwitch, type MemberPluginEntry } from "@/lib/plugins/directory";
 import type { SkillStatusFilter } from "@/lib/customize/skills";
 
-export const PLUGIN_GROUPS = ["mine", "organization", "shared"] as const;
+export const PLUGIN_GROUPS = [
+  "mine",
+  "marketplace",
+  "organization",
+  "shared",
+  "private",
+] as const;
 
 export type PluginGroup = (typeof PLUGIN_GROUPS)[number];
 
-export interface GroupedPlugins {
-  mine: MemberPluginEntry[];
-  organization: MemberPluginEntry[];
-  shared: MemberPluginEntry[];
-}
+export type GroupedPlugins = Record<PluginGroup, MemberPluginEntry[]>;
 
 export interface PluginListOptions {
   userEmail: string | null;
@@ -18,11 +20,13 @@ export interface PluginListOptions {
   locale: string;
 }
 
-/** The user's own plugins come first, as their skills do, published or not. */
+/** The user's own plugins come first, as their skills do, published or not.
+ * A plugin from a marketplace always shows its marketplace. */
 export function pluginGroup(
   entry: MemberPluginEntry,
   userEmail: string | null
 ): PluginGroup {
+  if (entry.section === "marketplace") return "marketplace";
   if (userEmail !== null && entry.ownerEmail === userEmail) return "mine";
   return entry.section;
 }
@@ -51,7 +55,13 @@ export function groupPlugins(
   entries: readonly MemberPluginEntry[],
   options: PluginListOptions
 ): GroupedPlugins {
-  const groups: GroupedPlugins = { mine: [], organization: [], shared: [] };
+  const groups: GroupedPlugins = {
+    mine: [],
+    marketplace: [],
+    organization: [],
+    shared: [],
+    private: [],
+  };
   for (const entry of entries)
     if (matches(entry, options))
       groups[pluginGroup(entry, options.userEmail)].push(entry);

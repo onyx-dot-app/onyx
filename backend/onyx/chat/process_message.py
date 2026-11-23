@@ -36,6 +36,7 @@ from onyx.chat.files import (
     extract_context_files,
     load_chat_files,
     load_context_user_files_for_tools,
+    place_chat_files,
     resolve_context_user_files,
 )
 from onyx.chat.history_store import RedisChatHistoryStore
@@ -80,6 +81,7 @@ from onyx.db.chat import (
     create_new_chat_message,
     find_summary_for_branch,
     get_chat_session_by_id,
+    get_chat_session_user_files,
     load_message_branch,
     reserve_chat_response_ids,
     reserve_stream_id,
@@ -426,6 +428,8 @@ def prepare_chat_turn(
                 response_ids = [resumed_response_id]
                 stream_id = reserve_stream_id(db_session)
             accepted_text = None
+            # Name the chat from this question while its answer streams.
+            auto_name = False
             if queued_turn is not None:
                 # Submitted input already passed the hook before entering the queue.
                 accepted_text = new_msg_req.message
@@ -532,8 +536,10 @@ def prepare_chat_turn(
                     )
             # One sandbox serves one user, and anonymous visitors share one
             # user. Incognito cleanup does not reach the sandbox's files. Two
-            # models must not change one session directory at once. Bots
-            # get no sandbox until they have service-account sandboxes.
+            # models must not change one session directory at once, so a
+            # multi-model turn has no sandbox tools and publishes no files;
+            # the web's file cards rely on it. Bots get no sandbox until they
+            # have service-account sandboxes. Deep research gets no sandbox.
             sandbox_tools = (
                 HARNESS_SANDBOX_ENABLED
                 and not user.is_anonymous
@@ -541,6 +547,7 @@ def prepare_chat_turn(
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
                 and chat_session.incognito_record_mode is None
                 and len(selected_models) == 1
+                and not new_msg_req.deep_research
             )
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn
@@ -557,7 +564,7 @@ def prepare_chat_turn(
             )
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
-            chat_skills = list_chat_skills(db_session, user)
+            chat_skills = list_chat_skills(db_session, user, built_ins=sandbox_tools)
             # A question records its picks when it is accepted, after the
             # checks that can reject it; regeneration reuses the record.
             accepts_question = queued_turn is not None or (
@@ -621,6 +628,16 @@ def prepare_chat_turn(
                     db_session=db_session,
                     commit=False,
                 )
+                # A chat that keeps content and has no name yet gets one from
+                # its first question.
+                auto_name = (
+                    keeps_content
+                    and not chat_session.description
+                    and not any(
+                        message.message_type == MessageType.USER
+                        for message in chat_history
+                    )
+                )
                 chat_history.append(user_message)
                 # The question and its responses are saved together, so a later
                 # preparation failure saves an error response that queued input
@@ -664,10 +681,19 @@ def prepare_chat_turn(
                 if results_turn or agent_host or resumed_response_id is not None
                 else response_parent_id
             )
+            context_files = resolve_context_user_files(
+                persona, chat_session.project_id, user.id, db_session
+            )
             context_user_files = capture_user_file_metadata(
-                resolve_context_user_files(
-                    persona, chat_session.project_id, user.id, db_session
+                [*context_files.project, *context_files.agent]
+            )
+            placed_chat_files = (
+                place_chat_files(
+                    get_chat_session_user_files(chat_session.id, db_session),
+                    context_files,
                 )
+                if sandbox_tools
+                else None
             )
             # Collect file IDs for the file reader tool *before* summary truncation so
             # that files attached to older (summarized-away) messages are still accessible
@@ -829,6 +855,9 @@ def prepare_chat_turn(
         history = convert_chat_history(
             chat_history=captured_history,
             files=loaded_files,
+            vm_paths={}
+            if placed_chat_files is None
+            else placed_chat_files.upload_paths,
         )
         if not any(
             tool.in_code_tool_id == FILE_READER_TOOL_ID
@@ -917,10 +946,13 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             sandbox_tools=sandbox_tools,
+            vm_chat_files=[] if placed_chat_files is None else placed_chat_files.files,
+            copy_vm_chat_files=placed_chat_files is not None,
             question_tool=question_tool,
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
+            auto_name=auto_name,
             mentions=mentions,
             user_identity=LLMUserIdentity(
                 user_id="anonymous_user"

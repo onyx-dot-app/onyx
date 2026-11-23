@@ -11,3 +11,8 @@ This uses `InputPasswordTypeIn`, with its mask, reveal toggle, and session repla
 Keys remain plain text. Reveal and hide do not change values or validation.
 Adding or removing rows hides password values so reveal state cannot move to another credential.
 Replacing or reordering credentials also hides them. Local typing preserves reveal state and focus.
+
+`disabled` disables every field and the add and remove buttons. `tooltip` (`string | RichStr`) shows
+on hover over the group, in any state. Inside `InputHorizontal` or `InputVertical`, the row's
+`disabled` also disables it, and its `disabledTooltip` replaces `tooltip` while disabled. The reason
+shows once, on the group, not on each field.

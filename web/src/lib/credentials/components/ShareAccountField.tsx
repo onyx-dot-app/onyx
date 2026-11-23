@@ -111,6 +111,7 @@ export function ShareAccountSelect({
         // A bare label (no htmlFor) hands a click on the title to the select
         // inside it, which opens the list.
         withLabel
+        disabled={disabled}
         title={t("title")}
         description={t("description")}
         center

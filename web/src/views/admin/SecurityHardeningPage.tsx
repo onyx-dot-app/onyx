@@ -71,7 +71,12 @@ function ToggleRow({
   disabled,
 }: ToggleRowProps) {
   return (
-    <InputHorizontal title={title} description={description} withLabel>
+    <InputHorizontal
+      title={title}
+      description={description}
+      withLabel
+      disabled={disabled}
+    >
       <InputSwitch
         checked={checked}
         onCheckedChange={onCheckedChange}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { BasicModalFooter, Button, Modal } from "@opal/components";
 import { toast } from "@opal/layouts";
@@ -25,6 +25,7 @@ export default function IntegrationCredentialsModal({
   const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
   const fields = integration.credential_fields;
+  const contentRef = useRef<HTMLDivElement>(null);
 
   async function submit() {
     if (fields.some((field) => !values[field.key]?.trim())) {
@@ -53,7 +54,28 @@ export default function IntegrationCredentialsModal({
 
   return (
     <Modal open onOpenChange={(open) => !open && !busy && onClose()}>
-      <Modal.Content width="sm" preventAccidentalClose={false}>
+      <Modal.Content
+        ref={contentRef}
+        width="sm"
+        preventAccidentalClose={false}
+        onOpenAutoFocus={(event) => {
+          const input = contentRef.current?.querySelector("input");
+          if (!input) return;
+          event.preventDefault();
+          input.focus();
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.key === "Enter" &&
+            !event.nativeEvent.isComposing &&
+            event.target instanceof HTMLInputElement &&
+            !busy
+          ) {
+            event.preventDefault();
+            void submit();
+          }
+        }}
+      >
         <Modal.Header
           icon={SvgKey}
           title={t("title", { name: integration.name })}

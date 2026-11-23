@@ -73,6 +73,7 @@ from onyx.agents.models import (
     ToolCallContext,
     ToolExecutionRecord,
     ToolResultAmendment,
+    ToolResultContext,
     cancellation_failure,
     messages_from_steps,
 )
@@ -266,6 +267,7 @@ class Agent:
         | None = None,
         after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult]
         | None = None,
+        prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = None,
         on_finish: ReleaseHook | None = None,
         on_suspend: ReleaseHook | None = None,
         on_drained: Callable[[], None] | None = None,
@@ -299,6 +301,10 @@ class Agent:
         self.after_step = after_step
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
+        # Replaces a completed result before the run records and streams it,
+        # so the live events, the saved history and the model see the same
+        # result. Results arrive one at a time, in the order calls complete.
+        self.prepare_tool_result = prepare_tool_result
         self.on_finish = on_finish
         # Called when the run suspends, before its state is captured.
         self.on_suspend = on_suspend
@@ -583,6 +589,12 @@ class Run:
         self.after_tool_call: (
             Callable[[ToolCallContext, ToolResult], ToolResult] | None
         ) = None
+        self._prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = (
+            None
+        )
+        # Serializes prepare_tool_result and recording, so each call of the
+        # hook sees every result recorded before it.
+        self._result_lock = threading.Lock()
         self._on_finish: ReleaseHook | None = None
         self._on_suspend: ReleaseHook | None = None
         self._on_drained: Callable[[], None] | None = None
@@ -805,37 +817,75 @@ class Run:
     def record_tool_results(
         self, result: ToolResult, calls: Sequence[ToolCall]
     ) -> None:
-        """Record the result of calls; `finish_tool` later ends them."""
-        # Checkpoint capture must not split a completed batch.
-        with self.execution_lock:
-            self.cancellation_signal.check()
-            if not self.is_accepting:
-                logger.warning("Tool batch completed after its run closed: %s", self.id)
-                raise AgentCancelled()
-            record = self._state.steps[self._progress.step_index]
-            message_id = record.message.id
-            if message_id is None:
-                raise RuntimeError("Tool execution requires a message ID")
-            for call in calls:
-                execution = record.tools[call.id]
-                execution.result = _tool_result_message(result, call, message_id)
-                execution.status = (
-                    ExecutionStatus.ERROR
-                    if result.is_error
-                    else ExecutionStatus.COMPLETE
+        """Record the result of calls, after `prepare_tool_result` replaces
+        it; `finish_tool` later ends them. Call without the execution lock."""
+        prepare = self._prepare_tool_result
+        if prepare is None:
+            with self.execution_lock:
+                record, message_id = self._accepting_tool_step()
+                self._store_tool_results(record, message_id, result, calls)
+            return
+        with self._result_lock:
+            with self.execution_lock:
+                record, message_id = self._accepting_tool_step()
+                step_results = tuple(
+                    execution.result
+                    for execution in record.tools.values()
+                    if execution.result is not None
                 )
-                self.publish_event(
-                    ToolUpdateEvent(
-                        **self.event_context,
-                        message_id=message_id,
-                        step_index=self._progress.step_index,
-                        tool_call=call,
-                        progress=ToolProgress(
-                            content="" if result.is_error else result.text,
-                            details=result.details,
-                        ),
-                    )
+            result = prepare(
+                ToolResultContext(
+                    message_id=message_id,
+                    calls=tuple(calls),
+                    result=result,
+                    step_results=step_results,
                 )
+            )
+            # Checkpoint capture must not split a completed batch.
+            with self.execution_lock:
+                self._accepting_tool_step()
+                self._store_tool_results(record, message_id, result, calls)
+
+    def _accepting_tool_step(self) -> tuple[StepRecord, str]:
+        """The step that a completed tool batch records into; the caller holds
+        the execution lock. A batch that ends after the run closed records
+        nothing, and the hook does no work for it."""
+        self.cancellation_signal.check()
+        if not self.is_accepting:
+            logger.warning("Tool batch completed after its run closed: %s", self.id)
+            raise AgentCancelled()
+        record = self._state.steps[self._progress.step_index]
+        message_id = record.message.id
+        if message_id is None:
+            raise RuntimeError("Tool execution requires a message ID")
+        return record, message_id
+
+    def _store_tool_results(
+        self,
+        record: StepRecord,
+        message_id: str,
+        result: ToolResult,
+        calls: Sequence[ToolCall],
+    ) -> None:
+        """The caller holds the execution lock."""
+        for call in calls:
+            execution = record.tools[call.id]
+            execution.result = _tool_result_message(result, call, message_id)
+            execution.status = (
+                ExecutionStatus.ERROR if result.is_error else ExecutionStatus.COMPLETE
+            )
+            self.publish_event(
+                ToolUpdateEvent(
+                    **self.event_context,
+                    message_id=message_id,
+                    step_index=self._progress.step_index,
+                    tool_call=call,
+                    progress=ToolProgress(
+                        content="" if result.is_error else result.text,
+                        details=result.details,
+                    ),
+                )
+            )
 
     def record_pending_tool(
         self, call: ToolCall, pending: PendingToolInput | ChildRunWait | NestedInputWait
@@ -1154,6 +1204,7 @@ class Run:
                 name for tool in agent._tools for name in tool.approval_required
             )
             self.after_tool_call = agent.after_tool_call
+            self._prepare_tool_result = agent.prepare_tool_result
             self._on_finish = agent.on_finish
             self._on_suspend = agent.on_suspend
             self._on_drained = agent.on_drained
@@ -1512,16 +1563,69 @@ class Run:
                 for message in self._state.messages
                 if isinstance(message, ToolResultMessage)
             ]
+        error: Exception | None = None
         try:
-            return hook(results), None
+            amendments = hook(results)
         except ReleaseFailed as failed:
-            return failed.amendments, failed.error
+            amendments, error = failed.amendments, failed.error
         except AgentCancelled:
             logger.info("Run release hook stopped for cancellation: %s", self.id)
             return [], None
         except Exception:
             logger.exception("Run release hook failed: %s", self.id)
             return [], None
+        prepare = self._prepare_tool_result
+        if prepare is None or not amendments:
+            return amendments, error
+        # Amended results go through prepare_tool_result as recorded ones do,
+        # under the run's signal: a stopped run's amendments apply as the hook
+        # made them.
+        prepared: list[ToolResultAmendment] = []
+        with cancellation_scope(self.cancellation_signal), self._result_lock:
+            for amendment in amendments:
+                with self.execution_lock:
+                    message_id, call = next(
+                        (
+                            (step.message.id, call)
+                            for step in self._state.steps
+                            for call in step.message.tool_calls
+                            if call.id == amendment.call_id
+                        ),
+                        (None, None),
+                    )
+                if message_id is None or call is None:
+                    # _apply_amendments logs and skips it.
+                    prepared.append(amendment)
+                    continue
+                try:
+                    result = prepare(
+                        ToolResultContext(
+                            message_id=message_id,
+                            calls=(call,),
+                            result=amendment.result,
+                            step_results=(),
+                            amended=True,
+                        )
+                    )
+                except AgentCancelled:
+                    # The call gets the amendment as the hook made it.
+                    logger.info(
+                        "Run %s stopped preparing the amendment of %s",
+                        self.id,
+                        amendment.call_id,
+                    )
+                    prepared.append(amendment)
+                    continue
+                except Exception:
+                    logger.exception(
+                        "Run %s could not prepare the amendment of %s",
+                        self.id,
+                        amendment.call_id,
+                    )
+                    prepared.append(amendment)
+                    continue
+                prepared.append(amendment.model_copy(update={"result": result}))
+        return prepared, error
 
     def _apply_amendments(self, amendments: Sequence[ToolResultAmendment]) -> None:
         """Set the final results of started calls; the caller holds the execution lock.
@@ -1601,6 +1705,7 @@ class Run:
         self.before_tool_call = None
         self.approval_required = frozenset()
         self.after_tool_call = None
+        self._prepare_tool_result = None
         self._on_finish = None
         self._on_suspend = None
         self._on_drained = None

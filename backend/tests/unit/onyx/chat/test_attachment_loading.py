@@ -104,3 +104,30 @@ def test_history_without_valid_user_file_id_keeps_lazy_image(
     store.assert_not_called()
     assert loaded[0].token_count == 0
     assert not loaded[0].content_pending
+
+
+def test_attachment_status_matches_non_canonical_user_file_ids() -> None:
+    """Uppercase or unhyphenated ids still find the file's status."""
+    file_id = uuid4()
+    descriptors: list[FileDescriptor] = [
+        {
+            "id": "store-id",
+            "type": ChatFileType.PLAIN_TEXT,
+            "user_file_id": raw,
+        }
+        for raw in (str(file_id).upper(), file_id.hex)
+    ]
+
+    def get_metadata(
+        user_file_ids: list[UUID],
+        db_session: Session,  # noqa: ARG001
+    ) -> dict[str, tuple[int, UserFileStatus]]:
+        return {str(uid): (9, UserFileStatus.SKIPPED) for uid in user_file_ids}
+
+    with patch(
+        "onyx.db.user_file.get_user_file_processing_info", side_effect=get_metadata
+    ):
+        inputs = prepare_chat_file_inputs(descriptors, MagicMock(spec=Session))
+
+    assert [item.indexed for item in inputs] == [False, False]
+    assert [item.token_count for item in inputs] == [9, 9]

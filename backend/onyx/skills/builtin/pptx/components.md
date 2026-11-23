@@ -1,6 +1,6 @@
 # Slide Components
 
-> **Path convention**: All commands run from the **session workspace**. Prefix skill scripts with `.opencode/skills/pptx/`. Generated files go in `outputs/`.
+> **Path convention**: Run all commands from your working directory, the chat session folder. Run skill scripts with their interpreter and the absolute path under `/mnt/skills/pptx/`. Write generated files to the working directory.
 
 **Components are the DEFAULT way to build a deck from scratch.** Each component is a tested layout function: fixed 0.5" margins, the SKILL.md typography scale, contrast-safe color picking, and shrink/truncate guards so long content cannot overflow. Assembling slides from components is much faster than hand-placing shapes and produces decks that pass `lint.py` on the first try. Drop to raw pptxgenjs ([pptxgenjs.md](pptxgenjs.md)) **only** for a layout no component covers — and even then, keep the rest of the deck on components.
 
@@ -24,14 +24,14 @@ The default visual system is **engineered monochrome**: a white field with near-
 Use the default monochrome palette (`defaultTheme()`) unless the user wants a specific palette:
 
 ```javascript
-const C = require(".opencode/skills/pptx/scripts/components.js");
+const C = require("/mnt/skills/pptx/scripts/components.js");
 
 const theme = C.defaultTheme(); // engineered monochrome — colors + fonts, no branding
 const pres = C.createPresentation(theme, { title: "Deck Title", author: "You" });
 
 // ...one component call per slide...
 
-await pres.writeFile({ fileName: "outputs/deck.pptx" });
+await pres.writeFile({ fileName: "deck.pptx" });
 ```
 
 For a topic-specific palette, `makeTheme` inherits the whole system in your colors:
@@ -98,17 +98,17 @@ C.statCallouts(pres, theme, {
 // chart.py PNG sized to the chartSlide region (see charts.md)
 C.chartSlide(pres, theme, {
   title: "Quarterly revenue",
-  chart: { path: "outputs/chart-revenue.png" },
+  chart: { path: "chart-revenue.png" },
   takeaway: "Q4 broke the flat trend — enterprise deals drove the jump.",
 });
 
 // icons pre-rendered with icon.js in ink, placed bare (no circle backer):
-//   node .opencode/skills/pptx/scripts/icon.js trending-up --color 0F0F0F -o outputs/icons/up.png
+//   node /mnt/skills/pptx/scripts/icon.js trending-up --color 0F0F0F -o icons/up.png
 C.iconRow(pres, theme, {
   title: "What worked",
   items: [
-    { iconPath: "outputs/icons/up.png", label: "Expansion", desc: "Existing accounts grew 22%" },
-    { iconPath: "outputs/icons/shield.png", label: "Churn control", desc: "Saves program cut churn in half" },
+    { iconPath: "icons/up.png", label: "Expansion", desc: "Existing accounts grew 22%" },
+    { iconPath: "icons/shield.png", label: "Churn control", desc: "Saves program cut churn in half" },
   ],
 });
 ```
@@ -127,6 +127,6 @@ C.iconRow(pres, theme, {
 `scripts/components_demo.js` renders a deck (on `defaultTheme()`) with one slide per component and must stay lint-clean:
 
 ```bash
-node .opencode/skills/pptx/scripts/components_demo.js outputs/components-demo.pptx
-python .opencode/skills/pptx/scripts/lint.py outputs/components-demo.pptx
+node /mnt/skills/pptx/scripts/components_demo.js components-demo.pptx
+python /mnt/skills/pptx/scripts/lint.py components-demo.pptx
 ```

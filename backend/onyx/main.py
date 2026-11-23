@@ -88,6 +88,9 @@ from onyx.server.features.admin_banner.api import admin_router as admin_banner_r
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
 from onyx.server.features.build.configs import SANDBOX_RUNTIME, SandboxRuntime
+from onyx.server.features.build.scheduled_tasks.api import (
+    router as scheduled_tasks_router,
+)
 from onyx.server.features.build.static_preview import (
     public_router as static_preview_router,
 )
@@ -124,6 +127,9 @@ from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.projects.api import router as projects_router
 from onyx.server.features.search.api import router as search_api_router
 from onyx.server.features.skill.api import user_router as skill_router
+from onyx.server.features.skill.marketplace_api import (
+    router as marketplace_router,
+)
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.features.usage.api import admin_usage_router, user_usage_router
@@ -181,6 +187,7 @@ from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.sso_discovery import router as sso_discovery_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
+from onyx.tools.tool_implementations.sandbox.file_copies import shutdown_file_copies
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
 from onyx.utils.encryption import validate_encryption_configuration
@@ -472,6 +479,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         except Exception:
             logger.exception("Failed to drain chat turns on shutdown")
 
+        try:
+            shutdown_file_copies()
+        except Exception:
+            logger.exception("Failed to stop chat file copies on shutdown")
+
         # Flush buffered per-user usage before disposing the DB engines its drain
         # thread writes through.
         from onyx.tracing.setup import shutdown_tracing
@@ -595,6 +607,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, scheduled_tasks_router)
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)
     include_router_with_global_prefix_prepended(application, user_router)
@@ -677,6 +690,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, action_policies_router)
     include_router_with_global_prefix_prepended(application, mobile_plugins_router)
     include_router_with_global_prefix_prepended(application, skill_router)
+    include_router_with_global_prefix_prepended(application, marketplace_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)

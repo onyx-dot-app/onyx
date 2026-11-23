@@ -4,8 +4,10 @@ run gives."""
 
 import json
 import os
+from datetime import datetime
 from typing import Any
 
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -81,6 +83,19 @@ def load_zip_metadata(
         )
         return zip_metadata
     return {}
+
+
+def zip_metadata_uploaded_at(zip_metadata_file_id: str | None) -> datetime | None:
+    """When the metadata file was uploaded. A metadata edit uploads a new file,
+    so this time moves forward when any file's metadata changes."""
+    if not zip_metadata_file_id:
+        return None
+    try:
+        return (
+            get_default_file_store().read_file_record(zip_metadata_file_id).created_at
+        )
+    except FileRecordNotFoundError:
+        return None
 
 
 def zip_metadata_entry(

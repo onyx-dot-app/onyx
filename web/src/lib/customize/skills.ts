@@ -2,6 +2,7 @@ import type { Skill, SkillsList } from "@/lib/skills/types";
 
 export const SKILL_GROUPS = [
   "mine",
+  "marketplace",
   "organization",
   "shared",
   "builtin",
@@ -13,12 +14,7 @@ export type SkillStatusFilter = "all" | "on" | "off";
 
 export type SkillSort = "updated" | "name";
 
-export interface GroupedSkills {
-  mine: Skill[];
-  organization: Skill[];
-  shared: Skill[];
-  builtin: Skill[];
-}
+export type GroupedSkills = Record<SkillGroup, Skill[]>;
 
 export interface SkillListOptions {
   userId: string | null;
@@ -32,6 +28,7 @@ export interface SkillListOptions {
 
 export function skillGroup(skill: Skill, userId: string | null): SkillGroup {
   if (skill.source === "builtin") return "builtin";
+  if (skill.marketplace?.kind === "github") return "marketplace";
   if (userId !== null && skill.owner?.id === userId) return "mine";
   if (skill.published_version_number !== null) return "organization";
   return "shared";
@@ -39,7 +36,7 @@ export function skillGroup(skill: Skill, userId: string | null): SkillGroup {
 
 function visible(skill: Skill, craftEnabled: boolean): boolean {
   return skill.source === "custom"
-    ? true
+    ? skill.member_visible
     : craftEnabled && skill.is_available !== null;
 }
 
@@ -77,6 +74,7 @@ export function groupSkills(
 ): GroupedSkills {
   const groups: GroupedSkills = {
     mine: [],
+    marketplace: [],
     organization: [],
     shared: [],
     builtin: [],

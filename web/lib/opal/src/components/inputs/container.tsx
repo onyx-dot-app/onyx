@@ -10,10 +10,7 @@ import { cn } from "@opal/utils";
 // InputContainer
 // ---------------------------------------------------------------------------
 
-interface InputContainerProps extends Omit<
-  React.HTMLAttributes<HTMLDivElement>,
-  "onBlur"
-> {
+interface InputContainerProps extends React.HTMLAttributes<HTMLDivElement> {
   ref?: React.Ref<HTMLDivElement>;
   /** Visual state; see `shared.css`. */
   variant?: InputVariants;
@@ -44,6 +41,7 @@ function InputContainer({
   onFieldBlur,
   className,
   onClick,
+  onBlur,
   children,
   ...rest
 }: InputContainerProps) {
@@ -67,14 +65,14 @@ function InputContainer({
         }
         focusTarget(event.currentTarget)?.focus();
       }}
-      onBlur={
-        onFieldBlur &&
-        ((event) => {
-          if (event.currentTarget.contains(event.relatedTarget as Node | null))
-            return;
-          onFieldBlur(event);
-        })
-      }
+      // `onBlur` stays a plain handler, so a wrapping `Tooltip` still closes.
+      onBlur={(event) => {
+        onBlur?.(event);
+        if (!onFieldBlur) return;
+        if (event.currentTarget.contains(event.relatedTarget as Node | null))
+          return;
+        onFieldBlur(event);
+      }}
     >
       {children}
     </div>

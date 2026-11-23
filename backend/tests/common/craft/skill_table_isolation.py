@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, class_mapper
 from onyx.db.models import (
     ExternalApp,
     GatedApp,
+    Marketplace,
     Plugin,
     Skill,
 )
@@ -20,6 +21,7 @@ _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     Skill,
     ExternalApp,
     GatedApp,
+    Marketplace,
     Plugin,
 )
 

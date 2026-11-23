@@ -58,12 +58,13 @@ class FakeProbe:
 
 def _result(output: str, exit_code: int = 0) -> ExecCommandResult:
     return ExecCommandResult(
-        output=output,
+        head=output,
+        tail="",
+        omitted_chars=0,
         session_id=None,
         exit_code=exit_code,
         completion="exited",
         wall_time_seconds=0.0,
-        original_token_count=0,
         truncated=False,
     )
 

@@ -11,7 +11,7 @@ Call the Slack Web API as the connected user via the bundled helper.
 
 ## Usage
 
-    python .opencode/skills/slack/slack_api.py <command> [args]
+    python /mnt/skills/slack/slack_api.py <command> [args]
 
 Read commands auto-paginate and prune empty fields. `post` is the only write.
 Use `--raw` to skip empty-field pruning; `python slack_api.py <command> -h`

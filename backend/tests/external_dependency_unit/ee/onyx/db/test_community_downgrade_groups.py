@@ -19,6 +19,7 @@ from onyx.db.enums import (
     GrantSource,
     IntegrationAuthMode,
     IntegrationKind,
+    MarketplaceKind,
     Permission,
     PersonaSharePermission,
     PluginInstallationPolicy,
@@ -34,6 +35,7 @@ from onyx.db.models import (
     Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
+    Marketplace,
     MCPServer,
     MCPServer__UserGroup,
     PermissionGrant,
@@ -41,6 +43,7 @@ from onyx.db.models import (
     Persona__UserFile,
     Persona__UserGroup,
     Plugin,
+    Plugin__User,
     Plugin__UserGroup,
     PluginSkill,
     TokenRateLimit,
@@ -567,5 +570,50 @@ def test_group_shared_providers_servers_and_skills_become_public(
         assert not providers[1].is_public
         assert not servers[1].is_public
         assert skills[1].marketplace_id != ORGANIZATION_LIBRARY_ID
+    finally:
+        db_session.rollback()
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_downgrade_shares_a_synced_plugin_with_group_members(
+    db_session: Session,
+) -> None:
+    """A synced plugin cannot move to the Organization library, so the members
+    of a removed group that shared it get a user share. A group with only an
+    install setting gives no share."""
+    try:
+        member = _make_user(db_session, in_basic=True)
+        outsider = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [member])
+        setting_group = _make_group(db_session, [outsider])
+        marketplace = Marketplace(
+            kind=MarketplaceKind.GITHUB,
+            name=f"downgrade-{uuid4().hex[:8]}",
+            repository="acme/plugins",
+            login_user_id=member.id,
+        )
+        db_session.add(marketplace)
+        db_session.flush()
+        synced = _make_skill(db_session, member)
+        synced.marketplace_id = marketplace.id
+        db_session.flush()
+        _share_with_group(db_session, synced, group)
+        db_session.add(
+            Plugin__UserGroup(
+                plugin_id=synced.id,
+                user_group_id=setting_group.id,
+                permission=None,
+                installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
+            )
+        )
+        db_session.flush()
+
+        remove_custom_user_groups__no_commit(db_session)
+
+        db_session.refresh(synced)
+        assert synced.marketplace_id == marketplace.id
+        assert db_session.scalars(
+            select(Plugin__User.user_id).where(Plugin__User.plugin_id == synced.id)
+        ).all() == [member.id]
     finally:
         db_session.rollback()

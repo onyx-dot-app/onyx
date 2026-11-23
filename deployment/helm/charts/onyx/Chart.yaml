@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.56
+version: 0.9.57
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,11 +20,11 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: New worker celery_worker_docconversion, off by default. When
-        enabled, the chart deploys it and sets ENABLE_CONVERSION_STAGE on the
-        docfetching worker, so docfetching lists Google Drive files and this
-        worker fetches and parses them.
+    - kind: changed
+      description: celery_worker_scheduled_tasks.concurrency sets the threads of
+        the scheduled-tasks worker. The default is now 32 (was 4). A
+        CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY value in configMap or in the
+        worker's extraEnv still takes precedence.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

@@ -10,6 +10,10 @@ import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
 import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
+  type ChatRightPanelState,
+  INITIAL_RIGHT_PANEL,
+} from "@/lib/chat/rightPanel";
+import {
   claimStreamReader,
   followChatSession,
   followChatStream,
@@ -1076,7 +1080,9 @@ describe("with stubbed server checks", () => {
 
     await refreshChatSession("session", errorMessage);
 
-    expect(fetchSettledChatSession).toHaveBeenCalledWith("session", 86);
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session", {
+      beforeMessageId: 86,
+    });
     expect(
       useChatSessionStore.getState().sessions.get("session")!.messageTree.get(2)
         ?.packets
@@ -1232,10 +1238,14 @@ describe("with stubbed server checks", () => {
   test("history replacement keeps the sources panel on the selected response", async () => {
     const local = { ...message(-2, "assistant", "Answer"), messageId: 42 };
     const saved = { ...local, nodeId: 42 };
+    const rightPanel: ChatRightPanelState = {
+      ...INITIAL_RIGHT_PANEL,
+      mode: "medium",
+    };
     useChatSessionStore.getState().updateSessionData("session", {
       messageTree: new Map([[-2, local]]),
       selectedNodeIdForDocDisplay: -2,
-      documentSidebarVisible: true,
+      rightPanel,
     });
     jest.mocked(processRawChatHistory).mockReturnValue(new Map([[42, saved]]));
     await settle();
@@ -1243,8 +1253,32 @@ describe("with stubbed server checks", () => {
       useChatSessionStore.getState().sessions.get("session")
     ).toMatchObject({
       selectedNodeIdForDocDisplay: 42,
-      documentSidebarVisible: true,
+      rightPanel,
     });
+  });
+
+  test("history replacement takes the load's published files, a background subagent's too", async () => {
+    const subagentFile = {
+      file_id: "file-subagent",
+      name: "notes.md",
+      title: null,
+      path: "/w/notes.md",
+      display_path: "notes.md",
+      size: 3,
+      mime_type: "text/markdown",
+      artifact_id: "artifact-notes",
+      version: 1,
+      thumbnail_file_id: null,
+    };
+    jest.mocked(fetchSettledChatSession).mockResolvedValue({
+      ...savedSession([], null),
+      published_files: [subagentFile],
+    });
+    await settle();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+        ?.loadedPublishedFiles.listed
+    ).toEqual([subagentFile]);
   });
 });
 

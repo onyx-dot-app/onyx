@@ -56,40 +56,39 @@ def test_parse_skill_document_rejects_empty_description(
         parse_skill_document(_skill_md(f"name: reports\ndescription: '{description}'"))
 
 
-@pytest.mark.parametrize("compatibility", ["", " ", "x" * 501])
-def test_parse_skill_document_rejects_invalid_compatibility(
-    compatibility: str,
-) -> None:
-    with pytest.raises(OnyxError, match="field 'compatibility'"):
-        parse_skill_document(
-            _skill_md(
-                "name: reports\n"
-                "description: Use this skill for reports.\n"
-                f"compatibility: '{compatibility}'"
-            )
-        )
-
-
 @pytest.mark.parametrize(
-    ("field", "value"),
+    ("field", "value", "stored"),
     [
-        ("license", "123"),
-        ("allowed-tools", "[Read]"),
-        ("metadata", "{version: 1}"),
+        ("compatibility", "''", ""),
+        ("compatibility", "' '", " "),
+        ("license", "123", 123),
+        ("license", "[MIT]", ["MIT"]),
+        ("allowed-tools", "[Read, 'Bash(ls *)']", ["Read", "Bash(ls *)"]),
+        ("allowed-tools", "{a: b}", {"a": "b"}),
+        ("metadata", "{version: 1, tags: [a]}", {"version": 1, "tags": ["a"]}),
+        ("metadata", "text", "text"),
     ],
 )
-def test_parse_skill_document_validates_optional_field_types(
+def test_parse_skill_document_keeps_unused_fields_it_cannot_read(
     field: str,
     value: str,
+    stored: object,
 ) -> None:
-    with pytest.raises(OnyxError, match=f"field '{field}'"):
-        parse_skill_document(
-            _skill_md(
-                "name: reports\n"
-                "description: Use this skill for reports.\n"
-                f"{field}: {value}"
-            )
+    document = parse_skill_document(
+        _skill_md(
+            f"name: reports\ndescription: Use this skill for reports.\n{field}: {value}"
         )
+    )
+    assert document.metadata.name == "reports"
+    assert document.frontmatter[field] == stored
+
+
+def test_parse_skill_document_names_a_bad_field_in_plain_words() -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        parse_skill_document(_skill_md("name: reports\ndescription: [a]"))
+    assert exc_info.value.detail == (
+        "SKILL.md frontmatter field 'description' must be text"
+    )
 
 
 def test_parse_skill_document_rejects_non_string_frontmatter_key() -> None:

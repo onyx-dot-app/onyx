@@ -22,6 +22,7 @@ from onyx.server.features.action_policies.models import DecisionBody
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.question.models import ToolQuestionAnswer
+from onyx.tools.tool_implementations.sandbox.models import PublishedFileView
 from onyx.utils.postgres_sanitization import sanitize_string
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
@@ -176,6 +177,15 @@ class SendMessageRequest(BaseModel):
             "Set to true if the client can receive automatic follow-up answers "
             "after the stream ends. This enables background agents for the "
             "turn. Clients that only read the streamed answer leave it false."
+        ),
+    )
+
+    accepts_chat_session_name: bool = Field(
+        default=False,
+        description=(
+            "Set to true to receive a `chat_session_name` line when the server "
+            "names a new chat. The server names a new chat from its first "
+            "question while it answers, whether or not this is set."
         ),
     )
 
@@ -525,6 +535,11 @@ class ChatSessionDetailResponse(BaseModel):
     incognito: bool = False
     # Set on a paged load when the current branch has messages before the page.
     has_older_messages: bool = False
+    # The files published in the chat, also by its subagents: the latest
+    # version of each artifact, by first publish
+    # (db/chat.py:get_chat_published_files).
+    # Set on a latest-page load and on a shared chat's load.
+    published_files: list[PublishedFileView] | None = None
     # The owner's saved tool options; NULL means the agent's tools.
     tool_options: ToolOptions | None = None
     # The status route's `approvals_version` for the requests this load shows.

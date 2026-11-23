@@ -1228,6 +1228,11 @@ class SearchTool(Tool):
                 time_filter.end.isoformat() if time_filter.end else "any",
             )
 
+        # Federated sources, Slack included, cannot apply tag filters.
+        if effective_filters is not None and effective_filters.tags:
+            slack_access_token = None
+            federated_retrieval_infos = []
+
         # Prepare queries with their weights and hybrid_alpha settings
         # Group 1: Keyword queries (use hybrid_alpha=0.2)
         keyword_queries_with_weights = [

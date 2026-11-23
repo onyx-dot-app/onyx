@@ -39,6 +39,9 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
+import AddMarketplaceModal from "@/sections/marketplaces/AddMarketplaceModal";
+import MarketplacesSection from "@/sections/marketplaces/MarketplacesSection";
+import { useMarketplaceAdded } from "@/lib/marketplaces/hooks";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -48,7 +51,6 @@ import useUserSkills from "@/hooks/useUserSkills";
 import AdminSkillsTable from "@/sections/skills/AdminSkillsTable";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
-import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillReviewRequests from "@/sections/skills/SkillReviewRequests";
 import SkillLimitUsersBanner from "@/sections/skills/SkillLimitUsersBanner";
@@ -64,7 +66,11 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import { useSkillEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
-import { adminSkillHref, newSkillHref } from "@/lib/customize/paths";
+import {
+  adminSkillHref,
+  newSkillHref,
+  pluginHref,
+} from "@/lib/customize/paths";
 
 export default function AdminSkillsPage() {
   const t = useTranslations("skills");
@@ -95,7 +101,8 @@ export default function AdminSkillsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const githubImportModal = useCreateModal();
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const onMarketplaceAdded = useMarketplaceAdded();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<CustomSkill | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -315,11 +322,11 @@ export default function AdminSkillsPage() {
                 },
                 {
                   kind: "action",
-                  id: "github",
+                  id: "marketplace",
                   icon: SvgGitHub,
-                  title: t("page.createMenu.github.title"),
-                  description: t("page.createMenu.github.description"),
-                  onSelect: () => githubImportModal.toggle(true),
+                  title: t("page.createMenu.marketplace.title"),
+                  description: t("page.createMenu.marketplace.description"),
+                  onSelect: () => setMarketplaceOpen(true),
                 },
               ]}
             />
@@ -493,7 +500,11 @@ export default function AdminSkillsPage() {
                         void enablement.setEnabled(skill, enabled)
                       }
                       onOpen={(skill) =>
-                        navigation.go(adminSkillHref(skill.id))
+                        navigation.go(
+                          skill.kind === "plugin"
+                            ? pluginHref(skill.id)
+                            : adminSkillHref(skill.id)
+                        )
                       }
                       onShare={setShareTarget}
                       onDelete={(skill) => {
@@ -513,6 +524,7 @@ export default function AdminSkillsPage() {
             )}
           </>
         )}
+        <MarketplacesSection onAdd={() => setMarketplaceOpen(true)} />
         {canManageOrgSkills && <SkillPublishingCard />}
       </SettingsLayouts.Body>
 
@@ -594,13 +606,14 @@ export default function AdminSkillsPage() {
         }}
       />
 
-      <githubImportModal.Provider>
-        <ImportSkillsFromGitHubModal
-          open
-          onClose={() => githubImportModal.toggle(false)}
-          onImported={() => void revalidateSkills()}
-        />
-      </githubImportModal.Provider>
+      <AddMarketplaceModal
+        open={marketplaceOpen}
+        onClose={() => setMarketplaceOpen(false)}
+        onAdded={(marketplace) => {
+          setMarketplaceOpen(false);
+          onMarketplaceAdded(marketplace);
+        }}
+      />
 
       <deleteModal.Provider>
         {deleteTarget && (

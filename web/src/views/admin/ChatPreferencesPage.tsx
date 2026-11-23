@@ -43,7 +43,6 @@ import {
   Text,
   Card,
   MessageCard,
-  Tooltip,
 } from "@opal/components";
 import { Modal } from "@opal/components";
 import { InputSwitch } from "@opal/components";
@@ -431,28 +430,19 @@ export default function ChatPreferencesPage() {
                 tag={!businessTier ? plans[Tier.BUSINESS].tag : betaTag}
                 description={t("searchMode.description")}
                 withLabel
+                disabled={!businessTier || uniqueSources.length === 0}
+                disabledTooltip={
+                  !businessTier
+                    ? plans[Tier.BUSINESS].tooltip
+                    : t("searchMode.noConnectorsTooltip")
+                }
               >
-                <Tooltip
-                  tooltip={
-                    !businessTier
-                      ? plans[Tier.BUSINESS].tooltip
-                      : uniqueSources.length === 0
-                        ? t("searchMode.noConnectorsTooltip")
-                        : undefined
-                  }
-                >
-                  <div>
-                    <InputSwitch
-                      checked={
-                        businessTier ? (s.search_ui_enabled ?? true) : false
-                      }
-                      onCheckedChange={(checked) => {
-                        void saveSettings({ search_ui_enabled: checked });
-                      }}
-                      disabled={!businessTier || uniqueSources.length === 0}
-                    />
-                  </div>
-                </Tooltip>
+                <InputSwitch
+                  checked={businessTier ? (s.search_ui_enabled ?? true) : false}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ search_ui_enabled: checked });
+                  }}
+                />
               </InputHorizontal>
               <InputHorizontal
                 title={t("autoDetectFilters.title")}
@@ -626,104 +616,92 @@ export default function ChatPreferencesPage() {
                         </Card>
                       )}
 
-                      <Disabled
-                        disabled={!imageGenTool}
-                        tooltip={t("tools.imageGeneration.disabledTooltip")}
-                      >
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.imageGeneration.title")}
-                            description={t("tools.imageGeneration.description")}
-                            disabled={!imageGenTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                imageGenTool
-                                  ? isToolEnabled(imageGenTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                imageGenTool &&
-                                void toggleTool(imageGenTool.id, checked)
-                              }
-                              disabled={!imageGenTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.imageGeneration.title")}
+                          description={t("tools.imageGeneration.description")}
+                          disabled={!imageGenTool}
+                          disabledTooltip={t(
+                            "tools.imageGeneration.disabledTooltip"
+                          )}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              imageGenTool
+                                ? isToolEnabled(imageGenTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              imageGenTool &&
+                              void toggleTool(imageGenTool.id, checked)
+                            }
+                          />
+                        </InputHorizontal>
+                      </Card>
 
-                      <Disabled disabled={!webSearchTool}>
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.webSearch.title")}
-                            description={t("tools.webSearch.description")}
-                            disabled={!webSearchTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                webSearchTool
-                                  ? isToolEnabled(webSearchTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                webSearchTool &&
-                                void toggleTool(webSearchTool.id, checked)
-                              }
-                              disabled={!webSearchTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.webSearch.title")}
+                          description={t("tools.webSearch.description")}
+                          disabled={!webSearchTool}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              webSearchTool
+                                ? isToolEnabled(webSearchTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              webSearchTool &&
+                              void toggleTool(webSearchTool.id, checked)
+                            }
+                          />
+                        </InputHorizontal>
+                      </Card>
 
-                      <Disabled disabled={!openURLTool}>
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.openUrl.title")}
-                            description={t("tools.openUrl.description")}
-                            disabled={!openURLTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                openURLTool
-                                  ? isToolEnabled(openURLTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                openURLTool &&
-                                void toggleTool(openURLTool.id, checked)
-                              }
-                              disabled={!openURLTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.openUrl.title")}
+                          description={t("tools.openUrl.description")}
+                          disabled={!openURLTool}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              openURLTool
+                                ? isToolEnabled(openURLTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              openURLTool &&
+                              void toggleTool(openURLTool.id, checked)
+                            }
+                          />
+                        </InputHorizontal>
+                      </Card>
 
-                      <Disabled disabled={!codeInterpreterTool}>
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.codeInterpreter.title")}
-                            description={t("tools.codeInterpreter.description")}
-                            disabled={!codeInterpreterTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                codeInterpreterTool
-                                  ? isToolEnabled(codeInterpreterTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                codeInterpreterTool &&
-                                void toggleTool(codeInterpreterTool.id, checked)
-                              }
-                              disabled={!codeInterpreterTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.codeInterpreter.title")}
+                          description={t("tools.codeInterpreter.description")}
+                          disabled={!codeInterpreterTool}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              codeInterpreterTool
+                                ? isToolEnabled(codeInterpreterTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              codeInterpreterTool &&
+                              void toggleTool(codeInterpreterTool.id, checked)
+                            }
+                          />
+                        </InputHorizontal>
+                      </Card>
                     </Section>
 
                     <MessageCard

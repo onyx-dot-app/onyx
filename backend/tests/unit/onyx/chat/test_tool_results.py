@@ -156,11 +156,11 @@ def test_later_prompts_replay_program_observations_with_their_images() -> None:
         status=details.status,
         cell_id=details.cell_id,
         cell_calls=details.calls,
-        max_tokens=1_000,
+        max_chars=4_000,
         end=None,
         discarded=None,
         elided_chars=0,
-    )
+    ).text
     references = [{"file_id": "image-1", "revised_prompt": "a red fox"}]
     assert content.endswith(f"Generated images: {json.dumps(references)}")
     program = ToolResultMessage(

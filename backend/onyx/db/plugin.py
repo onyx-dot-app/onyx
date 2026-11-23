@@ -22,7 +22,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Select, and_, delete, func, select
+from sqlalchemy import Select, and_, case, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -48,6 +48,9 @@ from onyx.db.models import (
 )
 from onyx.db.plugin_access import (
     affected_user_ids_for_plugins,
+    holds_one_root_skill,
+    plugin_editable_by_user,
+    seen_by_organization,
     visible_plugin_ids,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
@@ -63,6 +66,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.store import load_settings
 from onyx.skills.models import (
     PluginFileEntry,
+    PluginManifest,
+    PluginNeed,
     PluginVersionContent,
 )
 
@@ -72,6 +77,7 @@ ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 _PLUGIN_NAME_INDEX = "uq_plugin_marketplace_name"
 
 NameClashAction = Literal["raise", "rename"]
+SkillKey = tuple[UUID, str]
 _RENAME_ATTEMPTS = 3
 
 
@@ -117,6 +123,15 @@ def get_or_create_user_uploads__no_commit(user_id: UUID, db_session: Session) ->
     ).one()
 
 
+def get_user_uploads_id(user_id: UUID, db_session: Session) -> UUID | None:
+    return db_session.scalar(
+        select(Marketplace.id).where(
+            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+            Marketplace.owner_user_id == user_id,
+        )
+    )
+
+
 def get_or_create_organization_library__no_commit(db_session: Session) -> UUID:
     db_session.execute(
         insert(Marketplace)
@@ -148,34 +163,53 @@ def get_organization_library_default(db_session: Session) -> PluginInstallationP
     return policy or PluginInstallationPolicy.AVAILABLE
 
 
-def set_organization_library_default__no_commit(
-    policy: PluginInstallationPolicy, db_session: Session
+def set_marketplace_default__no_commit(
+    marketplace_id: UUID, policy: PluginInstallationPolicy, db_session: Session
 ) -> set[UUID]:
-    """Set the Organization library default and return the users with a
-    running sandbox who could see a plugin that follows it, before or after.
-    REQUIRED is refused: one switch would force every published plugin on
-    every user."""
-    if policy == PluginInstallationPolicy.REQUIRED:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "The Organization library default cannot be Required.",
-        )
-    library_id = get_or_create_organization_library__no_commit(db_session)
-    library = db_session.scalars(
-        select(Marketplace).where(Marketplace.id == library_id).with_for_update()
-    ).one()
+    """Set a marketplace default and return the users with a running sandbox
+    who could see a plugin that follows it, before or after. A company GitHub
+    marketplace can be REQUIRED, as in Claude; the Organization library
+    cannot, because one switch would force every published plugin on."""
+    if marketplace_id == ORGANIZATION_LIBRARY_ID:
+        if policy == PluginInstallationPolicy.REQUIRED:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "The Organization library default cannot be Required.",
+            )
+        get_or_create_organization_library__no_commit(db_session)
+    marketplace = db_session.scalars(
+        select(Marketplace).where(Marketplace.id == marketplace_id).with_for_update()
+    ).one_or_none()
+    if marketplace is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
     affected_ids = list(
         db_session.scalars(
             select(Plugin.id).where(
-                Plugin.marketplace_id == library_id,
+                Plugin.marketplace_id == marketplace_id,
                 Plugin.installation_policy.is_(None),
             )
         )
     )
     before = affected_user_ids_for_plugins(affected_ids, db_session)
-    library.default_installation_policy = policy
+    marketplace.default_installation_policy = policy
     db_session.flush()
     return before | affected_user_ids_for_plugins(affected_ids, db_session)
+
+
+SYNCED_PLUGIN_LOCKED = "Change this plugin in GitHub."
+
+
+def is_synced(plugin: Plugin) -> bool:
+    return plugin.marketplace.kind == MarketplaceKind.GITHUB
+
+
+def is_personal_synced(plugin: Plugin) -> bool:
+    return is_synced(plugin) and plugin.marketplace.owner_user_id is not None
+
+
+def refuse_if_synced(plugin: Plugin) -> None:
+    if is_synced(plugin):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, SYNCED_PLUGIN_LOCKED)
 
 
 def free_plugin_name(
@@ -226,6 +260,19 @@ def _add_version_rows(
         ),
         unpacked_size_bytes=content.unpacked_size_bytes,
         file_count=content.file_count,
+        manifest=(
+            content.manifest.model_dump(mode="json")
+            if content.manifest is not None
+            else None
+        ),
+        needs=(
+            [
+                need.model_dump(mode="json", exclude={"supported"})
+                for need in content.needs
+            ]
+            if content.needs is not None
+            else None
+        ),
         created_by_user_id=created_by.id if created_by is not None else None,
         created_by_email=created_by.email if created_by is not None else None,
     )
@@ -280,6 +327,17 @@ def check_base_version(plugin: Plugin, base_version_id: UUID | None) -> None:
         )
 
 
+def next_version_number(plugin_id: UUID, db_session: Session) -> int:
+    return (
+        db_session.scalar(
+            select(func.max(PluginVersion.version_number)).where(
+                PluginVersion.plugin_id == plugin_id
+            )
+        )
+        or 0
+    ) + 1
+
+
 def add_plugin_version__no_commit(
     *,
     plugin: Plugin,
@@ -322,27 +380,28 @@ def add_plugin_version__no_commit(
     if skip_if_unchanged and _manifest_matches(current, content, previous_manifest):
         return None
 
-    next_number = (
-        db_session.scalar(
-            select(func.max(PluginVersion.version_number)).where(
-                PluginVersion.plugin_id == plugin.id
-            )
-        )
-        or 0
-    ) + 1
     version = _add_version_rows(
         version_id=uuid4(),
         plugin_id=plugin.id,
-        version_number=next_number,
+        version_number=next_version_number(plugin.id, db_session),
         content=content,
         created_by=created_by,
         db_session=db_session,
     )
     plugin.current_version_id = version.id
-    if is_skill_version(skill.path for skill in content.skills):
-        plugin.description = content.skills[0].description
+    description = version_description(content)
+    if description is not None:
+        plugin.description = description
     db_session.flush()
     return version
+
+
+def version_description(content: PluginVersionContent) -> str | None:
+    if is_skill_version(skill.path for skill in content.skills):
+        return content.skills[0].description
+    if content.manifest is not None:
+        return content.manifest.description or ""
+    return None
 
 
 def list_plugin_versions(
@@ -441,28 +500,75 @@ class StoredSkillMd(BaseModel):
 
 
 def get_visible_versions_skill_md(
-    version_ids: Collection[UUID], user_id: UUID, db_session: Session
-) -> dict[UUID, StoredSkillMd]:
-    """The SKILL.md of each version whose plugin the user can see now, in one
-    query. A version that is gone or hidden from the user is left out."""
+    skills: Collection[SkillKey], user_id: UUID, db_session: Session
+) -> dict[SkillKey, StoredSkillMd]:
     rows = db_session.execute(
-        select(PluginVersion.id, PluginVersion.bundle_file_id, PluginSkill.skill_md)
-        .outerjoin(
-            PluginSkill,
-            and_(
-                PluginSkill.plugin_version_id == PluginVersion.id,
-                PluginSkill.path == "",
-            ),
+        select(
+            PluginVersion.id,
+            PluginSkill.path,
+            PluginVersion.bundle_file_id,
+            PluginSkill.skill_md,
         )
+        .join(PluginSkill, PluginSkill.plugin_version_id == PluginVersion.id)
         .where(
-            PluginVersion.id.in_(version_ids),
+            tuple_(PluginVersion.id, PluginSkill.path).in_(list(skills)),
             PluginVersion.plugin_id.in_(visible_plugin_ids(user_id)),
         )
     )
     return {
-        version_id: StoredSkillMd(bundle_file_id=bundle_file_id, skill_md=skill_md)
-        for version_id, bundle_file_id, skill_md in rows
+        (version_id, path): StoredSkillMd(
+            bundle_file_id=bundle_file_id, skill_md=skill_md
+        )
+        for version_id, path, bundle_file_id, skill_md in rows
     }
+
+
+def get_versions_needs(
+    version_ids: Iterable[UUID], db_session: Session
+) -> dict[UUID, list[PluginNeed]]:
+    ids = sorted(set(version_ids))
+    if not ids:
+        return {}
+    return {
+        version_id: [PluginNeed.model_validate(need) for need in needs or ()]
+        for version_id, needs in db_session.execute(
+            select(PluginVersion.id, PluginVersion.needs).where(
+                PluginVersion.id.in_(ids), PluginVersion.needs.is_not(None)
+            )
+        ).tuples()
+    }
+
+
+def get_version_manifest(
+    version_id: UUID, db_session: Session
+) -> PluginManifest | None:
+    manifest = db_session.scalar(
+        select(PluginVersion.manifest).where(PluginVersion.id == version_id)
+    )
+    return PluginManifest.model_validate(manifest) if manifest is not None else None
+
+
+class VersionSkill(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    name: str
+    description: str
+
+
+def list_version_skills(version_id: UUID, db_session: Session) -> list[VersionSkill]:
+    return [
+        VersionSkill(path=path, name=name, description=description)
+        for path, name, description in db_session.execute(
+            select(
+                PluginSkill.path,
+                PluginSkill.frontmatter["name"].astext,
+                PluginSkill.frontmatter["description"].astext,
+            )
+            .where(PluginSkill.plugin_version_id == version_id)
+            .order_by(PluginSkill.path)
+        ).tuples()
+    ]
 
 
 def get_plugin_current_version_id(plugin_id: UUID, db_session: Session) -> UUID | None:
@@ -484,25 +590,21 @@ def get_current_version_bundle_file_id(
 # --- Skill plugins and their access ----------------------------------------
 
 
-def create_skill_plugin__no_commit(
+def create_plugin__no_commit(
     plugin_id: UUID,
+    name: str,
     content: PluginVersionContent,
     author: User,
     db_session: Session,
 ) -> Plugin:
-    """Add the plugin of a new custom skill with ``content`` as version 1 and
-    its plugin_skill rows, private in the author's "My uploads". A used name
-    takes the next free name. A plugin that takes the same name at the same
-    time gets SKILL_NAME_CONFLICT."""
     marketplace_id = get_or_create_user_uploads__no_commit(author.id, db_session)
-    skill = content.skills[0]
     version_id = uuid4()
     try:
         with db_session.begin_nested():
             plugin = Plugin(
                 id=plugin_id,
-                name=free_plugin_name(marketplace_id, skill.name, db_session),
-                description=skill.description,
+                name=free_plugin_name(marketplace_id, name, db_session),
+                description=version_description(content) or "",
                 marketplace_id=marketplace_id,
                 author_user_id=author.id,
                 current_version_id=version_id,
@@ -522,10 +624,69 @@ def create_skill_plugin__no_commit(
             raise
         raise OnyxError(
             OnyxErrorCode.SKILL_NAME_CONFLICT,
-            f"Another skill named '{skill.name}' was saved at the same time. "
-            "Try again.",
+            f"Another skill named '{name}' was saved at the same time. Try again.",
         ) from exc
     return plugin
+
+
+def create_synced_plugin__no_commit(
+    marketplace: Marketplace,
+    name: str,
+    content: PluginVersionContent,
+    created_by: User | None,
+    db_session: Session,
+) -> Plugin:
+    if content.manifest is None:
+        raise RuntimeError("Bug: a synced plugin has a manifest.")
+    plugin_id = uuid4()
+    version_id = uuid4()
+    plugin = Plugin(
+        id=plugin_id,
+        name=name,
+        description=version_description(content) or "",
+        marketplace_id=marketplace.id,
+        author_user_id=marketplace.owner_user_id,
+        current_version_id=version_id,
+        published_version_id=version_id if marketplace.owner_user_id is None else None,
+    )
+    db_session.add(plugin)
+    db_session.flush()
+    _add_version_rows(
+        version_id=version_id,
+        plugin_id=plugin_id,
+        version_number=1,
+        content=content,
+        created_by=created_by,
+        db_session=db_session,
+    )
+    return plugin
+
+
+def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin | None:
+    """The plugin an upload of ``name`` adds a version to: one the user can
+    edit, in the user's uploads, then in another user's uploads (an EDITOR
+    share), then in the organization library."""
+    return db_session.scalars(
+        select(Plugin)
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .where(
+            Plugin.name == name,
+            Marketplace.kind.in_(
+                (MarketplaceKind.USER_UPLOADS, MarketplaceKind.ORGANIZATION_LIBRARY)
+            ),
+            plugin_editable_by_user(Plugin, user_id),
+            ~holds_one_root_skill(Plugin.current_version_id.expression),
+        )
+        .order_by(
+            case(
+                (Marketplace.owner_user_id == user_id, 0),
+                (Marketplace.kind == MarketplaceKind.USER_UPLOADS, 1),
+                else_=2,
+            ),
+            Plugin.id,
+        )
+        .limit(1)
+    ).one_or_none()
 
 
 def _move_plugin__no_commit(
@@ -608,6 +769,7 @@ def publish_plugin__no_commit(
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    refuse_if_synced(plugin)
     library_id = get_or_create_organization_library__no_commit(db_session)
     if plugin.marketplace_id == library_id:
         return
@@ -638,6 +800,7 @@ def publish_or_request_review__no_commit(
     ``actor``; OFF raises. The one place the setting applies. ``actor`` None
     is a system or approved publish and always publishes. An organization-wide
     plugin manager always publishes. A publish clears the pending request."""
+    refuse_if_synced(plugin)
     if actor is not None and not has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     ):
@@ -851,10 +1014,7 @@ def _lock_for_access_change(
         db_session.scalars(
             select(Plugin.id)
             .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-            .where(
-                Plugin.id.in_(found),
-                Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
-            )
+            .where(Plugin.id.in_(found), seen_by_organization(Marketplace))
         )
     )
     user_grants: dict[UUID, dict[UUID, SkillSharePermission]] = {}

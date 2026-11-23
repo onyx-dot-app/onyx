@@ -125,13 +125,24 @@ does them ([[indexing-pipeline]]).
 `FileOrigin.CHAT_IMAGE_GEN` and the session stamp, through
 `file_store/utils.py:save_chat_output_file`. The sandbox tool
 `publish_files` saves files from the user's VM with `FileOrigin.CHAT_ARTIFACT`
-and the stamp of the root chat session
-(`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`). They
-get a `FileRecord` but no `UserFile`. The chat shows them through
-`/chat/file/{file_id}`. A published file has an ID under
-`CHAT_ARTIFACT_FILE_PREFIX` and the root chat session ID, by which a chat
-delete deletes it, also when its response never saved; a saved response also
-lists it in `ChatMessage.files` ([[chat-persistence]]).
+(`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`)
+through `db/chat.py:save_chat_artifact`. Each file is a version of an
+artifact: `db/models.py:ChatArtifact` is one VM path in one root chat
+session, and `ChatArtifactVersion` numbers its files from 1 and holds each
+file's title. The save writes the file record, upserts the artifact (its row
+lock serializes concurrent publishes of one path) and adds the next version in
+one commit. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
+thumbnail: `HarnessSandbox.render_first_page` draws a JPEG of its first page in
+the VM, and the save writes it first as a `FileOrigin.CHAT_ARTIFACT_THUMBNAIL`
+record that `ChatArtifactVersion.thumbnail_file_id` links (`ON DELETE SET
+NULL`: a version stays valid without it). A render or thumbnail save that
+fails leaves the link null; it never fails the publish. They get a
+`FileRecord` but no `UserFile`. The chat shows them
+through `/chat/file/{file_id}`. A chat delete deletes a published file and its
+thumbnail through its artifact's versions, also when its response never saved; a saved response
+also lists it in `ChatMessage.files` ([[chat-persistence]]). The version rows
+cascade from the file record and the artifact, and the artifact from the chat
+session, so a chat delete must delete the files before the session.
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and
@@ -148,25 +159,30 @@ preview.
 1. `read-check-404` **Every read checks the acting user, and denial is a
    404.** `backend/onyx/access/access.py:user_can_access_chat_file` admits, in order: the file owner;
    readers of an agent the file is attached to; readers of a session whose
-   `ChatMessage.files` lists it; readers of the session stamped on a chat
-   output file (`configs/constants.py:CHAT_OUTPUT_FILE_ORIGINS`: generated
-   images and published files); and the document ACL for connector files. A new kind of file must fit
+   `ChatMessage.files` lists it; readers of the session of a chat output file
+   (`configs/constants.py:CHAT_OUTPUT_FILE_ORIGINS`: the session stamped on a
+   generated image, the artifact's session of a published file and of its
+   thumbnail, which `db/access.py:get_chat_output_file_row` matches on
+   either version column);
+   and the document ACL for connector files. A new kind of file must fit
    one of these branches, or nobody can read it.
    `FileStore.presign_download` checks no user: a caller that hands a URL to
    anyone else must authorize first.
-2. `generated-file-session-stamp` **Every chat output file must carry the
-   session stamp, and only chat output files are shared by it.** On a
-   `CHAT_OUTPUT_FILE_ORIGINS` origin (`CHAT_IMAGE_GEN`, `CHAT_ARTIFACT`), a
-   `chat_session_id` in `file_metadata` gives the file to every reader of
-   that session: its owner, and everyone while it is shared as `PUBLIC`. On
-   any other origin the stamp grants nothing. A `CHAT_IMAGE_GEN` file with no
-   stamp is open to every signed-in user
-   (`backend/onyx/access/access.py:user_can_access_chat_file`). Files written
-   before stamping depend on this, so the open branch must stay. A new writer
+2. `generated-file-session-stamp` **Every generated image must carry the
+   session stamp, and every published file its artifact version.** A
+   `chat_session_id` in the `file_metadata` of a `CHAT_IMAGE_GEN` file gives
+   the file to every reader of that session: its owner, and everyone while
+   it is shared as `PUBLIC`. On any other origin the stamp grants nothing. A
+   `CHAT_IMAGE_GEN` file with no stamp is open to every signed-in user
+   (`backend/onyx/access/access.py:user_can_access_chat_file`). Unstamped
+   generated images depend on this, so the open branch must stay. A new writer
    that forgets the stamp creates an open file, and nothing fails. Save
-   through `file_store/utils.py:save_chat_output_file`, which stamps the file
-   and accepts only these origins. A new kind of chat output that every
-   reader of the chat may download needs its origin in the set.
+   through `file_store/utils.py:save_chat_output_file`, which stamps the
+   file. A `CHAT_ARTIFACT` file, and a `CHAT_ARTIFACT_THUMBNAIL` file,
+   gets its chat from its version's artifact instead. Without a version, only a saved message that lists the file
+   gives access to it (`db/access.py:user_can_access_chat_message_file`), and
+   the chat's file list leaves it out. Save it through
+   `db/chat.py:save_chat_artifact`.
 3. `say-which-id` **Say which id you mean.** A new route or tool that accepts
    "a file id" must state whether it is a blob id or a `UserFile.id`. Pass a
    `UserFile.id` to `FileStore.read_file` and you get "not found" for a file
@@ -192,7 +208,11 @@ preview.
    read; indexing does not.**
    `server/features/projects/projects_file_utils.py:categorize_uploaded_files` rejects a file with
    empty extracted text, except a PDF or DOCX with embedded images when image
-   analysis is on. `file_processing/extract_file_text.py:_extract_text_and_images`
+   analysis is on. A code or script file
+   (`file_processing/file_types.py:OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`,
+   for example `.py`, `.ts`, `.sh`) must be text. Upload marks it `SKIPPED`, so
+   it is never indexed. The sets that connectors index do not include these
+   extensions. `file_processing/extract_file_text.py:_extract_text_and_images`
    catches every parser error and returns empty text. A parser crash during
    indexing can therefore give a `COMPLETED` file with no content, not
    `FAILED`: the chunker emits one empty chunk for an empty document
@@ -303,8 +323,8 @@ preview.
   in `OnyxFileExtensions`. Then check the upload branch in
   `categorize_uploaded_files` ([[#upload-rejects-indexing-does-not]]).
 - `add-generated-file-writer` **Add a generated-file writer.** Copy `file_store/utils.py:save_file_from_base64`:
-  save through `file_store/utils.py:save_chat_output_file` with a
-  `CHAT_OUTPUT_FILE_ORIGINS` origin ([[#generated-file-session-stamp]]). List
+  save through `file_store/utils.py:save_chat_output_file`
+  ([[#generated-file-session-stamp]]). List
   the current writers with `git grep -n "save_chat_output_file(" backend/onyx`.
 - `add-storage-backend` **Add a storage backend.** Copy `file_store/gcs_file_store.py`. List the
   current backends in `file_store/file_store.py:get_default_file_store`.
@@ -319,7 +339,8 @@ preview.
   sent ([[#say-which-id]]). Then walk the branches of
   `user_can_access_chat_file` in order for that user: `user_file.user_id`,
   agent links, `chat_message.files`, the `chat_session_id` in
-  `file_record.file_metadata`, and the connector document ACL.
+  `file_record.file_metadata` (a published file: its version's artifact),
+  and the connector document ACL.
 - `investigate-file-processing` **Investigate a file stuck in processing, or
   `COMPLETED` with no answers.**
   Read `user_file.status`, `chunk_count` and the sync flags. Search the

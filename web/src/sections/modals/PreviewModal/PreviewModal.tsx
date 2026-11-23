@@ -1,213 +1,67 @@
 "use client";
 
-import { Section } from "@opal/layouts";
-import { IconLoader } from "@opal/loaders";
-import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { MinimalOnyxDocument } from "@/lib/search/types";
-import { Modal } from "@opal/components";
-import { Button, Text } from "@opal/components";
-
-import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
-import mime from "mime";
+import { Modal, type ModalContentProps } from "@opal/components";
+import { stripBidiControls } from "@opal/utils";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
+import { useChatFilePreview } from "@/lib/filePreview/hooks";
+import { resolveFilePreviewFormat } from "@/lib/filePreview/format";
 import {
-  getCodeLanguage,
-  getDataLanguage,
-  getLanguageByMime,
-} from "@/lib/languages";
-import { fetchChatFile } from "@/lib/chat/svc";
-import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
-import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
-import {
-  parseContentDispositionFileName,
-  withMimeTypeExtension,
-} from "@/sections/modals/PreviewModal/downloadFileName";
+  FilePreviewBody,
+  FilePreviewScope,
+} from "@/sections/file-preview/FilePreview";
 
 interface PreviewModalProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
 }
 
-export default function PreviewModal({
+interface PreviewModalContentProps extends PreviewModalProps {
+  fileId: string;
+}
+
+function PreviewModalContent({
   presentingDocument,
+  fileId,
   onClose,
-}: PreviewModalProps) {
-  const t = useTranslations("chat.modals.preview");
-  const [fileContent, setFileContent] = useState("");
-  const [fileUrl, setFileUrl] = useState("");
-  const [fileName, setFileName] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [mimeType, setMimeType] = useState("application/octet-stream");
-  const [zoom, setZoom] = useState(100);
+}: PreviewModalContentProps) {
+  const t = useTranslations("chat.filePreview");
+  const formatBytes = useFormatBytes();
+  const displayName =
+    presentingDocument.semantic_identifier || t("header.fallbackTitle");
+  const preview = useChatFilePreview(fileId, displayName);
+  const { data } = preview;
 
-  const variantName = fileName || presentingDocument.semantic_identifier;
+  // Until the file loads, its name picks the size, so the modal rarely resizes
+  const kind =
+    data?.kind ??
+    resolveFilePreviewFormat(displayName, "application/octet-stream").kind;
+  const size: Required<Pick<ModalContentProps, "width" | "height">> =
+    kind === "code"
+      ? { width: "xl", height: "lg" }
+      : kind === "unsupported" || kind === "tooLarge"
+        ? { width: "xl", height: "full" }
+        : { width: "full", height: "full" };
 
-  const variant = useMemo(
-    () => resolveVariant(variantName, mimeType),
-    [variantName, mimeType]
-  );
-
-  const language = useMemo(
-    () =>
-      getCodeLanguage(variantName || "") ||
-      getLanguageByMime(mimeType) ||
-      getDataLanguage(variantName || "") ||
-      "plaintext",
-    [mimeType, variantName]
-  );
-
-  const lineCount = useMemo(() => {
-    if (!fileContent) return 0;
-    return fileContent.split("\n").length;
-  }, [fileContent]);
-
-  const fileSize = useMemo(() => {
-    if (!fileContent) return "";
-    const bytes = new TextEncoder().encode(fileContent).length;
-    if (bytes < 1024) return `${bytes} B`;
-    const kb = bytes / 1024;
-    if (kb < 1024) return `${kb.toFixed(2)} KB`;
-    const mb = kb / 1024;
-    return `${mb.toFixed(2)} MB`;
-  }, [fileContent]);
-
-  const fetchFile = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError(null);
-    setFileContent("");
-    const fileIdLocal =
-      presentingDocument.document_id.split("__")[1] ||
-      presentingDocument.document_id;
-    const originalFileName =
-      presentingDocument.semantic_identifier || "document";
-    // Direct raw-file URL — usable for downloads without materializing a blob.
-    const rawFileUrl = `/api/chat/file/${encodeURIComponent(fileIdLocal)}`;
-
-    const updateFileUrl = (url: string) =>
-      setFileUrl((prev) => {
-        if (prev.startsWith("blob:")) window.URL.revokeObjectURL(prev);
-        return url;
-      });
-
-    try {
-      setFileName(originalFileName);
-
-      // Variants that render from backend-parsed content (spreadsheets) don't
-      // need the raw binary blob — skip downloading the full workbook and let
-      // the download button point at the raw URL directly.
-      const preResolved = resolveVariant(
-        presentingDocument.semantic_identifier,
-        "application/octet-stream"
-      );
-      if (preResolved.needsParsedContent) {
-        updateFileUrl(rawFileUrl);
-        setMimeType(
-          mime.getType(originalFileName) ?? "application/octet-stream"
-        );
-        const parsedResponse = await fetchChatFile(fileIdLocal, true);
-        setFileContent(await parsedResponse.text());
-        return;
-      }
-
-      const response = await fetchChatFile(fileIdLocal);
-
-      // The stored name and MIME from the response headers are authoritative;
-      // re-resolve with them BEFORE materializing the body as a blob.
-      const storedFileName =
-        parseContentDispositionFileName(
-          response.headers.get("Content-Disposition")
-        ) ?? originalFileName;
-      const rawContentType =
-        response.headers.get("Content-Type") || "application/octet-stream";
-      const resolvedMime =
-        rawContentType === "application/octet-stream"
-          ? (mime.getType(storedFileName) ?? rawContentType)
-          : rawContentType;
-      const resolvedFileName = withMimeTypeExtension(
-        storedFileName,
-        resolvedMime
-      );
-      setFileName(resolvedFileName);
-      setMimeType(resolvedMime);
-
-      const resolved = resolveVariant(resolvedFileName, resolvedMime);
-      if (resolved.needsParsedContent) {
-        // Name alone didn't identify a spreadsheet, but the stored MIME did
-        // (e.g. an xlsx with a renamed/missing display name). Discard the raw
-        // workbook body and render from the parsed payload instead.
-        await response.body?.cancel();
-        updateFileUrl(rawFileUrl);
-        const parsedResponse = await fetchChatFile(fileIdLocal, true);
-        setFileContent(await parsedResponse.text());
-        return;
-      }
-
-      const blob = await response.blob();
-      updateFileUrl(window.URL.createObjectURL(blob));
-
-      if (resolved.needsTextContent) {
-        setFileContent(await blob.text());
-      }
-    } catch (error) {
-      console.error(
-        `Failed to load preview for chat file ${fileIdLocal}:`,
-        error
-      );
-      // Keep a usable download link for the CURRENT file even when the
-      // preview itself failed (a stale previous-file URL must never win).
-      updateFileUrl(rawFileUrl);
-      setLoadError(t("loadError.message"));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [presentingDocument, t]);
-
-  useEffect(() => {
-    fetchFile();
-  }, [fetchFile]);
-
-  useEffect(() => {
-    return () => {
-      if (fileUrl.startsWith("blob:")) window.URL.revokeObjectURL(fileUrl);
-    };
-  }, [fileUrl]);
-
-  const handleZoomIn = useCallback(
-    () => setZoom((prev) => Math.min(prev + 25, 200)),
-    []
-  );
-  const handleZoomOut = useCallback(
-    () => setZoom((prev) => Math.max(prev - 25, 25)),
-    []
-  );
-
-  const ctx: PreviewContext = useMemo(
-    () => ({
-      fileContent,
-      fileUrl,
-      fileName,
-      language,
-      lineCount,
-      fileSize,
-      zoom,
-      onZoomIn: handleZoomIn,
-      onZoomOut: handleZoomOut,
-      t,
-    }),
-    [
-      fileContent,
-      fileUrl,
-      fileName,
-      language,
-      lineCount,
-      fileSize,
-      zoom,
-      handleZoomIn,
-      handleZoomOut,
-      t,
-    ]
-  );
+  let description = "";
+  if (data?.kind === "code") {
+    description =
+      data.language === "plaintext"
+        ? t("text.headerDescription", {
+            lineCount: data.lineCount,
+            fileSize: formatBytes(data.size),
+          })
+        : t("code.headerDescription", {
+            language: data.language,
+            lineCount: data.lineCount,
+            fileSize: formatBytes(data.size),
+          });
+  } else if (data?.kind === "spreadsheet") {
+    description = t("spreadsheet.headerDescription", {
+      count: data.sheets.length,
+    });
+  }
 
   return (
     <Modal
@@ -217,49 +71,37 @@ export default function PreviewModal({
       }}
     >
       <Modal.Content
-        width={variant.width}
-        height={variant.height}
+        width={size.width}
+        height={size.height}
         preventAccidentalClose={false}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Modal.Header
-          title={fileName || t("header.fallbackTitle")}
-          description={variant.headerDescription(ctx)}
+          title={
+            stripBidiControls(data?.name ?? displayName) ||
+            t("header.fallbackTitle")
+          }
+          description={description}
           onClose={onClose}
         />
-
-        {/* Body — uses flex-1/min-h-0/overflow-hidden (not Modal.Body)
-            so that child ScrollIndicatorDivs become the actual scroll
-            container instead of the body stealing it via overflow-y-auto. */}
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full bg-background-tint-01">
-          {isLoading ? (
-            <Section>
-              <IconLoader className="h-8 w-8" />
-            </Section>
-          ) : loadError ? (
-            <Section padding={4}>
-              <Text font="main-ui-body" color="text-03">
-                {loadError}
-              </Text>
-              {fileUrl && (
-                <a href={fileUrl} download={fileName}>
-                  <Button>{t("downloadButton.label")}</Button>
-                </a>
-              )}
-            </Section>
-          ) : (
-            variant.renderContent(ctx)
-          )}
-        </div>
-
-        {!isLoading && !loadError && (
-          <FloatingFooter
-            left={variant.renderFooterLeft(ctx)}
-            right={variant.renderFooterRight(ctx)}
-            codeBackground={variant.codeBackground}
-          />
-        )}
+        <FilePreviewBody preview={preview} fileName={displayName} actions />
       </Modal.Content>
     </Modal>
+  );
+}
+
+/**
+ * A chat file's preview in a modal, with its name and details as the title.
+ * Another file gets its own preview scope, so the last file's bytes go.
+ */
+export default function PreviewModal(props: PreviewModalProps) {
+  // A citation's document ID carries the file ID after its source prefix
+  const fileId =
+    props.presentingDocument.document_id.split("__")[1] ||
+    props.presentingDocument.document_id;
+  return (
+    <FilePreviewScope key={fileId}>
+      <PreviewModalContent {...props} fileId={fileId} />
+    </FilePreviewScope>
   );
 }

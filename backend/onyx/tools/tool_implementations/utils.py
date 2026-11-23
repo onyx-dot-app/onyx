@@ -2,6 +2,7 @@ import json
 
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.tools.constants import MAX_OUTPUT_CHARS
 from onyx.tools.models import (
     CodeModeResultKind,
     CodeModeResultSpec,
@@ -46,8 +47,34 @@ def truncate_output(
             output[:max_length]
             + f"\n... [output truncated, {omitted} characters omitted]"
         )
-    logger.debug("Truncated %s: %s", label, truncated)
+    logger.debug("Truncated %s: %d characters omitted", label, omitted)
     return truncated
+
+
+def cut_middle(
+    head: str, tail: str, max_chars: int, *, omitted: int = 0, label: str = "output"
+) -> str:
+    """`head` and `tail`, between which `omitted` characters were already
+    left out, cut in the middle to `max_chars` with one marker that counts
+    every omitted character. Half of `max_chars` goes to each side; a side
+    that needs less leaves the rest to the other. With nothing omitted, they
+    are one text."""
+    if not omitted:
+        return truncate_output(head + tail, max_chars, label, keep_tail=True)
+    kept_tail = min(max_chars - min(max_chars // 2, len(head)), len(tail))
+    kept_head = min(max_chars - kept_tail, len(head))
+    dropped = omitted + len(head) - kept_head + len(tail) - kept_tail
+    logger.debug("Truncated %s: %d characters omitted", label, dropped)
+    return (
+        head[:kept_head]
+        + truncation_marker(dropped)
+        + (tail[len(tail) - kept_tail :] if kept_tail else "")
+    )
+
+
+def output_chars(requested: int) -> int:
+    """A requested `max_output_chars`, clamped to 1..MAX_OUTPUT_CHARS."""
+    return min(max(requested, 1), MAX_OUTPUT_CHARS)
 
 
 FILE_ASSOCIATED_GUIDANCE = (

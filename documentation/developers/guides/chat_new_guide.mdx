@@ -32,6 +32,7 @@ You can receive a streaming response or one complete response.
 | `parent_message_id` | The ID of the parent message in the chat history. Omit it (or pass `-1`) to place the new message after the latest message in the session. Pass a specific message ID to branch from that point. <br/><br/>**Warning:** If set to `null`, the new message starts from the root of the session, as the first message. |
 | `chat_session_id` | To continue an existing conversation, pass the chat session ID. If left blank, Onyx creates a new chat session from `chat_session_info`. Pass only one of `chat_session_id` and `chat_session_info`. |
 | `chat_session_info` | Settings for a new chat session. They apply to every message in the session. Leave fields blank to use defaults. <br/><br/>• `persona_id` – The ID of the Agent to use. Defaults to `0`, the default Agent <br/>• `project_id` – ID of a Project if the chat should be scoped to a Project <br/>• `incognito` – Start the session in incognito mode. The request fails with an error when incognito is not available to the user. It is never silently downgraded to an ordinary chat <br/>• `incognito_session_id` – The session ID you already used when uploading files, so the new session owns those files. Ignored unless `incognito` is true |
+| `accepts_chat_session_name` | Defaults to `false`. Onyx names a new chat from its first question while it answers, whether or not you set this. Set it to `true` to receive the name on the stream: one `{"chat_session_id": ..., "chat_session_name": ...}` line, sent when the name is saved. The line can come before, during, or after the answer packets. It does not come if the stream ends first; read the name with the chat session instead. |
 | `stream` | Defaults to `true`. If true, Onyx responds with an SSE stream of packets, the same set the Onyx UI uses. You assemble the answer, reasoning tokens, and tool calls from the streamed packets. If false, Onyx returns one `ChatFullResponse` JSON object. |
 | `include_citations` | Defaults to `true`. If false, Onyx removes citation markers such as `[1]` from the answer text and does not emit `citation_info` packets. |
 | `additional_context` | A string of extra context injected into the LLM call for this request. The model sees it, but Onyx does **not store it** and it does not appear in chat history.<br></br>Use it for request-scoped information such as the user's current page URL or session metadata.<br></br>Pass `null` or omit the field to send no additional context. |
@@ -147,6 +148,7 @@ class StreamingType(Enum):
     WRITE_STDIN_START = "write_stdin_start"
     EXEC_OUTPUT_DELTA = "exec_output_delta"
     EXEC_END = "exec_end"
+    FILE_TOOL_PROGRESS = "file_tool_progress"
     APPLY_PATCH_START = "apply_patch_start"
     APPLY_PATCH_END = "apply_patch_end"
     PUBLISH_FILES_START = "publish_files_start"
@@ -179,7 +181,12 @@ class ChatFullResponse(BaseModel):
 ```
 
 Each `ToolCallResponse` of a `publish_files` call lists the files it published in `published_files`.
-Each entry has the fields `file_id`, `name`, `title`, `path`, `size`, and `mime_type`.
+Each entry has the fields `file_id`, `artifact_id`, `version`, `name`, `title`, `path`, `size`, `mime_type`,
+and `thumbnail_file_id`. Every publish of one `path` in a chat is a version of one artifact.
+It has the same `artifact_id` and the next `version`, from 1.
+A message saved before files had versions has `artifact_id` and `version` set to null.
+`thumbnail_file_id` is a JPEG of the first page of a PDF, PowerPoint, or Word file.
+It is null for other files and for a file that did not render.
 
 ## Tool Approvals
 

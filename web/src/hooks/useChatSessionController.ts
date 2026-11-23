@@ -26,7 +26,11 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { useUser } from "@/providers/UserProvider";
-import { chatPageUrl, reloadLatestChatPage } from "@/lib/chat/pagedSession";
+import {
+  chatPageUrl,
+  mergeLatestChatPage,
+  reloadLatestChatPage,
+} from "@/lib/chat/pagedSession";
 import type { ProjectFile } from "@/lib/projects/types";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import type { ErrorResponseBody } from "@/lib/fetcher";
@@ -39,6 +43,7 @@ import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useNavigation } from "@opal/navigation";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
+import { startChatLoad } from "@/lib/chat/publishedFiles";
 import type { ComposedMessage } from "@/lib/chat/types";
 
 interface UseChatSessionControllerProps {
@@ -214,6 +219,7 @@ export default function useChatSessionController({
       const toolOptionsVersion =
         useChatSessionStore.getState().sessions.get(existingChatSessionId)
           ?.toolOptionsVersion ?? 0;
+      const loadSequence = startChatLoad();
       let response: Response;
       try {
         response = await fetch(chatPageUrl(existingChatSessionId), {
@@ -293,14 +299,27 @@ export default function useChatSessionController({
         }
       }
 
-      const localMessages = useChatSessionStore
+      const localSession = useChatSessionStore
         .getState()
-        .sessions.get(chatSession.chat_session_id)?.messageTree;
+        .sessions.get(chatSession.chat_session_id);
+      const localMessages = localSession?.messageTree;
       let savedMessages = processRawChatHistory(
         chatSession.messages,
         chatSession.packets
       );
-      if (recovering && localMessages?.size) {
+      let hasOlderMessages = chatSession.has_older_messages ?? false;
+      if (!recovering && !isIncognito && localSession && localMessages?.size) {
+        // A cached chat keeps the older pages it loaded, so a reopen does not
+        // drop the rows its saved scroll position is on. An older page that
+        // failed to load is retried.
+        const merged = mergeLatestChatPage(chatSession, {
+          messageTree: localMessages,
+          hasOlderMessages:
+            localSession.hasOlderMessages || localSession.olderMessagesFailed,
+        });
+        savedMessages = merged.messageTree;
+        hasOlderMessages = merged.hasOlderMessages;
+      } else if (recovering && localMessages?.size) {
         savedMessages = isIncognito
           ? restoreIncognitoMessages(
               savedMessages,
@@ -346,10 +365,15 @@ export default function useChatSessionController({
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
         useChatSessionStore
           .getState()
-          .updateSessionData(chatSession.chat_session_id, {
-            hasOlderMessages: chatSession.has_older_messages ?? false,
-            approvalsVersion: chatSession.approvals_version,
-          });
+          .applyLoadedSession(
+            chatSession.chat_session_id,
+            chatSession,
+            loadSequence,
+            {
+              hasOlderMessages,
+              olderMessagesFailed: false,
+            }
+          );
         chatSessionIdRef.current = chatSession.chat_session_id;
       }
 

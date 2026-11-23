@@ -210,6 +210,11 @@ def wait_for_idle() -> None:
     time.sleep(wait)
 
 
+def _output(result: ExecCommandResult) -> str:
+    """The output of a smoke command, which is short enough to keep whole."""
+    return result.head + result.tail
+
+
 class FirecrackerSmoke:
     """The steps, in order, on one test user and one chat session."""
 
@@ -275,10 +280,11 @@ class FirecrackerSmoke:
 
     def exec_uid(self) -> str:
         result = self._exec("id -u; id -un")
-        lines = result.output.split()
+        output = _output(result)
+        lines = output.split()
         require(
             result.exit_code == 0 and lines[:1] == [str(SANDBOX_UID)],
-            f"exit={result.exit_code} output={result.output.strip()!r}",
+            f"exit={result.exit_code} output={output.strip()!r}",
         )
         return f"uid={lines[0]} user={' '.join(lines[1:2])}"
 
@@ -289,8 +295,9 @@ class FirecrackerSmoke:
             f"sha256sum {DATA_PATH} && stat -c %u {DATA_PATH} "
             f"&& printf %s {NOTE_TEXT} > {NOTE_PATH}"
         )
-        require(result.exit_code == 0, f"exit={result.exit_code} {result.output}")
-        fields = result.output.split()
+        output = _output(result)
+        require(result.exit_code == 0, f"exit={result.exit_code} {output}")
+        fields = output.split()
         require(fields[:1] == [want], f"sha256 in the VM {fields[:1]} != {want}")
         require(fields[2:3] == [str(SANDBOX_UID)], f"file owner {fields[2:3]}")
         got = self.sandbox.read_file(self.ref, DATA_PATH, max_bytes=2 * PAYLOAD_BYTES)
@@ -304,10 +311,11 @@ class FirecrackerSmoke:
             "curl -sS -o /dev/null --max-time 20 -w '%{http_code}' "
             f"{shlex.quote(url)} 2>&1 || true"
         )
-        code = parse_http_code(result.output)
+        output = _output(result)
+        code = parse_http_code(output)
         require(
             code is not None and 200 <= code < 400,
-            f"{url}: {' '.join(result.output.split())}",
+            f"{url}: {' '.join(output.split())}",
         )
         return f"{url} http={code}"
 
@@ -342,8 +350,8 @@ class FirecrackerSmoke:
             sha256_hex(got) == sha256_hex(self.payload),
             f"{DATA_PATH} after resume: {len(got)} bytes, sha256 differs",
         )
-        note = self._exec(f"cat {NOTE_PATH}")
-        require(note.output.strip() == NOTE_TEXT, f"{NOTE_PATH}: {note.output!r}")
+        note = _output(self._exec(f"cat {NOTE_PATH}"))
+        require(note.strip() == NOTE_TEXT, f"{NOTE_PATH}: {note!r}")
         placement = get_sandbox_placement(self.tenant_cache, self.ref.sandbox_id)
         node = placement.node_id if placement else ""
         return f"files intact node={node}"
