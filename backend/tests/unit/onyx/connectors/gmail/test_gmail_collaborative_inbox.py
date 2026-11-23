@@ -577,12 +577,15 @@ def test_slim_listing_skips_the_group_search_for_a_mailbox_outside_the_group(
     assert [kwargs.get("q") for kwargs in gmail.list_kwargs] == [None]
 
 
+@pytest.mark.parametrize("status", [400, 403, 404])
 def test_slim_listing_fails_when_a_group_thread_cannot_be_read(
     group_api: MagicMock,  # noqa: ARG001
+    status: int,
 ) -> None:
-    """A group document that the listing leaves out is deleted by pruning."""
+    """A group document that the listing leaves out is deleted by pruning. A
+    denied read counts too: the batch read reports it as "not in this mailbox"."""
     gmail = _FakeGmail(
-        threads_by_id={"18f0aaaa": _http_error(400)}, group_thread_ids=["18f0aaaa"]
+        threads_by_id={"18f0aaaa": _http_error(status)}, group_thread_ids=["18f0aaaa"]
     )
 
     with pytest.raises(RuntimeError, match="while listing group mail"):
@@ -680,6 +683,7 @@ def test_reindex_finds_a_group_document_by_its_message_id(
     assert document.external_access == _GROUP_ACCESS
     # A mailbox outside the group is not searched.
     assert outsider_gmail.list_kwargs == []
+    assert member_gmail.list_kwargs[0]["includeSpamTrash"] is True
 
 
 @pytest.mark.parametrize(

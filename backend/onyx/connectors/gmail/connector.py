@@ -1061,10 +1061,12 @@ class GmailConnector(
                 fields=_GROUP_MAIL_THREAD_FIELDS,
                 metadata_headers=_GROUP_MAIL_HEADERS,
             )
-            # Pruning deletes the documents a listing leaves out.
-            if errors:
+            # Pruning deletes the documents a listing leaves out, so a listed
+            # thread that Gmail denies or fails to return ends the listing.
+            unread_thread_count = len(thread_id_batch) - len(threads)
+            if errors or unread_thread_count:
                 raise RuntimeError(
-                    f"Gmail failed to read {len(errors)} threads of "
+                    f"Gmail failed to read {unread_thread_count} threads of "
                     f"{user_email} while listing group mail"
                 )
             slim_doc_batch: list[SlimDocument | HierarchyNode] = []
@@ -1188,6 +1190,9 @@ class GmailConnector(
                         userId=user_email,
                         fields=THREAD_LIST_FIELDS,
                         q=f"rfc822msgid:{rfc_message_id}",
+                        # The crawl indexes a message in Spam or Trash when
+                        # another message keeps its thread listed.
+                        includeSpamTrash=True,
                         continue_on_404_or_403=True,
                     )
                 ]
