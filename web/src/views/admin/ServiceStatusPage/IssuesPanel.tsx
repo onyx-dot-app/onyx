@@ -26,7 +26,10 @@ import type {
   ClusterIssueKind,
 } from "@/lib/service-status/types";
 import { useClusterStatus } from "@/lib/service-status/hooks";
-import { SIZING_GUIDE_URL } from "@/views/admin/ServiceStatusPage/format";
+import {
+  SIZING_GUIDE_URL,
+  nodeLabel,
+} from "@/views/admin/ServiceStatusPage/format";
 
 const DISMISSED_KEY = "onyx.serviceStatus.dismissedIssues";
 
@@ -108,15 +111,17 @@ function writeDismissed(ids: Set<string>) {
 
 interface IssueCardProps {
   issue: ClusterIssue;
+  // The page's name for a node, as in the data node rows.
+  labelNode: (name: string) => string;
   onDismiss?: () => void;
 }
 
-function IssueCard({ issue, onDismiss }: IssueCardProps) {
+function IssueCard({ issue, labelNode, onDismiss }: IssueCardProps) {
   const t = useTranslations("admin.serviceStatus.issues");
   const navigation = useNavigation();
   const nodes =
     issue.node_names.length === 1
-      ? (issue.node_names[0] ?? "")
+      ? labelNode(issue.node_names[0] ?? "")
       : t("nodeCount", { count: issue.node_names.length });
   const values = { value: Math.round(issue.value), nodes };
   const [titleKey, descriptionKey] = ISSUE_MESSAGES[issue.kind][issue.severity];
@@ -187,10 +192,14 @@ function Count({ icon: Icon, count, className }: CountProps) {
 
 interface IssueListProps {
   issues: ClusterIssue[];
+  nodeNames: string[];
 }
 
-function IssueList({ issues }: IssueListProps) {
+function IssueList({ issues, nodeNames }: IssueListProps) {
   const t = useTranslations("admin.serviceStatus.issues");
+  const tNodes = useTranslations("admin.serviceStatus.nodes");
+  const labelNode = (name: string) =>
+    nodeLabel(name, nodeNames, (number) => tNodes("unnamed", { number }));
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -265,7 +274,11 @@ function IssueList({ issues }: IssueListProps) {
           <Section gap={0.5} alignItems="stretch" width="full">
             <Divider title={t("criticalCount", { count: critical.length })} />
             {critical.map((issue) => (
-              <IssueCard key={issueId(issue)} issue={issue} />
+              <IssueCard
+                key={issueId(issue)}
+                issue={issue}
+                labelNode={labelNode}
+              />
             ))}
           </Section>
         )}
@@ -276,6 +289,7 @@ function IssueList({ issues }: IssueListProps) {
               <IssueCard
                 key={issueId(issue)}
                 issue={issue}
+                labelNode={labelNode}
                 onDismiss={() => dismiss(issue)}
               />
             ))}
@@ -297,5 +311,10 @@ export function hasVisibleIssues(issues: ClusterIssue[]): boolean {
 export default function IssuesPanel() {
   const { data } = useClusterStatus();
   // The page shows the loader until the first read.
-  return data ? <IssueList issues={data.issues} /> : null;
+  return data ? (
+    <IssueList
+      issues={data.issues}
+      nodeNames={data.nodes.map((node) => node.name)}
+    />
+  ) : null;
 }

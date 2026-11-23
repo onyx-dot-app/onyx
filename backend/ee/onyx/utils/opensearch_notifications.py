@@ -8,6 +8,7 @@ clears, its notifications are dismissed; if it comes back, it notifies again.
 Warnings stay on the page.
 """
 
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -45,6 +46,8 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 SERVICE_STATUS_LINK = "/admin/service-status"
+# The page's rule for a name OpenSearch generated from the host.
+GENERATED_NODE_NAME = re.compile(r"[0-9a-f]{12,}", re.IGNORECASE)
 STATE_KEY = "opensearch_cluster_issue_state"
 LEASE_KEY = "opensearch_cluster_issue_lease"
 # Long enough to outlive a few skipped checks; a stale state only delays a
@@ -111,6 +114,15 @@ def _read_state(cache: CacheBackend) -> ClusterIssueState:
     return ClusterIssueState.model_validate_json(raw) if raw else ClusterIssueState()
 
 
+def _node_label(name: str, node_names: list[str]) -> str:
+    """The node's name as the Service Status page shows it: "Node N", from its
+    place in the node list, when OpenSearch generated the name from the host
+    (a container or instance hash that means nothing to an admin)."""
+    if not GENERATED_NODE_NAME.fullmatch(name) or name not in node_names:
+        return name
+    return f"Node {node_names.index(name) + 1}"
+
+
 def _read_issues(db_session: Session) -> dict[str, ClusterIssue] | None:
     """The cluster's critical issues that notify, by kind; None when the
     cluster did not answer."""
@@ -119,8 +131,15 @@ def _read_issues(db_session: Session) -> dict[str, ClusterIssue] | None:
     except Exception:
         logger.exception("Unable to read the OpenSearch cluster for notifications")
         return None
+    node_names: list[str] = [node.name for node in status.nodes]
     return {
-        issue.kind.value: issue
+        issue.kind.value: issue.model_copy(
+            update={
+                "node_names": [
+                    _node_label(name, node_names) for name in issue.node_names
+                ]
+            }
+        )
         for issue in status.issues
         if issue.severity == ClusterIssueSeverity.CRITICAL
         and issue.kind.value in IMMEDIATE | SUSTAINED
