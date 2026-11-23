@@ -519,10 +519,12 @@ How the app differs from macOS:
     uses the token.
 - On Linux the `.deb` registers `onyx://` in its desktop file (`onyx-v2.desktop`). AppImage
   and other builds that do not run from `/usr/bin` register it for the current user at launch,
-  so they get sign-in links too. This needs `xdg-mime`. A `.deb` install removes the per-user
-  `onyx://` entry that earlier versions wrote, so after `apt remove` no entry points to the
-  removed app. The AppImage
-  entry points to the AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
+  so they get sign-in links too. This needs `xdg-mime`. At each launch, a `.deb` install makes
+  `onyx-v2.desktop` the current user's default for `onyx://` (v1 can also claim the scheme),
+  and removes the per-user `onyx://` entry that earlier versions wrote. This cleanup happens
+  per user, at that user's first launch of the new version, not at package install. After
+  `apt remove`, the default names a desktop file that no longer exists, and the desktop ignores
+  it. The AppImage entry points to the AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
   launch it once from its new path. A launch while the app runs only shows the running app.
 - Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 and later). CI builds them on
   Ubuntu 22.04 and fails if a file in the `.deb` or the AppImage needs a newer glibc.

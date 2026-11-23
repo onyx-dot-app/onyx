@@ -107,20 +107,41 @@ fn registers_links_at_runtime(appimage: bool, exe: &std::path::Path) -> bool {
     appimage || exe.parent() != Some(std::path::Path::new("/usr/bin"))
 }
 
+/// The package's desktop file: the bundler names it after the product name.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn packaged_desktop_file(product_name: &str) -> String {
+    format!("{product_name}.desktop")
+}
+
 #[cfg(target_os = "linux")]
 fn register_links(app: &tauri::AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
     let Ok(exe) = std::env::current_exe() else {
         return;
     };
-    let result = if registers_links_at_runtime(app.env().appimage.is_some(), &exe) {
-        app.deep_link().register_all()
-    } else {
-        // Removes a handler that earlier versions wrote for this install.
-        app.deep_link().unregister("onyx")
+    if registers_links_at_runtime(app.env().appimage.is_some(), &exe) {
+        if let Err(e) = app.deep_link().register_all() {
+            log::warn!("could not register onyx:// links: {e}");
+        }
+        return;
+    }
+    // Removes a handler that earlier versions wrote for this install.
+    if let Err(e) = app.deep_link().unregister("onyx") {
+        log::warn!("could not remove the old onyx:// link handler: {e}");
+    }
+    // The package's desktop file only offers onyx://; another app (v1) can
+    // still be the default, and it rejects v2 sign-in links.
+    let Some(product_name) = app.config().product_name.as_deref() else {
+        return;
     };
-    if let Err(e) = result {
-        log::warn!("could not update the onyx:// link handler: {e}");
+    let desktop_file = packaged_desktop_file(product_name);
+    match std::process::Command::new("xdg-mime")
+        .args(["default", desktop_file.as_str(), "x-scheme-handler/onyx"])
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(status) => log::warn!("could not make {desktop_file} open onyx:// links: {status}"),
+        Err(e) => log::warn!("could not make {desktop_file} open onyx:// links: {e}"),
     }
 }
 
@@ -294,7 +315,15 @@ fn main() {
 mod tests {
     use std::path::Path;
 
-    use super::registers_links_at_runtime;
+    use super::{packaged_desktop_file, registers_links_at_runtime};
+
+    #[test]
+    fn the_packaged_handler_is_the_linux_desktop_file() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.linux.conf.json")).unwrap();
+        let product_name = config["productName"].as_str().unwrap();
+        assert_eq!(packaged_desktop_file(product_name), "onyx-v2.desktop");
+    }
 
     #[test]
     fn only_unpackaged_builds_register_links_at_runtime() {
