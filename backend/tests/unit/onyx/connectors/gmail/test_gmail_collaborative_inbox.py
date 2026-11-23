@@ -27,6 +27,7 @@ from onyx.connectors.gmail.collaborative_inbox import (
     CollaborativeInboxLookup,
     build_groups_settings_service,
     get_delivering_group,
+    get_group_members,
     get_rfc_message_id,
     is_collaborative_inbox,
 )
@@ -36,6 +37,7 @@ from onyx.connectors.gmail.connector import (
     thread_to_document,
     thread_to_documents,
 )
+from onyx.connectors.gmail.models import GroupMembers, GroupRole
 from onyx.connectors.google_utils.resources import GoogleService
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
 from onyx.connectors.models import (
@@ -94,7 +96,9 @@ def group_api(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
     )
     api = MagicMock()
     api.is_collaborative_inbox.return_value = True
-    api.list_group_member_emails.side_effect = lambda *_: iter([_MEMBER, _OTHER_MEMBER])
+    api.get_group_members.return_value = GroupMembers(
+        user_emails=frozenset({_MEMBER, _OTHER_MEMBER}), has_all_account_users=False
+    )
     with (
         patch.object(
             collaborative_inbox,
@@ -104,11 +108,7 @@ def group_api(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
         patch.object(
             collaborative_inbox, "is_collaborative_inbox", api.is_collaborative_inbox
         ),
-        patch.object(
-            collaborative_inbox,
-            "list_group_member_emails",
-            api.list_group_member_emails,
-        ),
+        patch.object(collaborative_inbox, "get_group_members", api.get_group_members),
         patch.object(collaborative_inbox, "get_google_service"),
     ):
         yield api
@@ -160,7 +160,7 @@ def test_lookup_returns_the_group_only_for_a_member_mailbox(
     assert lookup.get_group(_message("m3"), _OUTSIDER) is None
     # One settings read and one member listing serve the whole run.
     assert group_api.is_collaborative_inbox.call_count == 1
-    assert group_api.list_group_member_emails.call_count == 1
+    assert group_api.get_group_members.call_count == 1
 
 
 def test_lookup_matches_a_group_address_in_any_letter_case(
@@ -171,6 +171,53 @@ def test_lookup_matches_a_group_address_in_any_letter_case(
     assert lookup.get_group(_message("m1"), _MEMBER) == _GROUP
 
 
+def test_lookup_counts_every_mailbox_when_the_group_holds_the_whole_account(
+    group_api: MagicMock,
+) -> None:
+    group_api.get_group_members.return_value = GroupMembers(
+        user_emails=frozenset(), has_all_account_users=True
+    )
+    lookup = _lookup()
+
+    assert lookup.get_group(_message("m1"), _OUTSIDER) == _GROUP
+    assert lookup.get_groups_of_member(_OUTSIDER) == [_GROUP]
+
+
+def test_group_members_keeps_users_and_marks_the_whole_account_member() -> None:
+    admin_service = MagicMock()
+    list_members = admin_service.members.return_value.list
+    list_members.return_value.execute.return_value = {
+        "members": [
+            {"email": "Owner@example.com", "role": "OWNER", "type": "USER"},
+            {"email": _MEMBER, "role": "MEMBER", "type": "USER"},
+            {"email": "nested@example.com", "role": "MEMBER", "type": "GROUP"},
+            {"role": "MEMBER", "type": "CUSTOMER"},
+        ]
+    }
+
+    members = get_group_members(admin_service, _GROUP, include_nested_groups=True)
+
+    assert members == GroupMembers(
+        user_emails=frozenset({"owner@example.com", _MEMBER}),
+        has_all_account_users=True,
+    )
+    assert list_members.call_args.kwargs["includeDerivedMembership"] is True
+    assert "roles" not in list_members.call_args.kwargs
+
+    owners = get_group_members(
+        admin_service,
+        _GROUP,
+        include_nested_groups=False,
+        roles=frozenset({GroupRole.OWNER}),
+    )
+
+    # Filtered here as well as by Google.
+    assert owners == GroupMembers(
+        user_emails=frozenset({"owner@example.com"}), has_all_account_users=False
+    )
+    assert list_members.call_args.kwargs["roles"] == "OWNER"
+
+
 def test_lookup_ignores_a_group_without_collaborative_inbox(
     group_api: MagicMock,
 ) -> None:
@@ -179,7 +226,7 @@ def test_lookup_ignores_a_group_without_collaborative_inbox(
 
     assert lookup.get_group(_message("m1"), _MEMBER) is None
     assert lookup.get_groups_without_collaborative_inbox() == [_GROUP]
-    group_api.list_group_member_emails.assert_not_called()
+    group_api.get_group_members.assert_not_called()
 
 
 def test_lookup_makes_no_google_call_without_listed_groups(

@@ -85,7 +85,7 @@ GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 # Gmail
 #####
 
-# In seconds. Bounds how long someone who left a group keeps reading its mail.
+# In seconds. A removed reader keeps the group's mail until the next sync.
 GMAIL_PERMISSION_GROUP_SYNC_FREQUENCY = 5 * 60
 
 

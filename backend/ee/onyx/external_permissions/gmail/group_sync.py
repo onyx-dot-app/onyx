@@ -1,18 +1,9 @@
-"""The readers of the Gmail connector's Collaborative Inbox groups. A group
-document names its group, and each group maps to the people that the group's
-"who can view conversations" setting allows."""
-
 import time
-from collections.abc import Generator, Iterator
-
-from googleapiclient.errors import HttpError
+from collections.abc import Generator
+from functools import cached_property
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.external_permissions.gmail.models import (
-    GroupRole,
-    GroupSettings,
-    GroupViewSetting,
-)
+from ee.onyx.external_permissions.gmail.models import GroupViewSetting
 from ee.onyx.external_permissions.models import SyncEntityFailure
 from ee.onyx.external_permissions.utils import (
     MAX_FAILED_ENTITY_FRACTION,
@@ -22,15 +13,16 @@ from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.gmail.collaborative_inbox import (
+    COLLABORATIVE_INBOX_FIELD,
     GROUPS_SETTINGS_SCOPE_MISSING_MESSAGE,
     build_groups_settings_service,
-    list_group_member_emails,
+    get_group_members,
+    has_collaborative_inbox,
+    read_group_settings,
 )
 from onyx.connectors.gmail.connector import GmailConnector
-from onyx.connectors.google_utils.google_utils import (
-    execute_paginated_retrieval,
-    execute_single_retrieval,
-)
+from onyx.connectors.gmail.models import GroupMembers, GroupRole
+from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.resources import (
     AdminService,
     GoogleService,
@@ -44,117 +36,141 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_GROUP_SETTINGS_FIELDS = "enableCollaborativeInbox,whoCanViewGroup"
-_DIRECT_MEMBER_FIELDS = "nextPageToken, members(email, role, type)"
-_USER_MEMBER_TYPE = "USER"
-# The Admin SDK alias for the Workspace account of the calling admin.
+_VIEW_SETTING_FIELD = "whoCanViewGroup"
+_GROUP_SETTINGS_FIELDS = f"{COLLABORATIVE_INBOX_FIELD},{_VIEW_SETTING_FIELD}"
+# The Admin SDK alias for the calling admin's Workspace account. Unlike a domain
+# filter it covers every domain in the account, as ALL_IN_DOMAIN_CAN_VIEW does.
 _OWN_ACCOUNT = "my_customer"
-_ROLES_THAT_VIEW: dict[GroupViewSetting, frozenset[GroupRole]] = {
-    GroupViewSetting.ALL_OWNERS_CAN_VIEW: frozenset({GroupRole.OWNER}),
-    GroupViewSetting.ALL_MANAGERS_CAN_VIEW: frozenset(
-        {GroupRole.OWNER, GroupRole.MANAGER}
-    ),
-}
-# A group open to anyone on the web is read by the Workspace account, no wider.
-_ACCOUNT_WIDE_VIEW_SETTINGS = frozenset(
-    {GroupViewSetting.ANYONE_CAN_VIEW, GroupViewSetting.ALL_IN_DOMAIN_CAN_VIEW}
-)
+# The most users the Admin SDK returns in one users.list page.
+_MAX_USERS_PER_PAGE = 500
+_OWNERS = frozenset({GroupRole.OWNER})
+_OWNERS_AND_MANAGERS = frozenset({GroupRole.OWNER, GroupRole.MANAGER})
+
+
+class _SyncDeadlineExceeded(TimeoutError):
+    """Listing one large group or account can outlast the timeout, which the
+    sync task checks only between yielded groups."""
 
 
 def _check_sync_deadline(deadline: float) -> None:
-    """The caller checks its timeout only between yielded groups, and one
-    large group or account can take longer than that to list."""
     if time.monotonic() > deadline:
-        raise TimeoutError(
+        raise _SyncDeadlineExceeded(
             f"Gmail group sync exceeded {PERMISSION_SYNC_TIMEOUT}s before it finished"
         )
 
 
-def _get_group_settings(
-    settings_service: GroupsSettingsService, group_email: str
-) -> GroupSettings | None:
-    """None for an address that is no longer a group."""
-    try:
-        settings = next(
-            execute_single_retrieval(
-                retrieval_function=settings_service.groups().get,  # ty: ignore[unresolved-attribute]
-                groupUniqueId=group_email,
-                fields=_GROUP_SETTINGS_FIELDS,
-            )
-        )
-    except HttpError as e:
-        if e.resp.status != 404:
-            raise
-        return None
+class _AccountUsers:
+    """Every user of the Workspace account, listed at most once a sync."""
 
-    try:
-        who_can_view = GroupViewSetting(settings.get("whoCanViewGroup"))
-    except ValueError:
-        who_can_view = None
-    return GroupSettings(
-        # The Groups Settings API returns booleans as strings.
-        is_collaborative_inbox=settings.get("enableCollaborativeInbox") == "true",
-        who_can_view=who_can_view,
-    )
+    def __init__(self, admin_service: AdminService, deadline: float) -> None:
+        self._admin_service = admin_service
+        self._deadline = deadline
 
-
-def _list_direct_member_emails(
-    admin_service: AdminService, group_email: str, roles: frozenset[GroupRole]
-) -> Iterator[str]:
-    """The users who hold one of `roles` in the group itself. A nested group
-    that holds the role grants its members nothing here."""
-    for member in execute_paginated_retrieval(
-        retrieval_function=admin_service.members().list,  # ty: ignore[unresolved-attribute]
-        list_key="members",
-        groupKey=group_email,
-        fields=_DIRECT_MEMBER_FIELDS,
-    ):
-        member_email = member.get("email")
-        if (
-            member.get("type") == _USER_MEMBER_TYPE
-            and member.get("role") in roles
-            and member_email
+    @cached_property
+    def emails(self) -> frozenset[str]:
+        user_emails: set[str] = set()
+        for user in execute_paginated_retrieval(
+            retrieval_function=self._admin_service.users().list,  # ty: ignore[unresolved-attribute]
+            list_key="users",
+            customer=_OWN_ACCOUNT,
+            maxResults=_MAX_USERS_PER_PAGE,
+            fields=USER_FIELDS,
         ):
-            yield member_email.lower()
+            _check_sync_deadline(self._deadline)
+            if user_email := user.get("primaryEmail"):
+                user_emails.add(user_email.lower())
+        return frozenset(user_emails)
 
 
-def _list_account_user_emails(admin_service: AdminService) -> Iterator[str]:
-    for user in execute_paginated_retrieval(
-        retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
-        list_key="users",
-        customer=_OWN_ACCOUNT,
-        fields=USER_FIELDS,
-    ):
-        if user_email := user.get("primaryEmail"):
-            yield user_email.lower()
-
-
-def _list_reader_emails(
-    settings_service: GroupsSettingsService,
-    admin_service: AdminService,
-    group_email: str,
-) -> Iterator[str]:
-    settings = _get_group_settings(settings_service, group_email)
-    if settings is None or not settings.is_collaborative_inbox:
+def _get_view_setting(
+    settings_service: GroupsSettingsService, group_email: str
+) -> GroupViewSetting | None:
+    """None when nobody reads the group's mail: the address stopped being a
+    Collaborative Inbox group, or Google sent a view setting this enum lacks."""
+    settings = read_group_settings(
+        settings_service, group_email, _GROUP_SETTINGS_FIELDS
+    )
+    if settings is None or not has_collaborative_inbox(settings):
         logger.warning(
             "%s is not a Collaborative Inbox group, so nobody reads its mail",
             group_email,
         )
-        return
-    if settings.who_can_view is None:
-        logger.warning(
-            "%s has an unknown view setting, so nobody reads its mail", group_email
-        )
-        return
+        return None
 
-    if settings.who_can_view in _ACCOUNT_WIDE_VIEW_SETTINGS:
-        yield from _list_account_user_emails(admin_service)
-    elif settings.who_can_view == GroupViewSetting.ALL_MEMBERS_CAN_VIEW:
-        yield from list_group_member_emails(admin_service, group_email)
-    else:
-        yield from _list_direct_member_emails(
-            admin_service, group_email, _ROLES_THAT_VIEW[settings.who_can_view]
+    view_setting = settings.get(_VIEW_SETTING_FIELD)
+    try:
+        return GroupViewSetting(view_setting)
+    except ValueError:
+        logger.warning(
+            "%s has the unknown view setting %r, so nobody reads its mail",
+            group_email,
+            view_setting,
         )
+        return None
+
+
+def _with_account_users(
+    members: GroupMembers, account_users: _AccountUsers
+) -> frozenset[str]:
+    if not members.has_all_account_users:
+        return members.user_emails
+    return members.user_emails | account_users.emails
+
+
+def _get_member_reader_emails(
+    admin_service: AdminService, group_email: str, account_users: _AccountUsers
+) -> frozenset[str]:
+    direct_members = get_group_members(
+        admin_service, group_email, include_nested_groups=False
+    )
+    all_members = get_group_members(
+        admin_service, group_email, include_nested_groups=True
+    )
+    reader_emails = _with_account_users(direct_members, account_users)
+    # Google does not deliver the group's mail to a nested member from outside
+    # the account, so such a member does not read it here either.
+    nested_only_emails = all_members.user_emails - direct_members.user_emails
+    if nested_only_emails:
+        reader_emails |= nested_only_emails & account_users.emails
+    return reader_emails
+
+
+def _get_reader_emails(
+    settings_service: GroupsSettingsService,
+    admin_service: AdminService,
+    group_email: str,
+    account_users: _AccountUsers,
+) -> frozenset[str]:
+    match _get_view_setting(settings_service, group_email):
+        case None:
+            return frozenset()
+        case GroupViewSetting.ALL_OWNERS_CAN_VIEW:
+            # Members of a nested group that holds the role are left out.
+            return _with_account_users(
+                get_group_members(
+                    admin_service,
+                    group_email,
+                    include_nested_groups=False,
+                    roles=_OWNERS,
+                ),
+                account_users,
+            )
+        case GroupViewSetting.ALL_MANAGERS_CAN_VIEW:
+            return _with_account_users(
+                get_group_members(
+                    admin_service,
+                    group_email,
+                    include_nested_groups=False,
+                    roles=_OWNERS_AND_MANAGERS,
+                ),
+                account_users,
+            )
+        case GroupViewSetting.ALL_MEMBERS_CAN_VIEW:
+            return _get_member_reader_emails(admin_service, group_email, account_users)
+        # A group open to the web gets the readers of an account-wide one, not
+        # public access in Onyx.
+        case GroupViewSetting.ALL_IN_DOMAIN_CAN_VIEW | GroupViewSetting.ANYONE_CAN_VIEW:
+            return account_users.emails
 
 
 def gmail_group_sync(
@@ -174,8 +190,7 @@ def gmail_group_sync(
     settings_service = build_groups_settings_service(
         gmail_connector.creds, gmail_connector.primary_admin_email
     )
-    # Without the scope every group would sync as empty and hide its mail
-    # with no error.
+    # A missing scope is a setup error the admin must fix, so fail the whole sync.
     if settings_service is None:
         raise InsufficientPermissionsError(GROUPS_SETTINGS_SCOPE_MISSING_MESSAGE)
     admin_service = get_google_service(
@@ -183,16 +198,15 @@ def gmail_group_sync(
     )
 
     deadline = time.monotonic() + PERMISSION_SYNC_TIMEOUT
+    account_users = _AccountUsers(admin_service, deadline)
     failed_group_count = 0
     for group_email in group_emails:
-        reader_emails: set[str] = set()
+        _check_sync_deadline(deadline)
         try:
-            for reader_email in _list_reader_emails(
-                settings_service, admin_service, group_email
-            ):
-                _check_sync_deadline(deadline)
-                reader_emails.add(reader_email)
-        except TimeoutError:
+            reader_emails = _get_reader_emails(
+                settings_service, admin_service, group_email, account_users
+            )
+        except _SyncDeadlineExceeded:
             raise
         except Exception as e:
             logger.exception("Could not read the readers of %s", group_email)
