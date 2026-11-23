@@ -122,10 +122,21 @@ pub fn get_server_lock(state: State<'_, AppState>) -> ServerSetup {
     server_setup(&state.policy(), state.server().ok())
 }
 
-/// Whether onboarding chose the server in use (`server` is normalized).
-fn keeps_session(current: Option<&str>, server: &str) -> bool {
-    current == Some(server)
+/// The server onboarding chose, and whether it is the one in use. The server
+/// in use passes as it is: a managed one may use `http://` on any host. Any
+/// other server must pass the user rules.
+fn chosen_server(input: &str, current: Option<&str>) -> Result<(String, bool), String> {
+    if let (Some(current), Ok(server)) = (current, api::normalize_managed_server_url(input)) {
+        if server == current {
+            return Ok((server, true));
+        }
+    }
+    Ok((normalize_server_url(input)?, false))
 }
+
+/// Saves run one at a time, in order, so an older save that waits for a
+/// sign-out cannot overwrite a newer choice.
+static SAVING_SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Launcher commands refuse while managed policy turns the launcher off.
 fn launcher_enabled(app: &AppHandle, state: &AppState) -> Result<(), String> {
@@ -152,11 +163,12 @@ pub async fn save_server(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _saving = SAVING_SERVER.lock().await;
     server_locked(&state)?;
-    let server = normalize_server_url(&url)?;
     let current = state.server().ok();
+    let (server, same) = chosen_server(&url, current.as_deref())?;
     // The same server keeps the session and its windows.
-    if keeps_session(current.as_deref(), &server) {
+    if same {
         windows::close(&app, windows::ONBOARDING);
         windows::show_primary_except(&app, windows::ONBOARDING);
         return Ok(());
@@ -685,10 +697,10 @@ pub fn fit_window(window: tauri::WebviewWindow, content_height: f64) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_component, keeps_session, managed_prefs, selected_agent, server_lock_reason,
+        chosen_server, decode_component, managed_prefs, selected_agent, server_lock_reason,
         server_setup, MANAGED, SERVER_LOCKED_INVALID,
     };
-    use crate::api::{normalize_server_url, Agent};
+    use crate::api::Agent;
     use crate::policy::{self, Policy, RawValue};
 
     #[test]
@@ -723,12 +735,26 @@ mod tests {
             "onyx.example.com",
             " HTTPS://Onyx.Example.com/app/ ",
         ] {
-            let server = normalize_server_url(input).unwrap();
-            assert!(keeps_session(current, &server), "{input}");
+            assert_eq!(
+                chosen_server(input, current),
+                Ok(("https://onyx.example.com".to_string(), true)),
+                "{input}"
+            );
         }
-        let other = normalize_server_url("https://other.example.com").unwrap();
-        assert!(!keeps_session(current, &other));
-        assert!(!keeps_session(None, &other));
+        let other = Ok(("https://other.example.com".to_string(), false));
+        assert_eq!(chosen_server("https://other.example.com", current), other);
+        assert_eq!(chosen_server("https://other.example.com", None), other);
+    }
+
+    #[test]
+    fn a_managed_http_server_in_use_is_kept_but_no_other_http_server() {
+        let current = Some("http://onyx.corp");
+        assert_eq!(
+            chosen_server("http://onyx.corp/", current),
+            Ok(("http://onyx.corp".to_string(), true))
+        );
+        assert!(chosen_server("http://other.corp", current).is_err());
+        assert!(chosen_server("http://onyx.corp", None).is_err());
     }
 
     fn agent(id: i64) -> Agent {
