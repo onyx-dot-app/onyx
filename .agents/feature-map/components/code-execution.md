@@ -524,13 +524,18 @@ PowerPoint) and code files by extension
 `OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`). Other project and agent files reach the model only as prompt
 text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
-(`chat/files.py:build_python_chat_files_from_search_docs`, connector-origin
-files only), only when the chat offers the Python tool. Files already in
+(`chat/files.py:build_python_chat_files_from_search_docs`), only when the chat
+offers the Python tool (`ToolContext.python_stages_search_files`). The search
+tool lists the connector files in `SearchDocsResponse.openable_file_ids`
+(one file record query that also names the files in the result), so staging
+reads no file records; `PythonTool` applies the
+staging caps. Files already in
 `ChatAgent.chat_files` from an earlier step are not loaded again. Search documents
 and citations are retained without Python. `chat/agent.py:ChatAgent._update_tool_context` merges them into
 `chat_files` after the step and skips a filename already present, so the code in
 a later step can open a spreadsheet that search found. A code mode cell stages
-the files of its nested searches the same way
+the files of its nested searches the same way, when its context's
+`python_stages_search_files` is set
 (`tools/tool_implementations/code_mode/cells.py:CodeCell._run_call`), so a later
 `run_python` call in the same program can open them. Staging has caps on file
 count, total bytes and parallel uploads. When files are dropped, the model gets

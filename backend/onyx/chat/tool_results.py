@@ -184,12 +184,28 @@ def staged_result_details(
     else:
         return details
     sources = tool_result_sources(details)
+    # The files that the searches found a tool of the chat can open.
+    openable = {
+        file_id
+        for search in (
+            [details]
+            if isinstance(details, SearchDocsResponse)
+            else [
+                call.details
+                for call in details.all_calls()
+                if isinstance(call.details, SearchDocsResponse)
+            ]
+        )
+        for file_id in search.openable_file_ids
+    }
     staged = list(details.staged_files) if isinstance(details, StagedChatFiles) else []
     staged_ids = {file.file_id for file in staged}
     added = [
         doc
         for doc in (sources.documents if sources is not None else [])
-        if doc.file_id not in staged_ids and doc.file_id not in known_file_ids
+        if doc.file_id in openable
+        and doc.file_id not in staged_ids
+        and doc.file_id not in known_file_ids
     ]
     if isinstance(details, StagedChatFiles) and not added:
         return details

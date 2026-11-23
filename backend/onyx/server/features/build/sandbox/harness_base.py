@@ -32,6 +32,7 @@ Exec contract (`exec_command` / `write_stdin`):
 """
 
 import abc
+import hashlib
 import os
 import posixpath
 import string
@@ -158,6 +159,18 @@ def chat_file_name(file_id: str, name: str | None) -> str:
         if tail:
             return f"{prefix}{tail}"
     return f"{prefix}file"
+
+
+def search_file_name(file_id: str, title: str) -> str:
+    """The name of a search result's file in the sandbox: `chat_file_name`
+    with 8 hex digits of the file ID's SHA-256, since connector file IDs are
+    arbitrary strings. A title is not a path, so its `/` and `\\` become `_`
+    and it stays whole. The search result, the Python staging and the VM copy
+    use it, so they name a file alike."""
+    return chat_file_name(
+        hashlib.sha256(file_id.encode()).hexdigest(),
+        title.replace("/", "_").replace("\\", "_"),
+    )
 
 
 def session_tool_results(session_id: UUID) -> str:

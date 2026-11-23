@@ -18,6 +18,7 @@ from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.sandbox.harness_base import search_file_name
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -120,53 +121,8 @@ class TestBuildPythonChatFiles:
         chat_files = build_python_chat_files_from_search_docs(docs)
 
         assert len(chat_files) == 1
-        assert chat_files[0].filename == f"greetings_{file_id}.csv"
+        assert chat_files[0].filename == search_file_name(file_id, "greetings.csv")
         assert chat_files[0].content == b"hello,world\n1,2\n"
-
-    def test_disallowed_origin_is_rejected(
-        self,
-        file_cleanup: list[str],
-    ) -> None:
-        """Only `CONNECTOR`-origin files are eligible via this path —
-        `CHAT_UPLOAD` and others use different pipelines and must not leak
-        through even if a SearchDoc happens to reference their file_id."""
-        file_id = _write_file(b"from chat", origin=FileOrigin.CHAT_UPLOAD)
-        file_cleanup.append(file_id)
-
-        docs = [_make_search_doc(file_id=file_id, semantic_identifier="usr-upload.txt")]
-
-        assert build_python_chat_files_from_search_docs(docs) == []
-
-    def test_unknown_file_id_is_silently_dropped(
-        self,
-        file_cleanup: list[str],  # noqa: ARG002
-    ) -> None:
-        """Bad/stale file_id → log warning, skip it, continue the batch."""
-        docs = [
-            _make_search_doc(
-                file_id="does-not-exist", semantic_identifier="missing.csv"
-            )
-        ]
-        assert build_python_chat_files_from_search_docs(docs) == []
-
-    def test_mixed_good_and_bad_entries_return_only_good(
-        self,
-        file_cleanup: list[str],
-    ) -> None:
-        good_id = _write_file(b"ok")
-        blocked_id = _write_file(b"nope", origin=FileOrigin.CHAT_UPLOAD)
-        file_cleanup.extend([good_id, blocked_id])
-
-        docs = [
-            _make_search_doc(file_id=good_id, semantic_identifier="ok.csv"),
-            _make_search_doc(file_id=blocked_id, semantic_identifier="blocked.csv"),
-            _make_search_doc(file_id="ghost", semantic_identifier="ghost.csv"),
-            _make_search_doc(file_id=None, semantic_identifier="no-id.csv"),
-        ]
-
-        chat_files = build_python_chat_files_from_search_docs(docs)
-
-        assert [cf.filename for cf in chat_files] == [f"ok_{good_id}.csv"]
 
     def test_duplicate_file_ids_deduped_first_hit_wins(
         self,
@@ -188,7 +144,7 @@ class TestBuildPythonChatFiles:
         chat_files = build_python_chat_files_from_search_docs(docs)
 
         assert len(chat_files) == 1
-        assert chat_files[0].filename == f"first_{file_id}.csv"
+        assert chat_files[0].filename == search_file_name(file_id, "first.csv")
 
     def test_distinct_file_ids_with_same_title_get_distinct_names(
         self,
@@ -211,27 +167,13 @@ class TestBuildPythonChatFiles:
         chat_files = build_python_chat_files_from_search_docs(docs)
 
         assert [cf.filename for cf in chat_files] == [
-            f"Report_{file_a}.pdf",
-            f"Report_{file_b}.pdf",
-            f"Report_{file_c}.pdf",
+            search_file_name(file_a, "Report.pdf"),
+            search_file_name(file_b, "Report.pdf"),
+            search_file_name(file_c, "Report.pdf"),
         ]
         assert chat_files[0].content == b"first"
         assert chat_files[1].content == b"second"
         assert chat_files[2].content == b"third"
-
-    def test_title_sanitization_applied_to_filename(
-        self,
-        file_cleanup: list[str],
-    ) -> None:
-        file_id = _write_file(b"payload")
-        file_cleanup.append(file_id)
-
-        docs = [_make_search_doc(file_id=file_id, semantic_identifier="Q1/Q2 Report")]
-
-        chat_files = build_python_chat_files_from_search_docs(docs)
-
-        assert len(chat_files) == 1
-        assert chat_files[0].filename == f"Q1_Q2 Report_{file_id}"
 
     def test_original_order_preserved(
         self,
@@ -250,7 +192,7 @@ class TestBuildPythonChatFiles:
         chat_files = build_python_chat_files_from_search_docs(docs)
 
         assert [cf.filename for cf in chat_files] == [
-            f"a_{ids[0]}.csv",
-            f"b_{ids[1]}.csv",
-            f"c_{ids[2]}.csv",
+            search_file_name(ids[0], "a.csv"),
+            search_file_name(ids[1], "b.csv"),
+            search_file_name(ids[2], "c.csv"),
         ]

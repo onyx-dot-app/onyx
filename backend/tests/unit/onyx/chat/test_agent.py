@@ -21,6 +21,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Run, RunFailed
 from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
+from onyx.agents.tools import ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -75,7 +76,7 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import CapabilityEntry, ChatFile
+from onyx.tools.models import CapabilityEntry, ChatFile, ToolContext
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -495,7 +496,9 @@ def test_search_stages_files_only_when_python_needs_them(
         file_id="source-file",
     )
     search = SearchDocsResponse(
-        search_docs=[document], citation_mapping={1: "reference"}
+        search_docs=[document],
+        citation_mapping={1: "reference"},
+        openable_file_ids=["source-file"],
     )
     staged = ChatFile(
         filename="reference.txt", content=b"Evidence", file_id="source-file"
@@ -509,10 +512,15 @@ def test_search_stages_files_only_when_python_needs_them(
     monkeypatch.setattr(
         "onyx.chat.agent.build_python_chat_files_from_search_docs", stage
     )
-    monkeypatch.setattr(
-        "tests.unit.onyx.agents.fakes.EchoTool.run",
-        lambda *_args, **_kwargs: ToolResult(details=search, content="Evidence [1]"),
-    )
+    contexts: list[ToolContext] = []
+
+    def run(
+        _tool: EchoTool, _invocation: ToolInvocation, context: ToolContext
+    ) -> ToolResult:
+        contexts.append(context)
+        return ToolResult(details=search, content="Evidence [1]")
+
+    monkeypatch.setattr("tests.unit.onyx.agents.fakes.EchoTool.run", run)
     llm = ScriptedLLM(
         [
             *(
@@ -551,6 +559,10 @@ def test_search_stages_files_only_when_python_needs_them(
         chat_files=[staged] if already_available else [],
     )
     run_agent(agent, messages=[UserMessage(content="Find evidence twice")], max_steps=3)
+    # The search tool names staged files only when the chat stages them.
+    assert [context.python_stages_search_files for context in contexts] == [
+        python_enabled
+    ] * 2
     assert loaded == ([document] if python_enabled and not already_available else [])
     assert agent.chat_files == ([staged] if python_enabled or already_available else [])
     results = [

@@ -401,6 +401,9 @@ class ToolContext(BaseModel):
     # A code mode program made the call: its full value stays in the program's
     # memory, so a tool with a large full value keeps less.
     program_call: bool = False
+    # The chat stages the files of search results for the Python tool, so a
+    # search result names them by their staged file names.
+    python_stages_search_files: bool = False
 
 
 class ToolCallInfo(BaseModel):
