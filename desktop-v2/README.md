@@ -490,8 +490,10 @@ How the app differs from macOS:
   - An MSI uninstall keeps the app's data and the token. To also delete the data of the
     user who runs `msiexec`, set `DELETEAPPDATA=1`:
     `msiexec /x {ProductCode} DELETEAPPDATA=1`. This deletes that user's
-    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2`. It does not
-    go into junctions or symbolic links, and it keeps them. An upgrade never deletes data.
+    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` after the
+    uninstall succeeds. It does not go into junctions or symbolic links: it keeps the links
+    inside these folders, and when a folder is itself a link it removes only the link. Link
+    targets do not change. An upgrade never deletes data.
   - An uninstall that runs as LocalSystem (SCCM, Intune) deletes no user data, also with
     `DELETEAPPDATA=1`: each user controls their own folders, so a delete as LocalSystem is not
     safe there. After such an uninstall, each user's data folders and session token stay
