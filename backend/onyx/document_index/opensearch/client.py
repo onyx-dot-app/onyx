@@ -89,6 +89,15 @@ def _file_size(sizes: dict[str, Any], ext: str) -> int:
     return int(sizes.get(ext, {}).get("size_in_bytes", 0))
 
 
+# What an AWS domain in Elasticsearch compatibility mode reports as its version.
+ELASTICSEARCH_COMPATIBILITY_VERSION = "7.10.2"
+
+
+def _major_minor(version: str) -> tuple[int, int]:
+    major, minor = version.split(".")[:2]
+    return int(major), int(minor)
+
+
 def vector_usage_percent(vector_bytes: int, file_cache_bytes: int) -> float:
     """Vector bytes as a share of the file cache.
 
@@ -840,15 +849,28 @@ class OpenSearchClient(AbstractContextManager):
     def get_opensearch_version(self) -> tuple[int, int] | None:
         """Returns the (major, minor) OpenSearch version of the cluster.
 
+        An AWS domain in Elasticsearch compatibility mode
+        (override_main_response_version) reports Elasticsearch 7.10.2 on its
+        main endpoint, so its version is read from the nodes instead: the
+        oldest node's, which limits what the cluster can index.
+
         Returns:
-            None if the cluster does not report an OpenSearch version, for
-                example an AWS domain in Elasticsearch compatibility mode.
+            None if the cluster does not report an OpenSearch version.
         """
         version_info: dict[str, Any] = self._client.info()["version"]
-        if version_info.get("distribution") != "opensearch":
+        if version_info.get("distribution") == "opensearch":
+            return _major_minor(version_info["number"])
+        if version_info.get("number") != ELASTICSEARCH_COMPATIBILITY_VERSION:
             return None
-        major, minor = version_info["number"].split(".")[:2]
-        return int(major), int(minor)
+        response: dict[str, Any] = self._client.nodes.info(
+            params={"filter_path": "nodes.*.version"}
+        )
+        versions: list[tuple[int, int]] = [
+            _major_minor(node["version"])
+            for node in response.get("nodes", {}).values()
+            if node.get("version")
+        ]
+        return min(versions) if versions else None
 
     def close(self) -> None:
         """Closes the client.
