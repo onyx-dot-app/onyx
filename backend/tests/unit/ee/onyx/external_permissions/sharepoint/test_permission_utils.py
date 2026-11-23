@@ -19,6 +19,7 @@ from ee.onyx.external_permissions.microsoft_utils.sharepoint_permissions import 
 )
 from onyx.access.models import ExternalAccess
 from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
+from onyx.connectors.interfaces import RunScopedCache
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
@@ -175,49 +176,45 @@ def test_ad_group_claims_token_and_guid_share_cache(
     assert result.group_ids == {"Engineering Members", "Engineering Owners"}
 
 
-class _FakeRedis:
+class _FakeRunCache(RunScopedCache):
+    """The cache of one listing run, as the worker passes it."""
+
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
 
     def get(self, key: str) -> str | None:
         return self.values.get(key)
 
-    def set(self, key: str, value: str, ex: int | None = None) -> None:
-        assert ex == GROUP_EXPANSION_TTL_SECONDS
+    def set(self, key: str, value: str, ttl_seconds: int) -> None:
+        assert ttl_seconds == GROUP_EXPANSION_TTL_SECONDS
         self.values[key] = value
 
 
 @patch(f"{MODULE}._get_nested_azuread_groups")
 def test_the_shared_group_cache_serves_another_worker(
-    mock_get_group: MagicMock, monkeypatch: pytest.MonkeyPatch
+    mock_get_group: MagicMock,
 ) -> None:
-    """A second cache object for the same listing run stands in for a
+    """A second cache object on the same run cache stands in for a
     conversion thread of another worker: it reads the expansion that the
-    first one stored. A cache for another run does not."""
-    redis = _FakeRedis()
-    monkeypatch.setattr(
-        "onyx.connectors.microsoft_utils.sharepoint_access.get_redis_client",
-        lambda: redis,
-    )
+    first one stored. A cache on the run cache of another run does not."""
+    run_cache = _FakeRunCache()
     group = _make_ad_group("Engineering", "engineering-id")
     nested_group = _make_ad_group("Platform", "platform-id")
     mock_get_group.side_effect = [{nested_group}, set(), {nested_group}, set()]
 
-    first = SharedSharepointPermissionCache(scope="run-a")
+    first = SharedSharepointPermissionCache(shared=run_cache)
     resolved = _resolve_document_groups(MagicMock(), SITE_URL, {group}, first)
-    second = SharedSharepointPermissionCache(scope="run-a")
+    second = SharedSharepointPermissionCache(shared=run_cache)
     again = _resolve_document_groups(MagicMock(), SITE_URL, {group}, second)
 
     assert again == resolved
     assert mock_get_group.call_count == 2
-    other_run = SharedSharepointPermissionCache(scope="run-b")
+    other_run = SharedSharepointPermissionCache(shared=_FakeRunCache())
     assert _resolve_document_groups(MagicMock(), SITE_URL, {group}, other_run) == (
         resolved
     )
     assert mock_get_group.call_count == 4
     assert isinstance(next(iter(second.group_expansions.values())).nested_groups, set)
-    # The keys hold no site URL and no group name.
-    assert all(SITE_URL not in key and "Engineering" not in key for key in redis.values)
 
 
 def test_a_checkpoint_from_before_the_shared_cache_loads() -> None:

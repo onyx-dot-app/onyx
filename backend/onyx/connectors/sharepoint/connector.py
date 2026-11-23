@@ -2599,15 +2599,17 @@ class SharepointConnector(
         self, payload: SharepointListingPayload
     ) -> SharepointPermissionCache:
         """The permission cache of the listing run of ``payload``, which the
-        conversion threads of every worker share through Redis for that run
-        only. A payload with no run id uses the cache of this object."""
+        conversion threads of every worker share through the run cache for
+        that run only. A payload with no run id, or a connector with no run
+        cache, uses the cache of this object."""
         run_id = payload.listing_run_id
-        if run_id is None:
+        factory = self.run_scoped_cache_factory
+        if run_id is None or factory is None:
             return self._permission_cache
         with self._run_permission_caches_lock:
             cache = self._run_permission_caches.get(run_id)
             if cache is None:
-                cache = SharedSharepointPermissionCache(scope=run_id)
+                cache = SharedSharepointPermissionCache(shared=factory(run_id))
                 self._run_permission_caches[run_id] = cache
             return cache
 

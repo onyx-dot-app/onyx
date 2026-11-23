@@ -175,8 +175,13 @@ with no payload goes through `reindex`. The first step of a listing sets
 the group expansions of the permission reads in a
 `SharedSharepointPermissionCache` for that run
 (`connectors/microsoft_utils/sharepoint_access.py`): in the process and in
-Redis under `sharepoint_group_expansion:<run id>:<hash>`, so the threads of
-every worker share the expansion of a group in a run. The cache does not
+the `RunScopedCache` of the run (`connectors/interfaces.py`), so the threads
+of every worker share the expansion of a group in a run. The connector has
+no Redis client: `instantiate_connector` passes
+`set_run_scoped_cache_factory(RedisRunScopedCache)`
+(`redis/redis_run_scoped_cache.py`), which keeps each entry under
+`run_scoped_cache:<run id>:<hash>` with the tenant prefix. With no factory,
+the connector keeps the expansions in the process only. The cache does not
 lock a key: threads that miss the same group at the same time each read it,
 and the last write wins. A later run, or a connector on
 another credential, never reads these keys. The fetching path, the slim walk

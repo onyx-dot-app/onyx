@@ -1,21 +1,15 @@
 """Permission lookups for content in a SharePoint site. The SharePoint
 connector uses them, and so does Teams, whose channel files are in SharePoint."""
 
-import hashlib
 from typing import Any
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
-# no-direct-redis: allow indexing shares the group expansions between workers
-from redis.exceptions import RedisError
-
+from onyx.connectors.interfaces import RunScopedCache
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
 from onyx.db.enums import HierarchyNodeType
-
-# no-direct-redis: allow indexing shares the group expansions between workers
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -57,35 +51,29 @@ class SharepointPermissionCache(BaseModel):
         self.group_expansions[key] = expansion
 
 
-# A group expansion in Redis lives this long. Each key is for one listing run,
-# so this only bounds the memory of a run that ends early.
+# A shared group expansion lives this long. Each entry is for one listing
+# run, so this only bounds the memory of a run that ends early.
 GROUP_EXPANSION_TTL_SECONDS = 3600
 _GROUP_EXPANSION_KEY_PREFIX = "sharepoint_group_expansion"
 
 
 class SharedSharepointPermissionCache(SharepointPermissionCache):
-    """A permission cache that also keeps each expansion in Redis, so that the
-    conversion threads of every worker expand a group one time in one listing
-    run. ``scope`` is the id of that run: another run, or a connector with
-    another credential, never reads these keys, so each run sees access as
-    it is when the run reads it. When Redis cannot be reached, the cache
+    """A permission cache that also keeps each expansion in the cache of the
+    listing run, so that the conversion threads of every worker expand a
+    group one time in one run. Another run, or a connector with another
+    credential, has another run cache, so each run sees access as it is
+    when the run reads it. When the run cache cannot be reached, the cache
     works in the process only."""
 
-    scope: str
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def _redis_key(self, key: str) -> str:
-        digest = hashlib.sha256(key.encode()).hexdigest()
-        return f"{_GROUP_EXPANSION_KEY_PREFIX}:{self.scope}:{digest}"
+    shared: RunScopedCache
 
     def get_group_expansion(self, key: str) -> SharepointGroupExpansion | None:
         local = self.group_expansions.get(key)
         if local is not None:
             return local
-        try:
-            # no-direct-redis: allow indexing shares the group expansions between workers
-            raw = get_redis_client().get(self._redis_key(key))
-        except RedisError:
-            return None
+        raw = self.shared.get(f"{_GROUP_EXPANSION_KEY_PREFIX}:{key}")
         if raw is None:
             return None
         try:
@@ -99,15 +87,11 @@ class SharedSharepointPermissionCache(SharepointPermissionCache):
         self, key: str, expansion: SharepointGroupExpansion
     ) -> None:
         self.group_expansions[key] = expansion
-        try:
-            # no-direct-redis: allow indexing shares the group expansions between workers
-            get_redis_client().set(
-                self._redis_key(key),
-                expansion.model_dump_json(),
-                ex=GROUP_EXPANSION_TTL_SECONDS,
-            )
-        except RedisError as error:
-            logger.warning("Could not store a SharePoint group expansion: %s", error)
+        self.shared.set(
+            f"{_GROUP_EXPANSION_KEY_PREFIX}:{key}",
+            expansion.model_dump_json(),
+            GROUP_EXPANSION_TTL_SECONDS,
+        )
 
 
 def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001

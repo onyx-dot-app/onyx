@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from onyx.connectors.models import ConnectorFailure, HierarchyNode, SlimDocumentStub
 from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.redis.redis_run_scoped_cache import RedisRunScopedCache
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
@@ -155,6 +156,9 @@ class MockSharepoint(BaseModel):
         `certificate=True`: SharePoint REST refuses a client secret token."""
         connector = SharepointConnector(**kwargs)
         connector.load_credentials(self.credentials(certificate))
+        # As instantiate_connector does, so conversion shares the permission
+        # lookups of a listing run through Redis.
+        connector.set_run_scoped_cache_factory(RedisRunScopedCache)
         return connector
 
     def graph_get(
