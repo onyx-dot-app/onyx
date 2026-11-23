@@ -213,7 +213,7 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
     let server_url = string(SERVER_URL).and_then(|raw| match normalize_managed_server_url(&raw) {
         Ok(url) => {
             if !raw.trim().trim_end_matches('/').eq_ignore_ascii_case(&url) {
-                log::warn!("managed setting {SERVER_URL} {raw:?} is used as {url}: Onyx keeps only the scheme, host and port");
+                log::warn!("managed setting {SERVER_URL} is used as {url}: Onyx keeps only the scheme, host and port");
             }
             Some(url)
         }
