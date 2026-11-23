@@ -394,7 +394,6 @@ mod tests {
         save_then_record(false, || Ok(()), || panic!("recorded")).unwrap();
     }
 
-
     #[test]
     fn a_kept_read_failure_is_not_tried_again() {
         let mut failure = None;
