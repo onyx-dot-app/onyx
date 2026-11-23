@@ -167,9 +167,29 @@ fn linked_answer(url: &url::Url, run: u64) -> Option<Answer> {
 
 /// Whether a launch argument is a notification click (see `ANSWER_LINK`).
 /// A toast from an earlier run counts too: it must not open the main window.
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 pub fn is_answer_link(arg: &str) -> bool {
     url::Url::parse(arg).is_ok_and(|url| is_answer_route(&url))
+}
+
+/// Whether the process arguments (without the program) hold a toast click.
+#[cfg(any(windows, test))]
+fn started_by_toast<S: AsRef<std::ffi::OsStr>>(args: impl IntoIterator<Item = S>) -> bool {
+    args.into_iter()
+        .any(|arg| arg.as_ref().to_str().is_some_and(is_answer_link))
+}
+
+/// A toast click starts a second process that hands the link to the running
+/// one. Only the process the click started may take the foreground, so it
+/// passes that right on at once, before startup work can use it up.
+#[cfg(windows)]
+pub fn pass_on_foreground() {
+    use windows::Win32::UI::WindowsAndMessaging::{AllowSetForegroundWindow, ASFW_ANY};
+
+    if started_by_toast(std::env::args_os().skip(1)) {
+        // SAFETY: no pointers; a failure only means Windows refused the right.
+        let _ = unsafe { AllowSetForegroundWindow(ASFW_ANY) };
+    }
 }
 
 /// Handles `onyx://launcher/answer?..` from a clicked toast.
@@ -403,6 +423,15 @@ mod tests {
             parse("https://launcher/answer?answer=7&epoch=2&run=9"),
             None
         );
+    }
+
+    #[test]
+    fn a_process_started_by_a_toast_click_is_known() {
+        let link = answer_link(Answer { id: 3, epoch: 1 }, 8);
+        assert!(started_by_toast([link.as_str()]));
+        assert!(started_by_toast(["--flag", "onyx://launcher/answer"]));
+        assert!(!started_by_toast(["onyx://auth/callback?code=1"]));
+        assert!(!started_by_toast(Vec::<&str>::new()));
     }
 
     #[test]

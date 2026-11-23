@@ -216,7 +216,8 @@ mod platform {
 #[cfg(not(target_os = "macos"))]
 mod platform {
     use tauri::{
-        AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+        AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
+        WindowEvent,
     };
 
     use super::{local_navigation_allowed, local_new_window, LAUNCHER};
@@ -256,8 +257,11 @@ mod platform {
     pub fn show(app: &AppHandle) -> Result<(), String> {
         let window = app.get_webview_window(LAUNCHER).ok_or("launcher missing")?;
         match position_on_cursor_monitor(app) {
-            Some(position) => {
+            Some((position, _size)) => {
                 let _ = window.set_position(position);
+                // A hidden window keeps its size through a display scale change.
+                #[cfg(windows)]
+                let _ = window.set_size(_size);
             }
             None => {
                 let _ = window.center();
@@ -274,17 +278,21 @@ mod platform {
         }
     }
 
-    /// The launcher's place on the monitor under the pointer, the one the user
-    /// works on. `center()` keeps it on the monitor it was on.
-    fn position_on_cursor_monitor(app: &AppHandle) -> Option<PhysicalPosition<i32>> {
+    /// The launcher's place and physical size on the monitor under the
+    /// pointer, the one the user works on. `center()` keeps it on the monitor
+    /// it was on.
+    fn position_on_cursor_monitor(
+        app: &AppHandle,
+    ) -> Option<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
         let cursor = app.cursor_position().ok()?;
         let monitor = app.monitor_from_point(cursor.x, cursor.y).ok()??;
         // The known size: tao reports a wrong outer size for a window that
         // was never shown on Linux. The logical size is kept on a monitor with
         // another scale.
-        let size = tauri::LogicalSize::new(super::SIZE.0, super::SIZE.1)
-            .to_physical::<u32>(monitor.scale_factor());
-        Some(super::centered(monitor.work_area(), size))
+        Some(super::placement(
+            monitor.work_area(),
+            monitor.scale_factor(),
+        ))
     }
 
     /// Shows the launcher and asks the window manager for focus. KWin and
@@ -321,8 +329,18 @@ mod platform {
 }
 
 /// The launcher's size on Windows and Linux, in logical pixels.
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(not(target_os = "macos"), test))]
 const SIZE: (f64, f64) = (720.0, 460.0);
+
+/// The launcher's place and physical size, centered in `work_area` at `scale`.
+#[cfg(any(not(target_os = "macos"), test))]
+fn placement(
+    work_area: &tauri::PhysicalRect<i32, u32>,
+    scale: f64,
+) -> (tauri::PhysicalPosition<i32>, tauri::PhysicalSize<u32>) {
+    let size = tauri::LogicalSize::new(SIZE.0, SIZE.1).to_physical::<u32>(scale);
+    (centered(work_area, size), size)
+}
 
 /// The top-left corner that centers a window of `size` in `work_area`.
 #[cfg(any(not(target_os = "macos"), test))]
@@ -442,13 +460,26 @@ pub fn is_visible(app: &AppHandle) -> bool {
 mod tests {
     use tauri::{PhysicalPosition, PhysicalRect, PhysicalSize};
 
-    use super::centered;
+    use super::{centered, placement};
 
     fn area(x: i32, y: i32, width: u32, height: u32) -> PhysicalRect<i32, u32> {
         PhysicalRect {
             position: PhysicalPosition::new(x, y),
             size: PhysicalSize::new(width, height),
         }
+    }
+
+    #[test]
+    fn the_size_follows_the_monitor_scale() {
+        // 1280x1080 at 125%, with a 60px taskbar.
+        assert_eq!(
+            placement(&area(0, 0, 1280, 1020), 1.25),
+            (PhysicalPosition::new(190, 222), PhysicalSize::new(900, 575))
+        );
+        assert_eq!(
+            placement(&area(0, 0, 1280, 1020), 1.0),
+            (PhysicalPosition::new(280, 280), PhysicalSize::new(720, 460))
+        );
     }
 
     #[test]

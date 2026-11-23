@@ -58,11 +58,11 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
-# Answer toasts that open an onyx:// link (notify.rs) and menu keys while
-# WebView2 has focus (main_window.rs); the versions tauri-winrt-notification
-# and wry use.
+# Answer toasts that open an onyx:// link (notify.rs), menu keys while
+# WebView2 has focus (main_window.rs) and failed main-window loads
+# (offline.rs); the versions tauri-winrt-notification and wry use.
 webview2-com = "0.39"
-windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_UI_Input_KeyboardAndMouse"] }
+windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 
 # The versions tao and wry use (window focus, failed main-window loads, web
 # view settings and the context menu).

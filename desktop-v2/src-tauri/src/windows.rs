@@ -191,6 +191,28 @@ pub(crate) fn fit_in_work_area(
     }
 }
 
+/// Logical pixels the window frame adds left and right of the content.
+#[cfg(any(windows, test))]
+const FRAME_WIDTH: f64 = 16.0;
+
+/// The inner size, at most `wanted` and at least `min` (logical pixels), of
+/// a window with a title bar and menu bar that fits `work_area` (physical
+/// width, height) at `scale`.
+#[cfg(any(windows, test))]
+pub(crate) fn fit_size(
+    work_area: (u32, u32),
+    scale: f64,
+    wanted: (f64, f64),
+    min: (f64, f64),
+) -> (f64, f64) {
+    let width = f64::from(work_area.0) / scale - FRAME_WIDTH;
+    let height = f64::from(work_area.1) / scale - SCREEN_MARGIN;
+    (
+        wanted.0.min(width).max(min.0).floor(),
+        wanted.1.min(height).max(min.1).floor(),
+    )
+}
+
 /// Sizes a local window to its content: `content_height` logical pixels
 /// high, as wide as it opened, and inside its monitor's work area.
 pub fn fit_to_content(window: &WebviewWindow, content_height: f64) -> Result<(), String> {
@@ -422,6 +444,25 @@ pub fn show_primary(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_large_window_shrinks_to_the_work_area() {
+        // 1600x1200 at 150% with a 48px taskbar.
+        assert_eq!(
+            fit_size((1600, 1128), 1.5, (1280.0, 840.0), (800.0, 600.0)),
+            (1050.0, 672.0)
+        );
+        // It fits: no change.
+        assert_eq!(
+            fit_size((1920, 1032), 1.0, (1280.0, 840.0), (800.0, 600.0)),
+            (1280.0, 840.0)
+        );
+        // Never below the minimum size.
+        assert_eq!(
+            fit_size((1024, 728), 1.5, (1280.0, 840.0), (800.0, 600.0)),
+            (800.0, 600.0)
+        );
+    }
 
     #[test]
     fn content_that_fits_keeps_the_window_where_it_is() {
