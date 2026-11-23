@@ -1,7 +1,9 @@
 import asyncio
+import time
 from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 from google.auth.credentials import Credentials
 from google.genai import errors as genai_errors
@@ -13,7 +15,9 @@ from onyx.natural_language_processing.embedding_providers import vertex_schedule
 from onyx.natural_language_processing.embedding_providers.vertex_scheduler import (
     VertexRequestScheduler,
     VertexRetrySettings,
+    is_transient_vertex_error,
 )
+from onyx.natural_language_processing.embedding_rate_limit import EmbeddingRateLimiter
 from onyx.natural_language_processing.embedding_request_policy import (
     EmbeddingRequestPolicy,
     EmbeddingRetryBackoff,
@@ -39,13 +43,22 @@ def _vertex_429() -> genai_errors.ClientError:
 
 
 def _policy(
-    should_stop: Callable[[], bool] | None = None, indexing: bool = True
+    should_stop: Callable[[], bool] | None = None,
+    indexing: bool = True,
+    rate_limiter: EmbeddingRateLimiter | None = None,
 ) -> EmbeddingRequestPolicy:
     return EmbeddingRequestPolicy(
         retry_backoff=EmbeddingRetryBackoff(scale_seconds=0, max_seconds=0),
         retry_tries=1,
         block_on_provider_rate_limit=indexing,
         should_stop=should_stop,
+        rate_limiter=rate_limiter,
+    )
+
+
+def _vertex_503() -> genai_errors.ServerError:
+    return genai_errors.ServerError(
+        503, {"error": {"code": 503, "status": "UNAVAILABLE"}}
     )
 
 
@@ -91,7 +104,9 @@ def test_rate_limit_goes_to_the_policy_after_the_budget() -> None:
         raise _vertex_429()
 
     with pytest.raises(genai_errors.ClientError):
-        asyncio.run(scheduler._send_in_slot(request, limit, _policy()))
+        asyncio.run(
+            scheduler._send_in_slot(request, limit, _policy(), time.monotonic())
+        )
     assert calls == 1
     assert limit.limit < 10
 
@@ -142,9 +157,7 @@ def test_transient_server_error_is_sent_again() -> None:
         nonlocal calls
         calls += 1
         if calls == 1:
-            raise genai_errors.ServerError(
-                503, {"error": {"code": 503, "status": "UNAVAILABLE"}}
-            )
+            raise _vertex_503()
         return "ok"
 
     assert asyncio.run(scheduler.send(_KEY, request, _policy())) == "ok"
@@ -152,9 +165,47 @@ def test_transient_server_error_is_sent_again() -> None:
     assert scheduler.model_limit(_KEY).limit == 10
 
 
-def test_rate_limited_request_backs_off_inside_its_slot() -> None:
+def test_timeouts_are_not_sent_again() -> None:
+    # These aiohttp timeouts are connection errors too.
+    assert not is_transient_vertex_error(aiohttp.ConnectionTimeoutError())
+    assert not is_transient_vertex_error(aiohttp.SocketTimeoutError())
+    assert not is_transient_vertex_error(TimeoutError())
+    assert is_transient_vertex_error(aiohttp.ServerDisconnectedError())
+
+
+def test_each_resend_waits_for_the_configured_rate_limit() -> None:
+    scheduler = _scheduler_without_backoff()
+    limiter = MagicMock(spec=EmbeddingRateLimiter)
+    limiter.acquire_async = AsyncMock()
+    request = AsyncMock(side_effect=[_vertex_503(), "ok"])
+
+    policy = _policy(rate_limiter=limiter)
+    assert asyncio.run(scheduler.send(_KEY, request, policy)) == "ok"
+    assert request.await_count == 2
+    assert limiter.acquire_async.await_count == 2
+
+
+def test_wait_for_the_configured_rate_limit_holds_no_process_slot() -> None:
+    scheduler = _scheduler_without_backoff()
+    slots_during_wait: list[tuple[int, int]] = []
+
+    async def acquire(*_args: object) -> None:
+        slots_during_wait.append(
+            (scheduler.model_limit(_KEY).in_flight, scheduler.process_limit.in_flight)
+        )
+
+    limiter = MagicMock(spec=EmbeddingRateLimiter)
+    limiter.acquire_async = acquire
+    request = AsyncMock(side_effect=[_vertex_503(), "ok"])
+
+    asyncio.run(scheduler.send(_KEY, request, _policy(rate_limiter=limiter)))
+    # (model slots, process slots): before the request, and before the resend.
+    assert slots_during_wait == [(1, 0), (1, 0)]
+
+
+def test_rate_limited_request_backs_off_inside_its_model_slot() -> None:
     scheduler = _scheduler_without_backoff(max_concurrency=1, initial_concurrency=1)
-    in_flight_during_backoff: list[int] = []
+    in_flight_during_backoff: list[tuple[int, int]] = []
     calls = 0
 
     async def request() -> str:
@@ -165,11 +216,15 @@ def test_rate_limited_request_backs_off_inside_its_slot() -> None:
         return "ok"
 
     async def backoff(_seconds: float) -> None:
-        in_flight_during_backoff.append(scheduler.process_limit.in_flight)
+        in_flight_during_backoff.append(
+            (scheduler.model_limit(_KEY).in_flight, scheduler.process_limit.in_flight)
+        )
 
     with patch.object(vertex_scheduler.asyncio, "sleep", backoff):
         asyncio.run(scheduler.send(_KEY, request, _policy()))
-    assert in_flight_during_backoff == [1]
+    # (model slots, process slots): only a request in flight holds a process slot.
+    assert in_flight_during_backoff == [(1, 0)]
+    assert scheduler.model_limit(_KEY).in_flight == 0
     assert scheduler.process_limit.in_flight == 0
 
 
@@ -235,7 +290,9 @@ def _cloud_embedding() -> CloudEmbedding:
     )
 
 
-def _embed(client: MagicMock, texts: list[str]) -> None:
+def _embed(
+    client: MagicMock, texts: list[str], model: str = "gemini-embedding-2"
+) -> None:
     with (
         patch("google.auth.default", return_value=(MagicMock(spec=Credentials), "p")),
         patch("google.genai.Client", return_value=client),
@@ -243,7 +300,7 @@ def _embed(client: MagicMock, texts: list[str]) -> None:
         asyncio.run(
             _cloud_embedding()._embed_vertex(
                 texts=texts,
-                model="gemini-embedding-2",
+                model=model,
                 embedding_type="RETRIEVAL_DOCUMENT",
                 reduced_dimension=None,
             )
@@ -282,6 +339,45 @@ def test_embed_call_raises_the_request_error_not_a_group() -> None:
         _embed(client, ["a", "b", "c"])
 
 
+def test_stop_signal_is_raised_before_an_error_that_is_retried() -> None:
+    # Both requests fail before the TaskGroup cancels one of them. The
+    # RuntimeError is first in the group.
+    both_started = asyncio.Event()
+    calls = 0
+
+    async def embed_content(**_kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await both_started.wait()
+            raise ConnectorStopSignal("stop")
+        both_started.set()
+        raise RuntimeError("boom")
+
+    client = MagicMock()
+    client.aio.models.embed_content = embed_content
+    client.aio.aclose = AsyncMock()
+    with pytest.raises(ConnectorStopSignal):
+        _embed(client, ["a", "b"])
+
+
+def test_each_name_of_a_model_shares_one_limit(
+    vertex_scheduler: VertexRequestScheduler,
+) -> None:
+    response = MagicMock()
+    response.embeddings = [MagicMock(values=[1.0])]
+    client = MagicMock()
+    client.aio.models.embed_content = AsyncMock(return_value=response)
+    client.aio.aclose = AsyncMock()
+    limit = vertex_scheduler.model_limit(_KEY)
+    before = limit.limit
+
+    _embed(client, ["a"], model="publishers/google/models/gemini-embedding-2")
+
+    # The success counted on the limit of the base model.
+    assert limit.limit == before + 1
+
+
 def test_embeddings_keep_the_input_order() -> None:
     async def scenario() -> list[list[float]]:
         last_done = asyncio.Event()
@@ -317,4 +413,6 @@ def test_embeddings_keep_the_input_order() -> None:
                 reduced_dimension=None,
             )
 
-    assert asyncio.run(scenario()) == [[1.0], [2.0], [3.0]]
+    # The timeout fails the test if the requests do not run in parallel.
+    embeddings = asyncio.run(asyncio.wait_for(scenario(), timeout=10))
+    assert embeddings == [[1.0], [2.0], [3.0]]

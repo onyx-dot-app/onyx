@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from unittest.mock import patch
 
 import pytest
 
@@ -26,14 +27,15 @@ def test_limit_holds_across_threads_and_loops() -> None:
     for thread in threads:
         thread.start()
 
-    for _ in range(3):
-        assert acquired.acquire(timeout=10)
-    assert semaphore.in_flight == 3
-    assert not acquired.acquire(timeout=0.2)
-
-    release_all.set()
-    for thread in threads:
-        thread.join(timeout=10)
+    try:
+        for _ in range(3):
+            assert acquired.acquire(timeout=10)
+        assert semaphore.in_flight == 3
+        assert not acquired.acquire(timeout=0.2)
+    finally:
+        release_all.set()
+        for thread in threads:
+            thread.join(timeout=10)
     assert semaphore.in_flight == 0
 
 
@@ -54,8 +56,10 @@ def test_rate_limits_cut_once_per_cooldown() -> None:
     semaphore = AdaptiveSemaphore(
         initial=50, minimum=1, maximum=100, decrease_cooldown_seconds=60
     )
-    for _ in range(10):
-        semaphore.record_rate_limit()
+    # A clock below the cooldown must not hide the first cut.
+    with patch("onyx.utils.adaptive_semaphore.time.monotonic", return_value=1.0):
+        for _ in range(10):
+            semaphore.record_rate_limit()
     assert semaphore.limit == 35
 
 
@@ -89,7 +93,10 @@ def test_cancelled_waiter_gives_back_its_slot() -> None:
     assert semaphore.in_flight == 0
 
 
-def test_slot_granted_then_cancelled_is_given_back() -> None:
+@pytest.mark.parametrize("grant_arrives_before_the_cancel", [False, True])
+def test_slot_granted_then_cancelled_is_given_back(
+    grant_arrives_before_the_cancel: bool,
+) -> None:
     semaphore = AdaptiveSemaphore(initial=1, minimum=1, maximum=1)
 
     async def scenario() -> None:
@@ -97,6 +104,9 @@ def test_slot_granted_then_cancelled_is_given_back() -> None:
         waiter = asyncio.create_task(semaphore.acquire())
         await asyncio.sleep(0)  # test-flakes: allow yields once so the waiter queues
         semaphore.release()  # grants the waiter its slot before it runs
+        if grant_arrives_before_the_cancel:
+            # The waiter's future has its result, but the waiter has not run.
+            await asyncio.sleep(0)  # test-flakes: allow yields once so the grant runs
         waiter.cancel()
         with pytest.raises(asyncio.CancelledError):
             await waiter

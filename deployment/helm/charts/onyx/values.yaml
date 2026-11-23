@@ -1939,8 +1939,9 @@ configMap:
   FORCED_DOCUMENT_SET_NAMES: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
-  # Gemini Embedding 2 (Vertex) requests in flight per process, over all
-  # threads. The limit starts at the initial value and adapts to rate limits up
+  # Gemini Embedding 2 (Vertex) requests in flight. The max is the cap for one
+  # process, over all threads, projects and models. Each project and model has
+  # its own limit: it starts at the initial value and adapts to rate limits up
   # to the max. Empty = defaults (128 and 16).
   VERTEXAI_EMBEDDING_MAX_CONCURRENCY: ""
   VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY: ""

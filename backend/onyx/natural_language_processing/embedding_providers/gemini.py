@@ -10,13 +10,14 @@ _GEMINI_EMBEDDING_2_PROMPT_TEMPLATES = {
 }
 
 
+def gemini_base_model_name(model: str) -> str:
+    """`publishers/google/models/gemini-embedding-2` and `gemini-embedding-2`
+    are the same model."""
+    return model.split("/")[-1].strip().lower()
+
+
 def is_gemini_embedding_2_model(model: str) -> bool:
-    return (
-        model.split("/")[-1]
-        .strip()
-        .lower()
-        .startswith(_GEMINI_EMBEDDING_2_MODEL_PREFIX)
-    )
+    return gemini_base_model_name(model).startswith(_GEMINI_EMBEDDING_2_MODEL_PREFIX)
 
 
 def format_gemini_embedding_text(text: str, model: str, embedding_type: str) -> str:

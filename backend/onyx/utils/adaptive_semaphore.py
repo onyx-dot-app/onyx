@@ -29,7 +29,8 @@ class AdaptiveSemaphore:
         self._decrease_cooldown = decrease_cooldown_seconds
         self._in_flight = 0
         self._in_slow_start = True
-        self._last_decrease = 0.0
+        # The clock can start below the cooldown, so 0 could hide the first cut.
+        self._last_decrease = float("-inf")
         self._waiters: deque[tuple[asyncio.AbstractEventLoop, asyncio.Future[None]]] = (
             deque()
         )

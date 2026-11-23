@@ -1,6 +1,23 @@
+import logging
 import os
 from typing import Any, List
 from urllib.parse import urlparse
+
+
+def _int_env_or_default(name: str, default: int) -> int:
+    """Parse an int env var: ``default`` when unset or not an integer. A bad
+    value is logged, so it does not stop the import of this module."""
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logging.getLogger(__name__).error(
+            "%s=%r is not an integer; using %d", name, raw, default
+        )
+        return default
+
 
 # Used for logging
 SLACK_CHANNEL_ID = "channel_id"
@@ -115,10 +132,10 @@ VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
 # Gemini Embedding 2 requests in flight: the max is per process, and each
 # project and model starts at the initial value, then adapts to rate limits.
 VERTEXAI_EMBEDDING_MAX_CONCURRENCY = max(
-    1, int(os.environ.get("VERTEXAI_EMBEDDING_MAX_CONCURRENCY") or 128)
+    1, _int_env_or_default("VERTEXAI_EMBEDDING_MAX_CONCURRENCY", 128)
 )
 VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY = max(
-    1, int(os.environ.get("VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY") or 16)
+    1, _int_env_or_default("VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY", 16)
 )
 
 # Only used for OpenAI

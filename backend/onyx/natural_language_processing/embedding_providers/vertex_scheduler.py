@@ -3,7 +3,7 @@ import random
 import threading
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from functools import partial
 from typing import TypeVar
 
@@ -44,18 +44,21 @@ class VertexRetrySettings(BaseModel):
 
 
 def is_transient_vertex_error(error: BaseException) -> bool:
-    # Timeouts are not transient: each one already waited the full timeout.
     import aiohttp
     from google.genai import errors as genai_errors
 
+    # Timeouts are not transient: each one already waited the full timeout.
+    # Some aiohttp timeouts are connection errors too.
+    if isinstance(error, TimeoutError):
+        return False
     if isinstance(error, genai_errors.ServerError):
         return error.code in _TRANSIENT_STATUSES
     return isinstance(error, aiohttp.ClientConnectionError)
 
 
 class _SlotRetries:
-    """Resends happen inside the slot: a free slot would go to a new request
-    that the provider refuses too."""
+    """Resends happen inside the model slot: a free slot would go to a new
+    request that the provider refuses too."""
 
     def __init__(
         self, settings: VertexRetrySettings, policy: EmbeddingRequestPolicy
@@ -143,8 +146,9 @@ class VertexRequestScheduler:
         limit = self.model_limit(project_location_model)
         # Outside the policy, so its wait limit does not count the slot wait.
         async with self._slot(limit, policy.should_stop):
+            started_at = time.monotonic()
             return await policy.send_async(
-                partial(self._send_in_slot, request, limit, policy)
+                partial(self._send_in_slot, request, limit, policy, started_at)
             )
 
     @asynccontextmanager
@@ -153,11 +157,11 @@ class VertexRequestScheduler:
         limit: AdaptiveSemaphore,
         should_stop: Callable[[], bool] | None,
     ) -> AsyncIterator[None]:
-        async with AsyncExitStack() as stack:
-            for each in (limit, self._process_limit):
-                await self._acquire_unless_stopped(each, should_stop)
-                stack.callback(each.release)
+        await self._acquire_unless_stopped(limit, should_stop)
+        try:
             yield
+        finally:
+            limit.release()
 
     async def _acquire_unless_stopped(
         self,
@@ -182,11 +186,16 @@ class VertexRequestScheduler:
         request: Callable[[], Awaitable[_T]],
         limit: AdaptiveSemaphore,
         policy: EmbeddingRequestPolicy,
+        started_at: float,
     ) -> _T:
+        """Runs in the model slot. Only a request in flight holds a process
+        slot. So a project that waits for its rate limit, or that backs off,
+        takes no process capacity from the other projects."""
         retries = _SlotRetries(self._settings, policy)
         while True:
             try:
-                result = await request()
+                async with self._slot(self._process_limit, policy.should_stop):
+                    result = await request()
             except Exception as e:
                 wait = retries.wait_before_resend(e, limit)
                 if wait is None:
@@ -196,6 +205,9 @@ class VertexRequestScheduler:
                         "Stop signal while waiting to embed"
                     ) from e
                 await asyncio.sleep(wait)
+                # The policy took the configured rate limit for the first
+                # request only. That limit must see each HTTP request.
+                await policy.acquire_rate_limit_async(started_at)
                 continue
             limit.record_success()
             return result

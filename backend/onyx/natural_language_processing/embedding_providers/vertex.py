@@ -3,10 +3,12 @@ from collections.abc import Callable, Coroutine
 from functools import partial
 from typing import TYPE_CHECKING
 
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
 from onyx.natural_language_processing.embedding_auth import VertexEmbeddingAuth
 from onyx.natural_language_processing.embedding_providers.gemini import (
     format_gemini_embedding_text,
+    gemini_base_model_name,
     is_gemini_embedding_2_model,
 )
 from onyx.natural_language_processing.embedding_providers.vertex_credentials import (
@@ -14,6 +16,9 @@ from onyx.natural_language_processing.embedding_providers.vertex_credentials imp
 )
 from onyx.natural_language_processing.embedding_providers.vertex_scheduler import (
     VERTEX_SCHEDULER,
+)
+from onyx.natural_language_processing.embedding_rate_limit import (
+    EmbeddingWaitTimeoutError,
 )
 from onyx.natural_language_processing.embedding_request_policy import (
     EmbeddingRequestPolicy,
@@ -29,6 +34,8 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 _CLIENT_CLOSE_TIMEOUT_SECONDS = 5.0
+# `embed()` does not retry these. It retries the other errors.
+_ERRORS_THAT_END_THE_CALL = (ConnectorStopSignal, EmbeddingWaitTimeoutError)
 
 
 async def embed_with_vertex(
@@ -53,8 +60,10 @@ async def embed_with_vertex(
     )
     config = _embed_config(resolved_model, embedding_type, reduced_dimension)
     single_input = is_gemini_embedding_2_model(resolved_model)
+    # Vertex counts quota per base model, so each name of a model shares a limit.
     scheduler_key = (
-        f"{resolved.project_id}/{resolved.location}/{resolved_model}"
+        f"{resolved.project_id}/{resolved.location}/"
+        f"{gemini_base_model_name(resolved_model)}"
         if single_input
         else None
     )
@@ -103,8 +112,12 @@ async def _embed_in_parallel(
         async with asyncio.TaskGroup() as group:
             tasks = [group.create_task(embed_batch(batch)) for batch in batches]
     except ExceptionGroup as errors:
-        # Callers match on the request's own error type.
-        raise errors.exceptions[0] from None
+        # Callers match on the request's own error type. A stop or a wait
+        # timeout goes first, so an error that `embed()` retries cannot hide it.
+        raise next(
+            (e for e in errors.exceptions if isinstance(e, _ERRORS_THAT_END_THE_CALL)),
+            errors.exceptions[0],
+        ) from None
     return [embedding for task in tasks for embedding in task.result()]
 
 
