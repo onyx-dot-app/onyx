@@ -1,6 +1,5 @@
 import asyncio
-from collections.abc import Callable, Coroutine
-from functools import partial
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING
 
 from onyx.connectors.models import ConnectorStopSignal
@@ -76,12 +75,14 @@ async def embed_with_vertex(
     )
 
     async def send_batch(batch_texts: list[str]) -> list[Embedding]:
-        request = partial(
-            client.aio.models.embed_content,
-            model=resolved_model,
-            contents=_contents(batch_texts, resolved_model, embedding_type),
-            config=config,
-        )
+        # Built when the scheduler sends, so batches that wait hold no contents.
+        def request() -> Awaitable["genai_types.EmbedContentResponse"]:
+            return client.aio.models.embed_content(
+                model=resolved_model,
+                contents=_contents(batch_texts, resolved_model, embedding_type),
+                config=config,
+            )
+
         response = await VERTEX_SCHEDULER.send(scheduler_key, request, policy)
         return _embeddings_from(response)
 

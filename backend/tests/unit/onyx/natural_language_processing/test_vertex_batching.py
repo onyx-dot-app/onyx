@@ -8,8 +8,12 @@ from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
+from onyx.natural_language_processing.embedding_providers import vertex
 from onyx.natural_language_processing.embedding_providers.vertex_batching import (
     vertex_batches,
+)
+from onyx.natural_language_processing.embedding_providers.vertex_scheduler import (
+    VertexRequestScheduler,
 )
 from onyx.natural_language_processing.embedding_request_policy import (
     EmbeddingRequestPolicy,
@@ -157,3 +161,33 @@ def test_multi_input_batches_are_sent_in_parallel() -> None:
     client.aio.models.embed_content = embed_content
     with patch(f"{_BATCHING}.VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", 1):
         assert _embed("gemini-embedding-001", ["a", "bb"], client) == [[1.0], [2.0]]
+
+
+def test_batch_contents_are_built_only_when_the_batch_is_sent() -> None:
+    built_when_sent: list[int] = []
+    contents = vertex._contents
+
+    def counting_contents(
+        texts: list[str], model: str, embedding_type: str
+    ) -> list[genai_types.ContentUnion]:
+        counts.append(1)
+        return contents(texts, model, embedding_type)
+
+    async def embed_content(
+        contents: list[genai_types.Content], **_kwargs: object
+    ) -> MagicMock:
+        built_when_sent.append(len(counts))
+        return _response(contents)
+
+    counts: list[int] = []
+    client = MagicMock()
+    client.aio.models.embed_content = embed_content
+    one_slot = VertexRequestScheduler(max_concurrency=1, initial_concurrency=1)
+    with (
+        patch(f"{_BATCHING}.VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", 1),
+        patch.object(vertex, "_contents", counting_contents),
+        patch.object(vertex, "VERTEX_SCHEDULER", one_slot),
+    ):
+        _embed("gemini-embedding-001", ["a", "bb", "ccc"], client)
+    # With one slot, each batch builds its contents just before it is sent.
+    assert built_when_sent == [1, 2, 3]
