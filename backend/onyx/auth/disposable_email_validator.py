@@ -78,5 +78,4 @@ def refresh_disposable_domains() -> None:
     without waiting for the cache to expire. Unlike normal cache
     expiry, this blocks until the refresh completes.
     """
-    _blocklist._last_fetch_time = 0
-    _blocklist._start_refresh().join()
+    _blocklist.refresh_now()

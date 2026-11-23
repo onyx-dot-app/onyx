@@ -168,6 +168,16 @@ class RemoteDomainBlocklist:
             return self._domains.copy()
         return self._fallback_domains.copy()
 
+    def refresh_now(self) -> None:
+        """
+        Fetch the list and wait for it.
+
+        Normal refreshes run in the background when the cache is stale. This
+        is for a caller that needs the new list before it goes on.
+        """
+        self._last_fetch_time = 0
+        self._start_refresh().join()
+
     def contains_email_domain(self, email: str) -> bool:
         """Whether the email address's domain is in the list."""
         if not email or "@" not in email:

@@ -40,10 +40,7 @@ def _response(
 
 def _refresh_and_get(validator: RemoteDomainBlocklist) -> set[str]:
     """Force a refresh, run it to completion, and return the domains."""
-    validator._last_fetch_time = 0
-    thread = validator._start_refresh()
-    thread.join(timeout=5)
-    assert not thread.is_alive()
+    validator.refresh_now()
     return validator.get_domains()
 
 
