@@ -29,11 +29,9 @@ export class OnboardingNamePromptPage {
     return me.personalization;
   }
 
-  /** Open /app, or the given chat session, and wait for the chat input. */
-  async goto(chatSessionId?: string): Promise<void> {
-    await this.page.goto(
-      chatSessionId ? `/app?chatId=${chatSessionId}` : "/app"
-    );
+  /** Open a chat session and wait for the chat input. */
+  async gotoChat(chatSessionId: string): Promise<void> {
+    await this.page.goto(`/app?chatId=${chatSessionId}`);
     await expect(this.chatInput).toBeVisible({ timeout: 15000 });
   }
 

@@ -171,7 +171,7 @@ test.describe("Onboarding Flow @exclusive", () => {
         await expect.poll(settledInputTop).not.toBeNaN();
         const freshTop = lastTop;
 
-        await namePromptPage.goto(sessionId);
+        await namePromptPage.gotoChat(sessionId);
         // From the chat's layout, where the bottom row is empty
         await new AppSidebarPage(page).newSession();
         await expect(namePromptPage.namePrompt).toBeVisible();
