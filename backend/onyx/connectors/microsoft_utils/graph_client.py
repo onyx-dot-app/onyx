@@ -15,11 +15,20 @@ from collections.abc import Callable
 from typing import Any
 
 import requests
+from office365.runtime.client_object import ClientObject
 from office365.runtime.client_request import ClientRequestException
 from office365.runtime.queries.client_query import ClientQuery
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MICROSOFT_USER_AGENT,
+    USER_AGENT_HEADER,
+    MicrosoftRequestPacer,
+    PacerSource,
+    graph_call_type,
+    sdk_query_pacer,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -96,11 +105,11 @@ def log_and_raise_for_status(response: requests.Response) -> None:
 
 
 def sleep_and_retry(
-    query_obj: ClientQuery,
+    query_obj: ClientQuery | ClientObject,
     method_name: str,
     max_retries: int = 3,
     retryable_statuses: frozenset[int] = RETRYABLE_HTTP_STATUSES,
-    rebuild: Callable[[], ClientQuery] | None = None,
+    rebuild: Callable[[], ClientQuery | ClientObject] | None = None,
 ) -> Any:
     """
     Execute an office365 SDK query with retry logic for rate limiting and
@@ -111,6 +120,9 @@ def sleep_and_retry(
     ``rebuild`` makes the query again for each retry. The SDK drops a query and
     its one-time hooks once it is sent, so running the same object again sends
     nothing and answers with an empty result.
+
+    A client from ``prepare_sdk_client`` takes the cost of each request from
+    the shared limiter. A throttled answer is reported to that limiter here.
     """
     for attempt in range(max_retries + 1):
         if attempt and rebuild is not None:
@@ -142,6 +154,9 @@ def sleep_and_retry(
             continue
         except ClientRequestException as e:
             status = e.response.status_code if e.response is not None else None
+            pacer = sdk_query_pacer(query_obj)
+            if pacer is not None and e.response is not None:
+                pacer.report_response(status, e.response.headers.get("Retry-After"))
 
             # Some office365 versions wrap a transport error into a
             # ClientRequestException with no response, still retryable.
@@ -196,16 +211,25 @@ def graph_api_get_json(
     url: str,
     params: dict[str, str] | None = None,
     headers: dict[str, str] | None = None,
+    *,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> dict[str, Any]:
     """Make an authenticated GET request to the Graph API with retry.
 
     ``headers`` carries request preferences such as ``Prefer``. Authorization
-    is always set here.
+    and User-Agent are always set here. With a ``pacer``, each try takes the
+    cost of the call from the shared limiter first.
     """
     for attempt in range(GRAPH_API_MAX_RETRIES + 1):
+        if pacer is not None:
+            pacer.acquire(graph_call_type(url))
         # Tokens can expire during long traversals, so re-acquire per attempt.
         access_token = get_access_token()
-        request_headers = {**(headers or {}), "Authorization": f"Bearer {access_token}"}
+        request_headers = {
+            **(headers or {}),
+            "Authorization": f"Bearer {access_token}",
+            USER_AGENT_HEADER: MICROSOFT_USER_AGENT,
+        }
         try:
             response = requests.get(
                 url,
@@ -213,6 +237,10 @@ def graph_api_get_json(
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
+            if pacer is not None:
+                pacer.report_response(
+                    response.status_code, response.headers.get("Retry-After")
+                )
             wait = retry_wait(response, attempt, GRAPH_API_MAX_RETRIES)
             if wait is not None:
                 logger.warning(
@@ -258,9 +286,18 @@ class GraphApiClient:
         self,
         get_access_token: Callable[[], str],
         graph_api_base: str,
+        get_pacer: PacerSource | None = None,
     ) -> None:
         self.get_access_token = get_access_token
         self.graph_api_base = graph_api_base
+        self._get_pacer = get_pacer
+
+    @property
+    def pacer(self) -> MicrosoftRequestPacer | None:
+        """Paces the calls of this client. None: the calls are not limited.
+        Read for each call, because a connector gets its limiter after its
+        credentials."""
+        return self._get_pacer() if self._get_pacer is not None else None
 
     def get_json(
         self,
@@ -268,4 +305,6 @@ class GraphApiClient:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        return graph_api_get_json(self.get_access_token, url, params, headers)
+        return graph_api_get_json(
+            self.get_access_token, url, params, headers, pacer=self.pacer
+        )

@@ -224,9 +224,13 @@ def instantiate_connector(
         )
     )
 
+    # The credential in the source's own keys, read only when the limiter
+    # needs it.
+    load_credential_json: Callable[[], dict[str, Any]]
     if isinstance(connector, CredentialsConnector):
         provider = build_db_credentials_provider(source, credential.id)
         connector.set_credentials_provider(provider)
+        load_credential_json = provider.get_credentials
     else:
         if credential.credential_json:
             # Distinct decrypt site from OnyxDBCredentialsProvider (static /
@@ -247,6 +251,9 @@ def instantiate_connector(
         )
         new_credentials = connector.load_credentials(credential_json)
 
+        def load_credential_json() -> dict[str, Any]:
+            return credential_json
+
         if new_credentials is not None:
             backend_update_credential_json(
                 credential, source, new_credentials, db_session
@@ -258,7 +265,11 @@ def instantiate_connector(
         connector.set_raw_file_callback(raw_file_callback)
 
     source_api_limiter = build_source_api_limiter(
-        source, credential.id, should_stop, bulk_source_api_calls
+        source,
+        credential.id,
+        should_stop,
+        bulk_source_api_calls,
+        load_credential_json=load_credential_json,
     )
     if source_api_limiter is not None:
         connector.set_source_api_limiter(source_api_limiter)

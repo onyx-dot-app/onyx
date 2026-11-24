@@ -539,6 +539,29 @@ class TestPipeline:
         members = raw_redis.smembers(f"{tenant_id}:{key}")
         assert members == {b"a", b"b", b"c"}
 
+    def test_pipeline_pexpire_and_pttl_target_the_prefixed_key(
+        self,
+        tenant_redis: TenantRedisClient,
+        tenant_id: str,
+        raw_redis: Redis,
+    ) -> None:
+        key = _unique_key("pipe_pexpire")
+        raw_redis.set(key, "unprefixed", px=5_000)
+        try:
+            with tenant_redis.pipeline() as pipe:
+                left = (
+                    pipe.set(key, "1", px=5_000)
+                    .pexpire(key, 60_000, gt=True)
+                    .pttl(key)
+                    .execute()[-1]
+                )
+            assert 5_000 < left <= 60_000
+            assert 5_000 < cast(int, raw_redis.pttl(f"{tenant_id}:{key}")) <= 60_000
+            # The unprefixed key keeps its own TTL.
+            assert cast(int, raw_redis.pttl(key)) <= 5_000
+        finally:
+            raw_redis.delete(key)
+
 
 def test_renew_if_value_renews_only_the_tenant_key(
     tenant_redis: TenantRedisClient, tenant_id: str, raw_redis: Redis

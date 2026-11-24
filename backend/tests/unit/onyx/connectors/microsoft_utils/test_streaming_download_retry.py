@@ -411,7 +411,7 @@ def test_a_refused_download_url_falls_back_to_graph_content_without_a_wait(
         item,
         size_threshold=CAP,
         graph_api_base="https://graph.example/v1.0",
-        access_token="token",
+        get_access_token=lambda: "token",
     )
 
     assert content is not None

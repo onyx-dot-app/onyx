@@ -1379,6 +1379,33 @@ class TenantRedisPipeline:
         )
         return self
 
+    def pexpire(
+        self,
+        name: KeyArg,
+        time: int,
+        nx: bool = False,
+        xx: bool = False,
+        gt: bool = False,
+        lt: bool = False,
+    ) -> TenantRedisPipeline:
+        """Queues a PEXPIRE against a tenant-prefixed key.
+
+        Args:
+            name: The (unprefixed) key.
+            time: TTL in milliseconds.
+            nx: Only set if the key has no current TTL.
+            xx: Only set if the key already has a TTL.
+            gt: Only set if the new TTL is greater than the current one.
+            lt: Only set if the new TTL is less than the current one.
+
+        Returns:
+            ``self``, to allow chaining further pipeline commands.
+        """
+        self._p.pexpire(
+            _prefix_key(self._prefix, name), time, nx=nx, xx=xx, gt=gt, lt=lt
+        )
+        return self
+
     def sadd(
         self,
         name: KeyArg,
@@ -1418,6 +1445,12 @@ class TenantRedisPipeline:
     def hgetall(self, name: KeyArg) -> TenantRedisPipeline:
         """Queue all hash fields under a tenant-prefixed key."""
         self._p.hgetall(_prefix_key(self._prefix, name))
+        return self
+
+    def pttl(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue a tenant-prefixed PTTL: the ms until expiry, ``-1`` with no
+        TTL, or ``-2`` with no key."""
+        self._p.pttl(_prefix_key(self._prefix, name))
         return self
 
     # --------------------------------------------------------------------------

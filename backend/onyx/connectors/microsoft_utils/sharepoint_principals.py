@@ -10,6 +10,7 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointRoleAssignment,
 )
 from onyx.connectors.microsoft_utils.sharepoint_rest import EntraGroupReader
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -83,6 +84,8 @@ def extract_guid(text: str) -> str | None:
 def find_group_id_by_name(reader: EntraGroupReader, display_name: str) -> str | None:
     try:
         return reader.find_entra_group_id(display_name=display_name)
+    except ConnectorStopSignal:
+        raise
     except Exception as e:
         logger.error("Failed to get Entra group id for name %s: %s", display_name, e)
         return None
@@ -102,6 +105,8 @@ def resolve_group_id(reader: EntraGroupReader, identifier: str) -> str | None:
 
         return find_group_id_by_name(reader, identifier)
 
+    except ConnectorStopSignal:
+        raise
     except Exception as e:
         logger.error("Failed to resolve group id from %s: %s", identifier, e)
         return None
