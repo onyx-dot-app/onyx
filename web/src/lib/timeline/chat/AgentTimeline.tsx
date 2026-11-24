@@ -199,7 +199,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   const stepCards = (
     <TimelineRoot>
-      <Section alignItems="stretch" gap={1} height="auto">
+      <Section alignItems="stretch" gap={2} height="auto">
         {steps.slice(0, MAX_HOISTED_STEPS).map((runStep) => (
           // A step that arrives while the run works rises in; a saved run's
           // steps appear at once.

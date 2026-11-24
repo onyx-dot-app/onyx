@@ -221,7 +221,7 @@ export function RunCard<S extends RunCardStep>({
           expandable
           expanded={isOpen}
           expandedContent={
-            // The steps, 4px apart, as hoisted run cards are. A step card
+            // The steps, 4px apart. A step card
             // inside has no padding of its own, so its title lines up with
             // the card's own title.
             <Section alignItems="stretch" gap={1} height="auto">
