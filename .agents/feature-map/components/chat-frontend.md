@@ -562,7 +562,9 @@ has a session, and the header leaves room for it at its end
 (`layouts/chromes/AppChrome.tsx`, the shared view's header padding). That room
 is `--panel-toggle-reserve`, a registered property in `app/globals.css`: the
 open panel sets it to zero on the page element, and the page eases it with
-the panel's slide. In the
+the panel's slide. Its initial value and the size button's `end-12` in
+`sections/chat/ChatRightPanel.tsx` repeat `PANEL_TOGGLE_RESERVE` (48px); change all three
+together. In the
 DOM, the toggle follows what the user sees: a closed panel puts it in the
 workspace's `panelToggleSlot`, before the page, and an open panel puts it
 before its tabs. Closing gives focus back to it when the move or the panel
