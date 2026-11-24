@@ -4,6 +4,7 @@ import time
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, nullcontext
+from datetime import datetime, timezone
 from http import HTTPStatus
 from typing import Any, Generic, NoReturn, TypeVar
 
@@ -34,9 +35,11 @@ from onyx.configs.app_configs import (
     PIT_KEEP_ALIVE,
 )
 from onyx.configs.constants import OpenSearchAuthMethod
-from onyx.document_index.interfaces import TenantState
+from onyx.document_index.interfaces import ContentMatchKey, TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
+    DOCUMENT_ID_AGGREGATION_NAME,
+    DOCUMENT_ID_AGGREGATION_SOURCE,
     RESOURCE_CHECK_TIMEOUT_SECONDS,
     OpenSearchSearchType,
 )
@@ -166,6 +169,15 @@ class ChunkKeySearchHit(BaseModel):
     chunk_index: int
     max_chunk_size: int
     score: float | None = None
+
+
+class DocumentIdPage(BaseModel):
+    """One page of a composite aggregation over document IDs."""
+
+    document_ids: list[str]
+    # The start of the next page. None after an empty page; a page shorter
+    # than the requested size is the last one.
+    after_document_id: str | None
 
 
 class IndexInfo(BaseModel):
@@ -2139,6 +2151,81 @@ class OpenSearchIndexClient(OpenSearchClient):
                 ) from e
         return chunk_key_hits
 
+    def search_for_document_date_keys(
+        self,
+        body: dict[str, Any],
+        date_field_name: str,
+        search_type: OpenSearchSearchType,
+    ) -> list[ContentMatchKey]:
+        """Runs a search whose hits are collapsed to one per document and
+        returns each hit's document ID and date.
+
+        The body must request the document ID and `date_field_name` as doc
+        values, the date in epoch seconds (see
+        DocumentQuery.get_content_match_query).
+
+        Raises:
+            Exception: There was an error searching the index, or a hit is
+                missing its document ID.
+        """
+        hits = self._run_search(
+            body=body, search_pipeline_id=None, search_type=search_type
+        )
+        key_hits: list[ContentMatchKey] = []
+        for hit in hits:
+            fields: dict[str, list[Any]] = hit.get("fields", {})
+            try:
+                document_id = fields[DOCUMENT_ID_FIELD_NAME][0]
+            except (KeyError, IndexError) as e:
+                raise RuntimeError(
+                    f"Search hit is missing its document ID: {fields}."
+                ) from e
+            # A chunk without the date has no doc value for it.
+            dates = fields.get(date_field_name)
+            key_hits.append(
+                ContentMatchKey(
+                    document_id=document_id,
+                    date=(
+                        datetime.fromtimestamp(int(float(dates[0])), tz=timezone.utc)
+                        if dates
+                        else None
+                    ),
+                )
+            )
+        return key_hits
+
+    def search_for_document_id_page(
+        self, body: dict[str, Any], search_type: OpenSearchSearchType
+    ) -> DocumentIdPage:
+        """Runs a composite aggregation over document IDs and returns one page
+        of IDs (see DocumentQuery.get_content_count_query).
+
+        Raises:
+            Exception: There was an error searching the index, or the result
+                has no such aggregation.
+        """
+        result = self._run_search_request(
+            body=body, search_pipeline_id=None, search_type=search_type
+        )
+        try:
+            aggregation = result["aggregations"][DOCUMENT_ID_AGGREGATION_NAME]
+        except KeyError as e:
+            raise RuntimeError(
+                f"Search result is missing the {DOCUMENT_ID_AGGREGATION_NAME} aggregation."
+            ) from e
+        buckets: list[dict[str, Any]] = aggregation.get("buckets", [])
+        after_key: dict[str, str] | None = aggregation.get("after_key")
+        return DocumentIdPage(
+            document_ids=[
+                bucket["key"][DOCUMENT_ID_AGGREGATION_SOURCE] for bucket in buckets
+            ],
+            after_document_id=(
+                after_key[DOCUMENT_ID_AGGREGATION_SOURCE]
+                if after_key is not None and buckets
+                else None
+            ),
+        )
+
     def _run_search(
         self,
         body: dict[str, Any],
@@ -2149,6 +2236,28 @@ class OpenSearchIndexClient(OpenSearchClient):
         """Runs a search, records its metrics, and returns the raw hits.
 
         Searches with the same preference string read the same shard copies.
+
+        Raises:
+            Exception: There was an error searching the index, or the search
+                timed out.
+        """
+        result = self._run_search_request(
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            search_type=search_type,
+            preference=preference,
+        )
+        hits, *_ = self._get_hits_and_profile_from_search_result(result)
+        return hits
+
+    def _run_search_request(
+        self,
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        search_type: OpenSearchSearchType,
+        preference: str | None = None,
+    ) -> dict[str, Any]:
+        """Runs a search, records its metrics, and returns the whole result.
 
         Raises:
             Exception: There was an error searching the index, or the search
@@ -2169,7 +2278,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                     params=params,
                 )
                 client_duration_s = time.perf_counter() - t0
-                hits, time_took, timed_out, phase_took, profile = (
+                _, time_took, timed_out, phase_took, profile = (
                     self._get_hits_and_profile_from_search_result(result)
                 )
                 # Inside the try/except so that server-side timeouts (which
@@ -2197,7 +2306,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                         else type(e).__name__,
                     )
                 raise
-        return hits
+        return result
 
     @log_function_time(debug_only=True)
     def search_for_document_ids(
