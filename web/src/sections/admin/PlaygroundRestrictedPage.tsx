@@ -3,6 +3,7 @@
 import { MessageCard, ReadOnlyRegion } from "@opal/components";
 import { SvgLock } from "@opal/icons";
 import { Section } from "@opal/layouts";
+import { IconLoader } from "@opal/loaders";
 import { usePlaygroundRestriction } from "@/lib/playground/hooks";
 import type { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 
@@ -26,8 +27,17 @@ export default function PlaygroundRestrictedPage({
   featureKey,
   children,
 }: PlaygroundRestrictedPageProps) {
-  const { restricted, title, description } =
+  const { loading, restricted, title, description } =
     usePlaygroundRestriction(featureKey);
+  // A page with a feature key waits for the settings: it must not be live
+  // for a moment before the page knows it is restricted.
+  if (featureKey !== undefined && loading) {
+    return (
+      <Section padding={8}>
+        <IconLoader className="h-6 w-6" />
+      </Section>
+    );
+  }
   if (!restricted) return <>{children}</>;
 
   return (

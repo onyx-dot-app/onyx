@@ -16,8 +16,12 @@ jest.mock("react-markdown", () => ({
 
 const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
-function stubRestrictions(restrictions: PlaygroundRestrictedFeature[]) {
+function stubRestrictions(
+  restrictions: PlaygroundRestrictedFeature[],
+  isLoading = false
+) {
   mockUseSettings.mockReturnValue({
+    isLoading,
     playground_restrictions: restrictions,
   } as ReturnType<typeof useSettings>);
 }
@@ -83,6 +87,29 @@ test("an unrestricted page renders as it is", () => {
   expect(screen.queryByText("Playground Limit")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Add provider" })).toBeEnabled();
   expect(screen.getByTestId("provider-card").closest("[inert]")).toBeNull();
+});
+
+test("a page with a feature key waits for the settings before it is live", () => {
+  stubRestrictions([], true);
+  render(
+    <PlaygroundRestrictedPage featureKey={PlaygroundRestrictedFeature.SSO}>
+      <Page />
+    </PlaygroundRestrictedPage>
+  );
+
+  expect(screen.queryByRole("button", { name: "Add provider" })).toBeNull();
+  expect(screen.queryByText("Playground Limit")).not.toBeInTheDocument();
+});
+
+test("a page without a feature key renders while the settings load", () => {
+  stubRestrictions([], true);
+  render(
+    <PlaygroundRestrictedPage featureKey={undefined}>
+      <Page />
+    </PlaygroundRestrictedPage>
+  );
+
+  expect(screen.getByRole("button", { name: "Add provider" })).toBeEnabled();
 });
 
 test("a page without a feature key renders as it is on the playground", () => {

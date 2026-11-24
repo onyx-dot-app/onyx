@@ -22,6 +22,8 @@ export function usePlaygroundRestrictions(): ReadonlySet<PlaygroundRestrictedFea
 }
 
 export interface PlaygroundRestriction {
+  /** True while the settings load: whether the feature is restricted is not known yet. */
+  loading: boolean;
   /** True when the feature is restricted on this deployment. */
   restricted: boolean;
   /** Why, which picks the description. Absent for a surface without a feature key. */
@@ -45,6 +47,7 @@ export function usePlaygroundRestriction(
 ): PlaygroundRestriction {
   const t = useTranslations("common.playground");
   const restrictions = usePlaygroundRestrictions();
+  const { isLoading: loading } = useSettings();
   const restricted = featureKey !== undefined && restrictions.has(featureKey);
   const reason =
     featureKey !== undefined
@@ -60,11 +63,12 @@ export function usePlaygroundRestriction(
           ? t("restricted.switchedOff.description", args)
           : t("restricted.enterprise.description", args);
     return {
+      loading,
       restricted,
       reason,
       title: t("restricted.title"),
       description: markdown(description),
       tooltip: t("restricted.tooltip"),
     };
-  }, [restricted, reason, t]);
+  }, [loading, restricted, reason, t]);
 }
