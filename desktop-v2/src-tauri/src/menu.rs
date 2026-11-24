@@ -311,6 +311,19 @@ fn updates_item(app: &AppHandle) -> tauri::Result<MenuItem<Wry>> {
     Ok(item)
 }
 
+/// The tray icon. Only macOS tints a template glyph to match the menu bar. A
+/// black glyph is invisible on a dark taskbar or top bar, so Windows and Linux
+/// use the app icon (a black glyph on a white disc).
+fn tray_icon_png(template: bool) -> &'static [u8] {
+    if template {
+        include_bytes!("../icons/tray-icon.png")
+    } else if cfg!(windows) {
+        include_bytes!("../icons/32x32.png")
+    } else {
+        include_bytes!("../icons/128x128.png")
+    }
+}
+
 pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(
         app,
@@ -328,7 +341,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
     ])?;
     let builder = TrayIconBuilder::with_id("onyx-tray")
-        .icon(Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?)
+        .icon(Image::from_bytes(tray_icon_png(cfg!(target_os = "macos")))?)
         .icon_as_template(true)
         .tooltip("Onyx")
         .menu(&menu)
@@ -573,6 +586,20 @@ mod tests {
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 
     use super::*;
+
+    #[test]
+    fn the_untinted_tray_icon_shows_on_light_and_dark_bars() {
+        let icon = Image::from_bytes(tray_icon_png(false)).unwrap();
+        let opaque = || icon.rgba().chunks(4).filter(|px| px[3] == 255);
+        let light = opaque().any(|px| px[..3].iter().all(|&c| c > 200));
+        let dark = opaque().any(|px| px[..3].iter().all(|&c| c < 50));
+        assert!(light && dark);
+        // The macOS template stays the black glyph.
+        assert_eq!(
+            tray_icon_png(true),
+            include_bytes!("../icons/tray-icon.png").as_slice()
+        );
+    }
 
     fn ctrl() -> Modifiers {
         Modifiers {

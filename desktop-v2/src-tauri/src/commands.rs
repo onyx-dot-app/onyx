@@ -714,7 +714,7 @@ mod tests {
 
     #[test]
     fn onboarding_shows_why_an_unlocked_managed_server_was_ignored() {
-        for value in ["ftp://bad.example", "not a url"] {
+        for value in ["ftp://bad.example", "not a url", "garbage"] {
             let policy =
                 policy::parse(|key| (key == "ServerURL").then(|| RawValue::Str(value.to_string())));
             let setup = server_setup(&policy, None);
