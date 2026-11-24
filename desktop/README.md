@@ -144,16 +144,21 @@ and binary name (`onyx`), so this app takes its place:
 - Windows: the MSI has the same UpgradeCode (Tauri derives it from the product name), so it
   upgrades an earlier MSI install. The NSIS installer (`.exe`) installs for all users into
   `Program Files\Onyx`. The earlier `.exe` installed for the current user only, into
-  `%LOCALAPPDATA%\Onyx`. At each user's first launch, the new app hands that user's per-user
-  uninstall to a hidden PowerShell helper and exits (`hand_off_earlier_uninstall` in
-  `src-tauri/src/main.rs`). The earlier uninstaller ends every `onyx.exe` of the user by name, so
-  it cannot run while the new app runs. The app exits only after the helper writes a ready
-  file (within 5 seconds); otherwise it stops the helper and runs as normal. The helper waits
-  for the app to exit, runs the uninstaller silently, as the user (at most 2 minutes, then it
-  stops it), and always starts the app again. The uninstall keeps the earlier
-  app's data. The elevated installer never runs it: the user can change that uninstall entry and
-  its files. The app tries this once per user (marker file `earlier-uninstall-tried` in
-  `%LOCALAPPDATA%\app.onyx.desktop`).
+  `%LOCALAPPDATA%\Onyx`. At each user's first launch, the new app removes that user's per-user
+  install (`src-tauri/src/earlier_install.rs`). The earlier uninstaller ends every `onyx.exe` of
+  the user by name, so it cannot run while the new app runs:
+  1. The app copies its own binary to `%TEMP%\onyx-upgrade-helper-<random>.exe` and starts it in
+     helper mode, with the paths as separate arguments. The helper shows no window.
+  2. The app exits only after the helper writes a ready file (within 5 seconds). Otherwise it
+     stops the helper and runs as normal, and a later launch tries again.
+  3. The helper waits for the app to exit (at most 60 seconds, else it does nothing), takes the
+     one-attempt marker (`earlier-uninstall-tried` in `%LOCALAPPDATA%\app.onyx.desktop`), runs
+     the uninstaller silently as the user (`/S _?=<folder>`), and stops it after 2 minutes.
+  4. In every case the helper then starts the app again. A later launch deletes helper copies
+     that are more than a day old.
+
+  The uninstall keeps the earlier app's data. The elevated installer never runs it: the user can
+  change that uninstall entry and its files.
 - Linux: the `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and
   `dnf` upgrade the earlier package.
 

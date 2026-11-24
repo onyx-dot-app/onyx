@@ -6,6 +6,7 @@ mod ask;
 mod commands;
 mod config;
 mod dialog;
+mod earlier_install;
 #[cfg(test)]
 mod installer_files;
 mod launcher;
@@ -189,170 +190,6 @@ fn link_command_is_other_program(command: &str, exe: &std::path::Path) -> bool {
     !program.eq_ignore_ascii_case(&exe.to_string_lossy())
 }
 
-/// The uninstaller of the earlier desktop app's per-user install, from its
-/// `UninstallString`, if that install is not the one that runs (`exe`).
-/// Windows paths, as strings, so the rule is tested on every platform.
-#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
-fn earlier_user_uninstaller(uninstall_string: &str, exe: &str) -> Option<String> {
-    let path = uninstall_string.trim().trim_matches('"');
-    let (dir, name) = path.rsplit_once(['\\', '/'])?;
-    let absolute = dir.as_bytes().get(1..3) == Some(b":\\".as_slice()) || dir.starts_with(r"\\");
-    let exe_dir = exe.rsplit_once(['\\', '/']).map(|(dir, _)| dir);
-    let same_install = exe_dir.is_some_and(|exe_dir| exe_dir.eq_ignore_ascii_case(dir));
-    (name.eq_ignore_ascii_case("uninstall.exe") && absolute && !same_install)
-        .then(|| path.to_string())
-}
-
-/// A PowerShell single-quoted string.
-#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
-fn ps_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
-}
-
-/// The script that removes the earlier per-user install after this process
-/// (`pid`) exits, then starts `exe` again. The earlier uninstaller ends every
-/// `onyx.exe` of the user by name, so it cannot run while this app runs.
-/// - It first writes `ready`: the app exits only after it sees that file.
-/// - If the app still runs after 60 seconds, it does nothing.
-/// - NSIS wants `_?=<dir>` last and unquoted: it runs the uninstaller in
-///   place. The wait is bounded; an uninstaller that hangs is stopped.
-/// - `finally` starts the app again, also when the uninstall fails.
-#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
-fn earlier_uninstall_script(pid: u32, uninstaller: &str, exe: &str, ready: &str) -> Option<String> {
-    let (dir, _) = uninstaller.rsplit_once('\\')?;
-    Some(format!(
-        "$ErrorActionPreference = 'SilentlyContinue'\n\
-         Set-Content -LiteralPath {ready_q} -Value ''\n\
-         Wait-Process -Id {pid} -Timeout 60\n\
-         if (Get-Process -Id {pid}) {{ exit }}\n\
-         try {{\n\
-         \x20   $p = Start-Process -FilePath {uninstaller_q} -ArgumentList {args_q} -PassThru\n\
-         \x20   if ($p -and $p.WaitForExit(120000)) {{\n\
-         \x20       if ($p.ExitCode -eq 0) {{\n\
-         \x20           Remove-Item -LiteralPath {uninstaller_q} -Force\n\
-         \x20           [System.IO.Directory]::Delete({dir_q})\n\
-         \x20       }}\n\
-         \x20   }} elseif ($p) {{\n\
-         \x20       Stop-Process -Id $p.Id -Force\n\
-         \x20   }}\n\
-         }} finally {{\n\
-         \x20   Start-Process -FilePath {exe_q}\n\
-         }}\n",
-        ready_q = ps_quote(ready),
-        uninstaller_q = ps_quote(uninstaller),
-        args_q = ps_quote(&format!("/S _?={dir}")),
-        dir_q = ps_quote(dir),
-        exe_q = ps_quote(exe),
-    ))
-}
-
-/// What the app does after it tried to start the uninstall helper.
-#[derive(Debug, PartialEq, Eq)]
-enum Handoff {
-    /// The helper runs and wrote its ready file: exit so it can uninstall.
-    Exit,
-    /// No confirmed helper: stop it if it started, and run as normal.
-    KeepRunning,
-}
-
-#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
-fn handoff(started: bool, ready: bool) -> Handoff {
-    if started && ready {
-        Handoff::Exit
-    } else {
-        Handoff::KeepRunning
-    }
-}
-
-/// The earlier desktop app's setup program installed for the current user
-/// only (uninstall entry in HKCU). Left in place, it is a second "Onyx" in
-/// Apps and claims onyx:// for the user. This hands its silent uninstall
-/// (which keeps its data) to a helper that runs as the user, never from the
-/// elevated installer: the user can change that entry and its files. Returns
-/// true only when the helper confirmed that it runs; this process must then
-/// exit. Otherwise the app runs as normal. One attempt per user: a marker
-/// file stops a loop when the uninstall fails.
-#[cfg(all(windows, not(debug_assertions)))]
-fn hand_off_earlier_uninstall(product_name: &str, identifier: &str) -> bool {
-    use std::os::windows::process::CommandExt;
-    use winreg::enums::HKEY_CURRENT_USER;
-    use winreg::RegKey;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
-    let key = format!(r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{product_name}");
-    let Ok(uninstall) = RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey(key)
-        .and_then(|key| key.get_value::<String, _>("UninstallString"))
-    else {
-        return false;
-    };
-    let Ok(exe) = std::env::current_exe() else {
-        return false;
-    };
-    let exe = exe.to_string_lossy().into_owned();
-    let Some(uninstaller) = earlier_user_uninstaller(&uninstall, &exe) else {
-        return false;
-    };
-    let Some(local) = std::env::var_os("LOCALAPPDATA") else {
-        return false;
-    };
-    let marker_dir = std::path::Path::new(&local).join(identifier);
-    let marker = marker_dir.join("earlier-uninstall-tried");
-    if marker.exists()
-        || std::fs::create_dir_all(&marker_dir).is_err()
-        || std::fs::write(&marker, "").is_err()
-    {
-        return false;
-    }
-    let ready = marker_dir.join(format!("earlier-uninstall-ready-{}", std::process::id()));
-    let Some(script) = earlier_uninstall_script(
-        std::process::id(),
-        &uninstaller,
-        &exe,
-        &ready.to_string_lossy(),
-    ) else {
-        return false;
-    };
-    use base64::Engine;
-    let utf16: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
-    let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
-    let Some(system_root) = std::env::var_os("SystemRoot") else {
-        return false;
-    };
-    let powershell =
-        std::path::Path::new(&system_root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-    let child = std::process::Command::new(powershell)
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-EncodedCommand",
-        ])
-        .arg(encoded)
-        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
-        .spawn();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    let mut seen = false;
-    if child.is_ok() {
-        while !seen && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            seen = ready.exists();
-        }
-    }
-    let _ = std::fs::remove_file(&ready);
-    match handoff(child.is_ok(), seen) {
-        Handoff::Exit => true,
-        Handoff::KeepRunning => {
-            // The helper does nothing while this app runs, and is stopped here.
-            if let Ok(mut child) = child {
-                let _ = child.kill();
-            }
-            false
-        }
-    }
-}
-
 #[cfg(all(windows, not(debug_assertions)))]
 fn remove_other_user_link_handler() {
     use winreg::enums::HKEY_CURRENT_USER;
@@ -429,6 +266,16 @@ fn register_links(app: &tauri::AppHandle) {
 }
 
 fn main() {
+    // The helper copy that removes the earlier per-user install: no window,
+    // no Tauri.
+    #[cfg(all(windows, not(debug_assertions)))]
+    {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        if let Some(helper) = earlier_install::HelperArgs::parse(&args) {
+            earlier_install::run_helper(&helper);
+            return;
+        }
+    }
     #[cfg(windows)]
     notify::pass_on_foreground();
     // The tray title (StatusNotifierItem) uses this name. WM_CLASS, and so
@@ -438,7 +285,7 @@ fn main() {
     let context = tauri::generate_context!();
     // Before any window or plugin: the helper starts this app again.
     #[cfg(all(windows, not(debug_assertions)))]
-    if hand_off_earlier_uninstall(&context.package_info().name, &context.config().identifier) {
+    if earlier_install::hand_off(&context.package_info().name, &context.config().identifier) {
         return;
     }
     let version = context.package_info().version.to_string();
@@ -614,87 +461,9 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        earlier_uninstall_script, earlier_user_uninstaller, handoff, is_onyx_link_handler,
-        legacy_link_handler, link_command_is_other_program, packaged_desktop_file,
-        registers_links_at_runtime, Handoff,
+        is_onyx_link_handler, legacy_link_handler, link_command_is_other_program,
+        packaged_desktop_file, registers_links_at_runtime,
     };
-
-    #[test]
-    fn the_earlier_uninstall_runs_in_place_after_this_app_exits() {
-        let script = earlier_uninstall_script(
-            42,
-            r"C:\Users\Ann O'Neil\AppData\Local\Onyx\uninstall.exe",
-            r"C:\Program Files\Onyx\onyx.exe",
-            r"C:\Users\Ann O'Neil\AppData\Local\app.onyx.desktop\ready-42",
-        )
-        .unwrap();
-        let lines: Vec<&str> = script.lines().map(str::trim).collect();
-        assert_eq!(
-            &lines[1..4],
-            [
-                r"Set-Content -LiteralPath 'C:\Users\Ann O''Neil\AppData\Local\app.onyx.desktop\ready-42' -Value ''",
-                "Wait-Process -Id 42 -Timeout 60",
-                "if (Get-Process -Id 42) { exit }",
-            ]
-        );
-        // One argument string: /S, then _?= last with the unquoted folder.
-        assert!(script.contains(
-            r"-FilePath 'C:\Users\Ann O''Neil\AppData\Local\Onyx\uninstall.exe' -ArgumentList '/S _?=C:\Users\Ann O''Neil\AppData\Local\Onyx' -PassThru"
-        ));
-        assert!(script.contains("$p.WaitForExit(120000)"));
-        assert!(script.contains("Stop-Process -Id $p.Id -Force"));
-        assert!(script
-            .contains(r"[System.IO.Directory]::Delete('C:\Users\Ann O''Neil\AppData\Local\Onyx')"));
-        // The app starts again in `finally`, also when the uninstall fails.
-        assert_eq!(
-            &lines[lines.len() - 3..],
-            [
-                "} finally {",
-                r"Start-Process -FilePath 'C:\Program Files\Onyx\onyx.exe'",
-                "}",
-            ]
-        );
-        assert_eq!(
-            earlier_uninstall_script(1, "uninstall.exe", "onyx.exe", "r"),
-            None
-        );
-    }
-
-    #[test]
-    fn the_app_exits_only_for_a_confirmed_helper() {
-        assert_eq!(handoff(true, true), Handoff::Exit);
-        assert_eq!(handoff(true, false), Handoff::KeepRunning);
-        assert_eq!(handoff(false, false), Handoff::KeepRunning);
-    }
-
-    #[test]
-    fn only_another_installs_uninstaller_is_run() {
-        let exe = r"C:\Program Files\Onyx\onyx.exe";
-        let earlier = r"C:\Users\a\AppData\Local\Onyx\uninstall.exe";
-        assert_eq!(
-            earlier_user_uninstaller(&format!("\"{earlier}\""), exe).as_deref(),
-            Some(earlier)
-        );
-        assert_eq!(
-            earlier_user_uninstaller(earlier, exe).as_deref(),
-            Some(earlier)
-        );
-        assert_eq!(
-            earlier_user_uninstaller(r#""C:\Program Files\Onyx\uninstall.exe""#, exe),
-            None
-        );
-        assert_eq!(
-            earlier_user_uninstaller(r#""c:\program files\onyx\Uninstall.exe""#, exe),
-            None
-        );
-        assert_eq!(
-            earlier_user_uninstaller(r#""C:\Users\a\evil.exe" /S"#, exe),
-            None
-        );
-        assert_eq!(earlier_user_uninstaller(r"Onyx\uninstall.exe", exe), None);
-        assert_eq!(earlier_user_uninstaller("uninstall.exe", exe), None);
-        assert_eq!(earlier_user_uninstaller("", exe), None);
-    }
 
     #[test]
     fn a_link_command_for_another_program_is_found() {
