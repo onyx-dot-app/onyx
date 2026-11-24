@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
-from onyx.utils.fleet_telemetry import emit_telemetry, error_category, fingerprint
+from onyx.utils.fleet_telemetry import (
+    ToolKind,
+    emit_telemetry,
+    error_category,
+    fingerprint,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
@@ -136,6 +141,9 @@ class QueryObservation:
         self._lock = threading.Lock()
         self._used_search = False
         self._used_other_tool = False
+        self._tool_calls: dict[ToolKind, int] = {}
+        self._tool_failures: dict[ToolKind, int] = {}
+        self._mcp_auth_failures = 0
         # Chat-loop LLM calls per model index; model comparisons share one observation.
         self._llm_steps: dict[int, int] = {}
         # Each model's count when it queued its first answer text.
@@ -168,15 +176,26 @@ class QueryObservation:
             return max(self._llm_steps.values(), default=0)
         return self._answer_llm_steps.get(self._answer_model)
 
-    def tool_started(self, *, is_search: bool) -> None:
+    def tool_started(self, kind: ToolKind) -> None:
         with self._lock:
             # Stop-button completion freezes usage while workers wind down.
             if self._finished:
                 return
-            if is_search:
+            if kind == ToolKind.SEARCH:
                 self._used_search = True
             else:
                 self._used_other_tool = True
+            self._tool_calls[kind] = self._tool_calls.get(kind, 0) + 1
+
+    def tool_failed(self, kind: ToolKind) -> None:
+        with self._lock:
+            if not self._finished:
+                self._tool_failures[kind] = self._tool_failures.get(kind, 0) + 1
+
+    def mcp_auth_failed(self) -> None:
+        with self._lock:
+            if not self._finished:
+                self._mcp_auth_failures += 1
 
     def _tool_usage(self) -> QueryToolUsage:
         if self._used_search:
@@ -272,6 +291,9 @@ class QueryObservation:
             self._finished = True
             tool_usage = self._tool_usage() if self.mode != QueryMode.SEARCH else None
             llm_cycles = self._llm_cycles() if self.mode == QueryMode.CHAT else None
+            tool_calls = {kind.value: n for kind, n in self._tool_calls.items()}
+            tool_failures = {kind.value: n for kind, n in self._tool_failures.items()}
+            mcp_auth_failures = self._mcp_auth_failures
         if self.outcome is None:
             return
         # emit_telemetry never raises, so a stream always finishes normally.
@@ -289,6 +311,14 @@ class QueryObservation:
                 "llm_provider": self.llm_provider,
                 "tool_usage": tool_usage,
                 "llm_cycles": llm_cycles,
+                # Absent when zero, so a query without tools adds no bytes.
+                **({"tool_calls": tool_calls} if tool_calls else {}),
+                **({"tool_failures": tool_failures} if tool_failures else {}),
+                **(
+                    {"mcp_auth_failures": mcp_auth_failures}
+                    if mcp_auth_failures
+                    else {}
+                ),
             },
         )
 

@@ -35,6 +35,7 @@ from onyx.tools.models import (
 from onyx.tracing.framework.create import function_span
 from onyx.tracing.framework.spans import SpanError
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION
+from onyx.utils.fleet_telemetry import ToolKind
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -176,6 +177,48 @@ def _invoke_tool[T: ToolOutcome](
     return result
 
 
+@cache
+def _tool_kind_classes() -> tuple[tuple[type["Tool"], ToolKind], ...]:
+    # Local imports break the Tool / implementation inheritance cycle.
+    from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
+        CodeModeTool,
+        WaitCodeTool,
+    )
+    from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+    from onyx.tools.tool_implementations.images.image_generation_tool import (
+        ImageGenerationTool,
+    )
+    from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+    from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+    from onyx.tools.tool_implementations.python.python_tool import PythonTool
+    from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
+    from onyx.tools.tool_implementations.search.search_tool import SearchTool
+    from onyx.tools.tool_implementations.web_search.web_search_tool import (
+        WebSearchTool,
+    )
+
+    return (
+        (SearchTool, ToolKind.SEARCH),
+        (WebSearchTool, ToolKind.WEB_SEARCH),
+        (OpenURLTool, ToolKind.OPEN_URL),
+        (MCPTool, ToolKind.MCP),
+        (CustomTool, ToolKind.CUSTOM),
+        (ImageGenerationTool, ToolKind.IMAGE),
+        (PythonTool, ToolKind.PYTHON),
+        (CodeModeTool, ToolKind.CODE_MODE),
+        (WaitCodeTool, ToolKind.CODE_MODE),
+        (SandboxTool, ToolKind.SANDBOX),
+    )
+
+
+def tool_kind(tool: "Tool") -> ToolKind:
+    """The tool's fixed telemetry class, from its type and never its name."""
+    for tool_class, kind in _tool_kind_classes():
+        if isinstance(tool, tool_class):
+            return kind
+    return ToolKind.OTHER
+
+
 ToolResultFromChildren = Callable[
     [ToolInvocation, ToolContext, list["RunState"]], ToolResult
 ]
@@ -287,17 +330,18 @@ class Tool(abc.ABC):
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         """Run with tracing and return tool errors to the model; cancellation propagates."""
 
-        def execute() -> ToolOutcome:
-            if observation := CURRENT_QUERY_OBSERVATION.get():
-                # Local import breaks the Tool / SearchTool inheritance cycle.
-                from onyx.tools.tool_implementations.search.search_tool import (
-                    SearchTool,
-                )
+        observation = CURRENT_QUERY_OBSERVATION.get()
+        kind = tool_kind(self) if observation else ToolKind.OTHER
 
-                observation.tool_started(is_search=isinstance(self, SearchTool))
+        def execute() -> ToolOutcome:
+            if observation:
+                observation.tool_started(kind)
             return self._run(invocation, context)
 
-        return _invoke_tool(self.name, invocation, execute)
+        result = _invoke_tool(self.name, invocation, execute)
+        if observation and isinstance(result, ToolResult) and result.is_error:
+            observation.tool_failed(kind)
+        return result
 
     def bind(self, get_context: Callable[[], ToolContext]) -> AgentTool:
         """Bind runtime callbacks; resolve application context only when they execute."""

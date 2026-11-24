@@ -13,7 +13,8 @@ All data processing occurs inside your infrastructure.
 No sensitive data leaves your network except for the connections you configure.
 
 Onyx sends anonymous fleet telemetry by default. It sends health, version, connector counts, indexing counters,
-and query timings. It never sends names, URLs, email addresses, user IDs, document content, or query text.
+query timings, and failure counts (failed logins by sign-in method, and failed tool and MCP calls by kind).
+It never sends names, URLs, email addresses, user IDs, document content, query text, or tool and MCP server names.
 Set `DISABLE_TELEMETRY=true` on every Onyx service to turn it off.
 See [Configuration](/deployment/configuration/configuration).
 

@@ -42,6 +42,7 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.tool_name import normalize_external_tool_name, sanitize_tool_name
+from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -310,3 +311,7 @@ class MCPTool(Tool):
                 start_time=_start,
                 status=outcome,
             )
+            if outcome == MCPToolCallStatus.AUTH_ERROR and (
+                observation := CURRENT_QUERY_OBSERVATION.get()
+            ):
+                observation.mcp_auth_failed()

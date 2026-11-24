@@ -90,6 +90,20 @@ the drop, reject and invalid counts.
   event carries the vote, the channel of the `MessageOrigin` that the caller
   passes, and a digest of the tenant and message id, which stays the same when
   the user votes again. Text-only feedback and follow-up requests send nothing.
+- Tool calls: `tools/interface.py:Tool.run` passes the fixed `ToolKind` of
+  the tool's class (`tool_kind`) to `QueryObservation.tool_started`, and calls
+  `tool_failed` for an error result. `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run`
+  calls `mcp_auth_failed` when its `MCPToolCallStatus` is `AUTH_ERROR`. The
+  query event carries the counts, so tool calls add no events.
+- Login and MCP failures outside queries: `utils/fleet_telemetry.py:count_failure`
+  adds one to a capped in-memory count (`FailureCounts`). The password check
+  (`backend/onyx/auth/users.py:UserManager.authenticate`), the env Google OAuth callback
+  (`count_login_failures` in `get_oauth_router`), the OIDC and SAML callbacks
+  (`auth/sso_web_error.py:redirect_sso_errors_to_web`), MCP tool discovery
+  (`server/features/mcp/client.py:discover_mcp_tools`) and the setup check
+  (`server/features/mcp/setup_probe.py:probe_mcp_server`) count. The sender
+  thread sends the counts with each heartbeat as one `failure_counts` event,
+  and only when a count is not zero.
 - Queue depths: `background/celery/tasks/monitoring/tasks.py:_report_queue_depths`.
 - OpenSearch health: `document_index/opensearch/resource_health.py:_report_to_fleet`.
 
@@ -128,6 +142,8 @@ event is marked `shared`.
    `utils/fleet_telemetry.py:emit_telemetry` catches every exception. A new
    emit point must not read the database or call the network on an
    application or indexing thread. Put source reads in the collection pass.
+   A frequent failure, such as a failed login, must not emit an event of its
+   own: count it with `count_failure`, which takes only a short lock.
 2. `allowlisted-fields-only` **Only allowlisted fields leave the process.**
    `utils/fleet_telemetry.py:sanitize_data` drops an event with an unknown key, or a value that is not a
    number, a boolean or one short token with no spaces, slashes or `@`. A new
