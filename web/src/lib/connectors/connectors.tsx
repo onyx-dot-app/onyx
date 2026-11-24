@@ -7,6 +7,7 @@ import type {
   BooleanOption,
   ConnectionConfiguration,
   ListOption,
+  NumberOption,
 } from "@/lib/connectors/types";
 import { OneDriveScope } from "@/lib/connectors/types";
 import { googleCredentialKind } from "@/lib/credentials/utils";
@@ -14,6 +15,12 @@ import type { CredentialValues } from "@/lib/credentials/types";
 
 const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
 const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
+/**
+ * The config field that sets a Microsoft connector's share of the app
+ * registration's rate limit. The form shows the other connectors' values
+ * under it.
+ */
+export const MICROSOFT_RU_PER_MINUTE_FIELD_NAME = "ru_per_minute";
 
 interface OneDriveConfigurationText {
   description: string;
@@ -49,6 +56,14 @@ const ONE_DRIVE_TRANSLATION_KEYS: OneDriveConfigurationText = {
   authorityHostDescription: "oneDrive.authorityHost.description",
   graphApiHostLabel: "oneDrive.graphApiHost.label",
   graphApiHostDescription: "oneDrive.graphApiHost.description",
+};
+
+const MICROSOFT_RU_PER_MINUTE_FIELD: NumberOption = {
+  type: "number",
+  label: "connectors.microsoft.fields.ru_per_minute.label",
+  name: MICROSOFT_RU_PER_MINUTE_FIELD_NAME,
+  optional: true,
+  description: "connectors.microsoft.fields.ru_per_minute.description",
 };
 
 function buildOneDriveConfiguration(
@@ -127,6 +142,7 @@ function buildOneDriveConfiguration(
         default: DEFAULT_MICROSOFT_GRAPH_API_HOST,
         description: text.graphApiHostDescription,
       },
+      MICROSOFT_RU_PER_MINUTE_FIELD,
     ],
   };
 }
@@ -1231,6 +1247,7 @@ export const connectorConfigs: Record<
         description:
           "connectors.sharepoint.fields.sharepoint_domain_suffix.description",
       },
+      MICROSOFT_RU_PER_MINUTE_FIELD,
     ],
   },
   teams: {
@@ -1296,6 +1313,7 @@ export const connectorConfigs: Record<
         default: "https://graph.microsoft.com",
         description: "connectors.teams.fields.graph_api_host.description",
       },
+      MICROSOFT_RU_PER_MINUTE_FIELD,
     ],
   },
   outlook: {
@@ -1368,6 +1386,7 @@ export const connectorConfigs: Record<
         default: "https://graph.microsoft.com",
         description: "connectors.outlook.fields.graph_api_host.description",
       },
+      MICROSOFT_RU_PER_MINUTE_FIELD,
     ],
   },
   discourse: {

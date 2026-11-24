@@ -585,6 +585,12 @@ return {math.floor(factor * 1000 + 0.5), applied,
 """
 )
 
+# The day budget keeps the units of each hour for the current hour and the
+# 24 hours before it, plus one hour of margin.
+_DAY_KEY_TTL_SECONDS = 26 * 3600
+_SECONDS_PER_HOUR = 3600
+_DAY_HOURS = 24
+
 
 _last_unreachable_warning = 0.0
 _unreachable_warning_lock = threading.Lock()
@@ -812,6 +818,51 @@ class RedisRateWindows:
             return 0.0
         # PTTL is -2 with no key and -1 with no TTL. A pause always has one.
         return max(0, left_ms) / 1000
+
+    def try_take_from_day(self, key: str, cost: int, limit: int) -> float:
+        """Takes ``cost`` units from a budget of ``limit`` units in any 24
+        hours and returns 0, or takes nothing and returns the seconds until
+        the next hour. When Redis cannot be reached, the request is not
+        limited.
+
+        The key is a hash of the units of each hour, so its size does not
+        grow with the number of requests. The day counts the current hour and
+        the 24 hours before it, so no unit leaves before it is 24 hours old.
+        One request always fits an empty day. Redis gives the hour, so clock
+        skew between pods has no effect.
+
+        The call adds its units and reads the day in one MULTI. When the day
+        is then over the limit, it takes its units back. So the budget never
+        admits more than the limit. Near the limit, two calls can both take
+        their units back when one of them would fit. That call tries again
+        after a short wait, which costs little."""
+        try:
+            # no-direct-redis: allow the budget is shared by every indexing and sync worker
+            now, _ = self._redis.time()
+            hour = now // _SECONDS_PER_HOUR
+            field = str(hour)
+            with self._redis.pipeline() as pipe:
+                hours: dict[bytes, bytes] = (
+                    pipe.hincrby(key, field, cost)
+                    .expire(key, _DAY_KEY_TTL_SECONDS)
+                    .hgetall(key)
+                    .execute()[-1]
+                )
+            total = 0
+            stale: list[bytes] = []
+            for name, units in hours.items():
+                if int(name) < hour - _DAY_HOURS:
+                    stale.append(name)
+                else:
+                    total += int(units)
+            if stale:
+                self._redis.hdel(key, *stale)
+            if total - cost > 0 and total > limit:
+                self._redis.hincrby(key, field, -cost)
+                return float((hour + 1) * _SECONDS_PER_HOUR - now)
+        except RedisError as error:
+            _warn_redis_unreachable(error)
+        return 0.0
 
     def delete(self, window: RateWindow) -> None:
         """Removes the window's state. For tests."""

@@ -381,6 +381,19 @@ class TenantRedisClient:
         """
         return cast(int, self._r.hdel(_prefix_key(self._prefix, name), *keys))
 
+    def hincrby(self, name: KeyArg, key: str | bytes, amount: int = 1) -> int:
+        """Atomically adds to an integer field of a tenant-prefixed hash key.
+
+        Args:
+            name: The (unprefixed) hash key.
+            key: The hash field. Stored verbatim (no prefixing).
+            amount: The amount to add. Defaults to ``1``.
+
+        Returns:
+            The new integer value of the field.
+        """
+        return cast(int, self._r.hincrby(_prefix_key(self._prefix, name), key, amount))
+
     def hexists(self, name: KeyArg, key: str | bytes) -> bool:
         """Tests whether a field exists in a tenant-prefixed hash key.
 
@@ -1230,6 +1243,14 @@ class TenantRedisClient:
         """
         return cast(bool, self._r.ping())
 
+    def time(self) -> tuple[int, int]:
+        """Issues a TIME. Server-level command — no key, no prefix.
+
+        Returns:
+            The server's Unix time as (seconds, microseconds).
+        """
+        return cast("tuple[int, int]", self._r.time())
+
     def info(self, section: str | None = None) -> dict[str, Any]:
         """Issues an INFO. Server-level command — no key, no prefix.
 
@@ -1350,6 +1371,22 @@ class TenantRedisPipeline:
             ``self``, to allow chaining further pipeline commands.
         """
         self._p.incr(_prefix_key(self._prefix, name), amount)
+        return self
+
+    def hincrby(
+        self, name: KeyArg, key: str | bytes, amount: int = 1
+    ) -> TenantRedisPipeline:
+        """Queues an HINCRBY against a tenant-prefixed hash key.
+
+        Args:
+            name: The (unprefixed) hash key.
+            key: The hash field. Stored verbatim (no prefixing).
+            amount: The amount to add. Defaults to ``1``.
+
+        Returns:
+            ``self``, to allow chaining further pipeline commands.
+        """
+        self._p.hincrby(_prefix_key(self._prefix, name), key, amount)
         return self
 
     def expire(

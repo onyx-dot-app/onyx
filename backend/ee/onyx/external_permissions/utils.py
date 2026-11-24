@@ -54,6 +54,8 @@ def set_shared_source_api_limiter(
         cc_pair.credential_id,
         callback.should_stop if callback is not None else None,
         load_credential_json=lambda: credential_json(cc_pair),
+        cc_pair_id=cc_pair.id,
+        connector_specific_config=cc_pair.connector.connector_specific_config,
     )
     if limiter is not None:
         connector.set_source_api_limiter(limiter)

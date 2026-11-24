@@ -185,6 +185,28 @@ class CredentialBase(BaseModel):
     groups: list[int] = Field(default_factory=list)
 
 
+class MicrosoftRateBudgetEntry(BaseModel):
+    """One Microsoft connector on an app registration, and the RU per minute
+    that its config sets. None: it shares the learned budget of the app."""
+
+    connector_id: int
+    name: str
+    source: DocumentSource
+    ru_per_minute: int | None
+
+
+class MicrosoftRateBudgets(BaseModel):
+    """The other Microsoft connectors on the app registration of a
+    credential that the caller can see, and the sum of the RU per minute
+    that all of them set."""
+
+    connectors: list[MicrosoftRateBudgetEntry]
+    # The connectors that the caller cannot see and that set RU per minute.
+    # The total counts them.
+    hidden_connector_count: int = 0
+    total_ru_per_minute: int
+
+
 class CredentialSnapshot(CredentialBase):
     id: int
     user_id: UUID | None
