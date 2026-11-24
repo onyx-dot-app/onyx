@@ -28,7 +28,7 @@
 @property --panel-toggle-reserve {
   syntax: "<length>";
   inherits: true;
-  initial-value: 44px;
+  initial-value: 48px;
 }
 
 @layer base {

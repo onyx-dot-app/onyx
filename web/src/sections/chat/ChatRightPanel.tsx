@@ -41,7 +41,6 @@ import {
 } from "@/lib/chat/rightPanel";
 import {
   OUTPUT_PANEL_HEADER_CONTROL_WIDTH,
-  PANEL_TOGGLE_RESERVE,
   PANEL_TOGGLE_RESERVE_VAR,
 } from "@/lib/outputPanel/layout";
 import { retainedFileViewers } from "@/lib/outputPanel/tabs";
@@ -351,9 +350,9 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     };
   }, [open, workspace.page]);
   const toggle = sessionId !== null && (
-    // Centered in the 52px header row, 12px from the end, as the header's
-    // own md buttons
-    <div className="absolute end-3 top-3 z-30">
+    // On the chat header's button line: its md buttons, 10px from the top
+    // (a flex box, so no line box shifts it), 12px from the end
+    <Section width="fit" height="auto" className="absolute end-3 top-2.5 z-30">
       <Button
         ref={toggleRef}
         icon={SvgSidebar}
@@ -368,7 +367,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
         tooltip={t("toggleButton.label")}
         aria-label={t("toggleButton.label")}
       />
-    </div>
+    </Section>
   );
   const asideRef = useRef<HTMLElement>(null);
   const wasOpenRef = useRef(open);
@@ -533,9 +532,11 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           </OutputPanelLayout>
           {/* Beside the room of the toggle, which the panel places over the
               workspace's end */}
-          <div
-            className="absolute top-3"
-            style={{ insetInlineEnd: PANEL_TOGGLE_RESERVE }}
+          {/* end-12 is PANEL_TOGGLE_RESERVE */}
+          <Section
+            width="fit"
+            height="auto"
+            className="absolute end-12 top-2.5"
           >
             {!layout.narrow && (
               <PanelSizeButton
@@ -550,7 +551,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                 }
               />
             )}
-          </div>
+          </Section>
           {dragging && (
             // Over the content, so the pointer hovers nothing in it
             <div className="absolute inset-0 z-40 cursor-col-resize" />

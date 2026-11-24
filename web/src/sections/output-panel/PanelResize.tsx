@@ -243,7 +243,6 @@ export function PanelSizeButton({
     <Button
       icon={full ? SvgFold : SvgMaximize2}
       prominence="tertiary"
-      size="sm"
       aria-label={full ? restoreLabel : expandLabel}
       tooltip={full ? restoreLabel : expandLabel}
       onClick={onToggle}
