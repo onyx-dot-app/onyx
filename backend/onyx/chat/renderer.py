@@ -90,10 +90,12 @@ from onyx.tools.tool_implementations.question.models import (
     QuestionToolDetails,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACT_PUBLISH_PATHS,
     ApplyPatchResult,
     FileToolName,
     PublishedFiles,
     PublishedFileView,
+    PublishFileArgument,
     SandboxExecResult,
     SpilledOutput,
     WriteStdinArguments,
@@ -104,6 +106,7 @@ from onyx.tools.tool_implementations.sandbox.patch import (
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
+    ArtifactTool,
     EditTool,
     ExecCommandTool,
     PublishFilesTool,
@@ -146,18 +149,19 @@ FILE_TOOL_ARGUMENTS: dict[FileToolName, FileToolArguments] = {
     EditTool.NAME: FileToolArguments(text="new_string", path="file_path"),
     WriteTool.NAME: FileToolArguments(text="content", path="file_path"),
 }
+OwnEndPacket = (
+    type[packets.ExecEnd] | type[packets.ApplyPatchEnd] | type[packets.PublishFilesEnd]
+)
 # Tools whose calls end with their own end packet, and its type; a failed call
 # ends with that packet's error. Each call of these tools sends its own start
-# packet too, so the end never lands on a generic card.
-OWN_END_PACKETS: dict[
-    str,
-    type[packets.ExecEnd] | type[packets.ApplyPatchEnd] | type[packets.PublishFilesEnd],
-] = {
+# packet too, so the end never lands on a generic card. A call with the publish
+# card (publish_card_files) ends with PublishFilesEnd.
+OWN_END_PACKETS: dict[str, OwnEndPacket] = {
     ExecCommandTool.NAME: packets.ExecEnd,
     WriteStdinTool.NAME: packets.ExecEnd,
     **dict.fromkeys(FILE_TOOL_ARGUMENTS, packets.ApplyPatchEnd),
-    PublishFilesTool.NAME: packets.PublishFilesEnd,
 }
+_PUBLISH_FILE_ARGUMENTS = TypeAdapter(list[PublishFileArgument])
 # The shortest time between two reports of a call's streamed arguments.
 # Between reports the renderer only collects fragments, so it parses the
 # arguments at most this often, not once per fragment.
@@ -168,6 +172,28 @@ _OPTIONAL_STRING = TypeAdapter(str | None)
 _INT = TypeAdapter(int)
 _STRINGS = TypeAdapter(list[str])
 logger = setup_logger()
+
+
+def publish_card_files(
+    name: str, args: dict[str, JsonValue]
+) -> list[PublishFileArgument] | None:
+    """The files that a call of tool `name` asks to publish, as the model
+    wrote them, when the call shows the publish card; None for any other
+    call. Raises ValidationError when the arguments do not fit the card."""
+    if name == PublishFilesTool.NAME:
+        return _PUBLISH_FILE_ARGUMENTS.validate_python(args.get("files", []))
+    # A missing or null action is a publish, as parse_tool_arguments reads it.
+    if name == ArtifactTool.NAME and args.get("action") in (None, "publish"):
+        one, several = ARTIFACT_PUBLISH_PATHS
+        path = args.get(one)
+        title = _OPTIONAL_STRING.validate_python(args.get("title"))
+        return [
+            PublishFileArgument(path=path, title=title)
+            for path in _STRINGS.validate_python(
+                [path] if path is not None else args.get(several) or []
+            )
+        ]
+    return None
 
 
 def _spilled_card_text(spilled: SpilledOutput) -> str:
@@ -713,6 +739,8 @@ class ToolRenderer:
         self._files: set[str] = set()
         self._started = False
         self._finished = False
+        # The end packet of a failed call, chosen with the start packet.
+        self._own_end: OwnEndPacket | None = None
 
     def consume(
         self,
@@ -766,7 +794,16 @@ class ToolRenderer:
             )
             # A tool with its own end packet keeps its own card, which then
             # shows empty arguments; the end packet carries the error.
-            objects = self._start_objects({}) if name in OWN_END_PACKETS else []
+            objects = (
+                self._start_objects({})
+                if name in OWN_END_PACKETS or publish_card_files(name, {}) is not None
+                else []
+            )
+        self._own_end = (
+            packets.PublishFilesEnd
+            if any(isinstance(obj, packets.PublishFilesStart) for obj in objects)
+            else OWN_END_PACKETS.get(name)
+        )
         if not objects:
             objects = [
                 packets.CustomToolStart(
@@ -853,13 +890,13 @@ class ToolRenderer:
                 # starts empty.
                 patch = display_patch(path, old or None, patch) if path else ""
             objects = [packets.ApplyPatchStart(patch=patch, tool_name=name)]
-        elif name == PublishFilesTool.NAME:
+        elif (files := publish_card_files(name, args)) is not None:
             objects = [
-                packets.PublishFilesStart.model_validate(
-                    {
-                        "files": args.get("files", []),
-                        "description": args.get("description"),
-                    }
+                packets.PublishFilesStart(
+                    files=files,
+                    description=_OPTIONAL_STRING.validate_python(
+                        args.get("description")
+                    ),
                 )
             ]
         elif name == FileReaderTool.NAME:
@@ -1132,7 +1169,7 @@ class ToolRenderer:
 
     def _result_packets(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """The packets of a final result of the call, before its section end."""
-        end = OWN_END_PACKETS.get(self.call.name)
+        end = self._own_end
         if (
             end is not None
             and result is not None

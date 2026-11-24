@@ -7,16 +7,11 @@ They have no tool row: a chat turn builds them when it offers the sandbox
 sandbox is the isolation, so calls need no approval.
 """
 
-import base64
 import posixpath
-import time
-from collections.abc import Callable, Generator, Hashable, Iterator, Sequence
-from concurrent.futures import Future
-from contextlib import closing, contextmanager
+from collections.abc import Callable, Generator, Hashable, Sequence
+from contextlib import closing
 from functools import partial
-from itertools import count
 from typing import Literal
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,21 +20,13 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolProgress,
 )
-from onyx.db.chat import (
-    delete_unpublished_chat_artifacts,
-    get_user_published_file,
-    get_user_published_files,
-    save_chat_artifact,
-)
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.file_store.utils import chat_output_file_type
-from onyx.llm.cancellation import wait_for_future
 from onyx.llm.model_capabilities import is_claude_model
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.microvm.models import FileType
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
     APPLY_PATCH_USE,
+    ARTIFACT_DESCRIPTION,
+    ARTIFACT_RESULTS,
     ATTACHMENTS_NOT_SAVED_NOTE,
     CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
@@ -57,16 +44,9 @@ from onyx.prompts.sandbox_tools import (
     WRITE_USE,
 )
 from onyx.server.features.build.sandbox.harness_base import (
-    ARTIFACT_FILES_DIR,
     CHAT_FILES_DIR,
-    RENDER_FIRST_PAGE_BUDGET_SECONDS,
-    RENDER_FIRST_PAGE_MAX_INPUT_BYTES,
-    RENDER_FIRST_PAGE_SUFFIXES,
     HarnessSandbox,
-    HarnessSandboxError,
     SandboxPathError,
-    chat_file_name,
-    safe_file_name,
     session_relative_path,
 )
 from onyx.server.features.build.sandbox.models import (
@@ -76,7 +56,6 @@ from onyx.server.features.build.sandbox.models import (
     HarnessSandboxRef,
     SandboxPathInfo,
     chat_skill_folder,
-    session_workspace,
 )
 from onyx.skills.chat import SkillLoadError, load_chat_skill_files
 from onyx.tools.constants import LOAD_SKILL_TOOL_NAME
@@ -94,36 +73,38 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
-from onyx.tools.tool_implementations.sandbox import file_copies
+from onyx.tools.tool_implementations.sandbox import artifact_operations
+from onyx.tools.tool_implementations.sandbox.errors import (
+    sandbox_errors_as_tool_errors,
+    tool_error,
+)
 from onyx.tools.tool_implementations.sandbox.models import (
-    ARTIFACT_CURSOR,
-    ARTIFACTS_LIST_MAX_CHARS,
-    ARTIFACTS_LIST_MAX_LIMIT,
-    ARTIFACTS_QUERY_MAX_CHARS,
-    PUBLISH_FILES_MAX_BYTES,
-    PUBLISH_FILES_MAX_TITLE_CHARS,
+    ARTIFACT_ACTION_ARGUMENTS,
+    ARTIFACTS_MATERIALIZE_MAX_ITEMS,
+    PUBLISH_FILES_MAX_FILES,
     ApplyPatchArguments,
     ApplyPatchFileChange,
     ApplyPatchResult,
-    ArtifactCursor,
+    ArtifactArguments,
     ArtifactList,
+    ArtifactPublished,
     EditArguments,
     ExecCommandArguments,
     ExecCommandOutput,
     FileToolName,
     LibraryListArguments,
-    LibraryListFilters,
     LibraryPrepareMaterializeArguments,
-    ListedArtifact,
     MaterializeDestination,
-    MaterializedItem,
     MaterializedItems,
-    PublishedFile,
+    MaterializeItem,
     PublishedFiles,
+    PublishFileArgument,
     PublishFilesArguments,
     SandboxExecResult,
     WriteArguments,
     WriteStdinArguments,
+    artifact_url,
+    parse_artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.patch import (
     APPLY_PATCH_MAX_STAGED_BYTES,
@@ -144,7 +125,6 @@ from onyx.tools.tool_implementations.sandbox.patch import (
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.utils import cut_middle, output_chars
 from onyx.utils.logger import setup_logger
-from onyx.utils.postgres_sanitization import sanitize_string
 
 logger = setup_logger()
 
@@ -170,16 +150,6 @@ _FILE_TOOL_RESULT = CodeModeResultSpec(
 )
 
 
-@contextmanager
-def _sandbox_errors_as_tool_errors() -> Iterator[None]:
-    """Sandbox errors that the model can act on become tool errors with their
-    message."""
-    try:
-        yield
-    except HarnessSandboxError as error:
-        raise ToolCallException(str(error), str(error)) from error
-
-
 def _exec_tool_result(
     events: Generator[ExecEvent], invocation: ToolInvocation, max_chars: int
 ) -> ToolResult:
@@ -189,7 +159,7 @@ def _exec_tool_result(
     streamed = 0
     # Closed at once when the progress callback raises for a Stop, so the
     # client kills the command before the call ends.
-    with _sandbox_errors_as_tool_errors(), closing(events):
+    with sandbox_errors_as_tool_errors(), closing(events):
         for event in events:
             if isinstance(event, ExecCommandResult):
                 result = event
@@ -359,7 +329,7 @@ class WriteStdinTool(SandboxTool):
 
 
 def _verification_failed(message: str) -> ToolCallException:
-    return _tool_error(f"apply_patch verification failed: {message}")
+    return tool_error(f"apply_patch verification failed: {message}")
 
 
 def _file_path(ref: HarnessSandboxRef, path: str) -> str:
@@ -433,10 +403,6 @@ def _write_file(
     )
 
 
-def _tool_error(message: str) -> ToolCallException:
-    return ToolCallException(message, message)
-
-
 class _FileTool(SandboxTool):
     """What the file tools share: the order of calls."""
 
@@ -460,12 +426,12 @@ def _change_file(
     and return the change. `contents` gets a reader of the file's text (None
     when it is missing) and returns the new text."""
     if input_bytes > FILE_TOOL_MAX_INPUT_BYTES:
-        raise _tool_error(
+        raise tool_error(
             f"the input is larger than {FILE_TOOL_MAX_INPUT_BYTES} bytes; "
             "make smaller changes"
         )
     sandbox = turn.sandbox
-    with _sandbox_errors_as_tool_errors():
+    with sandbox_errors_as_tool_errors():
         ref = turn.start_call()
         path = _file_path(ref, file_path)
         [info] = sandbox.stat_files(ref, [path])
@@ -476,7 +442,7 @@ def _change_file(
                 lambda: None if created else _read_text(sandbox, ref, path, info)
             ).encode()
         except PatchError as error:
-            raise _tool_error(str(error)) from error
+            raise tool_error(str(error)) from error
         # A Stop during the checks changes nothing.
         invocation.cancellation.check()
         _write_file(sandbox, ref, path, data, info)
@@ -526,7 +492,7 @@ class ApplyPatchTool(_FileTool):
         except PatchError as error:
             raise _verification_failed(str(error)) from error
         sandbox = self._turn.sandbox
-        with _sandbox_errors_as_tool_errors():
+        with sandbox_errors_as_tool_errors():
             ref = self._turn.start_call()
             hunks: list[PatchHunk] = [
                 hunk.model_copy(
@@ -765,17 +731,9 @@ class WriteTool(_FileTool):
 
 
 class PublishFilesTool(_FileTool):
-    """Copies files from the VM to the file store, each as the next version
-    of the root chat's artifact at its path, so that everyone who can read the
-    chat can download them (`access/access.py:user_can_access_chat_file`). The
-    response's save attaches them to its message
-    (`db/chat_response.py:save_chat_turn`), and a hard chat delete deletes
-    them through their artifacts, saved or not
-    (`db/chat.py:delete_messages_and_files_from_chat_session`). A PDF,
-    PowerPoint or Word file also gets a thumbnail of its first page, drawn in
-    the VM, when it renders within the call's render budget. A call publishes
-    all of its files or none. It takes turns with the file tools, so it
-    publishes their changes."""
+    """Gives files from the VM to the user
+    (artifact_operations.create_files). It takes turns with the file tools,
+    so it publishes their changes."""
 
     NAME = "publish_files"
     # The tool description is its only instruction to the model.
@@ -795,73 +753,19 @@ class PublishFilesTool(_FileTool):
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(PublishFilesArguments, invocation.arguments)
-        sandbox = self._turn.sandbox
-        published: list[PublishedFile] = []
-        try:
-            with _sandbox_errors_as_tool_errors():
-                # The turn's chat session is the root chat's, whose readers
-                # may download the files; subagent runs share it.
-                ref = self._turn.start_call()
-                # The budget starts once the call has its sandbox, so a wake
-                # or a skills sync does not spend it.
-                render_until = time.monotonic() + RENDER_FIRST_PAGE_BUDGET_SECONDS
-                for requested in arguments.files:
-                    invocation.cancellation.check()
-                    data = sandbox.read_file(
-                        ref, requested.path, max_bytes=PUBLISH_FILES_MAX_BYTES
-                    )
-                    path = posixpath.normpath(
-                        posixpath.join(
-                            session_workspace(ref.session_id), requested.path
-                        )
-                    )
-                    name = posixpath.basename(path)
-                    # Postgres text cannot hold NUL, and a blank title is no
-                    # title
-                    title = (
-                        sanitize_string(requested.title or "")
-                        .strip()[:PUBLISH_FILES_MAX_TITLE_CHARS]
-                        .rstrip()
-                        or None
-                    )
-                    # A file with no thumbnail still publishes. Once the
-                    # budget is spent, no render looks up its file or logs.
-                    thumbnail = (
-                        sandbox.render_first_page(ref, path, until=render_until)
-                        if posixpath.splitext(name)[1].lower()
-                        in RENDER_FIRST_PAGE_SUFFIXES
-                        and len(data) <= RENDER_FIRST_PAGE_MAX_INPUT_BYTES
-                        and time.monotonic() < render_until
-                        else None
-                    )
-                    published.append(
-                        save_chat_artifact(
-                            data,
-                            name=name,
-                            mime_type=chat_output_file_type(name),
-                            chat_session_id=ref.session_id,
-                            path=path,
-                            title=title,
-                            thumbnail=thumbnail,
-                        )
-                    )
-                # A Stop during the last copy publishes nothing.
-                invocation.cancellation.check()
-        except BaseException:
-            # A failed clean-up must not replace the call's own error or Stop.
-            try:
-                delete_unpublished_chat_artifacts(published)
-            except Exception:
-                logger.warning(
-                    "publish_files_cleanup_failed files=%s",
-                    [file.file_id for file in published],
-                    exc_info=True,
-                )
-            raise
+        published = artifact_operations.create_files(
+            self._turn,
+            invocation.cancellation,
+            parse_tool_arguments(PublishFilesArguments, invocation.arguments),
+        )
         listed = "\n".join(
             f"- {file.path}: version {file.version}, file ID {file.file_id}, "
             f"{file.size} bytes, {file.mime_type}"
+            + (
+                f", url {artifact_url(file.artifact_id, file.version)}"
+                if file.artifact_id is not None and file.version is not None
+                else ""
+            )
             for file in published
         )
         return ToolResult(
@@ -871,62 +775,25 @@ class PublishFilesTool(_FileTool):
         )
 
 
-@contextmanager
-def _artifact_errors(action: str) -> Iterator[None]:
-    """The tool errors of an artifact tool's `action` ("The copy"): a
-    sandbox error's own message, or a fixed one; the details go to the log."""
-    try:
-        yield
-    except ToolCallException:
-        raise
-    except HarnessSandboxError as error:
-        raise _tool_error(str(error)) from error
-    except TimeoutError as error:
-        logger.warning("artifact_tool_timed_out action=%s", action, exc_info=True)
-        raise _tool_error(f"{action} timed out; try again") from error
-    except Exception as error:
-        logger.exception("artifact_tool_failed action=%s", action)
-        raise _tool_error(f"{action} failed; try again") from error
-
-
-# How often a copy that waits for its write checks for pod shutdown.
-_SLOT_CHECK_SECONDS = 1.0
-# The most writes of one dedupe copy: other writers can take names after
-# the listing.
-_MATERIALIZE_NAME_TRIES = 5
-
-
-def _copy_directory(session_id: UUID, directory: str) -> str:
-    """`directory`, relative to the working directory or absolute in it, as
-    a normalized path relative to it ("" is the working directory). A tool
-    error unless it is in the working directory, outside CHAT_FILES_DIR or in
-    ARTIFACT_FILES_DIR: the chat file copies own the rest of CHAT_FILES_DIR."""
-    try:
-        relative = session_relative_path(session_id, directory)
-    except SandboxPathError as error:
-        raise _tool_error(str(error)) from error
-    if f"{relative}/".startswith(
-        f"{CHAT_FILES_DIR}/"
-    ) and not f"{relative}/".startswith(f"{ARTIFACT_FILES_DIR}/"):
-        raise _tool_error(
-            f"{directory!r} is not a destination: use a directory outside "
-            f"{CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/"
-        )
-    return relative
-
-
 class _LibraryTool(SandboxTool):
-    """What the library tools, the tools over the published files, share.
-    They reach only the files published in the user's own root chats that are
-    not deleted (`db/chat.py:get_user_published_files`), this chat included.
-    In code mode they are the deferred group `library`, which tool_search
-    finds; the model learns of them from the publish_files description and
-    the group's line in the execute_code description, not the system prompt.
-    Running a call again changes nothing, so a call that a lost server left
-    running runs again."""
+    """What the tools over the user's published files share. They run the
+    artifact operations (artifact_operations.py), which reach only the files
+    published in the user's own root chats that are not deleted
+    (`db/chat.py:get_user_published_files`), this chat included. In code mode
+    each is a deferred function of its group, which tool_search finds; the
+    model learns of them from the publish_files description and the group's
+    line in the execute_code description, not the system prompt. Running a
+    list or copy again changes nothing, so a call that a lost server left
+    running runs again; the tools that publish say otherwise."""
 
     USE = None
     interrupted_result = None
+    CODE_MODE_NAMESPACE = "library"
+    # The group's line in the execute_code description.
+    CODE_MODE_NAMESPACE_DESCRIPTION = (
+        "Find the files that you published in this chat and the user's other "
+        "chats, and copy them into this chat."
+    )
     CODE_MODE_NAME: str
     RESULT: type[BaseModel]
 
@@ -938,9 +805,8 @@ class _LibraryTool(SandboxTool):
     def code_mode_function_name(self) -> CodeModeFunctionName:
         return CodeModeFunctionName(
             name=self.CODE_MODE_NAME,
-            namespace="library",
-            namespace_description="Find the files that you published in this chat "
-            "and the user's other chats, and copy them into this chat.",
+            namespace=self.CODE_MODE_NAMESPACE,
+            namespace_description=self.CODE_MODE_NAMESPACE_DESCRIPTION,
         )
 
     @property
@@ -949,12 +815,14 @@ class _LibraryTool(SandboxTool):
             kind=CodeModeResultKind.JSON_OBJECT, model=self.RESULT
         )
 
+    def tool_definition(self) -> ToolDefinition:
+        # Not strict: the arguments have nested models.
+        return tool_definition_from_arguments(
+            self.name, self.description, self.ARGUMENTS
+        )
+
 
 class LibraryListTool(_LibraryTool):
-    """Lists published files from the database; it never starts the VM. A
-    page keeps to ARTIFACTS_LIST_MAX_CHARS, under the spill limit of one
-    result, and the step's budget does not spill it."""
-
     NAME = "library_list"
     CODE_MODE_NAME = "list"
     DESCRIPTION = LIBRARY_LIST_DESCRIPTION
@@ -962,96 +830,16 @@ class LibraryListTool(_LibraryTool):
     RESULT = ArtifactList
     display_name = "Find Published Files"
 
-    def tool_definition(self) -> ToolDefinition:
-        # Not strict: `filters` is a `$defs` reference.
-        return tool_definition_from_arguments(
-            self.name, self.description, LibraryListArguments
-        )
-
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(LibraryListArguments, invocation.arguments)
-        chat_id: UUID | None = None
-        if arguments.chat_id is not None:
-            try:
-                chat_id = UUID(arguments.chat_id)
-            except ValueError as error:
-                raise _tool_error(f"No chat {arguments.chat_id} of yours") from error
-        cursor: ArtifactCursor | None = None
-        if arguments.cursor is not None:
-            try:
-                cursor = ARTIFACT_CURSOR.validate_json(
-                    base64.urlsafe_b64decode(arguments.cursor)
-                )
-            except ValueError as error:
-                raise _tool_error(
-                    "The cursor is not a next_cursor of this tool; list again "
-                    "without it"
-                ) from error
-            if (cursor.sort, cursor.sort_order) != (
-                arguments.sort,
-                arguments.sort_order,
-            ):
-                raise _tool_error(
-                    f"The cursor is from a list with sort {cursor.sort} and "
-                    f"sort_order {cursor.sort_order}; send those, or list again "
-                    "without the cursor"
-                )
-        query = (arguments.query or "").strip()
-        if len(query) > ARTIFACTS_QUERY_MAX_CHARS:
-            raise _tool_error(
-                f"The query is longer than {ARTIFACTS_QUERY_MAX_CHARS} characters"
-            )
-        limit = min(max(arguments.limit, 1), ARTIFACTS_LIST_MAX_LIMIT)
-        with _artifact_errors("The listing"):
-            with get_session_with_current_tenant() as db_session:
-                rows = get_user_published_files(
-                    db_session,
-                    self._turn.user_id,
-                    query=query or None,
-                    chat_session_id=chat_id,
-                    filters=arguments.filters or LibraryListFilters(),
-                    sort=arguments.sort,
-                    sort_order=arguments.sort_order,
-                    limit=limit,
-                    cursor=cursor,
-                )
-        if rows is None:
-            raise _tool_error(f"No chat {arguments.chat_id} of yours")
-        shown, more = rows[:limit], len(rows) > limit
-        while True:
-            content = ArtifactList(
-                files=[artifact for artifact, _ in shown],
-                next_cursor=base64.urlsafe_b64encode(
-                    ARTIFACT_CURSOR.dump_json(shown[-1][1])
-                ).decode()
-                if more and shown
-                else None,
+        return ToolResult(
+            content=artifact_operations.list_artifacts(
+                self._turn.user_id,
+                parse_tool_arguments(LibraryListArguments, invocation.arguments),
             ).model_dump_json()
-            if len(content) <= ARTIFACTS_LIST_MAX_CHARS or len(shown) <= 1:
-                return ToolResult(content=content)
-            shown, more = shown[:-1], True
+        )
 
 
 class LibraryPrepareMaterializeTool(_LibraryTool):
-    """Copies published files into the chat's working directory, one item at
-    a time in order, with one result for each item. The lookups and the
-    destination checks of every item come first, so a call whose items are
-    all refused never starts the VM; it fails only when no item succeeds. In
-    ARTIFACT_FILES_DIR without a file_name, a copy has its chat file name
-    (`chat_file_name`), which only that file has: a file there that is in
-    place (`file_copies.in_place`) is cached, and any other is written over.
-    Any other copy has the safe form of its name (`safe_file_name`), and the
-    conflict policy decides when the directory's listing shows that name, or
-    is cut at file_copies.MAX_LISTED entries. Under `error` and `dedupe` the
-    write never replaces a file: a name taken after the listing fails an
-    `error` copy and moves a `dedupe` copy to the next free name, up to
-    _MATERIALIZE_NAME_TRIES writes. Each write is a FileWrites of
-    the chat file copies, with their tries, write slots and timeouts; an
-    item waits for it until a Stop or pod shutdown. A Stop ends the call: a
-    started write lands on its own, and the next one does not start. A
-    sandbox that stops responding to a listing or a write fails the
-    remaining items."""
-
     NAME = "library_prepare_materialize"
     CODE_MODE_NAME = "prepare_materialize"
     DESCRIPTION = LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION
@@ -1059,228 +847,148 @@ class LibraryPrepareMaterializeTool(_LibraryTool):
     RESULT = MaterializedItems
     display_name = "Copy Published Files"
 
-    def tool_definition(self) -> ToolDefinition:
-        # Not strict: the items and the destination are `$defs` references.
-        return tool_definition_from_arguments(
-            self.name, self.description, LibraryPrepareMaterializeArguments
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        return ToolResult(
+            content=artifact_operations.materialize(
+                self._turn,
+                invocation.cancellation,
+                parse_tool_arguments(
+                    LibraryPrepareMaterializeArguments, invocation.arguments
+                ),
+            ).model_dump_json()
+        )
+
+
+class ArtifactTool(_LibraryTool, _FileTool):
+    """One tool with an action for each artifact operation
+    (artifact_operations.py), which Claude models get instead of
+    publish_files and the library tools (sandbox_tools_for_model), for
+    compatibility with how they work with artifacts. Each action builds the
+    library tools' arguments of its operation, so both families publish,
+    list and copy alike, and a publish gives the same PublishedFiles card.
+    Execution settings are per tool, so the tool takes turns with the file
+    tools and keeps the interrupted result, as publish needs; its list and
+    read calls take turns too. In code mode it is the deferred function
+    `artifact.artifact`, in its own group."""
+
+    NAME = "artifact"
+    CODE_MODE_NAMESPACE = "artifact"
+    CODE_MODE_NAMESPACE_DESCRIPTION = (
+        "Give files from the VM to the user, and find and copy the files "
+        "published in this chat and the user's other chats."
+    )
+    CODE_MODE_NAME = "artifact"
+    DESCRIPTION = ARTIFACT_DESCRIPTION
+    ARGUMENTS = ArtifactArguments
+    # The generic card of list and read; publish has the publish card.
+    display_name = "Published Files"
+    interrupted_result = INTERRUPTED_SANDBOX_RESULT
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.JSON_OBJECT, returns=ARTIFACT_RESULTS
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(
-            LibraryPrepareMaterializeArguments, invocation.arguments
+        arguments = parse_tool_arguments(ArtifactArguments, invocation.arguments)
+        action = arguments.action
+        extra = sorted(
+            name
+            for name, value in arguments
+            if value is not None
+            and name != "action"
+            and name not in ARTIFACT_ACTION_ARGUMENTS[action]
         )
-        cancellation = invocation.cancellation
-        session_id = self._turn.chat_session_id
-        destination = arguments.destination or MaterializeDestination()
-        directory = _copy_directory(
-            session_id,
-            ARTIFACT_FILES_DIR
-            if destination.directory is None
-            else destination.directory,
-        )
-        with _artifact_errors("The copy"):
-            with get_session_with_current_tenant() as db_session:
-                found = [
-                    get_user_published_file(
-                        db_session,
-                        self._turn.user_id,
-                        file_id=item.file_id,
-                        artifact_id=item.library_file_id,
-                    )
-                    for item in arguments.items
-                ]
-        results: list[MaterializedItem] = [
-            MaterializedItem(
-                library_file_id=item.library_file_id,
-                file_id=item.file_id,
-                status="error",
+        if extra:
+            raise tool_error(
+                f"Action {action} does not take {', '.join(extra)}; it takes "
+                f"{', '.join(sorted(ARTIFACT_ACTION_ARGUMENTS[action]))}"
             )
-            for item in arguments.items
+        if action == "publish":
+            paths = (
+                [arguments.file_path]
+                if arguments.file_path is not None
+                else arguments.file_paths or []
+            )
+            if not paths or (
+                arguments.file_path is not None and arguments.file_paths is not None
+            ):
+                raise tool_error("publish takes file_path or file_paths")
+            if len(paths) > PUBLISH_FILES_MAX_FILES:
+                raise tool_error(
+                    f"publish takes at most {PUBLISH_FILES_MAX_FILES} file_paths"
+                )
+            if arguments.title is not None and arguments.file_path is None:
+                raise tool_error("title goes with file_path")
+            published = artifact_operations.create_files(
+                self._turn,
+                invocation.cancellation,
+                PublishFilesArguments(
+                    files=[
+                        PublishFileArgument(path=path, title=arguments.title)
+                        for path in paths
+                    ]
+                ),
+            )
+            return ToolResult(
+                content=ArtifactPublished.of(published).model_dump_json(),
+                details=PublishedFiles(files=published),
+            )
+        if action == "list":
+            return ToolResult(
+                content=artifact_operations.list_artifacts(
+                    self._turn.user_id,
+                    parse_tool_arguments(
+                        LibraryListArguments,
+                        {
+                            "limit": arguments.limit,
+                            "cursor": arguments.after,
+                            "query": arguments.query,
+                            "filters": {"category": arguments.type},
+                        },
+                    ),
+                ).model_dump_json()
+            )
+        if arguments.out_dir is None:
+            raise tool_error(
+                "read copies published files into the VM: pass out_dir, the "
+                "directory for the copies"
+            )
+        targets = [
+            *([] if arguments.url is None else [arguments.url]),
+            *([] if arguments.path is None else [arguments.path]),
+            *(arguments.paths or []),
         ]
-        # Each copy to make: its index, file, directory, name, and whether
-        # the name is the file's chat file name.
-        copies: list[tuple[int, ListedArtifact, str, str, bool]] = []
-        for index, (item, file) in enumerate(zip(arguments.items, found, strict=True)):
-            try:
-                if file is None:
-                    raise _tool_error(
-                        f"No published file {item.file_id or item.library_file_id} "
-                        "in your chats"
-                    )
-                item_directory = (
-                    directory
-                    if item.relative_directory is None
-                    else _copy_directory(
-                        session_id, posixpath.join(directory, item.relative_directory)
-                    )
-                )
-                prefixed = item_directory == ARTIFACT_FILES_DIR and not item.file_name
-                copies.append(
-                    (
-                        index,
-                        file,
-                        item_directory,
-                        chat_file_name(file.file_id, file.file_name)
-                        if prefixed
-                        else safe_file_name(
-                            (item.file_name or file.file_name, file.file_id)
-                        ),
-                        prefixed,
-                    )
-                )
-            except ToolCallException as error:
-                results[index].error = error.llm_facing_message
-        if copies:
-            with _artifact_errors("The copy"):
-                ref = self._turn.start_call()
-                files = self._turn.sandbox.session_files(ref)
-            pool = file_copies.file_copy_pool()
-            # Each listed directory: the size of each regular file by name,
-            # None for any other entry, and whether the listing is cut. The
-            # names that this call wrote or found taken join it.
-            listings: dict[str, tuple[dict[str, int | None], bool]] = {}
-            # Why the sandbox stopped responding, once it did.
-            stopped: str | None = None
-            for index, file, item_directory, name, prefixed in copies:
-                # Before each item, as a cached or refused item writes nothing.
-                cancellation.check()
-                try:
-                    if stopped is not None:
-                        raise _tool_error(f"The copy failed: {stopped}; try again")
-                    # The listing is a snapshot, and a cut one can miss a file
-                    # at the name, so these writes never replace a file.
-                    no_replace = (
-                        not prefixed and destination.conflict_policy != "overwrite"
-                    )
-                    with _artifact_errors("The copy"):
-                        if (prefixed or no_replace) and item_directory not in listings:
-                            try:
-                                listing = files.list_files(
-                                    item_directory,
-                                    max_entries=file_copies.MAX_LISTED,
-                                    include_hidden=True,
-                                )
-                            except Exception as error:
-                                stopped = (
-                                    file_copies.NO_RESPONSE.reason
-                                    if file_copies.no_response(error)
-                                    else None
-                                )
-                                raise
-                            listings[item_directory] = (
-                                {
-                                    entry.name: entry.size
-                                    if entry.type is FileType.REGULAR
-                                    else None
-                                    for entry in listing.entries
-                                },
-                                listing.truncated,
-                            )
-                    # An overwrite outside the chat file names needs no listing.
-                    names, truncated = listings.get(item_directory, ({}, False))
-                    # In place, as file_copies.in_place: a regular file of the
-                    # file's size.
-                    cached = prefixed and names.get(name) == file.file_size_bytes
-                    # Each candidate is cut to fit the name limits; partial
-                    # binds the requested name, which the loop below rebinds.
-                    numbered = partial(safe_file_name, (name,))
-                    free_names = (
-                        candidate
-                        for number in count(1)
-                        if (candidate := numbered(suffix=f" ({number})")) not in names
-                    )
-                    if no_replace and (name in names or truncated):
-                        if destination.conflict_policy == "error":
-                            raise _tool_error(
-                                f"{posixpath.join(item_directory, name)} may "
-                                "already exist"
-                                if truncated and name not in names
-                                else f"{posixpath.join(item_directory, name)} "
-                                "already exists"
-                            )
-                        name = next(free_names)
-                    path = posixpath.join(item_directory, name)
-                    tries = 0
-                    while not cached:
-                        tries += 1
-                        cancellation.check()
-                        written: Future[file_copies.CopyFailure | None] = Future()
-                        file_copies.FileWrites(
-                            ref,
-                            pool,
-                            files,
-                            [
-                                file_copies.FileWrite(
-                                    path,
-                                    file.file_id,
-                                    file.file_size_bytes,
-                                    overwrite=not no_replace,
-                                )
-                            ],
-                            lambda: cancellation.cancelled,
-                            lambda _files, failure, done=written: done.set_result(
-                                failure
-                            ),
-                        )
-                        # The wait has no timeout: the write's tries have
-                        # theirs, and pod shutdown drops a queued write.
-                        while True:
-                            try:
-                                failure = wait_for_future(
-                                    written, _SLOT_CHECK_SECONDS, cancellation
-                                )
-                                break
-                            except TimeoutError:
-                                if pool.stopped.is_set():
-                                    stopped = "the server is shutting down"
-                                    raise _tool_error(
-                                        f"The copy stopped: {stopped}; try again"
-                                    ) from None
-                        if failure is not None and failure != file_copies.EXISTS:
-                            stopped = failure.reason if failure.ends_copy else None
-                            raise _tool_error(
-                                f"The copy failed: {failure.reason}; try again"
-                            )
-                        # A written name holds the file's size, so the same
-                        # file again is cached.
-                        names[name] = file.file_size_bytes if failure is None else None
-                        if failure is None:
-                            break
-                        if (
-                            destination.conflict_policy == "error"
-                            or tries == _MATERIALIZE_NAME_TRIES
-                        ):
-                            raise _tool_error(
-                                f"{path} already exists"
-                                if destination.conflict_policy == "error"
-                                else f"{path} and the names before it are taken; "
-                                "try again"
-                            )
-                        name = next(free_names)
-                        path = posixpath.join(item_directory, name)
-                except ToolCallException as error:
-                    results[index].error = error.llm_facing_message
-                    continue
-                results[index] = MaterializedItem(
-                    library_file_id=file.library_file_id,
-                    file_id=file.file_id,
-                    version_number=file.version_number,
-                    file_name=name,
-                    path=path,
-                    file_size_bytes=file.file_size_bytes,
-                    mime_type=file.mime_type,
-                    status="cached" if cached else "written",
-                )
-        logger.info(
-            "library_prepare_materialize statuses=%s",
-            [result.status for result in results],
-        )
-        if all(result.status == "error" for result in results):
-            raise _tool_error(
-                "No file was copied:\n"
-                + "\n".join(f"- {result.error}" for result in results)
+        if not targets:
+            raise tool_error("read takes url, path or paths")
+        if len(targets) > ARTIFACTS_MATERIALIZE_MAX_ITEMS:
+            raise tool_error(
+                f"read copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files; "
+                "pass fewer paths"
             )
-        return ToolResult(content=MaterializedItems(items=results).model_dump_json())
+        items: list[MaterializeItem] = []
+        for target in targets:
+            try:
+                artifact_id, version = parse_artifact_url(target)
+            except ValueError as error:
+                if target == arguments.url:
+                    raise tool_error(str(error)) from error
+                items.append(MaterializeItem(file_id=target))
+            else:
+                items.append(
+                    MaterializeItem(library_file_id=artifact_id, version_number=version)
+                )
+        return ToolResult(
+            content=artifact_operations.materialize(
+                self._turn,
+                invocation.cancellation,
+                LibraryPrepareMaterializeArguments(
+                    items=items,
+                    destination=MaterializeDestination(directory=arguments.out_dir),
+                ),
+            ).model_dump_json()
+        )
 
 
 class LoadSkillArguments(BaseModel):
@@ -1329,17 +1037,17 @@ def sandbox_tools_for_model(
     model_names: Sequence[str],
 ) -> tuple[type[SandboxTool], ...]:
     """The sandbox tools of a chat turn whose model has these names
-    (model_identity_names), in the order the prompt names them: Claude models
-    edit files with edit and write, the tools they are trained on; the others
-    with apply_patch. Every model gets publish_files and the artifact tools.
-    The turn builds them, and its prompt and token estimate name them."""
-    file_tools = (
-        (EditTool, WriteTool) if is_claude_model(model_names) else (ApplyPatchTool,)
-    )
+    (model_identity_names), in the order the prompt names them. Claude
+    models get the tools they work with: edit and write for files, and the
+    artifact tool for published files. The others get apply_patch,
+    publish_files and the library tools. No turn gets both sets. The turn
+    builds them, and its prompt and token estimate name them."""
+    if is_claude_model(model_names):
+        return (ExecCommandTool, WriteStdinTool, EditTool, WriteTool, ArtifactTool)
     return (
         ExecCommandTool,
         WriteStdinTool,
-        *file_tools,
+        ApplyPatchTool,
         PublishFilesTool,
         LibraryListTool,
         LibraryPrepareMaterializeTool,

@@ -163,3 +163,22 @@ Usage:
 - One call copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files. A failed item does not stop the others.
 - The chat does not keep files in {CHAT_FILES_DIR}/: a sandbox restart removes them. To change a file, copy it to a directory outside {CHAT_FILES_DIR}/, change it there, and publish it from that path.
 """
+
+# The artifact tool (sandbox_tools.ArtifactTool). tool_search matches its
+# first sentence.
+ARTIFACT_DESCRIPTION = f"""Publish, list and read the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
+
+Actions:
+- publish (the default): gives `file_path`, or up to {PUBLISH_FILES_MAX_FILES} `file_paths`, from the VM to the user; all are published, or none. Each file is at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Publishing the same path again adds a new version. Publish only finished deliverables, and do not paste their contents into your reply.
+- list: the user's published files from all their chats, newest first. `type` keeps one type (image, sheet, slides, report, other); `query` finds text in the name, the title or the chat's title; `after` takes the `next_cursor` of the previous page.
+- read: copies up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} published files into `out_dir`, in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/. Name them with `url` (a url from an earlier result; one that ends in /v<N> names that version), or with `path` or `paths`, each a url or a file ID. To change a file, read it into a directory outside {CHAT_FILES_DIR}/, change it there, and publish it.
+- A url is a link the user can open; give it to the user to point at a file.
+"""
+ARTIFACT_RESULTS = (
+    "publish: {files: [{library_file_id, file_id, version_number, file_name, "
+    "title, path, url}]}. list: {files: [{library_file_id, file_id, "
+    "version_number, file_name, title, artifact_type, mime_type, "
+    "file_size_bytes, created_at, modified_at, chat_id, chat_title, path, url}], "
+    "next_cursor}. read: {items: [{library_file_id, file_id, version_number, "
+    "file_name, path, file_size_bytes, mime_type, url, status, error}]}."
+)

@@ -42,6 +42,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     SpilledOutput,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ArtifactTool,
     ExecCommandTool,
     LibraryListTool,
     WriteStdinTool,
@@ -87,9 +88,10 @@ _ENCODE_CHARS = 1 << 20
 _UNKNOWN_AGE = datetime.max.replace(tzinfo=timezone.utc)
 # Tools whose content the limits of one result and one step do not cut: they
 # cut it themselves (the code mode cells, exec), page through it (read_file,
-# skills_read and library_list, whose page keeps within
-# ARTIFACTS_LIST_MAX_CHARS, so a spill would only be read back), or the model
-# cites it whole. A full value still spills.
+# skills_read, and library_list and the artifact tool, whose list page keeps
+# within ARTIFACTS_LIST_MAX_CHARS and whose other results are short, so a
+# spill would only be read back), or the model cites it whole. A full value
+# still spills.
 _OWN_LIMITS = frozenset(
     {
         CODE_MODE_TOOL_NAME,
@@ -99,6 +101,7 @@ _OWN_LIMITS = frozenset(
         FILE_READER_TOOL_NAME,
         SKILLS_READ_TOOL_NAME,
         LibraryListTool.NAME,
+        ArtifactTool.NAME,
         *CITEABLE_TOOLS_NAMES,
     }
 )

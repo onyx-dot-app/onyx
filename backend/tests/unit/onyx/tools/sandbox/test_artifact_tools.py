@@ -1,9 +1,11 @@
 import base64
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -14,16 +16,18 @@ from onyx.llm.models import ToolResult
 from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import ToolCallException, ToolContext
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
-from onyx.tools.tool_implementations.sandbox import sandbox_tools
+from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
     ARTIFACTS_CHAT_TITLE_MAX_CHARS,
     ARTIFACTS_LIST_MAX_CHARS,
     ARTIFACTS_LIST_MAX_LIMIT,
+    ARTIFACTS_MATERIALIZE_MAX_ITEMS,
     ARTIFACTS_NAME_MAX_CHARS,
     ARTIFACTS_PATH_MAX_CHARS,
     ARTIFACTS_QUERY_MAX_CHARS,
     PUBLISH_FILES_MAX_BYTES,
+    PUBLISH_FILES_MAX_FILES,
     PUBLISH_FILES_MAX_TITLE_CHARS,
     ArtifactCursor,
     ArtifactList,
@@ -33,25 +37,63 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ListedArtifact,
     SortOrder,
     artifact_type,
+    artifact_url,
+    parse_artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ApplyPatchTool,
+    ArtifactTool,
+    EditTool,
+    ExecCommandTool,
     LibraryListTool,
     LibraryPrepareMaterializeTool,
     PublishFilesTool,
+    WriteStdinTool,
+    WriteTool,
     sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.spill import RESULT_MAX_CHARS
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 
 
-@pytest.mark.parametrize("model", ["claude-sonnet-4-5", "gpt-5.1"])
-def test_every_model_gets_the_artifact_tools_after_publish_files(model: str) -> None:
-    tools = sandbox_tools_for_model([model])
-    assert tools[-3:] == (
+def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() -> None:
+    claude = sandbox_tools_for_model(["claude-sonnet-4-5"])
+    other = sandbox_tools_for_model(["gpt-5.1"])
+    assert claude == (
+        ExecCommandTool,
+        WriteStdinTool,
+        EditTool,
+        WriteTool,
+        ArtifactTool,
+    )
+    assert other == (
+        ExecCommandTool,
+        WriteStdinTool,
+        ApplyPatchTool,
         PublishFilesTool,
         LibraryListTool,
         LibraryPrepareMaterializeTool,
     )
+    shared = {ExecCommandTool, WriteStdinTool}
+    assert not (set(claude) - shared) & (set(other) - shared)
+
+
+def test_code_mode_defers_the_artifact_tool_of_claude_models() -> None:
+    turn = MagicMock(spec=SandboxTurn)
+    turn.vm_chat_files = []
+    stubs = build_tool_stubs(
+        [tool(turn) for tool in sandbox_tools_for_model(["claude-sonnet-4-5"])]
+    )
+
+    assert stubs.deferred_namespaces == {
+        "artifact": "Give files from the VM to the user, and find and copy the "
+        "files published in this chat and the user's other chats."
+    }
+    assert [
+        name for name, function in stubs.functions.items() if function.deferred
+    ] == ["artifact__artifact"]
+    assert "artifact__" not in stubs.listed_text
+    assert "artifact(" not in stubs.listed_text
 
 
 def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
@@ -113,8 +155,8 @@ def _run(
         assert rows is not None
         return rows
 
-    monkeypatch.setattr(sandbox_tools, "get_session_with_current_tenant", session)
-    monkeypatch.setattr(sandbox_tools, "get_user_published_files", published)
+    monkeypatch.setattr(artifact_operations, "get_session_with_current_tenant", session)
+    monkeypatch.setattr(artifact_operations, "get_user_published_files", published)
     turn = MagicMock(spec=SandboxTurn)
     outcome = LibraryListTool(turn).run(
         ToolInvocation(
@@ -316,6 +358,7 @@ def _entry(index: int) -> tuple[ListedArtifact, ArtifactCursor]:
             chat_id=uuid4(),
             chat_title='"' * ARTIFACTS_CHAT_TITLE_MAX_CHARS,
             path="\\" * ARTIFACTS_PATH_MAX_CHARS,
+            url=artifact_url(uuid4(), PUBLISH_FILES_MAX_BYTES),
         ),
         ARTIFACT_CURSOR.validate_python(_key("name", "desc")),
     )
@@ -338,3 +381,126 @@ def test_a_full_page_never_spills(monkeypatch: pytest.MonkeyPatch) -> None:
     assert 0 < shown < ARTIFACTS_LIST_MAX_LIMIT
     assert page.files == [artifact for artifact, _ in rows[:shown]]
     assert page.next_cursor == _cursor(rows[shown - 1][1])
+
+
+# The links that both the backend parser and the web's parseArtifactLink
+# read: each with its artifact and version, or null for one they refuse.
+_ARTIFACT_LINKS = json.loads(
+    (Path(__file__).parent / "artifact_links.json").read_text()
+)
+
+
+@pytest.mark.parametrize("web_domain", ["https://x.test", "https://x.test/"])
+def test_an_artifact_url_round_trips(
+    monkeypatch: pytest.MonkeyPatch, web_domain: str
+) -> None:
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.sandbox.models.WEB_DOMAIN", web_domain
+    )
+    artifact_id = uuid4()
+    url = artifact_url(artifact_id, 3)
+    assert url == f"https://x.test/app/artifacts/{artifact_id}/v3"
+    assert parse_artifact_url(url) == (artifact_id, 3)
+
+
+@pytest.mark.parametrize(
+    "example", _ARTIFACT_LINKS, ids=lambda example: example["link"]
+)
+def test_an_artifact_link_names_the_artifact_and_maybe_a_version(
+    example: dict[str, str | int | None],
+) -> None:
+    if example["artifact_id"] is None:
+        with pytest.raises(ValueError):
+            parse_artifact_url(str(example["link"]))
+    else:
+        assert parse_artifact_url(str(example["link"])) == (
+            UUID(str(example["artifact_id"])),
+            example["version"],
+        )
+
+
+# Its results are never spilled, and each echoes the paths that it took.
+_LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
+
+
+@pytest.mark.parametrize(
+    ("arguments", "error"),
+    [
+        (
+            {"file_path": "a.md", "out_dir": "x"},
+            "Action publish does not take out_dir; it takes file_path, "
+            "file_paths, title",
+        ),
+        (
+            {"action": "list", "url": "x"},
+            "Action list does not take url; it takes after, limit, query, scope, type",
+        ),
+        ({}, "publish takes file_path or file_paths"),
+        (
+            {"file_path": "a.md", "file_paths": ["b.md"]},
+            "publish takes file_path or file_paths",
+        ),
+        ({"file_paths": ["a.md"], "title": "A"}, "title goes with file_path"),
+        ({"file_paths": []}, "publish takes file_path or file_paths"),
+        (
+            {"file_paths": ["a.md"] * (PUBLISH_FILES_MAX_FILES + 1)},
+            f"publish takes at most {PUBLISH_FILES_MAX_FILES} file_paths",
+        ),
+        ({"action": "read", "out_dir": "x"}, "read takes url, path or paths"),
+        (
+            {
+                "action": "read",
+                "paths": ["f"] * (ARTIFACTS_MATERIALIZE_MAX_ITEMS + 1),
+                "out_dir": "x",
+            },
+            f"read copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files; pass "
+            "fewer paths",
+        ),
+        (
+            {"action": "read", "path": "f"},
+            "read copies published files into the VM: pass out_dir, the "
+            "directory for the copies",
+        ),
+        (
+            {"action": "read", "url": "report.pdf", "out_dir": "x"},
+            "'report.pdf' is not an artifact url",
+        ),
+        ({"action": "open"}, None),
+        ({"icon": "x"}, None),
+        *(
+            (
+                arguments,
+                f"Invalid tool arguments: {field}: String should have at "
+                f"most {ARTIFACTS_PATH_MAX_CHARS} characters",
+            )
+            for arguments, field in (
+                ({"file_path": _LONG_PATH}, "file_path"),
+                ({"file_paths": ["a.md", _LONG_PATH]}, "file_paths.1"),
+                ({"action": "read", "url": _LONG_PATH, "out_dir": "x"}, "url"),
+                ({"action": "read", "path": _LONG_PATH, "out_dir": "x"}, "path"),
+                ({"action": "read", "paths": [_LONG_PATH], "out_dir": "x"}, "paths.0"),
+                ({"action": "read", "path": "f", "out_dir": _LONG_PATH}, "out_dir"),
+            )
+        ),
+    ],
+)
+def test_the_artifact_tool_refuses_arguments_that_do_not_fit_the_action(
+    arguments: dict[str, JsonValue], error: str | None
+) -> None:
+    """Refused calls never start the VM. An unknown action or argument is a
+    validation error."""
+    turn = MagicMock(spec=SandboxTurn)
+    outcome = ArtifactTool(turn).run(
+        ToolInvocation(
+            call_id="artifact",
+            arguments=arguments,
+            cancellation=CancellationSignal(),
+            update=lambda _progress: None,
+        ),
+        ToolContext(),
+    )
+    assert isinstance(outcome, ToolResult)
+    assert outcome.is_error
+    if error is not None:
+        assert outcome.content == error
+    turn.start_call.assert_not_called()
