@@ -29,10 +29,11 @@ import { DocxPreview } from "@/sections/file-preview/DocxPreview";
 import { PptxPreview } from "@/sections/file-preview/PptxPreview";
 import { ImagePreview } from "@/sections/file-preview/ImagePreview";
 
-// An HTML preview may load libraries, styles, images and fonts, but it sends
-// no requests of its own: no fetch, XHR, WebSocket, form post or frame
+// An HTML preview runs only what the file holds: inline scripts and styles,
+// and data or blob images, fonts and media. It loads nothing from the network,
+// so a page cannot send its contents to another site.
 const HTML_PREVIEW_POLICY =
-  "default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; form-action 'none'";
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'";
 
 // A fixed prologue, so no text in the file can move the policy: before any
 // of the file's content, the parser puts the meta in the document's head.

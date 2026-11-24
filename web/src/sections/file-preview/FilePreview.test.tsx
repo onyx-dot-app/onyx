@@ -213,6 +213,10 @@ describe("text formats", () => {
       /^<!DOCTYPE html><meta http-equiv="Content-Security-Policy" content="default-src 'none';[^"]*form-action 'none'">/
     );
     expect(srcdoc.replace(/^<!DOCTYPE html><meta [^>]*>/, "")).toBe(html);
+    // Nothing loads from the network, so the page cannot send its contents out
+    expect(srcdoc.match(/^<!DOCTYPE html><meta [^>]*>/)?.[0]).not.toMatch(
+      /https?:/
+    );
     // The parser applies the policy whatever head-like text the file has
     const parsed = new DOMParser().parseFromString(
       srcdoc.replace(html, "<!-- <head> --><script>fetch('/x')</script>"),
