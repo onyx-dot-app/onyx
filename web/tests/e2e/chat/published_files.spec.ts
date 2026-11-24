@@ -755,9 +755,9 @@ test.describe("Published file tabs on a touch screen", () => {
     }
     const order = ["Files", ...titles];
     await chatPage.expectRightPanelTabs(order);
-    // At 380 px the panel cannot fit the tabs, and the drags below stay
-    // clear of the strip's edges, where a drag scrolls it
-    await chatPage.dragRightPanelEdge(380 - (await chatPage.rightPanelWidth()));
+    // At 560 px the panel cannot fit the tabs (112 px each at the least), and
+    // the drags below stay clear of the strip's edges, where a drag scrolls it
+    await chatPage.dragRightPanelEdge(560 - (await chatPage.rightPanelWidth()));
 
     // A swipe scrolls the strip and moves no tab
     await chatPage.swipeRightPanelTabs(-150);
