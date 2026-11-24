@@ -456,7 +456,10 @@ history API first, so the tabs follow the click, then asks Next to render a new
 route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
 `web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
 `AppPage` renders itself, so writing the URL is the whole switch; in-app links
-use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
+use its `linkTo*` props. A send from a new session makes its chat current
+before the URL changes, so a switch to a new session in that gap writes no new
+URL; `openNewSession` and `linkToNewSession` clear the current chat for that
+case. `AppChrome`'s `PendingRoute` loader is
 `web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
 URL's page loader (the agents catalog, the agent editor, the page loader, or
 blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same

@@ -12,6 +12,7 @@ import {
 } from "@opal/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { routeWithQuery } from "@/lib/routes";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 // "AppPosition" is where in the main application the user currently is. It is
 // derived from the URL and nothing else, so any flow that needs to put the user
@@ -112,6 +113,7 @@ class AppPosition {
   }
 
   openNewSession(options?: AppNavigationOptions) {
+    this.leaveSentChat();
     this.go({ location: "new-session" }, options);
   }
 
@@ -135,7 +137,25 @@ class AppPosition {
   }
 
   linkToNewSession(): AppLinkProps {
-    return this.linkTo({ location: "new-session" });
+    const link = this.linkTo({ location: "new-session" });
+    return {
+      href: link.href,
+      onClick: (event) => {
+        const handledBefore = event.defaultPrevented;
+        link.onClick(event);
+        if (!handledBefore && event.defaultPrevented) this.leaveSentChat();
+      },
+    };
+  }
+
+  /**
+   * A send from a new session makes its chat current before the page renders
+   * the chat's URL. A switch back to a new session in that gap renders no
+   * change, so the page never clears the chat; this clears it.
+   */
+  private leaveSentChat() {
+    if (this.isNewSession())
+      useChatSessionStore.getState().setCurrentSession(null);
   }
 
   private linkTo(value: AppPositionType): AppLinkProps {
