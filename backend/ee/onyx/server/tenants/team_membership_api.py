@@ -18,6 +18,7 @@ from onyx.db.sandbox import get_sandbox_purge_targets
 from onyx.db.users import (
     delete_user_from_db,
     delete_user_from_db__no_commit,
+    finish_user_delete,
     get_user_by_email,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -67,7 +68,7 @@ async def leave_organization(
         # Validate and stage local cleanup before the irreversible remote call.
         # Keep it uncommitted so a remote failure preserves the local account.
         try:
-            delete_user_from_db__no_commit(user_to_delete, db_session)
+            cleanup = delete_user_from_db__no_commit(user_to_delete, db_session)
         except Exception:
             db_session.rollback()
             raise
@@ -92,6 +93,7 @@ async def leave_organization(
             remove_all_users_from_tenant(tenant_id)
         finally:
             await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
+            await asyncio.to_thread(finish_user_delete, cleanup, db_session)
         return
 
     db_session.expunge(user_to_delete)
