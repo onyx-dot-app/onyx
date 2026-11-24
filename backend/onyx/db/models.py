@@ -5728,8 +5728,16 @@ class ChatArtifact(Base):
     cascade from the chat removes the rows."""
 
     __tablename__ = "chat_artifact"
-    # Also the index of the chat's artifacts
-    __table_args__ = (UniqueConstraint("chat_session_id", "path"),)
+    __table_args__ = (
+        # Also the index of the chat's artifacts
+        UniqueConstraint("chat_session_id", "path"),
+        # The user's artifacts by latest publish (artifacts_list).
+        Index(
+            "ix_chat_artifact_user_id_updated_at",
+            "user_id",
+            desc("updated_at"),
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -5739,6 +5747,10 @@ class ChatArtifact(Base):
         PGUUID(as_uuid=True),
         ForeignKey("chat_session.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    # The chat's owner
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
     # The absolute, normalized VM path
     path: Mapped[str] = mapped_column(Text, nullable=False)

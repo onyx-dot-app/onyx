@@ -702,6 +702,8 @@ class ToolRenderer:
         self._queries: set[str] = set()
         self._documents: set[str] = set()
         self._last_details: BaseModel | None = None
+        # The content of a result without details that the card shows.
+        self._last_content: str | None = None
         self.has_child_output = False
         self._has_python_output = False
         self._files: set[str] = set()
@@ -1031,14 +1033,19 @@ class ToolRenderer:
                         ),
                     ]
                 )
-        elif content and self.call.name not in {
-            SearchTool.NAME,
-            WebSearchTool.NAME,
-            OpenURLTool.NAME,
-            ImageGenerationTool.NAME,
-            MemoryTool.NAME,
-            PostgresTool.NAME,
-        }:
+        elif (
+            content
+            and content != self._last_content
+            and self.call.name
+            not in {
+                SearchTool.NAME,
+                WebSearchTool.NAME,
+                OpenURLTool.NAME,
+                ImageGenerationTool.NAME,
+                MemoryTool.NAME,
+                PostgresTool.NAME,
+            }
+        ):
             objects.append(
                 packets.CustomToolDelta(
                     tool_name=self.call.name,
@@ -1047,6 +1054,7 @@ class ToolRenderer:
                     data=content,
                 )
             )
+            self._last_content = content
         self._last_details = details
         return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
 

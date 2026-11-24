@@ -45,7 +45,6 @@ from onyx.server.settings.models import Settings
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.sandbox import file_copies
 from onyx.tools.tool_implementations.sandbox.file_copies import (
-    FileCopyPool,
     TurnFileCopies,
 )
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
@@ -55,6 +54,7 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
+    Idle,
     NewFileCopyPool,
     forget_sandbox_keys,
 )
@@ -82,9 +82,6 @@ class NewTurn(Protocol):
     ) -> tuple[SandboxTurn, HarnessSandboxRef]: ...
 
 
-Idle = Callable[[], bool]
-
-
 @pytest.fixture
 def sandbox(
     monkeypatch: pytest.MonkeyPatch, client_factory: InsecureClientFactory
@@ -109,22 +106,6 @@ def _wait_until(condition: Callable[[], bool], seconds: float = 15) -> None:
     while not condition():
         assert time.monotonic() < deadline, "the condition did not hold in time"
         time.sleep(0.02)  # test-flakes: allow polls a condition until a deadline
-
-
-@pytest.fixture
-def idle(monkeypatch: pytest.MonkeyPatch, new_file_copy_pool: NewFileCopyPool) -> Idle:
-    """Whether every copy that the test started has ended. The test starts
-    with a new pod pool; a pool that it makes for another pod counts too."""
-    pools: list[FileCopyPool] = []
-    init = FileCopyPool.__init__
-
-    def tracked(pool: FileCopyPool) -> None:
-        init(pool)
-        pools.append(pool)
-
-    monkeypatch.setattr(FileCopyPool, "__init__", tracked)
-    new_file_copy_pool()
-    return lambda: all(pool.idle() for pool in pools)
 
 
 @pytest.fixture

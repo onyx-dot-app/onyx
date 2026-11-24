@@ -146,3 +146,8 @@ class SandboxTurn:
                 ref.sandbox_id,
                 ref.session_id,
             )
+
+    @property
+    def user_id(self) -> UUID:
+        """The user whose sandbox it is; reading it never starts a call."""
+        return self._user_id

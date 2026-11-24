@@ -1,8 +1,5 @@
 import io
 import os
-import posixpath
-import string
-import unicodedata
 from collections.abc import Callable, Sequence
 from typing import cast
 from uuid import UUID
@@ -50,6 +47,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     AGENT_FILES_DIR,
     CHAT_FILES_DIR,
     PROJECT_FILES_DIR,
+    chat_file_name,
 )
 from onyx.server.query_and_chat.chat_utils import (
     is_code_interpreter_staged_file,
@@ -197,10 +195,6 @@ def resolve_context_user_files(
     return ContextUserFiles(project=project, agent=agent)
 
 
-# The longest file name, in UTF-8 bytes, of the VM's file system.
-_MAX_NAME_BYTES = 255
-
-
 def place_chat_files(
     uploads: Sequence[UserFile], context_files: ContextUserFiles
 ) -> PlacedChatFiles:
@@ -209,11 +203,7 @@ def place_chat_files(
     attachments/, and the project's and the agent's files in
     attachments/project/ and attachments/agent/.
 
-    A path is a function of its file alone, so it never holds another file:
-    `<directory>/<the first 8 hex digits of the file store ID>-<name>`. The
-    name is the last part of the file's name (the file store ID without one),
-    NFC, with control characters replaced by `_`; its stem is cut so that
-    the whole name fits _MAX_NAME_BYTES."""
+    Each file's name in its directory is `chat_file_name`'s."""
     vm_chat_files: list[VmChatFile] = []
     upload_paths: dict[str, str] = {}
     for directory, user_files in (
@@ -223,24 +213,7 @@ def place_chat_files(
     ):
         for user_file in user_files:
             file_id = user_file.file_id
-            base = "file"
-            for raw in (user_file.name or "", file_id):
-                cleaned = "".join(
-                    "_" if unicodedata.category(char) == "Cc" else char
-                    for char in posixpath.basename(
-                        unicodedata.normalize("NFC", raw).replace("\\", "/")
-                    )
-                )
-                if cleaned not in ("", ".", ".."):
-                    base = cleaned
-                    break
-            prefix = "".join(c for c in file_id if c in string.hexdigits)[:8].lower()
-            stem, extension = os.path.splitext(base)
-            if len(extension.encode()) > _MAX_NAME_BYTES // 2:
-                stem, extension = base, ""
-            room = _MAX_NAME_BYTES - len(f"{prefix}-{extension}".encode())
-            name = f"{prefix}-{stem.encode()[:room].decode(errors='ignore')}{extension}"
-            path = f"{directory}/{name}"
+            path = f"{directory}/{chat_file_name(file_id, user_file.name)}"
             vm_chat_files.append(VmChatFile(file_id=file_id, path=path))
             if directory == CHAT_FILES_DIR:
                 upload_paths[file_id] = path
