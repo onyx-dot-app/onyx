@@ -41,8 +41,8 @@ export function PanelUrlBar({
           <Button
             icon={refresh.isUserRefreshing ? IconLoader : SvgRevert}
             prominence="tertiary"
-            // A browser bar's icons: 16px in 24px, 28px apart
-            size="sm"
+            // As tall as the pill, with a 16px icon, as a browser bar's
+            size="md"
             disabled={
               !refresh.onRefresh ||
               refresh.isRefreshing ||
