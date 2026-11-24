@@ -135,40 +135,42 @@ export const PostgresToolRenderer: MessageRenderer<PostgresToolPacket, {}> = ({
       status: statusLabel,
       supportsCollapsible: documents.length > 0,
       timelineLayout: "timeline",
-      content: (
-        <Section gap={0} alignItems="stretch" height="fit">
-          {chips.length > 0 && (
-            <SearchChipList
-              items={chips}
-              initialCount={QUERY_CHIPS_TO_SHOW}
-              expansionCount={QUERY_CHIPS_TO_SHOW}
-              getKey={(chip) => chip.key}
-              toSourceInfo={chipToSourceInfo}
-              showDetailsCard={false}
-              isQuery={true}
-            />
-          )}
-          {documents.length > 0 && (
-            <>
-              <Text as="p" font="main-ui-muted" color="text-04">
-                {t("postgres.listed.label", { count: documents.length })}
-              </Text>
+      // Nothing to open until the query or its documents arrive.
+      content:
+        chips.length === 0 && documents.length === 0 ? null : (
+          <Section gap={0} alignItems="stretch" height="fit">
+            {chips.length > 0 && (
               <SearchChipList
-                items={documents}
-                initialCount={INITIAL_RESULTS_TO_SHOW}
-                expansionCount={RESULTS_PER_EXPANSION}
-                getKey={(doc, index) => doc.document_id ?? `result-${index}`}
-                toSourceInfo={documentToSourceInfo}
-                onClick={(doc) => {
-                  if (doc.link) {
-                    window.open(doc.link, "_blank", "noopener,noreferrer");
-                  }
-                }}
+                items={chips}
+                initialCount={QUERY_CHIPS_TO_SHOW}
+                expansionCount={QUERY_CHIPS_TO_SHOW}
+                getKey={(chip) => chip.key}
+                toSourceInfo={chipToSourceInfo}
+                showDetailsCard={false}
+                isQuery={true}
               />
-            </>
-          )}
-        </Section>
-      ),
+            )}
+            {documents.length > 0 && (
+              <>
+                <Text as="p" font="main-ui-muted" color="text-04">
+                  {t("postgres.listed.label", { count: documents.length })}
+                </Text>
+                <SearchChipList
+                  items={documents}
+                  initialCount={INITIAL_RESULTS_TO_SHOW}
+                  expansionCount={RESULTS_PER_EXPANSION}
+                  getKey={(doc, index) => doc.document_id ?? `result-${index}`}
+                  toSourceInfo={documentToSourceInfo}
+                  onClick={(doc) => {
+                    if (doc.link) {
+                      window.open(doc.link, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                />
+              </>
+            )}
+          </Section>
+        ),
     },
   ]);
 };

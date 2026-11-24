@@ -51,7 +51,9 @@ export interface RendererResult {
    * header's text; a live header that changes often keeps one key.
    */
   statusKey?: string;
-  content: JSX.Element;
+  /** The step's body; `null` while it has nothing to show, so the step
+   *  cannot open onto an empty body. */
+  content: JSX.Element | null;
 
   // can be used to override the look on the "expanded" view
   // used for things that should just show text w/o an icon or header

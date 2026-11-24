@@ -68,13 +68,14 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
 
-  if (!hasStarted) {
+  // Nothing to open until the step names its first URL.
+  if (!hasStarted || (urls.length === 0 && documents.length === 0)) {
     return children([
       {
         icon: STEP_ICONS.fetch,
         status: t("fetch.reading.status"),
         doneStatus: t("fetch.read.status", { count: readCount }),
-        content: <div />,
+        content: null,
         supportsCollapsible: false,
         timelineLayout: "timeline",
       },

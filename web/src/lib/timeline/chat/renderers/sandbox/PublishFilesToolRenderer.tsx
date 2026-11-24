@@ -127,7 +127,11 @@ export function PublishFilesToolRenderer({
       icon: SvgFiles,
       status,
       supportsCollapsible: true,
-      content,
+      // Nothing to open until a description, a file or an error arrives.
+      content:
+        start?.description || rows.length > 0 || error !== null
+          ? content
+          : null,
     },
   ]);
 }

@@ -72,7 +72,8 @@ export const DeepResearchPlanRenderer: MessageRenderer<
       icon: STEP_ICONS.thinking,
       status: statusText,
       doneStatus: doneStatusText,
-      content: planContent,
+      // Nothing to open until the plan's first words arrive.
+      content: fullContent ? planContent : null,
     },
   ]);
 };

@@ -242,7 +242,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       {
         icon: null,
         status: null,
-        content: <></>,
+        content: null,
         supportsCollapsible: true,
         timelineLayout: "content",
       },

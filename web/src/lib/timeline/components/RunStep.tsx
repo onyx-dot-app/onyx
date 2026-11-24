@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Line } from "@opal/components";
+import { Line, Presence } from "@opal/components";
+import { LineLoader } from "@opal/loaders";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
@@ -57,14 +58,25 @@ export function RunStep({
   if (hideHeader) return <>{body}</>;
 
   const shownTitle = status === "done" ? (doneTitle ?? title) : title;
-  const cardBody =
-    body !== null
-      ? {
-          expandable: true as const,
-          expanded: open,
-          expandedContent: body,
-        }
-      : { expandable: false as const };
+  // A running step always opens: before its first content arrives, its body
+  // is a loading shimmer. A finished step with nothing to show is a static
+  // row, so a click cannot open it.
+  const shownBody =
+    body ?? (status === "streaming" ? <LineLoader width="2/3" /> : null);
+  const hasBody = shownBody !== null;
+  const cardBody = hasBody
+    ? {
+        expandable: true as const,
+        expanded: open,
+        expandedContent: (
+          // The shimmer swaps out for the first content; later content
+          // updates in place.
+          <Presence.Swap swapKey={body === null ? "loading" : "content"}>
+            {shownBody}
+          </Presence.Swap>
+        ),
+      }
+    : { expandable: false as const };
 
   return (
     <Line
@@ -74,8 +86,8 @@ export function RunStep({
       shimmer={status === "streaming"}
       rightChildren={headerAccessory}
       // Filled while open; otherwise only on hover.
-      filled={open}
-      onClick={() => setOpen((prev) => !prev)}
+      filled={hasBody && open}
+      onClick={hasBody ? () => setOpen((prev) => !prev) : undefined}
       // The body starts under the title text.
       bodyInset="title"
       {...cardBody}

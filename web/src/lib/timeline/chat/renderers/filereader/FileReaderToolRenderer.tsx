@@ -96,7 +96,7 @@ export const FileReaderToolRenderer: MessageRenderer<
         doneStatus: doneStatusText,
         supportsCollapsible: true,
         timelineLayout: "timeline",
-        content: <></>,
+        content: null,
       },
     ]);
   }

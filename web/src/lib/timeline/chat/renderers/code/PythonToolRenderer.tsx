@@ -98,6 +98,9 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   const status = t("python.running.status");
   const doneStatus = t("python.ran.status");
 
+  // Nothing to open until the code starts streaming in.
+  const hasBody = code.trim().length > 0 || !!stdout || !!stderr || isComplete;
+
   // Shared content for all states - used by both FULL and compact modes
   const content = (
     <div className="flex flex-col space-y-2">
@@ -151,7 +154,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
         icon: STEP_ICONS.execute,
         status,
         doneStatus,
-        content,
+        content: hasBody ? content : null,
         supportsCollapsible: true,
         alwaysCollapsible: true,
       },
@@ -166,7 +169,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       doneStatus,
       supportsCollapsible: true,
       alwaysCollapsible: true,
-      content: (
+      content: hasBody ? (
         <ShadowDiv
           shadowDirection="bottom-only"
           variant="mask"
@@ -175,7 +178,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
         >
           {content}
         </ShadowDiv>
-      ),
+      ) : null,
     },
   ]);
 };

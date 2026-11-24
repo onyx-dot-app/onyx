@@ -92,7 +92,8 @@ export const InternalSearchToolRenderer: MessageRenderer<
         icon: STEP_ICONS.search,
         status: queriesHeader,
         doneStatus: queriesDoneHeader,
-        content: <></>,
+        // Nothing to open until the first query arrives.
+        content: null,
         supportsCollapsible: true,
         timelineLayout: "timeline",
       },

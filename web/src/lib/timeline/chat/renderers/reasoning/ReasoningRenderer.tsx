@@ -112,7 +112,7 @@ export const ReasoningRenderer: MessageRenderer<
       {
         icon: STEP_ICONS.thinking,
         status: thinkingStatus,
-        content: <></>,
+        content: null,
       },
     ]);
   }
@@ -131,7 +131,8 @@ export const ReasoningRenderer: MessageRenderer<
       status: displayStatus,
       // A title from the reasoning itself stays; the default turns past tense.
       doneStatus: title || thoughtStatus,
-      content: reasoningContent,
+      // Nothing to open until the reasoning's first words arrive.
+      content: content.length > 0 ? reasoningContent : null,
       expandedText: reasoningContent,
     },
   ]);

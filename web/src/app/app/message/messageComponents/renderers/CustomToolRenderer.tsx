@@ -145,8 +145,9 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const content = useMemo(
     () =>
       // One panel: the request, then the response (waiting, files, JSON,
-      // text or the tool's error), each under its own title row.
-      toolArgsJson || showResponse ? (
+      // text or the tool's error), each under its own title row. Nothing to
+      // open until the request or a response arrives.
+      toolArgsJson || (showResponse && !isRunning) ? (
         <CodePanel>
           {toolArgsJson && (
             <>
@@ -246,9 +247,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
             </>
           )}
         </CodePanel>
-      ) : (
-        <></>
-      ),
+      ) : null,
     [
       toolArgsJson,
       dataJson,
@@ -299,7 +298,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       status,
       doneStatus,
       supportsCollapsible: true,
-      content: (
+      content: content && (
         <ShadowDiv
           shadowDirection="bottom-only"
           variant="mask"
