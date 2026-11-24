@@ -653,7 +653,7 @@ test("a later report of a code mode call replaces what the step shows", async ()
 
     view.rerender(renderMessage(completed));
     expect(
-      await screen.findByText("lookup_orders completed")
+      await screen.findByText("Executed lookup_orders")
     ).toBeInTheDocument();
     expect(screen.getByText("3 orders")).toBeInTheDocument();
     expect(screen.queryByText("checking more")).not.toBeInTheDocument();
@@ -968,7 +968,7 @@ test("an expanded step keeps its state when a call is inserted before it", async
 
     // The new step starts closed.
     await screen.findByRole("button", {
-      name: "Expand lookup_refunds completed",
+      name: "Expand Executed lookup_refunds",
     });
     await openRun();
     expect(await screen.findByText("1 refund")).toBeInTheDocument();
