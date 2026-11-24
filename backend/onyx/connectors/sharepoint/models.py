@@ -112,6 +112,10 @@ class SharepointListingPayload(ListingPayload):
     # gives the file the access of that securable. None, the safe value:
     # the file gets a permission read of its own.
     inherited_access_from: SharepointSecurable | None = None
+    # When the listing read the library that ``inherited_access_from`` comes
+    # from. Conversion reads the file's own permissions when this read is
+    # older than CONTAINER_ACCESS_TTL_SECONDS.
+    inheritance_read_at: datetime | None = None
     mime_type: str | None = None
     size: int | None = None
     last_modified_by_display_name: str | None = None

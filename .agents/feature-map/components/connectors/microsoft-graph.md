@@ -215,18 +215,20 @@ nearest folder with its own, else the library if it has its own, else the
 site. The stub carries it in `inherited_access_from`. Conversion gives the file
 the access of that securable (`SharepointConnector._listed_file_access`): one
 read for each securable in a listing run, kept in the `RunScopedCache` of the
-run for `CONTAINER_ACCESS_TTL_SECONDS` (with no cache factory, in the connector
-object). A change to permissions in that time reaches the files that conversion
-gives the kept access only on the next listing run or permission sync, as for
-a file whose own read was made early in a run. Every other file, and every
-page, gets a read of its own, as before.
+run for `CONTAINER_ACCESS_TTL_SECONDS`. The stub also carries
+`inheritance_read_at`, and conversion uses the source only while that read is
+younger than `CONTAINER_ACCESS_TTL_SECONDS`. So a change to permissions reaches
+a converted file at most that long after the change, or on the next listing
+run or permission sync. With no run cache, nothing inherits. Every other file,
+and every page, gets a read of its own, as before.
 
 The self-check reads the own permissions of about 1 in `_SELF_CHECK_ONE_IN`
 inheriting files (by a hash of the document id), and of the first
 `_SELF_CHECK_FIRST_FILES` of each run in each process. The file gets its own
 access. When the two differ, the connector logs an ERROR and turns inheritance
 off for the rest of the run: in the process, and through the run cache for the
-other workers. When the run cache cannot be reached, only the process that
+other workers (`INHERITANCE_OFF_TTL_SECONDS`, longer than any run; a process
+that sees it keeps it). When the run cache cannot be reached, only the process that
 found the difference turns it off. Files converted before the difference was
 found keep the inherited access until the next run.
 
@@ -271,8 +273,10 @@ found keep the inherited access until the next run.
    library names a source.** `inherited_access_from` is None, and the file gets
    a permission read of its own, when the file has role assignments of its
    own, when it is not in the read (a newer file), when a folder above it is
-   not in the read, when the read or the read of the source fails, with a
-   client-secret credential, and with `treat_sharing_link_as_public`. A
+   not in the read, when the read or the read of the source fails, when the
+   read is older than `CONTAINER_ACCESS_TTL_SECONDS` at conversion, with no run
+   cache, with a client-secret credential, and with
+   `treat_sharing_link_as_public`. A
    sharing link breaks inheritance, so SharePoint marks the file as one with
    its own.
 10. `sdk-client-prepared` **Build an office365 client through

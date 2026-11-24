@@ -51,32 +51,17 @@ class SharepointPermissionCache(BaseModel):
     ) -> None:
         self.group_expansions[key] = expansion
 
-    # The access of a folder, a library or a site, for the files that have
-    # its role assignments and none of their own.
-    container_access: dict[str, ExternalAccess] = Field(default_factory=dict)
-    # True after the self-check found a file whose own access differs from
-    # the access it inherits: each later file reads its own.
-    inheritance_off: bool = False
-
-    def get_container_access(self, key: str) -> ExternalAccess | None:
-        return self.container_access.get(key)
-
-    def set_container_access(self, key: str, access: ExternalAccess) -> None:
-        self.container_access[key] = access
-
-    def is_inheritance_off(self) -> bool:
-        return self.inheritance_off
-
-    def turn_inheritance_off(self) -> None:
-        self.inheritance_off = True
-
 
 # The access of a folder, a library or a site is used for this long in one
-# listing run. It is short, so that a change to its permissions during a long
-# run reaches the files that the run converts later.
+# listing run, and so is the listing's read of which files inherit it. It is
+# short, so that a change to permissions during a long run reaches the files
+# that the run converts later.
 CONTAINER_ACCESS_TTL_SECONDS = 600
 _CONTAINER_ACCESS_KEY_PREFIX = "sharepoint_container_access"
 _INHERITANCE_OFF_KEY = "sharepoint_inheritance_off"
+# Longer than any listing run, so the self-check's decision holds until the
+# run ends. The key is in the run's own cache, so a new run starts clean.
+INHERITANCE_OFF_TTL_SECONDS = 7 * 24 * 3600
 
 # A shared group expansion lives this long. Each entry is for one listing
 # run, so this only bounds the memory of a run that ends early.
@@ -95,6 +80,9 @@ class SharedSharepointPermissionCache(SharepointPermissionCache):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     shared: RunScopedCache
+    # True after the self-check found a file whose own access differs from
+    # the access it inherits: each later file of the run reads its own.
+    inheritance_off: bool = False
 
     def get_group_expansion(self, key: str) -> SharepointGroupExpansion | None:
         local = self.group_expansions.get(key)
@@ -140,14 +128,17 @@ class SharedSharepointPermissionCache(SharepointPermissionCache):
         )
 
     def is_inheritance_off(self) -> bool:
-        """Off in this process, or in any worker of the run. When the run
-        cache cannot be reached, only this process knows: the self-check of
-        the other workers then finds a difference again on its own."""
-        return self.inheritance_off or self.shared.get(_INHERITANCE_OFF_KEY) is not None
+        """Off in this process, or in any worker of the run. A process that
+        sees it once keeps it for the run. When the run cache cannot be
+        reached, only this process knows: the self-check of the other
+        workers then finds a difference again on its own."""
+        if not self.inheritance_off and self.shared.get(_INHERITANCE_OFF_KEY):
+            self.inheritance_off = True
+        return self.inheritance_off
 
     def turn_inheritance_off(self) -> None:
         self.inheritance_off = True
-        self.shared.set(_INHERITANCE_OFF_KEY, "1", GROUP_EXPANSION_TTL_SECONDS)
+        self.shared.set(_INHERITANCE_OFF_KEY, "1", INHERITANCE_OFF_TTL_SECONDS)
 
 
 def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001

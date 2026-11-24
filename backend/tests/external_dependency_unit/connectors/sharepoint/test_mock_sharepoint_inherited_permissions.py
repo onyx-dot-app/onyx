@@ -5,6 +5,7 @@ gets the access of the folder, library or site it inherits from."""
 
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -15,6 +16,9 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointLibraryInheritance,
     SharepointSecurable,
     SharepointSecurableKind,
+)
+from onyx.connectors.microsoft_utils.sharepoint_access import (
+    CONTAINER_ACCESS_TTL_SECONDS,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -243,6 +247,77 @@ def test_a_change_of_a_folders_permissions_reaches_its_files(
     listing = list_stubs(connector, include_permissions=True)
 
     assert _convert(connector, listing.stubs) == _expected_access(mock)
+
+
+def test_a_stale_read_of_the_library_gives_each_file_its_own_read(
+    own_mock_sharepoint: MockSharepoint,
+) -> None:
+    """A file that got role assignments of its own after the listing read its
+    library gets them, when conversion runs after the read is too old."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS | {"unique_permission_fraction": 0.0})
+    connector = mock.build_connector(certificate=True)
+    listing = list_stubs(connector, include_permissions=True)
+    payloads = _file_payloads(listing.stubs)
+    changed = next(
+        file_id for file_id, p in payloads.items() if p.inherited_access_from
+    )
+    user = mock.summary()["user_emails"][0]
+    mock.set_permissions(
+        item_id=changed,
+        inherit=False,
+        grants=[{"principal": {"kind": "user", "key": user}, "role": "read"}],
+    )
+    read_at = datetime.now(timezone.utc) - timedelta(
+        seconds=CONTAINER_ACCESS_TTL_SECONDS + 60
+    )
+    stale = [
+        stub.model_copy(
+            update={
+                "listing_payload": payloads[stub.id].model_copy(
+                    update={"inheritance_read_at": read_at}
+                )
+            }
+        )
+        if stub.id in payloads
+        else stub
+        for stub in listing.stubs
+    ]
+    mock.reset_stats()
+
+    converted = _convert(connector, stale)
+
+    assert converted == _expected_access(mock)
+    # A file that still inherits from the same securable keeps its access,
+    # and the changed file gets its new, narrower access.
+    sibling = next(
+        file_id
+        for file_id, p in payloads.items()
+        if file_id != changed
+        and p.inherited_access_from == payloads[changed].inherited_access_from
+    )
+    assert converted[changed] != converted[sibling]
+    assert mock.op_count(_ROLE_READS) >= len(payloads)
+
+
+def test_no_run_cache_gives_each_file_its_own_read(
+    own_mock_sharepoint: MockSharepoint,
+) -> None:
+    """Without a run cache, nothing bounds how long a container's access is
+    kept, so a converting connector reads each file's own."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    listing = list_stubs(
+        mock.build_connector(certificate=True), include_permissions=True
+    )
+    payloads = _file_payloads(listing.stubs)
+    assert any(p.inherited_access_from for p in payloads.values())
+    connector = mock.build_connector(certificate=True)
+    connector.run_scoped_cache_factory = None
+    mock.reset_stats()
+
+    assert _convert(connector, listing.stubs) == _expected_access(mock)
+    assert mock.op_count(_ROLE_READS) >= len(payloads)
 
 
 def test_the_self_check_turns_inheritance_off_on_a_difference(

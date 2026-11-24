@@ -1,8 +1,13 @@
+from onyx.connectors.interfaces import RunScopedCache
 from onyx.connectors.microsoft_utils.models import (
     SharepointLibraryInheritance,
     SharepointListItemInheritance,
     SharepointSecurable,
     SharepointSecurableKind,
+)
+from onyx.connectors.microsoft_utils.sharepoint_access import (
+    INHERITANCE_OFF_TTL_SECONDS,
+    SharedSharepointPermissionCache,
 )
 from onyx.connectors.sharepoint.permission_inheritance import inherited_access_sources
 
@@ -115,3 +120,37 @@ def test_a_file_outside_the_library_root_has_no_source() -> None:
     )
 
     assert inherited_access_sources(library, _LIST_ID) == {}
+
+
+class _RunCache(RunScopedCache):
+    """The cache of one listing run. ``values`` keeps each value with its
+    time to live."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, tuple[str, int]] = {}
+
+    def get(self, key: str) -> str | None:
+        entry = self.values.get(key)
+        return entry[0] if entry else None
+
+    def set(self, key: str, value: str, ttl_seconds: int) -> None:
+        self.values[key] = (value, ttl_seconds)
+
+
+def test_inheritance_stays_off_for_the_rest_of_the_run() -> None:
+    """The marker outlives any listing run, and a worker that saw it keeps
+    it when the run cache later loses it."""
+    run_cache = _RunCache()
+    first = SharedSharepointPermissionCache(shared=run_cache)
+    second = SharedSharepointPermissionCache(shared=run_cache)
+    assert not second.is_inheritance_off()
+
+    first.turn_inheritance_off()
+
+    assert [ttl for _value, ttl in run_cache.values.values()] == [
+        INHERITANCE_OFF_TTL_SECONDS
+    ]
+    assert second.is_inheritance_off()
+    run_cache.values.clear()
+    assert second.is_inheritance_off()
+    assert not SharedSharepointPermissionCache(shared=_RunCache()).is_inheritance_off()

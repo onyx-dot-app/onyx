@@ -4,11 +4,10 @@ import html
 import os
 import re
 import threading
-import time
 import zlib
 from collections import deque
 from collections.abc import Generator, Iterable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import partial
 from typing import Any, cast
 from urllib.parse import SplitResult, quote, unquote, urlsplit
@@ -118,6 +117,7 @@ from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_calls_in_parallel
 
@@ -880,7 +880,7 @@ class SharepointConnector(
         # securable of each file that inherits, by list item id. One library
         # at a time.
         self._library_inheritance: (
-            tuple[tuple[str, str, str], float, dict[int, SharepointSecurable]] | None
+            tuple[tuple[str, str, str], datetime, dict[int, SharepointSecurable]] | None
         ) = None
         # The self-checks that this object started, by listing run.
         self._self_checks_started: dict[str, int] = {}
@@ -1888,6 +1888,13 @@ class SharepointConnector(
                 include_permissions=include_permissions,
             )
         seen_document_ids.add(driveitem.id)
+        inheritance = (
+            self._inherited_access_source(
+                checkpoint.listing_run_id, site_url, drive, driveitem
+            )
+            if self._lists_inheritance(include_permissions)
+            else None
+        )
         yield drive_item_stub(
             driveitem,
             site_url=site_url,
@@ -1900,13 +1907,8 @@ class SharepointConnector(
                 else drive.web_url
             ),
             listing_run_id=checkpoint.listing_run_id,
-            inherited_access_from=(
-                self._inherited_access_source(
-                    checkpoint.listing_run_id, site_url, drive, driveitem
-                )
-                if self._lists_inheritance(include_permissions)
-                else None
-            ),
+            inherited_access_from=inheritance[0] if inheritance else None,
+            inheritance_read_at=inheritance[1] if inheritance else None,
         )
 
     def _lists_inheritance(self, include_permissions: bool) -> bool:
@@ -1927,9 +1929,10 @@ class SharepointConnector(
         site_url: str,
         drive: SiteDrive,
         driveitem: DriveItemData,
-    ) -> SharepointSecurable | None:
+    ) -> tuple[SharepointSecurable, datetime] | None:
         """The securable whose role assignments the listed file has, when
-        the read of its library says that it has none of its own. None for a
+        the read of its library says that it has none of its own, and when
+        the library was read. None for a
         read of its own: the file has its own, it is not in the read (it is
         newer than the read), or the read failed. A new listing run reads the
         library again, and so does a run after CONTAINER_ACCESS_TTL_SECONDS."""
@@ -1944,7 +1947,8 @@ class SharepointConnector(
         if (
             cached is None
             or cached[0] != key
-            or time.monotonic() - cached[1] > CONTAINER_ACCESS_TTL_SECONDS
+            or datetime.now(timezone.utc) - cached[1]
+            > timedelta(seconds=CONTAINER_ACCESS_TTL_SECONDS)
         ):
             sources: dict[int, SharepointSecurable] = {}
             try:
@@ -1964,9 +1968,10 @@ class SharepointConnector(
                     drive.display_name,
                     e,
                 )
-            cached = (key, time.monotonic(), sources)
+            cached = (key, datetime.now(timezone.utc), sources)
             self._library_inheritance = cached
-        return cached[2].get(list_item_id)
+        source = cached[2].get(list_item_id)
+        return (source, cached[1]) if source is not None else None
 
     def _list_site_page_stubs(
         self,
@@ -2902,7 +2907,7 @@ class SharepointConnector(
         self,
         site_url: str,
         securable: SharepointSecurable,
-        permission_cache: SharepointPermissionCache,
+        permission_cache: SharedSharepointPermissionCache,
     ) -> ExternalAccess | None:
         """The access of a folder, library or site that files inherit
         from, read one time for each CONTAINER_ACCESS_TTL_SECONDS of a run.
@@ -2956,11 +2961,20 @@ class SharepointConnector(
 
         The self-check gives some files a read of their own too. When the two
         differ, the file gets its own access, and every later file of the run
-        reads its own (the run cache shares this with the other workers)."""
+        reads its own (the run cache shares this with the other workers).
+
+        No inheritance without a run cache, which bounds how long a
+        container's access is kept, or when the listing's read of the
+        library is older than CONTAINER_ACCESS_TTL_SECONDS: the file may have
+        got role assignments of its own since."""
         source = payload.inherited_access_from
         if (
             source is None
+            or payload.inheritance_read_at is None
+            or datetime.now(timezone.utc) - datetime_to_utc(payload.inheritance_read_at)
+            > timedelta(seconds=CONTAINER_ACCESS_TTL_SECONDS)
             or self.treat_sharing_link_as_public
+            or not isinstance(permission_cache, SharedSharepointPermissionCache)
             or permission_cache.is_inheritance_off()
         ):
             return None
