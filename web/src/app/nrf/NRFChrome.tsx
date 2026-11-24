@@ -15,8 +15,8 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useSidebarState } from "@opal/layouts";
+import { usePublishedHeight } from "@opal/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
-import usePublishedHeight from "@/hooks/usePublishedHeight";
 import { useTranslations } from "next-intl";
 
 const NRF_FOOTER_HEIGHT_VAR = "--nrf-footer-height";

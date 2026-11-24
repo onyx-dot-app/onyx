@@ -488,6 +488,9 @@ test.describe("Published files", () => {
       await expect
         .poll(() => chatPage.shareButtonEndGap(true))
         .toBeLessThanOrEqual(20);
+      await expect
+        .poll(() => chatPage.shareButtonEndGap(true))
+        .toBeGreaterThanOrEqual(0);
 
       await chatPage.rightPanelToggle.click();
       await expect(chatPage.publishedFilesPanel).toBeHidden();
