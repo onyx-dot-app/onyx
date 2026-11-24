@@ -510,6 +510,9 @@
         "userFile": {
           "description": "Archivos subidos en el chat"
         },
+        "chatArtifact": {
+          "description": "Archivos publicados en el chat"
+        },
         "googleSites": {
           "description": "Páginas alojadas en Google"
         },

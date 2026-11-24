@@ -180,15 +180,48 @@ also lists it in `ChatMessage.files` ([[chat-persistence]]). The version rows
 cascade from the file record and the artifact, and the artifact from the chat
 session, so a chat delete must delete the files before the session.
 
-**Published file text.** The text of a published file version is cached once
-under `ARTIFACT_TEXT_FILE_PREFIX` + `file_id` (`FileOrigin.PLAINTEXT_CACHE`) by
-`file_store/utils.py:get_or_extract_artifact_text`, the one entry point for a
-version's text. It extracts with
+**Published file text and search.** Each artifact is one search document,
+`str(chat_artifact.id)`, with source `DocumentSource.CHAT_ARTIFACT`, the
+owner's current email as its only ACL entry, no projects, personas or document
+sets, and the link `tools/tool_implementations/sandbox/models.py:artifact_url` of its newest available
+version ([[internal-search]]). `ChatArtifact.index_status` (`PENDING`,
+`INDEXED`, `FAILED`, `REMOVED`) and `index_attempts` hold its state; a partial index on
+`PENDING` serves the beat. `save_chat_artifact` sets `PENDING` with no
+attempts, and the publish operation
+(`tools/tool_implementations/sandbox/artifact_operations.py:publish`)
+sends the indexing task after its commit
+(`indexing/chat_artifact_index.py:send_chat_artifact_index_tasks`). A failed
+publish makes the artifacts it keeps `PENDING` again, since the beat may have
+indexed the version it deleted. The task
+`background/celery/tasks/chat_artifact_indexing/tasks.py:process_single_chat_artifact`
+runs on the user file processing queue: it counts a pickup before the slow
+work (`db/chat.py:start_chat_artifact_indexing`; past
+`CHAT_ARTIFACT_INDEX_MAX_ATTEMPTS` the artifact is `FAILED`), builds one
+`TextSection` per page from the text cache, and writes through
+`run_indexing_pipeline` with
+`indexing/adapters/chat_artifact_indexing_adapter.py`. The adapter holds the
+artifact's row while it writes. It writes and marks the row `INDEXED` only if
+no publish (`updated_at`), newer pickup or model swap (`index_attempts`)
+changed it since the pickup. The beat `check-for-chat-artifact-indexing` sends the `PENDING`
+rest at low priority, at most the shared queue's room below
+`USER_FILE_PROCESSING_MAX_QUEUE_DEPTH` each tick, and
+`db/swap_index.py:_perform_index_swap` makes every artifact that is not
+`REMOVED` `PENDING` again. A row is `INDEXED` only while its document holds
+the newest available version. Rows that existed before the column started
+`PENDING`, so the beat indexes them too; the rows of deleted chats started
+`REMOVED`. An email change makes the owner's artifacts that are not `REMOVED`
+`PENDING` (`db/users.py:reconcile_user_email__no_commit`), so their
+ACL gets the new email. An artifact with nothing to index has no document
+and is never `INDEXED`: a chat delete makes the chat's artifacts `REMOVED`,
+outside the beat's partial index, and one with no available version ends `FAILED`
+after its pickups. The text cache is `ARTIFACT_TEXT_FILE_PREFIX` + `file_id`
+(`FileOrigin.PLAINTEXT_CACHE`), written by
+`file_store/utils.py:get_or_extract_artifact_text`, the one entry point for
+a version's text. It extracts with
 `file_processing/extract_file_text.py:extract_text_pages` (PDF pages,
 PowerPoint slides, spreadsheet sheets; any other file as one text; no image
 captions), ends each page with a form feed, and keeps at most 10 M characters
-of a file up to 50 MiB. A version's file never changes
-([[#file-id-write-once]]), so its cached text never goes stale.
+of a file up to 50 MiB.
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and
@@ -308,12 +341,25 @@ preview.
     instead, and the checkpoint row that saved them deletes them when it ends
     or is replaced; session hard delete removes every blob by that prefix
     ([[chat-persistence#checkpoints-for-approvals]]).
-13. `artifact-version-cleanup` **A published version's cleanup deletes its
-    thumbnail, its cached text, then its file.**
-    `db/chat.py:delete_chat_artifact_files` is the only per-version cleanup:
-    the hard chat delete and the clean-up of a failed publish use it. The file
-    goes last, because its delete cascades to the version row that links the
-    others.
+13. `artifact-cleanup-levels` **A published file has two cleanup levels.**
+    Per version, `db/chat.py:delete_chat_artifact_files` deletes the
+    thumbnail, then the text cache, then the file. Per artifact, the search
+    document goes after the commit that removes the artifact row or deletes
+    its chat or owner
+    (`indexing/chat_artifact_index.py:delete_chat_artifacts_from_index`, a
+    plain delete: a write that committed within the second before it can
+    leave owner-only chunks). The chat delete functions return the artifact
+    ids, and their callers delete after the commit: the chat delete routes
+    (soft and hard), the chat retention task and the clean-up of a failed
+    publish. The user delete collects the ids in
+    `db/users.py:delete_user_from_db__no_commit` and deletes them in
+    `finish_user_delete`, which the admin delete
+    (`db/users.py:delete_user_from_db`) and the auth delete
+    (`backend/onyx/auth/users.py:UserManager.delete`) run after their commit. The index delete is not
+    in the per-version cleanup, because a failed publish that drops one
+    version must keep a live artifact's document. A new path that removes
+    artifact rows, or hides their chat, must call it after its commit, or the
+    owner's ordinary search keeps finding the file.
 14. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
     serves two stores.** A deployment that upgrades from the bundled MinIO
     keeps it as a second, read-fallback store. `S3BackedFileStore` writes and
@@ -359,7 +405,8 @@ preview.
 
 ## Dependencies
 
-- [[indexing-pipeline]]: `run_indexing_pipeline` for user files.
+- [[indexing-pipeline]]: `run_indexing_pipeline` for user files and
+  published files.
 - [[document-index]]: stores and filters the chunks.
 - [[llm-providers]]: tokenizers and the vision model for embedded images.
 - [[background-jobs]]: the user-file processing, sync and delete workers.
@@ -409,6 +456,10 @@ preview.
   `test_upload_files` modules) covers upload rejection.
 - `backend/tests/external_dependency_unit/file_store/` covers the backends,
   the MinIO compatibility store and generated-file access.
+- `backend/tests/external_dependency_unit/indexing/test_chat_artifact_indexing.py`
+  covers published file indexing and the text cache, and
+  `backend/tests/external_dependency_unit/opensearch/test_chat_artifact_search.py`
+  covers their search access and deletes.
 - `backend/tests/integration/tests/projects/` covers upload, link and delete.
 - By hand: as a second user, request another user's upload and generated image
   through `/chat/file/{file_id}`. Both must return 404 unless the session is

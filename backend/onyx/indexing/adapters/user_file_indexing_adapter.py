@@ -303,7 +303,7 @@ class UserFileIndexingAdapter(IndexingBatchAdapter):
             )
 
 
-class UserFileChunkEnricher:
+class UserFileChunkEnricher(ChunkEnrichmentContext):
     """Pre-computed metadata for per-chunk enrichment of user-uploaded files."""
 
     def __init__(

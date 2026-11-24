@@ -510,6 +510,9 @@
         "userFile": {
           "description": "채팅에서 업로드한 파일"
         },
+        "chatArtifact": {
+          "description": "채팅에서 게시된 파일"
+        },
         "googleSites": {
           "description": "Google 호스팅 페이지"
         },
