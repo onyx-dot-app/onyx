@@ -3,7 +3,9 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Fragment>
         <!-- The NSIS installer's uninstall entry. Both installers use the same
-             folder, so the MSI refuses to install beside an NSIS install. -->
+             folder, so the MSI refuses to install beside an NSIS install. The
+             32-bit NSIS installer writes the entry to the 32-bit registry
+             view; both views are searched. -->
         <Property Id="ONYX_NSIS_INSTALL">
             <RegistrySearch Id="OnyxNsisInstall"
                             Root="HKLM"
@@ -12,8 +14,16 @@
                             Type="raw"
                             Win64="yes" />
         </Property>
+        <Property Id="ONYX_NSIS_INSTALL_32">
+            <RegistrySearch Id="OnyxNsisInstall32"
+                            Root="HKLM"
+                            Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\Onyx"
+                            Name="UninstallString"
+                            Type="raw"
+                            Win64="no" />
+        </Property>
         <Condition Message="Onyx is already installed from the setup program (.exe). Uninstall it in Settings &gt; Apps, then run this installer again.">
-            <![CDATA[Installed OR NOT ONYX_NSIS_INSTALL]]>
+            <![CDATA[Installed OR (NOT ONYX_NSIS_INSTALL AND NOT ONYX_NSIS_INSTALL_32)]]>
         </Condition>
 
         <!-- The Finish page's "Launch" checkbox. The template's action starts

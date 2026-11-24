@@ -128,8 +128,24 @@ fn legacy_link_handler(
     )
 }
 
+/// Whether a desktop file's `Exec` value runs an Onyx program (`onyx`,
+/// `Onyx_amd64.AppImage`, ...), quoted or not.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn runs_onyx(exec: &str) -> bool {
+    let exec = exec.trim_start();
+    let program = match exec.strip_prefix('"') {
+        Some(rest) => rest.split('"').next().unwrap_or_default(),
+        None => exec.split_whitespace().next().unwrap_or_default(),
+    };
+    std::path::Path::new(program)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.to_ascii_lowercase().starts_with("onyx"))
+}
+
 /// Whether a handler file is the plugin's onyx:// entry: a hidden entry that
-/// runs a program with a link and handles no MIME type other than onyx://.
+/// runs an Onyx program with a link and handles no MIME type other than
+/// onyx://.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn is_onyx_link_handler(contents: &str) -> bool {
     let mut in_entry = false;
@@ -147,7 +163,7 @@ fn is_onyx_link_handler(contents: &str) -> bool {
         }
         match key.trim() {
             "NoDisplay" => hidden = value.trim() == "true",
-            "Exec" => exec = value.trim_end().ends_with(" %u"),
+            "Exec" => exec = value.trim_end().ends_with(" %u") && runs_onyx(value),
             "MimeType" => {
                 other_types = value
                     .split(';')
@@ -633,5 +649,9 @@ mod tests {
         ));
         assert!(!is_onyx_link_handler(&written.replace(" %u", "")));
         assert!(!is_onyx_link_handler(""));
+        // A hidden onyx:// entry of another program is kept.
+        assert!(!is_onyx_link_handler(
+            &written.replace("\"/usr/bin/onyx\"", "/usr/bin/other-app")
+        ));
     }
 }

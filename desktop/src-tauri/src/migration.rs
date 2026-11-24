@@ -21,8 +21,13 @@ use tauri_plugin_global_shortcut::Shortcut;
 use crate::config::Config;
 
 const PREVIEW_IDENTIFIER: &str = "app.onyx.desktop.v2";
-/// The earlier app's defaults, which are not imported (this app has its own).
-const EARLIER_DEFAULT_SHORTCUTS: [&str; 2] = ["Super+Shift+Space", "Ctrl+Alt+Space"];
+/// The earlier app's default on this platform, which is not imported (this
+/// app has its own).
+const EARLIER_DEFAULT_SHORTCUT: &str = if cfg!(target_os = "macos") {
+    "Super+Shift+Space"
+} else {
+    "Ctrl+Alt+Space"
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
@@ -149,7 +154,7 @@ fn read_earlier(path: &Path) -> Option<Config> {
         .get("summon_shortcut")
         .and_then(serde_json::Value::as_str)
         .map(str::trim)
-        .filter(|s| !EARLIER_DEFAULT_SHORTCUTS.contains(s) && Shortcut::from_str(s).is_ok())
+        .filter(|s| *s != EARLIER_DEFAULT_SHORTCUT && Shortcut::from_str(s).is_ok())
         .map(str::to_string);
     if server_url.is_none() && hotkey.is_none() {
         return None;
@@ -222,9 +227,11 @@ mod tests {
         let d = dirs("earlier");
         put(
             earlier(&d),
-            r#"{"server_url": "https://onyx.example.com/", "window_title": "Onyx",
-                "show_menu_bar": false, "summon_shortcut": "Super+Shift+Space",
-                "summon_opens_new_chat": true, "future_key": [1, 2]}"#,
+            &format!(
+                r#"{{"server_url": "https://onyx.example.com/", "window_title": "Onyx",
+                "show_menu_bar": false, "summon_shortcut": "{EARLIER_DEFAULT_SHORTCUT}",
+                "summon_opens_new_chat": true, "future_key": [1, 2]}}"#
+            ),
         );
         assert_eq!(
             import_previous(&d.target, &d.sources),
@@ -255,6 +262,24 @@ mod tests {
             ConfigStore::load(d.target.clone()).get().hotkey(),
             "Alt+Space"
         );
+    }
+
+    #[test]
+    fn the_other_platforms_default_is_a_custom_shortcut() {
+        let other = if cfg!(target_os = "macos") {
+            "Ctrl+Alt+Space"
+        } else {
+            "Super+Shift+Space"
+        };
+        let d = dirs("other-default");
+        put(
+            earlier(&d),
+            &format!(
+                r#"{{"server_url": "https://onyx.example.com", "summon_shortcut": "{other}"}}"#
+            ),
+        );
+        import_previous(&d.target, &d.sources);
+        assert_eq!(ConfigStore::load(d.target.clone()).get().hotkey(), other);
     }
 
     #[test]

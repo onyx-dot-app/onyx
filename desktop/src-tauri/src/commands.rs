@@ -181,6 +181,8 @@ pub async fn save_server(
     }
     if current.is_some() {
         end_session(&app).await?;
+        // A policy refresh can lock the server while the sign-out waits.
+        server_locked(&state)?;
     }
     state.config.update(|c| c.server_url = Some(server))?;
     log::info!("saved the server {logged}");

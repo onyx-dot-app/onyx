@@ -389,9 +389,9 @@ panel picks up the new session when the user returns.
 
 ## Verification
 
-- Desktop: `mkdir -p desktop/dist`, then
-  `cd desktop/src-tauri && cargo test --locked && cargo clippy --all-targets --locked -- -D warnings`,
-  and `cd desktop && bun run typecheck`. Tests sit in `#[cfg(test)]` modules
+- Desktop, from the repository root: `mkdir -p desktop/dist`, then
+  `(cd desktop/src-tauri && cargo test --locked && cargo clippy --all-targets --locked -- -D warnings)`
+  and `(cd desktop && bun run typecheck)`. Tests sit in `#[cfg(test)]` modules
   next to the code. `.github/workflows/desktop.yml` runs the same checks on
   macOS, Windows and Linux and builds unsigned installers. On macOS,
   `desktop/README.md` describes the QA harness (`desktop/src-tauri/src/qa.rs`).
