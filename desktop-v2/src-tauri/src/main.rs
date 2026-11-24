@@ -113,6 +113,52 @@ fn packaged_desktop_file(product_name: &str) -> String {
     format!("{product_name}.desktop")
 }
 
+/// The per-user handler that tauri-plugin-deep-link writes for this binary.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn legacy_link_handler(
+    data_dir: &std::path::Path,
+    exe: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let name = exe.file_name()?.to_str()?;
+    Some(
+        data_dir
+            .join("applications")
+            .join(format!("{name}-handler.desktop")),
+    )
+}
+
+/// Whether a handler file is the plugin's onyx:// entry: a hidden entry that
+/// runs a program with a link and handles no MIME type other than onyx://.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn is_onyx_link_handler(contents: &str) -> bool {
+    let mut in_entry = false;
+    let (mut hidden, mut exec, mut other_types) = (false, false, false);
+    for line in contents.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_entry = line == "[Desktop Entry]";
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if !in_entry {
+            continue;
+        }
+        match key.trim() {
+            "NoDisplay" => hidden = value.trim() == "true",
+            "Exec" => exec = value.trim_end().ends_with(" %u"),
+            "MimeType" => {
+                other_types = value
+                    .split(';')
+                    .map(str::trim)
+                    .any(|t| !t.is_empty() && t != "x-scheme-handler/onyx")
+            }
+            _ => {}
+        }
+    }
+    hidden && exec && !other_types
+}
+
 #[cfg(target_os = "linux")]
 fn register_links(app: &tauri::AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
@@ -125,7 +171,25 @@ fn register_links(app: &tauri::AppHandle) {
         }
         return;
     }
-    // Removes a handler that earlier versions wrote for this install.
+    // Removes a handler that earlier versions wrote for this install. The
+    // plugin only takes onyx:// out of the file; an unused file is deleted.
+    let handler = app
+        .path()
+        .data_dir()
+        .ok()
+        .and_then(|dir| legacy_link_handler(&dir, &exe));
+    if let Some(path) = handler {
+        match std::fs::read_to_string(&path) {
+            Ok(contents) if is_onyx_link_handler(&contents) => match std::fs::remove_file(&path) {
+                Ok(()) => log::info!("deleted the old onyx:// link handler"),
+                Err(e) => log::warn!("could not delete the old onyx:// link handler: {e}"),
+            },
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => log::warn!("could not read the old onyx:// link handler: {e}"),
+        }
+    }
+    // Also drops the handler's default and refreshes the MIME cache.
     if let Err(e) = app.deep_link().unregister("onyx") {
         log::warn!("could not remove the old onyx:// link handler: {e}");
     }
@@ -200,6 +264,7 @@ fn main() {
             let handle = app.handle();
             let config = ConfigStore::load(config_path);
             let policy = policy::with_remembered_server(policy::read(handle), &config);
+            policy::log_effective(&policy);
             policy::apply_launch_at_login(handle, &policy);
             app.manage(AppState::new(config, policy, api));
 
@@ -317,7 +382,10 @@ fn main() {
 mod tests {
     use std::path::Path;
 
-    use super::{packaged_desktop_file, registers_links_at_runtime};
+    use super::{
+        is_onyx_link_handler, legacy_link_handler, packaged_desktop_file,
+        registers_links_at_runtime,
+    };
 
     #[test]
     fn the_packaged_handler_is_the_linux_desktop_file() {
@@ -345,5 +413,42 @@ mod tests {
             false,
             Path::new("/usr/local/bin/onyx-desktop-v2")
         ));
+    }
+
+    #[test]
+    fn the_legacy_link_handler_is_named_after_the_binary() {
+        assert_eq!(
+            legacy_link_handler(
+                Path::new("/home/a/.local/share"),
+                Path::new("/usr/bin/onyx-desktop-v2")
+            ),
+            Some(
+                Path::new("/home/a/.local/share/applications/onyx-desktop-v2-handler.desktop")
+                    .into()
+            )
+        );
+    }
+
+    #[test]
+    fn only_the_plugins_onyx_handler_is_deleted() {
+        let written = "[Desktop Entry]\nType=Application\nName=onyx-v2\nExec=\"/usr/bin/onyx-desktop-v2\" %u\nTerminal=false\nMimeType=x-scheme-handler/onyx;\nNoDisplay=true\n";
+        assert!(is_onyx_link_handler(written));
+        // The plugin's unregister leaves the file without its MIME type.
+        let emptied = written.replace("MimeType=x-scheme-handler/onyx;\n", "MimeType=\n");
+        assert!(is_onyx_link_handler(&emptied));
+        assert!(is_onyx_link_handler(&written.replace(
+            "\"/usr/bin/onyx-desktop-v2\"",
+            "\"/home/a/Onyx.AppImage\""
+        )));
+        // A file someone changed to do more is kept.
+        assert!(!is_onyx_link_handler(&written.replace(
+            "x-scheme-handler/onyx;",
+            "x-scheme-handler/onyx;text/html;"
+        )));
+        assert!(!is_onyx_link_handler(
+            &written.replace("NoDisplay=true", "NoDisplay=false")
+        ));
+        assert!(!is_onyx_link_handler(&written.replace(" %u", "")));
+        assert!(!is_onyx_link_handler(""));
     }
 }

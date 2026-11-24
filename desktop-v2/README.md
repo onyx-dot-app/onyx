@@ -149,7 +149,7 @@ and the user can change it. Sample files for each platform are in [`deploy/`](de
 
 | Key | Type | Effect |
 |---|---|---|
-| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. The app keeps only the scheme, host and port: `https://onyx.example.com/app` becomes `https://onyx.example.com`, so Onyx must run at the server root. A URL with a user name or password is not valid. |
+| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. The app keeps only the scheme, host and port: `https://onyx.example.com/app` becomes `https://onyx.example.com`, so Onyx must run at the server root. A URL with a user name or password is not valid. A single word with no scheme, dot or port (`onyx`) is not valid; for a single-label host, add the scheme (`https://onyx`) or a port (`onyx:443`). |
 | `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the last valid `ServerURL` is used, else the user's saved server, and the server cannot change. |
 | `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. macOS only: Windows and Linux builds do not update themselves, so this key has no effect there. |
 | `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
@@ -528,7 +528,9 @@ How the app differs from macOS:
   and other builds that do not run from `/usr/bin` register it for the current user at launch,
   so they get sign-in links too. This needs `xdg-mime`. At each launch, a `.deb` install makes
   `onyx-v2.desktop` the current user's default for `onyx://` (v1 can also claim the scheme),
-  and removes the per-user `onyx://` entry that earlier versions wrote. This cleanup happens
+  and deletes the per-user `onyx://` entry that earlier versions wrote
+  (`~/.local/share/applications/onyx-desktop-v2-handler.desktop`). It deletes the file only if
+  it is that hidden entry and handles no other MIME type. This cleanup happens
   per user, at that user's first launch of the new version, not at package install. After
   `apt remove`, the default names a desktop file that no longer exists, and the desktop ignores
   it. The AppImage entry points to the AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
@@ -555,7 +557,8 @@ Linux needs some desktop services:
   app has focus, and with no XWayland it never works. Preferences shows a notice then. Open the
   launcher from the tray icon instead. Preferences also shows a notice when another app holds
   the shortcut.
-- **Tray icon**: it needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
+- **Tray icon**: Windows and Linux show the app icon (a black glyph on a white disc), so it
+  shows on light and dark panels. It needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
   tray icon without the AppIndicator extension (`gnome-shell-extension-appindicator`, on by
   default on Ubuntu). The icon file goes to `$XDG_RUNTIME_DIR/tray-icon`. When that directory
   is not set or the app cannot write to it (for example after `su`, or in some SSH and VDI
@@ -627,7 +630,10 @@ The app writes its log to `onyx.log` in the app's log folder (`init_logging` in
 
 Times are UTC. The log records the app's own messages at level `info` and higher: the app
 version and OS at startup, the saved server, sign-in (password or SSO) and sign-out, sign-in
-failures, offline and recovery, managed policy errors, downloads and failed links. At 1 MB the
+failures, onboarding server-check failures, a web sign-out or lost web session, offline and
+recovery, downloads and failed links. For managed policy, it records the policy in effect at
+startup, one line for each value that a later policy read changes, and policy errors (once,
+until they change). At 1 MB the
 file rotates to `onyx_<date>.log`, and the app keeps the four newest of those files. The log
 never holds a password, session token, cookie or sign-in code; URLs are written without their
 user info, query and fragment (`main_window::log_safe`). Debug builds also write the log to

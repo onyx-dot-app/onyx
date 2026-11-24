@@ -177,9 +177,12 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
     let fail_closed = Cell::new(false);
     let ignored: RefCell<Vec<&'static str>> = RefCell::new(Vec::new());
     let ignore = |key: &'static str, value: &RawValue, why: &str| {
-        log::error!(
-            "managed setting {key} is not valid ({why}): {}",
-            logged(value)
+        report(
+            log::Level::Error,
+            format!(
+                "managed setting {key} is not valid ({why}): {}",
+                logged(value)
+            ),
         );
         ignored.borrow_mut().push(key);
     };
@@ -195,9 +198,12 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
         match lookup(key) {
             None => false,
             Some(value) => as_bool(&value).unwrap_or_else(|| {
-                log::error!(
-                    "managed setting {key} is not valid (not a boolean; treated as true): {}",
-                    logged(&value)
+                report(
+                    log::Level::Error,
+                    format!(
+                        "managed setting {key} is not valid (not a boolean; treated as true): {}",
+                        logged(&value)
+                    ),
                 );
                 fail_closed.set(true);
                 true
@@ -216,7 +222,10 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
     let server_url = string(SERVER_URL).and_then(|raw| match normalize_managed_server_url(&raw) {
         Ok(url) => {
             if !raw.trim().trim_end_matches('/').eq_ignore_ascii_case(&url) {
-                log::warn!("managed setting {SERVER_URL} is used as {url}: Onyx keeps only the scheme, host and port");
+                report(
+                    log::Level::Warn,
+                    format!("managed setting {SERVER_URL} is used as {url}: Onyx keeps only the scheme, host and port"),
+                );
             }
             Some(url)
         }
@@ -227,8 +236,9 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
     });
     let lock_server_url = restrictive(LOCK_SERVER_URL);
     if lock_server_url && server_url.is_none() {
-        log::error!(
-            "managed setting {LOCK_SERVER_URL} needs a valid {SERVER_URL}; the saved server stays and cannot change"
+        report(
+            log::Level::Error,
+            format!("managed setting {LOCK_SERVER_URL} needs a valid {SERVER_URL}; the saved server stays and cannot change"),
         );
         fail_closed.set(true);
     }
@@ -270,11 +280,17 @@ pub fn parse_json(raw: &str) -> Policy {
     let map = match serde_json::from_str::<serde_json::Value>(raw) {
         Ok(serde_json::Value::Object(map)) => map,
         Ok(_) => {
-            log::error!("managed policy file is not a JSON object");
+            report(
+                log::Level::Error,
+                "managed policy file is not a JSON object".into(),
+            );
             return Policy::unreadable();
         }
         Err(e) => {
-            log::error!("managed policy file is not valid JSON: {e}");
+            report(
+                log::Level::Error,
+                format!("managed policy file is not valid JSON: {e}"),
+            );
             return Policy::unreadable();
         }
     };
@@ -491,8 +507,140 @@ fn read_trusted(
     Ok(raw)
 }
 
-/// Reads the managed policy from the platform store.
+/// A read problem: the log level and the line.
+type Problem = (log::Level, String);
+
+thread_local! {
+    /// The problems of the read in progress on this thread, if one is.
+    static READ_PROBLEMS: RefCell<Option<Vec<Problem>>> = const { RefCell::new(None) };
+}
+
+/// The problems of the last read. A read logs only the problems it adds, so
+/// each refresh does not log the same invalid values again.
+static LOGGED_PROBLEMS: Mutex<Vec<Problem>> = Mutex::new(Vec::new());
+
+/// Logs a policy problem now, or keeps it for the read in progress.
+fn report(level: log::Level, message: String) {
+    let now = READ_PROBLEMS.with_borrow_mut(|problems| match problems {
+        Some(problems) => {
+            problems.push((level, message));
+            None
+        }
+        None => Some(message),
+    });
+    if let Some(message) = now {
+        log::log!(level, "{message}");
+    }
+}
+
+/// The problems in `now` that are not in `last`.
+fn new_problems<'a>(last: &[Problem], now: &'a [Problem]) -> Vec<&'a Problem> {
+    now.iter().filter(|p| !last.contains(p)).collect()
+}
+
+/// Reads the managed policy from the platform store and logs the problems
+/// that the last read did not have.
 pub fn read(app: &AppHandle) -> Policy {
+    READ_PROBLEMS.set(Some(Vec::new()));
+    let policy = read_store(app);
+    let now = READ_PROBLEMS.take().unwrap_or_default();
+    let mut last = LOGGED_PROBLEMS.lock().unwrap_or_else(|p| p.into_inner());
+    for (level, message) in new_problems(&last, &now) {
+        log::log!(*level, "{message}");
+    }
+    *last = now;
+    policy
+}
+
+/// The policy as `key=value` pairs for the log; the server without
+/// credentials or query.
+fn summary(policy: &Policy) -> Vec<(&'static str, String)> {
+    let or_unset = |value: Option<String>| value.unwrap_or_else(|| "not set".into());
+    let ignored = if policy.ignored.is_empty() {
+        "none".to_string()
+    } else {
+        policy.ignored.join(",")
+    };
+    vec![
+        (
+            SERVER_URL,
+            or_unset(
+                policy
+                    .server_url
+                    .as_deref()
+                    .map(crate::main_window::log_safe),
+            ),
+        ),
+        (LOCK_SERVER_URL, policy.lock_server_url.to_string()),
+        (DISABLE_AUTO_UPDATE, policy.disable_auto_update.to_string()),
+        (
+            LAUNCHER_SHORTCUT,
+            or_unset(policy.launcher_shortcut.clone()),
+        ),
+        (DISABLE_LAUNCHER, policy.disable_launcher.to_string()),
+        (
+            LAUNCH_AT_LOGIN,
+            or_unset(policy.launch_at_login.map(|b| b.to_string())),
+        ),
+        (
+            DISABLE_NOTIFICATIONS,
+            policy.disable_notifications.to_string(),
+        ),
+        ("FailClosed", policy.fail_closed.to_string()),
+        ("Ignored", ignored),
+    ]
+}
+
+/// Logs the policy that applies.
+pub fn log_effective(policy: &Policy) {
+    let pairs: Vec<String> = summary(policy)
+        .into_iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect();
+    log::info!("managed policy in effect: {}", pairs.join(", "));
+}
+
+/// One `Key: old -> new` line for each value that changed.
+fn changes(old: &Policy, new: &Policy) -> Vec<String> {
+    summary(old)
+        .into_iter()
+        .zip(summary(new))
+        .filter(|((_, before), (_, after))| before != after)
+        .map(|((key, before), (_, after))| format!("{key}: {before} -> {after}"))
+        .collect()
+}
+
+/// The last managed server that a refresh read but did not apply.
+static PENDING_SERVER: Mutex<Option<String>> = Mutex::new(None);
+
+/// The log line when the managed server that waits for the next start
+/// changes: a new server, or none (IT restored or removed the value).
+fn pending_server_line(pending: Option<&str>, unapplied: Option<&str>) -> Option<String> {
+    if pending == unapplied {
+        return None;
+    }
+    Some(match unapplied {
+        Some(server) => format!(
+            "managed {SERVER_URL} changed to {}; it applies at the next start",
+            crate::main_window::log_safe(server)
+        ),
+        None => format!("the pending change of managed {SERVER_URL} no longer applies"),
+    })
+}
+
+/// The managed server that a read sets but this run does not use. A read
+/// that cannot tell the server (unreadable, or the value is not valid) keeps
+/// the pending one.
+fn unapplied_server(read: &Policy, running: Option<&str>, pending: Option<&str>) -> Option<String> {
+    if read.server_url.is_none() && read.invalid() {
+        return pending.map(str::to_string);
+    }
+    read.server_url
+        .clone()
+        .filter(|server| running != Some(server.as_str()))
+}
+
+fn read_store(app: &AppHandle) -> Policy {
     #[cfg(target_os = "macos")]
     {
         read_macos(&app.config().identifier, true)
@@ -510,7 +658,10 @@ pub fn read(app: &AppHandle) -> Policy {
             Ok(raw) => parse_json(&raw),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Policy::default(),
             Err(e) => {
-                log::error!("could not read the managed policy file: {e}");
+                report(
+                    log::Level::Error,
+                    format!("could not read the managed policy file: {e}"),
+                );
                 Policy::unreadable()
             }
         }
@@ -608,17 +759,19 @@ pub fn refresh(app: &AppHandle) {
     let _serial = REFRESHING.lock().unwrap_or_else(|p| p.into_inner());
     let state = app.state::<AppState>();
     let old = state.policy();
-    let new = keep_last_good(
-        &old,
-        keep_server(&old, read(app), state.config.get().server_url),
-    );
-    if new.next_server_url.is_some() && new.next_server_url != old.next_server_url {
-        log::info!(
-            "managed policy locks the server to {}; it applies when Onyx starts again",
-            crate::main_window::log_safe(new.next_server_url.as_deref().unwrap_or_default())
-        );
+    let read = read(app);
+    let mut pending = PENDING_SERVER.lock().unwrap_or_else(|p| p.into_inner());
+    let unapplied = unapplied_server(&read, old.server_url.as_deref(), pending.as_deref());
+    if let Some(line) = pending_server_line(pending.as_deref(), unapplied.as_deref()) {
+        log::info!("{line}");
     }
+    *pending = unapplied;
+    drop(pending);
+    let new = keep_last_good(&old, keep_server(&old, read, state.config.get().server_url));
     if new != old {
+        for change in changes(&old, &new) {
+            log::info!("managed policy changed: {change}");
+        }
         state.set_policy(new.clone());
         if new.disable_auto_update {
             crate::updater::discard_ready();
@@ -667,6 +820,82 @@ mod tests {
 
     fn s(value: &str) -> RawValue {
         RawValue::Str(value.to_string())
+    }
+
+    #[test]
+    fn a_refresh_logs_one_line_per_changed_key() {
+        let old = policy(&[
+            ("ServerURL", s("https://onyx.example.com")),
+            ("DisableLauncher", RawValue::Bool(false)),
+        ]);
+        assert_eq!(changes(&old, &old), Vec::<String>::new());
+        let new = policy(&[
+            ("ServerURL", s("https://onyx.example.com")),
+            ("DisableLauncher", RawValue::Bool(true)),
+            ("LaunchAtLogin", s("maybe")),
+        ]);
+        assert_eq!(
+            changes(&old, &new),
+            vec![
+                "DisableLauncher: false -> true",
+                "Ignored: none -> LaunchAtLogin",
+            ]
+        );
+        let summary = summary(&old);
+        assert!(summary.contains(&("ServerURL", "https://onyx.example.com/".to_string())));
+    }
+
+    #[test]
+    fn a_canceled_server_change_is_logged() {
+        let b = Some("https://b.example.com");
+        assert!(pending_server_line(None, b)
+            .unwrap()
+            .contains("https://b.example.com/"));
+        assert_eq!(pending_server_line(b, b), None);
+        assert_eq!(
+            pending_server_line(b, None).as_deref(),
+            Some("the pending change of managed ServerURL no longer applies")
+        );
+        assert_eq!(pending_server_line(None, None), None);
+    }
+
+    #[test]
+    fn a_failed_read_keeps_the_pending_server() {
+        let (a, b) = ("https://a.example.com", "https://b.example.com");
+        let read_b = policy(&[("ServerURL", s(b))]);
+        let pending = unapplied_server(&read_b, Some(a), None);
+        assert_eq!(pending.as_deref(), Some(b));
+        // An unreadable policy or an invalid value does not cancel it.
+        for failed in [Policy::unreadable(), policy(&[("ServerURL", s("garbage"))])] {
+            let kept = unapplied_server(&failed, Some(a), pending.as_deref());
+            assert_eq!(kept, pending);
+            assert_eq!(
+                pending_server_line(pending.as_deref(), kept.as_deref()),
+                None
+            );
+        }
+        // A valid read that restores or removes the value cancels it.
+        let restored = policy(&[("ServerURL", s(a))]);
+        assert_eq!(
+            unapplied_server(&restored, Some(a), pending.as_deref()),
+            None
+        );
+        assert_eq!(
+            unapplied_server(&Policy::default(), Some(a), pending.as_deref()),
+            None
+        );
+    }
+
+    #[test]
+    fn a_read_logs_only_problems_the_last_read_did_not_have() {
+        READ_PROBLEMS.set(Some(Vec::new()));
+        let _ = policy(&[("DisableLauncher", s("maybe")), ("LaunchAtLogin", s("x"))]);
+        let first = READ_PROBLEMS.take().unwrap();
+        assert_eq!(first.len(), 2);
+        assert_eq!(new_problems(&[], &first).len(), 2);
+        assert!(new_problems(&first, &first).is_empty());
+        let one_new = new_problems(&first[..1], &first);
+        assert_eq!(one_new, vec![&first[1]]);
     }
 
     #[test]
