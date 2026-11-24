@@ -36,9 +36,11 @@ from onyx.prompts.sandbox_tools import (
     EXEC_COMMAND_DESCRIPTION,
     EXEC_COMMAND_USE,
     LIBRARY_CREATE_LIBRARY_FILE_DESCRIPTION,
+    LIBRARY_FIND_DESCRIPTION,
     LIBRARY_LIST_DESCRIPTION,
     LIBRARY_MANAGE_LIBRARY_DESCRIPTION,
     LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION,
+    LIBRARY_READ_DESCRIPTION,
     LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION,
     SANDBOX_CODE_MODE_NOTE,
     SANDBOX_GUIDANCE,
@@ -93,6 +95,8 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactArguments,
     ArtifactList,
     ArtifactPublished,
+    ArtifactsFound,
+    ArtifactsRead,
     ArtifactVersionConflict,
     DeleteOperation,
     EditArguments,
@@ -101,8 +105,10 @@ from onyx.tools.tool_implementations.sandbox.models import (
     FileToolName,
     LibraryCreateLibraryFileArguments,
     LibraryFileTarget,
+    LibraryFindArguments,
     LibraryListArguments,
     LibraryPrepareMaterializeArguments,
+    LibraryReadArguments,
     LibraryReplaceLibraryFileArguments,
     ManageLibraryArguments,
     ManageResults,
@@ -765,9 +771,9 @@ class _LibraryTool(SandboxTool):
     CODE_MODE_NAMESPACE = "library"
     # The group's line in the execute_code description.
     CODE_MODE_NAMESPACE_DESCRIPTION = (
-        "Find the user's published files, copy them into this chat, add "
-        "versions to them, and change or delete them; create a file here to "
-        "give it to the user."
+        "Find and read the user's published files, copy them into this chat, "
+        "add versions to them, and change or delete them; create a file here "
+        "to give it to the user."
     )
     CODE_MODE_NAME: str
     RESULT: type[BaseModel]
@@ -830,6 +836,40 @@ class LibraryPrepareMaterializeTool(_LibraryTool):
                 parse_tool_arguments(
                     LibraryPrepareMaterializeArguments, invocation.arguments
                 ),
+            ).model_dump_json()
+        )
+
+
+class LibraryReadTool(_LibraryTool):
+    NAME = "library_read"
+    CODE_MODE_NAME = "read"
+    DESCRIPTION = LIBRARY_READ_DESCRIPTION
+    ARGUMENTS = LibraryReadArguments
+    RESULT = ArtifactsRead
+    display_name = "Read Published Files"
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        return ToolResult(
+            content=artifact_operations.read(
+                self._turn.user_id,
+                parse_tool_arguments(LibraryReadArguments, invocation.arguments),
+            ).model_dump_json()
+        )
+
+
+class LibraryFindTool(_LibraryTool):
+    NAME = "library_find"
+    CODE_MODE_NAME = "find"
+    DESCRIPTION = LIBRARY_FIND_DESCRIPTION
+    ARGUMENTS = LibraryFindArguments
+    RESULT = ArtifactsFound
+    display_name = "Find in Published Files"
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        return ToolResult(
+            content=artifact_operations.find(
+                self._turn.user_id,
+                parse_tool_arguments(LibraryFindArguments, invocation.arguments),
             ).model_dump_json()
         )
 
@@ -949,8 +989,9 @@ def _artifact_conflict_message(error: ArtifactVersionConflict) -> str:
     """The artifact tool's words for a new version whose url names a version
     that is not the newest."""
     return (
-        f"Current version is {error.current_version}; read it, merge your "
-        "change, then publish with the url from that result, or pass force:true"
+        f"Current version is {error.current_version}; read it with out_dir, "
+        "merge your change, then publish with the url from that result, or "
+        "pass force:true"
     )
 
 
@@ -969,7 +1010,7 @@ class ArtifactTool(_LibraryTool, _FileTool):
     NAME = "artifact"
     CODE_MODE_NAMESPACE = "artifact"
     CODE_MODE_NAMESPACE_DESCRIPTION = (
-        "Give files from the VM to the user, and find, copy, change and "
+        "Give files from the VM to the user, and find, read, copy, change and "
         "delete the files published in this chat and the user's other chats."
     )
     CODE_MODE_NAME = "artifact"
@@ -1152,11 +1193,6 @@ class ArtifactTool(_LibraryTool, _FileTool):
                     ),
                 ).model_dump_json()
             )
-        if arguments.out_dir is None:
-            raise tool_error(
-                "read copies published files into the VM: pass out_dir, the "
-                "directory for the copies"
-            )
         targets = [
             *([] if arguments.url is None else [arguments.url]),
             *([] if arguments.path is None else [arguments.path]),
@@ -1164,7 +1200,50 @@ class ArtifactTool(_LibraryTool, _FileTool):
         ]
         if not targets:
             raise tool_error("read takes url, path or paths")
-        if len(targets) > ARTIFACTS_MATERIALIZE_MAX_ITEMS:
+        # The url parsed above, so a target that is not a url is a file ID.
+        references = [
+            parse_file_reference(target).model_dump(mode="json", exclude_none=True)
+            for target in targets
+        ]
+        if arguments.out_dir is None:
+            # read shows the text; with query, it finds the query's lines.
+            options: dict[str, JsonValue] = (
+                {"start_line": arguments.offset, "max_lines": arguments.limit}
+                if arguments.query is None
+                else {
+                    "pattern": arguments.query,
+                    "match_offset": arguments.offset,
+                    "max_matches": arguments.limit,
+                }
+            )
+            text_items: list[JsonValue] = [
+                reference
+                | {key: value for key, value in options.items() if value is not None}
+                for reference in references
+            ]
+            return ToolResult(
+                content=(
+                    artifact_operations.read(
+                        self._turn.user_id,
+                        parse_tool_arguments(
+                            LibraryReadArguments, {"read": text_items}
+                        ),
+                    )
+                    if arguments.query is None
+                    else artifact_operations.find(
+                        self._turn.user_id,
+                        parse_tool_arguments(
+                            LibraryFindArguments, {"find": text_items}
+                        ),
+                    )
+                ).model_dump_json()
+            )
+        if (arguments.query, arguments.offset, arguments.limit) != (None, None, None):
+            raise tool_error(
+                "out_dir copies files; query, offset and limit go with a read "
+                "of their text, without out_dir"
+            )
+        if len(references) > ARTIFACTS_MATERIALIZE_MAX_ITEMS:
             raise tool_error(
                 f"read copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files; "
                 "pass fewer paths"
@@ -1174,12 +1253,7 @@ class ArtifactTool(_LibraryTool, _FileTool):
                 self._turn,
                 invocation.cancellation,
                 LibraryPrepareMaterializeArguments(
-                    items=[
-                        MaterializeItem(
-                            **parse_file_reference(target).model_dump(exclude_none=True)
-                        )
-                        for target in targets
-                    ],
+                    items=[MaterializeItem(**reference) for reference in references],
                     destination=MaterializeDestination(directory=arguments.out_dir),
                 ),
             ).model_dump_json()
@@ -1246,6 +1320,8 @@ def sandbox_tools_for_model(
         LibraryCreateLibraryFileTool,
         LibraryListTool,
         LibraryPrepareMaterializeTool,
+        LibraryReadTool,
+        LibraryFindTool,
         LibraryReplaceLibraryFileTool,
         LibraryManageLibraryTool,
     )

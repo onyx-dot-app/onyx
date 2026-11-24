@@ -1,5 +1,6 @@
 # Descriptions of the sandbox tools that the model reads.
 
+from onyx.file_store.constants import ARTIFACT_TEXT_MAX_FILE_BYTES
 from onyx.server.features.build.sandbox.harness_base import (
     AGENT_FILES_DIR,
     ARTIFACT_FILES_DIR,
@@ -8,10 +9,14 @@ from onyx.server.features.build.sandbox.harness_base import (
     PROJECT_FILES_DIR,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACT_TEXT_MAX_ITEMS,
     ARTIFACTS_MATERIALIZE_MAX_ITEMS,
+    FIND_MAX_MATCHES,
     MANAGE_LIBRARY_MAX_OPERATIONS,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_FILES,
+    READ_DEFAULT_LINES,
+    READ_MAX_LINES,
 )
 
 # The chat system prompt's section about the sandbox, when the turn offers the
@@ -184,16 +189,40 @@ Usage:
 - Deleting asks the user, and the whole call waits for the answer. Put deletes in their own call.
 """
 
+_TEXT_SCOPE = f"""- The text is extracted on the server, without starting the VM: PDF pages, slides and spreadsheet sheets (one page per sheet), Word, HTML, text and other document formats. Images have no text. A file larger than {ARTIFACT_TEXT_MAX_FILE_BYTES >> 20} MiB is not read here; copy it into the VM instead.
+- One call takes up to {ARTIFACT_TEXT_MAX_ITEMS} files. If any file is refused, the call fails with every reason."""
+
+LIBRARY_READ_DESCRIPTION = f"""Reads the text of published files from the user's chats, this chat included, by numbered lines or by pages.
+
+Usage:
+- Each item takes a `file_id` (that version) or a `library_file_id` (its newest version, or `version_number`). Each result gives the version read and the file's latest_version_number.
+- mode lines (the default) reads `max_lines` lines ({READ_DEFAULT_LINES} by default, at most {READ_MAX_LINES}) from `start_line`. mode pages reads pages `start_page` to `end_page` of a PDF, slide deck or spreadsheet. Page breaks show as `--- page N ---` lines.
+- A long result stops early: read again with `start_line` set to its `next_start_line`. In mode pages, keep the same pages; the read goes on to their end, and `next_start_line` is null once their last line shows. A very long line is cut.
+{_TEXT_SCOPE}
+"""
+
+LIBRARY_FIND_DESCRIPTION = f"""Finds the lines that contain a text or a regular expression in published files from the user's chats, this chat included, like grep. Each match gives its line number and page; read the file from that line for more.
+
+Usage:
+- Each item takes a `file_id` (that version) or a `library_file_id` (its newest version, or `version_number`), and a `pattern`.
+- The pattern is literal text by default, in any case; `regex` makes it a regular expression and `case_sensitive` matches case. A pattern matches within one line.
+- `start_line`/`end_line` or `start_page`/`end_page` limit the search. `context_before_lines` and `context_after_lines` show nearby lines.
+- At most `max_matches` matches come back (at most {FIND_MAX_MATCHES}); `next_match_offset` gives the next ones as `match_offset`, with the same `start_line`. A search that takes too long stops with timed_out and `reached_line`, and it can stop after matches that did not fit: page through them with `next_match_offset` first. When `next_match_offset` is null, search the rest with `start_line` set to `reached_line` and `match_offset` 0.
+{_TEXT_SCOPE}
+"""
+
 # The artifact tool (sandbox_tools.ArtifactTool). tool_search matches its
 # first sentence.
-ARTIFACT_DESCRIPTION = f"""Publish, replace, list, read, rename, restore and delete the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
+ARTIFACT_DESCRIPTION = f"""Publish, replace, list, read, find in, rename, restore and delete the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
 
 Actions:
 - publish (the default): gives `file_path`, or up to {PUBLISH_FILES_MAX_FILES} `file_paths`, from the VM to the user; all are published, or none. Each file is at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Publishing the same path again adds a new version. Publish only finished deliverables, and do not paste their contents into your reply.
 - publish with `url` and `file_path`: adds a version to that published file, also one of another chat; it keeps its name and type, so `file_path` needs its extension. Use the url from your last result: if the file has a newer version than the url names, the call fails and changes nothing. `force` adds the version anyway; older versions stay. `label` is a short note on why the version exists.
 - publish with `url` and `path`: adds a copy of the published file that `path` names (a file ID or a url), of the same type, as the url's newest version, with the same version rule.
 - list: the user's published files from all their chats, newest first. `type` keeps one type (image, sheet, slides, report, other); `query` finds text in the name, the title or the chat's title; `after` takes the `next_cursor` of the previous page.
-- read: copies up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} published files into `out_dir`, in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/. Name them with `url` (a url from an earlier result; one that ends in /v<N> names that version), or with `path` or `paths`, each a url or a file ID. To change a file, read it into a directory outside {CHAT_FILES_DIR}/, change it there, and publish it with its url.
+- read: shows the text of published files as numbered lines, without starting the VM. Name them with `url` (a url from an earlier result; one that ends in /v<N> names that version), or with `path` or `paths`, each a url or a file ID, up to {ARTIFACT_TEXT_MAX_ITEMS} files. `offset` is the first line and `limit` the most lines ({READ_DEFAULT_LINES} by default); a long result gives `next_start_line`. `offset` takes one file: page one file at a time. Images and files over {ARTIFACT_TEXT_MAX_FILE_BYTES >> 20} MiB have no text here.
+- read with `query`: finds the lines that contain the text, in any case, with their line and page numbers; `limit` caps the matches and `offset` skips matches (`next_match_offset`).
+- read with `out_dir`: copies up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} published files into `out_dir`, in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/, to work with them in the VM. To change a file, read it into a directory outside {CHAT_FILES_DIR}/, change it there, and publish it with its url.
 - rename: gives the file at `url` the file name `name`, not a path, with the current extension. Every version and later publishes keep it.
 - restore: adds a copy of the version at `url`, which ends in /v<N>, as the newest version. Earlier versions stay.
 - delete: deletes the file at `url` (the url of its newest version, or one without /v<N>) with all its versions, after the user approves; its download cards stop working.
@@ -204,10 +233,14 @@ ARTIFACT_RESULTS = (
     "title, path, url}]}. list: {files: [{library_file_id, file_id, "
     "version_number, file_name, title, artifact_type, mime_type, "
     "file_size_bytes, created_at, modified_at, chat_id, chat_title, path, url}], "
-    "next_cursor}. read: {items: [{library_file_id, file_id, version_number, "
-    "file_name, path, file_size_bytes, mime_type, url, status, error}]}. rename, "
-    "restore and publish with path: {results: [{operation, ok, "
-    "library_file_id, file_id, version_number, file_name, url, "
-    "version_reason}]}. delete: "
+    "next_cursor}. read: {items: [{file: {...the list entry, "
+    "latest_version_number}, total_lines, total_pages, start_line, end_line, "
+    "text, next_start_line, truncated}]}. read with query: {items: [{file, "
+    "total_matches_seen, matches: [{line, page, text, before, after}], "
+    "next_match_offset, timed_out, reached_line, truncated}]}. read with "
+    "out_dir: {items: [{library_file_id, file_id, version_number, file_name, "
+    "path, file_size_bytes, mime_type, url, status, error}]}. rename, restore "
+    "and publish with path: {results: [{operation, ok, library_file_id, "
+    "file_id, version_number, file_name, url, version_reason}]}. delete: "
     "{results: [{operation, ok, library_file_id, file_name, deleted_versions}]}."
 )

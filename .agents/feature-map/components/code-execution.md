@@ -63,9 +63,12 @@
   `library_replace_library_file` it adds a version to one of them;
   `library_manage_library` renames them, restores an older version, adds a
   copy of any of their versions as a new version, or deletes them after the
-  user approves. In code mode all of these are the deferred group `library`.
-  Claude models get the same operations as one `artifact` tool instead
-  (actions publish, list, read, rename, restore and delete), in its own
+  user approves. With `library_read` and `library_find` it reads numbered
+  lines or pages of any version of them and finds lines in them, on the
+  server, without the VM. In code mode all of these are the deferred group
+  `library`. Claude models get the same operations as one `artifact` tool
+  instead (actions publish, list, read, rename, restore and delete; read
+  shows text, finds text with `query`, or copies with `out_dir`), in its own
   deferred group `artifact`, for compatibility with how they work with
   artifacts. Every result links each version as
   `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
@@ -81,8 +84,8 @@ stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
 `apply_patch`, `edit`, `write`, `library_create_library_file`, `library_list`,
 `library_prepare_materialize`, `library_replace_library_file`, `library_manage_library`,
-`artifact`) and the artifact operations that they
-share. Code mode's packets and replay belong to [[streaming-protocol]], and
+`library_read`, `library_find`, `artifact`) and the artifact operations that
+they share. Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -225,7 +228,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_replace_library_file + library_manage_library | edit + write + artifact (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_read + library_find + library_replace_library_file + library_manage_library | edit + write + artifact (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -246,8 +249,8 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         WriteTool and ArtifactTool, the tools Claude models
                                         work with; else ApplyPatchTool,
                                         LibraryCreateLibraryFileTool, LibraryListTool,
-                                        LibraryPrepareMaterializeTool,
-                                        LibraryReplaceLibraryFileTool and
+                                        LibraryPrepareMaterializeTool, LibraryReadTool,
+                                        LibraryFindTool, LibraryReplaceLibraryFileTool and
                                         LibraryManageLibraryTool. No turn
                                         gets both sets; a model switch leaves calls of the other
                                         set in the history, which still render. The
@@ -437,7 +440,7 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         path (the published display path) and url
                                         (models.py:artifact_url); names and
                                         paths are cut, and a page drops its last
-                                        entries to stay within ARTIFACTS_LIST_MAX_CHARS,
+                                        entries to stay within ARTIFACT_RESULT_MAX_CHARS,
                                         below the spill limit of one result. The spill
                                         exempts library_list, so the step's budget
                                         does not spill a page either.
@@ -506,6 +509,54 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         they skip, such as node_modules, virtual
                                         environments and caches
                                         (firecracker/session_saves.py)
+  LibraryReadTool / LibraryFindTool    library_read and library_find: _LibraryTool (PARALLEL,
+                                        run again after a lost server), DEFERRED
+                                        library.read / library.find, JSON_OBJECT results
+                                        (ArtifactsRead, ArtifactsFound), generic card; thin
+                                        translators over artifact_operations.read / find,
+                                        which the artifact tool's read without out_dir runs
+                                        too. They read only the database and the file store
+                                        (SandboxTurn.user_id, never start_call). At most 5
+                                        items, each the shared file reference
+                                        (models.py:ArtifactFileReference: file_id, or
+                                        library_file_id with an optional version_number).
+                                        _published_texts looks every item up first
+                                        (_published_file, whose ListedArtifact has the
+                                        artifact's latest_version_number; a missing version
+                                        names the newest), then loads each text through
+                                        file_store/utils.py:get_or_extract_artifact_text (the
+                                        artifact_text_<file_id> cache that
+                                        [[file-store-and-user-files]] owns; later calls
+                                        reuse the cached text). A refused reference, a file over 50 MiB or a
+                                        file without text fails the whole call with every
+                                        reason. artifact_text.artifact_lines splits the text
+                                        into lines (CR, CRLF, LF) and page starts. read: mode
+                                        lines (start_line, max_lines 400 by default, at most
+                                        2,000) or pages (start_page..end_page; a file without
+                                        pages is a tool error); read_lines numbers lines as
+                                        cat -n, with "--- page N ---" before the first line and
+                                        each page start, and cuts a line over 1,000 characters.
+                                        find: per line like grep, literal (regex.escape) or
+                                        regex, case-insensitive unless case_sensitive, in a
+                                        line and page range (a reversed range, here or in a
+                                        read, is a validation error), with up to 5 context lines on each
+                                        side, max_matches (20, at most 100) and match_offset;
+                                        find_lines runs `regex` with concurrent=True and the
+                                        remaining part of FIND_TIMEOUT_SECONDS (1 s) for each
+                                        line, and a timeout returns the matches so far with
+                                        timed_out and reached_line (library_find pages the unshown
+                                        matches with next_match_offset first, then continues from
+                                        start_line=reached_line, match_offset 0); a shown line is at most 400
+                                        characters around its match. Both reserve every item's
+                                        frame first, its file cut as a list page cuts it
+                                        (models.py:shown_artifact), then split one item's lines
+                                        at a time and share ARTIFACT_RESULT_MAX_CHARS
+                                        (40,000) in item order: a cut read gives
+                                        next_start_line (a pages read gives it only
+                                        inside its pages and refuses a start_line
+                                        outside them), a cut find
+                                        next_match_offset.
+                                        library_read, library_find and artifact are in spill._OWN_LIMITS
   LibraryReplaceLibraryFileTool (SEQUENTIAL)  library_replace_library_file, DEFERRED
                                         library.replace_library_file; _LibraryTool and
                                         _FileTool, with the default interrupted result
@@ -539,7 +590,7 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         ArtifactPublished, the publish result model of the
                                         artifact tool. errors.py:artifact_errors lets the
                                         conflict through, and each family words it
-  LibraryManageLibraryTool (SEQUENTIAL)      library_manage_library, DEFERRED manage_library, the
+  LibraryManageLibraryTool (SEQUENTIAL)      library_manage_library, DEFERRED library.manage_library, the
                                         generic card; _LibraryTool and _FileTool, with the
                                         default interrupted result. `operations` (1-20) is a
                                         list of a union on `operation` (delete, rename,
@@ -655,10 +706,13 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         message files and access; list (scope "mine", type
                                         = category, query, limit, after = cursor; newest
                                         first) -> list_artifacts; read (url, or path and
-                                        paths, each a url or a file ID; out_dir required
-                                        until a read without it
-                                        exists) -> materialize, a url's /v<N> as the item's
-                                        version_number; delete (url of the newest version, or
+                                        paths, each a url or a file ID; a url's /v<N> as the
+                                        item's version_number) -> read (offset = start_line,
+                                        limit = max_lines), with query -> find (literal;
+                                        offset = match_offset, limit = max_matches; offset
+                                        refused for more than one file), with
+                                        out_dir -> materialize (query, offset and limit
+                                        refused); delete (url of the newest version, or
                                         without /v<N>) ->
                                         manage's delete, behind the same approval; rename
                                         (url, name) -> manage's rename; restore (url ending
@@ -695,9 +749,9 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         PREVIEW_TAIL_CHARS). Exempt
                                         from those two limits (_OWN_LIMITS): the cells,
                                         exec_command, write_stdin, read_file, skills_read,
-                                        library_list, library_manage_library, artifact and
-                                        CITEABLE_TOOLS_NAMES. A cell's closing record
-                                        sets the recorded result and its own output uncut
+                                        library_list, library_manage_library, library_read,
+                                        library_find, artifact and CITEABLE_TOOLS_NAMES. A
+                                        cell's closing record sets the recorded result and its own output uncut
                                         as the full value. Where:
                                         the full value or the content, at most
                                         SPILL_MAX_BYTES (a lone surrogate becomes "?"), to

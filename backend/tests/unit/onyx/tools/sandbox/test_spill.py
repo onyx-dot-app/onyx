@@ -36,15 +36,17 @@ from onyx.tools.tool_implementations.code_mode.prompt import (
 )
 from onyx.tools.tool_implementations.sandbox import spill
 from onyx.tools.tool_implementations.sandbox.models import (
-    ARTIFACTS_LIST_MAX_CHARS,
+    ARTIFACT_RESULT_MAX_CHARS,
     SandboxExecResult,
     SpilledOutput,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     ExecCommandTool,
+    LibraryFindTool,
     LibraryListTool,
     LibraryManageLibraryTool,
+    LibraryReadTool,
     _exec_result,
 )
 from onyx.tools.tool_implementations.sandbox.spill import (
@@ -254,6 +256,36 @@ def test_many_short_lines_under_the_character_limit_stay_whole(
     assert text.count("\n") > 2_000 and len(text) < spill.RESULT_MAX_CHARS
 
     assert _spill(turn, text).content == text
+    assert turn.files == {}
+
+
+@pytest.mark.parametrize(
+    "name", [LibraryReadTool.NAME, LibraryFindTool.NAME, ArtifactTool.NAME]
+)
+def test_a_bounded_library_result_past_the_steps_budget_stays_whole(
+    turn: _FakeVMTurn, name: str
+) -> None:
+    """A library tool pages through its results within
+    ARTIFACT_RESULT_MAX_CHARS, so a spill would only be read back."""
+    text = "r" * 39_000
+    earlier = ToolResultMessage(
+        tool_call_id="earlier",
+        tool_name="fetch",
+        content="e" * (spill.STEP_MAX_CHARS - 10_000),
+    )
+
+    result = spill_large_result(
+        turn,
+        ToolResultContext(
+            message_id="run:0",
+            calls=(ToolCall(id="call", name=name, arguments={}),),
+            result=ToolResult(content=text),
+            step_results=(earlier,),
+        ),
+        code_mode=False,
+    )
+
+    assert result.content == text
     assert turn.files == {}
 
 
@@ -617,7 +649,7 @@ def test_a_manage_result_past_the_steps_budget_stays_whole(
 def test_a_library_list_page_stays_whole_in_a_full_step(
     turn: _FakeVMTurn, name: str
 ) -> None:
-    page = "e" * ARTIFACTS_LIST_MAX_CHARS
+    page = "e" * ARTIFACT_RESULT_MAX_CHARS
     earlier = ToolResultMessage(
         tool_call_id="earlier", tool_name="fetch", content="s" * spill.STEP_MAX_CHARS
     )

@@ -9,10 +9,11 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, JsonValue, ValidationError
 
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.prompt_utils import build_system_prompt
+from onyx.file_store.models import ArtifactText
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
 from onyx.tools.interface import Tool, parse_tool_arguments
@@ -22,8 +23,8 @@ from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
 from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
+    ARTIFACT_RESULT_MAX_CHARS,
     ARTIFACTS_CHAT_TITLE_MAX_CHARS,
-    ARTIFACTS_LIST_MAX_CHARS,
     ARTIFACTS_LIST_MAX_LIMIT,
     ARTIFACTS_MATERIALIZE_MAX_ITEMS,
     ARTIFACTS_NAME_MAX_CHARS,
@@ -34,11 +35,17 @@ from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_TITLE_CHARS,
     ArtifactCursor,
     ArtifactList,
+    ArtifactsFound,
     ArtifactSort,
+    ArtifactsRead,
+    FindItem,
+    LibraryFindArguments,
     LibraryListFilters,
     LibraryPrepareMaterializeArguments,
+    LibraryReadArguments,
     ListedArtifact,
     ManageLibraryArguments,
+    ReadItem,
     SortOrder,
     artifact_type,
     artifact_url,
@@ -50,9 +57,11 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     EditTool,
     ExecCommandTool,
     LibraryCreateLibraryFileTool,
+    LibraryFindTool,
     LibraryListTool,
     LibraryManageLibraryTool,
     LibraryPrepareMaterializeTool,
+    LibraryReadTool,
     LibraryReplaceLibraryFileTool,
     WriteStdinTool,
     WriteTool,
@@ -79,6 +88,8 @@ def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() 
         LibraryCreateLibraryFileTool,
         LibraryListTool,
         LibraryPrepareMaterializeTool,
+        LibraryReadTool,
+        LibraryFindTool,
         LibraryReplaceLibraryFileTool,
         LibraryManageLibraryTool,
     )
@@ -100,9 +111,11 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
         name for name, function in stubs.functions.items() if function.deferred
     } == {
         "library__create_library_file",
+        "library__find",
         "library__list",
         "library__manage_library",
         "library__prepare_materialize",
+        "library__read",
         "library__replace_library_file",
     }
     assert "library__" not in stubs.listed_text
@@ -473,7 +486,7 @@ def test_a_new_version_keeps_the_type_by_the_lists_last_dot_rule(
 
 
 def test_a_full_page_never_spills(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert ARTIFACTS_LIST_MAX_CHARS < RESULT_MAX_CHARS
+    assert ARTIFACT_RESULT_MAX_CHARS < RESULT_MAX_CHARS
     rows = [_entry(index) for index in range(ARTIFACTS_LIST_MAX_LIMIT + 1)]
     result, _ = _run(
         monkeypatch,
@@ -481,7 +494,7 @@ def test_a_full_page_never_spills(monkeypatch: pytest.MonkeyPatch) -> None:
         rows=rows,
     )
 
-    assert len(result.content) <= ARTIFACTS_LIST_MAX_CHARS
+    assert len(result.content) <= ARTIFACT_RESULT_MAX_CHARS
     page = ArtifactList.model_validate_json(result.content)
     # The page drops its last entries to fit; the cursor starts after the
     # last one shown.
@@ -601,6 +614,14 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
             f"publish takes at most {PUBLISH_FILES_MAX_FILES} file_paths",
         ),
         ({"action": "read", "out_dir": "x"}, "read takes url, path or paths"),
+        *(
+            (
+                {"action": "read", "paths": ["f", "g"], "offset": 10, **query},
+                "Invalid tool arguments: offset pages one file; read one file "
+                "at a time to page",
+            )
+            for query in ({}, {"query": "q"})
+        ),
         (
             {
                 "action": "read",
@@ -611,9 +632,9 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
             "fewer paths",
         ),
         (
-            {"action": "read", "path": "f"},
-            "read copies published files into the VM: pass out_dir, the "
-            "directory for the copies",
+            {"action": "read", "path": "f", "out_dir": "x", "query": "q"},
+            "out_dir copies files; query, offset and limit go with a read of "
+            "their text, without out_dir",
         ),
         (
             {"action": "read", "url": "report.pdf", "out_dir": "x"},
@@ -726,3 +747,168 @@ def test_a_call_that_does_not_delete_asks_nothing_and_reads_no_database(
 
     monkeypatch.setattr(artifact_operations, "delete_approval_details", no_lookup)
     assert tool(MagicMock(spec=SandboxTurn)).approval_details(arguments) is None
+
+
+@pytest.mark.parametrize(
+    ("model", "item", "error"),
+    [
+        (ReadItem, {"mode": "pages", "start_page": 3, "end_page": 2}, "end_page"),
+        (FindItem, {"pattern": "a", "start_line": 9, "end_line": 4}, "end_line"),
+        (FindItem, {"pattern": "a", "start_page": 2, "end_page": 1}, "end_page"),
+    ],
+)
+def test_a_reversed_range_is_refused(
+    model: type[ReadItem] | type[FindItem], item: dict[str, JsonValue], error: str
+) -> None:
+    with pytest.raises(ValidationError, match=f"{error} comes before"):
+        model.model_validate({"file_id": "f"} | item)
+
+
+def _published_texts(
+    monkeypatch: pytest.MonkeyPatch,
+    texts: dict[str, tuple[ListedArtifact, ArtifactText]],
+) -> None:
+    """Published files by file ID with their text; any other ID is missing."""
+
+    @contextmanager
+    def session() -> Iterator[MagicMock]:
+        yield MagicMock()
+
+    def published(
+        _db_session: object,
+        _user_id: object,
+        *,
+        file_id: str | None = None,
+        **_: object,
+    ) -> ListedArtifact | None:
+        found = texts.get(file_id or "")
+        return None if found is None else found[0]
+
+    def text(file_id: str, _name: str, _size: int) -> ArtifactText:
+        return texts[file_id][1]
+
+    monkeypatch.setattr(artifact_operations, "get_session_with_current_tenant", session)
+    monkeypatch.setattr(artifact_operations, "get_user_published_file", published)
+    monkeypatch.setattr(artifact_operations, "get_or_extract_artifact_text", text)
+
+
+def _text_file(file_id: str, chat_title: str = "chat") -> ListedArtifact:
+    return ListedArtifact(
+        library_file_id=uuid4(),
+        file_id=file_id,
+        version_number=1,
+        file_name="n" * (ARTIFACTS_NAME_MAX_CHARS * 10) + ".txt",
+        title=None,
+        artifact_type="other",
+        mime_type="text/plain",
+        file_size_bytes=100,
+        created_at=datetime.now(timezone.utc),
+        modified_at=datetime.now(timezone.utc),
+        chat_id=uuid4(),
+        chat_title=chat_title,
+        path="p/" * ARTIFACTS_PATH_MAX_CHARS + "f.txt",
+        url=artifact_url(uuid4(), 1),
+    )
+
+
+_TEXT = ArtifactText(pages=["alpha\nbeta\nalpha\n"], paged=False, truncated=False)
+
+
+def test_a_long_chat_title_leaves_room_for_the_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A read or find shows each file as a list page does, so a chat title
+    over the result limit still leaves its text in the result."""
+    chat_title = "t" * (ARTIFACT_RESULT_MAX_CHARS + 1)
+    file = _text_file("f", chat_title=chat_title)
+    _published_texts(monkeypatch, {"f": (file, _TEXT)})
+    user_id = uuid4()
+
+    read = artifact_operations.read(
+        user_id, LibraryReadArguments.model_validate({"read": [{"file_id": "f"}]})
+    )
+    found = artifact_operations.find(
+        user_id,
+        LibraryFindArguments.model_validate(
+            {"find": [{"file_id": "f", "pattern": "alpha"}]}
+        ),
+    )
+
+    for result in (read, found):
+        assert len(result.model_dump_json()) <= ARTIFACT_RESULT_MAX_CHARS
+        shown = result.items[0].file
+        assert shown.chat_title == chat_title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]
+        assert len(shown.file_name) == ARTIFACTS_NAME_MAX_CHARS
+        assert len(shown.path) == ARTIFACTS_PATH_MAX_CHARS
+    assert isinstance(read, ArtifactsRead) and "beta" in read.items[0].text
+    assert isinstance(found, ArtifactsFound)
+    assert [match.line for match in found.items[0].matches] == [1, 3]
+
+
+def test_a_call_reports_every_refused_file_at_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    empty = ArtifactText(pages=[" \n"], paged=False, truncated=False)
+    _published_texts(monkeypatch, {"empty": (_text_file("empty"), empty)})
+
+    with pytest.raises(ToolCallException) as error:
+        artifact_operations.read(
+            uuid4(),
+            LibraryReadArguments.model_validate(
+                {"read": [{"file_id": "missing"}, {"file_id": "empty"}]}
+            ),
+        )
+
+    assert "No published file missing" in error.value.llm_facing_message
+    assert "has no text" in error.value.llm_facing_message
+
+
+def test_a_read_or_find_splits_one_file_into_lines_at_a_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each file's lines are split, used and dropped before the next file's."""
+    _published_texts(
+        monkeypatch, {"a": (_text_file("a"), _TEXT), "b": (_text_file("b"), _TEXT)}
+    )
+    steps: list[str] = []
+    for name, step in (
+        ("artifact_lines", artifact_operations.artifact_lines),
+        ("read_lines", artifact_operations.read_lines),
+        ("find_lines", artifact_operations.find_lines),
+    ):
+        monkeypatch.setattr(
+            artifact_operations,
+            name,
+            lambda *args, _name=name, _step=step, **kwargs: (
+                steps.append(_name) or _step(*args, **kwargs)
+            ),
+        )
+    user_id = uuid4()
+
+    artifact_operations.read(
+        user_id,
+        LibraryReadArguments.model_validate(
+            {"read": [{"file_id": "a"}, {"file_id": "b"}]}
+        ),
+    )
+    artifact_operations.find(
+        user_id,
+        LibraryFindArguments.model_validate(
+            {
+                "find": [
+                    {"file_id": "a", "pattern": "beta"},
+                    {"file_id": "b", "pattern": "beta"},
+                ]
+            }
+        ),
+    )
+
+    assert (
+        steps
+        == ["artifact_lines", "read_lines"] * 2
+        + [
+            "artifact_lines",
+            "find_lines",
+        ]
+        * 2
+    )
