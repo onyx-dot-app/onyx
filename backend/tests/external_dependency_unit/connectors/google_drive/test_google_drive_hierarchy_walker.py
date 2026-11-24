@@ -362,7 +362,6 @@ def test_off_by_one_batch_split_misparents_child(db_session: Session) -> None:
                 fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
                 failed_folder_ids_by_email=None,
                 permission_sync_context=None,
-                add_prefix=False,
             )
 
         assert len(new_nodes) == chain_len + 1, (
@@ -490,7 +489,6 @@ def test_cross_yield_walk_heals_misparented_child_via_stub(
                     fully_walked_hierarchy_node_raw_ids=fully_walked,
                     failed_folder_ids_by_email=None,
                     permission_sync_context=None,
-                    add_prefix=False,
                 )
             _run_through_runner_and_persist(db_connector, db_credential, new_nodes_1)
 
@@ -518,7 +516,6 @@ def test_cross_yield_walk_heals_misparented_child_via_stub(
                     fully_walked_hierarchy_node_raw_ids=fully_walked,
                     failed_folder_ids_by_email=None,
                     permission_sync_context=None,
-                    add_prefix=False,
                 )
             _run_through_runner_and_persist(db_connector, db_credential, new_nodes_2)
 
@@ -614,7 +611,6 @@ def test_walk_without_permissions_keeps_stored_folder_access(
                 fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
                 failed_folder_ids_by_email=None,
                 permission_sync_context=None,
-                add_prefix=True,
             )
 
         assert {node.raw_node_id for node in new_nodes} == {folder_id, root_id}
