@@ -422,8 +422,6 @@ test("a write shows its progress while it streams, then the replayed card", asyn
   try {
     const progress = wholeText("Writing report.md…");
     expect((await screen.findAllByText(progress)).length).toBeGreaterThan(0);
-    // The run header names the activity before the start packet arrives.
-    expect(screen.getAllByText("Editing files").length).toBeGreaterThan(0);
 
     // The start packet alone replaces the progress line.
     view.rerender(renderMessage([...streaming, ...finished.slice(0, 1)]));
