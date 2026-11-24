@@ -141,7 +141,25 @@ class TestDownloadedList:
         no_network.assert_not_called()
 
 
+def _join_refresh(blocklist: RemoteDomainBlocklist) -> None:
+    """No refresh thread may outlive the test, or the network mock."""
+    thread = blocklist._refresh_thread
+    if thread is not None:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+
+
 class TestModuleCheck:
+    """`is_free_mail_email` goes through the module instance. The tests swap
+    in one they own and join its refresh before the network mock goes."""
+
+    @pytest.fixture(autouse=True)
+    def owned_instance(self) -> Generator[None, None, None]:
+        blocklist = free_mail_domain_blocklist()
+        with mock.patch("onyx.auth.free_mail_email_validator._blocklist", blocklist):
+            yield
+        _join_refresh(blocklist)
+
     @pytest.mark.parametrize(
         "email",
         ("someone@gmail.com", "Someone@PROTON.me", "x@yandex.ru"),
