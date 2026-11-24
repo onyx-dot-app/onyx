@@ -6,7 +6,7 @@ Comment={{comment}}
 Exec={{exec}} %u
 StartupWMClass={{exec}}
 Icon={{icon}}
-Name=Onyx v2
+Name=Onyx
 Terminal=false
 Type=Application
 {{#if mime_type}}

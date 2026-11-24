@@ -52,7 +52,8 @@ need. Each client has a README with its build and design notes.
 
 The desktop app (`desktop/`) is a native Tauri 2 app for macOS, Windows and
 Linux. It replaced the earlier web-view shell, which has the same bundle ID
-(`app.onyx.desktop`) and name, so the new installers upgrade it in place. Each version
+(`app.onyx.desktop`) and name, so the new installers upgrade it in place and
+the first launch imports the old server URL. Each version
 tag releases it with the server. It signs in through
 `/api/auth/mobile/login`, hands the token to the remote web UI as the session
 cookie, and gives IPC only to its bundled windows. The main window never runs
@@ -92,7 +93,8 @@ verification ([[auth-and-identity]]), or the acting-user rules for the widget
 ## Architecture
 
 **Desktop.** `desktop/src-tauri/src/main.rs:main` reads the config
-(`desktop/src-tauri/src/config.rs:ConfigStore`) and the
+(`desktop/src-tauri/src/config.rs:ConfigStore`, after
+`desktop/src-tauri/src/migration.rs:import_previous` on a first launch) and the
 managed policy (`desktop/src-tauri/src/policy.rs:read`), then
 `desktop/src-tauri/src/windows.rs:route` opens onboarding, sign-in or the main
 window. The local windows are React pages in `desktop/src/pages/`, built by

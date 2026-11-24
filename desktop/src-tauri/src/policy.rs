@@ -1399,7 +1399,7 @@ mod tests {
     #[test]
     fn reads_macos_preferences() {
         use std::process::Command;
-        let domain = format!("app.onyx.desktop.v2.policy-test-{}", std::process::id());
+        let domain = format!("app.onyx.desktop.policy-test-{}", std::process::id());
         let write = |args: &[&str]| {
             let status = Command::new("defaults")
                 .arg("write")

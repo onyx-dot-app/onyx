@@ -18,6 +18,7 @@ mod macos_cookies;
 mod macos_dialogs;
 mod main_window;
 mod menu;
+mod migration;
 mod notify;
 mod offline;
 mod policy;
@@ -193,8 +194,9 @@ fn register_links(app: &tauri::AppHandle) {
     if let Err(e) = app.deep_link().unregister("onyx") {
         log::warn!("could not remove the old onyx:// link handler: {e}");
     }
-    // The package's desktop file only offers onyx://; another app (v1) can
-    // still be the default, and it rejects v2 sign-in links.
+    // The package's desktop file only offers onyx://; another app (the
+    // earlier desktop app) can still be the default, and it rejects these
+    // sign-in links.
     let Some(product_name) = app.config().product_name.as_deref() else {
         return;
     };
@@ -262,6 +264,11 @@ fn main() {
             let config_path = app.path().app_config_dir()?.join("config.json");
             app.manage(offline::Offline::default());
             let handle = app.handle();
+            if let Some(source) =
+                migration::import_previous(&config_path, &migration::Sources::find(handle))
+            {
+                log::info!("imported the settings of the {source:?} app");
+            }
             let config = ConfigStore::load(config_path);
             let policy = policy::with_remembered_server(policy::read(handle), &config);
             policy::log_effective(&policy);
@@ -389,29 +396,34 @@ mod tests {
 
     #[test]
     fn the_packaged_handler_is_the_linux_desktop_file() {
-        let config: serde_json::Value =
+        let base: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let linux: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.linux.conf.json")).unwrap();
-        let product_name = config["productName"].as_str().unwrap();
-        assert_eq!(packaged_desktop_file(product_name), "onyx-v2.desktop");
+        let product_name = linux["productName"]
+            .as_str()
+            .or(base["productName"].as_str())
+            .unwrap();
+        assert_eq!(packaged_desktop_file(product_name), "Onyx.desktop");
     }
 
     #[test]
     fn only_unpackaged_builds_register_links_at_runtime() {
         assert!(!registers_links_at_runtime(
             false,
-            Path::new("/usr/bin/onyx-desktop-v2")
+            Path::new("/usr/bin/onyx")
         ));
         assert!(registers_links_at_runtime(
             true,
-            Path::new("/tmp/.mount_Onyx/usr/bin/onyx-desktop-v2")
+            Path::new("/tmp/.mount_Onyx/usr/bin/onyx")
         ));
         assert!(registers_links_at_runtime(
             false,
-            Path::new("/home/a/onyx/target/debug/onyx-desktop-v2")
+            Path::new("/home/a/onyx/target/debug/onyx")
         ));
         assert!(registers_links_at_runtime(
             false,
-            Path::new("/usr/local/bin/onyx-desktop-v2")
+            Path::new("/usr/local/bin/onyx")
         ));
     }
 
@@ -420,26 +432,22 @@ mod tests {
         assert_eq!(
             legacy_link_handler(
                 Path::new("/home/a/.local/share"),
-                Path::new("/usr/bin/onyx-desktop-v2")
+                Path::new("/usr/bin/onyx")
             ),
-            Some(
-                Path::new("/home/a/.local/share/applications/onyx-desktop-v2-handler.desktop")
-                    .into()
-            )
+            Some(Path::new("/home/a/.local/share/applications/onyx-handler.desktop").into())
         );
     }
 
     #[test]
     fn only_the_plugins_onyx_handler_is_deleted() {
-        let written = "[Desktop Entry]\nType=Application\nName=onyx-v2\nExec=\"/usr/bin/onyx-desktop-v2\" %u\nTerminal=false\nMimeType=x-scheme-handler/onyx;\nNoDisplay=true\n";
+        let written = "[Desktop Entry]\nType=Application\nName=onyx\nExec=\"/usr/bin/onyx\" %u\nTerminal=false\nMimeType=x-scheme-handler/onyx;\nNoDisplay=true\n";
         assert!(is_onyx_link_handler(written));
         // The plugin's unregister leaves the file without its MIME type.
         let emptied = written.replace("MimeType=x-scheme-handler/onyx;\n", "MimeType=\n");
         assert!(is_onyx_link_handler(&emptied));
-        assert!(is_onyx_link_handler(&written.replace(
-            "\"/usr/bin/onyx-desktop-v2\"",
-            "\"/home/a/Onyx.AppImage\""
-        )));
+        assert!(is_onyx_link_handler(
+            &written.replace("\"/usr/bin/onyx\"", "\"/home/a/Onyx.AppImage\"")
+        ));
         // A file someone changed to do more is kept.
         assert!(!is_onyx_link_handler(&written.replace(
             "x-scheme-handler/onyx;",

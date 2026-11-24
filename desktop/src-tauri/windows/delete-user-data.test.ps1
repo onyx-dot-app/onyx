@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $roaming = Join-Path $Root 'Roaming'
 $local = Join-Path $Root 'Local'
-$app = 'app.onyx.desktop.v2'
+$app = 'app.onyx.desktop'
 $roamingApp = Join-Path $roaming $app
 
 New-Item -ItemType Directory -Force -Path (Join-Path $roamingApp 'sub\deep') | Out-Null
@@ -38,13 +38,14 @@ function cmdkey.exe {
     if ($args[0] -eq '/list') {
         'Currently stored credentials:'
         ''
-        '    Target: LegacyGeneric:target=https://onyx.example.com.app.onyx.desktop.v2'
+        '    Target: LegacyGeneric:target=https://onyx.example.com.app.onyx.desktop'
         '    Type: Generic '
         '    User: https://onyx.example.com'
-        '    Target: LegacyGeneric:target=https://other.example.com.app.onyx.desktop.v2.old'
-        '    Target: Domain:target=https://domain.example.com.app.onyx.desktop.v2'
-        '    Target: LegacyGeneric:target=app.onyx.desktop.v2'
-        '    Ziel: LegacyGeneric:target=http://localhost:8899.app.onyx.desktop.v2 '
+        '    Target: LegacyGeneric:target=https://other.example.com.app.onyx.desktop.old'
+        '    Target: LegacyGeneric:target=https://preview.example.com.app.onyx.desktop.v2'
+        '    Target: Domain:target=https://domain.example.com.app.onyx.desktop'
+        '    Target: LegacyGeneric:target=app.onyx.desktop'
+        '    Ziel: LegacyGeneric:target=http://localhost:8899.app.onyx.desktop '
     } else {
         Add-Content -LiteralPath $deleted -Value $args[0]
     }

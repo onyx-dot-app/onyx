@@ -12,7 +12,7 @@
 mod backend {
     use keyring::Entry;
 
-    const SERVICE: &str = "app.onyx.desktop.v2";
+    const SERVICE: &str = "app.onyx.desktop";
     #[cfg(target_os = "macos")]
     const STORE: &str = "the macOS keychain";
     #[cfg(target_os = "windows")]
@@ -78,7 +78,7 @@ mod backend {
         let home = std::env::var_os("HOME")?;
         Some(
             PathBuf::from(home)
-                .join("Library/Application Support/app.onyx.desktop.v2")
+                .join("Library/Application Support/app.onyx.desktop")
                 .join("dev-session-tokens.json"),
         )
     }

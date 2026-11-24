@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Onyx v2",
+  "productName": "Onyx",
   "version": "0.1.0",
-  "identifier": "app.onyx.desktop.v2",
+  "identifier": "app.onyx.desktop",
   "build": {
     "beforeDevCommand": "bun run vite:dev",
     "devUrl": "http://localhost:1420",
@@ -66,9 +66,9 @@
           "xdg-utils"
         ],
         "section": "utils",
-        "desktopTemplate": "linux/onyx-v2.desktop",
+        "desktopTemplate": "linux/onyx.desktop",
         "files": {
-          "/usr/share/doc/onyx-v2/copyright": "linux/copyright"
+          "/usr/share/doc/onyx/copyright": "linux/copyright"
         }
       }
     },

@@ -17,7 +17,7 @@
       <string>Onyx Desktop settings</string>
       <key>PayloadContent</key>
       <dict>
-        <key>app.onyx.desktop.v2</key>
+        <key>app.onyx.desktop</key>
         <dict>
           <key>Forced</key>
           <array>

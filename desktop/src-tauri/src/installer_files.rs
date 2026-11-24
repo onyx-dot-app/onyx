@@ -23,7 +23,7 @@ mod delete_user_data {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    const APP: &str = "app.onyx.desktop.v2";
+    const APP: &str = "app.onyx.desktop";
     const USER_SID: &str = "S-1-5-21-1111111111-2222222222-3333333333-1001";
 
     fn run(name: &str, sid: &str, no_links: bool) -> PathBuf {
@@ -96,8 +96,8 @@ mod delete_user_data {
         assert_eq!(
             deleted_credentials(&root),
             [
-                "/delete:LegacyGeneric:target=https://onyx.example.com.app.onyx.desktop.v2",
-                "/delete:LegacyGeneric:target=http://localhost:8899.app.onyx.desktop.v2",
+                "/delete:LegacyGeneric:target=https://onyx.example.com.app.onyx.desktop",
+                "/delete:LegacyGeneric:target=http://localhost:8899.app.onyx.desktop",
             ]
         );
         std::fs::remove_dir_all(&root).unwrap();

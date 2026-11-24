@@ -149,10 +149,8 @@ mod tests {
 
     #[test]
     fn session_record_survives_a_reload_and_not_a_data_wipe() {
-        let dir = std::env::temp_dir().join(format!(
-            "onyx-desktop-v2-config-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("onyx-desktop-config-test-{}", std::process::id()));
         let path = dir.join("config.json");
         let store = ConfigStore::load(path.clone());
         store

@@ -1,8 +1,9 @@
 // Injected into the main window (the server's web UI). It only restyles the
 // page; it calls no app command.
 //
-// - The web app reserves a 36px strip for desktop v1 (`html.onyx-desktop`);
-//   v2 removes it on pages with the chat layout, whose own rows drag the
+// - The web app reserves a 36px strip for the earlier desktop app
+//   (`html.onyx-desktop`); this script removes it on pages with the chat
+//   layout, whose own rows drag the
 //   window. Other pages (the web sign-in page after a session expires) keep
 //   the strip, and a fixed drag strip covers it.
 // - The sidebar runs to the window's top edge. Its logo row becomes the

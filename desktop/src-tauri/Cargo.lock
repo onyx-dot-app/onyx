@@ -3059,7 +3059,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "onyx-desktop-v2"
+name = "onyx"
 version = "0.0.0-dev"
 dependencies = [
  "base64 0.22.1",

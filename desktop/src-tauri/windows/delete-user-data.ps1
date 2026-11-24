@@ -9,7 +9,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 $sid = whoami.exe /user /fo csv /nh
 if ($sid -notmatch '"S-1-(5-21|12-1)-[0-9-]+"\s*$') { exit 0 }
 
-$app = 'app.onyx.desktop.v2'
+$app = 'app.onyx.desktop'
 $reparsePoint = 1024
 
 function Remove-OnyxTree([string]$Path) {
@@ -49,10 +49,10 @@ foreach ($root in $folders.AppData, $folders.'Local AppData') {
 }
 
 # This user's session tokens. keyring names each credential
-# "<server>.app.onyx.desktop.v2". cmdkey works in Constrained Language Mode.
+# "<server>.app.onyx.desktop". cmdkey works in Constrained Language Mode.
 # Its labels are translated, but the "LegacyGeneric:target=" prefix is not.
 foreach ($line in cmdkey.exe /list) {
-    if ($line -match '(LegacyGeneric:target=\S+\.app\.onyx\.desktop\.v2)\s*$') {
+    if ($line -match '(LegacyGeneric:target=\S+\.app\.onyx\.desktop)\s*$') {
         cmdkey.exe "/delete:$($Matches[1])" | Out-Null
     }
 }

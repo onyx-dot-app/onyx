@@ -137,10 +137,8 @@ mod platform {
             None => std::env::current_exe().map_err(|e| e.to_string())?,
         };
         let exec = super::desktop_exec(&exe.to_string_lossy())?;
-        // Not the package name: on Linux that is "onyx-v2", for a desktop file
-        // name with no space.
         let body = format!(
-            "[Desktop Entry]\nType=Application\nName=Onyx v2\nExec={exec}\nTerminal=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\n"
+            "[Desktop Entry]\nType=Application\nName=Onyx\nExec={exec}\nTerminal=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\n"
         );
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -251,12 +249,12 @@ mod tests {
     #[test]
     fn quotes_the_path() {
         assert_eq!(
-            windows_command(r"C:\Program Files\Onyx v2\Onyx v2.exe"),
-            r#""C:\Program Files\Onyx v2\Onyx v2.exe""#
+            windows_command(r"C:\Program Files\Onyx\onyx.exe"),
+            r#""C:\Program Files\Onyx\onyx.exe""#
         );
         assert_eq!(
-            desktop_exec("/opt/Onyx v2/onyx").unwrap(),
-            r#""/opt/Onyx v2/onyx""#
+            desktop_exec("/opt/My Apps/onyx").unwrap(),
+            r#""/opt/My Apps/onyx""#
         );
         assert_eq!(
             desktop_exec(r#"/a "b"/$c`d`/e\f/100%"#).unwrap(),

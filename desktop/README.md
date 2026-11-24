@@ -1,20 +1,19 @@
-# Onyx Desktop v2 (preview)
+# Onyx desktop app
 
-A native desktop app for Onyx, built with Tauri 2.12. macOS is the main platform. Windows and
-Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It lives beside
-`desktop/`, which keeps shipping unchanged and stays the default desktop app. v2 has its own bundle ID
-(`app.onyx.desktop.v2`) and name ("Onyx v2"), so both apps can be installed at the same time.
-On Linux the package name is `onyx-v2` (`src-tauri/tauri.linux.conf.json`), so file names have
-no space.
+A native desktop app for Onyx, built with Tauri 2.12, for macOS, Windows and Linux. Its bundle
+ID is `app.onyx.desktop` and its name is "Onyx" (the Linux package is `onyx`). The earlier
+desktop app (a web-view shell, in git history before this app) had the same ID and name, so an
+install of this app upgrades it in place. See
+[Upgrade from the earlier desktop app](#upgrade-from-the-earlier-desktop-app).
 
 ## What it does
 
 - Native onboarding: enter a server URL. The app checks `GET /api/version`.
 - Native sign-in with email and password through `POST /api/auth/mobile/login`. Release builds
-  keep the session token in the OS credential store (service `app.onyx.desktop.v2`, one entry per
+  keep the session token in the OS credential store (service `app.onyx.desktop`, one entry per
   server): the macOS keychain, Windows Credential Manager, or the Linux Secret Service (GNOME
   Keyring, KWallet). macOS debug builds keep it in `~/Library/Application Support/
-  app.onyx.desktop.v2/dev-session-tokens.json` (mode 600): an unsigned dev build gets a new code
+  app.onyx.desktop/dev-session-tokens.json` (mode 600): an unsigned dev build gets a new code
   signature on every rebuild, and macOS would ask for your password each time.
   Windows keeps Credential Manager entries after an uninstall. So on Windows the app uses a
   stored token only if its `config.json` records that this install saved it
@@ -136,6 +135,50 @@ opens. Click it to open the launcher, drag it anywhere, right-click to hide it. 
 clicks send it away. Whether it is shown and where it sits are saved in `config.json`. The
 sprite sheets in `public/aonyx/` are played faster than the pack's timing.
 
+## Upgrade from the earlier desktop app
+
+The earlier desktop app has the same bundle ID (`app.onyx.desktop`), product name (`Onyx`)
+and binary name (`onyx`), so this app takes its place:
+
+- macOS: the DMG replaces `Onyx.app` in Applications.
+- Windows: the MSI has the same UpgradeCode (Tauri derives it from the product name), so it
+  upgrades an earlier MSI install. The NSIS installer (`.exe`) installs for all users into
+  `Program Files\Onyx`. The earlier `.exe` installed for the current user only, into
+  `%LOCALAPPDATA%\Onyx`. The new installer runs that per-user uninstaller silently first
+  (`src-tauri/windows/installer-hooks.nsh`). The uninstall keeps the earlier app's data.
+  Only the per-user install of the user who runs the installer goes. Other users of the
+  computer remove theirs by hand.
+- Linux: the `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and
+  `dnf` upgrade the earlier package.
+
+At the first launch, before it reads `config.json`, the app imports settings once
+(`src-tauri/src/migration.rs`). It does this only when its own `config.json` does not exist:
+
+- From the preview build (`app.onyx.desktop.v2`), if its `config.json` exists: all settings,
+  except the record of saved session tokens. The preview's tokens stay in its own credential
+  store entries (service `app.onyx.desktop.v2`), so the user signs in once. The preview's file
+  does not change.
+- Else from the earlier app's `config.json`: `server_url` (only a URL that onboarding accepts)
+  and a `summon_shortcut` that is not its default. The app ignores other keys, a file that is
+  not valid JSON, and values of the wrong type. After the import, the app renames the file to
+  `config.json.imported`, as a backup that is not imported again. The earlier app's file is at:
+
+  | OS | File |
+  |---|---|
+  | macOS | `~/Library/Application Support/app.onyx.onyx-desktop/config.json` |
+  | Windows | `%APPDATA%\onyx\onyx-desktop\config\config.json` |
+  | Linux | `~/.config/onyx-desktop/config.json` (`$XDG_CONFIG_HOME` if set) |
+
+The earlier app kept its session in the web view's cookies. This app keeps the session in the
+OS credential store, so each user signs in once after the upgrade. The web view data (local
+storage, cache) of the earlier app is in the same folders and stays. On Linux the app deletes
+the earlier app's `cookies` file at launch (see [Windows and Linux](#windows-and-linux)).
+
+The earlier app had no managed policy. IT preset its server with a `config.json` at the paths
+above. That file still works for a first launch: the app imports its `server_url` as the
+user's saved server. The user can change it. To set a server that users cannot change, use
+`ServerURL` and `LockServerURL` (see [Managed deployment](#managed-deployment-mdm-and-group-policy)).
+
 ## Managed deployment (MDM and Group Policy)
 
 IT can push the app to every device with Kandji, Jamf, Intune or Group Policy, and set it up
@@ -185,21 +228,21 @@ The app does not ignore a policy that it cannot read. It fails closed:
 
 The app adds a login item for the current user only: a LaunchAgent on macOS,
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows, and
-`~/.config/autostart/app.onyx.desktop.v2.desktop` on Linux. `LaunchAtLogin` is best effort. A
+`~/.config/autostart/app.onyx.desktop.desktop` on Linux. `LaunchAtLogin` is best effort. A
 user can still turn the item off in System Settings, Task Manager or the desktop's startup
 settings. While the app runs, it sets the item again within five minutes (at each policy read,
 or when Preferences opens). If the app does not run, nothing sets it again. To make sure the
 app opens at login, deploy the login item with your management tool instead:
 
 - macOS: a managed login item (the `com.apple.servicemanagement` payload) for the bundle ID
-  `app.onyx.desktop.v2`, or a LaunchAgent in `/Library/LaunchAgents`.
+  `app.onyx.desktop`, or a LaunchAgent in `/Library/LaunchAgents`.
 - Windows: a value under `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`, with Group
   Policy Preferences or Intune. Quote the path.
 - Linux: a `.desktop` file in `/etc/xdg/autostart`.
 
 ### macOS
 
-macOS reads forced managed preferences for the bundle ID `app.onyx.desktop.v2`. Values that a
+macOS reads forced managed preferences for the bundle ID `app.onyx.desktop`. Values that a
 user writes with `defaults write` are not managed and are ignored. Upload this profile
 ([`deploy/macos/Onyx.mobileconfig`](deploy/macos/Onyx.mobileconfig)) as a
 custom configuration profile (Kandji: Custom Profile; Jamf Pro: Configuration Profiles, Upload;
@@ -225,7 +268,7 @@ Intune: macOS, Templates, Custom). Give each payload a new `PayloadUUID` (`uuidg
       <string>Onyx Desktop settings</string>
       <key>PayloadContent</key>
       <dict>
-        <key>app.onyx.desktop.v2</key>
+        <key>app.onyx.desktop</key>
         <dict>
           <key>Forced</key>
           <array>
@@ -269,7 +312,7 @@ Intune: macOS, Templates, Custom). Give each payload a new `PayloadUUID` (`uuidg
 </plist>
 ```
 
-To see what the app gets on a device, run `defaults read "/Library/Managed Preferences/app.onyx.desktop.v2"`.
+To see what the app gets on a device, run `defaults read "/Library/Managed Preferences/app.onyx.desktop"`.
 
 ### Windows
 
@@ -360,7 +403,7 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
 
 ## Run it
 
-Prerequisites: Rust 1.90+, Bun 1.3+, and a dependency install in `web/` (`desktop-v2` builds
+Prerequisites: Rust 1.90+, Bun 1.3+, and a dependency install in `web/` (the app builds
 Opal from `web/lib/opal/src`). Also, per platform:
 
 - macOS: Xcode Command Line Tools (full Xcode is not needed).
@@ -374,10 +417,12 @@ Opal from `web/lib/opal/src`). Also, per platform:
   ```
 
 ```bash
-cd desktop-v2
+cd desktop
 bun install
 bun run dev
 ```
+
+`ods desktop dev` does the same and also installs the `web/` dependencies.
 
 Point onboarding at any Onyx server v4.2 or later. The default is `http://localhost:3000`. A remote
 server needs `https://`; `http://` works only for a server on this computer: `localhost`, a
@@ -486,7 +531,7 @@ How the app differs from macOS:
   The app hands the session to the main window each time it opens the window. Other cookies of
   the web UI (for example the sidebar state) reset when the app quits. Local storage stays on
   disk. At launch the app deletes the `cookies` file that older builds wrote to
-  `~/.local/share/app.onyx.desktop.v2/`.
+  `~/.local/share/app.onyx.desktop/`. The earlier desktop app wrote its cookies there too.
 - The web sign-in window (SAML, cloud workspaces, older servers) is titled "Onyx web sign-in"
   and sends the web view's own user agent. On macOS it sends Safari's, because Google refuses
   WKWebView's default one. The native sign-in window hides while the web sign-in window is open, and
@@ -505,7 +550,7 @@ How the app differs from macOS:
   - Both installers refuse to install an older version over a newer one. Uninstall the newer
     version first.
   - The NSIS uninstaller option **Delete the application data** deletes the
-    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` folders of the
+    `%APPDATA%\app.onyx.desktop` and `%LOCALAPPDATA%\app.onyx.desktop` folders of the
     user who runs the uninstaller. It does not go into junctions or symbolic links: it keeps
     the links inside these folders, and when a folder is itself a link it removes only the
     link. Link targets do not change. The option also deletes the session tokens from the
@@ -524,12 +569,12 @@ How the app differs from macOS:
     user's config records it, so the user must sign in again when the config is gone or the
     user signed out. The app then deletes the old token. If the config is still there, a
     reinstall uses the token.
-- On Linux the `.deb` registers `onyx://` in its desktop file (`onyx-v2.desktop`). AppImage
+- On Linux the `.deb` and `.rpm` register `onyx://` in their desktop file (`Onyx.desktop`). AppImage
   and other builds that do not run from `/usr/bin` register it for the current user at launch,
   so they get sign-in links too. This needs `xdg-mime`. At each launch, a `.deb` install makes
-  `onyx-v2.desktop` the current user's default for `onyx://` (v1 can also claim the scheme),
-  and deletes the per-user `onyx://` entry that earlier versions wrote
-  (`~/.local/share/applications/onyx-desktop-v2-handler.desktop`). It deletes the file only if
+  `Onyx.desktop` the current user's default for `onyx://`, and deletes the per-user `onyx://`
+  entry that the earlier desktop app wrote for the same binary
+  (`~/.local/share/applications/onyx-handler.desktop`). It deletes the file only if
   it is that hidden entry and handles no other MIME type. This cleanup happens
   per user, at that user's first launch of the new version, not at package install. After
   `apt remove`, the default names a desktop file that no longer exists, and the desktop ignores
@@ -562,7 +607,7 @@ Linux needs some desktop services:
   tray icon without the AppIndicator extension (`gnome-shell-extension-appindicator`, on by
   default on Ubuntu). The icon file goes to `$XDG_RUNTIME_DIR/tray-icon`. When that directory
   is not set or the app cannot write to it (for example after `su`, or in some SSH and VDI
-  sessions), it goes to `~/.cache/app.onyx.desktop.v2/tray-icon`. If the tray icon still
+  sessions), it goes to `~/.cache/app.onyx.desktop/tray-icon`. If the tray icon still
   fails, the app logs the error and runs without it. Launch the app again to show its window.
 - The launcher's transparent corners need a compositing window manager. Without one, the
   corners show black. With no compositor and software rendering, WebKitGTK can also leave a
@@ -624,9 +669,9 @@ The app writes its log to `onyx.log` in the app's log folder (`init_logging` in
 
 | OS | Folder |
 |---|---|
-| macOS | `~/Library/Logs/app.onyx.desktop.v2/` |
-| Windows | `%LOCALAPPDATA%\app.onyx.desktop.v2\logs\` |
-| Linux | `~/.local/share/app.onyx.desktop.v2/logs/` (`$XDG_DATA_HOME` if set) |
+| macOS | `~/Library/Logs/app.onyx.desktop/` |
+| Windows | `%LOCALAPPDATA%\app.onyx.desktop\logs\` |
+| Linux | `~/.local/share/app.onyx.desktop/logs/` (`$XDG_DATA_HOME` if set) |
 
 Times are UTC. The log records the app's own messages at level `info` and higher: the app
 version and OS at startup, the saved server, sign-in (password or SSO) and sign-out, sign-in
@@ -647,8 +692,9 @@ stderr. If the folder cannot be written, the app runs without a log.
   offline window uses the health checks only. If one page fails while `GET /api/version`
   and `GET /` answer, the main window keeps that failed page.
 - Browser SSO needs a server with the native-app sign-in pass-through in its web OAuth
-  callback. v1 also registers the `onyx://` scheme; with both apps installed, macOS sends the
-  sign-in link to whichever app registered it last.
+  callback. The preview build (`app.onyx.desktop.v2`, "Onyx v2") also registers the `onyx://`
+  scheme; with both apps installed, macOS sends the sign-in link to whichever app registered it
+  last. Uninstall the preview build.
 - Windows and Linux are a preview: no signed builds, no auto-update feed, and no QA harness
   input (it posts AppKit events). Aonyx is a plain always-on-top window there, so clicking it
   can take focus from the app you are in.

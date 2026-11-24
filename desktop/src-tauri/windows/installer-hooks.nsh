@@ -3,7 +3,7 @@
 ; includes this file before it defines its pages.
 
 ; keyring names each session token's credential "<server>.<identifier>".
-!define ONYX_CREDENTIAL_SUFFIX ".app.onyx.desktop.v2"
+!define ONYX_CREDENTIAL_SUFFIX ".app.onyx.desktop"
 !define ONYX_CRED_TYPE_GENERIC 1
 ; ERROR_ELEVATION_REQUIRED and ERROR_PRODUCT_VERSION, so that deployment
 ; scripts can see why a silent install failed.

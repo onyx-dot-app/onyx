@@ -6,7 +6,7 @@
     <stringTable>
       <string id="Onyx">Onyx</string>
       <string id="OnyxDesktop">Onyx Desktop</string>
-      <string id="SUPPORTED_OnyxDesktopV2">Onyx Desktop v2 and later</string>
+      <string id="SUPPORTED_OnyxDesktop">Onyx desktop app versions that read managed policy</string>
       <string id="ServerURL">Onyx server</string>
       <string id="ServerURL_Explain">The Onyx server that the app connects to, for example https://onyx.example.com. http:// is allowed for an intranet server. If the user has not saved a server, the app skips onboarding. A server that the user saves later is used instead, unless "Lock the Onyx server" is enabled. The app keeps only the scheme, host and port, so Onyx must run at the server root. A URL with a user name or password is not valid.</string>
       <string id="LockServerURL">Lock the Onyx server</string>

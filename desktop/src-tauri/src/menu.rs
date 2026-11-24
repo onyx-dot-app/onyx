@@ -108,7 +108,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
     let app_menu = Submenu::with_items(
         app,
-        "Onyx v2",
+        "Onyx",
         true,
         &[
             &PredefinedMenuItem::about(app, Some("About Onyx"), None)?,
