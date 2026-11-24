@@ -113,8 +113,17 @@ template's ciphertext, so key rotation re-stores it
 execute pass over the template, whether or not a row changed. It runs the migration chain
 instead when no snapshot exists at that head, or when the schema already has
 tables from a failed build. On the playground (`IS_PLAYGROUND`),
-`ee/onyx/server/tenants/provisioning.py:check_playground_sign_up` first asks the control plane
-(`POST /sign-up-domain`) and refuses with a `PLAYGROUND_*` code when the address
+`ee/onyx/server/tenants/provisioning.py:check_playground_sign_up` refuses with a
+`PLAYGROUND_*` code. It first checks the address itself, without the control
+plane: a free-mail domain (gmail, proton and the like) gets
+`PLAYGROUND_FREE_MAIL`
+(`onyx/auth/free_mail_email_validator.py:is_free_mail_email`). The list is a
+curated set in the code plus HubSpot's free-mail provider list, downloaded
+through `onyx/auth/domain_blocklist.py:RemoteDomainBlocklist` (the same cache
+the disposable-domain check in `onyx/auth/disposable_email_validator.py` uses:
+hourly refresh in a background thread, conditional requests, SSRF-guarded fetch
+with a 5 MB cap). The curated set answers while the first download runs. Then
+it asks the control plane (`POST /sign-up-domain`) and refuses when the address
 or its domain has used its access, or when a team from the domain has a running
 trial and the person did not choose "start a new team" (`start_new_team`, a
 value in the signed OAuth state; the playground has no password form). The web

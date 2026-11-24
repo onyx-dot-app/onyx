@@ -11393,6 +11393,7 @@
         "playgroundAskAdmin": "请让您的管理员邀请您。",
         "playgroundCheckFailed": "我们无法核验您的注册。请稍后重试。",
         "playgroundEmailUsed": "您已使用过 playground 访问权限。",
+        "playgroundFreeMail": "请使用您的工作邮箱。",
         "playgroundLimitReached": "贵公司已使用过 playground 访问权限。",
         "serverError": "您的身份提供方遇到错误。请重试。",
         "staleSignIn": "此登录链接已过期或已失效。请重新登录。",
