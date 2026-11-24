@@ -144,10 +144,14 @@ and binary name (`onyx`), so this app takes its place:
 - Windows: the MSI has the same UpgradeCode (Tauri derives it from the product name), so it
   upgrades an earlier MSI install. The NSIS installer (`.exe`) installs for all users into
   `Program Files\Onyx`. The earlier `.exe` installed for the current user only, into
-  `%LOCALAPPDATA%\Onyx`. At each user's first launch, the new app runs that user's per-user
-  uninstaller silently, as the user (`remove_earlier_user_install` in `src-tauri/src/main.rs`).
-  The uninstall keeps the earlier app's data. The elevated installer never runs it: the user
-  can change that uninstall entry and its files.
+  `%LOCALAPPDATA%\Onyx`. At each user's first launch, the new app hands that user's per-user
+  uninstall to a hidden PowerShell helper and exits (`hand_off_earlier_uninstall` in
+  `src-tauri/src/main.rs`). The earlier uninstaller ends every `onyx.exe` of the user by name, so
+  it cannot run while the new app runs. The helper waits for the app to exit, runs the
+  uninstaller silently, as the user, then starts the app again. The uninstall keeps the earlier
+  app's data. The elevated installer never runs it: the user can change that uninstall entry and
+  its files. The app tries this once per user (marker file `earlier-uninstall-tried` in
+  `%LOCALAPPDATA%\app.onyx.desktop`).
 - Linux: the `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and
   `dnf` upgrade the earlier package.
 
@@ -476,8 +480,10 @@ the JavaScript build, and that build does not run again in the Tauri build
 (`beforeBuildCommand` is null in the release config). After all builds succeed,
 `publish-desktop-update-feed` writes one `latest.json` for all platforms and uploads it to the
 same release. See [Auto-update](#auto-update). To test the release build without a release, run
-the workflow by hand on a branch with **desktop** checked: it builds every desktop target and
-`latest.json` into a draft release `v0.0.0-dev+<sha>`, which nobody publishes.
+the workflow by hand on a branch with **desktop** checked: it builds every desktop target into a
+draft release `v0.0.0-dev+<sha>`, which nobody publishes. Such a test run gets no signing secret:
+its installers are not signed or notarized, it builds no update archives, and it writes no
+`latest.json`.
 
 `.github/workflows/desktop-downloads.yml` (weekly, or by hand) writes the download counts of the
 desktop assets of every release to its job summary.
@@ -572,7 +578,7 @@ How the app differs from macOS:
     (`HKCU\...\Uninstall\Onyx`) of the current user, as that user and without elevation.
     The uninstall keeps the earlier app's data. This works after an NSIS, MSI or
     LocalSystem install. Until a user starts the new app, that user sees two "Onyx" entries
-    in Apps.
+    in Apps. At that first launch the app closes, and starts again when the uninstall is done.
   - At launch, a release build deletes a per-user `onyx://` entry
     (`HKCU\Software\Classes\onyx`) that starts another program. The earlier desktop app
     wrote one at each launch, and it would win over the entry that the installers write for

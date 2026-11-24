@@ -181,14 +181,36 @@ pub async fn save_server(
     }
     if current.is_some() {
         end_session(&app).await?;
-        // A policy refresh can lock the server while the sign-out waits.
-        server_locked(&state)?;
     }
-    state.config.update(|c| c.server_url = Some(server))?;
-    log::info!("saved the server {logged}");
+    // A policy refresh can lock the server while the sign-out waits.
+    let lock = server_locked(&state);
+    let next = after_sign_out(lock.is_err());
+    if next == AfterSignOut::SaveNewServer {
+        state.config.update(|c| c.server_url = Some(server))?;
+        log::info!("saved the server {logged}");
+    } else {
+        log::warn!("the server is locked now; {logged} is not saved");
+    }
     windows::open_login(&app)?;
     windows::close(&app, windows::ONBOARDING);
-    Ok(())
+    lock
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum AfterSignOut {
+    SaveNewServer,
+    /// The session already ended, so the user signs in again to the locked
+    /// server instead of being left with no window.
+    SignInToCurrent,
+}
+
+/// What `save_server` does once the old session has ended.
+fn after_sign_out(locked_now: bool) -> AfterSignOut {
+    if locked_now {
+        AfterSignOut::SignInToCurrent
+    } else {
+        AfterSignOut::SaveNewServer
+    }
 }
 
 #[tauri::command]
@@ -708,9 +730,15 @@ pub fn fit_window(window: tauri::WebviewWindow, content_height: f64) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        chosen_server, decode_component, managed_prefs, selected_agent, server_lock_reason,
-        server_setup, MANAGED, SERVER_LOCKED_INVALID,
+        after_sign_out, chosen_server, decode_component, managed_prefs, selected_agent,
+        server_lock_reason, server_setup, AfterSignOut, MANAGED, SERVER_LOCKED_INVALID,
     };
+
+    #[test]
+    fn a_lock_during_sign_out_keeps_the_server_and_opens_sign_in() {
+        assert_eq!(after_sign_out(true), AfterSignOut::SignInToCurrent);
+        assert_eq!(after_sign_out(false), AfterSignOut::SaveNewServer);
+    }
     use crate::api::Agent;
     use crate::policy::{self, Policy, RawValue};
 

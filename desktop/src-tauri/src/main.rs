@@ -203,73 +203,98 @@ fn earlier_user_uninstaller(uninstall_string: &str, exe: &str) -> Option<String>
         .then(|| path.to_string())
 }
 
+/// A PowerShell single-quoted string.
+#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
+fn ps_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+/// The script that removes the earlier per-user install after this process
+/// (`pid`) exits, then starts `exe` again. The earlier uninstaller ends every
+/// `onyx.exe` of the user by name, so it cannot run while this app runs.
+/// NSIS wants `_?=<dir>` last and unquoted: it runs the uninstaller in place,
+/// so `-Wait` covers the uninstall.
+#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
+fn earlier_uninstall_script(pid: u32, uninstaller: &str, exe: &str) -> Option<String> {
+    let (dir, _) = uninstaller.rsplit_once('\\')?;
+    Some(format!(
+        "$ErrorActionPreference = 'SilentlyContinue'\n\
+         Wait-Process -Id {pid} -Timeout 60\n\
+         $p = Start-Process -FilePath {uninstaller_q} -ArgumentList {args_q} -Wait -PassThru\n\
+         if ($p -and $p.ExitCode -eq 0) {{\n\
+         \x20   Remove-Item -LiteralPath {uninstaller_q} -Force\n\
+         \x20   [System.IO.Directory]::Delete({dir_q})\n\
+         }}\n\
+         Start-Process -FilePath {exe_q}\n",
+        uninstaller_q = ps_quote(uninstaller),
+        args_q = ps_quote(&format!("/S _?={dir}")),
+        dir_q = ps_quote(dir),
+        exe_q = ps_quote(exe),
+    ))
+}
+
 /// The earlier desktop app's setup program installed for the current user
 /// only (uninstall entry in HKCU). Left in place, it is a second "Onyx" in
-/// Apps and claims onyx:// for the user. Its silent uninstall keeps its data.
-/// It runs here, as the user, never from the elevated installer: the user can
-/// change that entry and its files. It removes the "Onyx" Run value, so it
-/// runs before launch at login is set. The wait is bounded.
+/// Apps and claims onyx:// for the user. This hands its silent uninstall
+/// (which keeps its data) to a helper that runs as the user, never from the
+/// elevated installer: the user can change that entry and its files. Returns
+/// true when the helper started; this process must then exit. One attempt
+/// per user: a marker file stops a loop when the uninstall fails.
 #[cfg(all(windows, not(debug_assertions)))]
-fn remove_earlier_user_install(product_name: &str) {
-    use std::time::{Duration, Instant};
+fn hand_off_earlier_uninstall(product_name: &str, identifier: &str) -> bool {
+    use std::os::windows::process::CommandExt;
     use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
     let key = format!(r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{product_name}");
     let Ok(uninstall) = RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey(key)
         .and_then(|key| key.get_value::<String, _>("UninstallString"))
     else {
-        return;
+        return false;
     };
     let Ok(exe) = std::env::current_exe() else {
-        return;
+        return false;
     };
-    let Some(uninstaller) =
-        earlier_user_uninstaller(&uninstall, &exe.to_string_lossy()).map(std::path::PathBuf::from)
-    else {
-        return;
+    let exe = exe.to_string_lossy().into_owned();
+    let Some(uninstaller) = earlier_user_uninstaller(&uninstall, &exe) else {
+        return false;
     };
-    let Some(dir) = uninstaller.parent().map(std::path::Path::to_path_buf) else {
-        return;
+    let Some(local) = std::env::var_os("LOCALAPPDATA") else {
+        return false;
     };
-    // "_?=" runs the NSIS uninstaller in place, so the wait covers the uninstall.
-    let mut child = match std::process::Command::new(&uninstaller)
-        .arg("/S")
-        .arg(format!("_?={}", dir.display()))
-        .spawn()
+    let marker_dir = std::path::Path::new(&local).join(identifier);
+    let marker = marker_dir.join("earlier-uninstall-tried");
+    if marker.exists()
+        || std::fs::create_dir_all(&marker_dir).is_err()
+        || std::fs::write(&marker, "").is_err()
     {
-        Ok(child) => child,
-        Err(e) => {
-            log::warn!("could not start the earlier app's uninstaller: {e}");
-            return;
-        }
-    };
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) if status.success() => {
-                let _ = std::fs::remove_file(&uninstaller);
-                let _ = std::fs::remove_dir(&dir);
-                log::info!("removed the earlier app's per-user install");
-                return;
-            }
-            Ok(Some(status)) => {
-                log::warn!("the earlier app's uninstaller failed: {status}");
-                return;
-            }
-            Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(200));
-            }
-            Ok(None) => {
-                log::warn!("the earlier app's uninstaller did not finish in time");
-                return;
-            }
-            Err(e) => {
-                log::warn!("could not wait for the earlier app's uninstaller: {e}");
-                return;
-            }
-        }
+        return false;
     }
+    let Some(script) = earlier_uninstall_script(std::process::id(), &uninstaller, &exe) else {
+        return false;
+    };
+    use base64::Engine;
+    let utf16: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
+    let Some(system_root) = std::env::var_os("SystemRoot") else {
+        return false;
+    };
+    let powershell =
+        std::path::Path::new(&system_root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+    std::process::Command::new(powershell)
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-EncodedCommand",
+        ])
+        .arg(encoded)
+        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+        .spawn()
+        .is_ok()
 }
 
 #[cfg(all(windows, not(debug_assertions)))]
@@ -355,6 +380,11 @@ fn main() {
     #[cfg(target_os = "linux")]
     gtk::glib::set_application_name("Onyx");
     let context = tauri::generate_context!();
+    // Before any window or plugin: the helper starts this app again.
+    #[cfg(all(windows, not(debug_assertions)))]
+    if hand_off_earlier_uninstall(&context.package_info().name, &context.config().identifier) {
+        return;
+    }
     let version = context.package_info().version.to_string();
     let api = api::Api::new(&version).unwrap_or_else(|e| startup_failed(&e));
     let builder = tauri::Builder::default()
@@ -408,8 +438,6 @@ fn main() {
             let config = ConfigStore::load(config_path);
             let policy = policy::with_remembered_server(policy::read(handle), &config);
             policy::log_effective(&policy);
-            #[cfg(all(windows, not(debug_assertions)))]
-            remove_earlier_user_install(&handle.package_info().name);
             policy::apply_launch_at_login(handle, &policy);
             app.manage(AppState::new(config, policy, api));
 
@@ -530,9 +558,36 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        earlier_user_uninstaller, is_onyx_link_handler, legacy_link_handler,
-        link_command_is_other_program, packaged_desktop_file, registers_links_at_runtime,
+        earlier_uninstall_script, earlier_user_uninstaller, is_onyx_link_handler,
+        legacy_link_handler, link_command_is_other_program, packaged_desktop_file,
+        registers_links_at_runtime,
     };
+
+    #[test]
+    fn the_earlier_uninstall_runs_in_place_after_this_app_exits() {
+        let script = earlier_uninstall_script(
+            42,
+            r"C:\Users\Ann O'Neil\AppData\Local\Onyx\uninstall.exe",
+            r"C:\Program Files\Onyx\onyx.exe",
+        )
+        .unwrap();
+        assert!(
+            script.starts_with("$ErrorActionPreference = 'SilentlyContinue'\nWait-Process -Id 42 ")
+        );
+        // One argument string: /S, then _?= last with the unquoted folder.
+        assert!(script.contains(
+            r"-FilePath 'C:\Users\Ann O''Neil\AppData\Local\Onyx\uninstall.exe' -ArgumentList '/S _?=C:\Users\Ann O''Neil\AppData\Local\Onyx' -Wait"
+        ));
+        assert!(script
+            .contains(r"[System.IO.Directory]::Delete('C:\Users\Ann O''Neil\AppData\Local\Onyx')"));
+        assert!(script
+            .trim_end()
+            .ends_with(r"Start-Process -FilePath 'C:\Program Files\Onyx\onyx.exe'"));
+        assert_eq!(
+            earlier_uninstall_script(1, "uninstall.exe", "onyx.exe"),
+            None
+        );
+    }
 
     #[test]
     fn only_another_installs_uninstaller_is_run() {

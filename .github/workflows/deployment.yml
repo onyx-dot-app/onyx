@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       desktop:
-        description: "Test run: also build the desktop app and its latest.json into a draft release"
+        description: "Test run: also build unsigned desktop installers into a draft release"
         type: boolean
         default: false
 
@@ -555,18 +555,22 @@ jobs:
       # engineering sets the repository variable DESKTOP_WINDOWS_SIGN_COMMAND
       # and the signing credentials (desktop/README.md, "Windows code
       # signing"). Tauri then signs the app, the uninstaller and the installers.
+      # A test run (the `desktop` input) gets no signing secret at all: it
+      # builds unsigned installers with no update archives.
       - name: Write the release config
         env:
-          WINDOWS_SIGN_COMMAND: ${{ runner.os == 'Windows' && vars.DESKTOP_WINDOWS_SIGN_COMMAND || '' }}
+          SIGNED: ${{ needs.determine-builds.outputs.is-test-run != 'true' }}
+          WINDOWS_SIGN_COMMAND: ${{ runner.os == 'Windows' && needs.determine-builds.outputs.is-test-run != 'true' && vars.DESKTOP_WINDOWS_SIGN_COMMAND || '' }}
           RELEASE_CONFIG: ${{ runner.temp }}/desktop-release.conf.json
         run: |
           bun -e '
-            const config = { build: { beforeBuildCommand: null }, bundle: { createUpdaterArtifacts: true } };
+            const config = { build: { beforeBuildCommand: null }, bundle: { createUpdaterArtifacts: process.env.SIGNED === "true" } };
             if (process.env.WINDOWS_SIGN_COMMAND) config.bundle.windows = { signCommand: process.env.WINDOWS_SIGN_COMMAND };
             require("fs").writeFileSync(process.env.RELEASE_CONFIG, JSON.stringify(config));
           '
 
       - name: Configure AWS credentials
+        if: needs.determine-builds.outputs.is-test-run != 'true'
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
@@ -575,6 +579,7 @@ jobs:
       # The updater key pair signs the update archives. Its public half is
       # plugins.updater.pubkey in desktop/src-tauri/tauri.conf.json.
       - name: Get the updater signing key
+        if: needs.determine-builds.outputs.is-test-run != 'true'
         uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
@@ -582,7 +587,7 @@ jobs:
             TAURI_SIGNING_PRIVATE_KEY_PASSWORD, deploy/desktop-v2-updater-private-key-password
 
       - name: Get the Apple secrets
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && needs.determine-builds.outputs.is-test-run != 'true'
         uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
@@ -595,7 +600,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Import Apple Developer Certificate
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && needs.determine-builds.outputs.is-test-run != 'true'
         run: |
           CERT="${RUNNER_TEMP}/certificate.p12"
           echo "${APPLE_CERTIFICATE}" | base64 --decode > "${CERT}"
@@ -644,7 +649,7 @@ jobs:
           args: ${{ matrix.args }} --config ${{ runner.temp }}/desktop-release.conf.json
 
       - name: Check Authenticode signatures
-        if: runner.os == 'Windows' && vars.DESKTOP_WINDOWS_SIGN_COMMAND != ''
+        if: runner.os == 'Windows' && needs.determine-builds.outputs.is-test-run != 'true' && vars.DESKTOP_WINDOWS_SIGN_COMMAND != ''
         working-directory: ${{ matrix.bundle-dir }}
         shell: pwsh
         # Tauri restores the unsigned app in target/release after each
@@ -700,7 +705,8 @@ jobs:
       - determine-builds
       - create-release
       - build-desktop
-    if: needs.determine-builds.outputs.build-desktop == 'true' || (inputs.desktop && needs.determine-builds.outputs.is-test-run == 'true')
+    # A test run builds no signed update archives, so it gets no feed.
+    if: needs.determine-builds.outputs.build-desktop == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
