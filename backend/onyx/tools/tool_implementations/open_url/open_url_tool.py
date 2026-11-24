@@ -540,8 +540,8 @@ class OpenURLTool(Tool):
             # Every page the crawl fetched, as it arrives. A timeout returns
             # these, so the pages the display showed are also in the result.
             fetched_pages: list[OpenedPage] = []
-            # Once the result takes its snapshot (after a timeout), a crawl
-            # still running in its worker may neither add nor show a page.
+            # Once the result takes its snapshot, a worker that timed out
+            # may neither add nor show a page.
             pages_lock = threading.Lock()
             pages_closed = [False]
 
@@ -554,7 +554,9 @@ class OpenURLTool(Tool):
                         _report_opened(
                             invocation,
                             [page.section],
-                            requested_by_normalized.get(url, []),
+                            requested_by_normalized.get(
+                                normalize_web_content_url(url), []
+                            ),
                         )
 
             def _close_pages() -> list[OpenedPage]:
@@ -596,8 +598,9 @@ class OpenURLTool(Tool):
                 indexed_result = IndexedRetrievalResult(
                     sections=[], missing_document_ids=[]
                 )
+                fetched_so_far = _close_pages()
                 crawled_pages, failed_web_fetches = crawled_result or (
-                    _close_pages(),
+                    fetched_so_far,
                     [],
                 )
 
@@ -638,15 +641,17 @@ class OpenURLTool(Tool):
                     opened_ids = {
                         section.center_chunk.document_id for section in opened_sections
                     }
-                    _report_opened(
-                        invocation,
-                        opened_sections,
-                        [
-                            url
-                            for url, document_id in url_to_doc_id.items()
-                            if document_id in opened_ids
-                        ],
-                    )
+                    with pages_lock:
+                        if not pages_closed[0]:
+                            _report_opened(
+                                invocation,
+                                opened_sections,
+                                [
+                                    url
+                                    for url, document_id in url_to_doc_id.items()
+                                    if document_id in opened_ids
+                                ],
+                            )
                     return result
 
                 # An indexed copy of a URL wins over its crawl, so a crawled
@@ -654,7 +659,9 @@ class OpenURLTool(Tool):
                 indexed_urls = {normalize_web_content_url(url) for url in url_to_doc_id}
 
                 def _report_crawled(url: str, page: OpenedPage) -> None:
-                    _on_crawled(url, page, url not in indexed_urls)
+                    _on_crawled(
+                        url, page, normalize_web_content_url(url) not in indexed_urls
+                    )
 
                 if self._web_fetch_disabled:
                     # Indexed-only: never crawl. Unresolved URLs are seeded as
@@ -695,8 +702,9 @@ class OpenURLTool(Tool):
                 indexed_result = indexed_result or IndexedRetrievalResult(
                     sections=[], missing_document_ids=[]
                 )
+                fetched_so_far = _close_pages()
                 crawled_pages, failed_web_fetches = crawled_result or (
-                    _close_pages(),
+                    fetched_so_far,
                     [],
                 )
 
