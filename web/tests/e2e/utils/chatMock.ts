@@ -179,7 +179,7 @@ export interface MockPublishedFile {
   thumbnailFileId?: string;
 }
 
-/** The packets of one publish_files call, the same live and on replay. */
+/** The packets of one publishing call, the same live and on replay. */
 export function publishFilesPackets(
   turnIndex: number,
   files: MockPublishedFile[]

@@ -90,7 +90,7 @@ const fileIds = (files: PublishedFile[]): string[] =>
   files.map((file) => file.file_id);
 
 describe("chatPublishedFiles", () => {
-  test("reads every publish_files result, nested calls included", () => {
+  test("reads every publishing call's result, nested calls included", () => {
     const packets = [
       publishEnd([published("a", "/w/report.md")]),
       publishEnd([published("b", "/w/chart.png")], 0),

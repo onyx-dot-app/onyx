@@ -13,7 +13,7 @@ const PUBLISH_END_PACKETS: ReadonlySet<string> = new Set([
   PacketType.PUBLISH_FILES_END,
 ]);
 
-/** The files that one response's publish_files calls published, in order. */
+/** The files that one response's publishing calls published, in order. */
 function readPublishedFiles(packets: Packet[]): PublishedFile[] {
   return readOnce(publishedFileReads, packets, PUBLISH_END_PACKETS, (packets) =>
     packets.flatMap((packet) =>

@@ -185,7 +185,7 @@ def _publish(
     title: str | None = None,
     missing: bool = False,
 ) -> PublishedFile:
-    """A file that `publish_files` saved for the chat, as the next publish.
+    """A file that a publish saved for the chat, as the next publish.
     Subagents share the root chat's sandbox turn, so their files belong to the
     root chat too."""
     name = path.rsplit("/", 1)[-1]

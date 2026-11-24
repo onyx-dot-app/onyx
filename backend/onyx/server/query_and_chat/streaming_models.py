@@ -569,7 +569,8 @@ class ApplyPatchEnd(BaseObj):
     error: str | None = None
 
 
-# The files that a publish_files call asks for, as the model wrote them.
+# The files that a publishing call asks for, as the model wrote them
+# (chat/renderer.py:publish_card_files).
 class PublishFilesStart(BaseObj):
     type: Literal["publish_files_start"] = StreamingType.PUBLISH_FILES_START.value
     # Empty when the arguments are not valid, for example cut off.

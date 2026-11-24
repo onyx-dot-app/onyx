@@ -632,7 +632,7 @@ def test_a_file_path_shows_once_whole(
             {"session_id": ["x"]},
             WriteStdinStart(session_id="", chars=""),
         ),
-        ("publish_files", {"files": "a.md"}, PublishFilesStart()),
+        ("library_create_library_file", {"files": "a.md"}, PublishFilesStart()),
     ],
 )
 def test_a_call_with_unusable_arguments_keeps_its_own_card(

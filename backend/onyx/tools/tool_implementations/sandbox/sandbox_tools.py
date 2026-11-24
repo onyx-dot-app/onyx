@@ -33,10 +33,10 @@ from onyx.prompts.sandbox_tools import (
     EDIT_USE,
     EXEC_COMMAND_DESCRIPTION,
     EXEC_COMMAND_USE,
+    LIBRARY_CREATE_LIBRARY_FILE_DESCRIPTION,
     LIBRARY_LIST_DESCRIPTION,
     LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION,
     LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION,
-    PUBLISH_FILES_DESCRIPTION,
     SANDBOX_CODE_MODE_NOTE,
     SANDBOX_GUIDANCE,
     WRITE_DESCRIPTION,
@@ -94,6 +94,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ExecCommandArguments,
     ExecCommandOutput,
     FileToolName,
+    LibraryCreateLibraryFileArguments,
     LibraryListArguments,
     LibraryPrepareMaterializeArguments,
     LibraryReplaceLibraryFileArguments,
@@ -102,11 +103,9 @@ from onyx.tools.tool_implementations.sandbox.models import (
     MaterializeItem,
     PublishedFiles,
     PublishFileArgument,
-    PublishFilesArguments,
     SandboxExecResult,
     WriteArguments,
     WriteStdinArguments,
-    artifact_url,
     parse_artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.patch import (
@@ -733,69 +732,24 @@ class WriteTool(_FileTool):
         )
 
 
-class PublishFilesTool(_FileTool):
-    """Gives files from the VM to the user
-    (artifact_operations.publish). It takes turns with the file tools,
-    so it publishes their changes."""
-
-    NAME = "publish_files"
-    # The tool description is its only instruction to the model.
-    USE = None
-    DESCRIPTION = PUBLISH_FILES_DESCRIPTION
-    ARGUMENTS = PublishFilesArguments
-    display_name = "Publish Files"
-
-    @property
-    def code_mode_result(self) -> CodeModeResultSpec:
-        return _FILE_TOOL_RESULT
-
-    def tool_definition(self) -> ToolDefinition:
-        # Not strict: the file entries are `$defs` references.
-        return tool_definition_from_arguments(
-            self.name, self.description, PublishFilesArguments
-        )
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        published = artifact_operations.publish(
-            self._turn,
-            invocation.cancellation,
-            parse_tool_arguments(PublishFilesArguments, invocation.arguments).files,
-        )
-        listed = "\n".join(
-            f"- {file.path}: version {file.version}, file ID {file.file_id}, "
-            f"{file.size} bytes, {file.mime_type}"
-            + (
-                f", url {artifact_url(file.artifact_id, file.version)}"
-                if file.artifact_id is not None and file.version is not None
-                else ""
-            )
-            for file in published
-        )
-        return ToolResult(
-            content="Published. The user sees a download card for each file; "
-            f"do not repeat their contents.\n{listed}",
-            details=PublishedFiles(files=published),
-        )
-
-
 class _LibraryTool(SandboxTool):
     """What the tools over the user's published files share. They run the
     artifact operations (artifact_operations.py), which reach only the files
     published in the user's own root chats that are not deleted
     (`db/chat.py:get_user_published_files`), this chat included. In code mode
     each is a deferred function of its group, which tool_search finds; the
-    model learns of them from the publish_files description and the group's
-    line in the execute_code description, not the system prompt. Running a
-    list or copy again changes nothing, so a call that a lost server left
-    running runs again; the tools that publish say otherwise."""
+    group's line in the execute_code description says what the group is for,
+    and no listed function or prompt names a function. Running a list or copy
+    again changes nothing, so a call that a lost server left running runs
+    again; the tools that publish say otherwise."""
 
     USE = None
     interrupted_result = None
     CODE_MODE_NAMESPACE = "library"
     # The group's line in the execute_code description.
     CODE_MODE_NAMESPACE_DESCRIPTION = (
-        "Find the files that you published in this chat and the user's other "
-        "chats, copy them into this chat, and add versions to them."
+        "Find the user's published files, copy them into this chat and add "
+        "versions to them; create a file here to give it to the user."
     )
     CODE_MODE_NAME: str
     RESULT: type[BaseModel]
@@ -862,6 +816,37 @@ class LibraryPrepareMaterializeTool(_LibraryTool):
         )
 
 
+class LibraryCreateLibraryFileTool(_LibraryTool, _FileTool):
+    """Gives files from the VM to the user, each as the next version of the
+    root chat's artifact at its path (artifact_operations.publish). It takes
+    turns with the file tools, so it publishes their changes, and a call
+    that a lost server left running is not run again."""
+
+    NAME = "library_create_library_file"
+    CODE_MODE_NAME = "create_library_file"
+    DESCRIPTION = LIBRARY_CREATE_LIBRARY_FILE_DESCRIPTION
+    ARGUMENTS = LibraryCreateLibraryFileArguments
+    RESULT = ArtifactPublished
+    display_name = "Publish Files"
+    interrupted_result = INTERRUPTED_SANDBOX_RESULT
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(
+            LibraryCreateLibraryFileArguments, invocation.arguments
+        )
+        published = artifact_operations.publish(
+            self._turn,
+            invocation.cancellation,
+            [PublishFileArgument(path=arguments.file, title=arguments.title)]
+            if arguments.file is not None
+            else [PublishFileArgument(path=path) for path in arguments.files or []],
+        )
+        return ToolResult(
+            content=ArtifactPublished.of(published).model_dump_json(),
+            details=PublishedFiles(files=published),
+        )
+
+
 class LibraryReplaceLibraryFileTool(_LibraryTool, _FileTool):
     """Adds a version to an artifact of any of the user's chats
     (artifact_operations.replace_file). It returns PublishedFiles, so the
@@ -898,8 +883,8 @@ class LibraryReplaceLibraryFileTool(_LibraryTool, _FileTool):
 
 class ArtifactTool(_LibraryTool, _FileTool):
     """One tool with an action for each artifact operation
-    (artifact_operations.py), which Claude models get instead of
-    publish_files and the library tools (sandbox_tools_for_model), for
+    (artifact_operations.py), which Claude models get instead of the
+    library tools (sandbox_tools_for_model), for
     compatibility with how they work with artifacts. Each action builds the
     library tools' arguments of its operation, so both families publish,
     list and copy alike, and a publish gives the same PublishedFiles card.
@@ -1110,8 +1095,8 @@ def sandbox_tools_for_model(
     """The sandbox tools of a chat turn whose model has these names
     (model_identity_names), in the order the prompt names them. Claude
     models get the tools they work with: edit and write for files, and the
-    artifact tool for published files. The others get apply_patch,
-    publish_files and the library tools. No turn gets both sets. The turn
+    artifact tool for published files. The others get apply_patch and the
+    library tools. No turn gets both sets. The turn
     builds them, and its prompt and token estimate name them."""
     if is_claude_model(model_names):
         return (ExecCommandTool, WriteStdinTool, EditTool, WriteTool, ArtifactTool)
@@ -1119,7 +1104,7 @@ def sandbox_tools_for_model(
         ExecCommandTool,
         WriteStdinTool,
         ApplyPatchTool,
-        PublishFilesTool,
+        LibraryCreateLibraryFileTool,
         LibraryListTool,
         LibraryPrepareMaterializeTool,
         LibraryReplaceLibraryFileTool,

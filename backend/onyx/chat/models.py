@@ -648,7 +648,7 @@ class ToolCallResponse(BaseModel):
     tool_result: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
-    # Files that publish_files gave the user; each downloads from
+    # Files that the call published to the user; each downloads from
     # /chat/file/{file_id}.
     published_files: list[PublishedFile] | None = None
     # Reasoning that led to the tool call
