@@ -168,9 +168,9 @@ test("a command shows its output while it runs and how it ended", async () => {
     ).toBeGreaterThan(0);
     await openRun();
     expect(view.container).toHaveTextContent("$ make test");
-    // While it runs, only the last lines of the output are in the page.
-    expect(screen.getByText(/test_8 ok/)).toBeInTheDocument();
-    expect(view.container).not.toHaveTextContent("collecting");
+    // While it runs, the whole output streams in; the panel follows its
+    // newest line.
+    expect(screen.getByText(/collecting[\s\S]*test_8 ok/)).toBeInTheDocument();
 
     // The saved output is what the model saw, cut by tokens; it replaces the
     // live preview.
@@ -194,9 +194,8 @@ test("a command shows its output while it runs and how it ended", async () => {
     );
     await expandTimeline();
     expect(screen.getByText("Ran command")).toBeInTheDocument();
-    expect(
-      screen.getByText("In /home/onyx/workspaces/abc")
-    ).toBeInTheDocument();
+    // Where it ran is a comment above the command.
+    expect(view.container).toHaveTextContent("# in /home/onyx/workspaces/abc");
     expect(
       screen.getByText(/collecting\s+…12 tokens truncated…\s+1 failed/)
     ).toBeInTheDocument();
