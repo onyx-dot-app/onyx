@@ -114,7 +114,11 @@ At its first launch, the app reads the `config.json` file of the previous app on
 | --- | --- |
 | macOS | `~/Library/Application Support/app.onyx.onyx-desktop/config.json` |
 | Windows | `%APPDATA%\onyx\onyx-desktop\config\config.json` |
-| Linux | `~/.config/onyx-desktop/config.json` |
+| Linux | `$XDG_CONFIG_HOME/onyx-desktop/config.json` (default: `~/.config/onyx-desktop/config.json`) |
+
+On Linux,
+the new app's settings folder follows `$XDG_CONFIG_HOME` too (see [Where the app keeps its
+files](#where-the-app-keeps-its-files)).
 
 - The app uses `server_url` as the saved server, so the user goes directly to sign-in.
   The app keeps only the scheme, host, and port, so Onyx must run at the server root.
@@ -166,7 +170,7 @@ To change the server or sign out, open **Preferences**.
 
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| User settings (`config.json`) | `~/Library/Application Support/app.onyx.desktop/` | `%APPDATA%\app.onyx.desktop\` | `~/.config/app.onyx.desktop/` |
+| User settings (`config.json`) | `~/Library/Application Support/app.onyx.desktop/` | `%APPDATA%\app.onyx.desktop\` | `$XDG_CONFIG_HOME/app.onyx.desktop/` (default: `~/.config/app.onyx.desktop/`) |
 | Log files | `~/Library/Logs/app.onyx.desktop/` | `%LOCALAPPDATA%\app.onyx.desktop\logs\` | `~/.local/share/app.onyx.desktop/logs/` |
 | Session token | Keychain, service `app.onyx.desktop`, one item per server | Credential Manager, **Windows Credentials**, one entry per server | Secret Service, service `app.onyx.desktop`, one item per server |
 | Launch at login item | LaunchAgent for the current user | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | `~/.config/autostart/app.onyx.desktop.desktop` |

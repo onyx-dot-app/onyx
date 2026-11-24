@@ -106,13 +106,21 @@ fn rejected_tokens_from(value: serde_json::Value) -> BTreeMap<String, BTreeSet<S
     for (server, value) in entries {
         let set: Option<BTreeSet<String>> = match value {
             Value::String(one) => Some(BTreeSet::from([one])),
-            Value::Array(items) => items
-                .into_iter()
-                .map(|item| match item {
-                    Value::String(s) => Some(s),
-                    _ => None,
-                })
-                .collect(),
+            // A list keeps its valid fingerprints; only bad items go.
+            Value::Array(items) => {
+                let count = items.len();
+                let set: BTreeSet<String> = items
+                    .into_iter()
+                    .filter_map(|item| match item {
+                        Value::String(s) => Some(s),
+                        _ => None,
+                    })
+                    .collect();
+                if set.len() < count {
+                    log::warn!("a rejectedTokens item in config.json is not valid; ignored");
+                }
+                Some(set)
+            }
             _ => None,
         };
         match set {
@@ -301,7 +309,7 @@ mod tests {
             r#""garbage""#,
             "42",
             r#"{"https://a.example.com": 7}"#,
-            r#"{"https://a.example.com": ["aa", 1]}"#,
+            r#"{"https://a.example.com": [1, null]}"#,
         ] {
             let config: Config = serde_json::from_str(&format!(
                 r#"{{"serverUrl": "https://a.example.com", "hotkey": "Alt+Space", "rejectedTokens": {bad}}}"#
@@ -316,6 +324,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(mixed.rejected_tokens.len(), 1);
+        // The valid fingerprints of a list stay when one item is bad.
+        let partly: Config = serde_json::from_str(
+            r#"{"rejectedTokens": {"https://a.example.com": ["aa", 1, "bb"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            partly.rejected_tokens.get("https://a.example.com"),
+            Some(&BTreeSet::from(["aa".to_string(), "bb".to_string()]))
+        );
     }
 
     #[test]

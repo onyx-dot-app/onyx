@@ -51,9 +51,11 @@ the framed pages and framed sign-in path in the web app that only these clients
 need. Each client has a README with its build and design notes.
 
 The desktop app (`desktop/`) is a native Tauri 2 app for macOS, Windows and
-Linux. It replaced the earlier web-view shell, which has the same bundle ID
-(`app.onyx.desktop`) and name, so the new installers upgrade it in place and
-the first launch imports the old server URL. Version tags release it with
+Linux. It keeps the earlier web-view shell's bundle ID (`app.onyx.desktop`)
+and name. The installers upgrade it in place (the MSI does a major upgrade),
+except the Windows setup program (`.exe`): it leaves the old per-user copy,
+and the app shows a one-time notice to remove it in Settings > Apps. The first
+launch imports the old server URL. Version tags release it with
 the server, except beta and cloud tags (the `ods release classify` routing). It signs in through
 `/api/auth/mobile/login`, hands the token to the remote web UI as the session
 cookie, and gives IPC only to its bundled windows. The main window never runs
