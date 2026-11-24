@@ -23,6 +23,7 @@ import { HumanMessageBubble } from "@/app/app/message/HumanMessage";
 import type { TurnGroup } from "@/lib/timeline/chat/transformers";
 import type {
   GroupedPacket,
+  PlacedImage,
   PlacedPublishedFile,
 } from "@/lib/timeline/chat/hooks/packetProcessor";
 import { handleCopy } from "@/app/app/message/copyingUtils";
@@ -90,7 +91,7 @@ interface ResponseSection {
   /** Text that a later step of this section follows. */
   interimGroups: GroupedPacket[];
   displayGroups: GroupedPacket[];
-  images: GeneratedImage[];
+  images: PlacedImage[];
   publishedFiles: PlacedPublishedFile[];
   authErrors: AuthError[];
   toolRequests: ToolRequestRecord[];
@@ -647,16 +648,20 @@ const AgentMessage = React.memo(function AgentMessage({
                                 <ToolQuestionCard question={segment.record} />
                               ),
                           };
+                        case "images":
+                          return {
+                            kind: "card",
+                            key: segment.key,
+                            node: (
+                              <GeneratedImageGrid images={segment.images} />
+                            ),
+                          };
                         case "extras":
                           return {
                             kind: "card",
                             key: "extras",
                             node: (
                               <div className="flex flex-col gap-3">
-                                {/* Generated images lead the answer. */}
-                                {section.images.length > 0 && (
-                                  <GeneratedImageGrid images={section.images} />
-                                )}
                                 {section.authErrors.map((authError, i) => (
                                   <CustomToolAuthCard
                                     key={`auth-error-${i}`}
@@ -796,14 +801,19 @@ const AgentMessage = React.memo(function AgentMessage({
 export default AgentMessage;
 
 /**
- * The section ends with a run: the turn's cursor waits under it, while its
- * steps run and until what comes next.
+ * The section ends with a run, or with the images a run's last step made:
+ * the turn's cursor waits under them, while the steps run and until what
+ * comes next. Its slot stays as an image arrives, so it moves down with the
+ * image instead of fading out over it.
  */
 function endsWithRun(segments: SectionSegment[]): boolean {
-  // Generated images that arrive before the answer sit after the run; the
-  // run still ends the section, so the cursor keeps its slot under them.
+  // Auth cards that arrive before the answer sit after the run; the run
+  // still ends the section, so the cursor keeps its slot under them.
   const last = segments.findLast((s) => s.kind !== "extras");
-  return last?.kind === "run" && last.turnGroups.length > 0;
+  return (
+    last?.kind === "images" ||
+    (last?.kind === "run" && last.turnGroups.length > 0)
+  );
 }
 
 type SectionSegment =
@@ -811,7 +821,9 @@ type SectionSegment =
   | { kind: "text"; key: string; group: GroupedPacket }
   /** An approval or a question card. */
   | { kind: "record"; record: ToolRequestRecord }
-  /** Generated images and auth cards, which lead the section's answer. */
+  /** The images that one turn's image step generated, right after it. */
+  | { kind: "images"; key: string; images: GeneratedImage[] }
+  /** Auth cards, which lead the section's answer. */
   | { kind: "extras" }
   /** Files from every publish_files call, after the ended section's answer. */
   | { kind: "files" };
@@ -827,8 +839,9 @@ const LIVE_RUN_KEY = "live";
 
 /**
  * Lays out one response section the way Craft lays out a turn: steps, text,
- * and approval and question cards in arrival (turn) order. Consecutive steps
- * form one run. Text between steps shows once every earlier step of the
+ * generated images, and approval and question cards in arrival (turn) order.
+ * Consecutive steps form one run; an image ends its step's run, so it shows
+ * exactly where it was generated. Text between steps shows once every earlier step of the
  * section is revealed, so it never appears ahead of the steps before it; an
  * earlier section's steps never gate it. The last run holds the live header;
  * a section with no run gets an empty one, which shows the cursor while the
@@ -853,25 +866,40 @@ function buildSectionSegments(
     )
   );
 
-  // At one turn, a step comes before its text, and text before its card.
+  // A turn's generated images, in the order they arrived.
+  const imagesByTurn = new Map<number, GeneratedImage[]>();
+  for (const image of section.images) {
+    const turnImages = imagesByTurn.get(image.turnIndex) ?? [];
+    turnImages.push(image);
+    imagesByTurn.set(image.turnIndex, turnImages);
+  }
+
+  // At one turn, a step comes before its images, then its text, then its
+  // card.
   type Item =
     | { turn: number; rank: 0; group: TurnGroup }
-    | { turn: number; rank: 1; text: GroupedPacket }
-    | { turn: number; rank: 2; record: ToolRequestRecord };
+    | { turn: number; rank: 1; images: GeneratedImage[] }
+    | { turn: number; rank: 2; text: GroupedPacket }
+    | { turn: number; rank: 3; record: ToolRequestRecord };
   const items: Item[] = [
     ...section.toolGroups.map((group) => ({
       turn: packetTurn(group),
       rank: 0 as const,
       group,
     })),
+    ...Array.from(imagesByTurn, ([turn, images]) => ({
+      turn,
+      rank: 1 as const,
+      images,
+    })),
     ...[...interim, ...section.displayGroups].map((text) => ({
       turn: text.turn_index,
-      rank: 1 as const,
+      rank: 2 as const,
       text,
     })),
     ...section.toolRequests.map((record) => ({
       turn: record.turnIndex,
-      rank: 2 as const,
+      rank: 3 as const,
       record,
     })),
   ].sort((a, b) => a.turn - b.turn || a.rank - b.rank);
@@ -883,6 +911,12 @@ function buildSectionSegments(
         kind: "text",
         key: getToolKey(item.text.turn_index, item.text.tab_index),
         group: item.text,
+      });
+    } else if ("images" in item) {
+      segments.push({
+        kind: "images",
+        key: `images-${item.turn}`,
+        images: item.images,
       });
     } else if ("record" in item) {
       segments.push({ kind: "record", record: item.record });
@@ -903,7 +937,7 @@ function buildSectionSegments(
     }
   }
 
-  if (section.images.length > 0 || section.authErrors.length > 0) {
+  if (section.authErrors.length > 0) {
     // The extras lead the answer: the text after the last run.
     const lastRun = segments.findLastIndex((s) => s.kind === "run");
     const answer = segments.findIndex(

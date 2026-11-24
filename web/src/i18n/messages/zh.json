@@ -12241,7 +12241,7 @@
           "label": "响应"
         },
         "runningStatus": {
-          "text": "正在执行 {toolName}"
+          "text": "正在执行 {toolName}..."
         },
         "unreachableStatus": {
           "text": "{toolName} 无法连接到其服务器"
@@ -12425,7 +12425,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "思考中"
+          "text": "思考中..."
         }
       },
       "timeline": {
@@ -12440,7 +12440,7 @@
             "status": "已生成计划"
           },
           "generating": {
-            "status": "正在生成计划"
+            "status": "正在生成计划..."
           }
         },
         "expandButton": {
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "{count, plural, =0 {正在浏览} other {正在浏览 # 个页面}}"
+            "status": "正在浏览网页..."
           },
           "read": {
-            "status": "{count, plural, =0 {已浏览} other {已浏览 # 个页面}}"
+            "status": "{count, plural, =0 {已浏览网页} other {已浏览 # 个网页}}"
           }
         },
         "fileReader": {
@@ -12459,66 +12459,66 @@
             "status": "已读取 {fileName}（第 {start, number}–{end, number} 个字符，共 {total, number} 个）"
           },
           "reading": {
-            "status": "正在读取文件"
+            "status": "正在读取文件..."
           }
         },
         "header": {
           "executingCode": {
-            "label": "正在执行代码"
+            "label": "正在执行代码..."
           },
           "executingNamedTool": {
-            "label": "正在执行 {toolName}"
+            "label": "正在执行 {toolName}..."
           },
           "executingTool": {
-            "label": "正在执行工具"
+            "label": "正在执行工具..."
           },
           "generatingImages": {
-            "label": "正在生成图片"
+            "label": "正在生成图片..."
           },
           "generatingPlan": {
-            "label": "正在生成计划"
+            "label": "正在生成计划..."
           },
           "queryingKnowledgeBase": {
-            "label": "正在查询知识库"
+            "label": "正在查询知识库..."
           },
           "reading": {
-            "label": "正在读取"
+            "label": "正在读取..."
           },
           "readingFile": {
-            "label": "正在读取文件"
+            "label": "正在读取文件..."
           },
           "researching": {
-            "label": "正在研究"
+            "label": "正在研究..."
           },
           "searchingWeb": {
-            "label": "正在搜索网页"
+            "label": "正在搜索网页..."
           },
           "thinking": {
-            "label": "思考中"
+            "label": "思考中..."
           },
           "updatingMemory": {
             "label": "正在更新记忆..."
           },
           "working": {
-            "label": "处理中"
+            "label": "处理中..."
           },
           "waitingForApproval": {
-            "label": "正在等待你的批准"
+            "label": "正在等待你的批准..."
           },
           "waitingForAnswer": {
-            "label": "正在等待你的回答"
+            "label": "正在等待你的回答..."
           },
           "runningCommand": {
-            "label": "正在运行命令"
+            "label": "正在运行命令..."
           },
           "editingFiles": {
-            "label": "正在编辑文件"
+            "label": "正在编辑文件..."
           },
           "publishingFiles": {
-            "label": "正在发布文件"
+            "label": "正在发布文件..."
           },
           "browsing": {
-            "label": "{count, plural, =0 {正在浏览} other {正在浏览 # 个页面}}"
+            "label": "正在浏览网页..."
           },
           "runPhrases": {
             "doingWork": {
@@ -12568,7 +12568,7 @@
             "text": "未找到结果"
           },
           "reading": {
-            "status": "正在读取"
+            "status": "正在读取..."
           },
           "read": {
             "label": "已读取"
@@ -12579,7 +12579,8 @@
             "sources": "正在搜索 {sources}",
             "doneSources": "已搜索 {sources}",
             "sourcesOverflow": "{sources} 及另外 {count} 个",
-            "withTimeWindow": "{header}({timeWindow})"
+            "withTimeWindow": "{header}({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "自 {date} 起",
@@ -12598,7 +12599,7 @@
             "text": "记忆工具已禁用"
           },
           "updating": {
-            "status": "正在更新记忆"
+            "status": "正在更新记忆..."
           },
           "updated": {
             "status": "已更新记忆"
@@ -12620,7 +12621,7 @@
             "status": "已查询知识库"
           },
           "querying": {
-            "status": "正在查询知识库"
+            "status": "正在查询知识库..."
           },
           "listed": {
             "label": "{count, plural, one {已列出 # 个文档} other {已列出 # 个文档}}"
@@ -12680,7 +12681,7 @@
             "label": "输出："
           },
           "running": {
-            "status": "正在运行 Python"
+            "status": "正在运行 Python..."
           },
           "ran": {
             "status": "已运行 Python"
@@ -12694,7 +12695,7 @@
         },
         "reasoning": {
           "thinking": {
-            "status": "思考中"
+            "status": "思考中..."
           },
           "thought": {
             "status": "已思考"
@@ -12730,7 +12731,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "正在搜索网页"
+            "status": "正在搜索网页..."
           },
           "searched": {
             "status": "已搜索网络"
@@ -15085,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "处理中"
+          "label": "处理中..."
         }
       },
       "read": {

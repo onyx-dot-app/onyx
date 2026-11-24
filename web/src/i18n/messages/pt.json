@@ -12241,7 +12241,7 @@
           "label": "Resposta"
         },
         "runningStatus": {
-          "text": "Executando {toolName}"
+          "text": "Executando {toolName}..."
         },
         "unreachableStatus": {
           "text": "{toolName} não conseguiu alcançar o servidor"
@@ -12425,7 +12425,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "Pensando"
+          "text": "Pensando..."
         }
       },
       "timeline": {
@@ -12440,7 +12440,7 @@
             "status": "Plano gerado"
           },
           "generating": {
-            "status": "Gerando plano"
+            "status": "Gerando plano..."
           }
         },
         "expandButton": {
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "{count, plural, =0 {Navegando} one {Navegando # página} other {Navegando # páginas}}"
+            "status": "Navegando em páginas web..."
           },
           "read": {
-            "status": "{count, plural, =0 {Navegou} one {Navegou # página} other {Navegou # páginas}}"
+            "status": "{count, plural, =0 {Navegou em páginas web} one {Navegou em # página web} other {Navegou em # páginas web}}"
           }
         },
         "fileReader": {
@@ -12459,66 +12459,66 @@
             "status": "Leu {fileName} (caracteres {start, number}–{end, number} de {total, number})"
           },
           "reading": {
-            "status": "Lendo arquivo"
+            "status": "Lendo arquivo..."
           }
         },
         "header": {
           "executingCode": {
-            "label": "Executando código"
+            "label": "Executando código..."
           },
           "executingNamedTool": {
-            "label": "Executando {toolName}"
+            "label": "Executando {toolName}..."
           },
           "executingTool": {
-            "label": "Executando ferramenta"
+            "label": "Executando ferramenta..."
           },
           "generatingImages": {
-            "label": "Gerando imagens"
+            "label": "Gerando imagens..."
           },
           "generatingPlan": {
-            "label": "Gerando plano"
+            "label": "Gerando plano..."
           },
           "queryingKnowledgeBase": {
-            "label": "Consultando a base de conhecimento"
+            "label": "Consultando a base de conhecimento..."
           },
           "reading": {
-            "label": "Lendo"
+            "label": "Lendo..."
           },
           "readingFile": {
-            "label": "Lendo arquivo"
+            "label": "Lendo arquivo..."
           },
           "researching": {
-            "label": "Pesquisando"
+            "label": "Pesquisando..."
           },
           "searchingWeb": {
-            "label": "Pesquisando na web"
+            "label": "Pesquisando na web..."
           },
           "thinking": {
-            "label": "Pensando"
+            "label": "Pensando..."
           },
           "updatingMemory": {
             "label": "Atualizando memória..."
           },
           "working": {
-            "label": "Trabalhando"
+            "label": "Trabalhando..."
           },
           "waitingForApproval": {
-            "label": "Aguardando sua aprovação"
+            "label": "Aguardando sua aprovação..."
           },
           "waitingForAnswer": {
-            "label": "Aguardando sua resposta"
+            "label": "Aguardando sua resposta..."
           },
           "runningCommand": {
-            "label": "Executando comando"
+            "label": "Executando comando..."
           },
           "editingFiles": {
-            "label": "Editando arquivos"
+            "label": "Editando arquivos..."
           },
           "publishingFiles": {
-            "label": "Publicando arquivos"
+            "label": "Publicando arquivos..."
           },
           "browsing": {
-            "label": "{count, plural, =0 {Navegando} one {Navegando # página} other {Navegando # páginas}}"
+            "label": "Navegando em páginas web..."
           },
           "runPhrases": {
             "doingWork": {
@@ -12568,7 +12568,7 @@
             "text": "Nenhum resultado encontrado"
           },
           "reading": {
-            "status": "Lendo"
+            "status": "Lendo..."
           },
           "read": {
             "label": "Lido"
@@ -12579,7 +12579,8 @@
             "sources": "Pesquisando {sources}",
             "doneSources": "Pesquisa em {sources} concluída",
             "sourcesOverflow": "{sources} +{count} mais",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "desde {date}",
@@ -12598,7 +12599,7 @@
             "text": "Ferramenta de memória desativada"
           },
           "updating": {
-            "status": "Atualizando memória"
+            "status": "Atualizando memória..."
           },
           "updated": {
             "status": "Memória atualizada"
@@ -12620,7 +12621,7 @@
             "status": "Base de conhecimento consultada"
           },
           "querying": {
-            "status": "Consultando a base de conhecimento"
+            "status": "Consultando a base de conhecimento..."
           },
           "listed": {
             "label": "{count, plural, one {# documento listado} other {# documentos listados}}"
@@ -12680,7 +12681,7 @@
             "label": "Saída:"
           },
           "running": {
-            "status": "Executando Python"
+            "status": "Executando Python..."
           },
           "ran": {
             "status": "Python executado"
@@ -12694,7 +12695,7 @@
         },
         "reasoning": {
           "thinking": {
-            "status": "Pensando"
+            "status": "Pensando..."
           },
           "thought": {
             "status": "Pensou"
@@ -12730,7 +12731,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "Pesquisando na web"
+            "status": "Pesquisando na web..."
           },
           "searched": {
             "status": "Pesquisa na web concluída"
@@ -15085,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "Trabalhando"
+          "label": "Trabalhando..."
         }
       },
       "read": {

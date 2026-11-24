@@ -205,8 +205,10 @@ replay rules. Saved-session replay sends the request,
 and its resolution once decided, for each request of an ended or suspended
 response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
-`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
-model writes it, with the tool name as `tool_type`. Native model reasoning streams
+`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`), and the
+prompt of the tools in `chat/renderer.py:PROMPT_ARGUMENT_TOOLS`
+(`generate_image`), while the model writes it, with the tool name as
+`tool_type`. The image step shows the prompt until the revised prompts arrive. Native model reasoning streams
 as reasoning packets.
 
 Each call's streamed arguments report at most once per

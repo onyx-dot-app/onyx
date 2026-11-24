@@ -12241,7 +12241,7 @@
           "label": "응답"
         },
         "runningStatus": {
-          "text": "{toolName} 실행 중"
+          "text": "{toolName} 실행 중..."
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
@@ -12425,7 +12425,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "생각 중"
+          "text": "생각 중..."
         }
       },
       "timeline": {
@@ -12440,7 +12440,7 @@
             "status": "계획 생성됨"
           },
           "generating": {
-            "status": "계획 생성 중"
+            "status": "계획 생성 중..."
           }
         },
         "expandButton": {
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "{count, plural, =0 {탐색 중} other {# 페이지 탐색 중}}"
+            "status": "웹 페이지 탐색 중..."
           },
           "read": {
-            "status": "{count, plural, =0 {탐색함} other {# 페이지 탐색함}}"
+            "status": "{count, plural, =0 {웹 페이지를 탐색했습니다} other {웹 페이지 #개를 탐색했습니다}}"
           }
         },
         "fileReader": {
@@ -12459,66 +12459,66 @@
             "status": "{fileName} 읽음 (총 {total, number}자 중 {start, number}–{end, number}자)"
           },
           "reading": {
-            "status": "파일 읽는 중"
+            "status": "파일 읽는 중..."
           }
         },
         "header": {
           "executingCode": {
-            "label": "코드 실행 중"
+            "label": "코드 실행 중..."
           },
           "executingNamedTool": {
-            "label": "{toolName} 실행 중"
+            "label": "{toolName} 실행 중..."
           },
           "executingTool": {
-            "label": "도구 실행 중"
+            "label": "도구 실행 중..."
           },
           "generatingImages": {
-            "label": "이미지 생성 중"
+            "label": "이미지 생성 중..."
           },
           "generatingPlan": {
-            "label": "계획 생성 중"
+            "label": "계획 생성 중..."
           },
           "queryingKnowledgeBase": {
-            "label": "지식 베이스 조회 중"
+            "label": "지식 베이스 조회 중..."
           },
           "reading": {
-            "label": "읽는 중"
+            "label": "읽는 중..."
           },
           "readingFile": {
-            "label": "파일 읽는 중"
+            "label": "파일 읽는 중..."
           },
           "researching": {
-            "label": "리서치 중"
+            "label": "리서치 중..."
           },
           "searchingWeb": {
-            "label": "웹 검색 중"
+            "label": "웹 검색 중..."
           },
           "thinking": {
-            "label": "생각 중"
+            "label": "생각 중..."
           },
           "updatingMemory": {
             "label": "메모리 업데이트 중..."
           },
           "working": {
-            "label": "작업 중"
+            "label": "작업 중..."
           },
           "waitingForApproval": {
-            "label": "승인을 기다리는 중"
+            "label": "승인을 기다리는 중..."
           },
           "waitingForAnswer": {
-            "label": "답변을 기다리는 중"
+            "label": "답변을 기다리는 중..."
           },
           "runningCommand": {
-            "label": "명령 실행 중"
+            "label": "명령 실행 중..."
           },
           "editingFiles": {
-            "label": "파일 편집 중"
+            "label": "파일 편집 중..."
           },
           "publishingFiles": {
-            "label": "파일 게시 중"
+            "label": "파일 게시 중..."
           },
           "browsing": {
-            "label": "{count, plural, =0 {탐색 중} other {# 페이지 탐색 중}}"
+            "label": "웹 페이지 탐색 중..."
           },
           "runPhrases": {
             "doingWork": {
@@ -12568,7 +12568,7 @@
             "text": "결과를 찾을 수 없음"
           },
           "reading": {
-            "status": "읽는 중"
+            "status": "읽는 중..."
           },
           "read": {
             "label": "읽었습니다"
@@ -12579,7 +12579,8 @@
             "sources": "{sources} 검색 중",
             "doneSources": "{sources}을(를) 검색했습니다",
             "sourcesOverflow": "{sources} 외 {count}개",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "{date} 이후",
@@ -12598,7 +12599,7 @@
             "text": "메모리 도구가 비활성화되었습니다"
           },
           "updating": {
-            "status": "메모리 업데이트 중"
+            "status": "메모리 업데이트 중..."
           },
           "updated": {
             "status": "메모리를 업데이트했습니다"
@@ -12620,7 +12621,7 @@
             "status": "지식 베이스 조회 완료"
           },
           "querying": {
-            "status": "지식 베이스 조회 중"
+            "status": "지식 베이스 조회 중..."
           },
           "listed": {
             "label": "{count, plural, one {문서 #개 나열됨} other {문서 #개 나열됨}}"
@@ -12680,7 +12681,7 @@
             "label": "출력:"
           },
           "running": {
-            "status": "Python 실행 중"
+            "status": "Python 실행 중..."
           },
           "ran": {
             "status": "Python을 실행했습니다"
@@ -12694,7 +12695,7 @@
         },
         "reasoning": {
           "thinking": {
-            "status": "생각 중"
+            "status": "생각 중..."
           },
           "thought": {
             "status": "생각했습니다"
@@ -12730,7 +12731,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "웹 검색 중"
+            "status": "웹 검색 중..."
           },
           "searched": {
             "status": "웹을 검색했습니다"
@@ -15085,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "작업 중"
+          "label": "작업 중..."
         }
       },
       "read": {

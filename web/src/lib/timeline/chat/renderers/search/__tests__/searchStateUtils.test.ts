@@ -98,18 +98,18 @@ describe("formatSearchHeader", () => {
         tEn,
         "en"
       )
-    ).toBe("Searching internal documents (since Jan 5, 2024)");
+    ).toBe("Searching internal documents (since Jan 5, 2024)...");
   });
 
   it("leaves the header untouched when no time window applies", () => {
     expect(formatSearchHeader([], null, tEn, "en")).toBe(
-      "Searching internal documents"
+      "Searching internal documents..."
     );
   });
 
   it("names up to three sources and counts the rest", () => {
     expect(formatSearchHeader(["slack", "notion"], null, tEn, "en")).toBe(
-      "Searching Slack, Notion"
+      "Searching Slack, Notion..."
     );
     expect(
       formatSearchHeader(
@@ -118,12 +118,12 @@ describe("formatSearchHeader", () => {
         tEn,
         "en"
       )
-    ).toBe("Searching Slack, Notion, Confluence +2 more");
+    ).toBe("Searching Slack, Notion, Confluence +2 more...");
   });
 
   it("translates the default header", () => {
     expect(formatSearchHeader([], null, tAr, "ar")).toBe(
-      "جارٍ البحث في المستندات الداخلية"
+      "جارٍ البحث في المستندات الداخلية..."
     );
   });
 });

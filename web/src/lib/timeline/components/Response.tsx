@@ -10,7 +10,7 @@ import React, {
 import { Presence } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { cn, prefersReducedMotion } from "@opal/utils";
-import { AnswerText } from "@/lib/timeline/components/AnswerText";
+import { ResponseInset } from "@/lib/timeline/components/ResponseInset";
 import {
   RESPONSE_CURSOR_ANCHOR_ATTRIBUTE,
   STREAMING_CURSOR_LOOK,
@@ -36,7 +36,8 @@ const CURSOR_GLIDE_MS = 250;
 /**
  * One item of a response, in arrival order. A `run` is a run card, `text` is
  * answer text (or anything that lines up with it, such as the cursor), and a
- * `card` is a block such as a notice or an approval card.
+ * `card` is a block such as an image, a notice or an approval card. Every
+ * kind but `run` punches in to the run card's content (`ResponseInset`).
  */
 export interface ResponseItem {
   kind: "run" | "text" | "card";
@@ -277,11 +278,9 @@ export function Response({ items, working = false }: ResponseProps) {
               }
               grow
             >
-              {item.kind === "text" ? (
-                <AnswerText>{item.node}</AnswerText>
-              ) : (
-                item.node
-              )}
+              {/* Every item but a run card punches in to the run card's
+                  content. */}
+              <ResponseInset>{item.node}</ResponseInset>
             </Presence>
           )
         )}

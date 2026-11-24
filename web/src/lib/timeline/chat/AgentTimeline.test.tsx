@@ -78,8 +78,8 @@ describe("AgentTimeline while a tool call waits for the user", () => {
       expect(
         screen.getByText(
           awaitingUser === "approval"
-            ? "Waiting for your approval"
-            : "Waiting for your answer"
+            ? "Waiting for your approval..."
+            : "Waiting for your answer..."
         )
       ).toBeVisible();
     }

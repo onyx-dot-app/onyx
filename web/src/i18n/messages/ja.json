@@ -12241,7 +12241,7 @@
           "label": "レスポンス"
         },
         "runningStatus": {
-          "text": "{toolName} を実行中"
+          "text": "{toolName} を実行中..."
         },
         "unreachableStatus": {
           "text": "{toolName} はサーバーに接続できませんでした"
@@ -12425,7 +12425,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "思考中"
+          "text": "思考中..."
         }
       },
       "timeline": {
@@ -12440,7 +12440,7 @@
             "status": "プランを生成しました"
           },
           "generating": {
-            "status": "プランを生成中"
+            "status": "プランを生成中..."
           }
         },
         "expandButton": {
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "{count, plural, =0 {閲覧中} other {# ページを閲覧中}}"
+            "status": "ウェブページを閲覧中..."
           },
           "read": {
-            "status": "{count, plural, =0 {閲覧しました} other {# ページを閲覧しました}}"
+            "status": "{count, plural, =0 {ウェブページを閲覧しました} other {# 件のウェブページを閲覧しました}}"
           }
         },
         "fileReader": {
@@ -12459,66 +12459,66 @@
             "status": "{fileName} を読み取りました ({total, number} 文字中 {start, number}–{end, number} 文字目)"
           },
           "reading": {
-            "status": "ファイルを読み取り中"
+            "status": "ファイルを読み取り中..."
           }
         },
         "header": {
           "executingCode": {
-            "label": "コードを実行中"
+            "label": "コードを実行中..."
           },
           "executingNamedTool": {
-            "label": "{toolName} を実行中"
+            "label": "{toolName} を実行中..."
           },
           "executingTool": {
-            "label": "ツールを実行中"
+            "label": "ツールを実行中..."
           },
           "generatingImages": {
-            "label": "画像を生成中"
+            "label": "画像を生成中..."
           },
           "generatingPlan": {
-            "label": "プランを生成中"
+            "label": "プランを生成中..."
           },
           "queryingKnowledgeBase": {
-            "label": "ナレッジベースを照会中"
+            "label": "ナレッジベースを照会中..."
           },
           "reading": {
-            "label": "読み取り中"
+            "label": "読み取り中..."
           },
           "readingFile": {
-            "label": "ファイルを読み取り中"
+            "label": "ファイルを読み取り中..."
           },
           "researching": {
-            "label": "リサーチ中"
+            "label": "リサーチ中..."
           },
           "searchingWeb": {
-            "label": "ウェブを検索中"
+            "label": "ウェブを検索中..."
           },
           "thinking": {
-            "label": "思考中"
+            "label": "思考中..."
           },
           "updatingMemory": {
             "label": "メモリを更新中..."
           },
           "working": {
-            "label": "作業中"
+            "label": "作業中..."
           },
           "waitingForApproval": {
-            "label": "承認を待っています"
+            "label": "承認を待っています..."
           },
           "waitingForAnswer": {
-            "label": "回答を待っています"
+            "label": "回答を待っています..."
           },
           "runningCommand": {
-            "label": "コマンドを実行中"
+            "label": "コマンドを実行中..."
           },
           "editingFiles": {
-            "label": "ファイルを編集中"
+            "label": "ファイルを編集中..."
           },
           "publishingFiles": {
-            "label": "ファイルを公開しています"
+            "label": "ファイルを公開しています..."
           },
           "browsing": {
-            "label": "{count, plural, =0 {閲覧中} other {# ページを閲覧中}}"
+            "label": "ウェブページを閲覧中..."
           },
           "runPhrases": {
             "doingWork": {
@@ -12568,7 +12568,7 @@
             "text": "結果が見つかりません"
           },
           "reading": {
-            "status": "読み取り中"
+            "status": "読み取り中..."
           },
           "read": {
             "label": "読み込みました"
@@ -12579,7 +12579,8 @@
             "sources": "{sources}を検索中",
             "doneSources": "{sources}を検索しました",
             "sourcesOverflow": "{sources} 他{count}件",
-            "withTimeWindow": "{header}({timeWindow})"
+            "withTimeWindow": "{header}({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "{date}以降",
@@ -12598,7 +12599,7 @@
             "text": "メモリツールは無効です"
           },
           "updating": {
-            "status": "メモリを更新中"
+            "status": "メモリを更新中..."
           },
           "updated": {
             "status": "メモリを更新しました"
@@ -12620,7 +12621,7 @@
             "status": "ナレッジベースを照会しました"
           },
           "querying": {
-            "status": "ナレッジベースを照会中"
+            "status": "ナレッジベースを照会中..."
           },
           "listed": {
             "label": "{count, plural, one {# 件のドキュメントを一覧表示} other {# 件のドキュメントを一覧表示}}"
@@ -12680,7 +12681,7 @@
             "label": "出力:"
           },
           "running": {
-            "status": "Python を実行中"
+            "status": "Python を実行中..."
           },
           "ran": {
             "status": "Python を実行しました"
@@ -12694,7 +12695,7 @@
         },
         "reasoning": {
           "thinking": {
-            "status": "思考中"
+            "status": "思考中..."
           },
           "thought": {
             "status": "思考しました"
@@ -12730,7 +12731,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "ウェブを検索中"
+            "status": "ウェブを検索中..."
           },
           "searched": {
             "status": "ウェブを検索しました"
@@ -15085,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "作業中"
+          "label": "作業中..."
         }
       },
       "read": {

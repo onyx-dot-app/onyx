@@ -166,8 +166,8 @@ test("parallel searches render as separate steps in order", async () => {
   );
   try {
     await openRun();
-    const internal = await screen.findByText("Searching internal documents");
-    const web = screen.getAllByText("Searching the web").at(-1);
+    const internal = await screen.findByText("Searching internal documents...");
+    const web = screen.getAllByText("Searching the web...").at(-1);
     expect(web).toBeDefined();
     expect(
       internal.compareDocumentPosition(web!) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -225,7 +225,7 @@ test.each([undefined, 0])(
         act(() => step.click());
       }
       expect(
-        screen.getByText("Searching internal documents")
+        screen.getByText("Searching internal documents...")
       ).toBeInTheDocument();
       expect(screen.getByText("internal")).toBeInTheDocument();
       expect(screen.getByText("web")).toBeInTheDocument();
@@ -717,11 +717,11 @@ test("a program call whose stream stopped for approval shows a waiting header an
   );
   try {
     expect(
-      await screen.findByText("Waiting for your approval")
+      await screen.findByText("Waiting for your approval...")
     ).toBeInTheDocument();
     // The waiting card shows in the transcript's trailing region.
     expect(screen.queryByTestId("tool-approval-card")).not.toBeInTheDocument();
-    expect(screen.queryByText("Working")).not.toBeInTheDocument();
+    expect(screen.queryByText("Working...")).not.toBeInTheDocument();
 
     // A decision this client made ends the wait before its packet arrives.
     act(() =>
@@ -730,7 +730,7 @@ test("a program call whose stream stopped for approval shows a waiting header an
       })
     );
     expect(
-      screen.queryByText("Waiting for your approval")
+      screen.queryByText("Waiting for your approval...")
     ).not.toBeInTheDocument();
 
     const resolved: Packet[] = [
@@ -759,7 +759,7 @@ test("a program call whose stream stopped for approval shows a waiting header an
       await screen.findAllByText("Approved: Create issue")
     ).not.toHaveLength(0);
     expect(
-      screen.queryByText("Waiting for your approval")
+      screen.queryByText("Waiting for your approval...")
     ).not.toBeInTheDocument();
   } finally {
     view.unmount();
@@ -811,7 +811,7 @@ test("a question waits with a header, then a typed answer shows as the user's me
   );
   try {
     expect(
-      await screen.findByText("Waiting for your answer")
+      await screen.findByText("Waiting for your answer...")
     ).toBeInTheDocument();
     // The waiting card shows in the transcript's trailing region.
     expect(screen.queryByTestId("tool-question-card")).not.toBeInTheDocument();
@@ -874,7 +874,7 @@ test("a question waits with a header, then a typed answer shows as the user's me
     ).toBeTruthy();
     expect(await screen.findByText("README updated.")).toBeInTheDocument();
     expect(
-      screen.queryByText("Waiting for your answer")
+      screen.queryByText("Waiting for your answer...")
     ).not.toBeInTheDocument();
   } finally {
     view.unmount();
@@ -905,7 +905,7 @@ test("a running program shows working over a parallel turn", async () => {
   try {
     // The parallel searches show as their own steps, still working.
     expect(
-      await screen.findAllByText("Searching internal documents")
+      await screen.findAllByText("Searching internal documents...")
     ).toHaveLength(2);
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   } finally {
@@ -1036,7 +1036,7 @@ test("a program without tool calls shows only a working header", async () => {
   }
 });
 
-test("generated images from earlier tool steps lead the answer once", async () => {
+test("a generated image shows once, before the later steps and the answer", async () => {
   seedSessionAwaitingAnswer();
   const image = {
     file_id: "generated-1",

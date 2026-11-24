@@ -12241,7 +12241,7 @@
           "label": "Réponse"
         },
         "runningStatus": {
-          "text": "Exécution de {toolName}"
+          "text": "Exécution de {toolName}..."
         },
         "unreachableStatus": {
           "text": "{toolName} n'a pas pu joindre son serveur"
@@ -12425,7 +12425,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "Réflexion"
+          "text": "Réflexion..."
         }
       },
       "timeline": {
@@ -12440,7 +12440,7 @@
             "status": "Plan généré"
           },
           "generating": {
-            "status": "Génération du plan"
+            "status": "Génération du plan..."
           }
         },
         "expandButton": {
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "{count, plural, =0 {Navigation} one {Navigation sur # page} other {Navigation sur # pages}}"
+            "status": "Consultation de pages web..."
           },
           "read": {
-            "status": "{count, plural, =0 {Navigation terminée} one {# page parcourue} other {# pages parcourues}}"
+            "status": "{count, plural, =0 {Pages web consultées} one {# page web consultée} other {# pages web consultées}}"
           }
         },
         "fileReader": {
@@ -12459,66 +12459,66 @@
             "status": "A lu {fileName} (caractères {start, number}–{end, number} sur {total, number})"
           },
           "reading": {
-            "status": "Lecture du fichier"
+            "status": "Lecture du fichier..."
           }
         },
         "header": {
           "executingCode": {
-            "label": "Exécution du code"
+            "label": "Exécution du code..."
           },
           "executingNamedTool": {
-            "label": "Exécution de {toolName}"
+            "label": "Exécution de {toolName}..."
           },
           "executingTool": {
-            "label": "Exécution de l'outil"
+            "label": "Exécution de l'outil..."
           },
           "generatingImages": {
-            "label": "Génération des images"
+            "label": "Génération des images..."
           },
           "generatingPlan": {
-            "label": "Génération du plan"
+            "label": "Génération du plan..."
           },
           "queryingKnowledgeBase": {
-            "label": "Interrogation de la base de connaissances"
+            "label": "Interrogation de la base de connaissances..."
           },
           "reading": {
-            "label": "Lecture"
+            "label": "Lecture..."
           },
           "readingFile": {
-            "label": "Lecture du fichier"
+            "label": "Lecture du fichier..."
           },
           "researching": {
-            "label": "Recherche en cours"
+            "label": "Recherche en cours..."
           },
           "searchingWeb": {
-            "label": "Recherche sur le web"
+            "label": "Recherche sur le web..."
           },
           "thinking": {
-            "label": "Réflexion"
+            "label": "Réflexion..."
           },
           "updatingMemory": {
             "label": "Mise à jour de la mémoire..."
           },
           "working": {
-            "label": "En cours"
+            "label": "En cours..."
           },
           "waitingForApproval": {
-            "label": "En attente de votre approbation"
+            "label": "En attente de votre approbation..."
           },
           "waitingForAnswer": {
-            "label": "En attente de votre réponse"
+            "label": "En attente de votre réponse..."
           },
           "runningCommand": {
-            "label": "Exécution de la commande"
+            "label": "Exécution de la commande..."
           },
           "editingFiles": {
-            "label": "Modification des fichiers"
+            "label": "Modification des fichiers..."
           },
           "publishingFiles": {
-            "label": "Publication des fichiers"
+            "label": "Publication des fichiers..."
           },
           "browsing": {
-            "label": "{count, plural, =0 {Navigation} one {Navigation sur # page} other {Navigation sur # pages}}"
+            "label": "Consultation de pages web..."
           },
           "runPhrases": {
             "doingWork": {
@@ -12568,7 +12568,7 @@
             "text": "Aucun résultat trouvé"
           },
           "reading": {
-            "status": "Lecture"
+            "status": "Lecture..."
           },
           "read": {
             "label": "Lu"
@@ -12579,7 +12579,8 @@
             "sources": "Recherche dans {sources}",
             "doneSources": "Recherche dans {sources} terminée",
             "sourcesOverflow": "{sources} +{count} autres",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "depuis le {date}",
@@ -12598,7 +12599,7 @@
             "text": "Outil de mémoire désactivé"
           },
           "updating": {
-            "status": "Mise à jour de la mémoire"
+            "status": "Mise à jour de la mémoire..."
           },
           "updated": {
             "status": "Mémoire mise à jour"
@@ -12620,7 +12621,7 @@
             "status": "Base de connaissances interrogée"
           },
           "querying": {
-            "status": "Interrogation de la base de connaissances"
+            "status": "Interrogation de la base de connaissances..."
           },
           "listed": {
             "label": "{count, plural, one {# document listé} other {# documents listés}}"
@@ -12680,7 +12681,7 @@
             "label": "Sortie :"
           },
           "running": {
-            "status": "Exécution de Python"
+            "status": "Exécution de Python..."
           },
           "ran": {
             "status": "Python exécuté"
@@ -12694,7 +12695,7 @@
         },
         "reasoning": {
           "thinking": {
-            "status": "Réflexion"
+            "status": "Réflexion..."
           },
           "thought": {
             "status": "Réflexion terminée"
@@ -12730,7 +12731,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "Recherche sur le web"
+            "status": "Recherche sur le web..."
           },
           "searched": {
             "status": "Recherche sur le web terminée"
@@ -15085,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "En cours"
+          "label": "En cours..."
         }
       },
       "read": {
