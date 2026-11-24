@@ -21,7 +21,7 @@ from onyx.access.models import (
     ExternalAccess,
     NodeExternalAccess,
 )
-from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
+from onyx.access.utils import build_domain_group_id
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -106,7 +106,6 @@ def get_external_access_for_raw_gdrive_file(
     retriever_drive_service: GoogleDriveService | None,
     admin_drive_service: GoogleDriveService,
     fallback_user_email: str,
-    add_prefix: bool = False,
     fallback_drive_service_factory: (
         Callable[[], GoogleDriveService | None] | None
     ) = None,
@@ -116,10 +115,6 @@ def get_external_access_for_raw_gdrive_file(
 
     Assumes the file we retrieved has EITHER `permissions` or `permission_ids`
 
-    add_prefix: When this method is called during the initial indexing via the connector,
-                set add_prefix to True so group IDs are prefixed with the source type.
-                When invoked from doc_sync (permission sync), use the default (False)
-                since upsert_document_external_perms handles prefixing.
     fallback_user_email: When we cannot retrieve any permission info for a file
                 (e.g. externally-owned files where the API returns no permissions
                 and permissions.list returns 403), fall back to granting access
@@ -266,13 +261,6 @@ def get_external_access_for_raw_gdrive_file(
         | ({drive_id} if drive_id is not None else set())
     )
 
-    # Prefix group IDs with source type if requested (for indexing path)
-    if add_prefix:
-        group_ids = {
-            build_ext_group_name_for_onyx(group_id, DocumentSource.GOOGLE_DRIVE)
-            for group_id in group_ids
-        }
-
     return ExternalAccess(
         external_user_emails=user_emails,
         external_user_group_ids=group_ids,
@@ -284,7 +272,6 @@ def get_external_access_for_folder(
     folder: GoogleDriveFileType,
     google_domain: str,
     drive_service: GoogleDriveService,
-    add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Extract ExternalAccess from a folder's permissions.
@@ -296,8 +283,6 @@ def get_external_access_for_folder(
         folder: The folder metadata from Google Drive API (must include permissionIds field)
         google_domain: The company's Google Workspace domain (e.g., "company.com")
         drive_service: Google Drive service for fetching permission details
-        add_prefix: When True, prefix group IDs with source type (for indexing path).
-                   When False (default), leave unprefixed (for permission sync path).
 
     Returns:
         ExternalAccess with extracted permission info
@@ -358,13 +343,7 @@ def get_external_access_for_folder(
             # If allowFileDiscovery is False, it's "link only" access
             is_public = permission.allow_file_discovery is not False
 
-    # Prefix group IDs with source type if requested (for indexing path)
     group_ids: set[str] = group_emails | domain_groups
-    if add_prefix:
-        group_ids = {
-            build_ext_group_name_for_onyx(group_id, DocumentSource.GOOGLE_DRIVE)
-            for group_id in group_ids
-        }
 
     return ExternalAccess(
         external_user_emails=user_emails,

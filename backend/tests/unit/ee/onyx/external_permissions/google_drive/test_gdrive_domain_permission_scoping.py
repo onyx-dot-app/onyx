@@ -42,16 +42,13 @@ def _domain_permission(domain: str, perm_id: str = "perm-domain") -> dict[str, A
     return {"id": perm_id, "type": "domain", "domain": domain}
 
 
-def _file_access(
-    permissions: list[dict[str, Any]], add_prefix: bool = False
-) -> ExternalAccess:
+def _file_access(permissions: list[dict[str, Any]]) -> ExternalAccess:
     return get_external_access_for_raw_gdrive_file(
         file=_raw_file(permissions),
         company_domain=COMPANY_DOMAIN,
         retriever_drive_service=None,
         admin_drive_service=_DRIVE_SERVICE,
         fallback_user_email="admin@companya.com",
-        add_prefix=add_prefix,
     )
 
 
@@ -200,17 +197,7 @@ def test_retriever_impersonation_failure_falls_back_to_admin() -> None:
     )
 
 
-def test_indexing_path_prefixes_domain_group() -> None:
-    access = _file_access([_domain_permission(COMPANY_DOMAIN)], add_prefix=True)
-    expected = build_ext_group_name_for_onyx(
-        f"domain:{COMPANY_DOMAIN}", DocumentSource.GOOGLE_DRIVE
-    )
-    assert expected in access.external_user_group_ids
-
-
-def _folder_access(
-    permissions: list[GoogleDrivePermission], add_prefix: bool = False
-) -> ExternalAccess:
+def _folder_access(permissions: list[GoogleDrivePermission]) -> ExternalAccess:
     with patch(
         "ee.onyx.external_permissions.google_drive.doc_sync.get_permissions_by_ids",
         return_value=permissions,
@@ -219,7 +206,6 @@ def _folder_access(
             folder={"id": "folder-1", "permissionIds": ["p1"]},
             google_domain=COMPANY_DOMAIN,
             drive_service=_DRIVE_SERVICE,
-            add_prefix=add_prefix,
         )
 
 

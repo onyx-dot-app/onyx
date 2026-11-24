@@ -31,6 +31,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
+from onyx.access.utils import build_ext_group_names_for_storage
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
@@ -1129,7 +1130,10 @@ def upsert_documents(
                                 doc.external_access.external_user_emails
                             ),
                             "external_user_group_ids": list(
-                                doc.external_access.external_user_group_ids
+                                build_ext_group_names_for_storage(
+                                    doc.external_access.external_user_group_ids,
+                                    source,
+                                )
                             ),
                             "is_public": doc.external_access.is_public,
                         }
