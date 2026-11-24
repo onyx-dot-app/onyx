@@ -429,6 +429,7 @@ def test_version_accepts_only_bounded_approved_suffix_chains(version: str) -> No
         ("op-previewer-cad1d12", None, "cad1d12"),
         ("nightly-latest-20261123", None, "nightly"),
         ("nightly-2582a29", None, "2582a29"),
+        ("dev-build-main-12345678", None, "12345678"),
         ("edge", None, "unknown"),
         ("edge", "not-a-sha", "unknown"),
         ("nightly", "2582a29ef5a52fff", "2582a29"),

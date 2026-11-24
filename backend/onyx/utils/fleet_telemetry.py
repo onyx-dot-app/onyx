@@ -47,7 +47,8 @@ _COMMIT: re.Pattern[str] = re.compile(r"[a-f0-9]{7,40}\Z")
 _FIXED_LABELS: frozenset[str] = frozenset({"nightly", "dev", "unknown"})
 # A build tag such as "dev-build-main-f9b2636" ends in its short commit.
 _TAG_COMMIT: re.Pattern[str] = re.compile(r"-([a-f0-9]{7,40})\Z")
-_DATE: re.Pattern[str] = re.compile(r"\d{8}")
+# The nightly tag ends in a date, which is also valid hex.
+_NIGHTLY_DATE_TAG: re.Pattern[str] = re.compile(r"nightly-latest-\d{8}")
 
 # Read from OnyxCeleryQueues, so a renamed queue needs no telemetry change.
 CELERY_QUEUES: tuple[str, ...] = tuple(
@@ -334,8 +335,7 @@ def reported_version(raw: str) -> str:
     if _COMMIT.fullmatch(commit):
         return commit[:7]
     tag_commit: re.Match[str] | None = _TAG_COMMIT.search(raw)
-    # A date suffix such as nightly-latest-20261123 is also hex; it is not a commit.
-    if tag_commit and not _DATE.fullmatch(tag_commit.group(1)):
+    if tag_commit and not _NIGHTLY_DATE_TAG.fullmatch(raw):
         return tag_commit.group(1)
     if raw.startswith("nightly"):
         return "nightly"
