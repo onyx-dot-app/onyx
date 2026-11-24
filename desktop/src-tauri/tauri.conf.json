@@ -70,6 +70,13 @@
         "files": {
           "/usr/share/doc/onyx/copyright": "linux/copyright"
         }
+      },
+      "rpm": {
+        "depends": [
+          "ca-certificates",
+          "xdg-utils"
+        ],
+        "desktopTemplate": "linux/onyx.desktop"
       }
     },
     "createUpdaterArtifacts": false
