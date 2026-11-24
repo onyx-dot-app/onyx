@@ -354,6 +354,30 @@ test.describe("Published files", () => {
     );
   });
 
+  test("a JSON file tab shows the file's numbers as written", async ({
+    page,
+    chatPage,
+  }) => {
+    const data: MockPublishedFile = {
+      ...report("published-file-15", "Q3 data"),
+      name: "data.json",
+      path: "/home/onyx/workspaces/chat/data.json",
+      displayPath: "data.json",
+      artifactId: "artifact-data",
+      mimeType: "application/json",
+    };
+    await chatPage.goto();
+    await mockFile(page, data, '{"id":9007199254740993,"ratio":1.0}');
+    await mockChatEndpoint(page, buildMockPublishFilesStream([data], MESSAGE));
+
+    await sendMessage(page, "Export the data");
+    await chatPage.publishedFileCard("Q3 data").click();
+    // Minified JSON shows indented
+    const preview = chatPage.publishedFilePreview("Q3 data");
+    await expect(preview).toContainText('"id": 9007199254740993,');
+    await expect(preview).toContainText('"ratio": 1.0');
+  });
+
   test("a saved reply shows a card for each publish, and the panel the newest version of each file", async ({
     page,
     chatPage,
