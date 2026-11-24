@@ -225,6 +225,15 @@ def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() ->
         select_reembed_strategy(_vector_ss(one_bit), _vector_ss(none))
         is ReembedStrategy.COPY_VECTORS
     )
+    # Quantization plus a multipass change -> the full chunk vector is unchanged.
+    multipass_present: SearchSettings = _vector_ss(none)
+    multipass_present.multipass_indexing = True
+    multipass_future: SearchSettings = _vector_ss(one_bit)
+    multipass_future.multipass_indexing = False
+    assert (
+        select_reembed_strategy(multipass_present, multipass_future)
+        is ReembedStrategy.COPY_VECTORS
+    )
     # Quantization plus a model change -> the vector changes -> re-embed.
     assert (
         select_reembed_strategy(
