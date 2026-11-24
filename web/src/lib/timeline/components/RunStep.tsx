@@ -1,11 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Line, Presence, type LineVariant } from "@opal/components";
+import { Line, type LineVariant } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
-import { CompletedHeader } from "@/lib/timeline/components/headers/CompletedHeader";
-import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
+import { HoistedStepHeader } from "@/lib/timeline/components/headers/HoistedStepHeader";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 import { STEP_ICONS } from "@/lib/timeline/icons";
@@ -85,6 +84,7 @@ export function RunStep({
   asCard = false,
 }: RunStepProps) {
   const [ownExpanded, setOwnExpanded] = useState(defaultExpanded);
+  const [headerHovered, setHeaderHovered] = useState(false);
   const shownTitle = status === "done" ? (doneTitle ?? title) : title;
 
   if (asCard) {
@@ -105,29 +105,21 @@ export function RunStep({
       : { expandable: false as const };
     return (
       <TimelineRoot>
+        {/* The header toggles the card and draws the chevron, so the card
+            has no click of its own. Filled while open or hovered. */}
         <Line
           flavour="card"
-          // Filled while open; otherwise only on hover, running or not.
-          filled={ownExpanded}
-          onClick={foldable ? () => setOwnExpanded((prev) => !prev) : undefined}
-          rightChildren={headerAccessory}
+          filled={ownExpanded || headerHovered}
           {...cardBody}
         >
-          {/* The title swaps when the step's state changes, as a run card's
-              header does; a running title that changes updates in place. */}
-          <Presence.Swap swapKey={running ? "working" : status}>
-            {running ? (
-              <StreamingHeader
-                icon={statusIcon(status) ?? icon}
-                headerText={plainTitle}
-              />
-            ) : (
-              <CompletedHeader
-                icon={statusIcon(status) ?? icon}
-                text={plainTitle}
-              />
-            )}
-          </Presence.Swap>
+          <HoistedStepHeader
+            icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
+            title={plainTitle}
+            shimmer={running}
+            open={ownExpanded}
+            onToggle={() => setOwnExpanded((prev) => !prev)}
+            onHoverChange={setHeaderHovered}
+          />
         </Line>
       </TimelineRoot>
     );
