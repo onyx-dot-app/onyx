@@ -11792,7 +11792,12 @@
         "toast": "Authentification réussie"
       },
       "scrollToBottomButton": {
-        "label": "Aller en bas"
+        "label": "Aller en bas",
+        "reason": {
+          "approval": "Approbation requise",
+          "newAnswer": "Nouvelle réponse",
+          "question": "Question en attente"
+        }
       },
       "sessionAccessDenied": {
         "description": "Vous n'avez pas la permission de voir cette session de discussion.",

@@ -11792,7 +11792,12 @@
         "toast": "Authentication successful"
       },
       "scrollToBottomButton": {
-        "label": "Scroll to bottom"
+        "label": "Scroll to bottom",
+        "reason": {
+          "approval": "Approval needed",
+          "newAnswer": "New answer",
+          "question": "Question waiting"
+        }
       },
       "sessionAccessDenied": {
         "description": "You don't have permission to view this chat session.",

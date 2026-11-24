@@ -11792,7 +11792,12 @@
         "toast": "身份验证成功"
       },
       "scrollToBottomButton": {
-        "label": "滚动到底部"
+        "label": "滚动到底部",
+        "reason": {
+          "approval": "需要批准",
+          "newAnswer": "新回答",
+          "question": "有问题待回答"
+        }
       },
       "sessionAccessDenied": {
         "description": "您没有查看此聊天会话的权限。",

@@ -11792,7 +11792,12 @@
         "toast": "인증에 성공했습니다"
       },
       "scrollToBottomButton": {
-        "label": "맨 아래로 이동"
+        "label": "맨 아래로 이동",
+        "reason": {
+          "approval": "승인 필요",
+          "newAnswer": "새 답변",
+          "question": "답변 대기 중인 질문"
+        }
       },
       "sessionAccessDenied": {
         "description": "이 채팅 세션을 볼 수 있는 권한이 없습니다.",

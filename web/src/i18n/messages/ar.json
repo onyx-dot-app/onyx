@@ -11792,7 +11792,12 @@
         "toast": "تمت المصادقة بنجاح"
       },
       "scrollToBottomButton": {
-        "label": "التمرير إلى الأسفل"
+        "label": "التمرير إلى الأسفل",
+        "reason": {
+          "approval": "مطلوب الموافقة",
+          "newAnswer": "إجابة جديدة",
+          "question": "سؤال بانتظار الإجابة"
+        }
       },
       "sessionAccessDenied": {
         "description": "ليس لديك إذن لعرض جلسة المحادثة هذه.",

@@ -11792,7 +11792,12 @@
         "toast": "Autenticação bem-sucedida"
       },
       "scrollToBottomButton": {
-        "label": "Ir para o final"
+        "label": "Ir para o final",
+        "reason": {
+          "approval": "Aprovação necessária",
+          "newAnswer": "Nova resposta",
+          "question": "Pergunta aguardando"
+        }
       },
       "sessionAccessDenied": {
         "description": "Você não tem permissão para ver esta sessão de chat.",

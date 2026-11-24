@@ -1076,6 +1076,11 @@ the tab, and a chat that the store does not hold shows no status.
     chat's end clear of the composer: a footer spacer (not content, so "at the
     bottom" ignores it), the latest turn's minimum height, and
     `scroll-padding-bottom` for focus and `scrollIntoView`.
+    The button names why to return (`lib/chat/hooks.ts:useJumpToLatestReason`):
+    a waiting approval, a waiting question, or new output from a run that went
+    on after the button appeared and has ended. Output that only loads, such
+    as an opened chat's history, does not count. Otherwise it is a bare
+    chevron.
     Each chat's position (end, or a row and offset) and its row heights live
     in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
     them from loaded rows only, so a switch never waits on the network. Rows

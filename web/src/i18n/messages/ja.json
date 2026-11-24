@@ -11792,7 +11792,12 @@
         "toast": "認証に成功しました"
       },
       "scrollToBottomButton": {
-        "label": "一番下までスクロール"
+        "label": "一番下までスクロール",
+        "reason": {
+          "approval": "承認が必要です",
+          "newAnswer": "新しい回答",
+          "question": "質問への回答待ち"
+        }
       },
       "sessionAccessDenied": {
         "description": "このチャットセッションを表示する権限がありません。",

@@ -62,6 +62,7 @@ import { getUnresolvedMultiModelTurn } from "@/lib/timeline/chat/message/multiMo
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useChatSessionStore,
+  useCurrentChatState,
   useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
@@ -377,6 +378,61 @@ export function useWaitingQuestionIds(): string[] {
   );
   // A string key keeps the same list while the tree streams.
   return useMemo(() => (ids ? ids.split(" ") : []), [ids]);
+}
+
+export type JumpToLatestReason = "approval" | "question" | "newAnswer";
+
+/**
+ * Why the user should return to the end of the chat while the
+ * scroll-to-bottom button shows (`visible`): an approval or a question
+ * waits, or a run that went on after the button appeared has ended with new
+ * output. Output that only loads, such as an opened chat's history, is not
+ * new.
+ */
+export function useJumpToLatestReason(
+  visible: boolean
+): JumpToLatestReason | null {
+  const tree = useCurrentMessageTree();
+  const chatState = useCurrentChatState();
+  const localStatuses = useToolRequestUi((state) => state.localStatuses);
+  const waitingQuestionIds = useWaitingQuestionIds();
+  const approvalWaits = useMemo(
+    () =>
+      tree
+        ? readWaitingToolRequests(tree).some(
+            (item) =>
+              item.kind === "approval" &&
+              !localStatuses.has(item.request.approval_id)
+          )
+        : false,
+    [tree, localStatuses]
+  );
+  const contentKey = useMemo(() => {
+    if (!tree) return "";
+    const chain = getLatestMessageChain(tree);
+    const last = chain[chain.length - 1];
+    return `${chain.length}:${last?.packets.length ?? 0}`;
+  }, [tree]);
+  const sessionId = useChatSessionStore((state) => state.currentSessionId);
+  const running = chatState === "loading" || chatState === "streaming";
+  // The content when the button last appeared or went away, and whether a
+  // run went on since.
+  const [seen, setSeen] = useState({
+    visible,
+    sessionId,
+    contentKey,
+    ran: false,
+  });
+  if (seen.visible !== visible || seen.sessionId !== sessionId)
+    setSeen({ visible, sessionId, contentKey, ran: false });
+  else if (visible && running && !seen.ran) setSeen({ ...seen, ran: true });
+
+  if (!visible) return null;
+  if (approvalWaits) return "approval";
+  if (waitingQuestionIds.length > 0) return "question";
+  if (chatState === "input" && seen.ran && seen.contentKey !== contentKey)
+    return "newAnswer";
+  return null;
 }
 
 /**

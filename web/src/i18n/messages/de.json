@@ -11792,7 +11792,12 @@
         "toast": "Authentifizierung erfolgreich"
       },
       "scrollToBottomButton": {
-        "label": "Nach unten scrollen"
+        "label": "Nach unten scrollen",
+        "reason": {
+          "approval": "Freigabe erforderlich",
+          "newAnswer": "Neue Antwort",
+          "question": "Frage wartet"
+        }
       },
       "sessionAccessDenied": {
         "description": "Sie haben keine Berechtigung, diese Chat-Sitzung zu sehen.",
