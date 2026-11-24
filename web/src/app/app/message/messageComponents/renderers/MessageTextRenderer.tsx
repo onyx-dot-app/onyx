@@ -401,11 +401,11 @@ export const MessageTextRenderer: MessageRenderer<
       status: null,
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
-          <span className="italic">
+          <div className="italic">
             <Text as="p" font="secondary-body" color="text-04">
               {t("text.thinkingPlaceholder.text")}
             </Text>
-          </span>
+          </div>
         ) : displayedContent.length > 0 ? (
           <AnswerMarkdown
             content={processedContent}
