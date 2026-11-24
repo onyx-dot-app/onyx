@@ -52,11 +52,6 @@ export interface RunCardProps<S extends RunCardStep> {
   doneText?: string;
   /** The header's icon while the run works and once it is done. */
   icon?: IconFunctionComponent;
-  /**
-   * Play the card's entry when it mounts while its run works. Off for a card
-   * that takes the place of a run's own step cards (see AgentTimeline).
-   */
-  appear?: boolean;
   summary?: RunCardSummary;
 }
 
@@ -77,7 +72,6 @@ export function RunCard<S extends RunCardStep>({
   durationSeconds,
   doneText,
   icon = SvgSparkle,
-  appear = true,
   summary,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
@@ -89,7 +83,7 @@ export function RunCard<S extends RunCardStep>({
   const [isOpen, setIsOpen] = useState(isRunning);
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
-  const [arrivedLive] = useState(appear && isRunning);
+  const [arrivedLive] = useState(isRunning);
   // Steps already there when the card mounts show at once; later ones rise
   // in.
   const [initialStepIds] = useState(

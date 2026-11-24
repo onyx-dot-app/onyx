@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Presence } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -133,15 +133,26 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Hoisted: each step of a short run is its own run card, with the step's
   // title as its header. Once the run has more steps, they collapse into one
-  // run card.
-  if (steps.length > 0 && steps.length <= MAX_HOISTED_STEPS) {
+  // run card: the step cards leave first, then the run card enters.
+  const hoisted = steps.length > 0 && steps.length <= MAX_HOISTED_STEPS;
+  const [shownHoisted, setShownHoisted] = useState(hoisted);
+  if (hoisted && !shownHoisted) setShownHoisted(true);
+
+  if (shownHoisted) {
     return (
       <TimelineRoot>
         <Section alignItems="stretch" gap={1} height="auto">
-          {steps.map((runStep) => (
+          {steps.slice(0, MAX_HOISTED_STEPS).map((runStep, index) => (
             // A step that arrives while the run works rises in; a saved
             // run's steps appear at once.
-            <Presence key={runStep.id} appear={isActive} grow>
+            <Presence
+              key={runStep.id}
+              show={hoisted}
+              appear={isActive}
+              grow
+              // The steps leave together; the first to finish hands over.
+              onExited={index === 0 ? () => setShownHoisted(false) : undefined}
+            >
               <ChatStep
                 step={runStep.step}
                 status={runStep.status}
@@ -166,9 +177,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         awaitingUser !== null ? headerText : t("header.doingWork.label")
       }
       doneText={t("header.didWork.label")}
-      // A run that just passed the limit swaps its step cards for this
-      // card at once, with no entry.
-      appear={steps.length <= MAX_HOISTED_STEPS}
       isActive={isActive}
       isStopped={stopPacketSeen && userStopped}
       autoCollapse={hasDisplayContent}
