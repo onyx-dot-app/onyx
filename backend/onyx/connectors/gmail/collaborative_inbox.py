@@ -1,5 +1,5 @@
 import re
-from collections.abc import Iterator
+from collections.abc import Callable
 from functools import cached_property
 from typing import Any
 
@@ -9,6 +9,7 @@ from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError
 
+from onyx.connectors.gmail.models import GroupMembers, GroupRole
 from onyx.connectors.google_utils.google_utils import (
     execute_paginated_retrieval,
     execute_single_retrieval,
@@ -31,9 +32,14 @@ GROUPS_SETTINGS_SCOPE_MISSING_MESSAGE = (
     f"delegation grants the scope {GROUPS_SETTINGS_SCOPE}."
 )
 
-_COLLABORATIVE_INBOX_FIELD = "enableCollaborativeInbox"
-_GROUP_MEMBER_FIELDS = "nextPageToken, members(email, type)"
+COLLABORATIVE_INBOX_FIELD = "enableCollaborativeInbox"
+_GROUP_MEMBER_FIELDS = "nextPageToken, members(email, role, type)"
 _USER_MEMBER_TYPE = "USER"
+# Every user of the Workspace account, as one member.
+_ACCOUNT_MEMBER_TYPE = "CUSTOMER"
+# Upper bound on the member addresses held for one group. An address measures
+# about 125 bytes in the set, so this holds it near 60 MB.
+_MAX_GROUP_MEMBERS = 500_000
 # A List-ID value is an optional phrase, then the id in angle brackets.
 _LIST_ID_RE = re.compile(r"<([^<>\s]+)>\s*$")
 
@@ -62,45 +68,83 @@ def build_groups_settings_service(
     )
 
 
-def is_collaborative_inbox(
-    settings_service: GroupsSettingsService, group_email: str
-) -> bool:
-    """Whether the address is a group with Collaborative Inbox turned on. False
-    when it is not a group."""
+def read_group_settings(
+    settings_service: GroupsSettingsService, group_email: str, fields: str
+) -> dict[str, str] | None:
+    """The `fields` of the group's settings. None when the address is not a
+    group."""
     try:
-        settings = next(
+        return next(
             execute_single_retrieval(
                 retrieval_function=settings_service.groups().get,  # ty: ignore[unresolved-attribute]
                 groupUniqueId=group_email,
-                fields=_COLLABORATIVE_INBOX_FIELD,
+                fields=fields,
             )
         )
     except HttpError as e:
-        # A 403 is not an answer. Read as "no", it would empty the slim
-        # listing, and pruning would delete the group's documents.
+        # A 403 is not an answer. Read as "not a group", it would empty the
+        # slim listing, and pruning would delete the group's documents.
         if e.resp.status not in (400, 404):
             raise
         logger.warning("%s is not a group: %s", group_email, e)
-        return False
+        return None
+
+
+def has_collaborative_inbox(settings: dict[str, str]) -> bool:
     # The Groups Settings API returns booleans as strings.
-    return settings.get(_COLLABORATIVE_INBOX_FIELD) == "true"
+    return settings.get(COLLABORATIVE_INBOX_FIELD) == "true"
 
 
-def list_group_member_emails(
-    admin_service: AdminService, group_email: str
-) -> Iterator[str]:
-    """The lowercased addresses of the users in the group, direct or through a
-    nested group."""
+def is_collaborative_inbox(
+    settings_service: GroupsSettingsService, group_email: str
+) -> bool:
+    settings = read_group_settings(
+        settings_service, group_email, COLLABORATIVE_INBOX_FIELD
+    )
+    return settings is not None and has_collaborative_inbox(settings)
+
+
+def get_group_members(
+    admin_service: AdminService,
+    group_email: str,
+    include_nested_groups: bool,
+    roles: frozenset[GroupRole] | None = None,
+    check_deadline: Callable[[], None] | None = None,
+) -> GroupMembers:
+    """The users in the group, and those of its nested groups when asked. With
+    `roles`, only the members that hold one of them. `check_deadline` runs for
+    each member and raises to stop a listing that takes too long."""
+    list_kwargs: dict[str, Any] = {}
+    if roles is not None:
+        list_kwargs["roles"] = ",".join(sorted(role.value for role in roles))
+
+    user_emails: set[str] = set()
+    has_all_account_users = False
     for member in execute_paginated_retrieval(
         retrieval_function=admin_service.members().list,  # ty: ignore[unresolved-attribute]
         list_key="members",
         groupKey=group_email,
-        includeDerivedMembership=True,
+        includeDerivedMembership=include_nested_groups,
         fields=_GROUP_MEMBER_FIELDS,
+        **list_kwargs,
     ):
+        if check_deadline is not None:
+            check_deadline()
+        if roles is not None and member.get("role") not in roles:
+            continue
         member_email = member.get("email")
-        if member.get("type") == _USER_MEMBER_TYPE and member_email:
-            yield member_email.lower()
+        if member.get("type") == _ACCOUNT_MEMBER_TYPE:
+            has_all_account_users = True
+        elif member.get("type") == _USER_MEMBER_TYPE and member_email:
+            user_emails.add(member_email.lower())
+            if len(user_emails) > _MAX_GROUP_MEMBERS:
+                raise RuntimeError(
+                    f"{group_email} has more than {_MAX_GROUP_MEMBERS} members"
+                )
+    return GroupMembers(
+        user_emails=frozenset(user_emails),
+        has_all_account_users=has_all_account_users,
+    )
 
 
 def _header_values(message: dict[str, Any], name: str) -> list[str]:
@@ -154,7 +198,7 @@ class CollaborativeInboxLookup:
         self._group_emails = frozenset(email.lower() for email in group_emails)
         # None when the address is not a Collaborative Inbox group, or when the
         # credential cannot read group settings.
-        self._member_emails_by_group: dict[str, frozenset[str] | None] = {}
+        self._members_by_group: dict[str, GroupMembers | None] = {}
 
     @cached_property
     def _settings_service(self) -> GroupsSettingsService | None:
@@ -178,35 +222,42 @@ class CollaborativeInboxLookup:
         group_email = get_delivering_group(message, self._group_emails)
         if group_email is None:
             return None
-        member_emails = self._get_member_emails(group_email)
-        if member_emails is None or mailbox_email.lower() not in member_emails:
-            return None
-        return group_email
+        return group_email if self._is_member(group_email, mailbox_email) else None
 
     def get_groups_of_member(self, mailbox_email: str) -> list[str]:
         return [
             group_email
             for group_email in sorted(self._group_emails)
-            if mailbox_email.lower() in (self._get_member_emails(group_email) or ())
+            if self._is_member(group_email, mailbox_email)
         ]
 
     def get_groups_without_collaborative_inbox(self) -> list[str]:
         return [
             group_email
             for group_email in sorted(self._group_emails)
-            if self._get_member_emails(group_email) is None
+            if self._get_members(group_email) is None
         ]
 
-    def _get_member_emails(self, group_email: str) -> frozenset[str] | None:
-        if group_email not in self._member_emails_by_group:
-            self._member_emails_by_group[group_email] = self._read_member_emails(
-                group_email
-            )
-        return self._member_emails_by_group[group_email]
+    def _is_member(self, group_email: str, mailbox_email: str) -> bool:
+        members = self._get_members(group_email)
+        if members is None:
+            return False
+        # The connector reads only the mailboxes of the account's own users.
+        return (
+            members.has_all_account_users
+            or mailbox_email.lower() in members.user_emails
+        )
 
-    def _read_member_emails(self, group_email: str) -> frozenset[str] | None:
+    def _get_members(self, group_email: str) -> GroupMembers | None:
+        if group_email not in self._members_by_group:
+            self._members_by_group[group_email] = self._read_members(group_email)
+        return self._members_by_group[group_email]
+
+    def _read_members(self, group_email: str) -> GroupMembers | None:
         if self._settings_service is None:
             return None
         if not is_collaborative_inbox(self._settings_service, group_email):
             return None
-        return frozenset(list_group_member_emails(self._admin_service, group_email))
+        return get_group_members(
+            self._admin_service, group_email, include_nested_groups=True
+        )
