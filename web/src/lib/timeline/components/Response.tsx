@@ -4,6 +4,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -63,7 +64,8 @@ export interface ResponseProps {
  */
 function useTurnCursor(
   rootRef: React.RefObject<HTMLDivElement | null>,
-  cursorRef: React.RefObject<HTMLSpanElement | null>
+  cursorRef: React.RefObject<HTMLSpanElement | null>,
+  hiddenRef: React.RefObject<boolean>
 ): void {
   useEffect(() => {
     const root = rootRef.current;
@@ -82,6 +84,14 @@ function useTurnCursor(
         `[${RESPONSE_CURSOR_ANCHOR_ATTRIBUTE}]`
       );
       const anchor = anchors.item(anchors.length - 1);
+      // Hidden (e.g. while the turn waits for the user): fade out in place,
+      // and keep checking so the cursor returns once it may show again.
+      if (anchor && hiddenRef.current) {
+        cursor.style.opacity = "0";
+        visible = false;
+        frame = requestAnimationFrame(place);
+        return;
+      }
       if (!anchor) {
         cursor.style.opacity = "0";
         visible = false;
@@ -117,10 +127,13 @@ function useTurnCursor(
       observer.disconnect();
       if (frame !== null) cancelAnimationFrame(frame);
     };
-  }, [rootRef, cursorRef]);
+  }, [rootRef, cursorRef, hiddenRef]);
 }
 
 interface ResponseCursorScopeProps {
+  /** Hide the cursor, e.g. while the turn waits for the user to approve a
+   *  tool call or answer a question. */
+  hidden?: boolean;
   children: React.ReactNode;
 }
 
@@ -129,11 +142,19 @@ interface ResponseCursorScopeProps {
  * span several responses. A `Response` opens its own scope unless one is
  * already open around it.
  */
-export function ResponseCursorScope({ children }: ResponseCursorScopeProps) {
+export function ResponseCursorScope({
+  hidden = false,
+  children,
+}: ResponseCursorScopeProps) {
   const inScope = useContext(InCursorScopeContext);
   const rootRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
-  useTurnCursor(rootRef, cursorRef);
+  // Read by the placement loop on each frame.
+  const hiddenRef = useRef(hidden);
+  useLayoutEffect(() => {
+    hiddenRef.current = hidden;
+  });
+  useTurnCursor(rootRef, cursorRef, hiddenRef);
 
   if (inScope) return <>{children}</>;
   return (
@@ -168,20 +189,39 @@ export function ResponseCursorScope({ children }: ResponseCursorScopeProps) {
  */
 export function Response({ items }: ResponseProps) {
   const [initialKeys] = useState(() => new Set(items.map((item) => item.key)));
-  // The keys of the previous render, to see text replace the cursor item.
-  const [previousKeys, setPreviousKeys] = useState(() =>
-    items.map((item) => item.key)
-  );
+  // The keys of the previous render, and the text that took the cursor
+  // item's place in the last change. They update together: a state update
+  // during render renders again before children mount, so the decision must
+  // survive into the render that mounts the new text.
+  const [keyState, setKeyState] = useState<{
+    keys: React.Key[];
+    replacingCursor: ReadonlySet<React.Key>;
+  }>(() => ({
+    keys: items.map((item) => item.key),
+    replacingCursor: new Set(),
+  }));
   const keys = items.map((item) => item.key);
   if (
-    keys.length !== previousKeys.length ||
-    keys.some((key, index) => key !== previousKeys[index])
+    keys.length !== keyState.keys.length ||
+    keys.some((key, index) => key !== keyState.keys[index])
   ) {
-    setPreviousKeys(keys);
+    const cursorReplaced =
+      keyState.keys.includes(RESPONSE_CURSOR_KEY) &&
+      !keys.includes(RESPONSE_CURSOR_KEY);
+    setKeyState({
+      keys,
+      replacingCursor: new Set(
+        cursorReplaced
+          ? items
+              .filter(
+                (item) =>
+                  item.kind === "text" && !keyState.keys.includes(item.key)
+              )
+              .map((item) => item.key)
+          : []
+      ),
+    });
   }
-  const cursorReplaced =
-    previousKeys.includes(RESPONSE_CURSOR_KEY) &&
-    !keys.includes(RESPONSE_CURSOR_KEY);
 
   return (
     <ResponseCursorScope>
@@ -195,11 +235,7 @@ export function Response({ items }: ResponseProps) {
               appear={
                 item.appear ??
                 (!initialKeys.has(item.key) &&
-                  !(
-                    cursorReplaced &&
-                    item.kind === "text" &&
-                    !previousKeys.includes(item.key)
-                  ))
+                  !keyState.replacingCursor.has(item.key))
               }
               grow
             >

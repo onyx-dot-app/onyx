@@ -1,11 +1,15 @@
 import type { Element, Root, RootContent } from "hast";
+import { cn } from "@opal/utils";
 
 /** The streaming cursor's look, without its placement. */
 export const STREAMING_CURSOR_LOOK =
   "animate-pulse motion-reduce:animate-none bg-text-04 rounded-xs w-1.5 h-3.5";
 
 /** The streaming cursor inline in text. `BlinkingBar` renders the same box. */
-export const STREAMING_CURSOR_CLASS_NAME = `${STREAMING_CURSOR_LOOK} flex-none relative top-[0.2rem] inline-block`;
+export const STREAMING_CURSOR_CLASS_NAME = cn(
+  STREAMING_CURSOR_LOOK,
+  "flex-none relative top-[0.2rem] inline-block"
+);
 
 /**
  * Marks where a response's one cursor sits (see `Response`). The marker has
