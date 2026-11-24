@@ -62,9 +62,9 @@ export function RunStep({
   if (hideHeader) return <>{body}</>;
 
   const shownTitle = status === "done" ? (doneTitle ?? title) : title;
-  // A running step always opens: before its first content arrives, its body
-  // is a loading shimmer. A finished step with nothing to show is a static
-  // row, so a click cannot open it.
+  // A running step can always be opened (it still starts closed): before its
+  // first content arrives, its body is a loading shimmer. A finished step
+  // with nothing to show is a static row, so a click cannot open it.
   const shownBody =
     body ??
     (status === "streaming" || loading ? <LineLoader width="2/3" /> : null);

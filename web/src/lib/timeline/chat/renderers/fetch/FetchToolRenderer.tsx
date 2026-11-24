@@ -68,8 +68,12 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
 
-  // Nothing to open until the step names its first URL.
-  if (!hasStarted || (urls.length === 0 && documents.length === 0)) {
+  // Nothing to open until the step names its first URL. Highlight mode has
+  // no step to open, so it keeps showing its heading meanwhile.
+  if (
+    !isHighlight &&
+    (!hasStarted || (urls.length === 0 && documents.length === 0))
+  ) {
     return children([
       {
         icon: STEP_ICONS.fetch,

@@ -131,8 +131,9 @@ export const ReasoningRenderer: MessageRenderer<
       status: displayStatus,
       // A title from the reasoning itself stays; the default turns past tense.
       doneStatus: title || thoughtStatus,
-      // Nothing to open until the reasoning's first words arrive.
-      content: content.length > 0 ? reasoningContent : null,
+      // Nothing to open until body text arrives; a heading moves into the
+      // title.
+      content: displayContent.trim() ? reasoningContent : null,
       expandedText: reasoningContent,
     },
   ]);

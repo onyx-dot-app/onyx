@@ -288,7 +288,14 @@ export const ResearchAgentRenderer: MessageRenderer<
               isHover={isHover}
             >
               {(results: TimelineRendererOutput) => (
-                <TimelineStepComposer results={results} />
+                <TimelineStepComposer
+                  results={results}
+                  // A nested call that still works opens onto the loading
+                  // shimmer, as a direct call does.
+                  status={
+                    !stopPacketSeen && !group.complete ? "streaming" : "done"
+                  }
+                />
               )}
             </TimelineRendererComponent>
           );
