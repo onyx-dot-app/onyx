@@ -149,11 +149,11 @@ ARM64 Lima runs use a test-only image variant; they do not validate the publishe
 
 ## Skills and user state
 
-Skills and other managed content arrive on read-only drives: `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces`.
+Managed content arrives on read-only drives: `/mnt/user-uploads` and `/mnt/spaces`.
 Managed drives use `noexec`; invoke scripts through interpreters, such as `node icon.js` or `python script.py`.
-The managed-drive hot-swap work owns updates to these files.
-The rootfs converter makes the mount points and `/home/onyx/workspaces`, the parent of the session directories.
-This image does not install or synchronize skill bundles.
+`/mnt/skills` links to `/var/lib/onyx/skills`. The guest daemon puts each skill there (`InstallSkill`), owned by root and read-only to the sandbox user.
+The rootfs converter makes the mount points, the skills folder and `/home/onyx/workspaces`, the parent of the session directories.
+This image does not install skill bundles.
 
 The rootfs converter owns scratch overlays for `/etc`, `/home`, `/root`, `/opt`, `/srv`, `/usr`, `/var`, and `/workspace`.
 The template boot makes `/tmp/onyx/tool-results`, `/tmp/onyx/search-files` and `/tmp/onyx/artifacts` on the `/tmp` tmpfs, owned by the sandbox user; the template snapshot keeps them.
