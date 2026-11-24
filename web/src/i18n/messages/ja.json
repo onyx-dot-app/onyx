@@ -12520,11 +12520,47 @@
           "browsing": {
             "label": "{count, plural, =0 {閲覧中} other {# ページを閲覧中}}"
           },
-          "doingWork": {
-            "label": "作業中..."
-          },
-          "didWork": {
-            "label": "作業しました"
+          "runPhrases": {
+            "doingWork": {
+              "working": "作業中...",
+              "done": "作業しました"
+            },
+            "crunchingDetails": {
+              "working": "詳細を分析中...",
+              "done": "詳細を分析しました"
+            },
+            "connectingDots": {
+              "working": "点と点をつないでいます...",
+              "done": "点と点をつなぎました"
+            },
+            "runningNumbers": {
+              "working": "数字を計算中...",
+              "done": "数字を計算しました"
+            },
+            "fillingGaps": {
+              "working": "足りない部分を補っています...",
+              "done": "足りない部分を補いました"
+            },
+            "sortingThingsOut": {
+              "working": "整理しています...",
+              "done": "整理しました"
+            },
+            "gatheringPieces": {
+              "working": "ピースを集めています...",
+              "done": "ピースを集めました"
+            },
+            "workingThroughIt": {
+              "working": "取り組んでいます...",
+              "done": "取り組みました"
+            },
+            "ironingOutDetails": {
+              "working": "細部を詰めています...",
+              "done": "細部を詰めました"
+            },
+            "roundingThingsOut": {
+              "working": "仕上げています...",
+              "done": "仕上げました"
+            }
           }
         },
         "internalSearch": {
