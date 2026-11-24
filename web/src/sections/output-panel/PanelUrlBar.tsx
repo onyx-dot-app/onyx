@@ -82,7 +82,7 @@ export function PanelUrlBar({
                     <Text
                       as="p"
                       dir="ltr"
-                      font="secondary-body"
+                      font="main-ui-body"
                       color="text-03"
                       maxLines={1}
                     >
