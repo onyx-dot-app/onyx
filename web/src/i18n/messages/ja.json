@@ -17806,7 +17806,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {スキル 1 件} other {スキル {skills} 件}}",
       "loadFailed": "プラグインを読み込めませんでした。",
       "filter": {
         "all": "すべてのプラグイン"

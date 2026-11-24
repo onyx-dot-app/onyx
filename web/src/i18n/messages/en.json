@@ -17806,7 +17806,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {1 skill} other {{skills} skills}}",
       "loadFailed": "Could not load your plugins.",
       "filter": {
         "all": "All plugins"

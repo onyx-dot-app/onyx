@@ -17806,7 +17806,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {스킬 1개} other {스킬 {skills}개}}",
       "loadFailed": "플러그인을 불러오지 못했습니다.",
       "filter": {
         "all": "모든 플러그인"
