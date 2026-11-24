@@ -13,7 +13,11 @@ from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
-from onyx.integrations.models import ActionSettings, ApprovalMode
+from onyx.integrations.models import (
+    BUILTIN_ACTION_PREFIX,
+    ActionSettings,
+    ApprovalMode,
+)
 from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.tools.tool_implementations.sandbox.models import (
     PublishedFile,
@@ -337,15 +341,44 @@ class DynamicSchemaInfo(BaseModel):
     user_email: str | None = None
 
 
+def is_builtin_action(integration_id: int | None, action_id: str) -> bool:
+    """Whether an approval scope or request is a built-in Onyx action's. A
+    request of a deleted integration also has no integration, but an
+    integration's action key."""
+    return integration_id is None and action_id.startswith(BUILTIN_ACTION_PREFIX)
+
+
 class ToolApprovalScope(BaseModel):
     """The gated action of a tool whose calls wait for the user's approval."""
 
     model_config = ConfigDict(frozen=True)
 
-    integration_id: int
-    # The action key: the MCP tool name or the OpenAPI operationId. With the
-    # integration, it keys the action policy and session grants.
+    # None for a built-in Onyx action, which no action policy covers; its
+    # action key starts with BUILTIN_ACTION_PREFIX.
+    integration_id: int | None
+    # The action key: the MCP tool name, the OpenAPI operationId, or
+    # `onyx:<operation>` for a built-in action. With the integration, it keys
+    # the action policy and session grants.
     action_id: str
+
+    @model_validator(mode="after")
+    def builtin_action_has_builtin_key(self) -> Self:
+        if self.integration_id is None and not self.action_id.startswith(
+            BUILTIN_ACTION_PREFIX
+        ):
+            raise ValueError(
+                f"An action with no integration needs a {BUILTIN_ACTION_PREFIX} key"
+            )
+        return self
+
+
+class ToolApprovalDetails(BaseModel):
+    """What the approval card of one call shows."""
+
+    # The card's headline.
+    display_name: str
+    # None shows the call's arguments.
+    payload: dict[str, JsonValue] | None = None
 
 
 class ChatFile(BaseModel):

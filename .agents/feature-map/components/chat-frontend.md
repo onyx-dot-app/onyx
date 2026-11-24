@@ -54,8 +54,9 @@
   agent results do not become user message bubbles. A "Subagent results received" divider shows above each
   automatic follow-up response. That response shows its model label but
   cannot be regenerated.
-- **A tool call needs approval.** An approval card shows the tool's
-  arguments. Every card that waits for a decision shows in one region after
+- **A tool call needs approval.** An approval card shows the payload that
+  the tool gives for the call (`ToolApprovalRequest.arguments`), or the call's arguments
+  when the tool gives none. Every card that waits for a decision shows in one region after
   the last message (`sections/chat/ToolApprovalsRegion.tsx`, rendered by
   `ChatUI`), oldest response first and in packet order, from the replies and
   from their background subagents alike. A multi-model card names its model;

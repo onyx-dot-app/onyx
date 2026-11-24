@@ -155,6 +155,14 @@ functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
 result says how to call it through the offered tool
 (`agents/tool_execution.py`).
 
+A tool whose calls can wait for the user's approval sets `approval`
+(`tools/models.py:ToolApprovalScope`): an integration action that its policy
+asks for, or a built-in tool's `onyx:<operation>` action with no integration.
+`approval_details(arguments)` gives each call's card (headline and payload), or
+None for a call that runs without asking; it runs before any database work and
+must not raise. The default shows the display name and the arguments. See
+[[mcp-and-custom-tools#chat-approval-durable-wait]].
+
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
 result. On Stop or a run failure, a running call ends with no result (status

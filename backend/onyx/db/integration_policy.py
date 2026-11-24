@@ -1,7 +1,7 @@
 from collections.abc import Collection, Mapping, Sequence
 from uuid import UUID
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, false, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
@@ -83,25 +83,36 @@ def list_policy_rows(
 
 
 def list_session_granted_actions(
-    db_session: Session, chat_session_id: UUID | None, integration_ids: Collection[int]
-) -> dict[int, set[str]]:
-    granted: dict[int, set[str]] = {key: set() for key in integration_ids}
+    db_session: Session,
+    chat_session_id: UUID | None,
+    integration_ids: Collection[int | None],
+) -> dict[int | None, set[str]]:
+    """The actions of each integration that "Approve for this chat" approved
+    in the chat. The None key gives the grants with no integration: built-in
+    actions' (`onyx:` keys) and deleted integrations' actions."""
+    granted: dict[int | None, set[str]] = {key: set() for key in integration_ids}
     if chat_session_id is None or not integration_ids:
         return granted
     for integration_id, action in db_session.execute(
         select(ApprovalRequest.integration_id, ApprovalRequest.action_id).where(
             ApprovalRequest.chat_session_id == chat_session_id,
-            ApprovalRequest.integration_id.in_(integration_ids),
+            or_(
+                ApprovalRequest.integration_id.in_(
+                    [key for key in integration_ids if key is not None]
+                ),
+                ApprovalRequest.integration_id.is_(None)
+                if None in granted
+                else false(),
+            ),
             ApprovalRequest.decided_via == ApprovalDecidedVia.SESSION_GRANT,
         )
     ).tuples():
-        if integration_id is not None:
-            granted[integration_id].add(action)
+        granted[integration_id].add(action)
     return granted
 
 
 def get_session_granted_actions(
-    db_session: Session, chat_session_id: UUID, integration_id: int
+    db_session: Session, chat_session_id: UUID, integration_id: int | None
 ) -> set[str]:
     """The actions of the integration that "Approve for this chat" approved
     in the chat."""

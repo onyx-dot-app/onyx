@@ -116,7 +116,8 @@ class ToolApprovals(Protocol):
         self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
     ) -> PendingToolInput | ToolResult | None:
         """A request to wait for, a result for a call that cannot wait, or None
-        when a standing grant approves the call. The call is `nested_call`
+        when a standing grant approves the call or the call needs no approval.
+        The call is `nested_call`
         when `tool_call`, a call of the run's step, makes it for the model, and
         `tool_call` otherwise."""
         ...
