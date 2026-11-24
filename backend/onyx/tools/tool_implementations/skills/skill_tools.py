@@ -23,6 +23,8 @@ from onyx.tools.interface import (
 )
 from onyx.tools.models import (
     CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     CustomToolCallSummary,
     ToolCallException,
     ToolContext,
@@ -50,6 +52,9 @@ class SkillsReadArguments(BaseModel):
 class _SkillTool(Tool):
     id = None
     code_mode_exposure = CodeModeExposure.IMMEDIATE
+    code_mode_result = CodeModeResultSpec(
+        kind=CodeModeResultKind.TEXT, annotation="str"
+    )
     arguments: ClassVar[type[BaseModel]]
 
     def __init__(self, user: User, *, built_ins: bool) -> None:
