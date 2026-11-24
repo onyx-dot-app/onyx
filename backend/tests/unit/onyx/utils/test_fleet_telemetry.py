@@ -430,6 +430,10 @@ def test_version_accepts_only_bounded_approved_suffix_chains(version: str) -> No
         ("nightly-latest-20261123", None, "nightly"),
         ("edge", None, "unknown"),
         ("edge", "not-a-sha", "unknown"),
+        ("nightly", "2582a29ef5a52fff", "2582a29"),
+        ("dev", "2582a29ef5a52fff", "2582a29"),
+        ("nightly", None, "nightly"),
+        ("dev", None, "dev"),
     ],
 )
 def test_reported_version_names_every_build_type(

@@ -43,6 +43,8 @@ _VERSION: re.Pattern[str] = re.compile(
     r"(?:v?\d{1,4}\.\d{1,4}(?:\.\d{1,4})?(?:[-.](?:cloud|beta|alpha|rc|dev|nightly|release)(?:[-.]?\d{1,8})?){0,3}|[a-f0-9]{7,40}|unknown|dev|nightly)\Z"
 )
 _COMMIT: re.Pattern[str] = re.compile(r"[a-f0-9]{7,40}\Z")
+# Labels the version pattern accepts that name no build; a commit says more.
+_FIXED_LABELS: frozenset[str] = frozenset({"nightly", "dev", "unknown"})
 # A build tag such as "dev-build-main-f9b2636" ends in its short commit.
 _TAG_COMMIT: re.Pattern[str] = re.compile(r"-([a-f0-9]{7,40})\Z")
 
@@ -323,7 +325,7 @@ def reported_version(raw: str) -> str:
     builds (nightly, edge, dev-build) report their short commit."""
     if raw == "Development":
         return "dev"
-    if is_valid_version(raw):
+    if is_valid_version(raw) and raw not in _FIXED_LABELS:
         return raw
     from onyx.server.settings.build_info import get_build_info
 
@@ -333,7 +335,9 @@ def reported_version(raw: str) -> str:
     if raw.startswith("nightly"):
         return "nightly"
     tag_commit: re.Match[str] | None = _TAG_COMMIT.search(raw)
-    return tag_commit.group(1) if tag_commit else "unknown"
+    if tag_commit:
+        return tag_commit.group(1)
+    return raw if raw in _FIXED_LABELS else "unknown"
 
 
 def read_json_body(response: requests.Response, limit: int) -> Any:
