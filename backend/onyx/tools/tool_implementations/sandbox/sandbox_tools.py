@@ -41,13 +41,13 @@ from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
     APPLY_PATCH_USE,
     ARTIFACTS_DOWNLOAD_DESCRIPTION,
-    ARTIFACTS_LIST_DESCRIPTION,
     ATTACHMENTS_NOT_SAVED_NOTE,
     CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
     EDIT_USE,
     EXEC_COMMAND_DESCRIPTION,
     EXEC_COMMAND_USE,
+    LIBRARY_LIST_DESCRIPTION,
     PUBLISH_FILES_DESCRIPTION,
     SANDBOX_CODE_MODE_NOTE,
     SANDBOX_GUIDANCE,
@@ -99,6 +99,7 @@ from onyx.tools.tool_implementations.sandbox.file_copies import (
     COPY_MIN_BYTES_PER_SECOND,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACT_CURSOR,
     ARTIFACTS_LIST_MAX_CHARS,
     ARTIFACTS_LIST_MAX_LIMIT,
     ARTIFACTS_QUERY_MAX_CHARS,
@@ -110,12 +111,13 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactCursor,
     ArtifactList,
     ArtifactsDownloadArguments,
-    ArtifactsListArguments,
     DownloadedArtifact,
     EditArguments,
     ExecCommandArguments,
     ExecCommandOutput,
     FileToolName,
+    LibraryListArguments,
+    LibraryListFilters,
     PublishedFile,
     PublishedFiles,
     PublishFilesArguments,
@@ -894,15 +896,15 @@ _DOWNLOADS_MAX_LISTED = 10_000
 _SLOT_CHECK_SECONDS = 1.0
 
 
-class _ArtifactTool(SandboxTool):
-    """What the artifact tools share. They reach only the files published in
-    the user's own root chats that are not deleted
-    (`db/chat.py:get_user_published_files`), this chat included. In code mode
-    they are the deferred group `artifacts`, which tool_search finds; the
-    model learns of them from the publish_files description and the group's
-    line in the execute_code description, not the system prompt. Running a
-    call again changes nothing, so a call that a lost server left running
-    runs again."""
+class _LibraryTool(SandboxTool):
+    """What the library tools, the tools over the published files, share.
+    They reach only the files published in the user's own root chats that are
+    not deleted (`db/chat.py:get_user_published_files`), this chat included.
+    In code mode they are the deferred group `library`, which tool_search
+    finds; the model learns of them from the publish_files description and
+    the group's line in the execute_code description, not the system prompt.
+    Running a call again changes nothing, so a call that a lost server left
+    running runs again."""
 
     USE = None
     interrupted_result = None
@@ -917,7 +919,7 @@ class _ArtifactTool(SandboxTool):
     def code_mode_function_name(self) -> CodeModeFunctionName:
         return CodeModeFunctionName(
             name=self.CODE_MODE_NAME,
-            namespace="artifacts",
+            namespace="library",
             namespace_description="Find and download the files that you published "
             "in this chat and the user's other chats.",
         )
@@ -929,30 +931,36 @@ class _ArtifactTool(SandboxTool):
         )
 
 
-class ArtifactsListTool(_ArtifactTool):
+class LibraryListTool(_LibraryTool):
     """Lists published files from the database; it never starts the VM. A
     page keeps to ARTIFACTS_LIST_MAX_CHARS, under the spill limit of one
-    result; the step's budget can still spill it."""
+    result, and the step's budget does not spill it."""
 
-    NAME = "artifacts_list"
+    NAME = "library_list"
     CODE_MODE_NAME = "list"
-    DESCRIPTION = ARTIFACTS_LIST_DESCRIPTION
-    ARGUMENTS = ArtifactsListArguments
+    DESCRIPTION = LIBRARY_LIST_DESCRIPTION
+    ARGUMENTS = LibraryListArguments
     RESULT = ArtifactList
     display_name = "Find Published Files"
 
+    def tool_definition(self) -> ToolDefinition:
+        # Not strict: `filters` is a `$defs` reference.
+        return tool_definition_from_arguments(
+            self.name, self.description, LibraryListArguments
+        )
+
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(ArtifactsListArguments, invocation.arguments)
+        arguments = parse_tool_arguments(LibraryListArguments, invocation.arguments)
         chat_id: UUID | None = None
         if arguments.chat_id is not None:
             try:
                 chat_id = UUID(arguments.chat_id)
             except ValueError as error:
                 raise _tool_error(f"No chat {arguments.chat_id} of yours") from error
-        before: ArtifactCursor | None = None
+        cursor: ArtifactCursor | None = None
         if arguments.cursor is not None:
             try:
-                before = ArtifactCursor.model_validate_json(
+                cursor = ARTIFACT_CURSOR.validate_json(
                     base64.urlsafe_b64decode(arguments.cursor)
                 )
             except ValueError as error:
@@ -960,6 +968,15 @@ class ArtifactsListTool(_ArtifactTool):
                     "The cursor is not a next_cursor of this tool; list again "
                     "without it"
                 ) from error
+            if (cursor.sort, cursor.sort_order) != (
+                arguments.sort,
+                arguments.sort_order,
+            ):
+                raise _tool_error(
+                    f"The cursor is from a list with sort {cursor.sort} and "
+                    f"sort_order {cursor.sort_order}; send those, or list again "
+                    "without the cursor"
+                )
         query = (arguments.query or "").strip()
         if len(query) > ARTIFACTS_QUERY_MAX_CHARS:
             raise _tool_error(
@@ -973,17 +990,20 @@ class ArtifactsListTool(_ArtifactTool):
                     self._turn.user_id,
                     query=query or None,
                     chat_session_id=chat_id,
+                    filters=arguments.filters or LibraryListFilters(),
+                    sort=arguments.sort,
+                    sort_order=arguments.sort_order,
                     limit=limit,
-                    before=before,
+                    cursor=cursor,
                 )
         if rows is None:
             raise _tool_error(f"No chat {arguments.chat_id} of yours")
         shown, more = rows[:limit], len(rows) > limit
         while True:
             content = ArtifactList(
-                artifacts=[artifact for artifact, _ in shown],
+                files=[artifact for artifact, _ in shown],
                 next_cursor=base64.urlsafe_b64encode(
-                    shown[-1][1].model_dump_json().encode()
+                    ARTIFACT_CURSOR.dump_json(shown[-1][1])
                 ).decode()
                 if more and shown
                 else None,
@@ -993,7 +1013,7 @@ class ArtifactsListTool(_ArtifactTool):
             shown, more = shown[:-1], True
 
 
-class ArtifactsDownloadTool(_ArtifactTool):
+class ArtifactsDownloadTool(_LibraryTool):
     """Copies a published file into the chat's working directory, in
     ARTIFACT_FILES_DIR under its chat file name (`chat_file_name`). The
     access check comes first, so a refused file never starts the VM. The copy
@@ -1020,11 +1040,14 @@ class ArtifactsDownloadTool(_ArtifactTool):
                 found = get_user_published_file(db_session, self._turn.user_id, file_id)
             if found is None:
                 raise _tool_error(f"No published file {file_id} in your chats")
-            if found.size > PUBLISH_FILES_MAX_BYTES:
+            if found.file_size_bytes > PUBLISH_FILES_MAX_BYTES:
                 raise _tool_error(
-                    f"{found.name} is larger than {PUBLISH_FILES_MAX_BYTES >> 20} MiB"
+                    f"{found.file_name} is larger than "
+                    f"{PUBLISH_FILES_MAX_BYTES >> 20} MiB"
                 )
-            path = f"{ARTIFACT_FILES_DIR}/{chat_file_name(found.file_id, found.name)}"
+            path = (
+                f"{ARTIFACT_FILES_DIR}/{chat_file_name(found.file_id, found.file_name)}"
+            )
             ref = self._turn.start_call()
             files = self._turn.sandbox.session_files(ref)
             entry = next(
@@ -1040,11 +1063,14 @@ class ArtifactsDownloadTool(_ArtifactTool):
             cached = (
                 entry is not None
                 and entry.type is FileType.REGULAR
-                and entry.size == found.size
+                and entry.size == found.file_size_bytes
             )
             if not cached:
                 invocation.cancellation.check()
-                timeout = COPY_BASE_SECONDS + found.size / COPY_MIN_BYTES_PER_SECOND
+                timeout = (
+                    COPY_BASE_SECONDS
+                    + found.file_size_bytes / COPY_MIN_BYTES_PER_SECOND
+                )
                 slot: Future[None] = Future()
                 copied: Future[None] = Future()
 
@@ -1083,8 +1109,8 @@ class ArtifactsDownloadTool(_ArtifactTool):
             content=DownloadedArtifact(
                 path=path,
                 file_id=found.file_id,
-                name=found.name,
-                size=found.size,
+                name=found.file_name,
+                size=found.file_size_bytes,
                 mime_type=found.mime_type,
                 chat_id=found.chat_id,
                 cached=cached,
@@ -1150,7 +1176,7 @@ def sandbox_tools_for_model(
         WriteStdinTool,
         *file_tools,
         PublishFilesTool,
-        ArtifactsListTool,
+        LibraryListTool,
         ArtifactsDownloadTool,
     )
 

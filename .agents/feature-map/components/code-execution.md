@@ -56,7 +56,7 @@
   `apply_patch` card names the files and counts them. Every
   model also gets `publish_files`, which gives files from the VM to the user
   as download cards; owners and viewers of a shared chat can download them,
-  and a hard chat delete deletes them. With `artifacts_list` and
+  and a hard chat delete deletes them. With `library_list` and
   `artifacts_download` the model finds the files that it published in the
   user's own chats and copies one into the current chat's attachments
   folder; they show as generic tool cards.
@@ -69,7 +69,7 @@ This component owns `PythonTool`, the Code Interpreter client, the settings
 table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
-`apply_patch`, `edit`, `write`, `publish_files`, `artifacts_list`,
+`apply_patch`, `edit`, `write`, `publish_files`, `library_list`,
 `artifacts_download`). Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
@@ -213,7 +213,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch | edit + write / publish_files / artifacts_list + artifacts_download (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch | edit + write / publish_files / library_list + artifacts_download (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -232,7 +232,7 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         (model_capabilities.is_claude_model, the one rule that
                                         LLM requests and prompt caching use too), else
                                         ApplyPatchTool; never both; PublishFilesTool,
-                                        ArtifactsListTool and ArtifactsDownloadTool for every
+                                        LibraryListTool and ArtifactsDownloadTool for every
                                         model. The reserved-token prompt
                                         (calculate_reserved_tokens) names the same set
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
@@ -343,9 +343,9 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         publish is a new file and version.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
-  ArtifactsListTool / ArtifactsDownloadTool  sandbox_tools._ArtifactTool: code mode
-                                        DEFERRED in the group `artifacts`
-                                        (tools.artifacts__list / __download, found
+  LibraryListTool / ArtifactsDownloadTool  sandbox_tools._LibraryTool: code mode
+                                        DEFERRED in the group `library`
+                                        (tools.library__list / __download, found
                                         with tool_search), JSON_OBJECT results
                                         (ArtifactList, DownloadedArtifact), no saved
                                         details (the generic card shows the JSON),
@@ -358,24 +358,44 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         that are not deleted, this chat and
                                         scheduled-task chats included
                                         (db/chat.py:_listable_chat; never a public
-                                        chat of another user). artifacts_list reads
-                                        only the database (SandboxTurn.user_id, no
+                                        chat of another user). library_list (not
+                                        strict: `filters` is a nested model) reads only
+                                        the database (SandboxTurn.user_id, no
                                         start_call): db/chat.py:get_user_published_files,
                                         the newest available version of each artifact,
-                                        newest ChatArtifact.updated_at first (an upsert
-                                        never moves it back), by the index (user_id,
-                                        updated_at DESC) so a page stops at its limit;
-                                        a query (at most 200 characters) matches the
-                                        file name, the version's title or the chat's
-                                        title (icontains, autoescape); limit clamped
-                                        to 1-50 (default 25); each row comes with its
-                                        ArtifactCursor (updated_at, artifact ID), whose
-                                        base64url JSON is next_cursor. Entries give
-                                        published_display_path; names and paths are
-                                        cut, and a page drops its last entries to stay
-                                        within ARTIFACTS_LIST_MAX_CHARS, below the
-                                        spill limit of one result (the step's budget
-                                        can still spill it).
+                                        by `sort` (modified_at = ChatArtifact.updated_at,
+                                        the default, which an upsert never moves back;
+                                        created_at; name and size of the newest
+                                        version) and sort_order (default desc), the
+                                        artifact ID breaking ties. Only modified_at
+                                        reads the index (user_id, updated_at DESC) and
+                                        stops at the limit; the other sorts read and
+                                        sort all the user's matching artifacts.
+                                        filters: created/modified after (inclusive) and
+                                        before (exclusive), naive times in UTC;
+                                        include/exclude_file_types and category by the
+                                        newest name's text after its last dot
+                                        (models.py:ARTIFACT_TYPE_EXTENSIONS, which also
+                                        gives each entry's artifact_type). A query (at
+                                        most 200 characters, kept until a search tool
+                                        takes it over) matches the file name, the
+                                        version's title or the chat's title (icontains,
+                                        autoescape); limit clamped to 1-50 (default
+                                        25). Each row comes with its ArtifactCursor
+                                        (sort, sort_order, sort key, artifact ID; a
+                                        union by sort, so a name stays a string), whose
+                                        base64url JSON is next_cursor; a cursor of
+                                        another sort or order is a tool error. Entries
+                                        (ArtifactList.files) carry library_file_id
+                                        (the artifact ID), file_id, version_number, file_name, title,
+                                        artifact_type, mime_type, file_size_bytes,
+                                        created_at, modified_at, chat_id, chat_title and
+                                        path (the published display path); names and
+                                        paths are cut, and a page drops its last
+                                        entries to stay within ARTIFACTS_LIST_MAX_CHARS,
+                                        below the spill limit of one result. The spill
+                                        exempts library_list, so the step's budget
+                                        does not spill a page either.
                                         artifacts_download: get_user_published_file
                                         (any version's file ID, a CHAT_ARTIFACT record
                                         whose object is not missing) and the 100 MiB
@@ -410,8 +430,8 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         than SPILL_MIN_DROPPED_CHARS (PREVIEW_HEAD_CHARS +
                                         PREVIEW_TAIL_CHARS). Exempt
                                         from those two limits (_OWN_LIMITS): the cells,
-                                        exec_command, write_stdin, read_file, skills_read
-                                        and CITEABLE_TOOLS_NAMES. A cell's closing record
+                                        exec_command, write_stdin, read_file, skills_read,
+                                        library_list and CITEABLE_TOOLS_NAMES. A cell's closing record
                                         sets the recorded result and its own output uncut
                                         as the full value. Where:
                                         the full value or the content, at most
@@ -750,7 +770,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     `IMMEDIATE` (a function whose stub the description lists: the built-in
     tools) or `DEFERRED` (a callable function that the description omits; the
     model finds it with `tool_search(query)`: MCP and OpenAPI tools, and the
-    sandbox artifact tools in the group `artifacts`). A tool
+    sandbox library tools in the group `library`). A tool
     that waits for a child run (`Tool.result_from_children`) must be `DIRECT`.
     `tools/tool_implementations/code_mode/code_mode_tool.py:with_code_mode`
     raises otherwise. The code mode tools are `DIRECT` too. MCP functions are
@@ -759,7 +779,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     that stays unique among the turn's functions. The description lists each
     namespace of deferred functions on one line with the first line of its
     description (`CodeModeFunctionName.namespace_description`, set by the
-    group's owner: a fixed line for a built-in group such as `artifacts`, the
+    group's owner: a fixed line for a built-in group such as `library`, the
     integration's description for an MCP server), cut to 250 characters.
     Built-in namespaces come first, then those of integrations (tools with
     `integration_action`), each sorted by name. The lines fit 4 KiB: names

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, JsonValue, create_model
 from pydantic_monty import Monty, MontyTypingError
 
 from onyx.llm.models import ToolResult
+from onyx.tools.interface import tool_definition_from_arguments
 from onyx.tools.models import (
     CodeModeExposure,
     CodeModeResultKind,
@@ -34,6 +35,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.sandbox.models import LibraryListArguments
 from tests.unit.onyx.tools.code_mode.fakes import (
     FakeMCPTool,
     FakeTool,
@@ -241,6 +243,88 @@ def test_openapi_like_schema_without_required_makes_every_argument_optional() ->
         "requestBody: dict[str, Any] | None = None) -> Any:"
     ) in stub
     assert "requestBody: Keys: title?." in stub
+
+
+def test_an_object_with_properties_and_a_combinator_lists_its_keys() -> None:
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {
+            "body": {
+                "type": "object",
+                "properties": {"title": {"type": "string"}},
+                "required": ["title"],
+                "oneOf": [
+                    {"required": ["title"]},
+                    {"properties": {"draft": {"type": "boolean"}}},
+                ],
+            }
+        },
+    }
+    stub = (
+        build_tool_stubs([FakeTool("create_ticket", _unused, parameters=parameters)])
+        .functions["create_ticket"]
+        .stub
+    )
+    assert "body: Keys: title." in stub
+
+
+def test_an_object_with_properties_and_a_ref_lists_its_own_keys() -> None:
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {
+            "body": {
+                "$ref": "#/$defs/Base",
+                "properties": {"title": {"type": "string"}},
+                "required": ["title"],
+            }
+        },
+        "$defs": {
+            "Base": {"type": "object", "properties": {"draft": {"type": "boolean"}}}
+        },
+    }
+    stub = (
+        build_tool_stubs([FakeTool("create_ticket", _unused, parameters=parameters)])
+        .functions["create_ticket"]
+        .stub
+    )
+    assert "body: Keys: title." in stub
+
+
+def test_a_required_object_that_admits_null_through_its_combinator_is_sent_as_null() -> (
+    None
+):
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {
+            "x": {
+                "properties": {"title": {"type": "string"}},
+                "anyOf": [{"type": "object"}, {"type": "null"}],
+            }
+        },
+        "required": ["x"],
+    }
+    function = build_tool_stubs(
+        [FakeTool("create_ticket", _unused, parameters=parameters)]
+    ).functions["create_ticket"]
+    assert tool_arguments(function, {"x": None}).value == {"x": None}
+
+
+def test_a_nested_model_argument_lists_the_keys_of_its_model() -> None:
+    definition = tool_definition_from_arguments(
+        "library_list", "List files.", LibraryListArguments
+    )
+    stub = (
+        build_tool_stubs(
+            [FakeTool(definition.name, _unused, parameters=definition.parameters)]
+        )
+        .functions["library_list"]
+        .stub
+    )
+    assert (
+        "filters: Keys: category?, created_after?, created_before?, "
+        "exclude_file_types?, include_file_types?, modified_after?, "
+        "modified_before?." in stub
+    )
 
 
 def test_strict_nullable_required_arguments_are_optional_and_sent_as_null() -> None:

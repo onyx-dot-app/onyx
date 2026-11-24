@@ -7,7 +7,14 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    computed_field,
+)
 
 from onyx.server.features.build.sandbox.exec_output import (
     EXEC_DEFAULT_YIELD_MS,
@@ -23,6 +30,7 @@ from onyx.server.features.build.sandbox.models import (
     ExecCompletionName,
 )
 from onyx.tools.constants import DEFAULT_MAX_OUTPUT_CHARS, MAX_OUTPUT_CHARS_DESCRIPTION
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
 
@@ -270,7 +278,7 @@ class PublishedFiles(BaseModel):
     files: list[PublishedFile]
 
 
-# artifacts_list: the most entries of one page, and the default.
+# library_list: the most entries of one page, and the default.
 ARTIFACTS_LIST_MAX_LIMIT = 50
 ARTIFACTS_LIST_DEFAULT_LIMIT = 25
 # The longest query, and the longest name, path and chat title that a page
@@ -279,34 +287,149 @@ ARTIFACTS_QUERY_MAX_CHARS = 200
 ARTIFACTS_NAME_MAX_CHARS = 200
 ARTIFACTS_PATH_MAX_CHARS = 300
 ARTIFACTS_CHAT_TITLE_MAX_CHARS = 200
-# The longest artifacts_list result; a page drops its last entries to fit.
-# Below spill.RESULT_MAX_CHARS, the spill limit of one result; the step's
-# budget (spill.STEP_MAX_CHARS) can still spill a page.
+# The most extensions that one file type filter takes.
+ARTIFACTS_MAX_FILE_TYPES = 50
+# The longest library_list result; a page drops its last entries to fit.
+# Below spill.RESULT_MAX_CHARS, the spill limit of one result, so neither
+# that limit nor the step's budget spills a page.
 ARTIFACTS_LIST_MAX_CHARS = 40_000
+# Model text that a result or its error can echo. Such a result may never
+# spill, so the text has a cap.
+_EchoedText = Annotated[str, Field(max_length=ARTIFACTS_PATH_MAX_CHARS)]
+
+# The kind of a published file, from the extension of its name. Image tool
+# outputs are not artifacts, so no type is kept for them.
+ArtifactType = Literal["image", "sheet", "slides", "report", "other"]
+ARTIFACT_TYPE_EXTENSIONS: dict[ArtifactType, frozenset[str]] = {
+    "image": frozenset(
+        {
+            "png",
+            "jpg",
+            "jpeg",
+            "gif",
+            "webp",
+            "svg",
+            "bmp",
+            "tif",
+            "tiff",
+            "heic",
+            "avif",
+        }
+    ),
+    "sheet": frozenset({"csv", "tsv", "xls", "xlsx", "xlsm", "xlsb", "ods"}),
+    "slides": frozenset({"ppt", "pptx", "pptm", "odp", "key"}),
+    "report": frozenset({"pdf", "doc", "docx", "odt", "md", "html", "htm"}),
+}
 
 
-class ArtifactsListArguments(BaseModel):
+def artifact_extension(file_name: str) -> str | None:
+    """The lowercase text after the last dot of a file's name, None without
+    a dot; the list's SQL filters read the same text."""
+    _, dot, extension = file_name.rpartition(".")
+    return extension.lower() if dot else None
+
+
+def artifact_type(file_name: str) -> ArtifactType:
+    """The type of a file by its extension (`artifact_extension`)."""
+    extension = artifact_extension(file_name)
+    return next(
+        (
+            kind
+            for kind, extensions in ARTIFACT_TYPE_EXTENSIONS.items()
+            if extension in extensions
+        ),
+        "other",
+    )
+
+
+ArtifactSort = Literal["created_at", "modified_at", "name", "size"]
+SortOrder = Literal["asc", "desc"]
+
+
+def _filter_time_in_utc(value: datetime) -> datetime:
+    """A filter time without a zone is UTC."""
+    try:
+        return datetime_to_utc(value)
+    except OverflowError:
+        # Such as year 1 with a positive offset.
+        raise ValueError("the time in UTC is outside years 1 to 9999") from None
+
+
+_UtcDatetime = Annotated[datetime, AfterValidator(_filter_time_in_utc)]
+# Extensions match in any case, with or without the dot.
+_FileTypes = Annotated[
+    list[Annotated[str, AfterValidator(lambda ext: ext.strip().lstrip(".").lower())]],
+    Field(max_length=ARTIFACTS_MAX_FILE_TYPES),
+]
+_TIME_FILTER = "An ISO 8601 date or time; a time without a zone is UTC."
+
+
+class LibraryListFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # The tool checks the bounds, so the strict schema keeps to plain types.
-    query: str | None = Field(
+    created_after: _UtcDatetime | None = Field(
         default=None,
-        description="Case-insensitive text to find in the file name, the "
-        f"file's title or the chat's title, at most {ARTIFACTS_QUERY_MAX_CHARS} "
-        "characters. Omit it to list every file.",
+        description=f"Files first published at or after this time. {_TIME_FILTER}",
     )
-    chat_id: str | None = Field(
+    created_before: _UtcDatetime | None = Field(
         default=None,
-        description="List only the files of this chat (a chat_id of an entry).",
+        description=f"Files first published before this time. {_TIME_FILTER}",
     )
+    modified_after: _UtcDatetime | None = Field(
+        default=None,
+        description=f"Files last published at or after this time. {_TIME_FILTER}",
+    )
+    modified_before: _UtcDatetime | None = Field(
+        default=None,
+        description=f"Files last published before this time. {_TIME_FILTER}",
+    )
+    include_file_types: _FileTypes | None = Field(
+        default=None,
+        description='Only files with one of these extensions, such as ["xlsx", '
+        '".csv"]; any case, with or without the dot.',
+    )
+    exclude_file_types: _FileTypes | None = Field(
+        default=None,
+        description="No files with one of these extensions; any case, with or "
+        "without the dot.",
+    )
+    category: ArtifactType | None = Field(
+        default=None,
+        description="Only files of this kind, from the file extension: image, "
+        "sheet (csv, tsv, xls*, ods), slides (ppt*, odp, key), report (pdf, "
+        "doc*, odt, md, html) or other.",
+    )
+
+
+class LibraryListArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cursor: str | None = Field(
+        default=None,
+        description="The next_cursor of the previous page, with the same "
+        "arguments otherwise.",
+    )
+    # The tool clamps the limit.
     limit: int = Field(
         default=ARTIFACTS_LIST_DEFAULT_LIMIT,
         description=f"The most files to return, from 1 to {ARTIFACTS_LIST_MAX_LIMIT}.",
     )
-    cursor: str | None = Field(
+    sort: ArtifactSort = Field(
+        default="modified_at",
+        description="created_at: first publish; modified_at: latest publish; "
+        "name: file name; size: file size.",
+    )
+    sort_order: SortOrder = "desc"
+    filters: LibraryListFilters | None = None
+    chat_id: _EchoedText | None = Field(
         default=None,
-        description="The next_cursor of the previous page, with the same "
-        "query and chat_id, for the next older files.",
+        description="List only the files of this chat (a chat_id of an entry).",
+    )
+    query: str | None = Field(
+        default=None,
+        description="Case-insensitive text to find in the file name, the "
+        f"file's title or the chat's title, at most {ARTIFACTS_QUERY_MAX_CHARS} "
+        "characters.",
     )
 
 
@@ -319,41 +442,66 @@ class ArtifactsDownloadArguments(BaseModel):
     )
 
 
-class ArtifactCursor(BaseModel):
-    """Where a page of artifacts_list ends: the last entry's artifact and its
-    latest publish. A cursor is this model's JSON in base64url."""
-
-    updated_at: datetime
+class _CursorBase(BaseModel):
+    sort_order: SortOrder
     artifact_id: UUID
 
 
-class ListedArtifact(BaseModel):
-    """A published file in an artifacts_list page, or the file that
-    artifacts_download looks up."""
+class _TimeCursor(_CursorBase):
+    sort: Literal["created_at", "modified_at"]
+    key: datetime
 
+
+class _NameCursor(_CursorBase):
+    sort: Literal["name"]
+    key: str
+
+
+class _SizeCursor(_CursorBase):
+    sort: Literal["size"]
+    key: int
+
+
+# Where a page of library_list ends: the sort, and the last entry's sort key
+# and artifact. A cursor is its JSON in base64url.
+ArtifactCursor = Annotated[
+    _TimeCursor | _NameCursor | _SizeCursor, Field(discriminator="sort")
+]
+ARTIFACT_CURSOR: TypeAdapter[ArtifactCursor] = TypeAdapter(ArtifactCursor)
+
+
+class ListedArtifact(BaseModel):
+    """A published file in an library_list page, or the file that
+    artifacts_download looks up: one version of an artifact."""
+
+    # The artifact's ID, the same for every version.
+    library_file_id: UUID
     file_id: str
+    # More than 1: older versions exist.
+    version_number: int
     # The file record's display name; at most ARTIFACTS_NAME_MAX_CHARS in a
     # page.
-    name: str
+    file_name: str
     title: str | None
-    # published_display_path of the artifact's path; in a page, a longer one
-    # keeps its last ARTIFACTS_PATH_MAX_CHARS.
-    path: str
-    # More than 1: older versions exist.
-    version: int
+    artifact_type: ArtifactType
+    mime_type: str
+    file_size_bytes: int
+    # The artifact's first and latest publish.
+    created_at: datetime
+    modified_at: datetime
     chat_id: UUID
     # At most ARTIFACTS_CHAT_TITLE_MAX_CHARS in a page.
     chat_title: str | None
-    published_at: datetime
-    size: int
-    mime_type: str
+    # published_display_path of the artifact's path; in a page, a longer one
+    # keeps its last ARTIFACTS_PATH_MAX_CHARS.
+    path: str
 
 
 class ArtifactList(BaseModel):
-    """What artifacts_list returns: newest publish first."""
+    """What library_list returns."""
 
-    artifacts: list[ListedArtifact]
-    # None: no older files.
+    files: list[ListedArtifact]
+    # None: no more files.
     next_cursor: str | None
 
 

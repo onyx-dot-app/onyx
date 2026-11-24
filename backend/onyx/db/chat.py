@@ -101,13 +101,19 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.tools.models import IntegrationEntry, ToolOptions
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACT_CURSOR,
+    ARTIFACT_TYPE_EXTENSIONS,
     ARTIFACTS_CHAT_TITLE_MAX_CHARS,
     ARTIFACTS_NAME_MAX_CHARS,
     ARTIFACTS_PATH_MAX_CHARS,
     ArtifactCursor,
+    ArtifactSort,
+    LibraryListFilters,
     ListedArtifact,
     PublishedFile,
     PublishedFileView,
+    SortOrder,
+    artifact_type,
     published_display_path,
 )
 from onyx.utils.logger import setup_logger
@@ -1187,7 +1193,6 @@ def _newest_available_version() -> LateralFromClause:
             ChatArtifactVersion.file_id,
             ChatArtifactVersion.title,
             ChatArtifactVersion.thumbnail_file_id,
-            ChatArtifactVersion.created_at.label("published_at"),
             FileRecord.display_name,
             FileRecord.file_type,
             FileRecord.file_size,
@@ -1245,18 +1250,22 @@ def _listable_chat(user_id: UUID) -> ColumnElement[bool]:
 
 
 def _listed_artifact(row: Row) -> ListedArtifact:
+    name = row.display_name or row.file_id
     return ListedArtifact(
+        library_file_id=row.id,
         file_id=row.file_id,
-        name=row.display_name or row.file_id,
+        version_number=row.version,
+        file_name=name,
         title=row.title,
-        path=published_display_path(row.path),
-        version=row.version,
+        artifact_type=artifact_type(name),
+        mime_type=row.file_type,
+        # A file without a recorded size shows as 0.
+        file_size_bytes=row.file_size or 0,
+        created_at=row.created_at,
+        modified_at=row.updated_at,
         chat_id=row.chat_session_id,
         chat_title=row.description,
-        published_at=row.published_at,
-        # A file without a recorded size shows as 0.
-        size=row.file_size or 0,
-        mime_type=row.file_type,
+        path=published_display_path(row.path),
     )
 
 
@@ -1266,18 +1275,23 @@ def get_user_published_files(
     *,
     query: str | None,
     chat_session_id: UUID | None,
+    filters: LibraryListFilters,
+    sort: ArtifactSort,
+    sort_order: SortOrder,
     limit: int,
-    before: ArtifactCursor | None,
+    cursor: ArtifactCursor | None,
 ) -> list[tuple[ListedArtifact, ArtifactCursor]] | None:
     """Up to `limit` + 1 of the files that the model published in the user's
     listable chats (`_listable_chat`), each with the cursor that starts after
-    it: the newest available version of each artifact, by the artifact's
-    latest publish, newest first. An artifact published again while the caller pages
-    moves to the first page, so later pages skip it. `query` matches the file
-    name, the version's title or the chat's title, in any case, after the
-    version is chosen. An entry's name, path and chat title are cut to their
-    ARTIFACTS_*_MAX_CHARS, a path to its end. None when `chat_session_id` is
-    not a listable chat of the user."""
+    it: the newest available version of each artifact, in `sort` order with
+    the artifact ID as the tie-break. `modified_at` reads
+    ix_chat_artifact_user_id_updated_at in order and stops at the limit; the
+    other sorts read and sort all of the user's matching artifacts. An
+    artifact that changes its sort key while the caller pages can move past
+    the cursor or behind it. `name`, `size`, the type filters and `query` use
+    the newest available version. An entry's name, path and chat title are
+    cut to their ARTIFACTS_*_MAX_CHARS, a path to its end. None when
+    `chat_session_id` is not a listable chat of the user."""
     listable = _listable_chat(user_id)
     if (
         chat_session_id is not None
@@ -1288,29 +1302,73 @@ def get_user_published_files(
     ):
         return None
     newest = _newest_available_version()
+    name = func.coalesce(newest.c.display_name, newest.c.file_id)
+    # The text after the last dot, as artifact_type reads it; NULL without one.
+    extension = func.lower(func.substring(name, r"\.([^.]*)$"))
+    key = {
+        "created_at": ChatArtifact.created_at,
+        "modified_at": ChatArtifact.updated_at,
+        "name": name,
+        "size": func.coalesce(newest.c.file_size, 0),
+    }[sort]
+    descending = sort_order == "desc"
     statement = (
         select(
             ChatArtifact.id,
             ChatArtifact.path,
+            ChatArtifact.created_at,
             ChatArtifact.updated_at,
             ChatArtifact.chat_session_id,
             ChatSession.description,
             newest,
+            key.label("sort_key"),
         )
         .join(ChatSession, ChatSession.id == ChatArtifact.chat_session_id)
         .join(newest, true())
-        # ix_chat_artifact_user_id_updated_at gives the order, so the scan
-        # stops at the limit.
         .where(ChatArtifact.user_id == user_id, listable)
-        .order_by(ChatArtifact.updated_at.desc(), ChatArtifact.id.desc())
+        .order_by(
+            *(
+                (key.desc(), ChatArtifact.id.desc())
+                if descending
+                else (key.asc(), ChatArtifact.id.asc())
+            )
+        )
         .limit(limit + 1)
     )
     if chat_session_id is not None:
         statement = statement.where(ChatArtifact.chat_session_id == chat_session_id)
-    if before is not None:
+    if cursor is not None:
+        position = tuple_(key, ChatArtifact.id)
+        after = tuple_(literal(cursor.key), literal(cursor.artifact_id))
         statement = statement.where(
-            tuple_(ChatArtifact.updated_at, ChatArtifact.id)
-            < tuple_(literal(before.updated_at), literal(before.artifact_id))
+            position < after if descending else position > after
+        )
+    if filters.created_after is not None:
+        statement = statement.where(ChatArtifact.created_at >= filters.created_after)
+    if filters.created_before is not None:
+        statement = statement.where(ChatArtifact.created_at < filters.created_before)
+    if filters.modified_after is not None:
+        statement = statement.where(ChatArtifact.updated_at >= filters.modified_after)
+    if filters.modified_before is not None:
+        statement = statement.where(ChatArtifact.updated_at < filters.modified_before)
+    if filters.include_file_types:
+        statement = statement.where(extension.in_(filters.include_file_types))
+    if filters.exclude_file_types:
+        statement = statement.where(
+            or_(extension.is_(None), extension.not_in(filters.exclude_file_types))
+        )
+    if filters.category == "other":
+        statement = statement.where(
+            or_(
+                extension.is_(None),
+                extension.not_in(
+                    [ext for exts in ARTIFACT_TYPE_EXTENSIONS.values() for ext in exts]
+                ),
+            )
+        )
+    elif filters.category is not None:
+        statement = statement.where(
+            extension.in_(ARTIFACT_TYPE_EXTENSIONS[filters.category])
         )
     if query:
         statement = statement.where(
@@ -1323,13 +1381,23 @@ def get_user_published_files(
     page: list[tuple[ListedArtifact, ArtifactCursor]] = []
     for row in db_session.execute(statement):
         artifact = _listed_artifact(row)
-        artifact.name = artifact.name[:ARTIFACTS_NAME_MAX_CHARS]
+        artifact.file_name = artifact.file_name[:ARTIFACTS_NAME_MAX_CHARS]
         if len(artifact.path) > ARTIFACTS_PATH_MAX_CHARS:
             artifact.path = "…" + artifact.path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :]
         if artifact.chat_title is not None:
             artifact.chat_title = artifact.chat_title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]
         page.append(
-            (artifact, ArtifactCursor(updated_at=row.updated_at, artifact_id=row.id))
+            (
+                artifact,
+                ARTIFACT_CURSOR.validate_python(
+                    {
+                        "sort": sort,
+                        "sort_order": sort_order,
+                        "key": row.sort_key,
+                        "artifact_id": row.id,
+                    }
+                ),
+            )
         )
     return page
 
@@ -1343,13 +1411,15 @@ def get_user_published_file(
     None. Its name, path and chat title are not cut."""
     row = db_session.execute(
         select(
+            ChatArtifact.id,
             ChatArtifact.path,
+            ChatArtifact.created_at,
+            ChatArtifact.updated_at,
             ChatArtifact.chat_session_id,
             ChatSession.description,
             ChatArtifactVersion.version,
             ChatArtifactVersion.file_id,
             ChatArtifactVersion.title,
-            ChatArtifactVersion.created_at.label("published_at"),
             FileRecord.display_name,
             FileRecord.file_type,
             FileRecord.file_size,

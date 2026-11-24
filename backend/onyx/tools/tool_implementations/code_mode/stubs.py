@@ -444,7 +444,37 @@ def _docstring_text(text: str) -> str:
     return re.sub(r'"(?=""|\Z)', r'\\"', escaped)
 
 
-def _object_keys_summary(schema: JsonValue) -> str:
+def _object_keys_summary(schema: JsonValue, root: Mapping[str, JsonValue]) -> str:
+    """The keys of an object argument: its own properties, else through
+    `$ref`s and a combinator whose only member that is not null is the
+    object, as an optional model is."""
+    for _ in range(MAX_SCHEMA_DEPTH):
+        if not isinstance(schema, dict):
+            return ""
+        if schema.get("properties"):
+            break
+        ref = schema.get("$ref")
+        if isinstance(ref, str):
+            schema = _resolve_ref(ref, root)
+            continue
+        options = next(
+            (
+                schema[combinator]
+                for combinator in ("anyOf", "oneOf", "allOf")
+                if isinstance(schema.get(combinator), list)
+            ),
+            None,
+        )
+        if not isinstance(options, list):
+            break
+        members = [
+            option
+            for option in options
+            if not (isinstance(option, dict) and option.get("type") == "null")
+        ]
+        if len(members) != 1:
+            return ""
+        schema = members[0]
     if not isinstance(schema, dict):
         return ""
     properties = schema.get("properties")
@@ -498,7 +528,7 @@ def _parameters(
         if isinstance(prop, dict):
             raw = prop.get("description")
             description = raw if isinstance(raw, str) else ""
-            description += _object_keys_summary(prop)
+            description += _object_keys_summary(prop, parameters)
         if python_name != original:
             description = f"(tool argument `{original}`) {description}".strip()
         result.append(
