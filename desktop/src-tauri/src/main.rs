@@ -212,20 +212,33 @@ fn ps_quote(value: &str) -> String {
 /// The script that removes the earlier per-user install after this process
 /// (`pid`) exits, then starts `exe` again. The earlier uninstaller ends every
 /// `onyx.exe` of the user by name, so it cannot run while this app runs.
-/// NSIS wants `_?=<dir>` last and unquoted: it runs the uninstaller in place,
-/// so `-Wait` covers the uninstall.
+/// - It first writes `ready`: the app exits only after it sees that file.
+/// - If the app still runs after 60 seconds, it does nothing.
+/// - NSIS wants `_?=<dir>` last and unquoted: it runs the uninstaller in
+///   place. The wait is bounded; an uninstaller that hangs is stopped.
+/// - `finally` starts the app again, also when the uninstall fails.
 #[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
-fn earlier_uninstall_script(pid: u32, uninstaller: &str, exe: &str) -> Option<String> {
+fn earlier_uninstall_script(pid: u32, uninstaller: &str, exe: &str, ready: &str) -> Option<String> {
     let (dir, _) = uninstaller.rsplit_once('\\')?;
     Some(format!(
         "$ErrorActionPreference = 'SilentlyContinue'\n\
+         Set-Content -LiteralPath {ready_q} -Value ''\n\
          Wait-Process -Id {pid} -Timeout 60\n\
-         $p = Start-Process -FilePath {uninstaller_q} -ArgumentList {args_q} -Wait -PassThru\n\
-         if ($p -and $p.ExitCode -eq 0) {{\n\
-         \x20   Remove-Item -LiteralPath {uninstaller_q} -Force\n\
-         \x20   [System.IO.Directory]::Delete({dir_q})\n\
-         }}\n\
-         Start-Process -FilePath {exe_q}\n",
+         if (Get-Process -Id {pid}) {{ exit }}\n\
+         try {{\n\
+         \x20   $p = Start-Process -FilePath {uninstaller_q} -ArgumentList {args_q} -PassThru\n\
+         \x20   if ($p -and $p.WaitForExit(120000)) {{\n\
+         \x20       if ($p.ExitCode -eq 0) {{\n\
+         \x20           Remove-Item -LiteralPath {uninstaller_q} -Force\n\
+         \x20           [System.IO.Directory]::Delete({dir_q})\n\
+         \x20       }}\n\
+         \x20   }} elseif ($p) {{\n\
+         \x20       Stop-Process -Id $p.Id -Force\n\
+         \x20   }}\n\
+         }} finally {{\n\
+         \x20   Start-Process -FilePath {exe_q}\n\
+         }}\n",
+        ready_q = ps_quote(ready),
         uninstaller_q = ps_quote(uninstaller),
         args_q = ps_quote(&format!("/S _?={dir}")),
         dir_q = ps_quote(dir),
@@ -233,13 +246,32 @@ fn earlier_uninstall_script(pid: u32, uninstaller: &str, exe: &str) -> Option<St
     ))
 }
 
+/// What the app does after it tried to start the uninstall helper.
+#[derive(Debug, PartialEq, Eq)]
+enum Handoff {
+    /// The helper runs and wrote its ready file: exit so it can uninstall.
+    Exit,
+    /// No confirmed helper: stop it if it started, and run as normal.
+    KeepRunning,
+}
+
+#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
+fn handoff(started: bool, ready: bool) -> Handoff {
+    if started && ready {
+        Handoff::Exit
+    } else {
+        Handoff::KeepRunning
+    }
+}
+
 /// The earlier desktop app's setup program installed for the current user
 /// only (uninstall entry in HKCU). Left in place, it is a second "Onyx" in
 /// Apps and claims onyx:// for the user. This hands its silent uninstall
 /// (which keeps its data) to a helper that runs as the user, never from the
 /// elevated installer: the user can change that entry and its files. Returns
-/// true when the helper started; this process must then exit. One attempt
-/// per user: a marker file stops a loop when the uninstall fails.
+/// true only when the helper confirmed that it runs; this process must then
+/// exit. Otherwise the app runs as normal. One attempt per user: a marker
+/// file stops a loop when the uninstall fails.
 #[cfg(all(windows, not(debug_assertions)))]
 fn hand_off_earlier_uninstall(product_name: &str, identifier: &str) -> bool {
     use std::os::windows::process::CommandExt;
@@ -272,7 +304,13 @@ fn hand_off_earlier_uninstall(product_name: &str, identifier: &str) -> bool {
     {
         return false;
     }
-    let Some(script) = earlier_uninstall_script(std::process::id(), &uninstaller, &exe) else {
+    let ready = marker_dir.join(format!("earlier-uninstall-ready-{}", std::process::id()));
+    let Some(script) = earlier_uninstall_script(
+        std::process::id(),
+        &uninstaller,
+        &exe,
+        &ready.to_string_lossy(),
+    ) else {
         return false;
     };
     use base64::Engine;
@@ -283,7 +321,7 @@ fn hand_off_earlier_uninstall(product_name: &str, identifier: &str) -> bool {
     };
     let powershell =
         std::path::Path::new(&system_root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-    std::process::Command::new(powershell)
+    let child = std::process::Command::new(powershell)
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -293,8 +331,26 @@ fn hand_off_earlier_uninstall(product_name: &str, identifier: &str) -> bool {
         ])
         .arg(encoded)
         .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
-        .spawn()
-        .is_ok()
+        .spawn();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut seen = false;
+    if child.is_ok() {
+        while !seen && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            seen = ready.exists();
+        }
+    }
+    let _ = std::fs::remove_file(&ready);
+    match handoff(child.is_ok(), seen) {
+        Handoff::Exit => true,
+        Handoff::KeepRunning => {
+            // The helper does nothing while this app runs, and is stopped here.
+            if let Ok(mut child) = child {
+                let _ = child.kill();
+            }
+            false
+        }
+    }
 }
 
 #[cfg(all(windows, not(debug_assertions)))]
@@ -558,9 +614,9 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        earlier_uninstall_script, earlier_user_uninstaller, is_onyx_link_handler,
+        earlier_uninstall_script, earlier_user_uninstaller, handoff, is_onyx_link_handler,
         legacy_link_handler, link_command_is_other_program, packaged_desktop_file,
-        registers_links_at_runtime,
+        registers_links_at_runtime, Handoff,
     };
 
     #[test]
@@ -569,24 +625,46 @@ mod tests {
             42,
             r"C:\Users\Ann O'Neil\AppData\Local\Onyx\uninstall.exe",
             r"C:\Program Files\Onyx\onyx.exe",
+            r"C:\Users\Ann O'Neil\AppData\Local\app.onyx.desktop\ready-42",
         )
         .unwrap();
-        assert!(
-            script.starts_with("$ErrorActionPreference = 'SilentlyContinue'\nWait-Process -Id 42 ")
+        let lines: Vec<&str> = script.lines().map(str::trim).collect();
+        assert_eq!(
+            &lines[1..4],
+            [
+                r"Set-Content -LiteralPath 'C:\Users\Ann O''Neil\AppData\Local\app.onyx.desktop\ready-42' -Value ''",
+                "Wait-Process -Id 42 -Timeout 60",
+                "if (Get-Process -Id 42) { exit }",
+            ]
         );
         // One argument string: /S, then _?= last with the unquoted folder.
         assert!(script.contains(
-            r"-FilePath 'C:\Users\Ann O''Neil\AppData\Local\Onyx\uninstall.exe' -ArgumentList '/S _?=C:\Users\Ann O''Neil\AppData\Local\Onyx' -Wait"
+            r"-FilePath 'C:\Users\Ann O''Neil\AppData\Local\Onyx\uninstall.exe' -ArgumentList '/S _?=C:\Users\Ann O''Neil\AppData\Local\Onyx' -PassThru"
         ));
+        assert!(script.contains("$p.WaitForExit(120000)"));
+        assert!(script.contains("Stop-Process -Id $p.Id -Force"));
         assert!(script
             .contains(r"[System.IO.Directory]::Delete('C:\Users\Ann O''Neil\AppData\Local\Onyx')"));
-        assert!(script
-            .trim_end()
-            .ends_with(r"Start-Process -FilePath 'C:\Program Files\Onyx\onyx.exe'"));
+        // The app starts again in `finally`, also when the uninstall fails.
         assert_eq!(
-            earlier_uninstall_script(1, "uninstall.exe", "onyx.exe"),
+            &lines[lines.len() - 3..],
+            [
+                "} finally {",
+                r"Start-Process -FilePath 'C:\Program Files\Onyx\onyx.exe'",
+                "}",
+            ]
+        );
+        assert_eq!(
+            earlier_uninstall_script(1, "uninstall.exe", "onyx.exe", "r"),
             None
         );
+    }
+
+    #[test]
+    fn the_app_exits_only_for_a_confirmed_helper() {
+        assert_eq!(handoff(true, true), Handoff::Exit);
+        assert_eq!(handoff(true, false), Handoff::KeepRunning);
+        assert_eq!(handoff(false, false), Handoff::KeepRunning);
     }
 
     #[test]

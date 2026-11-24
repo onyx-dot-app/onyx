@@ -147,8 +147,10 @@ and binary name (`onyx`), so this app takes its place:
   `%LOCALAPPDATA%\Onyx`. At each user's first launch, the new app hands that user's per-user
   uninstall to a hidden PowerShell helper and exits (`hand_off_earlier_uninstall` in
   `src-tauri/src/main.rs`). The earlier uninstaller ends every `onyx.exe` of the user by name, so
-  it cannot run while the new app runs. The helper waits for the app to exit, runs the
-  uninstaller silently, as the user, then starts the app again. The uninstall keeps the earlier
+  it cannot run while the new app runs. The app exits only after the helper writes a ready
+  file (within 5 seconds); otherwise it stops the helper and runs as normal. The helper waits
+  for the app to exit, runs the uninstaller silently, as the user (at most 2 minutes, then it
+  stops it), and always starts the app again. The uninstall keeps the earlier
   app's data. The elevated installer never runs it: the user can change that uninstall entry and
   its files. The app tries this once per user (marker file `earlier-uninstall-tried` in
   `%LOCALAPPDATA%\app.onyx.desktop`).

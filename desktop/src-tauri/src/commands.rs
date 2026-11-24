@@ -184,12 +184,16 @@ pub async fn save_server(
     }
     // A policy refresh can lock the server while the sign-out waits.
     let lock = server_locked(&state);
-    let next = after_sign_out(lock.is_err());
-    if next == AfterSignOut::SaveNewServer {
-        state.config.update(|c| c.server_url = Some(server))?;
-        log::info!("saved the server {logged}");
-    } else {
-        log::warn!("the server is locked now; {logged} is not saved");
+    match after_sign_out(lock.is_err(), state.server().is_ok()) {
+        AfterSignOut::SaveNewServer => {
+            state.config.update(|c| c.server_url = Some(server))?;
+            log::info!("saved the server {logged}");
+        }
+        AfterSignOut::SignInToCurrent => {
+            log::warn!("the server is locked now; {logged} is not saved");
+        }
+        // Onboarding stays open and shows the lock reason.
+        AfterSignOut::StayInOnboarding => return lock,
     }
     windows::open_login(&app)?;
     windows::close(&app, windows::ONBOARDING);
@@ -200,16 +204,20 @@ pub async fn save_server(
 enum AfterSignOut {
     SaveNewServer,
     /// The session already ended, so the user signs in again to the locked
-    /// server instead of being left with no window.
+    /// server (the saved or the managed one) instead of being left with no
+    /// window.
     SignInToCurrent,
+    /// Locked, and no server to sign in to.
+    StayInOnboarding,
 }
 
-/// What `save_server` does once the old session has ended.
-fn after_sign_out(locked_now: bool) -> AfterSignOut {
-    if locked_now {
-        AfterSignOut::SignInToCurrent
-    } else {
-        AfterSignOut::SaveNewServer
+/// What `save_server` does once the old session has ended. `has_server`: the
+/// app has a server to use without this save.
+fn after_sign_out(locked_now: bool, has_server: bool) -> AfterSignOut {
+    match (locked_now, has_server) {
+        (false, _) => AfterSignOut::SaveNewServer,
+        (true, true) => AfterSignOut::SignInToCurrent,
+        (true, false) => AfterSignOut::StayInOnboarding,
     }
 }
 
@@ -736,8 +744,11 @@ mod tests {
 
     #[test]
     fn a_lock_during_sign_out_keeps_the_server_and_opens_sign_in() {
-        assert_eq!(after_sign_out(true), AfterSignOut::SignInToCurrent);
-        assert_eq!(after_sign_out(false), AfterSignOut::SaveNewServer);
+        assert_eq!(after_sign_out(true, true), AfterSignOut::SignInToCurrent);
+        assert_eq!(after_sign_out(false, true), AfterSignOut::SaveNewServer);
+        // A first save: no server yet.
+        assert_eq!(after_sign_out(false, false), AfterSignOut::SaveNewServer);
+        assert_eq!(after_sign_out(true, false), AfterSignOut::StayInOnboarding);
     }
     use crate::api::Agent;
     use crate::policy::{self, Policy, RawValue};
