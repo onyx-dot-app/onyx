@@ -108,15 +108,18 @@ fn rejected_tokens_from(value: serde_json::Value) -> BTreeMap<String, BTreeSet<S
             Value::String(one) => Some(BTreeSet::from([one])),
             // A list keeps its valid fingerprints; only bad items go.
             Value::Array(items) => {
-                let count = items.len();
+                let mut skipped_invalid = false;
                 let set: BTreeSet<String> = items
                     .into_iter()
                     .filter_map(|item| match item {
                         Value::String(s) => Some(s),
-                        _ => None,
+                        _ => {
+                            skipped_invalid = true;
+                            None
+                        }
                     })
                     .collect();
-                if set.len() < count {
+                if skipped_invalid {
                     log::warn!("a rejectedTokens item in config.json is not valid; ignored");
                 }
                 Some(set)
