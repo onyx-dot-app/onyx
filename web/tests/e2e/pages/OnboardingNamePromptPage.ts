@@ -5,6 +5,7 @@
 
 import { type Page, type Locator, expect } from "@playwright/test";
 import type { UserPersonalization } from "@/lib/types";
+import { AppSidebarPage } from "@tests/e2e/pages/AppSidebarPage";
 
 export class OnboardingNamePromptPage {
   readonly page: Page;
@@ -76,11 +77,15 @@ export class OnboardingNamePromptPage {
     });
     await this.page.goto("/app");
     await expect(this.noAgentModal).toBeVisible({ timeout: 15000 });
-    const userLoaded = this.page.waitForResponse("**/api/me");
     releaseUser();
-    await userLoaded;
+    await expect(new AppSidebarPage(this.page).accountMenu).toBeAttached();
     failing = false;
     await expect(this.chatInput).toBeVisible({ timeout: 30000 });
+  }
+
+  /** Go to the next onboarding step. */
+  async advanceOnboarding(): Promise<void> {
+    await this.onboardingHeader.getByRole("button", { name: "Next" }).click();
   }
 
   /** The chat input's top edge, or NaN while it has no box. */

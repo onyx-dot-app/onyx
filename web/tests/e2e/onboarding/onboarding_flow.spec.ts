@@ -189,9 +189,7 @@ test.describe("Onboarding Flow @exclusive", () => {
       await expect(namePromptPage.onboardingHeader).toBeVisible();
       const welcomeTop = await namePromptPage.settledChatInputTop();
 
-      await namePromptPage.onboardingHeader
-        .getByRole("button", { name: "Next" })
-        .click();
+      await namePromptPage.advanceOnboarding();
       await expect(namePromptPage.nameStep).toBeVisible();
       expect(
         Math.abs((await namePromptPage.settledChatInputTop()) - welcomeTop)
