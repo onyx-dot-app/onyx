@@ -7,8 +7,9 @@ import MessageSwitcher from "@/lib/timeline/chat/message/MessageSwitcher";
 import { cn, richNodes } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { Badge, Button, CopyButton, Text } from "@opal/components";
-import { SvgEdit, SvgSparkle } from "@opal/icons";
+import { SvgChevronDown, SvgChevronUp, SvgEdit, SvgSparkle } from "@opal/icons";
 import { Hoverable } from "@opal/core";
+import { useOverflow } from "@opal/hooks";
 import FileDisplay from "./FileDisplay";
 import { placeMentions, MENTION_TRIGGER } from "@/lib/chat/mentions";
 import type {
@@ -108,6 +109,10 @@ export function HumanMessageBubble({
   content,
   mentions,
 }: HumanMessageBubbleProps) {
+  const t = useTranslations("chat.messages.humanMessage");
+  const [textElement, setTextElement] = useState<HTMLDivElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const clipped = useOverflow(textElement);
   const body = useMemo(() => {
     if (!mentions?.length) return content;
     const parts: React.ReactNode[] = [];
@@ -153,12 +158,34 @@ export function HumanMessageBubble({
           }
         }}
       >
-        <div className="inline-block align-middle">
-          {/* Not a `p`: the chips' badges are blocks. */}
-          <Text dir="auto" font="main-content-body" color="text-04">
-            {body}
-          </Text>
+        <div
+          ref={setTextElement}
+          className={cn(
+            !expanded && "max-h-72 overflow-hidden",
+            clipped &&
+              "[mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
+          )}
+        >
+          <div className="inline-block align-middle">
+            {/* Not a `p`: the chips' badges are blocks. */}
+            <Text dir="auto" font="main-content-body" color="text-04">
+              {body}
+            </Text>
+          </div>
         </div>
+        {(clipped || expanded) && (
+          <Button
+            prominence="tertiary"
+            size="sm"
+            rightIcon={expanded ? SvgChevronUp : SvgChevronDown}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded
+              ? t("foldButton.collapseLabel")
+              : t("foldButton.expandLabel")}
+          </Button>
+        )}
       </div>
     </div>
   );

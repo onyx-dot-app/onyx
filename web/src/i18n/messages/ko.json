@@ -12324,6 +12324,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "편집"
+        },
+        "foldButton": {
+          "collapseLabel": "간단히 보기",
+          "expandLabel": "전체 메시지 보기"
         }
       },
       "imageTool": {

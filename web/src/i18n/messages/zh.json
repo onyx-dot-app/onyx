@@ -12324,6 +12324,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "编辑"
+        },
+        "foldButton": {
+          "collapseLabel": "收起",
+          "expandLabel": "显示完整消息"
         }
       },
       "imageTool": {

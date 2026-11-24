@@ -12324,6 +12324,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "تعديل"
+        },
+        "foldButton": {
+          "collapseLabel": "عرض أقل",
+          "expandLabel": "إظهار الرسالة كاملة"
         }
       },
       "imageTool": {

@@ -12324,6 +12324,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "編集"
+        },
+        "foldButton": {
+          "collapseLabel": "表示を減らす",
+          "expandLabel": "メッセージ全体を表示"
         }
       },
       "imageTool": {
