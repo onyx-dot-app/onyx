@@ -207,7 +207,10 @@ most threads (`docconversion_pool_size`).
 certificate credential and `treat_sharing_link_as_public` off reads, for each
 library, which items have role assignments of their own
 (`SharepointSourceOperations.get_library_inheritance`: SharePoint REST list
-items with `HasUniqueRoleAssignments`, one read for each 5,000 items). It keeps
+items with `HasUniqueRoleAssignments`, one read for each 5,000 items in item id
+order, each read retried on its own). A library with more than
+`LIBRARY_INHERITANCE_MAX_ITEMS` items is not read, and its files read their own
+permissions: a larger read does not end within `CONTAINER_ACCESS_TTL_SECONDS`. It keeps
 the result for one library at a time, for one listing run and at most
 `CONTAINER_ACCESS_TTL_SECONDS`. `permission_inheritance.inherited_access_sources`
 gives each file with none of its own the securable it inherits from: its

@@ -9,9 +9,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
+from office365.sharepoint.lists.list import List as SpList
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.load_all import load_all_from_connector
+from onyx.connectors.microsoft_utils import sharepoint_rest
 from onyx.connectors.microsoft_utils.models import (
     SharepointLibraryInheritance,
     SharepointSecurable,
@@ -146,8 +148,9 @@ def test_an_inherited_file_gets_the_access_of_a_read_of_its_own(
         SharepointSecurableKind.LIBRARY,
         SharepointSecurableKind.SITE,
     }
-    # One read of the items of each library.
-    assert mock.op_count("rest.list.items") == len(mock.drive_ids())
+    # For each library, one read of its items and one empty page that ends
+    # the read.
+    assert mock.op_count("rest.list.items") == 2 * len(mock.drive_ids())
     listing_reads = mock.op_count(_ROLE_READS)
 
     converted = _convert(connector, listing.stubs)
@@ -375,7 +378,7 @@ def test_a_stub_ages_from_the_start_of_the_read_of_its_library(
 
     def timed(
         self: SharepointSourceOperations, **kwargs: Any
-    ) -> SharepointLibraryInheritance:
+    ) -> SharepointLibraryInheritance | None:
         starts.append(datetime.now(timezone.utc))
         return original(self, **kwargs)
 
@@ -393,3 +396,95 @@ def test_a_stub_ages_from_the_start_of_the_read_of_its_library(
     for read_at in read_times:
         assert read_at is not None
         assert any(started >= read_at for started in starts)
+
+
+def _sources(
+    listing_stubs: list[SlimDocumentStub],
+) -> dict[str, SharepointSecurable | None]:
+    return {
+        file_id: payload.inherited_access_from
+        for file_id, payload in _file_payloads(listing_stubs).items()
+    }
+
+
+def test_a_library_is_read_one_page_at_a_time(
+    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each page of the read of a library retries on its own, so a throttled
+    page does not start the walk again. Small pages give the same sources."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    whole = _sources(
+        list_stubs(
+            mock.build_connector(certificate=True), include_permissions=True
+        ).stubs
+    )
+    mock.reset_stats()
+
+    monkeypatch.setattr(sharepoint_rest, "LIBRARY_ITEMS_PAGE_SIZE", 5)
+    original = sharepoint_rest.sleep_and_retry
+    page_reads: list[str] = []
+
+    def counted(query_obj: Any, method_name: str, **kwargs: Any) -> Any:
+        if method_name == "list_library_inheritance":
+            page_reads.append(query_obj.query_options.filter)
+        return original(query_obj, method_name, **kwargs)
+
+    monkeypatch.setattr(sharepoint_rest, "sleep_and_retry", counted)
+    paged = _sources(
+        list_stubs(
+            mock.build_connector(certificate=True), include_permissions=True
+        ).stubs
+    )
+
+    assert paged == whole
+    assert any(source is not None for source in paged.values())
+    item_reads = mock.op_count("rest.list.items")
+    assert item_reads > 2 * len(mock.drive_ids())
+    assert len(page_reads) == item_reads
+    # Each library's pages ask for ever higher ids.
+    after_ids = [int(page_filter.split()[-1]) for page_filter in page_reads]
+    starts = [i for i, after_id in enumerate(after_ids) if after_id == 0]
+    assert len(starts) == len(mock.drive_ids())
+    for start, end in zip(starts, [*starts[1:], len(after_ids)], strict=True):
+        assert after_ids[start:end] == sorted(set(after_ids[start:end]))
+
+
+def test_a_library_over_the_item_limit_is_not_read(
+    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A library too large to read in time gives each of its files a read of
+    its own, as before."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    monkeypatch.setattr(sharepoint_rest, "LIBRARY_INHERITANCE_MAX_ITEMS", 1)
+    connector = mock.build_connector(certificate=True)
+
+    listing = list_stubs(connector, include_permissions=True)
+
+    sources = _sources(listing.stubs)
+    assert sources and not any(sources.values())
+    assert mock.op_count("rest.list.items") == 0
+    assert _convert(connector, listing.stubs) == _expected_access(mock)
+
+
+def test_a_library_that_grows_past_the_limit_during_the_read_is_not_used(
+    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The item count can be under the limit when the read starts and over
+    it before the read ends: the read then stops, and each file reads its
+    own permissions."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    monkeypatch.setattr(sharepoint_rest, "LIBRARY_ITEMS_PAGE_SIZE", 5)
+    monkeypatch.setattr(sharepoint_rest, "LIBRARY_INHERITANCE_MAX_ITEMS", 12)
+    monkeypatch.setattr(SpList, "item_count", property(lambda _self: 0))
+    connector = mock.build_connector(certificate=True)
+
+    listing = list_stubs(connector, include_permissions=True)
+
+    sources = _sources(listing.stubs)
+    assert sources and not any(sources.values())
+    # The read stops after the page that passes the limit.
+    assert mock.op_count("rest.list.items") == 3 * len(mock.drive_ids())
+    assert _convert(connector, listing.stubs) == _expected_access(mock)
