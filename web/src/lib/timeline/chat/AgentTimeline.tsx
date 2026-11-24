@@ -5,7 +5,8 @@ import { useTranslations } from "next-intl";
 import { Presence } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { prefersReducedMotion } from "@opal/utils";
-import { StopReason } from "@/app/app/services/streamingModels";
+import { PacketType, StopReason } from "@/app/app/services/streamingModels";
+import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import {
   TurnGroup,
@@ -167,6 +168,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       setLayout("collapsed");
       return;
     }
+    // Focus inside the outgoing step cards moves to the run card's fold
+    // control; the step cards are inert while they leave.
+    if (stepList.contains(document.activeElement)) {
+      card.querySelector<HTMLElement>("button")?.focus();
+    }
     // The box closes from the step cards' height to the run card's, while
     // each step card slides up into the first one's place and fades.
     const ease = `${HANDOVER_MS}ms ease-in-out`;
@@ -216,6 +222,22 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}
               stopReason={stopReason}
+              // A finished memory step keeps its tag in its header, as the
+              // collapsed run card does.
+              headerAccessory={
+                memoryOperation &&
+                runStep.status === "done" &&
+                runStep.step.packets.some(
+                  (packet) => packet.obj.type === PacketType.MEMORY_TOOL_START
+                ) ? (
+                  <MemoryTagWithTooltip
+                    memoryText={memoryText ?? null}
+                    memoryOperation={memoryOperation}
+                    memoryId={memoryId ?? null}
+                    memoryIndex={memoryIndex ?? null}
+                  />
+                ) : undefined
+              }
             />
           </Presence>
         ))}
@@ -289,6 +311,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               : undefined
           }
           aria-hidden={layout === "handover" || undefined}
+          inert={layout === "handover" || undefined}
         >
           {stepCards}
         </div>

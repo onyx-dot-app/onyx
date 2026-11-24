@@ -77,15 +77,18 @@ function LineCardTitle({
   const text = typeof title === "string" ? title : title.raw;
   return (
     // The title font on the row: the text's line boxes (a shimmer's span is
-    // inline) then match the icon box, one title line tall.
-    <span className="opal-line-title opal-line-card-title font-main-ui-action">
+    // inline) then match the icon box, one title line tall. Block wrappers:
+    // the icon, the swap and the loader render divs.
+    <div className="opal-line-title opal-line-card-title font-main-ui-action">
       {Icon && <ContentIcon icon={Icon} font="main-ui-action" />}
       <Presence.Swap swapKey={titleKey ?? text} axis="inline">
-        <span className="opal-line-card-title-text">
+        {/* One line: a long title truncates, shimmering or settled. */}
+        <div className="opal-line-card-title-text">
           {shimmer ? (
             <TextLoader font="main-ui-action">{text}</TextLoader>
           ) : (
             <Text
+              as="p"
               font="main-ui-action"
               color="inherit"
               maxLines={1}
@@ -94,9 +97,9 @@ function LineCardTitle({
               {title}
             </Text>
           )}
-        </span>
+        </div>
       </Presence.Swap>
-    </span>
+    </div>
   );
 }
 
@@ -167,6 +170,8 @@ function Line({
             <div
               className="opal-line-body"
               data-opal-line-body-inset={bodyInset}
+              // `title` passes the icon only when the header shows one.
+              data-opal-line-has-icon={icon !== undefined || undefined}
             >
               {expandedContent}
             </div>

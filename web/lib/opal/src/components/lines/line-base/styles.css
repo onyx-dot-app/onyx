@@ -44,6 +44,10 @@
   @apply block min-w-0;
   padding-inline: 2px;
 }
+/* A shimmering title stays on one line too: it is cut at the header's end. */
+.opal-line-card-title-text > .opal-text-loader {
+  @apply max-w-full overflow-hidden whitespace-nowrap;
+}
 /* A long title stays within the header: its swap box may shrink, and the
    text truncates (with a tooltip) rather than widening the card. */
 .opal-line-card-title .opal-presence-swap,
@@ -75,6 +79,10 @@
    its icon box (one title line), the gap and the text's own padding. */
 .opal-line .opal-line-body[data-opal-line-body-inset="title"] {
   @apply p-0;
+  padding-inline-start: calc(var(--padding-text-4) + 2px);
+}
+.opal-line
+  .opal-line-body[data-opal-line-body-inset="title"][data-opal-line-has-icon] {
   padding-inline-start: calc(var(--padding-text-4) + 1.25rem + 0.25rem + 2px);
 }
 

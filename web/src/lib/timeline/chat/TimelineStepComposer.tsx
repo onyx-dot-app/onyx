@@ -9,6 +9,8 @@ export interface TimelineStepComposerProps {
   results: TimelineRendererOutput;
   /** The step's status; it decides the first row's icon and failed tint. */
   status?: TimelineEntryStatus;
+  /** Shown at the end of the first row's header, e.g. a memory's tag. */
+  headerAccessory?: React.ReactNode;
 }
 
 /**
@@ -18,6 +20,7 @@ export interface TimelineStepComposerProps {
 export function TimelineStepComposer({
   results,
   status = "done",
+  headerAccessory,
 }: TimelineStepComposerProps) {
   return (
     <>
@@ -34,6 +37,7 @@ export function TimelineStepComposer({
             titleKey={result.statusKey}
             defaultExpanded={result.isExpanded}
             body={result.content}
+            headerAccessory={index === 0 ? headerAccessory : undefined}
           />
         )
       )}
