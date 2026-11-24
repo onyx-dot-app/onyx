@@ -10,7 +10,6 @@ import io
 import json
 import threading
 import time
-import zipfile
 from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
@@ -151,6 +150,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     ExecSessionNotFoundError,
 )
 from onyx.server.features.build.sandbox.models import (
+    CHAT_SKILLS_PATH,
     ExecEvent,
     ExecOutputDelta,
     HarnessSandboxRef,
@@ -175,7 +175,9 @@ from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.tools.constants import (
     CODE_MODE_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
+    LOAD_SKILL_TOOL_NAME,
     POSTGRES_TOOL_NAME,
+    SKILLS_READ_TOOL_NAME,
     SPAWN_AGENT_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
@@ -357,7 +359,7 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
         session_id = chat_session_id or uuid4()
         turn = SandboxTurn(
             tenant_id=TENANT_ID,
-            user_id=user.id,
+            user=user,
             chat_session_id=session_id,
             vm_chat_files=[],
             copy_vm_chat_files=False,
@@ -5283,22 +5285,25 @@ def test_open_url_without_a_sandbox_keeps_its_page_excerpts(
     ]
 
 
-def test_a_turn_shows_its_built_ins_and_again_on_a_vm_that_replaced_a_stopped_one(
-    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, make_tools: MakeTools
+@pytest.mark.usefixtures("node")
+def test_only_load_skill_puts_the_skill_files_in_the_vm(
+    chat: SandboxChat, node: RunningFakeAgent
 ) -> None:
-    tools = make_tools()
-    _run(tools.exec_command, {"cmd": "echo hi"})
-    _run(tools.exec_command, {"cmd": "echo hi"})
-    assert node.agent.swap_mounts == ["skills"]
-    [bundle] = node.agent.managed_images.values()
-    with zipfile.ZipFile(io.BytesIO(bundle)) as zf:
-        assert "pptx/scripts/lint.py" in zf.namelist()
-
-    vm = node.agent.vms[str(tools.ref.sandbox_id)]
-    sandbox._client_factory.client(node.address).stop(
-        sandbox_id=str(tools.ref.sandbox_id),
-        attempt=vm.attempt,
-        generation=vm.generation,
+    llm = ChatLLM(
+        [
+            tool_step(SKILLS_READ_TOOL_NAME, "read", {"name": "pptx"}),
+            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(LOAD_SKILL_TOOL_NAME, "load", {"name": "pptx"}),
+            tool_step(LOAD_SKILL_TOOL_NAME, "again", {"name": "pptx"}),
+            tool_step(LOAD_SKILL_TOOL_NAME, "missing", {"name": "nope"}),
+            Delta(content="Done."),
+        ]
     )
-    _run(tools.exec_command, {"cmd": "echo hi"})
-    assert node.agent.swap_mounts == ["skills", "skills"]
+    chat.send(llm)
+    assert [name for _, name in node.agent.skill_installs] == ["pptx"]
+    assert any(
+        path == f"{CHAT_SKILLS_PATH}/pptx/scripts/lint.py"
+        for _, _, path in node.agent.files
+    )
+    assert f"{CHAT_SKILLS_PATH}/pptx/" in last_tool_text(llm, "again")
+    assert "No skill is named 'nope'" in last_tool_text(llm, "missing")

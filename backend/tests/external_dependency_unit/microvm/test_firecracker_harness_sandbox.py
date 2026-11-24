@@ -67,11 +67,12 @@ from onyx.server.features.build.sandbox.harness_base import (
     session_tool_results,
 )
 from onyx.server.features.build.sandbox.models import (
+    CHAT_SKILLS_PATH,
     ExecCommandResult,
     ExecEvent,
     ExecOutputDelta,
+    FileSet,
     HarnessSandboxRef,
-    SkillsBundle,
     session_workspace,
 )
 from tests.external_dependency_unit.microvm.conftest import (
@@ -123,7 +124,6 @@ def new_ref(
     for ref in refs:
         tenant_cache.delete(harness_state.EXEC_SESSIONS_PREFIX + str(ref.sandbox_id))
         tenant_cache.delete(harness_state.ACTIVITY_PREFIX + str(ref.sandbox_id))
-        tenant_cache.delete(harness_state.SKILLS_IMAGE_PREFIX + str(ref.sandbox_id))
 
 
 @pytest.fixture
@@ -1281,26 +1281,45 @@ def test_the_least_recently_used_exec_session_record_goes_over_the_cap(
     assert _output(_run(sandbox.write_stdin(ref, second, "y"))[1]) == "y"
 
 
-def test_skills_go_to_each_vm_instance_once_per_change(
-    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+def test_a_skill_copies_once_per_version_and_vm(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
 ) -> None:
     ref = new_ref()
-    files = {"pptx/SKILL.md": b"# pptx", "pptx/scripts/lint.py": b"print(1)"}
-    sandbox.sync_skills(ref, SkillsBundle.from_files(files))
-    sandbox.sync_skills(
-        ref, SkillsBundle.from_files(dict(reversed(list(files.items()))))
-    )
-    assert node.agent.swap_mounts == ["skills"]
-    assert len(node.agent.managed_images) == 1
+    sandbox_id = str(ref.sandbox_id)
 
-    changed = SkillsBundle.from_files({**files, "pptx/SKILL.md": b"# pptx v2"})
-    sandbox.sync_skills(ref, changed)
-    assert len(node.agent.swap_mounts) == 2
+    def copied() -> dict[str, bytes]:
+        return {
+            key[2].removeprefix(CHAT_SKILLS_PATH + "/"): data
+            for key, data in node.agent.files.items()
+            if key[:2] == (sandbox_id, "") and key[2].startswith(CHAT_SKILLS_PATH)
+        }
 
-    vm = node.agent.vms[str(ref.sandbox_id)]
+    v1: FileSet = {"report/SKILL.md": b"# report", "report/scripts/run.py": b"1"}
+    assert sandbox.install_skill(ref, "report", "v1", v1)
+    assert copied() == {**v1, "report/.version": b"v1"}
+    assert not sandbox.install_skill(ref, "report", "v1", v1)
+
+    assert sandbox.install_skill(ref, "report", "v2", {"report/SKILL.md": b"# v2"})
+    assert copied() == {"report/SKILL.md": b"# v2", "report/.version": b"v2"}
+
+    # A new VM instance has no skills.
+    vm = node.agent.vms[sandbox_id]
     sandbox._client_factory.client(node.address).stop(
-        sandbox_id=str(ref.sandbox_id), attempt=vm.attempt, generation=vm.generation
+        sandbox_id=sandbox_id, attempt=vm.attempt, generation=vm.generation
     )
-    sandbox.sync_skills(ref, changed)
-    assert len(node.agent.swap_mounts) == 3
-    assert node.agent.create_calls == 2
+    assert sandbox.install_skill(ref, "report", "v2", {"report/SKILL.md": b"# v2"})
+
+
+def test_a_skill_with_files_outside_its_folder_is_refused(
+    sandbox: FirecrackerHarnessSandbox,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    with pytest.raises(HarnessSandboxError):
+        sandbox.install_skill(
+            ref, "report", "v1", {"report/SKILL.md": b"", "other/x": b""}
+        )
+    with pytest.raises(HarnessSandboxError):
+        sandbox.install_skill(ref, "../report", "v1", {})

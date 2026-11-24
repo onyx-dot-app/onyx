@@ -5,14 +5,25 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.models import User
 from onyx.db.sandbox import get_or_create_sandbox
+from onyx.db.skill import list_chat_skills
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
-from onyx.server.features.build.sandbox.models import HarnessSandboxRef, SkillsBundle
+from onyx.server.features.build.sandbox.models import (
+    FileSet,
+    HarnessSandboxRef,
+    chat_skill_folder,
+)
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class SkillLoadError(Exception):
+    """A skill that load_skill cannot copy: the user has no skill of that
+    name, or its files cannot be read."""
 
 
 class SandboxTurn:
@@ -39,21 +50,18 @@ class SandboxTurn:
         self,
         *,
         tenant_id: str,
-        user_id: UUID,
+        user: User,
         chat_session_id: UUID,
         vm_chat_files: Sequence[VmChatFile],
         copy_vm_chat_files: bool,
     ) -> None:
         self._tenant_id = tenant_id
-        self._user_id = user_id
+        self._user = user
         self._chat_session_id = chat_session_id
         self.vm_chat_files = vm_chat_files
         self._copy_vm_chat_files = copy_vm_chat_files
         self._lock = threading.Lock()
         self._ref: HarnessSandboxRef | None = None
-        self._skills_lock = threading.Lock()
-        self._skills_loaded = False
-        self._skills_bundle: SkillsBundle | None = None
         self.file_copies: TurnFileCopies | None = None
 
     @property
@@ -74,7 +82,7 @@ class SandboxTurn:
         if ref is None:
             # Outside the lock: concurrent first calls get the same row.
             with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
-                sandbox_id = get_or_create_sandbox(db_session, self._user_id).id
+                sandbox_id = get_or_create_sandbox(db_session, self._user.id).id
             with self._lock:
                 if self._ref is None:
                     self._ref = HarnessSandboxRef(
@@ -104,31 +112,40 @@ class SandboxTurn:
                     ref.sandbox_id,
                     ref.session_id,
                 )
-        self._sync_skills(ref)
         return ref
 
-    def _sync_skills(self, ref: HarnessSandboxRef) -> None:
-        # Deferred: the skills push stack loads only when a tool runs.
-        from onyx.skills.push import build_chat_built_ins_bundle
+    def load_skill(self, ref: HarnessSandboxRef, name: str) -> str:
+        """Copy the skill named `name`, at the version the user runs now,
+        into its read-only VM folder. Returns the folder. Raises SkillLoadError for an unknown or unreadable skill."""
+        from onyx.skills.push import (
+            build_chat_built_in_skill_files,
+            build_chat_custom_skill_files,
+            chat_skill_version,
+        )
 
-        with self._skills_lock:
-            try:
-                if not self._skills_loaded:
-                    with get_session_with_tenant(
-                        tenant_id=self._tenant_id
-                    ) as db_session:
-                        self._skills_bundle = build_chat_built_ins_bundle(db_session)
-                    self._skills_loaded = True
-                # Every call: a VM that replaced a stopped one mid-turn needs
-                # the push too, and an unchanged instance is skipped.
-                if self._skills_bundle is not None:
-                    self.sandbox.sync_skills(ref, self._skills_bundle)
-            except Exception:
-                logger.exception(
-                    "sandbox_skills_sync_failed sandbox=%s session=%s",
-                    ref.sandbox_id,
-                    ref.session_id,
-                )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
+            skill = next(
+                (
+                    skill
+                    for skill in list_chat_skills(
+                        db_session, self._user, built_ins=True
+                    )
+                    if skill.name == name
+                ),
+                None,
+            )
+        if skill is None:
+            raise SkillLoadError(f"No skill is named '{name}'.")
+
+        if skill.built_in_skill_id is not None:
+            files: FileSet | None = build_chat_built_in_skill_files(skill)
+        else:
+            with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
+                files = build_chat_custom_skill_files(skill, self._user, db_session)
+        if files is None:
+            raise SkillLoadError(f"The files of skill '{name}' cannot be read now.")
+        self.sandbox.install_skill(ref, name, chat_skill_version(skill), files)
+        return chat_skill_folder(name)
 
     def end(self) -> None:
         """End the turn if a call started one. Never raises."""

@@ -78,7 +78,7 @@ class NewTurn(Protocol):
         self,
         chat_files: list[VmChatFile] | None = None,
         chat: UUID | None = None,
-        user_id: UUID | None = None,
+        turn_user: User | None = None,
     ) -> tuple[SandboxTurn, HarnessSandboxRef]: ...
 
 
@@ -155,11 +155,11 @@ def new_turn(
     def new(
         chat_files: list[VmChatFile] | None = None,
         chat: UUID | None = None,
-        user_id: UUID | None = None,
+        turn_user: User | None = None,
     ) -> tuple[SandboxTurn, HarnessSandboxRef]:
         turn = SandboxTurn(
             tenant_id=TENANT_ID,
-            user_id=user_id or user.id,
+            user=turn_user or user,
             chat_session_id=chat or chat_session_id,
             vm_chat_files=chat_files or [],
             copy_vm_chat_files=chat_files is not None,
@@ -1404,15 +1404,15 @@ def test_the_chats_of_a_slow_vm_do_not_delay_copies_into_other_vms(
     hung_paths = [[f"attachments/hung-{i}-{j}.txt" for j in range(4)] for i in range(4)]
     for paths in hung_paths:
         node.agent.write_gates.update(dict.fromkeys(paths, gate))
-    _, slow_ref = new_turn(None, uuid4(), slow_user.id)
+    _, slow_ref = new_turn(None, uuid4(), slow_user)
     held, release = _hold(
         monkeypatch, sandbox, lambda ref: ref.sandbox_id == slow_ref.sandbox_id
     )
     try:
         for paths in hung_paths:
-            new_turn([_file(file_id, path) for path in paths], uuid4(), hung_user.id)
+            new_turn([_file(file_id, path) for path in paths], uuid4(), hung_user)
         for _ in range(4):
-            new_turn([_file(file_id, "attachments/slow.txt")], uuid4(), slow_user.id)
+            new_turn([_file(file_id, "attachments/slow.txt")], uuid4(), slow_user)
         _wait_until(lambda: len(node.agent.write_waiting) == file_copies.VM_COPY_WRITES)
         _wait_until(lambda: len(held) == file_copies.VM_INTAKES)
 
@@ -1626,7 +1626,7 @@ def test_vms_whose_writes_hang_leave_threads_for_other_vms(
             new_turn(
                 [_file(file_id, path) for path in paths],
                 uuid4(),
-                make_test_user(f"fcp_hung{i}").id,
+                make_test_user(f"fcp_hung{i}"),
             )
         _wait_until(
             lambda: len(node.agent.write_waiting) == 2 * file_copies.VM_COPY_WRITES
@@ -1710,7 +1710,7 @@ def test_vms_with_a_hung_session_setup_do_not_delay_another_vm(
     file_id = store_file(b"x")
     slow_users = [make_test_user(f"fcp_setup{i}") for i in range(2)]
     slow = [
-        new_turn(None, uuid4(), slow_user.id)
+        new_turn(None, uuid4(), slow_user)
         for slow_user in slow_users
         for _ in range(file_copies.VM_INTAKES + 1)
     ]

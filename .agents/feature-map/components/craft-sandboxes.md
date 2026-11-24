@@ -84,7 +84,10 @@ assets, without OpenCode or the current Python sidecar. The existing converter
 adds init, the static Go daemon and relay, overlays, and the rootfs manifest.
 In a Firecracker VM, managed content mounts on read-only, noexec drives at
 `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the
-same A/B slot mechanism); scripts run through interpreters. Each session has
+same A/B slot mechanism); scripts run through interpreters. In the current
+image `/mnt/skills` is not a managed mount: it links to the guest daemon's
+root-owned skills folder `/var/lib/onyx/skills`, which `InstallSkill` fills
+when chat's `load_skill` runs ([[skills]]). Each session has
 `/home/onyx/workspaces/<session-id>`, the default working directory of its
 commands; commands can still reach any path in the VM. The template boot
 makes `/tmp/onyx/{tool-results,search-files,artifacts}` on the `/tmp` tmpfs,
@@ -266,14 +269,13 @@ the stored token on each request, so a new token takes effect at once.
 `backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
 - `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
   agent, with session saves (capture, upload, discard, restore) and the
-  managed drive (put, swap). Chat's built-ins use the skills drive:
-  `FirecrackerHarnessSandbox.sync_skills` takes a `SkillsBundle` (a zip
-  with fixed entry times, so the same files give the same image ID), and,
-  under the per-sandbox lock
-  `sandbox_fc:skills_sync:<sandbox>`, puts and swaps the image only when
-  the `sandbox_fc:skills_image:<sandbox>` cache record names another VM
-  instance `(attempt, generation)` or another image. A woken or replaced VM is a
-  new instance, so its first chat turn pushes again. Stubs in `backend/onyx/microvm/generated/`; the
+  managed drive (put, swap). Chat does not use the managed drive for skills:
+  `FirecrackerHarnessSandbox.install_skill` sends one skill's files as a plain
+  tar to the daemon's `InstallSkill`, which stages them, writes
+  `<name>/.version`, and swaps the folder into `/mnt/skills/<name>/` (root's,
+  read-only to the sandbox user). The daemon skips a skill whose `.version`
+  matches, and runs one install at a time. A failed install changes nothing.
+  No command runs in the VM, and the backend keeps no record of it. Stubs in `backend/onyx/microvm/generated/`; the
   `microvm-python-stubs` pre-commit hook fails when they differ from
   `microvm/proto` (`regenerate.sh --check`).
 - `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through

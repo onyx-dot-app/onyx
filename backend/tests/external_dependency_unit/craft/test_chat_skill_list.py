@@ -30,10 +30,14 @@ from onyx.db.skill import (
 )
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.sandbox.models import CHAT_SKILLS_PATH
 from onyx.skills.built_in import CHAT_BUILT_IN_SKILL_IDS
 from onyx.skills.content import read_chat_skills_md, read_versions_skill_md
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
-from onyx.skills.push import build_chat_built_ins_bundle
+from onyx.skills.push import (
+    build_chat_built_in_skill_files,
+    build_chat_custom_skill_files,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
@@ -303,16 +307,57 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     )
 
     pptx = built_ins["pptx"]
-    skill_md = read_chat_skills_md([pptx], user.id, db_session)[
+    skill_md = read_chat_skills_md([pptx], user.id, db_session, built_ins=True)[
         (pptx.version_id, pptx.path)
     ]
-    assert skill_md.startswith("Skill files: /mnt/skills/pptx/")
-    assert "python /mnt/skills/pptx/scripts/lint.py" in skill_md
+    assert skill_md.startswith(f"Skill files: {CHAT_SKILLS_PATH}/pptx/")
+    assert f"python {CHAT_SKILLS_PATH}/pptx/scripts/lint.py" in skill_md
 
-    # Each mounted folder is a listed skill; the bundle is built once.
-    bundle = build_chat_built_ins_bundle(db_session)
-    assert bundle is not None
-    assert build_chat_built_ins_bundle(db_session) is bundle
-    with zipfile.ZipFile(io.BytesIO(bundle.zip_bytes)) as zf:
-        folders = {name.split("/", 1)[0] for name in zf.namelist()}
-    assert folders == set(built_ins)
+    for skill in built_ins.values():
+        files = build_chat_built_in_skill_files(skill)
+        assert f"{skill.name}/SKILL.md" in files
+        assert all(path.startswith(f"{skill.name}/") for path in files)
+
+
+def test_a_custom_chat_skill_copies_its_folder_and_names_it(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    bundle_ids: list[str],
+    users: tuple[User, User],
+) -> None:
+    author, _ = users
+    name = f"copy-{author.id.hex[:8]}"
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        bundle_zip.writestr(
+            "SKILL.md",
+            f"---\nname: {name}\ndescription: Copy\n---\n\n"
+            "Run python ${CLAUDE_SKILL_DIR}/scripts/run.py.\n",
+        )
+        bundle_zip.writestr("scripts/run.py", "print(1)\n")
+    ingested = ingest_skill_bundle(
+        output.getvalue(), f"{name}.zip", get_default_file_store(), expected_name=name
+    )
+    bundle_ids.append(ingested.bundle_file_id)
+    created, _ = create_custom_skill__no_commit(ingested, author, db_session)
+    set_skill_installation_policy(created, PluginInstallationPolicy.DEFAULT, db_session)
+    db_session.commit()
+    skill = next(
+        skill
+        for skill in list_chat_skills(db_session, author, built_ins=True)
+        if skill.name == name
+    )
+
+    files = build_chat_custom_skill_files(skill, author, db_session)
+    assert files is not None
+    folder = f"{CHAT_SKILLS_PATH}/{name}"
+    assert sorted(files) == [f"{name}/SKILL.md", f"{name}/scripts/run.py"]
+    copied_md = files[f"{name}/SKILL.md"].decode()
+
+    key = (skill.version_id, skill.path)
+    with_sandbox = read_chat_skills_md([skill], author.id, db_session, built_ins=True)
+    assert with_sandbox[key].startswith(f"Skill files: {folder}/ (read-only). ")
+    assert f"Run python {folder}/scripts/run.py." in with_sandbox[key]
+    assert f"Run python {folder}/scripts/run.py." in copied_md
+    without = read_chat_skills_md([skill], author.id, db_session, built_ins=False)
+    assert without[key].startswith(f"---\nname: {name}\n")

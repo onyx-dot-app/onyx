@@ -438,8 +438,8 @@ def list_runtime_skills_for_user(
 
 
 def list_chat_built_in_skills(db_session: Session) -> list[RuntimeSkill]:
-    """The available built-ins that chat shows and mounts. They do not
-    depend on the user."""
+    """The available built-ins that chat shows and that load_skill copies
+    into the VM. They do not depend on the user."""
     return [
         RuntimeSkill(
             id=row.id,

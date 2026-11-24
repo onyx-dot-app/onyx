@@ -704,7 +704,8 @@ def test_a_question_saves_its_picks_and_reserves_room_for_their_skills(
     chat_session.incognito_record_mode = record_mode
     picks = _review_pick(token_count=40)
     monkeypatch.setattr(
-        "onyx.chat.process_message.accept_picked_skills", lambda *_args: [picks]
+        "onyx.chat.process_message.accept_picked_skills",
+        lambda *_args, **_kwargs: [picks],
     )
     created: list[ChatMessage] = []
 
