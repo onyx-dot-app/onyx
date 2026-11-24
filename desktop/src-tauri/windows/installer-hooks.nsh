@@ -35,6 +35,44 @@ Function OnyxGuiInit
   !insertmacro OnyxStopIfMsiInstalled
 FunctionEnd
 
+; The earlier desktop app's setup program installed for the current user
+; only, with its uninstall entry under HKCU. Left in place, it would be a
+; second Onyx in Apps, and its per-user onyx:// entry would win over this
+; install's. Its silent uninstall keeps its data folders. Only the user who
+; runs this installer is covered; a LocalSystem install finds nothing here.
+!macro OnyxRemoveEarlierUserInstall
+  Push $R0
+  Push $R1
+  Push $R2
+  ReadRegStr $R0 HKCU "${UNINSTKEY}" "UninstallString"
+  ${If} $R0 != ""
+    ; The value is the quoted path of uninstall.exe.
+    StrCpy $R1 $R0 1
+    ${If} $R1 == '"'
+      StrCpy $R0 $R0 "" 1
+      StrCpy $R0 $R0 -1
+    ${EndIf}
+    ${GetParent} "$R0" $R1
+    ${If} ${FileExists} "$R0"
+    ${AndIf} $R1 != "$INSTDIR"
+      DetailPrint "Removing the earlier per-user install in $R1"
+      ; _?= runs the uninstaller in place, so ExecWait waits for it.
+      ClearErrors
+      ExecWait '"$R0" /S _?=$R1' $R2
+      ${IfNot} ${Errors}
+      ${AndIf} $R2 = 0
+        Delete "$R0"
+        RMDir "$R1"
+      ${Else}
+        DetailPrint "Could not remove the earlier per-user install (exit code $R2)."
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  Pop $R2
+  Pop $R1
+  Pop $R0
+!macroend
+
 !macro NSIS_HOOK_PREINSTALL
   ; A standard user cannot write to Program Files. Without this check, a
   ; silent install as a standard user installs nothing and exits with 0.
@@ -46,6 +84,7 @@ FunctionEnd
   ${EndIf}
 
   !insertmacro OnyxStopIfMsiInstalled
+  !insertmacro OnyxRemoveEarlierUserInstall
 !macroend
 
 ; Sets $0 to 1 if the uninstaller runs as the user who owns the desktop, else

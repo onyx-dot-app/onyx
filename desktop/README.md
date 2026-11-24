@@ -546,7 +546,17 @@ How the app differs from macOS:
     (`/S`) then exits with code 740.
   - Use one installer type on a computer. When the MSI version is installed, the NSIS
     installer stops before its first page (a silent install exits with code 1638). The MSI
-    stops when the NSIS version is installed. Uninstall the other one first.
+    stops when the NSIS version is installed. Uninstall the other one first. This also
+    applies to an MSI install of the earlier desktop app: upgrade it with the MSI.
+  - The NSIS installer silently uninstalls the earlier desktop app's per-user install
+    (`HKCU\...\Uninstall\Onyx`) of the user who runs it. That uninstall keeps the earlier
+    app's data. The MSI does not do this. After an MSI or LocalSystem install, a user who
+    still has the earlier per-user install sees two "Onyx" entries in Apps. Uninstall the
+    earlier one there.
+  - At launch, a release build deletes a per-user `onyx://` entry
+    (`HKCU\Software\Classes\onyx`) that starts another program. The earlier desktop app
+    wrote one at each launch, and it would win over the entry that the installers write for
+    all users.
   - Both installers refuse to install an older version over a newer one. Uninstall the newer
     version first.
   - The NSIS uninstaller option **Delete the application data** deletes the

@@ -160,6 +160,43 @@ fn is_onyx_link_handler(contents: &str) -> bool {
     hidden && exec && !other_types
 }
 
+/// Whether a per-user `onyx://` command starts a program other than `exe`.
+/// The earlier desktop app wrote such an entry at each launch, and a
+/// per-user entry wins over the one the installers write for all users.
+#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
+fn link_command_is_other_program(command: &str, exe: &std::path::Path) -> bool {
+    let command = command.trim_start();
+    let program = match command.strip_prefix('"') {
+        Some(rest) => rest.split('"').next().unwrap_or_default(),
+        None => command.split_whitespace().next().unwrap_or_default(),
+    };
+    !program.eq_ignore_ascii_case(&exe.to_string_lossy())
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+fn remove_other_user_link_handler() {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    const KEY: &str = r"Software\Classes\onyx";
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let Ok(command) = hkcu
+        .open_subkey(format!(r"{KEY}\shell\open\command"))
+        .and_then(|key| key.get_value::<String, _>(""))
+    else {
+        return;
+    };
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    if !link_command_is_other_program(&command, &exe) {
+        return;
+    }
+    match hkcu.delete_subkey_all(KEY) {
+        Ok(()) => log::info!("deleted a per-user onyx:// entry for another program"),
+        Err(e) => log::warn!("could not delete the per-user onyx:// entry: {e}"),
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn register_links(app: &tauri::AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
@@ -305,6 +342,8 @@ fn main() {
                 if let Err(e) = app.deep_link().register_all() {
                     log::warn!("could not register onyx:// links: {e}");
                 }
+                #[cfg(all(target_os = "windows", not(debug_assertions)))]
+                remove_other_user_link_handler();
                 #[cfg(target_os = "linux")]
                 register_links(handle);
                 let link_app = handle.clone();
@@ -390,9 +429,31 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        is_onyx_link_handler, legacy_link_handler, packaged_desktop_file,
-        registers_links_at_runtime,
+        is_onyx_link_handler, legacy_link_handler, link_command_is_other_program,
+        packaged_desktop_file, registers_links_at_runtime,
     };
+
+    #[test]
+    fn a_link_command_for_another_program_is_found() {
+        let exe = Path::new(r"C:\Program Files\Onyx\onyx.exe");
+        assert!(!link_command_is_other_program(
+            r#""C:\Program Files\Onyx\onyx.exe" "%1""#,
+            exe
+        ));
+        assert!(!link_command_is_other_program(
+            r#""c:\program files\onyx\ONYX.EXE" "%1""#,
+            exe
+        ));
+        assert!(link_command_is_other_program(
+            r#""C:\Users\a\AppData\Local\Onyx\onyx.exe" "%1""#,
+            exe
+        ));
+        assert!(link_command_is_other_program(
+            r"C:\Users\a\onyx.exe %1",
+            exe
+        ));
+        assert!(link_command_is_other_program("", exe));
+    }
 
     #[test]
     fn the_packaged_handler_is_the_linux_desktop_file() {
