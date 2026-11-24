@@ -7,6 +7,7 @@ import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { useSidebarFolded } from "@opal/layouts/sidebar/context";
 import { Text, Tooltip } from "@opal/components";
+import { TextLoader } from "@opal/loaders/text-loader/components";
 import useOverflow from "@opal/hooks/useOverflow";
 import { cn } from "@opal/utils";
 import { NavLink } from "@opal/navigation/components";
@@ -43,6 +44,9 @@ interface SidebarTabProps {
   /** Disables the tab — applies muted colors and suppresses clicks. */
   disabled?: boolean;
 
+  /** Shimmers a string label, for an item whose work is still in progress. */
+  loading?: boolean;
+
   onClick?: React.MouseEventHandler<HTMLElement>;
   href?: string;
 
@@ -56,6 +60,12 @@ interface SidebarTabProps {
 
   /** Content rendered on the right side (e.g. action buttons). */
   rightChildren?: React.ReactNode;
+
+  /**
+   * `rightChildren` show at rest too, so the label keeps their room (1.5rem)
+   * at all times, not only on hover.
+   */
+  rightChildrenAtRest?: boolean;
 
   /** Tooltip shown on hover. Takes precedence over the label tooltip. */
   tooltip?: string | RichStr;
@@ -139,12 +149,14 @@ function SidebarTab({
   variant = "sidebar-heavy",
   nested,
   disabled,
+  loading,
 
   onClick,
   href,
   type,
   icon,
   rightChildren,
+  rightChildrenAtRest,
   tooltip,
   children,
 }: SidebarTabProps) {
@@ -165,7 +177,12 @@ function SidebarTab({
   // The `rightChildren` node is absolutely positioned to sit on top of the
   // overlay control. A zero-width spacer reserves truncation space for the title.
   const truncationSpacer = rightChildren && (
-    <div className="w-0 group-hover/SidebarTab:w-6" />
+    <div
+      className={cn(
+        "w-0 group-hover/SidebarTab:w-6",
+        rightChildrenAtRest && "w-6"
+      )}
+    />
   );
 
   /* The overlay holds no text of its own, and a folded tab hides its label, so
@@ -256,14 +273,20 @@ function SidebarTab({
                   </div>
                 )}
                 <div className="opal-sidebar-tab__fold">
-                  <Text
-                    font="main-ui-body"
-                    color="inherit"
-                    maxLines={1}
-                    ref={setTitleElement}
-                  >
-                    {label}
-                  </Text>
+                  {loading ? (
+                    <TextLoader font="main-ui-body" truncate>
+                      {label}
+                    </TextLoader>
+                  ) : (
+                    <Text
+                      font="main-ui-body"
+                      color="inherit"
+                      maxLines={1}
+                      ref={setTitleElement}
+                    >
+                      {label}
+                    </Text>
+                  )}
                   {actions}
                 </div>
               </div>

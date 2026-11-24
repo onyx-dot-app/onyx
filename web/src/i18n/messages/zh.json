@@ -16667,6 +16667,23 @@
       "rename": {
         "label": "重命名"
       },
+      "runStatus": {
+        "approval": {
+          "label": "需要批准"
+        },
+        "done": {
+          "label": "完成"
+        },
+        "failed": {
+          "label": "失败"
+        },
+        "question": {
+          "label": "问题待回答"
+        },
+        "working": {
+          "label": "处理中"
+        }
+      },
       "share": {
         "label": "共享"
       }

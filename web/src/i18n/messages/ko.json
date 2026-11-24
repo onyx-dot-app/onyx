@@ -16667,6 +16667,23 @@
       "rename": {
         "label": "이름 변경"
       },
+      "runStatus": {
+        "approval": {
+          "label": "승인 필요"
+        },
+        "done": {
+          "label": "완료"
+        },
+        "failed": {
+          "label": "실패"
+        },
+        "question": {
+          "label": "질문 대기 중"
+        },
+        "working": {
+          "label": "작업 중"
+        }
+      },
       "share": {
         "label": "공유"
       }

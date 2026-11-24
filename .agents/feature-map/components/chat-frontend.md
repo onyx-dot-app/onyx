@@ -897,6 +897,20 @@ the admin and Craft sidebars share: the logo mark and the wordmark from
 column's edge as the sidebar folds. A sidebar renders it rather than setting
 up its own branding.
 
+**Run status on chat rows.** Each chat row (`sections/sidebar/ChatButton.tsx`)
+shows the run status, with its name in a tooltip, for a chat that this tab
+holds in the session store. Working shimmers the title (`SidebarTab`
+`loading`). The other statuses put a mark at the row's end, which the options
+button replaces on hover: a warning icon, an error icon, or the blue unseen
+dot for Done. Working (`loading`, `streaming` or `cancelling`), Needs
+approval or Question waiting (`lib/chat/runStatus.ts:liveRunStatus`, from
+`readWaitingToolRequests`, less the requests that this client decided), and
+Failed or Done for a run that ended while its chat was not on screen.
+`lib/chat/hooks.ts:useTrackChatRuns`, which `AppSidebar` mounts, watches the
+store for runs that stop working and records Failed or Done in
+`useUnseenRuns`; opening the chat clears the record. The record lives only in
+the tab, and a chat that the store does not hold shows no status.
+
 ## Contracts and traps
 
 1. `packet-list-append-only` **A message's packet list grows by appending,

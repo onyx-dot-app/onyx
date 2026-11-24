@@ -16667,6 +16667,23 @@
       "rename": {
         "label": "Renommer"
       },
+      "runStatus": {
+        "approval": {
+          "label": "Approbation requise"
+        },
+        "done": {
+          "label": "Terminé"
+        },
+        "failed": {
+          "label": "Échec"
+        },
+        "question": {
+          "label": "Question en attente"
+        },
+        "working": {
+          "label": "En cours"
+        }
+      },
       "share": {
         "label": "Partager"
       }

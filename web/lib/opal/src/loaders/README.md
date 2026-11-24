@@ -81,7 +81,7 @@ Each tab has a sidebar tab's footprint, so the real tabs replace it without a sh
 <TextLoader font="main-ui-body">Indexing documents…</TextLoader>
 ```
 
-Props: `children` (`string | RichStr`; markdown renders inline only, and a code span keeps its chip with `text-02` text instead of the wave), `font` (`TextFont`, default `"main-ui-action"`). The text rests at `text-02` and the wave peaks at `text-04`.
+Props: `children` (`string | RichStr`; markdown renders inline only, and a code span keeps its chip with `text-02` text instead of the wave), `font` (`TextFont`, default `"main-ui-action"`), `truncate` (default `false`: keep the text on one line, cut with an ellipsis that shimmers with it). The text rests at `text-02` and the wave peaks at `text-04`.
 
 The wave is 40% of the text's length, never narrower than 40px. Its rate scales with the length, so it crosses any text in 2s, with a 1s pause between waves; on wrapped text it runs along each line in reading order. Those four values are constants at the top of `text-loader/components.tsx`.
 

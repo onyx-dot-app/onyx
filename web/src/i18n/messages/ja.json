@@ -16667,6 +16667,23 @@
       "rename": {
         "label": "名前を変更"
       },
+      "runStatus": {
+        "approval": {
+          "label": "承認が必要"
+        },
+        "done": {
+          "label": "完了"
+        },
+        "failed": {
+          "label": "失敗"
+        },
+        "question": {
+          "label": "質問が待機中"
+        },
+        "working": {
+          "label": "処理中"
+        }
+      },
       "share": {
         "label": "共有"
       }

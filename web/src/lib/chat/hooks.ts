@@ -95,6 +95,14 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import type { DropdownAction } from "@opal/components";
 import { SvgChevronLeft, SvgDownload, SvgFileText, SvgHash } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import {
+  type ChatRunStatus,
+  endedRunStatus,
+  isWorking,
+  liveRunStatus,
+  useUnseenRuns,
+} from "@/lib/chat/runStatus";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const SERVER_WORK_POLL_MS = 2000;
@@ -1093,4 +1101,52 @@ export function useChatExportMenu(
         }),
     },
   };
+}
+
+/** The run status that a chat's sidebar row shows. */
+export function useChatRunStatus(sessionId: string): ChatRunStatus | null {
+  const localStatuses = useToolRequestUi((state) => state.localStatuses);
+  const localAnswers = useToolRequestUi((state) => state.localAnswers);
+  const live = useChatSessionStore((state) => {
+    const session = state.sessions.get(sessionId);
+    return session ? liveRunStatus(session, localStatuses, localAnswers) : null;
+  });
+  const unseen = useUnseenRuns((state) => state.unseen.get(sessionId) ?? null);
+  return live ?? unseen;
+}
+
+/**
+ * Records how runs end while their chat is not on screen, and clears that
+ * record when the user opens the chat. Mount once, in the app sidebar.
+ */
+export function useTrackChatRuns(): void {
+  const visibleChatId = useAppPosition().chat();
+  const visibleChatIdRef = useRef(visibleChatId);
+
+  useEffect(() => {
+    visibleChatIdRef.current = visibleChatId;
+    if (visibleChatId) useUnseenRuns.getState().markSeen(visibleChatId);
+  }, [visibleChatId]);
+
+  useEffect(
+    () =>
+      useChatSessionStore.subscribe((state, prev) => {
+        if (state.sessions === prev.sessions) return;
+        for (const [sessionId, session] of state.sessions) {
+          const before = prev.sessions.get(sessionId);
+          if (
+            !before ||
+            before === session ||
+            !isWorking(before) ||
+            isWorking(session) ||
+            sessionId === visibleChatIdRef.current
+          )
+            continue;
+          const ended = endedRunStatus(session);
+          if (ended === "failed" || ended === "done")
+            useUnseenRuns.getState().markUnseen(sessionId, ended);
+        }
+      }),
+    []
+  );
 }

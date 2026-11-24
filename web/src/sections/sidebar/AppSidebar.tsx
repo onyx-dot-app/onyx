@@ -15,6 +15,7 @@ import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import ChatButton from "@/sections/sidebar/ChatButton";
+import { useTrackChatRuns } from "@/lib/chat/hooks";
 import { AgentButton } from "@/lib/agents/components";
 import { DragEndEvent } from "@dnd-kit/core";
 import {
@@ -86,7 +87,7 @@ import {
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
 import {
   useUnviewedChatScheduledTaskCount,
   useUnviewedScheduledTaskCount,
@@ -229,6 +230,7 @@ export default function AppSidebar() {
   const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
+  useTrackChatRuns();
 
   // Use SWR hooks for data fetching
   const {

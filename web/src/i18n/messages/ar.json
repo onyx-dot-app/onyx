@@ -16667,6 +16667,23 @@
       "rename": {
         "label": "إعادة تسمية"
       },
+      "runStatus": {
+        "approval": {
+          "label": "بحاجة إلى موافقة"
+        },
+        "done": {
+          "label": "تم"
+        },
+        "failed": {
+          "label": "فشل"
+        },
+        "question": {
+          "label": "سؤال بانتظار الرد"
+        },
+        "working": {
+          "label": "قيد العمل"
+        }
+      },
       "share": {
         "label": "مشاركة"
       }
