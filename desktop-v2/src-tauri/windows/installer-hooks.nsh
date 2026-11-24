@@ -95,6 +95,9 @@ FunctionEnd
 ; delete-user-data.ps1 does for the MSI. The uninstaller runs as an
 ; administrator, and the user can put links in these folders: a junction or
 ; symbolic link stays, and its target does not change. RMDir /r follows them.
+; Each directory stays open without delete sharing while it is walked, so no
+; process can rename it or put a link in its place. The open does not follow
+; a link, and a directory that opens as a link is left alone.
 ; A directory is removed only when it is empty.
 Function un.OnyxDeleteTree
   Exch $R0
@@ -102,31 +105,60 @@ Function un.OnyxDeleteTree
   Push $R2
   Push $R3
   Push $R4
-  FindFirst $R1 $R2 "$R0\*"
-  ${DoWhile} $R2 != ""
-    ${If} $R2 != "."
-    ${AndIf} $R2 != ".."
-      StrCpy $R4 "$R0\$R2"
-      System::Call 'kernel32::GetFileAttributesW(w R4) i .R3'
-      ; INVALID_FILE_ATTRIBUTES (-1) also has the reparse point bit.
-      IntOp $R4 $R3 & ${ONYX_ATTRIBUTE_REPARSE_POINT}
-      ${If} $R4 <> 0
-        ; Gone, or a link.
-      ${Else}
-        IntOp $R4 $R3 & ${ONYX_ATTRIBUTE_DIRECTORY}
+  Push $R5
+  Push $R6
+  ; FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_SHARE_READ |
+  ; FILE_SHARE_WRITE, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS |
+  ; FILE_FLAG_OPEN_REPARSE_POINT
+  System::Call 'kernel32::CreateFileW(w R0, i 0x81, i 3, p 0, i 3, i 0x02200000, p 0) p .R5'
+  ; BY_HANDLE_FILE_INFORMATION starts with the attributes.
+  System::Alloc 52
+  Pop $R6
+  System::Call 'kernel32::GetFileInformationByHandle(p R5, p R6) i .R3'
+  ${If} $R3 <> 0
+    System::Call '*$R6(i .R3)'
+  ${Else}
+    StrCpy $R3 -1
+  ${EndIf}
+  System::Free $R6
+  ; INVALID_FILE_ATTRIBUTES (-1) also has the reparse point bit.
+  IntOp $R4 $R3 & ${ONYX_ATTRIBUTE_REPARSE_POINT}
+  IntOp $R6 $R3 & ${ONYX_ATTRIBUTE_DIRECTORY}
+  ${If} $R4 = 0
+  ${AndIf} $R6 <> 0
+    FindFirst $R1 $R2 "$R0\*"
+    ${DoWhile} $R2 != ""
+      ${If} $R2 != "."
+      ${AndIf} $R2 != ".."
+        StrCpy $R4 "$R0\$R2"
+        System::Call 'kernel32::GetFileAttributesW(w R4) i .R3'
+        IntOp $R4 $R3 & ${ONYX_ATTRIBUTE_REPARSE_POINT}
         ${If} $R4 <> 0
-          Push "$R0\$R2"
-          Call un.OnyxDeleteTree
+          ; Gone, or a link.
         ${Else}
-          Delete "$R0\$R2"
+          IntOp $R4 $R3 & ${ONYX_ATTRIBUTE_DIRECTORY}
+          ${If} $R4 <> 0
+            ; Checked again on its open handle.
+            Push "$R0\$R2"
+            Call un.OnyxDeleteTree
+          ${Else}
+            ; Delete never goes into a directory, and on a file link it
+            ; removes only the link.
+            Delete "$R0\$R2"
+          ${EndIf}
         ${EndIf}
       ${EndIf}
-    ${EndIf}
-    FindNext $R1 $R2
-  ${Loop}
-  FindClose $R1
-  ; Without /r: fails when the directory is not empty.
-  RMDir "$R0"
+      FindNext $R1 $R2
+    ${Loop}
+    FindClose $R1
+    System::Call 'kernel32::CloseHandle(p R5)'
+    ; Without /r: fails when the directory is not empty.
+    RMDir "$R0"
+  ${Else}
+    System::Call 'kernel32::CloseHandle(p R5)'
+  ${EndIf}
+  Pop $R6
+  Pop $R5
   Pop $R4
   Pop $R3
   Pop $R2
