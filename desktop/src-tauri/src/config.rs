@@ -38,6 +38,9 @@ pub struct Config {
     /// The last valid managed `ServerURL`, used while the policy is invalid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_server_url: Option<String>,
+    /// Windows: the notice about the earlier app's per-user install was shown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub earlier_install_notice_shown: Option<bool>,
 }
 
 impl Config {

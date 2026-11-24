@@ -117,7 +117,9 @@ install of this app upgrades it in place. See
 - Sign out, and saving another server, remove the session on this computer at once. If the server
   cannot be reached to end the session, a dialog says so, and the app tries the server
   sign-out again in the background while it runs. The token stays in memory only: it is not
-  written back to the keychain, so after a quit the server session ends only when it expires. The launcher, onboarding and sign-in show one line for each of the same errors,
+  written back to the keychain, so after a quit the server session ends only when it expires. If
+  the OS credential store cannot delete the stored token, the sign-out still closes the main
+  window and opens sign-in, logs the error, and shows a warning. The launcher, onboarding and sign-in show one line for each of the same errors,
   for example "Can't find <host>. Check the server address." (`src-tauri/src/reachability.rs`).
 - If the HTTP client cannot start (for example, a broken OpenSSL configuration), a dialog
   says so and the app quits.
@@ -144,21 +146,13 @@ and binary name (`onyx`), so this app takes its place:
 - Windows: the MSI has the same UpgradeCode (Tauri derives it from the product name), so it
   upgrades an earlier MSI install. The NSIS installer (`.exe`) installs for all users into
   `Program Files\Onyx`. The earlier `.exe` installed for the current user only, into
-  `%LOCALAPPDATA%\Onyx`. At each user's first launch, the new app removes that user's per-user
-  install (`src-tauri/src/earlier_install.rs`). The earlier uninstaller ends every `onyx.exe` of
-  the user by name, so it cannot run while the new app runs:
-  1. The app copies its own binary to `%TEMP%\onyx-upgrade-helper-<random>.exe` and starts it in
-     helper mode, with the paths as separate arguments. The helper shows no window.
-  2. The app exits only after the helper writes a ready file (within 5 seconds). Otherwise it
-     stops the helper and runs as normal, and a later launch tries again.
-  3. The helper waits for the app to exit (at most 60 seconds, else it does nothing), takes the
-     one-attempt marker (`earlier-uninstall-tried` in `%LOCALAPPDATA%\app.onyx.desktop`), runs
-     the uninstaller silently as the user (`/S _?=<folder>`), and stops it after 2 minutes.
-  4. In every case the helper then starts the app again. A later launch deletes helper copies
-     that are more than a day old.
-
-  The uninstall keeps the earlier app's data. The elevated installer never runs it: the user can
-  change that uninstall entry and its files.
+  `%LOCALAPPDATA%\Onyx`. Nothing removes that install: the app never runs its uninstaller (the
+  user can change that HKCU entry and its files, and the uninstaller ends every `onyx.exe` of the
+  user by name). At the first launch, if the HKCU uninstall entry is there, a Windows release
+  build shows a one-time notice: "An older version of Onyx is still installed. Remove it in
+  Windows Settings > Apps.", with **Open Settings** (`ms-settings:appsfeatures`) and **Not now**
+  (`src-tauri/src/earlier_install.rs`). `config.json` records that it was shown
+  (`earlierInstallNoticeShown`).
 - Linux: the `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and
   `dnf` upgrade the earlier package.
 
@@ -581,11 +575,9 @@ How the app differs from macOS:
     installer stops before its first page (a silent install exits with code 1638). The MSI
     stops when the NSIS version is installed. Uninstall the other one first. This also
     applies to an MSI install of the earlier desktop app: upgrade it with the MSI.
-  - At launch, a release build silently uninstalls the earlier desktop app's per-user install
-    (`HKCU\...\Uninstall\Onyx`) of the current user, as that user and without elevation.
-    The uninstall keeps the earlier app's data. This works after an NSIS, MSI or
-    LocalSystem install. Until a user starts the new app, that user sees two "Onyx" entries
-    in Apps. At that first launch the app closes, and starts again when the uninstall is done.
+  - The installers and the app never remove the earlier desktop app's per-user install
+    (`HKCU\...\Uninstall\Onyx`). Its user sees two "Onyx" entries in Apps until they remove
+    the older one; the app says so once at its first launch.
   - At launch, a release build deletes a per-user `onyx://` entry
     (`HKCU\Software\Classes\onyx`) that starts another program. The earlier desktop app
     wrote one at each launch, and it would win over the entry that the installers write for

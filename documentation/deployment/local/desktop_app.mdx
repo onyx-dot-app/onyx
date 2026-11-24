@@ -100,10 +100,11 @@ over a setup program install. To change the installer type, uninstall the previo
 
 - **macOS**: the new `Onyx.app` replaces the previous one in **Applications**.
 - **Windows**: the new MSI upgrades a previous MSI install. The new setup program (`.exe`) installs for all users.
-  The previous setup program installed for the current user only. At each user's first launch,
-  the new app uninstalls that user's previous per-user install and keeps its data.
-  The app closes for a few seconds during the uninstall, then starts again. Until the user starts the new app,
-  **Settings > Apps** shows two **Onyx** entries.
+  The previous setup program installed for the current user only, and the new installers do not remove it.
+  After you install the new app,
+  each user who used the previous setup program removes the older **Onyx** in **Settings > Apps**. At its first launch,
+  the new app shows this once, with a button that opens **Settings > Apps**.
+  The new app takes over `onyx://` sign-in links at launch, so the older install does not get them.
 - **Linux**: the new `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and `dnf` upgrade
   the previous package.
 

@@ -266,16 +266,6 @@ fn register_links(app: &tauri::AppHandle) {
 }
 
 fn main() {
-    // The helper copy that removes the earlier per-user install: no window,
-    // no Tauri.
-    #[cfg(all(windows, not(debug_assertions)))]
-    {
-        let args: Vec<String> = std::env::args().skip(1).collect();
-        if let Some(helper) = earlier_install::HelperArgs::parse(&args) {
-            earlier_install::run_helper(&helper);
-            return;
-        }
-    }
     #[cfg(windows)]
     notify::pass_on_foreground();
     // The tray title (StatusNotifierItem) uses this name. WM_CLASS, and so
@@ -283,11 +273,6 @@ fn main() {
     #[cfg(target_os = "linux")]
     gtk::glib::set_application_name("Onyx");
     let context = tauri::generate_context!();
-    // Before any window or plugin: the helper starts this app again.
-    #[cfg(all(windows, not(debug_assertions)))]
-    if earlier_install::hand_off(&context.package_info().name, &context.config().identifier) {
-        return;
-    }
     let version = context.package_info().version.to_string();
     let api = api::Api::new(&version).unwrap_or_else(|e| startup_failed(&e));
     let builder = tauri::Builder::default()
@@ -343,6 +328,8 @@ fn main() {
             policy::log_effective(&policy);
             policy::apply_launch_at_login(handle, &policy);
             app.manage(AppState::new(config, policy, api));
+            #[cfg(all(windows, not(debug_assertions)))]
+            earlier_install::notify_if_present(handle);
 
             // Windows and Linux: the main window gets its own menu (main_window.rs).
             #[cfg(target_os = "macos")]

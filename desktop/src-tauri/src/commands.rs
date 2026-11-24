@@ -358,19 +358,38 @@ async fn end_session(app: &AppHandle) -> Result<(), String> {
         Some(token) => crate::revocation::end_server_session(app, &server, &token).await,
         None => true,
     };
-    cleared?;
+    // The session has ended in memory, so the windows follow it even when
+    // the stored token could not be deleted.
+    if let Err(e) = &cleared {
+        log::warn!("signed out, but the stored session token was not deleted: {e}");
+    }
     log::info!("signed out of {}", main_window::log_safe(&server));
     main_window::close(app, &server);
     windows::reset_launcher(app);
-    if !revoked {
-        windows::notify(
-            app,
-            "Signed out",
-            "Signed out on this computer. Onyx could not reach the server to end the \
-             session. Onyx tries again while it is open.",
-        );
+    if let Some(text) = sign_out_notice(revoked, cleared.is_ok()) {
+        windows::notify(app, "Signed out", text);
     }
     Ok(())
+}
+
+const NOT_REVOKED: &str =
+    "Signed out on this computer. Onyx could not reach the server to end the \
+     session. Onyx tries again while it is open.";
+const NOT_CLEARED: &str = "Signed out, but Onyx could not delete the stored session token from \
+     the credential store of this computer. Sign out again later, or delete it there.";
+const NEITHER: &str = "Signed out on this computer, but Onyx could not delete the stored \
+     session token, and could not reach the server to end the session. Onyx tries again \
+     while it is open.";
+
+/// The warning after a sign-out: the server did not end the session
+/// (`revoked`), or the stored token was not deleted (`cleared`).
+fn sign_out_notice(revoked: bool, cleared: bool) -> Option<&'static str> {
+    match (revoked, cleared) {
+        (true, true) => None,
+        (false, true) => Some(NOT_REVOKED),
+        (true, false) => Some(NOT_CLEARED),
+        (false, false) => Some(NEITHER),
+    }
 }
 
 #[tauri::command]
@@ -739,8 +758,17 @@ pub fn fit_window(window: tauri::WebviewWindow, content_height: f64) -> Result<(
 mod tests {
     use super::{
         after_sign_out, chosen_server, decode_component, managed_prefs, selected_agent,
-        server_lock_reason, server_setup, AfterSignOut, MANAGED, SERVER_LOCKED_INVALID,
+        server_lock_reason, server_setup, sign_out_notice, AfterSignOut, MANAGED, NEITHER,
+        NOT_CLEARED, NOT_REVOKED, SERVER_LOCKED_INVALID,
     };
+
+    #[test]
+    fn a_failed_token_delete_still_signs_out_with_a_warning() {
+        assert_eq!(sign_out_notice(true, true), None);
+        assert_eq!(sign_out_notice(false, true), Some(NOT_REVOKED));
+        assert_eq!(sign_out_notice(true, false), Some(NOT_CLEARED));
+        assert_eq!(sign_out_notice(false, false), Some(NEITHER));
+    }
 
     #[test]
     fn a_lock_during_sign_out_keeps_the_server_and_opens_sign_in() {

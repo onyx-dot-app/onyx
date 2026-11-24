@@ -35,7 +35,7 @@ Deploy the policy before you deploy the new app, so that the first launch alread
 | Key | Type | Effect |
 | --- | --- | --- |
 | `ServerURL` | string | The Onyx server. Use the server's origin: scheme, host, and port, for example `https://onyx.example.com`. `http://` is allowed here for an intranet server. If the user has not saved a server, the app skips onboarding. A server that the user saves later wins, unless `LockServerURL` is set. |
-| `LockServerURL` | boolean | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the user's saved server stays and the user cannot change it. |
+| `LockServerURL` | boolean | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the app uses the last valid `ServerURL` that it read, else the user's saved server, and the user cannot change it. |
 | `DisableAutoUpdate` | boolean | The app does not check for updates, and does not install an update that it already downloaded. **Check for Updates…** says that updates are managed. Windows and Linux builds have no automatic updates, so the key changes nothing there. |
 | `LauncherShortcut` | string | The global shortcut that opens the launcher, in the **Preferences** format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
 | `DisableLauncher` | boolean | Turns off the launcher shortcut, and the launcher does not open. An open launcher closes at the next policy read. |
