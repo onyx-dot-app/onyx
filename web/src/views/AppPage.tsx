@@ -901,7 +901,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         // Makes room for a docked activity card (`AppChrome`)
                         <div
                           data-activity-room
-                          className="w-full [&>*]:mx-auto"
+                          // The composer row's inline padding, so the room
+                          // for a docked card matches
+                          className="w-full sm:px-4 [&>*]:mx-auto"
                         >
                           <ScheduledRunBanner
                             chatSessionId={currentChatSessionId}
