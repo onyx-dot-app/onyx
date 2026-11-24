@@ -216,12 +216,12 @@ export function ResponseCursorScope({
 
 /**
  * A response's layout, the same in chat and Craft: its items in arrival order,
- * 0.75rem apart, with text lined up with the run header's text.
+ * 0.75rem apart, every item but a run card punched in (`ResponseInset`).
  *
  * The spacing is the column's gap, so an item that renders nothing (a hidden
  * run) takes no space. An item that arrives after the response first renders
- * opens its space: its height grows, then it fades in, so whatever sits below
- * slides down instead of snapping. Run cards do this themselves (`RunCard`).
+ * opens its space: its height and the gap above it grow, then it fades in, so
+ * whatever sits below slides down instead of snapping. Run cards do this themselves (`RunCard`).
  * Items present on the first render, such as saved history, appear at once.
  * Text that takes the cursor item's place appears at once too: the cursor
  * moves into it.
@@ -265,25 +265,34 @@ export function Response({ items, working = false }: ResponseProps) {
   return (
     <ResponseCursorScope working={working}>
       <Section alignItems="stretch" gap={3} height="auto">
-        {items.map((item) =>
-          item.kind === "run" ? (
-            <React.Fragment key={item.key}>{item.node}</React.Fragment>
-          ) : (
-            <Presence
+        {items.map((item, index) => {
+          if (item.kind === "run") {
+            return <React.Fragment key={item.key}>{item.node}</React.Fragment>;
+          }
+          const appear =
+            item.appear ??
+            (!initialKeys.has(item.key) &&
+              !keyState.replacingCursor.has(item.key));
+          return (
+            // An arriving item opens the column's gap above it with its
+            // height, so what sits below it (the cursor too) slides down
+            // instead of jumping by the gap first.
+            <div
               key={item.key}
-              appear={
-                item.appear ??
-                (!initialKeys.has(item.key) &&
-                  !keyState.replacingCursor.has(item.key))
-              }
-              grow
+              className={cn(
+                appear &&
+                  index > 0 &&
+                  "transition-[margin-top] duration-200 ease-out motion-reduce:transition-none starting:-mt-3"
+              )}
             >
-              {/* Every item but a run card punches in to the run card's
-                  content. */}
-              <ResponseInset>{item.node}</ResponseInset>
-            </Presence>
-          )
-        )}
+              <Presence appear={appear} grow>
+                {/* Every item but a run card punches in to the run card's
+                    content. */}
+                <ResponseInset>{item.node}</ResponseInset>
+              </Presence>
+            </div>
+          );
+        })}
       </Section>
     </ResponseCursorScope>
   );
