@@ -842,6 +842,7 @@ fn recover_web_session(app: &AppHandle, url: &Url) {
 async fn recover(app: &AppHandle, url: &Url) {
     let state = app.state::<AppState>();
     let epoch = state.epoch();
+    let choice = crate::offline::next_choice(app);
     let Ok((server, token)) = state.session() else {
         close(app, &state.server().unwrap_or_default());
         crate::windows::route(app);
@@ -870,7 +871,7 @@ async fn recover(app: &AppHandle, url: &Url) {
             crate::windows::end_rejected_session(app, &server, &token);
         }
         Ok(false) => crate::windows::end_rejected_session(app, &server, &token),
-        Err(reason) => crate::windows::show_offline(app, &server, &path, reason, epoch),
+        Err(reason) => crate::windows::show_offline(app, &server, &path, choice, reason, epoch),
     }
 }
 

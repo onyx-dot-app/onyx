@@ -56,6 +56,9 @@ pub struct Policy {
     pub fail_closed: bool,
     /// Keys whose value is not valid and was ignored.
     pub ignored: Vec<&'static str>,
+    /// A locked managed server that a refresh read while another server is
+    /// in use. It applies at the next launch.
+    pub next_server_url: Option<String>,
 }
 
 impl Policy {
@@ -250,6 +253,7 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
         disable_notifications: restrictive(DISABLE_NOTIFICATIONS),
         fail_closed: false,
         ignored: Vec::new(),
+        next_server_url: None,
     };
     Policy {
         fail_closed: fail_closed.get(),
@@ -578,6 +582,25 @@ fn keep_last_good(old: &Policy, mut new: Policy) -> Policy {
     new
 }
 
+/// The server values of a policy read at runtime. A lock can turn on (for
+/// example when the policy becomes unreadable) but never off; when it turns
+/// on, it locks the server in use now. A locked managed server that is not
+/// the one in use is kept as the next server.
+fn keep_server(old: &Policy, mut read: Policy, saved: Option<String>) -> Policy {
+    let in_use = old.server(saved);
+    read.next_server_url = read
+        .server_url
+        .clone()
+        .filter(|managed| read.lock_server_url && Some(managed) != in_use.as_ref());
+    read.server_url = if read.lock_server_url && !old.lock_server_url {
+        in_use
+    } else {
+        old.server_url.clone()
+    };
+    read.lock_server_url |= old.lock_server_url;
+    read
+}
+
 /// Reads the policy again and applies what changed. Runs on any thread.
 /// The server keeps its startup value for this run, so the session never
 /// moves to another server under the open windows.
@@ -585,15 +608,16 @@ pub fn refresh(app: &AppHandle) {
     let _serial = REFRESHING.lock().unwrap_or_else(|p| p.into_inner());
     let state = app.state::<AppState>();
     let old = state.policy();
-    let mut new = read(app);
-    new.server_url = old.server_url.clone();
-    // A lock can turn on (for example when the policy becomes unreadable)
-    // but never off. When it turns on, it locks the server in use now.
-    if new.lock_server_url && !old.lock_server_url {
-        new.server_url = old.server(state.config.get().server_url);
+    let new = keep_last_good(
+        &old,
+        keep_server(&old, read(app), state.config.get().server_url),
+    );
+    if new.next_server_url.is_some() && new.next_server_url != old.next_server_url {
+        log::info!(
+            "managed policy locks the server to {}; it applies when Onyx starts again",
+            crate::main_window::log_safe(new.next_server_url.as_deref().unwrap_or_default())
+        );
     }
-    new.lock_server_url = old.lock_server_url || new.lock_server_url;
-    let new = keep_last_good(&old, new);
     if new != old {
         state.set_policy(new.clone());
         if new.disable_auto_update {
@@ -690,6 +714,7 @@ mod tests {
                 disable_notifications: true,
                 fail_closed: false,
                 ignored: vec![],
+                next_server_url: None,
             }
         );
     }
@@ -766,6 +791,7 @@ mod tests {
                 disable_notifications: true,
                 fail_closed: true,
                 ignored: vec![SERVER_URL, LAUNCHER_SHORTCUT, LAUNCH_AT_LOGIN],
+                next_server_url: None,
             }
         );
         let wrong_type = policy(&[(SERVER_URL, RawValue::Bool(true))]);
@@ -898,6 +924,44 @@ mod tests {
         assert!(unreadable.disable_launcher);
         assert_eq!(unreadable.launcher_shortcut.as_deref(), Some("Alt+Space"));
         assert_eq!(unreadable.launch_at_login, Some(true));
+    }
+
+    #[test]
+    fn a_runtime_lock_keeps_the_server_in_use_and_names_the_next_one() {
+        let (managed, mine) = ("https://onyx.example.com", "http://localhost:8899");
+        let unlocked = policy(&[(SERVER_URL, s(managed))]);
+        let locked = policy(&[
+            (SERVER_URL, s(managed)),
+            (LOCK_SERVER_URL, RawValue::Bool(true)),
+        ]);
+        let saved = || Some(mine.to_string());
+
+        // The user's own server is in use: it stays locked for this run, is
+        // not labeled as the managed one, and the managed one comes next.
+        let new = keep_server(&unlocked, locked.clone(), saved());
+        assert!(new.lock_server_url);
+        assert_eq!(new.server(saved()).as_deref(), Some(mine));
+        assert_eq!(new.server_url.as_deref(), Some(mine));
+        assert_eq!(new.next_server_url.as_deref(), Some(managed));
+        // Later refreshes keep it so.
+        let again = keep_server(&new, locked.clone(), saved());
+        assert_eq!(again.server(saved()).as_deref(), Some(mine));
+        assert_eq!(again.next_server_url.as_deref(), Some(managed));
+
+        // The managed server is in use: nothing waits for a restart.
+        let same = keep_server(&unlocked, locked.clone(), None);
+        assert_eq!(same.server(None).as_deref(), Some(managed));
+        assert_eq!(same.next_server_url, None);
+
+        // No lock, or a lock without a server: no next server.
+        assert_eq!(
+            keep_server(&unlocked, unlocked.clone(), saved()).next_server_url,
+            None
+        );
+        let bare = keep_server(&unlocked, Policy::unreadable(), saved());
+        assert!(bare.lock_server_url);
+        assert_eq!(bare.server(saved()).as_deref(), Some(mine));
+        assert_eq!(bare.next_server_url, None);
     }
 
     fn scratch_dir(name: &str) -> std::path::PathBuf {
