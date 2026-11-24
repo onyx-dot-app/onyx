@@ -29,7 +29,8 @@ inside the Cloud deployment.
 
 | Events | Source | When |
 | --- | --- | --- |
-| `runtime`, `version`, `resource`, `heartbeat` | Each API server, Celery worker, and Slack bot process | At start, then every 5 minutes |
+| `runtime`, `version` | Each API server, Celery worker, and Slack bot process. `version` is the release tag; other builds (nightly, edge, dev builds) send their short commit | At start |
+| `resource`, `heartbeat` | Each API server, Celery worker, and Slack bot process | Every 5 minutes |
 | `query` | Chat turns and search requests: channel, mode, outcome, timing, error category, chat tool usage, LLM cycles | At the end of server execution |
 | `attempt` counters | Indexing: documents fetched, chunks embedded and written, errors, durations | Summed for 30 seconds |
 | `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, permission and group sync times and cadence of permission-synced connectors, signup email domains, license presence, the number of standard user accounts and how many of them are active | Each item when it changes, and 6 hours after its own last send |
