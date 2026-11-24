@@ -104,6 +104,8 @@ export interface AppInputBarHandle {
   /** Puts back a question that failed to send, unless a newer draft exists. */
   restore: (unsent: UnsentMessage) => void;
   focus: () => void;
+  /** Focuses the input and pastes the clipboard data at its end. */
+  paste: (data: DataTransfer) => void;
 }
 
 export interface AppInputBarProps {
@@ -446,6 +448,12 @@ const AppInputBar = React.memo(
         inputRef.current?.focus();
         setCursorToEnd();
       },
+      paste: (data: DataTransfer) => {
+        if (disabled) return;
+        inputRef.current?.focus();
+        setCursorToEnd();
+        pasteClipboard(data);
+      },
     }));
 
     // Sync non-empty prop changes to internal state (e.g. NRFPage reads URL params
@@ -706,20 +714,20 @@ const AppInputBar = React.memo(
       }
     }, [showFiles, currentMessageFiles]);
 
-    function handlePaste(event: React.ClipboardEvent) {
-      if (disabled) return;
-      const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
+    function pasteClipboard(data: DataTransfer) {
+      const pastedFiles = getPastedFilesIfNoText(data);
       if (pastedFiles.length > 0) {
-        event.preventDefault();
         handleFileUpload(pastedFiles);
         return;
       }
+      const text = data.getData("text/plain");
+      if (text) pasteText(text);
+    }
 
+    function handlePaste(event: React.ClipboardEvent) {
+      if (disabled) return;
       event.preventDefault();
-      const text = event.clipboardData.getData("text/plain");
-      if (!text) return;
-
-      pasteText(text);
+      pasteClipboard(event.clipboardData);
     }
 
     const handleRemoveMessageFile = useCallback(

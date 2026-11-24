@@ -112,6 +112,7 @@ import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
 import { useTranslations } from "next-intl";
+import { typeToFocusHandlers } from "@/lib/chat/typeToFocus";
 
 interface FadeProps {
   show: boolean;
@@ -283,6 +284,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles, t]);
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
+  const typeToFocus = typeToFocusHandlers(chatInputBarRef);
 
   // An unresolved agent reads as plain chat, so a named-agent layout never
   // flashes for an agent that is not there yet.
@@ -841,18 +843,23 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       <div className="w-full h-full overflow-hidden">
         {/* noPaste: the input bar already uploads pasted files itself. Without
             it react-dropzone handles the same paste again and attaches the
-            image twice. */}
+            image twice. noKeyboard: Space on the focused page types into the
+            chat input instead of opening the file picker. The root takes focus
+            on a click in empty space, so its key and paste props send typing
+            there to the chat input. */}
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
           }
           noClick
           noPaste
+          noKeyboard
         >
           {({ getRootProps }) => (
             <div
               className="h-full w-full flex flex-col items-center outline-hidden relative"
               {...getRootProps({ tabIndex: -1 })}
+              {...typeToFocus}
             >
               {/* Main content grid — 3 rows, animated */}
               <div

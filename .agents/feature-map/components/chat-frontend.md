@@ -58,6 +58,15 @@
   Sessions and Shortcuts. Search matches chat sessions and shortcut labels.
   Shortcuts includes New Session and shows the keys for the user's platform.
   Each shortcut action runs after the menu closes.
+- **A user types or pastes with no field focused.** On the chat page, a
+  printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and
+  the browser types the character there. A paste goes to the input too. Keys
+  in a field, Space on a button, and keys while a dialog, menu or listbox is
+  open stay where they are (`web/src/lib/chat/typeToFocus.ts`). The handlers
+  are React props on the page's root element in `views/AppPage.tsx`, which
+  takes focus (`tabIndex={-1}`) on a click in empty space. So only keys with
+  focus inside the page count: not keys on the sidebar, or on `body` before
+  the first click.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button stops every active
