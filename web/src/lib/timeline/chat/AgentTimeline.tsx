@@ -1,11 +1,17 @@
 "use client";
 
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useId,
+} from "react";
 import { useTranslations } from "next-intl";
 import { Presence } from "@opal/components";
 import { SvgListTree } from "@opal/icons";
 import { Section } from "@opal/layouts";
-import { prefersReducedMotion } from "@opal/utils";
+import { pick, prefersReducedMotion, seededRandom } from "@opal/utils";
 import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { constructCurrentMemoryState } from "@/lib/timeline/chat/renderers/memory/memoryStateUtils";
 import { isMemoryToolPackets } from "@/lib/timeline/chat/packetHelpers";
@@ -157,10 +163,12 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     useTimelineStepState(turnGroups);
   const streamingStartTime = useStreamingStartTime();
   const t = useTranslations("chat.messages.timeline");
-  // Picked once, so the header keeps its phrase from working to done.
-  const [phrase] = useState(
-    () =>
-      RUN_PHRASES[Math.floor(Math.random() * RUN_PHRASES.length)] ?? "doingWork"
+  // Picked per card, seeded from its id: the same on the server and the
+  // client, and kept from working to done.
+  const cardId = useId();
+  const phrase = useMemo(
+    () => pick(RUN_PHRASES, seededRandom(cardId)),
+    [cardId]
   );
 
   const steps = useMemo<ChatRunStep[]>(
