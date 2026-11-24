@@ -15,6 +15,7 @@ import { useTimelineHeader } from "@/lib/timeline/chat/hooks/useTimelineHeader";
 import { useTimelineStepState } from "@/lib/timeline/chat/hooks/useTimelineStepState";
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { RunCard } from "@/lib/timeline/components/RunCard";
+import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import { ChatStep } from "@/lib/timeline/chat/ChatStep";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
 import type { AwaitingUser } from "@/lib/chat/toolApprovals";
@@ -135,23 +136,24 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // run card.
   if (steps.length > 0 && steps.length <= MAX_HOISTED_STEPS) {
     return (
-      <Section alignItems="stretch" gap={3} height="auto">
-        {steps.map((runStep) => (
-          // A step that arrives while the run works rises in; a saved
-          // run's steps appear at once.
-          <Presence key={runStep.id} appear={isActive} grow>
-            <ChatStep
-              step={runStep.step}
-              status={runStep.status}
-              position={{ isFirst: true, isLast: true }}
-              chatState={chatState}
-              stopPacketSeen={stopPacketSeen}
-              stopReason={stopReason}
-              asCard
-            />
-          </Presence>
-        ))}
-      </Section>
+      <TimelineRoot>
+        <Section alignItems="stretch" gap={3} height="auto">
+          {steps.map((runStep) => (
+            // A step that arrives while the run works rises in; a saved
+            // run's steps appear at once.
+            <Presence key={runStep.id} appear={isActive} grow>
+              <ChatStep
+                step={runStep.step}
+                status={runStep.status}
+                position={{ isFirst: true, isLast: true }}
+                chatState={chatState}
+                stopPacketSeen={stopPacketSeen}
+                stopReason={stopReason}
+              />
+            </Presence>
+          ))}
+        </Section>
+      </TimelineRoot>
     );
   }
 
@@ -178,8 +180,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         memoryId,
         memoryIndex,
       }}
-      // Each step renders as a hoisted step does, so a step looks the same
-      // in a collapsed run card as on its own.
       renderStep={(runStep, position) => (
         <ChatStep
           step={runStep.step}
@@ -188,7 +188,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           chatState={chatState}
           stopPacketSeen={stopPacketSeen}
           stopReason={stopReason}
-          asCard
         />
       )}
     />

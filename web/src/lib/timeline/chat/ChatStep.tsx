@@ -24,8 +24,6 @@ export interface ChatStepProps {
   chatState: FullChatState;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
-  /** Draw the step as a hoisted run card. */
-  asCard?: boolean;
 }
 
 /**
@@ -39,7 +37,6 @@ export const ChatStep = React.memo(function ChatStep({
   chatState,
   stopPacketSeen,
   stopReason,
-  asCard = false,
 }: ChatStepProps) {
   const renderStep = useCallback(
     (results: TimelineRendererOutput) => (
@@ -49,10 +46,9 @@ export const ChatStep = React.memo(function ChatStep({
         isFirstStep={position.isFirst}
         collapsible
         status={status}
-        asCard={asCard}
       />
     ),
-    [position.isFirst, position.isLast, status, asCard]
+    [position.isFirst, position.isLast, status]
   );
 
   return (

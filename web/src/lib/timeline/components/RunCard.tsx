@@ -163,11 +163,6 @@ export function RunCard<S extends RunCardStep>({
           onClick={foldable ? toggle : undefined}
           // The header's own fold button, in every state, so its step count
           // animates as it changes and it lights up with the header.
-          foldLabel={
-            foldable
-              ? t("stepsButton.label", { count: steps.length })
-              : undefined
-          }
           rightChildren={
             foldable && (
               <>
@@ -205,14 +200,27 @@ export function RunCard<S extends RunCardStep>({
                     </Text>
                   </div>
                 </Presence>
+                {/* The step count is text before the chevron, so the card's
+                    chevron lines up with its steps' chevrons. */}
+                <div className="px-(--padding-text-4)">
+                  <Text
+                    as="p"
+                    font="secondary-body"
+                    color="text-03"
+                    wordWrap="whitespace-nowrap"
+                  >
+                    {t("stepsButton.label", { count: steps.length })}
+                  </Text>
+                </div>
               </>
             )
           }
           expandable
           expanded={isOpen}
           expandedContent={
-            // The steps, 0.25rem apart.
-            <Section alignItems="stretch" gap={1} height="auto">
+            // The steps, with no gap. A step card inside has no padding of
+            // its own, so its title lines up with the card's own title.
+            <Section alignItems="stretch" gap={0} height="auto">
               {steps.map((step, index) => (
                 // A step that streams in rises in, after the card opens room
                 // for it. Steps already there when the card mounts (a saved

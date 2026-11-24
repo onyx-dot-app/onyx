@@ -92,6 +92,12 @@
 .opal-line[data-opal-line-flavour="card"] {
   @apply rounded-12 p-1 transition-colors duration-300;
 }
+/* A card inside a card (a step in a run card) has no padding of its own,
+   so its title lines up with the outer card's. */
+.opal-line[data-opal-line-flavour="card"]
+  .opal-line[data-opal-line-flavour="card"] {
+  @apply p-0;
+}
 .opal-line[data-opal-line-flavour="card"][data-opal-line-filled="true"],
 .opal-line[data-opal-line-flavour="card"][data-opal-line-clickable="true"]:hover {
   @apply bg-background-tint-00;
