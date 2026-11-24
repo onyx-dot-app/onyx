@@ -157,11 +157,24 @@ impl Offline {
     }
 }
 
+/// A number for a recovery path chosen now. Take it when the work that
+/// reports the path starts, so a late report does not win over a newer
+/// choice.
+pub fn next_choice(app: &AppHandle) -> u64 {
+    app.state::<Offline>().next_choice()
+}
+
 /// Shows the offline window for `reason`; `path` loads in the main window on
-/// recovery. Does nothing if the session `epoch` ended meanwhile (sign-out,
-/// server change). On error the main window is shown again.
-pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Result<(), String> {
-    let choice = app.state::<Offline>().next_choice();
+/// recovery. `choice` is from `next_choice`. Does nothing if the session
+/// `epoch` ended meanwhile (sign-out, server change). On error the main
+/// window is shown again.
+pub fn show(
+    app: &AppHandle,
+    path: &str,
+    choice: u64,
+    reason: Unreachable,
+    epoch: u64,
+) -> Result<(), String> {
     show_with(app, path, choice, reason, epoch, false, false)
 }
 
@@ -446,6 +459,8 @@ pub fn path_of(url: &Url) -> String {
 /// the server returns 5xx errors (a proxy error page also finishes loading).
 pub fn watch_load(app: &AppHandle, url: &Url) {
     let load = app.state::<Offline>().loads().navigated();
+    // Taken when the navigation starts: a later page request wins.
+    let choice = next_choice(app);
     let epoch = app.state::<AppState>().epoch();
     let path = path_of(url);
     let app = app.clone();
@@ -491,7 +506,7 @@ pub fn watch_load(app: &AppHandle, url: &Url) {
             // wry reports iframe navigations here too, so recovery reopens
             // the window's own document, not the URL this check started for.
             let path = top_level_path(&app, &server).unwrap_or(path);
-            if let Err(e) = show(&app, &path, reason, epoch) {
+            if let Err(e) = show(&app, &path, choice, reason, epoch) {
                 log::warn!("the main window keeps the failed page: {e}");
             }
             return;
@@ -919,6 +934,27 @@ mod tests {
         raced.page_replaced("/search", 3);
         raced.merge("/chat", 2, Unreachable::Refused, false, false);
         assert_eq!(raced.path, "/search");
+
+        // A load check numbers its path when the navigation starts, so its
+        // late report loses to a page request made after that.
+        let offline = super::Offline::default();
+        let mut late = pending(false);
+        late.path_choice = 0;
+        let watch = offline.next_choice();
+        late.page_replaced("/search", offline.next_choice());
+        late.merge("/app", watch, Unreachable::Refused, false, false);
+        assert_eq!(late.path, "/search");
+        // With nothing newer chosen, its report sets the path.
+        let mut alone = pending(false);
+        alone.path_choice = 0;
+        alone.merge(
+            "/app",
+            offline.next_choice(),
+            Unreachable::Refused,
+            false,
+            false,
+        );
+        assert_eq!(alone.path, "/app");
     }
 
     #[test]

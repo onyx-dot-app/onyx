@@ -324,6 +324,7 @@ pub fn route(app: &AppHandle) {
 pub fn route_to(app: &AppHandle, path: &str) {
     let state = app.state::<AppState>();
     let epoch = state.epoch();
+    let choice = crate::offline::next_choice(app);
     let Ok(server) = state.server() else {
         let _ = open_onboarding(app);
         return;
@@ -366,7 +367,7 @@ pub fn route_to(app: &AppHandle, path: &str) {
                 if let Err(e) = main_window::open(&app, &server, &token, &path).await {
                     log::warn!("could not open main window: {e}");
                     match state.api.health(&server).await {
-                        Err(reason) => show_offline(&app, &server, &path, reason, epoch),
+                        Err(reason) => show_offline(&app, &server, &path, choice, reason, epoch),
                         Ok(()) => open_failed(&app, "Could not open Onyx", &e),
                     }
                 }
@@ -379,7 +380,7 @@ pub fn route_to(app: &AppHandle, path: &str) {
             Ok(false) => end_rejected_session(&app, &server, &token),
             // Unreachable is not signed out: the session is kept, and
             // Sign in is only for a rejected session or the user's choice.
-            Err(reason) => show_offline(&app, &server, &path, reason, epoch),
+            Err(reason) => show_offline(&app, &server, &path, choice, reason, epoch),
         }
     });
 }
@@ -403,10 +404,11 @@ pub(crate) fn show_offline(
     app: &AppHandle,
     server: &str,
     path: &str,
+    choice: u64,
     reason: Unreachable,
     epoch: u64,
 ) {
-    if let Err(e) = crate::offline::show(app, path, reason, epoch) {
+    if let Err(e) = crate::offline::show(app, path, choice, reason, epoch) {
         log::warn!("showing the dialog instead of the offline window: {e}");
         open_failed(app, "Could not open Onyx", &reason.message(server));
     }
