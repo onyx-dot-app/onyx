@@ -179,9 +179,10 @@ skills catalog. The two tools have no
 tool catalog rows. A direct call renders as a generic tool card with a short
 JSON summary, not the SKILL.md text. In code mode they are `IMMEDIATE`
 functions that return text (`tools.skills_list`, `tools.skills_read`), and the
-chat agent's skills catalog names them so. The code cell shows the SKILL.md
-text when the program prints or returns it. Deep Research does not use code
-mode and calls them directly.
+chat agent's skills catalog names them so. SKILL.md text that the program
+prints or returns goes into its `code_mode_delta` packets; the web timeline
+does not show program output ([[chat-frontend]]). Deep Research does not use
+code mode and calls them directly.
 
 **Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
 `exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and
