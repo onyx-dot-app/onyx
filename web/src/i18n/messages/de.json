@@ -12462,9 +12462,6 @@
             "status": "Liest Datei"
           }
         },
-        "generatedImages": {
-          "label": "{count, plural, one {# Bild generiert} other {# Bilder generiert}}"
-        },
         "header": {
           "executingCode": {
             "label": "Führt Code aus"

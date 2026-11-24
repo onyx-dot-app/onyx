@@ -12462,9 +12462,6 @@
             "status": "正在读取文件"
           }
         },
-        "generatedImages": {
-          "label": "{count, plural, one {已生成 # 张图片} other {已生成 # 张图片}}"
-        },
         "header": {
           "executingCode": {
             "label": "正在执行代码"

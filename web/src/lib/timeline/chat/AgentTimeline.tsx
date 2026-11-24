@@ -31,8 +31,6 @@ export interface AgentTimelineProps {
   hasDisplayContent?: boolean;
   /** Processing duration in seconds (for completed messages) */
   processingDurationSeconds?: number;
-  /** Number of images generated */
-  generatedImageCount?: number;
   /** Tool processing duration from backend (via MESSAGE_START packet) */
   toolProcessingDuration?: number;
   /** A code mode program works between tool calls; it has no step */
@@ -58,7 +56,6 @@ function areAgentTimelinePropsEqual(
     prev.hasDisplayContent === next.hasDisplayContent &&
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.chatState === next.chatState &&
-    prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.codeModeWorking === next.codeModeWorking &&
     prev.awaitingUser === next.awaitingUser
@@ -93,7 +90,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   stopReason,
   hasDisplayContent = false,
   processingDurationSeconds,
-  generatedImageCount = 0,
   toolProcessingDuration,
   codeModeWorking = false,
   awaitingUser = null,
@@ -104,7 +100,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     codeModeWorking,
     awaitingUser
   );
-  const { memoryText, memoryOperation, memoryId, memoryIndex, isMemoryOnly } =
+  const { memoryText, memoryOperation, memoryId, memoryIndex } =
     useTimelineStepState(turnGroups);
   const streamingStartTime = useStreamingStartTime();
 
@@ -134,8 +130,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       streamingStartTime={streamingStartTime}
       durationSeconds={toolProcessingDuration ?? processingDurationSeconds}
       summary={{
-        generatedImageCount,
-        isMemoryOnly,
         memoryText,
         memoryOperation,
         memoryId,

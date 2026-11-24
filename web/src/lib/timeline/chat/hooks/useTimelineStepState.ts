@@ -8,13 +8,9 @@ interface MemoryStepState {
   memoryOperation: "add" | "update" | null;
   memoryId: number | null;
   memoryIndex: number | null;
-  isMemoryOnly: boolean;
 }
 
-/**
- * Extracts memory state from the first memory-tool step in turnGroups
- * and determines whether the timeline contains only memory steps.
- */
+/** Extracts memory state from the first memory-tool step in turnGroups. */
 export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
   return useMemo(() => {
     let memoryText: string | null = null;
@@ -23,16 +19,9 @@ export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
     let memoryIndex: number | null = null;
     let foundMemory = false;
 
-    let totalSteps = 0;
-    let allMemory = true;
-
     for (const tg of turnGroups) {
       for (const step of tg.steps) {
-        totalSteps++;
-        if (!isMemoryToolPackets(step.packets)) {
-          allMemory = false;
-          continue;
-        }
+        if (!isMemoryToolPackets(step.packets)) continue;
 
         if (!foundMemory) {
           foundMemory = true;
@@ -50,7 +39,6 @@ export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
       memoryOperation,
       memoryId,
       memoryIndex,
-      isMemoryOnly: totalSteps > 0 && allMemory,
     };
   }, [turnGroups]);
 }

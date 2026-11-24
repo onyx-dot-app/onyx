@@ -12462,9 +12462,6 @@
             "status": "جارٍ قراءة الملف"
           }
         },
-        "generatedImages": {
-          "label": "{count, plural, one {تم توليد صورة واحدة} other {تم توليد # صور}}"
-        },
         "header": {
           "executingCode": {
             "label": "جارٍ تنفيذ الكود"

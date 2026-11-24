@@ -12462,9 +12462,6 @@
             "status": "ファイルを読み取り中"
           }
         },
-        "generatedImages": {
-          "label": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
-        },
         "header": {
           "executingCode": {
             "label": "コードを実行中"
