@@ -42,20 +42,26 @@ export class OnboardingNamePromptPage {
     await expect(this.chatInput).toBeVisible({ timeout: 15000 });
   }
 
-  /** Open /app and hold the user's `/api/me` response until the chat input
-   *  shows, so the page renders before it knows the user. */
+  /** Open /app and hold the user's `/api/me` response. The welcome screen
+   *  must not show the chat input before it knows the user, so it cannot
+   *  render in one layout and then move into the onboarding layout. */
   async gotoBeforeUserLoads(): Promise<void> {
     let release = () => {};
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let markRequested = () => {};
+    const requested = new Promise<void>((resolve) => {
+      markRequested = resolve;
+    });
     await this.page.route("**/api/me", async (route) => {
+      markRequested();
       await held;
       await route.continue();
     });
     await this.page.goto("/app");
-    await expect(this.chatInput).toBeVisible({ timeout: 15000 });
-    await expect(this.namePrompt).toBeHidden();
+    await requested;
+    await expect(this.chatInput).toBeHidden();
     release();
   }
 
