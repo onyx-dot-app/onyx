@@ -221,7 +221,9 @@ a version's text. It extracts with
 `file_processing/extract_file_text.py:extract_text_pages` (PDF pages,
 PowerPoint slides, spreadsheet sheets; any other file as one text; no image
 captions), ends each page with a form feed, and keeps at most 10 M characters
-of a file up to 50 MiB.
+of a file up to 50 MiB. A version's file never changes
+([[#file-id-write-once]]), so its cached text never goes stale. The sandbox
+tools `library_read` and `library_find` ([[code-execution]]) read it.
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and

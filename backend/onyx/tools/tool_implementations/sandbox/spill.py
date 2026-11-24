@@ -44,8 +44,10 @@ from onyx.tools.tool_implementations.sandbox.models import (
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     ExecCommandTool,
+    LibraryFindTool,
     LibraryListTool,
     LibraryManageLibraryTool,
+    LibraryReadTool,
     WriteStdinTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -89,10 +91,10 @@ _ENCODE_CHARS = 1 << 20
 _UNKNOWN_AGE = datetime.max.replace(tzinfo=timezone.utc)
 # Tools whose content the limits of one result and one step do not cut: they
 # cut it themselves (the code mode cells, exec), page through it (read_file,
-# skills_read, library_list and the artifact tool's list, whose page keeps
-# within ARTIFACTS_LIST_MAX_CHARS) or give short results (library_manage_library
-# and the artifact tool's other actions), so a spill would only be read back,
-# or the model cites it whole. A full value still spills.
+# skills_read, and the library tools and the artifact tool, whose results page
+# within ARTIFACT_RESULT_MAX_CHARS or, as a manage result, are short, so a
+# spill would only be read back), or the model cites it whole. A full value
+# still spills.
 _OWN_LIMITS = frozenset(
     {
         CODE_MODE_TOOL_NAME,
@@ -103,6 +105,8 @@ _OWN_LIMITS = frozenset(
         SKILLS_READ_TOOL_NAME,
         LibraryListTool.NAME,
         LibraryManageLibraryTool.NAME,
+        LibraryReadTool.NAME,
+        LibraryFindTool.NAME,
         ArtifactTool.NAME,
         *CITEABLE_TOOLS_NAMES,
     }

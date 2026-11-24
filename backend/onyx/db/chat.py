@@ -1638,8 +1638,8 @@ def get_user_published_files(
     other sorts read and sort all of the user's matching artifacts. An
     artifact that changes its sort key while the caller pages can move past
     the cursor or behind it. `name`, `size`, the type filters and `query` use
-    the newest available version and the artifact's effective name. An entry's name, path and chat title are
-    cut to their ARTIFACTS_*_MAX_CHARS, a path to its end. None when
+    the newest available version and the artifact's effective name. Each entry
+    is cut as shown_artifact cuts it. None when
     `chat_session_id` is not a listable chat of the user."""
     listable = _listable_chat(user_id)
     if (
@@ -1727,23 +1727,20 @@ def get_user_published_files(
                 ChatSession.description.icontains(query, autoescape=True),
             )
         )
-    page: list[tuple[ListedArtifact, ArtifactCursor]] = []
-    for row in db_session.execute(statement):
-        artifact = shown_artifact(_listed_artifact(row))
-        page.append(
-            (
-                artifact,
-                ARTIFACT_CURSOR.validate_python(
-                    {
-                        "sort": sort,
-                        "sort_order": sort_order,
-                        "key": row.sort_key,
-                        "artifact_id": row.id,
-                    }
-                ),
-            )
+    return [
+        (
+            shown_artifact(_listed_artifact(row)),
+            ARTIFACT_CURSOR.validate_python(
+                {
+                    "sort": sort,
+                    "sort_order": sort_order,
+                    "key": row.sort_key,
+                    "artifact_id": row.id,
+                }
+            ),
         )
-    return page
+        for row in db_session.execute(statement)
+    ]
 
 
 def get_user_published_file(
@@ -1758,7 +1755,8 @@ def get_user_published_file(
     the artifact `artifact_id`'s `version`, by default its newest available
     one, when it is in a listable chat of the user (`_listable_chat`) and its
     object is not missing; else None. Any other file, such as a thumbnail or
-    an upload, is None. Its name, path and chat title are not cut. It has
+    an upload, is None. Its name, path and chat title are not cut
+    (shown_artifact cuts them for a result). It has
     the artifact's latest_version_number, its newest available version."""
     newest = _newest_available_version(
         version, file_id=file_id if artifact_id is None else None

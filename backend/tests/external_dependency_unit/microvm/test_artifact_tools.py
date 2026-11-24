@@ -3,7 +3,9 @@ FirecrackerHarnessSandbox with a fake host agent, Postgres and the file
 store: where a copy lands, the cache, the conflict policies, refusals that
 never start the VM, item errors, Stop, the write slots and tries, the chat
 file cleanup, and chat turns through the chat flow (the generic card, live
-and replayed, and the code mode group `library`)."""
+and replayed, and the code mode group `library`). Then the operations of
+both tool families, and the text tools library_read and library_find: lines,
+pages, versions, matching, refusals, the cached text and the result limit."""
 
 import base64
 import json
@@ -15,9 +17,12 @@ from typing import IO
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
+import openpyxl
 import pytest
 from fastapi import Request
+from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel, JsonValue
+from reportlab.pdfgen import canvas
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.orm import Session
 
@@ -48,6 +53,8 @@ from onyx.db.models import (
 )
 from onyx.db.sandbox import get_or_create_sandbox
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing import extract_file_text
+from onyx.file_store.constants import ARTIFACT_TEXT_MAX_FILE_BYTES
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -87,10 +94,14 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolCallException, ToolContext, ToolOptions
-from onyx.tools.tool_implementations.sandbox import artifact_operations, file_copies
+from onyx.tools.tool_implementations.sandbox import (
+    artifact_operations,
+    file_copies,
+)
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
+    ARTIFACT_RESULT_MAX_CHARS,
     ARTIFACTS_CHAT_TITLE_MAX_CHARS,
     ARTIFACTS_PATH_MAX_CHARS,
     DELETE_OF_A_VERSION,
@@ -99,8 +110,11 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactList,
     ArtifactNotFound,
     ArtifactPublished,
+    ArtifactsFound,
+    ArtifactsRead,
     DeleteOperation,
     FileUri,
+    FoundText,
     LibraryFileTarget,
     LibraryListFilters,
     ManageLibraryArguments,
@@ -118,9 +132,11 @@ from onyx.tools.tool_implementations.sandbox.models import (
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     LibraryCreateLibraryFileTool,
+    LibraryFindTool,
     LibraryListTool,
     LibraryManageLibraryTool,
     LibraryPrepareMaterializeTool,
+    LibraryReadTool,
     LibraryReplaceLibraryFileTool,
     SandboxTool,
 )
@@ -1601,6 +1617,51 @@ class _Family:
         version, by a caller that last saw version `seen`."""
         raise NotImplementedError
 
+    def read_text(
+        self,
+        call_id: str,
+        file: UUID | str,
+        version: int | None = None,
+        start_line: int | None = None,
+        max_lines: int | None = None,
+    ) -> Delta:
+        """The numbered lines of `file`: an artifact (at `version`, by
+        default its newest) or a version's file ID."""
+        raise NotImplementedError
+
+    def find(
+        self,
+        call_id: str,
+        file: UUID | str,
+        text: str,
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> Delta:
+        """The lines of `file` that contain `text`, in any case."""
+        raise NotImplementedError
+
+
+def _without_none(values: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return {key: value for key, value in values.items() if value is not None}
+
+
+def _library_reference(file: UUID | str, version: int | None) -> dict[str, JsonValue]:
+    if isinstance(file, str):
+        return {"file_id": file}
+    return _without_none({"library_file_id": str(file), "version_number": version})
+
+
+def _artifact_tool_reference(
+    file: UUID | str, version: int | None
+) -> dict[str, JsonValue]:
+    if isinstance(file, str):
+        return {"path": file}
+    return {
+        "url": f"/app/artifacts/{file}"
+        if version is None
+        else artifact_url(file, version)
+    }
+
 
 class _Library(_Family):
     def llm(self, steps: list[Delta]) -> ChatLLM:
@@ -1731,6 +1792,46 @@ class _Library(_Family):
             },
         )
 
+    def read_text(
+        self,
+        call_id: str,
+        file: UUID | str,
+        version: int | None = None,
+        start_line: int | None = None,
+        max_lines: int | None = None,
+    ) -> Delta:
+        return tool_step(
+            LibraryReadTool.NAME,
+            call_id,
+            {
+                "read": [
+                    _library_reference(file, version)
+                    | _without_none({"start_line": start_line, "max_lines": max_lines})
+                ]
+            },
+        )
+
+    def find(
+        self,
+        call_id: str,
+        file: UUID | str,
+        text: str,
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> Delta:
+        return tool_step(
+            LibraryFindTool.NAME,
+            call_id,
+            {
+                "find": [
+                    _library_reference(file, None)
+                    | _without_none(
+                        {"pattern": text, "match_offset": offset, "max_matches": limit}
+                    )
+                ]
+            },
+        )
+
 
 class _Artifact(_Family):
     def llm(self, steps: list[Delta]) -> ChatLLM:
@@ -1842,6 +1943,36 @@ class _Artifact(_Family):
             {"url": artifact_url(artifact_id, seen), "path": file_id, "label": reason},
         )
 
+    def read_text(
+        self,
+        call_id: str,
+        file: UUID | str,
+        version: int | None = None,
+        start_line: int | None = None,
+        max_lines: int | None = None,
+    ) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {"action": "read", "offset": start_line, "limit": max_lines}
+            | _artifact_tool_reference(file, version),
+        )
+
+    def find(
+        self,
+        call_id: str,
+        file: UUID | str,
+        text: str,
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {"action": "read", "query": text, "offset": offset, "limit": limit}
+            | _artifact_tool_reference(file, None),
+        )
+
 
 _LIBRARY_CONFLICT = (
     "Current version is 2, not the one you named; nothing changed. Copy "
@@ -1849,8 +1980,8 @@ _LIBRARY_CONFLICT = (
     "expected_current_version"
 )
 _ARTIFACT_CONFLICT = (
-    "Current version is 2; read it, merge your change, then publish with the "
-    "url from that result, or pass force:true"
+    "Current version is 2; read it with out_dir, merge your change, then "
+    "publish with the url from that result, or pass force:true"
 )
 
 
@@ -3675,3 +3806,347 @@ def test_a_stale_or_foreign_update_writes_nothing(
         )
     finally:
         get_default_file_store().delete_file(upload)
+
+
+# Reading and finding text: library_read, library_find and the artifact
+# tool's read without out_dir
+
+
+def _birds_pdf() -> bytes:
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer)
+    for line in ("Page one about herons.", "Page two about egrets."):
+        pdf.drawString(72, 720, line)
+        pdf.drawString(72, 700, "Birds wade.")
+        pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_read_pages_through_a_published_pdf_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    user: User,
+    family: _Family,
+) -> None:
+    """Chat C reads a PDF that chat A published, one line and then the
+    rest, without starting the VM; the generic cards stream as the reload
+    replays them."""
+    file_id = _publish(_chat(db_session, user, "Reports"), "birds.pdf", _birds_pdf())
+    artifact_id = _artifact_id(file_id)
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [family.read_text("first", artifact_id, max_lines=1), Delta(content="Done.")]
+    )
+    parts = chat.send(llm)
+
+    [first] = ArtifactsRead.model_validate_json(last_tool_text(llm, "first")).items
+    assert (
+        first.file.file_id,
+        first.file.version_number,
+        first.file.latest_version_number,
+        first.total_pages,
+    ) == (file_id, 1, 1, 2)
+    assert first.text == "--- page 1 ---\n     1\tPage one about herons.\n"
+    assert (first.start_line, first.end_line, first.next_start_line) == (1, 1, 2)
+
+    llm = family.llm(
+        [
+            family.read_text("rest", artifact_id, start_line=first.next_start_line),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+    [rest] = ArtifactsRead.model_validate_json(last_tool_text(llm, "rest")).items
+    assert rest.text.startswith("--- page 1 ---\n     2\tBirds wade.\n--- page 2 ---\n")
+    assert "Page two about egrets." in rest.text
+    assert (rest.end_line, rest.next_start_line) == (rest.total_lines, None)
+
+    live = _card_packets(parts)
+    assert any(isinstance(obj, packets.CustomToolStart) for obj in live)
+    first_turn, _ = chat.replayed(db_session)
+    assert _card_packets(first_turn) == live
+    assert node.agent.create_calls == 0
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_page_read_that_the_limit_cuts_resumes_at_its_next_start_line(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, user: User
+) -> None:
+    file_id = _publish(_chat(db_session, user, "Reports"), "birds.pdf", _birds_pdf())
+    tool = LibraryReadTool(_turn(user, _chat(db_session, user)))
+    pages: dict[str, JsonValue] = {
+        "file_id": file_id,
+        "mode": "pages",
+        "start_page": 1,
+        "end_page": 2,
+    }
+
+    whole = _call(tool, {"read": [pages]}).content
+    text = ArtifactsRead.model_validate_json(whole).items[0].text
+    page_two = text[text.index("--- page 2 ---") :]
+    # Room for page 1 only.
+    monkeypatch.setattr(
+        artifact_operations,
+        "ARTIFACT_RESULT_MAX_CHARS",
+        len(whole)
+        + artifact_operations._ITEM_NUMBERS_CHARS
+        - (len(json.dumps(page_two)) - 2)
+        + 5,
+    )
+    [cut] = ArtifactsRead.model_validate_json(
+        _call(tool, {"read": [pages]}).content
+    ).items
+    assert (cut.end_line, cut.next_start_line) == (2, 3)
+
+    [rest] = ArtifactsRead.model_validate_json(
+        _call(tool, {"read": [pages | {"start_line": cut.next_start_line}]}).content
+    ).items
+    assert rest.text == page_two
+    assert (rest.start_line, rest.end_line, rest.next_start_line) == (3, 4, None)
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_whole_page_read_ends_and_refuses_a_start_line_outside_its_pages(
+    db_session: Session, user: User
+) -> None:
+    file_id = _publish(_chat(db_session, user, "Reports"), "birds.pdf", _birds_pdf())
+    tool = LibraryReadTool(_turn(user, _chat(db_session, user)))
+    page_one: dict[str, JsonValue] = {"file_id": file_id, "mode": "pages"}
+
+    [read] = ArtifactsRead.model_validate_json(
+        _call(tool, {"read": [page_one]}).content
+    ).items
+    assert (read.start_line, read.end_line, read.total_lines) == (1, 2, 4)
+    assert read.next_start_line is None
+
+    outside = _call(tool, {"read": [page_one | {"start_line": 3}]})
+    assert outside.is_error
+    assert outside.content == (
+        "start_line 3 is outside pages 1 to 1 of birds.pdf, lines 1 to 2"
+    )
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_read_reaches_any_version_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    family: _Family,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    old = _publish(source, "notes.md", b"first draft\n")
+    _publish(source, "notes.md", b"second draft\nmore\n")
+    artifact_id = _artifact_id(old)
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [
+            family.read_text("old", artifact_id, version=1),
+            family.read_text("newest", artifact_id),
+            family.read_text("by_file_id", old),
+            family.read_text("missing", artifact_id, version=7),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    def read(call_id: str) -> tuple[int, int | None, str]:
+        [item] = ArtifactsRead.model_validate_json(last_tool_text(llm, call_id)).items
+        return item.file.version_number, item.file.latest_version_number, item.text
+
+    assert read("old") == (1, 2, "     1\tfirst draft\n")
+    assert read("newest") == (2, 2, "     1\tsecond draft\n     2\tmore\n")
+    assert read("by_file_id") == (1, 2, "     1\tfirst draft\n")
+    assert last_tool_text(llm, "missing") == (
+        f"No version 7 of {artifact_id}; its newest is 2"
+    )
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_find_matches_literal_text_in_any_case_and_pages_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    family: _Family,
+) -> None:
+    file_id = _publish(
+        _chat(db_session, user, "Reports"),
+        "log.txt",
+        b"alpha\nBeta needle\ngamma\nNEEDLE delta\nneedle.\n",
+    )
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [
+            family.find("all", file_id, "needle"),
+            family.find("page", file_id, "needle", offset=1, limit=1),
+            family.find("literal", file_id, "needle."),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    def found(call_id: str) -> tuple[list[int], int, int | None]:
+        [item] = ArtifactsFound.model_validate_json(last_tool_text(llm, call_id)).items
+        assert not item.timed_out
+        return (
+            [match.line for match in item.matches],
+            item.total_matches_seen,
+            item.next_match_offset,
+        )
+
+    assert found("all") == ([2, 4, 5], 3, None)
+    assert found("page") == ([4], 3, 2)
+    # Literal text: the dot matches only a dot.
+    assert found("literal") == ([5], 1, None)
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_find_takes_a_regex_case_pages_and_context(
+    db_session: Session, user: User
+) -> None:
+    file_id = _publish(_chat(db_session, user, "Reports"), "birds.pdf", _birds_pdf())
+    tool = LibraryFindTool(_turn(user, _chat(db_session, user)))
+
+    def found(item: dict[str, JsonValue]) -> FoundText:
+        [result] = ArtifactsFound.model_validate_json(
+            _call(tool, {"find": [{"file_id": file_id} | item]}).content
+        ).items
+        return result
+
+    egrets = found(
+        {
+            "pattern": r"about \w+",
+            "regex": True,
+            "start_page": 2,
+            "context_before_lines": 1,
+        }
+    )
+    [match] = egrets.matches
+    assert (match.page, match.text, match.before) == (
+        2,
+        "Page two about egrets.",
+        ["Birds wade."],
+    )
+    assert found({"pattern": "page", "case_sensitive": True}).matches == []
+    assert len(found({"pattern": "page"}).matches) == 2
+
+    bad = _call(tool, {"find": [{"file_id": file_id, "pattern": "(", "regex": True}]})
+    assert bad.is_error
+    assert bad.content.startswith("The pattern '(' is not a regular expression")
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_find_in_a_sheet_cut_at_the_cell_cap_says_truncated(
+    db_session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(extract_file_text, "MAX_XLSX_CELLS_PER_SHEET", 4)
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    assert isinstance(sheet, Worksheet)
+    for row in range(5):
+        sheet.append([f"needle {row}", "hay"])
+    data = BytesIO()
+    workbook.save(data)
+    file_id = _publish(_chat(db_session, user, "Reports"), "big.xlsx", data.getvalue())
+
+    [found] = ArtifactsFound.model_validate_json(
+        _call(
+            LibraryFindTool(_turn(user, _chat(db_session, user))),
+            {"find": [{"file_id": file_id, "pattern": "needle"}]},
+        ).content
+    ).items
+
+    assert found.matches
+    assert found.truncated
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_refused_files_fail_the_whole_read_with_every_reason(
+    db_session: Session, user: User, make_test_user: MakeTestUser
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    text_file = _publish(source, "notes.md", b"notes\n")
+    picture = _publish(source, "pixel.png", b"\x89PNG\r\n\x1a\n")
+    big = _publish(source, "big.txt", b"big\n")
+    db_session.execute(
+        update(FileRecord)
+        .where(FileRecord.file_id == big)
+        .values(file_size=ARTIFACT_TEXT_MAX_FILE_BYTES + 1)
+    )
+    db_session.commit()
+    theirs = _publish(
+        _chat(db_session, make_test_user("artifact_text_stranger")), "a.md", b"a\n"
+    )
+    tool = LibraryReadTool(_turn(user, _chat(db_session, user)))
+
+    refused = _call(
+        tool,
+        {"read": [{"file_id": text_file}, {"file_id": theirs}, {"file_id": "nope"}]},
+    )
+    assert refused.is_error
+    assert refused.content == (
+        f"No published file {theirs} in your chats\nNo published file nope in your chats"
+    )
+    no_text = _call(
+        tool, {"read": [{"file_id": text_file}, {"file_id": picture}, {"file_id": big}]}
+    )
+    assert no_text.is_error
+    assert no_text.content == (
+        "pixel.png has no text; copy it into the sandbox to work with it\n"
+        "big.txt is larger than 50 MiB; copy it into the sandbox to work with it"
+    )
+    pages = _call(tool, {"read": [{"file_id": text_file, "mode": "pages"}]})
+    assert pages.is_error
+    assert pages.content == "notes.md has no pages; read or search it by line instead"
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_read_and_find_results_stay_within_their_limit_at_worst_case_sizes(
+    db_session: Session, user: User
+) -> None:
+    """Five items of long lines that JSON escapes share one result of at
+    most ARTIFACT_RESULT_MAX_CHARS, and say where each continues."""
+    line = '"\t\\' * 400 + "x"
+    file_id = _publish(
+        _chat(db_session, user, "Reports"),
+        "wide.txt",
+        "\n".join([line] * 3_000).encode(),
+    )
+    turn = _turn(user, _chat(db_session, user))
+    read = _call(
+        LibraryReadTool(turn),
+        {"read": [{"file_id": file_id, "max_lines": 2_000}] * 5},
+    )
+    assert not read.is_error, read.content
+    assert len(read.content) <= ARTIFACT_RESULT_MAX_CHARS
+    items = ArtifactsRead.model_validate_json(read.content).items
+    assert items[0].end_line > 0
+    assert [item.next_start_line for item in items] == [
+        item.end_line + 1 for item in items
+    ]
+
+    found = _call(
+        LibraryFindTool(turn),
+        {
+            "find": [
+                {
+                    "file_id": file_id,
+                    "pattern": "x",
+                    "max_matches": 100,
+                    "context_before_lines": 5,
+                    "context_after_lines": 5,
+                }
+            ]
+            * 5
+        },
+    )
+    assert not found.is_error, found.content
+    assert len(found.content) <= ARTIFACT_RESULT_MAX_CHARS
+    finds = ArtifactsFound.model_validate_json(found.content).items
+    assert finds[0].matches
+    assert all(
+        item.next_match_offset == len(item.matches) and item.total_matches_seen == 3_000
+        for item in finds
+    )
