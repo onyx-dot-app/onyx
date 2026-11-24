@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.middleware import tenant_tracking
+from onyx.auth.constants import OAUTH_PROVIDER_SCOPES
 from onyx.auth.session_tokens import build_session_token_value
 from onyx.auth.users import auth_backend, get_redis_strategy
 from onyx.configs import app_configs
@@ -126,6 +127,7 @@ async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
                     client_id="tenant-test-client",
                     client_name="Tenant test",
                     resource="http://localhost:3000/mcp/",
+                    scopes=list(OAUTH_PROVIDER_SCOPES),
                     issue_refresh=True,
                 )
                 session.commit()

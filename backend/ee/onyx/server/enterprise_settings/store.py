@@ -2,7 +2,6 @@ import os
 from io import BytesIO
 from typing import Any, cast
 
-import puremagic
 from fastapi import UploadFile
 from PIL import Image
 
@@ -22,6 +21,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.utils.file import (
+    MAX_UPLOAD_IMAGE_PIXELS,
+    read_upload_within_limit,
+    sniff_mime_type,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,8 +40,6 @@ ALLOWED_LOGO_MIME_TYPES: frozenset[str] = frozenset({"image/png", "image/jpeg"})
 # Branding art is small. The body is held in memory here and again by the file
 # store, so cap it rather than buffer whatever the caller sends.
 MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024
-# 4096x4096 is far past any branding need and caps a decode at about 67 MB RGBA.
-MAX_LOGO_PIXELS = 4096 * 4096
 
 
 def _clamp_appearance_fields(stored: dict[str, Any]) -> dict[str, Any]:
@@ -142,13 +144,8 @@ def sniff_logo_mime_type(data: bytes) -> str | None:
     stored logo with Pillow, so a body that only looks like a PNG would raise
     there every time an email is sent.
     """
-    try:
-        matches = puremagic.magic_string(data)
-    except (puremagic.PureError, ValueError):
-        # PureError: nothing matched. ValueError: the body is empty.
-        return None
-    mime_type = matches[0].mime_type if matches else None
-    if mime_type not in ALLOWED_LOGO_MIME_TYPES:
+    mime_type = sniff_mime_type(data, ALLOWED_LOGO_MIME_TYPES)
+    if mime_type is None:
         return None
 
     try:
@@ -158,7 +155,7 @@ def sniff_logo_mime_type(data: bytes) -> str | None:
             # highly compressed file can still decode to gigapixels, and
             # get_emailable_logo() thumbnails it while an email is being sent.
             width, height = image.size
-            if width * height > MAX_LOGO_PIXELS:
+            if width * height > MAX_UPLOAD_IMAGE_PIXELS:
                 logger.warning("Logo is %dx%d, over the pixel cap", width, height)
                 return None
             # verify() consumes the handle, so this image is not reused
@@ -192,14 +189,7 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
                 OnyxErrorCode.INVALID_INPUT,
                 "Invalid file type- only .png, .jpg, and .jpeg files are allowed",
             )
-        # One byte over the cap is enough to reject an oversized body without
-        # reading the rest of it.
-        file_content = file.file.read(MAX_LOGO_SIZE_BYTES + 1)
-        if len(file_content) > MAX_LOGO_SIZE_BYTES:
-            raise OnyxError(
-                OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                f"Logo must be {MAX_LOGO_SIZE_BYTES // (1024 * 1024)} MB or smaller",
-            )
+        file_content = read_upload_within_limit(file, MAX_LOGO_SIZE_BYTES, "Logo")
         display_name = file.filename
 
     file_type = sniff_logo_mime_type(file_content)

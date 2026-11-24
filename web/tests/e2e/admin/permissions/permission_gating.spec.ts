@@ -8,6 +8,7 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
 import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 import { AdminLanguageModelsPage } from "@tests/e2e/pages/AdminLanguageModelsPage";
+import { SettingsThirdPartyAccessPage } from "@tests/e2e/pages/SettingsThirdPartyAccessPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -888,18 +889,12 @@ test.describe("Permission gating: CREATE_USER_API_KEYS", () => {
       // Phase 1: Basic grants it by default, so the section shows and the button is enabled
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).toBeVisible({ timeout: 10000 });
-
-      const newTokenButton = page.getByRole("button", {
-        name: "New Access Token",
+      const thirdPartyAccessPage = new SettingsThirdPartyAccessPage(page);
+      await thirdPartyAccessPage.load();
+      await expect(thirdPartyAccessPage.newTokenButton).toBeVisible({
+        timeout: 10000,
       });
-      await expect(newTokenButton).toBeVisible({ timeout: 10000 });
-      await expect(newTokenButton).toBeEnabled();
+      await expect(thirdPartyAccessPage.newTokenButton).toBeEnabled();
 
       // Create a PAT via API so Phase 2 can test "token exists but no permission"
       const createResponse = await page.request.post("/api/user/pats", {
@@ -919,15 +914,11 @@ test.describe("Permission gating: CREATE_USER_API_KEYS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).toBeVisible({ timeout: 10000 });
-
-      await expect(newTokenButton).toBeVisible({ timeout: 10000 });
-      await expect(newTokenButton).toBeDisabled();
+      await thirdPartyAccessPage.load();
+      await expect(thirdPartyAccessPage.newTokenButton).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(thirdPartyAccessPage.newTokenButton).toBeDisabled();
 
       // Phase 3: Switch it back on and the button is enabled again
       await page.context().clearCookies();
@@ -938,11 +929,11 @@ test.describe("Permission gating: CREATE_USER_API_KEYS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(newTokenButton).toBeVisible({ timeout: 10000 });
-      await expect(newTokenButton).toBeEnabled();
+      await thirdPartyAccessPage.load();
+      await expect(thirdPartyAccessPage.newTokenButton).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(thirdPartyAccessPage.newTokenButton).toBeEnabled();
     } finally {
       // Basic is shared with every other spec, so restore it from a context
       // that outlives this test's page if the test timed out.

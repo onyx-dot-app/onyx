@@ -12,14 +12,11 @@ import type {
 } from "@/lib/service-status/types";
 import {
   barColor,
+  nodeLabel,
   diskPercent,
   toSize,
   vectorPercent,
 } from "@/views/admin/ServiceStatusPage/format";
-
-// OpenSearch names a node after its host when no name is set: a container
-// or instance hash, which means nothing to an admin.
-const GENERATED_NAME = /^[0-9a-f]{12,}$/i;
 
 interface UsageCellProps {
   label: string;
@@ -100,9 +97,11 @@ function NodeRows({ nodes, thresholds }: NodeRowsProps) {
                   width="fit"
                 >
                   <Text as="p" font="main-ui-action" color="text-04">
-                    {GENERATED_NAME.test(node.name)
-                      ? t("unnamed", { number: index + 1 })
-                      : node.name}
+                    {/* The row's own place, so two nodes with the same
+                        generated name still get distinct labels. */}
+                    {nodeLabel(node.name, index + 1, (number) =>
+                      t("unnamed", { number })
+                    )}
                   </Text>
                   <CopyButton
                     getCopyText={() => node.name}

@@ -5,7 +5,12 @@
  * individual tests remain declarative.
  */
 
-import { type Page, type Locator, expect } from "@playwright/test";
+import {
+  type Download,
+  type Page,
+  type Locator,
+  expect,
+} from "@playwright/test";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import { InputBar } from "@tests/e2e/chat/InputBar";
 
@@ -63,6 +68,11 @@ export class ChatPage {
   readonly selectedModelOptions: Locator;
   readonly unselectedModelOptions: Locator;
 
+  // Header share menu: share the chat or download its transcript
+  readonly shareMenuButton: Locator;
+  readonly shareMenu: Locator;
+  readonly shareDialog: Locator;
+
   constructor(page: Page) {
     this.page = page;
     this.inputBar = new InputBar(page);
@@ -104,6 +114,9 @@ export class ChatPage {
     this.unselectedModelOptions = this.modelPopover.locator(
       '[data-interactive-state="empty"]'
     );
+    this.shareMenuButton = page.getByTestId("share-chat-button");
+    this.shareMenu = page.getByRole("menu", { name: "Share or export" });
+    this.shareDialog = page.getByRole("dialog");
   }
 
   humanMessage(index = 0): Locator {
@@ -618,6 +631,19 @@ export class ChatPage {
     ).toHaveCount(1);
   }
 
+  /** Assert the font the answer text of an AI message renders in. */
+  async expectAnswerFont(family: RegExp, index = 0): Promise<void> {
+    await expect(
+      this.aiMessage(index).locator(".response-text").first()
+    ).toHaveCSS("font-family", family);
+  }
+
+  async expectAnswerLetterSpacing(spacing: string, index = 0): Promise<void> {
+    await expect(
+      this.aiMessage(index).locator(".response-text").first()
+    ).toHaveCSS("letter-spacing", spacing);
+  }
+
   async expectAnswerHeading(text: string): Promise<void> {
     await expect(
       this.scrollContainer.getByRole("heading", { name: text, exact: true })
@@ -713,6 +739,46 @@ export class ChatPage {
       })
       .not.toBe("");
     return html;
+  }
+
+  /** The id of the open chat session, read from the URL. */
+  currentSessionId(): string {
+    const sessionId = new URL(this.page.url()).searchParams.get("chatId");
+    if (!sessionId) throw new Error("No chat session is open");
+    return sessionId;
+  }
+
+  /**
+   * The composer follows the chat column: 45rem (720px) at reading width, and
+   * the 80rem (1280px) wide cap less its 2rem (32px) gutter when wide,
+   * centered in the conversation. Needs a window wider than the wide cap.
+   */
+  async expectChatColumnWidth(width: "reading" | "wide"): Promise<void> {
+    // NaN (no box yet) fails every comparison, so the polls keep waiting.
+    const composerWidth = expect.poll(
+      async () =>
+        (await this.inputBar.container.boundingBox())?.width ?? Number.NaN
+    );
+    if (width === "reading") {
+      await composerWidth.toBeLessThanOrEqual(720);
+      return;
+    }
+    await composerWidth.toBeGreaterThan(1200);
+    await composerWidth.toBeLessThanOrEqual(1248);
+    // The composer's center is the conversation's center, up to the
+    // scrollbar's width.
+    await expect
+      .poll(async () => {
+        const composer = await this.inputBar.container.boundingBox();
+        const conversation = await this.scrollContainer.boundingBox();
+        if (!composer || !conversation) return Number.NaN;
+        return Math.abs(
+          composer.x +
+            composer.width / 2 -
+            (conversation.x + conversation.width / 2)
+        );
+      })
+      .toBeLessThanOrEqual(16);
   }
 
   async expectCopyButton(): Promise<void> {
@@ -843,11 +909,32 @@ export class ChatPage {
     await expect(this.page.getByTestId("incognito-intro")).toBeVisible();
   }
 
+  async openShareMenu(): Promise<void> {
+    await this.shareMenuButton.click();
+    await expect(this.shareMenu).toBeVisible();
+  }
+
+  async openShareModal(): Promise<void> {
+    await this.openShareMenu();
+    await this.shareMenu.getByRole("menuitem", { name: "Share…" }).click();
+    await expect(this.shareDialog).toBeVisible();
+  }
+
+  /** Picks an export row of the share menu and returns the download. */
+  async exportFromShareMenu(
+    format: "Markdown" | "Plain Text"
+  ): Promise<Download> {
+    await this.openShareMenu();
+    const download = this.page.waitForEvent("download");
+    await this.shareMenu
+      .getByRole("menuitem", { name: `Export as ${format}` })
+      .click();
+    return download;
+  }
+
   async expectIncognito(): Promise<void> {
     await expect(this.page.getByTestId("incognito-chat-pill")).toBeVisible();
-    await expect(
-      this.page.getByRole("button", { name: "share-chat-button" })
-    ).toHaveCount(0);
+    await expect(this.shareMenuButton).toHaveCount(0);
     await expect(this.page.getByTestId("AgentMessage/like-button")).toHaveCount(
       0
     );

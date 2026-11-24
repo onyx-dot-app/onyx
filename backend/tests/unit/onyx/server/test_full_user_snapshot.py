@@ -17,6 +17,7 @@ def _mock_user(
     user.is_active = True
     user.password_configured = True
     user.personal_name = personal_name
+    user.profile_image_file_id = None
     user.created_at = created_at or datetime.datetime(
         2025, 1, 1, tzinfo=datetime.timezone.utc
     )

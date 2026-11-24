@@ -6,7 +6,11 @@ mod ask;
 mod commands;
 mod config;
 mod dialog;
+#[cfg(test)]
+mod installer_files;
 mod launcher;
+#[cfg(any(target_os = "linux", test))]
+mod linux_cookies;
 mod login_item;
 #[cfg(target_os = "macos")]
 mod macos_cookies;
@@ -53,11 +57,113 @@ fn exit_now(app: &tauri::AppHandle) -> ! {
     std::process::exit(code)
 }
 
+/// The app cannot talk to any server without its HTTP client, so it tells
+/// the user why and quits.
+fn startup_failed(error: &str) -> ! {
+    let text = format!(
+        "Onyx could not start secure connections: {error}\n\nCheck this computer's TLS \
+         settings (for example, OPENSSL_CONF), or contact your IT team."
+    );
+    eprintln!("{text}");
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("Onyx could not start")
+        .set_description(dialog::text(text))
+        .show();
+    std::process::exit(1)
+}
+
+/// Writes `log` records to `onyx.log` in the app's log directory. The file
+/// rotates at 1 MB and four older files are kept. The app runs without a log
+/// file if the directory cannot be used.
+fn init_logging(app: &tauri::AppHandle) {
+    use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+    let builder = tauri_plugin_log::Builder::new()
+        .clear_targets()
+        .target(Target::new(TargetKind::LogDir {
+            file_name: Some("onyx".into()),
+        }))
+        .level(log::LevelFilter::Info)
+        .max_file_size(1_000_000)
+        .rotation_strategy(RotationStrategy::KeepSome(4));
+    #[cfg(debug_assertions)]
+    let builder = builder.target(Target::new(TargetKind::Stderr));
+    // Only the logger: the plugin's commands stay unregistered.
+    match builder.split(app) {
+        Ok((_plugin, level, logger)) => {
+            if let Err(e) = tauri_plugin_log::attach_logger(level, logger) {
+                eprintln!("could not start logging: {e}");
+            }
+        }
+        Err(e) => eprintln!("could not open the log file: {e}"),
+    }
+}
+
+/// Whether onyx:// needs a per-user handler at runtime. A .deb or .rpm
+/// install (in /usr/bin) declares the scheme in its system desktop file, and
+/// a per-user handler would outlive the package.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn registers_links_at_runtime(appimage: bool, exe: &std::path::Path) -> bool {
+    appimage || exe.parent() != Some(std::path::Path::new("/usr/bin"))
+}
+
+/// The package's desktop file: the bundler names it after the product name.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn packaged_desktop_file(product_name: &str) -> String {
+    format!("{product_name}.desktop")
+}
+
+#[cfg(target_os = "linux")]
+fn register_links(app: &tauri::AppHandle) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    if registers_links_at_runtime(app.env().appimage.is_some(), &exe) {
+        if let Err(e) = app.deep_link().register_all() {
+            log::warn!("could not register onyx:// links: {e}");
+        }
+        return;
+    }
+    // Removes a handler that earlier versions wrote for this install.
+    if let Err(e) = app.deep_link().unregister("onyx") {
+        log::warn!("could not remove the old onyx:// link handler: {e}");
+    }
+    // The package's desktop file only offers onyx://; another app (v1) can
+    // still be the default, and it rejects v2 sign-in links.
+    let Some(product_name) = app.config().product_name.as_deref() else {
+        return;
+    };
+    let desktop_file = packaged_desktop_file(product_name);
+    match std::process::Command::new("xdg-mime")
+        .args(["default", desktop_file.as_str(), "x-scheme-handler/onyx"])
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(status) => log::warn!("could not make {desktop_file} open onyx:// links: {status}"),
+        Err(e) => log::warn!("could not make {desktop_file} open onyx:// links: {e}"),
+    }
+}
+
 fn main() {
+    #[cfg(windows)]
+    notify::pass_on_foreground();
+    // The tray title (StatusNotifierItem) uses this name. WM_CLASS, and so
+    // the desktop file match, uses the program name: the binary name.
+    #[cfg(target_os = "linux")]
+    gtk::glib::set_application_name("Onyx");
+    let context = tauri::generate_context!();
+    let version = context.package_info().version.to_string();
+    let api = api::Api::new(&version).unwrap_or_else(|e| startup_failed(&e));
     let builder = tauri::Builder::default()
         // Must come first: a second launch (or an onyx:// link that starts
         // the app) hands its URL to the running instance and exits.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // A clicked answer toast shows the launcher (notify.rs), not the main window.
+            #[cfg(windows)]
+            if _args.iter().any(|arg| notify::is_answer_link(arg)) {
+                return;
+            }
             windows::show_primary(app);
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -77,20 +183,37 @@ fn main() {
     // Launch at login on macOS (login_item.rs).
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_autostart::Builder::new().build());
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(linux_cookies::plugin());
     let app = builder
-        .setup(|app| {
+        .setup(move |app| {
+            init_logging(app.handle());
+            log::info!(
+                "Onyx {version} starting on {} {}",
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            );
+            #[cfg(target_os = "linux")]
+            linux_cookies::remove_old_cookies(app.handle());
             let config_path = app.path().app_config_dir()?.join("config.json");
             app.manage(offline::Offline::default());
             let handle = app.handle();
-            let policy = policy::read(handle);
+            let config = ConfigStore::load(config_path);
+            let policy = policy::with_remembered_server(policy::read(handle), &config);
             policy::apply_launch_at_login(handle, &policy);
-            app.manage(AppState::new(ConfigStore::load(config_path), policy));
+            app.manage(AppState::new(config, policy, api));
 
             // Windows and Linux: the main window gets its own menu (main_window.rs).
             #[cfg(target_os = "macos")]
             app.set_menu(menu::build(handle)?)?;
             app.on_menu_event(|app, event| menu::handle(app, event.id().as_ref()));
+            #[cfg(target_os = "macos")]
             menu::build_tray(handle)?;
+            // The app keeps running without a tray; a second launch shows it.
+            #[cfg(not(target_os = "macos"))]
+            if let Err(e) = menu::build_tray(handle) {
+                log::error!("could not create the tray icon: {e}");
+            }
 
             policy::sync_hotkey(handle);
             if app.state::<AppState>().hotkey().is_some() {
@@ -102,16 +225,20 @@ fn main() {
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 // The NSIS and MSI installers register onyx:// for all users;
-                // a per-user entry would override it. AppImage and dev builds
-                // need it at runtime.
-                #[cfg(any(target_os = "linux", all(target_os = "windows", debug_assertions)))]
+                // a per-user entry would override it. Dev builds need it at
+                // runtime.
+                #[cfg(all(target_os = "windows", debug_assertions))]
                 if let Err(e) = app.deep_link().register_all() {
                     log::warn!("could not register onyx:// links: {e}");
                 }
+                #[cfg(target_os = "linux")]
+                register_links(handle);
                 let link_app = handle.clone();
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
                         sso::handle_callback(&link_app, &url);
+                        #[cfg(windows)]
+                        notify::handle_link(&link_app, &url);
                     }
                 });
             }
@@ -126,6 +253,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::check_server,
             commands::save_server,
+            commands::get_server_lock,
             commands::login,
             commands::get_auth_methods,
             commands::sign_in_with_sso,
@@ -152,8 +280,9 @@ fn main() {
             commands::aonyx_menu,
             commands::get_offline_status,
             commands::retry_connection,
+            commands::fit_window,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building the Onyx desktop app");
 
     app.run(|app, event| match event {
@@ -180,4 +309,39 @@ fn main() {
         RunEvent::Reopen { .. } => windows::show_primary(app),
         _ => {}
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{packaged_desktop_file, registers_links_at_runtime};
+
+    #[test]
+    fn the_packaged_handler_is_the_linux_desktop_file() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.linux.conf.json")).unwrap();
+        let product_name = config["productName"].as_str().unwrap();
+        assert_eq!(packaged_desktop_file(product_name), "onyx-v2.desktop");
+    }
+
+    #[test]
+    fn only_unpackaged_builds_register_links_at_runtime() {
+        assert!(!registers_links_at_runtime(
+            false,
+            Path::new("/usr/bin/onyx-desktop-v2")
+        ));
+        assert!(registers_links_at_runtime(
+            true,
+            Path::new("/tmp/.mount_Onyx/usr/bin/onyx-desktop-v2")
+        ));
+        assert!(registers_links_at_runtime(
+            false,
+            Path::new("/home/a/onyx/target/debug/onyx-desktop-v2")
+        ));
+        assert!(registers_links_at_runtime(
+            false,
+            Path::new("/usr/local/bin/onyx-desktop-v2")
+        ));
+    }
 }

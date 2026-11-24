@@ -1,6 +1,5 @@
 from uuid import UUID
 
-import puremagic
 from fastapi import (
     APIRouter,
     Depends,
@@ -97,6 +96,7 @@ from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_per
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
+from onyx.utils.file import sniff_mime_type
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -342,7 +342,7 @@ def upload_file(
     # Store the type sniffed from the bytes, never the client-declared one.
     header: bytes = file.file.read(_AVATAR_SNIFF_BYTES)
     file.file.seek(0)
-    file_type: str | None = _sniff_avatar_mime_type(header)
+    file_type: str | None = sniff_mime_type(header, INLINE_SAFE_IMAGE_MIME_TYPES)
     if file_type is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -356,19 +356,6 @@ def upload_file(
         file_type=file_type,
     )
     return {"file_id": file_id}
-
-
-def _sniff_avatar_mime_type(header: bytes) -> str | None:
-    try:
-        matches: list[puremagic.PureMagicWithConfidence] = puremagic.magic_string(
-            header
-        )
-    except (puremagic.PureError, ValueError):
-        return None
-    mime_type: str | None = matches[0].mime_type if matches else None
-    if mime_type not in INLINE_SAFE_IMAGE_MIME_TYPES:
-        return None
-    return mime_type
 
 
 """Endpoints for all"""

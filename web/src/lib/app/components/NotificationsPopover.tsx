@@ -12,8 +12,8 @@ import {
 } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
-import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
-import { NotificationType } from "@/lib/notifications/interfaces";
+import type { Notification as NotificationData } from "@/lib/notifications/types";
+import { NotificationType } from "@/lib/notifications/types";
 import {
   getNotificationIcon,
   isExternalLink,

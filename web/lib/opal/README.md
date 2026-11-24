@@ -52,6 +52,16 @@ You also need to define the underlying CSS variables (`--text-01`, etc.) in your
 `colors.css` or import a copy from Onyx. The preset references them but does not define them —
 they live with the consumer so the consumer controls the palette.
 
+### 3. Reduced motion (optional)
+
+Opal stops or shortens its animations when the OS asks for reduced motion
+(`prefers-reduced-motion: reduce`). To force reduced motion from your app, for
+example from a user setting, set `data-motion="reduced"` on `<html>`. Remove the
+attribute to follow the OS setting again.
+
+Opal's stylesheets and `prefersReducedMotion()` from `@onyx-ai/opal/utils`
+follow both signals.
+
 ## Usage
 
 ```tsx

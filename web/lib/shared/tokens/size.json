@@ -326,5 +326,9 @@
   "width-chat-message-max": {
     "value": "45rem",
     "type": "dimension"
+  },
+  "width-chat-wide-max": {
+    "value": "80rem",
+    "type": "dimension"
   }
 }

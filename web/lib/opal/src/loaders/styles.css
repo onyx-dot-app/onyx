@@ -5,8 +5,8 @@
    sweeping across it. The wave matches TextLoader's (see the constants in
    text-loader/components.tsx): 40% of the block's width but at least 40px,
    a 2s crossing whatever the width, then a 1s pause. Only `translate`
-   animates, so the sweep composites on the GPU. Under
-   `prefers-reduced-motion` the sweep stops and the block holds still.
+   animates, so the sweep composites on the GPU. Under reduced motion the
+   sweep stops and the block holds still.
    --------------------------------------------------------------------------- */
 
 .opal-shimmer-block {
@@ -136,13 +136,19 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .opal-shimmer-block::after {
-    animation: none;
-    display: none;
+/* The variant wraps the host, not its ::after: a nested rule cannot match
+   through a pseudo-element parent. */
+.opal-shimmer-block {
+  @variant motion-reduce {
+    &::after {
+      animation: none;
+      display: none;
+    }
   }
+}
 
-  .opal-text-loader-wave {
+.opal-text-loader-wave {
+  @variant motion-reduce {
     animation: none;
   }
 }

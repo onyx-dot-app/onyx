@@ -11,6 +11,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexingStatus
+from onyx.db.fleet_telemetry import StandardUserCounts
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.utils import fleet_telemetry as fleet
 from onyx.utils import fleet_telemetry_collector as collector
@@ -153,7 +154,11 @@ class _Source:
         )
         monkeypatch.setattr(collector, "license_row", lambda _session: self.license)
         monkeypatch.setattr(
-            collector, "standard_user_count", lambda _session: self.users
+            collector,
+            "standard_user_counts",
+            lambda _session: StandardUserCounts(
+                total=self.users, active=self.users - 1
+            ),
         )
         monkeypatch.setattr(collector, "attempt_rows", attempts)
         monkeypatch.setattr(
@@ -461,7 +466,7 @@ def test_first_run_sends_work_then_inventory_and_sets_the_cursor(
         "users",
     ]
     assert events[5]["data"]["domain"] == "example.com"
-    assert events[7]["data"] == {"total": 3}
+    assert events[7]["data"] == {"total": 3, "active": 2}
     stage: dict[str, Any] = events[1]
     # The service requires a stage event at the time of its last update.
     assert stage["occurred_at"] == (_NOW - timedelta(minutes=1)).isoformat()

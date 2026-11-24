@@ -24,7 +24,7 @@ Claude Code then asks for:
 | Option | Value |
 | --- | --- |
 | Onyx URL | Your Onyx web address without a trailing slash, for example `https://cloud.onyx.app` |
-| Onyx API token | A personal access token with the `read:search` scope. Create one under Settings > Accounts & Access > Access Tokens in Onyx. |
+| Onyx API token | A personal access token with the `read:search` scope. Create one under Settings > 3rd Party Access > Access Tokens in Onyx. |
 | Strict retrieval | Off by default. Gates other search tools until Onyx has been consulted. See below. |
 | Prefetch results | Off by default. Injects raw search results before each prompt. See below. |
 

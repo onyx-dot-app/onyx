@@ -32,7 +32,7 @@ import {
   toast,
 } from "@opal/layouts";
 import { CardLoader, IconLoader } from "@opal/loaders";
-import { markdown } from "@opal/utils";
+import { markdown, prefersReducedMotion } from "@opal/utils";
 import { SvgPlugBroken } from "@opal/illustrations";
 import {
   SvgArrowLeft,
@@ -152,7 +152,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     if (errorsRequest > 0) {
       panelRef.current?.scrollIntoView({
         block: "nearest",
-        behavior: "smooth",
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
       });
     }
   }, [errorsRequest]);

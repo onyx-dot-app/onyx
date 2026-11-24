@@ -16,11 +16,13 @@ from tenacity import wait_none
 from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.embedding_rate_limit import EmbeddingRateLimiter
+from onyx.natural_language_processing.embedding_request_policy import (
+    EmbeddingRequestPolicy,
+    EmbeddingRetryBackoff,
+)
 from onyx.natural_language_processing.search_nlp_models import (
     CloudEmbedding,
     EmbeddingModel,
-    EmbeddingRequestPolicy,
-    EmbeddingRetryBackoff,
     cohere_rerank_aws,
 )
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
@@ -836,7 +838,10 @@ def test_passage_model_server_requests_wait_for_the_rate_limit() -> None:
         patch(
             f"{_SEARCH_NLP_MODULE}.load_embedding_rate_limiter", return_value=limiter
         ),
-        patch(f"{_SEARCH_NLP_MODULE}.wait_sleeps", return_value=iter([0.0])),
+        patch(
+            "onyx.natural_language_processing.embedding_request_policy.wait_sleeps",
+            return_value=iter([0.0]),
+        ),
         patch(
             f"{_SEARCH_NLP_MODULE}.requests.post", side_effect=[rate_limited, ok]
         ) as post,

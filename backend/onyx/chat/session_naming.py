@@ -28,6 +28,7 @@ from onyx.db.chat import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType, record_mode_persists_content
 from onyx.db.models import ChatMessage, User
+from onyx.db.user_preferences import fetch_user_preferences
 from onyx.llm.factory import (
     get_default_utility_llm,
     get_llm_for_persona,
@@ -223,6 +224,7 @@ def name_chat_session(
             )
             persona = chat_session.persona
             llm_override = chat_session.llm_override
+            user_defaults = fetch_user_preferences(user, db_session).chat_defaults
 
         name = generate_chat_session_name_or_fallback(
             chat_history=chat_history,
@@ -232,6 +234,7 @@ def name_chat_session(
                 get_llm_for_persona,
                 persona=persona,
                 user=user,
+                user_defaults=user_defaults,
                 llm_override=llm_override,
                 additional_headers=additional_headers,
             ),

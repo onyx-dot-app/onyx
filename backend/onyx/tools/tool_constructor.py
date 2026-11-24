@@ -175,6 +175,7 @@ def construct_tools(
     configuration: PersonaToolConfiguration,
     user: User,
     llm: LLM,
+    enable_memory_tool: bool,
     db_session: Session | None = None,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
@@ -194,6 +195,7 @@ def construct_tools(
             db_session=db_session,
             user=user,
             llm=llm,
+            enable_memory_tool=enable_memory_tool,
             selection_llm_factory=selection_llm_factory,
             search_tool_config=search_tool_config,
             custom_tool_config=custom_tool_config,
@@ -209,6 +211,7 @@ def _construct_tools_impl(
     db_session: Session,
     user: User,
     llm: LLM,
+    enable_memory_tool: bool,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     file_reader_tool_config: FileReaderToolConfig | None = None,
@@ -386,7 +389,7 @@ def _construct_tools_impl(
 
     # Always inject MemoryTool when the user has the memory tool enabled,
     # bypassing persona tool associations and the tool options
-    if user.enable_memory_tool:
+    if enable_memory_tool:
         try:
             memory_tool_db_model = get_builtin_tool(db_session, MemoryTool)
             memory_tool = MemoryTool(

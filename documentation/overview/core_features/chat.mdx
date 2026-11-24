@@ -70,7 +70,7 @@ Onyx supports all major LLM providers and self-hosted options such as Ollama and
 - **Add Model**: Generate answers from several models side by side. An admin turns **Multi-Model Generation**
   on at **Admin Panel → Chat Preferences**.
 
-Set your default model, reasoning level, and temperature under **Settings → Chats**.
+Set your default model, reasoning level, and temperature under **Settings → Chat Preferences → Model Preferences**.
 
 ### Send While Onyx Responds
 
@@ -81,7 +81,8 @@ You can keep typing while Onyx works on a response.
 Messages that Onyx has not read yet appear above the input bar. You can edit or remove them there,
 or select **Send now** to stop the current response and send that message. Stopping a response pauses the queue.
 
-To make **Enter** stop the current response instead, change **Send Behavior While Working** under **Settings → Chats**.
+To make **Enter** stop the current response instead,
+change **Send Behavior While Working** under **Settings → Chat Preferences → Interactions**.
 
 ## Sources Panel
 
@@ -103,8 +104,8 @@ Select a document in the panel to include its full content in your next message.
 A **Project** groups chats with a shared set of **Files** and **Instructions**. Use Projects to organize ongoing work,
 or to reuse files and instructions without creating an Agent.
 
-Chats started in the Project use its files and instructions.
-Use **Move to Project** in the chat header menu to move an existing chat.
+Chats started in the Project use its files and instructions. To move an existing chat,
+open its menu in the sidebar and select **Move to Project**.
 
 When the Project files do not fit in the model's context window, Onyx searches them and uses the relevant parts.
 
@@ -118,5 +119,6 @@ An admin turns Incognito Chats on at **Admin Panel → Security & Hardening**.
 
 ## Memory
 
-Onyx can store facts from your chats and use them in later answers. Manage this under **Settings → Memory**:
+Onyx can store facts from your chats and use them in later answers.
+Manage this under **Settings → Chat Preferences → Memory**:
 turn **Reference Stored Memories** and **Update Memories** on or off, and use **View/Add** to edit the stored lines.
