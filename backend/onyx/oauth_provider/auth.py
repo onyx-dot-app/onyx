@@ -5,9 +5,12 @@ from starlette.concurrency import run_in_threadpool
 from onyx.auth.constants import (
     OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX,
     OAUTH_PROVIDER_REFRESH_TOKEN_PREFIX,
-    OAUTH_PROVIDER_SCOPE,
 )
-from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
+from onyx.auth.oauth_provider import (
+    OAuthProviderTokenKind,
+    is_valid_oauth_provider_grant_scope,
+    parse_oauth_provider_token,
+)
 from onyx.auth.permissions import has_global_permission
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -31,6 +34,7 @@ _ACCESS_ROUTES = frozenset(
         ("GET", "/oauth-provider/introspect"),
         ("POST", "/search"),
         ("POST", "/search/raw"),
+        ("POST", "/search/postgres-query"),
         ("POST", "/web-search/search-lite"),
         ("POST", "/web-search/open-urls"),
         ("GET", "/manage/indexed-sources"),
@@ -124,11 +128,11 @@ async def authenticate_oauth_provider_request(
         raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE) from error
     if not is_member:
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
-    if set(info.grant.scopes) != {OAUTH_PROVIDER_SCOPE} or not has_global_permission(
-        user, Permission.READ_SEARCH
-    ):
+    if not is_valid_oauth_provider_grant_scope(
+        info.grant.scopes
+    ) or not has_global_permission(user, Permission.READ_SEARCH):
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
-    request.state.token_scopes = [Permission.READ_SEARCH]
+    request.state.token_scopes = [Permission(scope) for scope in info.grant.scopes]
     request.state.usage_credential = UsageCredentialIdentity(
         UsageCredentialType.OAUTH_PROVIDER,
         str(info.grant.id),

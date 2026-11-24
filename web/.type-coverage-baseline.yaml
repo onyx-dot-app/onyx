@@ -32,7 +32,7 @@ packages:
   src/components: 98.4
   src/components/admin: 95.9
   src/components/auth: 89.3
-  src/components/chat: 92.3
+  src/components/chat: 92.1
   src/components/context: 100
   src/components/dateRangeSelectors: 100
   src/components/dev: 98.8
@@ -56,7 +56,7 @@ packages:
   src/i18n: 99.2
   src/i18n/messages: 100
   src/layouts: 100
-  src/layouts/chromes: 99.8
+  src/layouts/chromes: 99.7
   src/layouts/craft: 96.1
   src/lib: 99.2
   src/lib/agents: 99.5

@@ -35,6 +35,8 @@ pub struct OfflineStatus {
     next_retry_ms: Option<u64>,
     /// Managed policy locks the server, so Change server is hidden.
     server_locked: bool,
+    /// No automatic checks: only Retry checks again.
+    retry_by_hand: bool,
 }
 
 struct Pending {
@@ -42,6 +44,10 @@ struct Pending {
     /// The main-window path to load when the server is back.
     path: String,
     status: OfflineStatus,
+    /// The web view failed while the server answers the app's own checks
+    /// (for example, a certificate only the web view rejects). Automatic
+    /// checks would pass and reload the failing page, so only Retry checks.
+    retry_by_hand: bool,
 }
 
 /// Main-window navigations, by id. A load belongs to the navigation that was
@@ -66,6 +72,12 @@ impl Loads {
 
     fn finished(&mut self) {
         self.finished = self.finished.max(self.committed);
+    }
+
+    /// The id of the latest navigation.
+    #[cfg(any(target_os = "linux", windows, test))]
+    fn current(&self) -> u64 {
+        self.latest
     }
 
     fn is_latest(&self, id: u64) -> bool {
@@ -99,6 +111,16 @@ impl Offline {
 /// recovery. Does nothing if the session `epoch` ended meanwhile (sign-out,
 /// server change). On error the main window is shown again.
 pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Result<(), String> {
+    show_with(app, path, reason, epoch, false)
+}
+
+fn show_with(
+    app: &AppHandle,
+    path: &str,
+    reason: Unreachable,
+    epoch: u64,
+    retry_by_hand: bool,
+) -> Result<(), String> {
     let state = app.state::<AppState>();
     let Ok(server) = state.server() else {
         return Ok(());
@@ -115,6 +137,7 @@ pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Res
             Some(p) => {
                 p.path = path.to_string();
                 p.status.reason = reason;
+                p.retry_by_hand |= retry_by_hand;
                 None
             }
             None => {
@@ -128,7 +151,9 @@ pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Res
                         checking: false,
                         next_retry_ms: None,
                         server_locked,
+                        retry_by_hand,
                     },
+                    retry_by_hand,
                 });
                 Some(id)
             }
@@ -249,20 +274,38 @@ fn update(app: &AppHandle, id: Option<u64>, change: impl FnOnce(&mut OfflineStat
     true
 }
 
+/// Takes the `retry_by_hand` flag of window `id`.
+fn take_retry_by_hand(app: &AppHandle, id: u64) -> bool {
+    let offline = app.state::<Offline>();
+    let mut pending = offline.pending();
+    match pending.as_mut() {
+        Some(p) if p.id == id => std::mem::take(&mut p.retry_by_hand),
+        _ => false,
+    }
+}
+
 async fn monitor(app: AppHandle, id: u64) {
     let mut step = 0;
     loop {
+        let by_hand = take_retry_by_hand(&app, id);
         let delay = Duration::from_secs(BACKOFF_SECS[step.min(BACKOFF_SECS.len() - 1)]);
         let delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
+        // Made before the page can send Retry, so no wake is lost.
+        let offline = app.state::<Offline>();
+        let wake = offline.wake.notified();
         if !update(&app, Some(id), |s| {
             s.checking = false;
-            s.next_retry_ms = Some(delay_ms);
+            s.next_retry_ms = (!by_hand).then_some(delay_ms);
+            s.retry_by_hand = by_hand;
         }) {
             return;
         }
-        let woken = tokio::time::timeout(delay, app.state::<Offline>().wake.notified())
-            .await
-            .is_ok();
+        let woken = if by_hand {
+            wake.await;
+            true
+        } else {
+            tokio::time::timeout(delay, wake).await.is_ok()
+        };
         // A manual retry starts the backoff over.
         step = if woken { 0 } else { step + 1 };
         if !update(&app, Some(id), |s| {
@@ -308,7 +351,10 @@ fn recover(app: &AppHandle, id: u64) {
             }
         }
     };
-    log::info!("server reachable again; loading {path}");
+    log::info!(
+        "server reachable again; loading {}",
+        main_window::log_safe(&path)
+    );
     windows::close(app, windows::OFFLINE);
     windows::route_to(app, &path);
 }
@@ -370,7 +416,7 @@ pub fn watch_load(app: &AppHandle, url: &Url) {
                 return;
             }
             let finished = offline.loads().has_finished(load);
-            if finished && !matches!(reason, Unreachable::ServerError { .. }) {
+            if finished && !reason.server_answered() {
                 return;
             }
             // wry reports iframe navigations here too, so recovery reopens
@@ -391,6 +437,271 @@ fn top_level_path(app: &AppHandle, server: &str) -> Option<String> {
     (url.origin() == server.origin()).then(|| path_of(&url))
 }
 
+/// The reason to show for a main-window load that the web view could not
+/// finish, and whether only Retry checks again. If the app's own check fails
+/// too, its reason shows and checks run as usual. If it passes, the failure
+/// is the web view's own.
+#[cfg(any(target_os = "linux", windows, test))]
+fn webview_failure(health: Result<(), Unreachable>) -> (Unreachable, bool) {
+    match health {
+        Err(reason) => (reason, false),
+        Ok(()) => (Unreachable::Unknown, true),
+    }
+}
+
+/// WebKitGTK shows its own error page for a failed load, and that page
+/// finishes loading like any other, so failed loads are caught here.
+#[cfg(target_os = "linux")]
+pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
+    use webkit2gtk::WebViewExt;
+
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
+        let view = webview.inner();
+        let failed_app = app.clone();
+        view.connect_load_failed(move |_, _, uri, error| {
+            // Downloads, blocked navigations and stopped loads are not outages.
+            let ignored = error.matches(webkit2gtk::NetworkError::Cancelled)
+                || error.kind::<webkit2gtk::PolicyError>().is_some()
+                || error.kind::<webkit2gtk::DownloadError>().is_some()
+                || error.kind::<webkit2gtk::PluginError>().is_some();
+            if !ignored {
+                log::warn!("the main window could not load {uri}: {error}");
+                webview_failed(&failed_app, uri, None);
+            }
+            false
+        });
+        view.connect_load_failed_with_tls_errors(move |_, uri, _, flags| {
+            log::warn!("the main window rejected the certificate of {uri}: {flags:?}");
+            webview_failed(&app, uri, Some(Unreachable::Tls));
+            // Handled, so WebKit does not also emit `load-failed`.
+            true
+        });
+    });
+    if let Err(e) = result {
+        log::warn!("could not watch the main window for failed loads: {e}");
+    }
+}
+
+/// What a failed WebView2 navigation with `WebErrorStatus` `status` means.
+#[cfg(any(windows, test))]
+#[derive(Debug, PartialEq)]
+enum WebErrorKind {
+    /// Not an outage: a stopped or blocked navigation, a download, an HTTP
+    /// error page, or a certificate error that the certificate event took.
+    Ignored,
+    Tls,
+    Connection,
+}
+
+/// `certs_handled`: the certificate event already shows the offline window,
+/// so the navigation it cancels does not count again.
+#[cfg(any(windows, test))]
+fn web_error_kind(status: i32, certs_handled: bool) -> WebErrorKind {
+    match status {
+        // Common name, expired, client certificate, revoked, invalid.
+        1..=5 if certs_handled => WebErrorKind::Ignored,
+        1..=5 => WebErrorKind::Tls,
+        // Server unreachable, timeout, invalid response, connection reset,
+        // disconnected, cannot connect, host name not resolved.
+        6..=8 | 10..=13 => WebErrorKind::Connection,
+        // Unknown (also HTTP errors), aborted (downloads), canceled,
+        // redirect failed, unexpected, sign-in required.
+        _ => WebErrorKind::Ignored,
+    }
+}
+
+/// The page to load on recovery after a certificate error for `request`:
+/// the top-level navigation if it failed, else the document that loads the
+/// failed subresource. `None` if `request` is not on `server`: another
+/// site's bad certificate is not an outage.
+#[cfg(any(windows, test))]
+fn recovery_uri<'a>(
+    request: &'a str,
+    navigating: &str,
+    document: &'a str,
+    server: &str,
+) -> Option<&'a str> {
+    let origin = |uri: &str| Url::parse(uri).ok().map(|url| url.origin());
+    if origin(request).is_none() || origin(request) != origin(server) {
+        return None;
+    }
+    Some(if request == navigating {
+        request
+    } else {
+        document
+    })
+}
+
+/// WebView2 shows its own error page for a failed load, and a certificate
+/// page that lets the user continue, so both are caught here. A certificate
+/// error is always cancelled.
+#[cfg(windows)]
+pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
+    use ::windows::core::{Interface, BOOL, PWSTR};
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_14, COREWEBVIEW2_SERVER_CERTIFICATE_ERROR_ACTION_CANCEL,
+        COREWEBVIEW2_WEB_ERROR_STATUS,
+    };
+    use webview2_com::{
+        take_pwstr, NavigationCompletedEventHandler, NavigationStartingEventHandler,
+        ServerCertificateErrorDetectedEventHandler,
+    };
+
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
+        // SAFETY: the controller is live on the UI thread, where with_webview runs.
+        let core = match unsafe { webview.controller().CoreWebView2() } {
+            Ok(core) => core,
+            Err(e) => {
+                log::warn!("could not watch the main window for failed loads: {e}");
+                return;
+            }
+        };
+        // The URI of the latest top-level navigation, to tell it apart from
+        // a subresource in a certificate error.
+        let navigating = std::sync::Arc::new(Mutex::new(String::new()));
+        let started = navigating.clone();
+        let handler = NavigationStartingEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else {
+                return Ok(());
+            };
+            let mut uri = PWSTR::null();
+            // SAFETY: WebView2 calls this on the UI thread with live event args.
+            unsafe { args.Uri(&mut uri)? };
+            *started.lock().unwrap_or_else(|p| p.into_inner()) = take_pwstr(uri);
+            Ok(())
+        }));
+        let mut token = 0i64;
+        // SAFETY: as above.
+        if let Err(e) = unsafe { core.add_NavigationStarting(&handler, &mut token) } {
+            log::warn!("could not watch the main window's navigations: {e}");
+        }
+        // Older WebView2 runtimes have no certificate event; their
+        // certificate page then counts as a failed navigation below.
+        let certs_handled = match core.cast::<ICoreWebView2_14>() {
+            Ok(core) => {
+                let cert_app = app.clone();
+                let handler = ServerCertificateErrorDetectedEventHandler::create(Box::new(
+                    move |sender, args| {
+                        let (Some(sender), Some(args)) = (sender, args) else {
+                            return Ok(());
+                        };
+                        let mut request = PWSTR::null();
+                        let mut document = PWSTR::null();
+                        let mut status = COREWEBVIEW2_WEB_ERROR_STATUS::default();
+                        // SAFETY: WebView2 calls this on the UI thread with live event args.
+                        unsafe {
+                            args.SetAction(COREWEBVIEW2_SERVER_CERTIFICATE_ERROR_ACTION_CANCEL)?;
+                            args.RequestUri(&mut request)?;
+                            args.ErrorStatus(&mut status)?;
+                            sender.Source(&mut document)?;
+                        }
+                        let (request, document) = (take_pwstr(request), take_pwstr(document));
+                        log::warn!(
+                            "the main window rejected the certificate of {} (web error {})",
+                            crate::main_window::log_safe(&request),
+                            status.0
+                        );
+                        let navigating = navigating.lock().unwrap_or_else(|p| p.into_inner());
+                        let Ok(server) = cert_app.state::<AppState>().server() else {
+                            return Ok(());
+                        };
+                        if let Some(uri) = recovery_uri(&request, &navigating, &document, &server) {
+                            webview_failed(&cert_app, uri, Some(Unreachable::Tls));
+                        }
+                        Ok(())
+                    },
+                ));
+                let mut token = 0i64;
+                // SAFETY: as above.
+                match unsafe { core.add_ServerCertificateErrorDetected(&handler, &mut token) } {
+                    Ok(()) => true,
+                    Err(e) => {
+                        log::warn!("could not watch the main window for certificate errors: {e}");
+                        false
+                    }
+                }
+            }
+            Err(_) => false,
+        };
+        let handler = NavigationCompletedEventHandler::create(Box::new(move |sender, args| {
+            let (Some(sender), Some(args)) = (sender, args) else {
+                return Ok(());
+            };
+            let mut success = BOOL::default();
+            let mut status = COREWEBVIEW2_WEB_ERROR_STATUS::default();
+            // SAFETY: WebView2 calls this on the UI thread with live event args.
+            unsafe {
+                args.IsSuccess(&mut success)?;
+                args.WebErrorStatus(&mut status)?;
+            }
+            if success.as_bool() {
+                return Ok(());
+            }
+            let known = match web_error_kind(status.0, certs_handled) {
+                WebErrorKind::Ignored => return Ok(()),
+                WebErrorKind::Tls => Some(Unreachable::Tls),
+                WebErrorKind::Connection => None,
+            };
+            // The error page keeps the failed URL as the source.
+            let mut uri = PWSTR::null();
+            // SAFETY: as above.
+            unsafe { sender.Source(&mut uri)? };
+            let uri = take_pwstr(uri);
+            log::warn!(
+                "the main window could not load {} (web error {})",
+                crate::main_window::log_safe(&uri),
+                status.0
+            );
+            webview_failed(&app, &uri, known);
+            Ok(())
+        }));
+        let mut token = 0i64;
+        // SAFETY: as above.
+        if let Err(e) = unsafe { core.add_NavigationCompleted(&handler, &mut token) } {
+            log::warn!("could not watch the main window for failed loads: {e}");
+        }
+    });
+    if let Err(e) = result {
+        log::warn!("could not watch the main window for failed loads: {e}");
+    }
+}
+
+/// A main-window load of `uri` failed in the web view. Shows the offline
+/// window if `uri` is on the server. The work runs in a task, so a web view
+/// callback can call this: building a window inside a WebView2 callback
+/// deadlocks.
+#[cfg(any(target_os = "linux", windows))]
+fn webview_failed(app: &AppHandle, uri: &str, known: Option<Unreachable>) {
+    let state = app.state::<AppState>();
+    let epoch = state.epoch();
+    let (Ok(server), Ok(url)) = (state.server(), Url::parse(uri)) else {
+        return;
+    };
+    if Url::parse(&server).ok().map(|s| s.origin()) != Some(url.origin()) {
+        return;
+    }
+    let path = path_of(&url);
+    let load = app.state::<Offline>().loads().current();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let (reason, by_hand) = match known {
+            Some(reason) => (reason, true),
+            None => webview_failure(app.state::<AppState>().api.health(&server).await),
+        };
+        // A newer navigation replaced the failed page.
+        if !app.state::<Offline>().loads().is_latest(load)
+            || app.get_webview_window(main_window::LABEL).is_none()
+        {
+            return;
+        }
+        if let Err(e) = show_with(&app, &path, reason, epoch, by_hand) {
+            log::warn!("the main window keeps the failed page: {e}");
+        }
+    });
+}
+
 /// The main window committed a new document (`PageLoadEvent::Started`).
 pub fn load_committed(app: &AppHandle) {
     app.state::<Offline>().loads().committed();
@@ -402,8 +713,9 @@ pub fn load_finished(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{path_of, Loads};
+    use super::{path_of, recovery_uri, web_error_kind, webview_failure, Loads, WebErrorKind};
     use crate::main_window::server_url_join;
+    use crate::reachability::Unreachable;
     use url::Url;
 
     #[test]
@@ -449,6 +761,69 @@ mod tests {
         loads.committed();
         loads.finished();
         assert!(loads.has_finished(second));
+    }
+
+    #[test]
+    fn a_newer_navigation_is_no_longer_the_current_one() {
+        let mut loads = Loads::default();
+        loads.navigated();
+        let failed = loads.current();
+        assert!(loads.is_latest(failed));
+        loads.navigated();
+        assert!(!loads.is_latest(failed));
+    }
+
+    #[test]
+    fn a_web_view_failure_waits_for_retry_only_if_the_server_answers() {
+        assert_eq!(
+            webview_failure(Err(Unreachable::Refused)),
+            (Unreachable::Refused, false)
+        );
+        assert_eq!(webview_failure(Ok(())), (Unreachable::Unknown, true));
+    }
+
+    #[test]
+    fn web_view2_failures_that_show_the_offline_window() {
+        // Cannot connect, host name not resolved, timeout.
+        for status in [12, 13, 7] {
+            assert_eq!(web_error_kind(status, true), WebErrorKind::Connection);
+        }
+        // Certificate is invalid (for example, an unknown authority).
+        assert_eq!(web_error_kind(5, false), WebErrorKind::Tls);
+        assert_eq!(web_error_kind(5, true), WebErrorKind::Ignored);
+        // Unknown (HTTP errors), aborted (downloads), canceled (blocked navigations).
+        for status in [0, 9, 14] {
+            assert_eq!(web_error_kind(status, false), WebErrorKind::Ignored);
+        }
+    }
+
+    #[test]
+    fn a_certificate_error_recovers_the_page_not_a_subresource() {
+        let page = "https://onyx.example/app";
+        let script = "https://onyx.example/static/app.js";
+        let server = "https://onyx.example";
+        // The page itself failed while it loaded.
+        assert_eq!(
+            recovery_uri(page, page, "https://onyx.example/old", server),
+            Some(page)
+        );
+        // A subresource of the open page failed.
+        assert_eq!(recovery_uri(script, page, page, server), Some(page));
+    }
+
+    #[test]
+    fn another_sites_certificate_error_keeps_the_page() {
+        let page = "https://onyx.example/app";
+        let image = "https://images.example/cat.png";
+        assert_eq!(
+            recovery_uri(image, page, page, "https://onyx.example"),
+            None
+        );
+        // Another site as the top-level navigation is not the server either.
+        assert_eq!(
+            recovery_uri(image, image, page, "https://onyx.example"),
+            None
+        );
     }
 
     #[test]

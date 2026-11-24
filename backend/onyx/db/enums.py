@@ -421,6 +421,37 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class InterfaceFont(str, PyEnum):
+    """Font for interface text. Values match web/src/lib/appearance/preferences.ts."""
+
+    DEFAULT = "default"
+    SYSTEM = "system"
+    OPENDYSLEXIC = "opendyslexic"
+    ATKINSON = "atkinson"
+
+
+class ResponseFont(str, PyEnum):
+    """Font for chat response text: the interface font, or the default font."""
+
+    MATCH = "match"
+    DEFAULT = "default"
+
+
+class MotionPreference(str, PyEnum):
+    """Follow the OS reduced-motion setting, or always reduce motion. Values
+    match web/src/lib/appearance/preferences.ts."""
+
+    SYSTEM = "system"
+    REDUCED = "reduced"
+
+
+class PopupDismissal(str, PyEnum):
+    """Whether toasts close by themselves or stay until the user closes them."""
+
+    AUTO_DISMISS = "auto_dismiss"
+    STAY_ON_SCREEN = "stay_on_screen"
+
+
 class SupportedLanguage(str, PyEnum):
     EN = "en"
     ES = "es"

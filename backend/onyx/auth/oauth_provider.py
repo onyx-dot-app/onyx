@@ -2,6 +2,7 @@
 
 import re
 import secrets
+from collections.abc import Iterable
 from enum import Enum
 
 from pydantic import BaseModel
@@ -10,10 +11,12 @@ from onyx.auth.constants import (
     OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX,
     OAUTH_PROVIDER_CODE_PREFIX,
     OAUTH_PROVIDER_REFRESH_TOKEN_PREFIX,
+    OAUTH_PROVIDER_SCOPES,
     OAUTH_PROVIDER_SECRET_PATTERN,
     OAUTH_PROVIDER_TENANT_PATTERN,
 )
 from onyx.auth.pat import hash_pat
+from onyx.db.enums import Permission
 
 _OAUTH_PROVIDER_TENANT_RE = re.compile(rf"\A{OAUTH_PROVIDER_TENANT_PATTERN}\Z")
 _OAUTH_PROVIDER_ACCESS_TOKEN_RE = re.compile(
@@ -85,3 +88,16 @@ def generate_oauth_provider_code(tenant_id: str) -> str:
 def parse_oauth_provider_code_tenant(code: str) -> str | None:
     match = _OAUTH_PROVIDER_CODE_RE.fullmatch(code)
     return match.group("tenant_id") if match is not None else None
+
+
+def is_supported_oauth_provider_scope_request(scopes: Iterable[str]) -> bool:
+    """A client may ask for any of the scopes. Its grant carries all of them."""
+    requested = set(scopes)
+    return bool(requested) and requested <= set(OAUTH_PROVIDER_SCOPES)
+
+
+def is_valid_oauth_provider_grant_scope(scopes: Iterable[str]) -> bool:
+    granted = set(scopes)
+    return Permission.READ_SEARCH.value in granted and granted <= set(
+        OAUTH_PROVIDER_SCOPES
+    )

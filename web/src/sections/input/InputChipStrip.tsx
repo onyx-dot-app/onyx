@@ -2,7 +2,7 @@
 
 import { useRef, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { Button, Text, Tooltip } from "@opal/components";
 import {
@@ -192,7 +192,7 @@ export function InputChipStrip({
   onRemoveEntry,
   onClickEntry,
 }: InputChipStripProps) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionConfig();
   const hasContent = files.length > 0 || entries.length > 0;
 
   // Animate height so the bar grows/shrinks smoothly on first/last chip.

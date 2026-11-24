@@ -115,6 +115,7 @@ from onyx.db.enums import (
     IntegrationConnectionStatus,
     IntegrationKind,
     IntegrationOAuthProviderMode,
+    InterfaceFont,
     LLMModelFlowType,
     MarketplaceKind,
     MCPAuthenticationPerformer,
@@ -122,17 +123,20 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    MotionPreference,
     NotificationSeverity,
     PatType,
     Permission,
     PermissionSyncStatus,
     PersonaSharePermission,
     PluginInstallationPolicy,
+    PopupDismissal,
     PortAttemptStatus,
     ProcessingMode,
     QuestionAnsweredVia,
     QuestionOutcome,
     ReceiptStatus,
+    ResponseFont,
     SandboxStatus,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
@@ -163,6 +167,7 @@ from onyx.llm.models import (
     AssistantMessage,
     ReasoningEffort,
     ToolResultMessage,
+    UserChatDefaults,
 )
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
@@ -455,59 +460,16 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
 
-    """
-    Preferences probably should be in a separate table at some point, but for now
-    putting here for simpicity
-    """
-
-    temperature_override_enabled: Mapped[bool | None] = mapped_column(
-        Boolean, default=None
-    )
-    # Per-user chat defaults. An admin's per-model settings outrank them, see
-    # resolve_reasoning_effort and the factory temperature chain.
-    temperature_default: Mapped[float | None] = mapped_column(Float, default=None)
-    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
-        Enum(
-            ReasoningEffort,
-            native_enum=False,
-            values_callable=lambda x: [e.value for e in x],
-        ),
-        nullable=True,
-        default=None,
-    )
-    auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
-    shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    theme_preference: Mapped[ThemePreference | None] = mapped_column(
-        Enum(ThemePreference, native_enum=False),
-        nullable=True,
-        default=None,
-    )
-    # UI language. None = follow Settings.default_language.
-    language: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
-    chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
-    default_app_mode: Mapped[DefaultAppMode] = mapped_column(
-        Enum(DefaultAppMode, native_enum=False),
-        nullable=False,
-        default=DefaultAppMode.CHAT,
-    )
-    # personalization fields are exposed via the chat user settings "Personalization" tab
+    # Profile fields, shown in Settings > Account. The user's own settings
+    # are in `UserPreferences`.
+    # Full name. SCIM provisioning keeps it in sync with the IdP.
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The name Onyx calls the user. Only the user sets it.
+    preferred_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Free text. The web app offers a fixed list of work functions plus "Other".
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
-    use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    enable_memory_tool: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
-    user_preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    chosen_assistants: Mapped[list[int] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True, default=None
-    )
-    visible_assistants: Mapped[list[int]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=[]
-    )
-    hidden_assistants: Mapped[list[int]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=[]
-    )
+    # File store id of the profile photo (FileOrigin.USER_PROFILE_IMAGE).
+    profile_image_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Eagerly loaded: `UserInfo.from_model` reads this without a session, and a
     # lazy load would fail outright under async.
@@ -542,21 +504,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         onupdate=func.now(),
         nullable=False,
     )
-
-    default_model: Mapped[str] = mapped_column(Text, nullable=True)
-    # organized in typical structured fashion
-    # formatted as `displayName__provider__modelName`
-
-    # Input preferences
-    paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
-    interrupt_on_send: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false"
-    )
-
-    # Voice preferences
-    voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
-    voice_auto_playback: Mapped[bool] = mapped_column(Boolean, default=False)
-    voice_playback_speed: Mapped[float] = mapped_column(Float, default=1.0)
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
@@ -605,6 +552,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         return not bool(self.oauth_accounts)
 
     @property
+    def addressed_name(self) -> str | None:
+        """The name Onyx calls the user: the preferred name, else the full name."""
+        return self.preferred_name or self.personal_name
+
+    @property
     def is_anonymous(self) -> bool:
         """Returns True if this is the anonymous user."""
         return str(self.id) == ANONYMOUS_USER_UUID
@@ -624,6 +576,152 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
             self.oauth_accounts, key=lambda link: link.expires_at or 0
         )
         return live.access_token
+
+
+class UserPreferences(Base):
+    """The settings a user picks for themselves.
+
+    A user has no row until they first save a setting. Until then,
+    `fetch_user_preferences` returns each column's `default`. A column's
+    `server_default` must give the same value.
+    """
+
+    __tablename__ = "user_preferences"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    # Formatted as `displayName__provider__modelName`.
+    default_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Per-user chat defaults. An admin's per-model settings outrank them, see
+    # resolve_reasoning_effort and the factory temperature chain.
+    # None follows the workspace setting.
+    temperature_override_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+
+    # None = the frontend follows the workspace setting.
+    auto_scroll: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    shortcut_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    theme_preference: Mapped[ThemePreference | None] = mapped_column(
+        Enum(ThemePreference, native_enum=False), nullable=True
+    )
+    # UI language. None = follow Settings.default_language.
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+    chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_app_mode: Mapped[DefaultAppMode] = mapped_column(
+        Enum(DefaultAppMode, native_enum=False),
+        nullable=False,
+        default=DefaultAppMode.CHAT,
+        server_default=DefaultAppMode.CHAT.value,
+    )
+    interface_font: Mapped[InterfaceFont] = mapped_column(
+        Enum(
+            InterfaceFont,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=InterfaceFont.DEFAULT,
+        server_default=InterfaceFont.DEFAULT.value,
+    )
+    response_font: Mapped[ResponseFont] = mapped_column(
+        Enum(
+            ResponseFont,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=ResponseFont.MATCH,
+        server_default=ResponseFont.MATCH.value,
+    )
+    # Accessibility, in Settings > Appearance.
+    motion: Mapped[MotionPreference] = mapped_column(
+        Enum(
+            MotionPreference,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=MotionPreference.SYSTEM,
+        server_default=MotionPreference.SYSTEM.value,
+    )
+    popup_dismissal: Mapped[PopupDismissal] = mapped_column(
+        Enum(
+            PopupDismissal,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=PopupDismissal.AUTO_DISMISS,
+        server_default=PopupDismissal.AUTO_DISMISS.value,
+    )
+    # Off keeps every chat message mounted, so screen readers reach them all.
+    dynamic_conversations: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+
+    # Memory settings and instructions are in Settings > Chat Preferences.
+    use_memories: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    enable_memory_tool: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    # Free-text instructions that the chat prompt includes.
+    instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    chosen_assistants: Mapped[list[int] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    visible_assistants: Mapped[list[int]] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+        default=[],
+        server_default=text("'[]'::jsonb"),
+    )
+    hidden_assistants: Mapped[list[int]] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+        default=[],
+        server_default=text("'[]'::jsonb"),
+    )
+
+    paste_as_tile: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    interrupt_on_send: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
+    voice_auto_send: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    voice_auto_playback: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    voice_playback_speed: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default="1"
+    )
+
+    @property
+    def chat_defaults(self) -> UserChatDefaults:
+        return UserChatDefaults(
+            temperature_default=self.temperature_default,
+            reasoning_effort_default=self.reasoning_effort_default,
+        )
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -1407,6 +1505,12 @@ class Document(Base):
             "ix_document_secondary_only_sync_pending",
             "id",
             postgresql_where=text("secondary_only_sync_pending IS TRUE"),
+        ),
+        # Date filters and the newest-first keyset order of the postgres_query tool.
+        Index(
+            "ix_document_doc_updated_at_id",
+            doc_updated_at.desc().nulls_last(),
+            id.desc(),
         ),
     )
 

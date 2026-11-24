@@ -160,6 +160,11 @@ export class UsersAdminPage {
     return this.table.getByRole("row").filter({ hasText: email });
   }
 
+  /** The profile photo in a user's row, once the user has one. */
+  getRowAvatarPhoto(email: string): Locator {
+    return this.getRowByEmail(email).locator("img[src*='/profile-image']");
+  }
+
   /** Click the sort button on a column header. */
   async sortByColumn(columnName: string) {
     // Column headers are <th> elements. The sort button is a child <button>

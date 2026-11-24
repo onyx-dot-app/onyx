@@ -1,6 +1,6 @@
 import { test, expect } from "@tests/e2e/chat/fixtures";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
-import { UserChatPreferencesPage } from "@tests/e2e/pages/UserChatPreferencesPage";
+import { SettingsChatPreferencesPage } from "@tests/e2e/pages/SettingsChatPreferencesPage";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
   addMockLlmConversation,
@@ -283,7 +283,7 @@ pendingTest.describe("Interrupt and send", () => {
   pendingTest(
     "the interrupt preference applies to the send arrow and survives reload",
     async ({ page, chatPage, heldResponse }) => {
-      const preferences = new UserChatPreferencesPage(page);
+      const preferences = new SettingsChatPreferencesPage(page);
       await preferences.goto();
       await expect(preferences.sendBehavior).toHaveValue(
         "After the current step"

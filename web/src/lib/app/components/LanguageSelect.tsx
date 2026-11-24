@@ -13,14 +13,19 @@ import {
 /** The select value of the Global Default row, which stands for no override. */
 const GLOBAL_DEFAULT_LANGUAGE_VALUE = "global-default";
 
-interface WorkspaceLanguageSelectProps {
+interface LanguageSelectNameProps {
+  /** The accessible name, such as the setting row's title. */
+  "aria-label"?: string;
+}
+
+interface WorkspaceLanguageSelectProps extends LanguageSelectNameProps {
   value: Locale;
   onChange: (language: Locale) => void;
   globalDefault?: undefined;
   disabled?: boolean;
 }
 
-interface OverrideLanguageSelectProps {
+interface OverrideLanguageSelectProps extends LanguageSelectNameProps {
   /** The override; null follows the workspace default. */
   value: Locale | null;
   onChange: (language: Locale | null) => void;
@@ -52,6 +57,7 @@ export function LanguageSelect(props: LanguageSelectProps) {
         }}
         defaultOption={DEFAULT_LOCALE}
         placeholder={placeholder}
+        aria-label={props["aria-label"]}
         options={LOCALE_OPTIONS}
         disabled={disabled}
       />
@@ -71,6 +77,7 @@ export function LanguageSelect(props: LanguageSelectProps) {
       }}
       defaultOption={GLOBAL_DEFAULT_LANGUAGE_VALUE}
       placeholder={placeholder}
+      aria-label={props["aria-label"]}
       options={[
         {
           value: GLOBAL_DEFAULT_LANGUAGE_VALUE,

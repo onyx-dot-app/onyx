@@ -8,6 +8,7 @@ from onyx.configs.constants import (
     KV_ANONYMOUS_USER_PREFERENCES_KEY,
 )
 from onyx.db.enums import AccountType
+from onyx.db.models import UserPreferences as UserPreferencesModel
 from onyx.key_value_store.store import KeyValueStore, KvKeyNotFoundError
 from onyx.server.manage.models import UserInfo, UserPersonalization, UserPreferences
 
@@ -24,20 +25,27 @@ def set_anonymous_user_personalization(
     store.store(KV_ANONYMOUS_USER_PERSONALIZATION_KEY, personalization.model_dump())
 
 
-def load_anonymous_user_preferences(store: KeyValueStore) -> UserPreferences:
+def load_anonymous_user_preferences(
+    store: KeyValueStore, defaults: UserPreferencesModel
+) -> UserPreferences:
+    """The stored anonymous preferences over the column defaults."""
+    preferences = UserPreferences.from_model(defaults, pinned_assistants=[])
     try:
         preferences_data = cast(
             Mapping[str, Any], store.load(KV_ANONYMOUS_USER_PREFERENCES_KEY)
         )
-        return UserPreferences(**preferences_data)
-    except KvKeyNotFoundError:
-        return UserPreferences(
-            chosen_assistants=None, default_model=None, auto_scroll=True
+        return UserPreferences.model_validate(
+            {**preferences.model_dump(), **preferences_data}
         )
+    except KvKeyNotFoundError:
+        return preferences.model_copy(update={"auto_scroll": True})
 
 
-def fetch_anonymous_user_info(store: KeyValueStore) -> UserInfo:
-    """Fetch a UserInfo object for anonymous users (used for API responses)."""
+def fetch_anonymous_user_info(
+    store: KeyValueStore, defaults: UserPreferencesModel
+) -> UserInfo:
+    """Fetch a UserInfo object for anonymous users (used for API responses).
+    `defaults` is `fetch_user_preferences` for the anonymous account."""
     personalization = UserPersonalization()
     try:
         personalization_data = cast(
@@ -54,7 +62,7 @@ def fetch_anonymous_user_info(store: KeyValueStore) -> UserInfo:
         is_superuser=False,
         is_verified=True,
         account_type=AccountType.ANONYMOUS,
-        preferences=load_anonymous_user_preferences(store),
+        preferences=load_anonymous_user_preferences(store, defaults),
         personalization=personalization,
         is_anonymous_user=True,
         password_configured=False,

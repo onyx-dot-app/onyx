@@ -1,50 +1,30 @@
-import { SvgUser } from "@opal/icons";
+import { IconContainer } from "@opal/components";
 import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";
-import { getUserEmail, getUserInitials } from "@/lib/users/svc";
-import type { User } from "@/lib/types";
+import { getUserInitials } from "@/lib/users/svc";
 
 export interface UserAvatarProps {
-  user: User | null;
+  /** Initials come from this name, else from the email. */
+  name: string | null;
+  email: string;
+  /** Profile photo. The initials show when it is missing or fails to load. */
+  imageUrl?: string | null;
   size?: number;
 }
 
 export default function UserAvatar({
-  user,
+  name,
+  email,
+  imageUrl,
   size = DEFAULT_AVATAR_SIZE_PX,
 }: UserAvatarProps) {
-  const userEmail = getUserEmail(user);
-  const userInitials = getUserInitials(
-    user?.personalization?.name ?? null,
-    userEmail
-  );
-
-  if (!userInitials) {
-    return (
-      <div
-        role="img"
-        aria-label={`${userEmail} avatar`}
-        className="flex items-center justify-center rounded-full bg-background-tint-01"
-        style={{ width: size, height: size }}
-      >
-        <SvgUser size={size * 0.55} className="stroke-text-03" aria-hidden />
-      </div>
-    );
-  }
-
   return (
-    <div
-      role="img"
-      aria-label={`${userEmail} avatar`}
-      className="flex items-center justify-center rounded-full bg-background-neutral-inverted-00"
-      style={{ width: size, height: size }}
-    >
-      {/* Raw span: the font size scales with the avatar, which Opal Text cannot do. */}
-      <span
-        className="font-secondary-action text-text-inverted-05 select-none"
-        style={{ fontSize: size * 0.4 }}
-      >
-        {userInitials}
-      </span>
+    <div role="img" aria-label={`${email} avatar`}>
+      <IconContainer
+        avatar="user"
+        initials={getUserInitials(name, email)}
+        src={imageUrl}
+        diameter={size}
+      />
     </div>
   );
 }

@@ -15,8 +15,8 @@
     stroke 0.5s ease-out;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .opal-progress-ring-arc {
+.opal-progress-ring-arc {
+  @variant motion-reduce {
     transition: none;
   }
 }

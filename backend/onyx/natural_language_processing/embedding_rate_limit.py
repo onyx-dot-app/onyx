@@ -160,23 +160,32 @@ class EmbeddingRateLimiter:
             if waited and on_wait is not None:
                 on_wait(time.monotonic() - start)
 
-    def _try_acquire(self) -> float:
+    def try_acquire(self) -> float:
         """Takes a slot and returns 0, or returns the seconds until a slot frees."""
         return self._windows.try_acquire([self.window])
+
+    def full_window_sleeps(
+        self,
+        attempt: int,
+        started_at: float,
+        should_stop: Callable[[], bool] | None,
+    ) -> Iterator[float]:
+        """Yields the sleeps of wait number `attempt` after a full window."""
+        return wait_sleeps(
+            f"Embedding rate limit of {self.max_requests} requests per "
+            f"{self.period_seconds}s is full",
+            attempt,
+            started_at,
+            should_stop,
+        )
 
     def _sleeps(
         self, should_stop: Callable[[], bool] | None, started_at: float
     ) -> Iterator[float]:
         """Yields the sleeps until this request takes a slot."""
         attempt = 0
-        while self._try_acquire() > 0:
-            yield from wait_sleeps(
-                f"Embedding rate limit of {self.max_requests} requests per "
-                f"{self.period_seconds}s is full",
-                attempt,
-                started_at,
-                should_stop,
-            )
+        while self.try_acquire() > 0:
+            yield from self.full_window_sleeps(attempt, started_at, should_stop)
             attempt += 1
 
 

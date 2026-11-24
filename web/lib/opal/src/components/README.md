@@ -17,6 +17,7 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | Component                                                         | Description                                                               | Docs                                                          |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | [Button](./buttons/button/)                                       | Label and/or icon-only stateless button                                   | [README](./buttons/button/README.md)                          |
+| [AvatarButton](./buttons/avatar-button/)                          | Round button around an avatar, with a pencil overlay on hover and focus   | [README](./buttons/avatar-button/README.md)                   |
 | [AttachmentItemButton](./buttons/attachment-item-button/)         | File-like resource row: icon/image tile, content, center and action slots | [README](./buttons/attachment-item-button/README.md)          |
 | [SelectButton](./buttons/select-button/)                          | Stateful button: toggles, dropdown triggers (chevron) and filters         | [README](./buttons/select-button/README.md)                   |
 | [RowAction](./buttons/row-action/)                                | A row's value or action: button, dropdown trigger, link or static         | [README](./buttons/row-action/README.md)                      |

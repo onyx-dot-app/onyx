@@ -4,6 +4,8 @@ A native desktop app for Onyx, built with Tauri 2.12. macOS is the main platform
 Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It lives beside
 `desktop/`, which keeps shipping unchanged and stays the default desktop app. v2 has its own bundle ID
 (`app.onyx.desktop.v2`) and name ("Onyx v2"), so both apps can be installed at the same time.
+On Linux the package name is `onyx-v2` (`src-tauri/tauri.linux.conf.json`), so file names have
+no space.
 
 ## What it does
 
@@ -14,6 +16,10 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   Keyring, KWallet). macOS debug builds keep it in `~/Library/Application Support/
   app.onyx.desktop.v2/dev-session-tokens.json` (mode 600): an unsigned dev build gets a new code
   signature on every rebuild, and macOS would ask for your password each time.
+  Windows keeps Credential Manager entries after an uninstall. So on Windows the app uses a
+  stored token only if its `config.json` records that this install saved it
+  (`sessionServers`). If you delete the app's data, or install again after you deleted it, you
+  must sign in again. The app then deletes the old token.
 - The main window shows the server's own web UI. The shell sets the session cookie in the
   window before the first page load, so the web login page never shows. On macOS the cookie
   is built natively as a host-only, HttpOnly cookie (`src-tauri/src/macos_cookies.rs`):
@@ -70,7 +76,8 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   Click support differs by OS:
   - macOS: a click works while the notification is on screen and from Notification Center.
     In `bun run tauri dev`, macOS shows the notification as Terminal's.
-  - Windows: a click works only while the toast is on screen, not from the Action Center.
+  - Windows: a click works while the toast is on screen and from the Action Center. The toast
+    opens an `onyx://launcher/answer` link, which the running app receives (single instance).
   - Linux: a click works only if the notification server supports the `default` action
     (GNOME and KDE do). Otherwise the notification shows, and a click does nothing.
 - SSO in the system browser, where you are often signed in already. The browser runs the
@@ -87,18 +94,30 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   health checks (`GET /api/version` for the API and `GET /` for the web UI, every 5 seconds
   for up to a minute while the page has not finished loading), the main window hides and a small window shows "Can't
   reach <host>" with the reason: no network, DNS, TLS certificate, timeout, connection refused
-  or a 5xx error. It checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
+  or a 5xx error. The API check passes only for the Onyx version JSON. Any other answer (a
+  network sign-in page, another site) shows "does not look like an Onyx server", and the
+  web UI's own `/api` route shows that `/api` does not reach the API server. These reasons,
+  and a 5xx error, also replace a page that already loaded. On Linux and Windows, a main-window load
+  that the web view cannot finish (for example, connection refused) shows this window instead
+  of the web view's error page. A certificate error also shows this window, not the web
+  view's certificate page, so the user cannot continue to the page. If the app's own check passes but the web view still fails (for
+  example, a certificate that only the web view does not trust), the window checks again
+  only on **Retry**. Otherwise it checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
   the network comes back, and on **Retry**. When the server answers, the main window loads the
   page again, after the server also answers the session check (`GET /api/me`). A session
   check that fails keeps the window and its backoff. A page that already loaded stays when
   the network drops for a short time. Closing the window stops the checks. For a TLS error,
   the window says that a company proxy that inspects secure traffic, or a missing company
   root certificate, is a common cause.
-- Sign out and **Change server** remove the session on this computer at once. If the server
+- **Change server** opens onboarding with the current server filled in. The same server keeps
+  the session. Another server ends the session, then sign-in opens.
+- Sign out, and saving another server, remove the session on this computer at once. If the server
   cannot be reached to end the session, a dialog says so, and the app tries the server
   sign-out again in the background while it runs. The token stays in memory only: it is not
-  written back to the keychain, so after a quit the server session ends only when it expires. The launcher shows one line for the same errors:
-  "Can't reach <host>. Check your connection." (`src-tauri/src/reachability.rs`).
+  written back to the keychain, so after a quit the server session ends only when it expires. The launcher, onboarding and sign-in show one line for each of the same errors,
+  for example "Can't find <host>. Check the server address." (`src-tauri/src/reachability.rs`).
+- If the HTTP client cannot start (for example, a broken OpenSSL configuration), a dialog
+  says so and the app quits.
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
@@ -121,15 +140,16 @@ in advance. With a managed server, the app skips onboarding and opens at sign-in
 The app reads the policy at launch, every 5 minutes, before each update check, and each time
 Preferences opens (`src-tauri/src/policy.rs`). A managed value wins over the user's own
 `config.json` value. Preferences shows managed values read-only, with "Managed by your
-organization". Sample files for each platform are in [`deploy/`](deploy/).
+organization". A `ServerURL` without `LockServerURL` shows "Default set by your organization",
+and the user can change it. Sample files for each platform are in [`deploy/`](deploy/).
 
 | Key | Type | Effect |
 |---|---|---|
-| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. |
-| `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the user's saved server stays and cannot change. |
-| `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. |
+| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. The app keeps only the scheme, host and port: `https://onyx.example.com/app` becomes `https://onyx.example.com`, so Onyx must run at the server root. A URL with a user name or password is not valid. |
+| `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the last valid `ServerURL` is used, else the user's saved server, and the server cannot change. |
+| `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. macOS only: Windows and Linux builds do not update themselves, so this key has no effect there. |
 | `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
-| `DisableLauncher` | bool | No launcher shortcut, and the launcher does not open. An open launcher closes at the next policy read. |
+| `DisableLauncher` | bool | No launcher shortcut, the launcher does not open, **Open Launcher** in the menus is turned off, and Aonyx is hidden. An open launcher and Aonyx close at the next policy read. Aonyx comes back when the launcher turns on again. |
 | `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the Preferences switch is locked. See [Launch at login](#launch-at-login). |
 | `DisableNotifications` | bool | Turns off desktop notifications. |
 
@@ -144,11 +164,16 @@ valid.
 The app does not ignore a policy that it cannot read. It fails closed:
 
 - If the policy file or a value cannot be read, Preferences shows "Your organization's Onyx
-  policy is invalid".
+  policy is invalid. Some settings are locked."
 - If the Linux policy file exists but is not a valid JSON object (for example, it has a trailing
   comma), the server is locked and updates are off. A UTF-8 byte order mark is allowed.
 - An invalid `LockServerURL` or `Disable*` value counts as `true`.
-- An invalid `ServerURL`, `LauncherShortcut` or `LaunchAtLogin` value is ignored.
+- An invalid `ServerURL`, `LauncherShortcut` or `LaunchAtLogin` value is ignored. Preferences
+  names the ignored setting and does not lock other settings.
+- The app remembers the last valid `ServerURL`. If a later policy is invalid and has no valid
+  `ServerURL`, the app uses the remembered server, so one bad push does not stop sign-in.
+- If the server is locked and no server is known, onboarding shows that the policy is invalid
+  and the server field is turned off.
 
 ### Launch at login
 
@@ -269,7 +294,12 @@ separately.
 ### Linux
 
 The app reads `/etc/onyx-desktop/policy.json`, one JSON object with the same keys
-([`deploy/linux/policy.json`](deploy/linux/policy.json)). Make it readable by all users:
+([`deploy/linux/policy.json`](deploy/linux/policy.json)). Make it readable by all users, and
+writable only by root (for example, `root:root` with mode `644`). The app does not trust the file
+if it, or a directory above it, is not owned by root or is writable by group or others. A sticky
+directory such as `/tmp` is allowed. Each symlink on the path must also be owned by root, and the
+directories on the way to its target get the same check. A file that is not trusted counts as a policy that cannot be read (see
+[Invalid policy](#invalid-policy)).
 
 ```json
 {
@@ -344,7 +374,9 @@ bun run dev
 ```
 
 Point onboarding at any Onyx server v4.2 or later. The default is `http://localhost:3000`. A remote
-server needs `https://`; `http://` works only for a server on this computer.
+server needs `https://`; `http://` works only for a server on this computer: `localhost`, a
+loopback IP address, or on macOS also a `*.localhost` name. Windows and Linux can send
+`*.localhost` names to DNS, so they need `https://` for them.
 
 ## Checks
 
@@ -365,7 +397,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
   an unsigned app on first launch: right-click it, choose **Open**, then **Open** again.
 - The same pull requests also run the checks on Windows and Linux, and build unsigned x64
   installers as artifacts: NSIS (`.exe`) and MSI on Windows, AppImage and `.deb` on Linux.
-  These installers are not signed. They are for review only, not for customers. Each one has
+  These installers are not signed. They are for review only, not for customers. Their version
+  has the workflow run number as build metadata (for example `0.1.0+454`), so the About dialog,
+  the package and the installed programs list tell builds apart. Each one has
   a GitHub build provenance attestation (`gh attestation verify <file> --repo
   onyx-dot-app/onyx`). Pull requests from forks get no installer artifacts.
 - Run the workflow by hand on `main` with a version (for example `0.2.0`) to publish a signed
@@ -373,6 +407,34 @@ cargo test --manifest-path src-tauri/Cargo.toml
   pre-release tagged `desktop-v2-v<version>`, which is never marked as the latest release, so
   v1's downloads and auto-update are not affected. Releases are macOS only for now. The job
   gets the signing secrets only after the JavaScript build, and only in its signing step.
+
+### Windows code signing
+
+The Windows installers and the app are not Authenticode-signed yet, so SmartScreen shows
+"Unknown publisher". The Windows build step in `desktop-v2.yml` has a hook for it: when the
+repository variable `DESKTOP_V2_WINDOWS_SIGN_COMMAND` is set, the build passes it to Tauri as
+`bundle.windows.signCommand`. Tauri then runs the command for each file it signs (the app, the
+NSIS uninstaller, the NSIS installer and the MSI) and puts the file path in place of `%1`. Tauri
+splits the command at spaces, so a path in it cannot contain a space. A later step then fails
+the build if one of the installers, or the app inside the MSI or the NSIS installer, has no
+valid signature. Tauri restores the unsigned app in `target/release` after it packages each
+installer, so that copy is not checked.
+
+Release engineering must supply:
+
+- A code-signing certificate for the publisher name. New OV and EV certificates keep the key
+  in a hardware module, so a `.pfx` file in a secret is not an option. A cloud signing
+  service, for example Azure Artifact Signing, works with `signCommand`.
+- The sign command, for example
+  `trusted-signing-cli -e <endpoint> -a <account> -c <profile> -d "Onyx" %1`, and the tool
+  it calls, installed in the job.
+- The credentials for that command. Prefer short-lived OIDC credentials (the job already has
+  `id-token: write`) over a stored secret.
+- A decision about where to sign. Today the hook is in the pull request job, which runs branch
+  code. To sign only releases, add a Windows job to the protected `release` environment and
+  move the hook there.
+- The publisher name. `tauri.windows.conf.json` sets `bundle.publisher` to `Onyx`. Make it
+  agree with the certificate's subject name.
 
 ## Windows and Linux
 
@@ -387,29 +449,100 @@ How the app differs from macOS:
 
 - The launcher shortcut is `Ctrl+Alt+Space` by default (`Ctrl+Shift+Space` often switches the
   input language). The launcher is a borderless, always-on-top window with no taskbar entry. It
-  takes focus when it shows and hides when you click away or press `Esc`. In the launcher,
-  `Ctrl+Enter` opens the chat in the window and `Ctrl+N` starts a new chat.
+  opens in the center of the monitor under the pointer. It takes focus when it shows (on X11
+  it asks the window manager with a fresh X timestamp) and hides when you click away or press
+  `Esc`. In the launcher, `Ctrl+Enter` opens the chat in the window and `Ctrl+N` starts a new
+  chat.
+- On Linux, Aonyx leaves always-on-top while a file chooser of the main window is open, so it
+  does not cover the chooser's buttons.
+- On Linux, the context menu of a link to the server has no **Open Link in New Window**: that
+  window would have no menu bar. **Open Link** opens it in the same window.
 - The main window keeps the native title bar and has its own menu bar: **File** (New Chat
   `Ctrl+N`, Open Launcher, Preferences `Ctrl+,`, Close Window `Ctrl+W`, Quit `Ctrl+Q`), **View**
   (Reload `Ctrl+R`, Back `Alt+Left`, Forward `Alt+Right`, zoom `Ctrl+0`/`Ctrl+=`/`Ctrl+-`, Full
-  Screen `F11`) and **Help** (About). Other windows have no menu bar.
+  Screen `F11`) and **Help** (About). Other windows have no menu bar. On Windows the shortcuts
+  also work while the page has focus: the app reads them from WebView2's accelerator key event.
+- On Windows a left click on the tray icon opens Onyx and a right click opens the tray menu.
+- Downloads on Linux do not open a save dialog: WebKitGTK asks on the GTK main thread, where a
+  blocking dialog would deadlock. The file goes to the Downloads folder (a name that is already
+  in use gets a number). A notification then names the file and its folder; click it to show
+  the file in its folder. A failed download also shows a notification.
+- On Linux the main window lets the page write the clipboard after a request finishes (for
+  example **Create Share Link**). Reading the clipboard still needs a paste. The text context
+  menu shows WebKit's standard items only.
 - No auto-update: the update feed has macOS builds only, so the app does not check for updates
   and has no **Check for Updates…** item. Install a new version by hand.
-- The session cookie goes in through wry's cookie API. WebView2 and WebKitGTK show `alert()`,
-  `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
+- The session cookie goes in through wry's cookie API. Its domain has no leading dot, so
+  WebView2 and WebKitGTK keep it host-only, as macOS does. WebView2 and WebKitGTK show
+  `alert()`, `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
+- On Linux the web views keep cookies in memory only (`src-tauri/src/linux_cookies.rs`), so
+  the session cookie that the server sets is not written to disk outside the Secret Service.
+  The app hands the session to the main window each time it opens the window. Other cookies of
+  the web UI (for example the sidebar state) reset when the app quits. Local storage stays on
+  disk. At launch the app deletes the `cookies` file that older builds wrote to
+  `~/.local/share/app.onyx.desktop.v2/`.
+- The web sign-in window (SAML, cloud workspaces, older servers) is titled "Onyx web sign-in"
+  and sends the web view's own user agent. On macOS it sends Safari's, because Google refuses
+  WKWebView's default one. The native sign-in window hides while the web sign-in window is open, and
+  shows again when you close that window or the sign-in fails.
 - Windows installers install for all users (NSIS `perMachine`, and MSI) into Program Files, so
   a standard user cannot replace the app's files. They need administrator rights. They contain the
   WebView2 offline installer, so they also work on a computer with no internet access. The
   installers register `onyx://` sign-in links for all users. Debug builds register them for
   the current user at launch.
-- On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
-  builds get sign-in links too. This needs `xdg-mime`.
+- Installer rules (`src-tauri/windows/`):
+  - The NSIS installer (`.exe`) stops when the user is not an administrator. A silent install
+    (`/S`) then exits with code 740.
+  - Use one installer type on a computer. When the MSI version is installed, the NSIS
+    installer stops before its first page (a silent install exits with code 1638). The MSI
+    stops when the NSIS version is installed. Uninstall the other one first.
+  - Both installers refuse to install an older version over a newer one. Uninstall the newer
+    version first.
+  - The NSIS uninstaller option **Delete the application data** also deletes the session
+    tokens from the user's Credential Manager. It does this only when the uninstaller runs as
+    the signed-in Windows user, not when another administrator's credentials elevate it. A
+    plain uninstall keeps the app's data and the token.
+  - An MSI uninstall keeps the app's data and the token. To also delete the data of the
+    user who runs `msiexec`, set `DELETEAPPDATA=1`:
+    `msiexec /x {ProductCode} DELETEAPPDATA=1`. This deletes that user's
+    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` after the
+    uninstall succeeds. It does not go into junctions or symbolic links: it keeps the links
+    inside these folders, and when a folder is itself a link it removes only the link. Link
+    targets do not change. An upgrade never deletes data.
+  - An uninstall that runs as LocalSystem (SCCM, Intune) deletes no user data, also with
+    `DELETEAPPDATA=1`: each user controls their own folders, so a delete as LocalSystem is not
+    safe there. After such an uninstall, each user's data folders and session token stay
+    (the token in that user's Credential Manager). The `DELETEAPPDATA=1` uninstall also keeps
+    the token in Credential Manager. The app uses a stored token only when the user's
+    config records it, so the user must sign in again when the config is gone or the user
+    signed out. The app then deletes the old token. If the config is still there, a reinstall
+    uses the token.
+- On Linux the `.deb` registers `onyx://` in its desktop file (`onyx-v2.desktop`). AppImage
+  and other builds that do not run from `/usr/bin` register it for the current user at launch,
+  so they get sign-in links too. This needs `xdg-mime`. At each launch, a `.deb` install makes
+  `onyx-v2.desktop` the current user's default for `onyx://` (v1 can also claim the scheme),
+  and removes the per-user `onyx://` entry that earlier versions wrote. This cleanup happens
+  per user, at that user's first launch of the new version, not at package install. After
+  `apt remove`, the default names a desktop file that no longer exists, and the desktop ignores
+  it. The AppImage entry points to the AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
+  launch it once from its new path. A launch while the app runs only shows the running app.
+- Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 and later). CI builds them on
+  Ubuntu 22.04 and fails if a file in the `.deb` or the AppImage needs a newer glibc.
 
 Linux needs some desktop services:
 
 - **Secret Service**, to keep you signed in: GNOME Keyring, KWallet or another provider must
   run and be unlocked in your session. Minimal window managers, VDI and SSH sessions often have
-  none. Then sign-in fails with a message that names the Secret Service.
+  none. Then sign-in fails with a message that names the problem: no provider, no default
+  keyring, no D-Bus session bus, or a locked keyring. If the keyring is locked at launch, Onyx
+  asks to unlock it one time. If you cancel, Onyx says that it could not read the session and
+  offers **Try Again** and **Sign In**.
+- **Answer notifications** need a notification server and a session bus that the app can find
+  through `DBUS_SESSION_BUS_ADDRESS` or `$XDG_RUNTIME_DIR/bus`. A bus that only X11 autolaunch
+  finds is not enough; the app then logs a warning and shows no notification.
+- **HiDPI**: GTK reads the scale from `GDK_SCALE` and `GDK_DPI_SCALE`, not from the KDE
+  display settings. On a KDE X11 session at 200% with neither set, the windows show at 1x and
+  look small. Start the app with `GDK_SCALE=2`.
 - **Global shortcut**: the launcher shortcut uses X11 key grabs. In a Wayland session (the
   default on Ubuntu 22.04+, Fedora and RHEL 9) the shortcut works only while an X11 (XWayland)
   app has focus, and with no XWayland it never works. Preferences shows a notice then. Open the
@@ -417,8 +550,14 @@ Linux needs some desktop services:
   the shortcut.
 - **Tray icon**: it needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
   tray icon without the AppIndicator extension (`gnome-shell-extension-appindicator`, on by
-  default on Ubuntu).
-- The launcher's transparent corners need a compositing window manager.
+  default on Ubuntu). The icon file goes to `$XDG_RUNTIME_DIR/tray-icon`. When that directory
+  is not set or the app cannot write to it (for example after `su`, or in some SSH and VDI
+  sessions), it goes to `~/.cache/app.onyx.desktop.v2/tray-icon`. If the tray icon still
+  fails, the app logs the error and runs without it. Launch the app again to show its window.
+- The launcher's transparent corners need a compositing window manager. Without one, the
+  corners show black. With no compositor and software rendering, WebKitGTK can also leave a
+  stale rectangle on screen until the next repaint.
+- The title bar and the menu bar follow the desktop theme, not the color mode of the web UI.
 
 ## Auto-update
 
@@ -467,6 +606,25 @@ appears, complete, in `<name>.out.json`. Other ops:
 `ONYX_DESKTOP_QA_DIR` set to a private directory (owned by you, mode 0700; created that way if
 missing), because it can drive signed-in windows. It cannot press global shortcuts or move the window by drag (both
 need the physical mouse or keyboard).
+
+## Logs
+
+The app writes its log to `onyx.log` in the app's log folder (`init_logging` in
+`src-tauri/src/main.rs`, with `tauri-plugin-log`):
+
+| OS | Folder |
+|---|---|
+| macOS | `~/Library/Logs/app.onyx.desktop.v2/` |
+| Windows | `%LOCALAPPDATA%\app.onyx.desktop.v2\logs\` |
+| Linux | `~/.local/share/app.onyx.desktop.v2/logs/` (`$XDG_DATA_HOME` if set) |
+
+Times are UTC. The log records the app's own messages at level `info` and higher: the app
+version and OS at startup, the saved server, sign-in (password or SSO) and sign-out, sign-in
+failures, offline and recovery, managed policy errors, downloads and failed links. At 1 MB the
+file rotates to `onyx_<date>.log`, and the app keeps the four newest of those files. The log
+never holds a password, session token, cookie or sign-in code; URLs are written without their
+user info, query and fragment (`main_window::log_safe`). Debug builds also write the log to
+stderr. If the folder cannot be written, the app runs without a log.
 
 ## Known limits
 

@@ -119,8 +119,8 @@ each integration whose credential does not resolve.
 
 Two tools are added outside the built-in loop. `SearchTool` is added when the
 request forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is
-off, and the loop did not build it. `MemoryTool` is added when
-`user.enable_memory_tool` is set ([[#memory-tool-bypasses-filters]]). MCP and
+off, and the loop did not build it. `MemoryTool` is added when the
+user's `enable_memory_tool` preference is set ([[#memory-tool-bypasses-filters]]). MCP and
 OpenAPI actions receive stable qualified names with the integration id
 (`mcp__<integration id>__<name>__<tool>`, `custom__<integration id>__<operationId>`),
 independent of the other selected tools, and have `id = None`.
@@ -280,7 +280,8 @@ are plain `AgentTool` objects with no `Tool` row, and
 
 1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses the tool options
    and the agent's tools.** `tools/tool_constructor.py:_construct_tools_impl`
-   adds it after the agent tool loop whenever `user.enable_memory_tool` is set.
+   adds it after the agent tool loop whenever its `enable_memory_tool` argument
+   (the user's preference, captured in `ChatTurnSetup`) is set.
    A user who turns every tool off for a message can still get a memory write.
    A change to per-message filtering must decide whether memory follows it.
    In an incognito turn the tool is still offered, but `MemoryTool._run`

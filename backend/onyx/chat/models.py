@@ -976,6 +976,9 @@ class ChatTurnSetup(BaseModel):
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext
+    # The user's memory settings as the turn started.
+    use_memories: bool
+    enable_memory_tool: bool
     # The turn offers the skill tools when the user had custom skills as it
     # started; the tools and each agent's catalog read the current skills.
     has_chat_skills: bool

@@ -38,7 +38,11 @@ from onyx.db.document import (
     get_cc_pair_ids_for_documents,
     upsert_document_by_connector_credential_pair,
 )
-from onyx.db.document_access import get_accessible_documents_by_ids
+from onyx.db.document_access import (
+    apply_resolved_document_access_filter,
+    get_accessible_documents_by_ids,
+    resolve_document_access_pairs,
+)
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
@@ -119,6 +123,17 @@ def ce(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     _set_ee(monkeypatch, False)
     yield
     fetch_versioned_implementation.cache_clear()
+
+
+def _visible_with_resolved_pairs(
+    db_session: Session, user: User, doc_ids: set[str]
+) -> set[str]:
+    pairs = resolve_document_access_pairs(db_session, user.id)
+    stmt = select(DbDocument.id).where(DbDocument.id.in_(doc_ids))
+    stmt = apply_resolved_document_access_filter(
+        db_session, stmt, pairs, user.email, [], user_id=user.id
+    )
+    return set(db_session.execute(stmt.distinct()).scalars().all())
 
 
 def _make_pair(
@@ -799,6 +814,11 @@ def test_restricted_pair_needs_data_access_group_and_acl_match(
             user_id=user.id,
         )
         assert {doc.id for doc in accessible} == expected_doc_ids, user.email
+        # Its form with the pairs resolved first (postgres_query tool).
+        assert (
+            _visible_with_resolved_pairs(db_session, user, set(doc_ids.values()))
+            == expected_doc_ids
+        ), user.email
 
 
 @pytest.mark.usefixtures("ee")
@@ -937,7 +957,11 @@ def test_pending_pair_hides_stale_public_chunks_in_every_mode(
             external_group_ids=[],
             user_id=user.id,
         )
-        return {doc.id for doc in accessible}
+        visible_ids = {doc.id for doc in accessible}
+        assert _visible_with_resolved_pairs(db_session, user, doc_ids) == visible_ids, (
+            user.email
+        )
+        return visible_ids
 
     # The chunk keeps public=true until metadata sync, but the pair grants
     # nothing. A granting pair of a shared document still grants.

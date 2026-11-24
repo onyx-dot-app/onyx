@@ -44,6 +44,7 @@ from onyx.utils.fleet_telemetry import (
 )
 from onyx.utils.fleet_telemetry_collector import collect_snapshots
 from onyx.utils.platform_utils import is_running_in_container, is_running_in_kubernetes
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 
 _MONITORING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
@@ -533,6 +534,13 @@ def cloud_monitor_celery_pidbox(
 )
 def monitor_opensearch_resources(*, tenant_id: str | None = None) -> None:  # noqa: ARG001
     refresh_resource_health()
+    try:
+        # EE: tells full admins about critical cluster issues.
+        fetch_ee_implementation_or_noop(
+            "onyx.utils.opensearch_notifications", "notify_admins_of_cluster_issues"
+        )()
+    except Exception:
+        task_logger.exception("Unable to notify admins of OpenSearch cluster issues")
 
 
 @shared_task(

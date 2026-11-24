@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.constants import LlmProviderNames
 from onyx.utils.fleet_telemetry import emit_telemetry, error_category, fingerprint
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -33,18 +34,51 @@ _STOP_OUTCOMES: dict[str, str] = {"user_cancelled": "canceled"}
 _CLIENT_ERROR_CODES: frozenset[str] = frozenset(
     code.code for code in OnyxErrorCode if code.status_code < 500
 )
+# 4xx codes that block a user's question, so they still count as failed queries.
+_COUNTED_CLIENT_ERRORS: dict[str, str] = {
+    OnyxErrorCode.RATE_LIMITED.code: "rate_limit",
+    OnyxErrorCode.SEAT_LIMIT_EXCEEDED.code: "license",
+    OnyxErrorCode.SUBSCRIPTION_INACTIVE.code: "license",
+}
 # Error packet codes as fleet error categories. Other codes report "internal".
 _CHAT_ERROR_CATEGORIES: dict[str, str] = {
     "AUTH_ERROR": "auth",
     "PERMISSION_DENIED": "permission",
     "RATE_LIMIT": "rate_limit",
-    "BUDGET_EXCEEDED": "rate_limit",
+    "BUDGET_EXCEEDED": "quota",
     "CONNECTION_ERROR": "source_unavailable",
     "SERVICE_UNAVAILABLE": "source_unavailable",
     "BAD_GATEWAY": "source_unavailable",
     "LLM_PROVIDER_ERROR": "source_unavailable",
     "GATEWAY_TIMEOUT": "timeout",
+    **_COUNTED_CLIENT_ERRORS,
 }
+# Codes from LLM provider classification (onyx.llm.exceptions). Others report "internal".
+_LLM_ERROR_CATEGORIES: dict[str, str] = {
+    "AUTH_ERROR": "auth",
+    "PERMISSION_DENIED": "permission",
+    "RATE_LIMIT": "rate_limit",
+    "BUDGET_EXCEEDED": "quota",
+    "CONNECTION_ERROR": "source_unavailable",
+    "SERVICE_UNAVAILABLE": "source_unavailable",
+    "API_ERROR": "source_unavailable",
+    "CONTEXT_TOO_LONG": "context_limit",
+    "REQUEST_TOO_LARGE": "context_limit",
+    "CONTENT_POLICY": "content_policy",
+    "MODEL_REFUSAL": "content_policy",
+    "NOT_FOUND": "not_found",
+    "BAD_REQUEST": "bad_request",
+    "UNPROCESSABLE_ENTITY": "bad_request",
+}
+_LLM_PROVIDERS: frozenset[str] = frozenset(name.value for name in LlmProviderNames)
+
+
+def _llm_provider(details: dict[str, Any] | None) -> str:
+    """The provider type, never a custom provider's name."""
+    provider = (details or {}).get("provider")
+    if not provider:
+        return "unknown"
+    return provider if provider in _LLM_PROVIDERS else "custom"
 
 
 class QueryMode(str, Enum):
@@ -96,6 +130,8 @@ class QueryObservation:
         # None: the request was rejected before it ran, so there is no query to report.
         self.outcome: str | None = "success"
         self.error_code: str | None = None
+        self.error_source: str | None = None
+        self.llm_provider: str | None = None
         self.writer_owned = False
         self._lock = threading.Lock()
         self._used_search = False
@@ -181,9 +217,22 @@ class QueryObservation:
             self.time_to_results_ms = max(0, (time.monotonic() - self.started) * 1000)
 
     def failed(self, error: BaseException) -> None:
-        if isinstance(error, OnyxError) and error.status_code < 500:
-            # Bad input or a missing permission is not a failed query.
-            self.outcome = None
+        if isinstance(error, OnyxError):
+            code = error.error_code.code
+            counted = _COUNTED_CLIENT_ERRORS.get(code)
+            if error.status_code < 500 and counted is None:
+                # Bad input or a missing permission is not a failed query.
+                self.outcome = None
+                return
+            self.outcome = "failure"
+            self.error_code = counted or _CHAT_ERROR_CATEGORIES.get(
+                code, error_category(error)
+            )
+            self.error_source = (
+                "llm"
+                if error.error_code == OnyxErrorCode.LLM_PROVIDER_ERROR
+                else "onyx"
+            )
             return
         self.outcome = "failure"
         self.error_code = error_category(error)
@@ -193,17 +242,28 @@ class QueryObservation:
         the process."""
         # As in `failed`, a 4xx OnyxError is not a failed query. LLM errors carry
         # details, so a provider's NOT_FOUND is still a failure.
+        code = packet.error_code or ""
+        if packet._from_llm:
+            self.outcome = "failure"
+            self.error_code = _LLM_ERROR_CATEGORIES.get(code, "internal")
+            self.error_source = "llm"
+            self.llm_provider = _llm_provider(packet.details)
+            return
         if (
-            packet.error_code in _CLIENT_ERROR_CODES
+            code in _CLIENT_ERROR_CODES
+            and code not in _COUNTED_CLIENT_ERRORS
             and not packet.is_retryable
             and packet.details is None
         ):
             self.outcome = None
             return
         self.outcome = "failure"
-        self.error_code = _CHAT_ERROR_CATEGORIES.get(
-            packet.error_code or "", "internal"
-        )
+        self.error_code = _CHAT_ERROR_CATEGORIES.get(code, "internal")
+        if code == OnyxErrorCode.LLM_PROVIDER_ERROR.code:
+            self.error_source = "llm"
+            self.llm_provider = _llm_provider(packet.details)
+        else:
+            self.error_source = "onyx"
 
     def finish(self) -> None:
         with self._lock:
@@ -225,6 +285,8 @@ class QueryObservation:
                 "first_answer_ms": self.first_answer_ms,
                 "time_to_results_ms": self.time_to_results_ms,
                 "error_code": self.error_code,
+                "error_source": self.error_source,
+                "llm_provider": self.llm_provider,
                 "tool_usage": tool_usage,
                 "llm_cycles": llm_cycles,
             },

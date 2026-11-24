@@ -343,6 +343,13 @@ panel picks up the new session when the user returns.
     requests `<all_urls>` host access and injects the selection icon on every
     page. The host grant may also be what lets the panel iframe send its
     auth cookie (Known issues).
+14. `v2-window-commands-async` **A desktop v2 command that can open a window
+    must be `async`.** Tauri runs a sync command on the main thread inside the
+    WebView2 message handler. A window built there deadlocks on Windows: the
+    new window stays blank and the app stops. macOS and Linux do not show it.
+    `desktop-v2/src-tauri/src/commands.rs:commands_that_open_windows_are_async`
+    fails for a sync command that calls a window-opening helper. Add a new
+    helper of that kind to its `OPENS_WINDOWS` list.
 
 ---
 

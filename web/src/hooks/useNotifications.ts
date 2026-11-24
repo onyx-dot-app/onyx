@@ -9,7 +9,7 @@ import type {
   Notification,
   NotificationSummary,
   NotificationsResponse,
-} from "@/lib/notifications/interfaces";
+} from "@/lib/notifications/types";
 
 const DEFAULT_NOTIFICATIONS_PAGE_SIZE = 25;
 

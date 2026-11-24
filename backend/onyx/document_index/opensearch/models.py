@@ -148,6 +148,14 @@ class ClusterIndexStatus(BaseModel):
     replicas: int
 
 
+class ClusterIssueState(BaseModel):
+    """What the admin notifications remember between cluster checks."""
+
+    # When each critical issue was first seen, by issue kind or "unreachable".
+    # A cleared issue leaves the map, so its return is a new occurrence.
+    first_seen: dict[str, datetime] = Field(default_factory=dict)
+
+
 class UsageThresholds(BaseModel):
     """The usage percents at which a data node gets a warning or critical issue."""
 

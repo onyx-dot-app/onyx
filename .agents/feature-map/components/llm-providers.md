@@ -232,7 +232,7 @@ build their own clients.
    each agent's default model) and the Community downgrade. Search for
    `invalidate_provider_listing_cache` to find every caller.
 9. `personal-default-string-format` **Deleting a provider clears personal
-   defaults by string match.** `User.default_model` stores
+   defaults by string match.** `UserPreferences.default_model` stores
    `<display name>__<provider type>__<model>`. `db/llm.py:remove_llm_provider`
    clears matching values, and for a nameless provider it matches both the
    empty name and the provider id. A new writer of that string must use the

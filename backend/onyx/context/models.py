@@ -6,7 +6,9 @@ from onyx.db.enums import SupportedLanguage
 
 
 class UserInfo(BaseModel):
+    # The name to address the user by: preferred name, else full name.
     name: str | None = None
+    full_name: str | None = None
     role: str | None = None
     email: str | None = None
     # Directory profile from the IdP login snapshot (country, department, ...)
@@ -43,6 +45,8 @@ class UserMemoryContext(BaseModel):
         result = []
         if self.user_info.name:
             result.append(f"User's name: {self.user_info.name}")
+        if self.user_info.full_name and self.user_info.full_name != self.user_info.name:
+            result.append(f"User's full name: {self.user_info.full_name}")
         if self.user_info.role:
             result.append(f"User's role: {self.user_info.role}")
         if self.user_info.email:
