@@ -38,6 +38,12 @@ type fakeKernel struct {
 	noResize   bool
 }
 
+// testMounts are the default mounts plus skills, the mount of a call with
+// no mount name.
+var testMounts = append([]ManagedMount{
+	{Name: "skills", MountPoint: "/mnt/skills", Devices: slotDevs("/dev/vdc", "/dev/vdf")},
+}, DefaultManagedMounts...)
+
 func (k *fakeKernel) op(format string, args ...any) {
 	k.ops = append(k.ops, fmt.Sprintf(format, args...))
 }
@@ -146,7 +152,7 @@ func newManagedKernel() *fakeKernel {
 func managedHarness(t *testing.T, k *fakeKernel) pb.SandboxdClient {
 	t.Helper()
 	h := newHarness(t, execs.Config{}, Config{Managed: &ManagedConfig{
-		Ops: k, SizeWait: 200 * time.Millisecond, Mounts: DefaultManagedMounts[:1],
+		Ops: k, SizeWait: 200 * time.Millisecond, Mounts: testMounts[:1],
 	}})
 	return h.initialized()
 }
@@ -362,7 +368,7 @@ func (r routedKernel) MountedOn(mp string, rdev uint64) (bool, error) {
 // Each named mount swaps its own slots; the others do not change.
 func TestMountManagedNamedMounts(t *testing.T) {
 	kernels := map[string]*fakeKernel{}
-	for i, m := range DefaultManagedMounts {
+	for i, m := range testMounts {
 		a, b := m.Devices[pb.ManagedSlot_MANAGED_SLOT_A], m.Devices[pb.ManagedSlot_MANAGED_SLOT_B]
 		kernels[m.MountPoint] = &fakeKernel{
 			disks: map[string]*fakeDisk{
@@ -373,7 +379,7 @@ func TestMountManagedNamedMounts(t *testing.T) {
 		}
 	}
 	h := newHarness(t, execs.Config{}, Config{Managed: &ManagedConfig{
-		Ops: routedKernel{byMount: kernels}, SizeWait: 200 * time.Millisecond, Mounts: DefaultManagedMounts,
+		Ops: routedKernel{byMount: kernels}, SizeWait: 200 * time.Millisecond, Mounts: testMounts,
 	}})
 	c := h.initialized()
 	ctx := keyed(context.Background())
@@ -403,7 +409,7 @@ func TestMountManagedNamedMounts(t *testing.T) {
 }
 
 func TestParseManagedMounts(t *testing.T) {
-	got, err := ParseManagedMounts(FormatManagedMounts(DefaultManagedMounts))
+	got, err := ParseManagedMounts(FormatManagedMounts(testMounts))
 	if err != nil || len(got) != 3 || got[2].Name != "spaces" || got[2].MountPoint != "/mnt/spaces" ||
 		got[2].Devices[pb.ManagedSlot_MANAGED_SLOT_B] != "/dev/vdj" {
 		t.Fatalf("round trip: %+v %v", got, err)

@@ -153,6 +153,18 @@ service Sandboxd {
   // nothing. A capture and a restore of one session never run at once.
   rpc RestoreSession(stream RestoreSessionRequest) returns (RestoreSessionResponse);
 
+  // InstallSkill puts one skill in the skills folder (--skills-root), as
+  // <skills root>/<name>/. The first message is the header, the later ones
+  // carry a plain tar (no zstd) whose members are all under <name>/. If the
+  // folder already has the header's version in <name>/.version, the call
+  // reads no data and returns installed=false. Else the daemon extracts
+  // into a staging directory, checks size and SHA-256, writes .version,
+  // and then replaces the folder. The files are root's: directories 0755,
+  // files 0644 (0755 with an execute bit). A reader never sees a mix of
+  // old and new files. Bad archives fail as in RestoreSession and
+  // change nothing. Installs run one at a time.
+  rpc InstallSkill(stream InstallSkillRequest) returns (InstallSkillResponse);
+
   // Reserved for the browser. They return UNIMPLEMENTED.
   rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
   rpc BrowserStop(BrowserStopRequest) returns (BrowserStopResponse);
@@ -804,6 +816,33 @@ message RestoreSessionResponse {
   int64 expanded_bytes = 3;
   // Capture roots that the restore replaced.
   repeated string roots = 4;
+}
+
+message InstallSkillHeader {
+  // Folder name: one path part, not starting with ".".
+  string name = 1;
+  // Opaque version, at most 256 bytes, no line breaks.
+  string version = 2;
+  // Exact tar size and hex SHA-256.
+  int64 size_bytes = 3;
+  string sha256 = 4;
+  ArchiveLimits limits = 5;
+}
+
+message InstallSkillRequest {
+  oneof part {
+    // The first message.
+    InstallSkillHeader header = 1;
+    // Later messages: the tar bytes (at most 1 MiB each).
+    bytes data = 2;
+  }
+}
+
+message InstallSkillResponse {
+  // False when the folder already had the version.
+  bool installed = 1;
+  int64 files = 2;
+  int64 expanded_bytes = 3;
 }
 
 // Browser placeholders.

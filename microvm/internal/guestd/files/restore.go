@@ -62,21 +62,48 @@ func (h *hashReader) Read(p []byte) (int, error) {
 // Restore extracts a capture archive from r into the session. Nothing in
 // the session changes unless the whole archive is valid and matches the
 // size and SHA-256 of spec.
+// checkArchive checks the header of an archive stream: its SHA-256 (hex,
+// returned in lower case), its size, and the limits of the call.
+func (s *Store) checkArchive(sha string, size int64, req Limits) (string, Limits, error) {
+	lim, err := s.limits(req)
+	if err != nil {
+		return "", lim, err
+	}
+	want := strings.ToLower(sha)
+	if !hexSHA256.MatchString(want) {
+		return "", lim, fmt.Errorf("%w: sha256 must be 64 hex characters", ErrInvalid)
+	}
+	if size <= 0 {
+		return "", lim, fmt.Errorf("%w: size_bytes must be positive", ErrInvalid)
+	}
+	if size > lim.StoredBytes {
+		return "", lim, fmt.Errorf("%w: archive of %d bytes is over %d", ErrLimit, size, lim.StoredBytes)
+	}
+	return want, lim, nil
+}
+
+// verifyArchive reads what is left of the stream after the tar end, still
+// inside the decoded budget of br, and checks the whole stream against the
+// header.
+func verifyArchive(br io.Reader, hr *hashReader, size int64, want string) error {
+	if _, err := io.Copy(io.Discard, br); err != nil {
+		return archiveErr(err)
+	}
+	if _, err := io.Copy(io.Discard, hr); err != nil {
+		return archiveErr(err)
+	}
+	if got := hex.EncodeToString(hr.h.Sum(nil)); hr.n != size || got != want {
+		return fmt.Errorf("%w: got %d bytes with sha256 %s, the header says %d bytes with %s",
+			ErrArchive, hr.n, got, size, want)
+	}
+	return nil
+}
+
 func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (RestoreSummary, error) {
 	var sum RestoreSummary
-	lim, err := s.limits(spec.Limits)
+	want, lim, err := s.checkArchive(spec.SHA256, spec.Size, spec.Limits)
 	if err != nil {
 		return sum, err
-	}
-	want := strings.ToLower(spec.SHA256)
-	if !hexSHA256.MatchString(want) {
-		return sum, fmt.Errorf("%w: sha256 must be 64 hex characters", ErrInvalid)
-	}
-	if spec.Size <= 0 {
-		return sum, fmt.Errorf("%w: size_bytes must be positive", ErrInvalid)
-	}
-	if spec.Size > lim.StoredBytes {
-		return sum, fmt.Errorf("%w: archive of %d bytes is over %d", ErrLimit, spec.Size, lim.StoredBytes)
 	}
 	roots, err := s.roots(spec.Roots)
 	if err != nil {
@@ -121,18 +148,8 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 	if err := x.run(ctx, tar.NewReader(br)); err != nil {
 		return sum, err
 	}
-	// The hash covers the whole stream: read what is left after the tar end,
-	// still inside the decoded budget.
-	if _, err := io.Copy(io.Discard, br); err != nil {
-		return sum, archiveErr(err)
-	}
-	if _, err := io.Copy(io.Discard, hr); err != nil {
-		return sum, archiveErr(err)
-	}
-	got := hex.EncodeToString(hr.h.Sum(nil))
-	if hr.n != spec.Size || got != want {
-		return sum, fmt.Errorf("%w: got %d bytes with sha256 %s, the header says %d bytes with %s",
-			ErrArchive, hr.n, got, spec.Size, want)
+	if err := verifyArchive(br, hr, spec.Size, want); err != nil {
+		return sum, err
 	}
 	swap, err := x.liftTopFiles(roots)
 	if err != nil {
