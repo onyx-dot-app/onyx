@@ -7344,6 +7344,9 @@
         "other": {
           "label": "Otros"
         },
+        "suggestedQuestions": {
+          "label": "Preguntas sugeridas"
+        },
         "unattributed": {
           "label": "Sin atribuir"
         }

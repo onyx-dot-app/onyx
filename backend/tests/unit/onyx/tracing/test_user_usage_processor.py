@@ -271,19 +271,24 @@ def test_grouped_calls_are_priced_per_call_not_on_the_sum(
     assert recorded_calls[0]["usage"].cost_cents == pytest.approx(6.0)
 
 
+@pytest.mark.parametrize(
+    "flow", [LLMFlow.IMAGE_SUMMARIZATION, LLMFlow.SUGGESTED_QUESTIONS]
+)
 def test_records_system_usage_when_user_id_unset(
-    processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
+    processor: UserUsageTracingProcessor,
+    recorded_calls: list[dict[str, Any]],
+    flow: LLMFlow,
 ) -> None:
     processor.on_span_end(
         _generation_span(
-            flow=LLMFlow.IMAGE_SUMMARIZATION.value,
+            flow=flow.value,
             usage={"input_tokens": 5, "output_tokens": 2},
         )
     )
     processor.force_flush()
     assert len(recorded_calls) == 1
     assert recorded_calls[0]["attribution"] == SystemUsageAttribution.ATTRIBUTED
-    assert recorded_calls[0]["usage"].flow == LLMFlow.IMAGE_SUMMARIZATION.value
+    assert recorded_calls[0]["usage"].flow == flow.value
 
 
 def test_records_unknown_non_user_flow_as_unattributed(

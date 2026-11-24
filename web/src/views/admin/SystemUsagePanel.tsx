@@ -27,6 +27,7 @@ const OTHER_CATEGORY = "other";
 const IMAGE_SUMMARIZATION_FLOW = "image_summarization";
 const CONTEXTUAL_RAG_DOC_SUMMARY_FLOW = "contextual_rag_doc_summary";
 const CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW = "contextual_rag_chunk_context";
+const SUGGESTED_QUESTIONS_FLOW = "suggested_questions";
 
 interface SystemUsageRow extends UsageExportTotals {
   category: string;
@@ -55,6 +56,8 @@ function categoryLabel(category: string, t: SystemUsageTranslate): string {
       return t("categories.contextualRagDocumentSummary.label");
     case CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW:
       return t("categories.contextualRagChunkContext.label");
+    case SUGGESTED_QUESTIONS_FLOW:
+      return t("categories.suggestedQuestions.label");
     case UNATTRIBUTED_CATEGORY:
       return t("categories.unattributed.label");
     case OTHER_CATEGORY:

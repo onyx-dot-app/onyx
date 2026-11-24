@@ -131,3 +131,45 @@ test("preserves filters while a new date range loads", async () => {
 
   expect(screen.queryByText("$3.00")).not.toBeInTheDocument();
 });
+
+test("suggested-question runs get their own row", () => {
+  const record = {
+    attribution: "ATTRIBUTED",
+    model: "gpt-6-luna",
+    flow: "suggested_questions",
+    provider: "openai",
+    day: "2026-09-01",
+    input_tokens: 40,
+    output_tokens: 8,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    cost_cents: 1,
+  } as const;
+  mockUseSystemUsage.mockReturnValue({
+    usage: {
+      start: "2026-09-01",
+      end: "2026-09-02",
+      categories: [
+        {
+          category: "suggested_questions",
+          totals: {
+            input_tokens: 40,
+            output_tokens: 8,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+            cost_cents: 1,
+          },
+          records: [record],
+        },
+      ],
+    } satisfies SystemUsageResponse,
+    isLoading: false,
+    error: undefined,
+    refetch: jest.fn(),
+  });
+
+  render(<SystemUsagePanel />);
+
+  expect(screen.getByText("Suggested questions")).toBeInTheDocument();
+  expect(screen.queryByText("suggested_questions")).not.toBeInTheDocument();
+});

@@ -7344,6 +7344,9 @@
         "other": {
           "label": "その他"
         },
+        "suggestedQuestions": {
+          "label": "おすすめの質問"
+        },
         "unattributed": {
           "label": "未帰属"
         }

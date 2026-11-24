@@ -7344,6 +7344,9 @@
         "other": {
           "label": "기타"
         },
+        "suggestedQuestions": {
+          "label": "추천 질문"
+        },
         "unattributed": {
           "label": "미귀속"
         }
