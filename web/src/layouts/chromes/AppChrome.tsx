@@ -43,7 +43,7 @@ import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
-import { PANEL_TOGGLE_RESERVE } from "@/lib/outputPanel/layout";
+import { PANEL_TOGGLE_ROOM } from "@/lib/outputPanel/layout";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -140,12 +140,13 @@ function Header() {
         !appPosition.isSharedChat() && (
           <RootLayout.Header>
             {/* A chat's header keeps out of the room for the chat's right
-                panel toggle, which the panel places over the header's end */}
+                panel toggle, which the closed panel places over the header's
+                end */}
             <div
               className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4"
               style={
                 appPosition.isChat()
-                  ? { paddingInlineEnd: PANEL_TOGGLE_RESERVE }
+                  ? { paddingInlineEnd: `max(1rem, ${PANEL_TOGGLE_ROOM})` }
                   : undefined
               }
             >
@@ -456,7 +457,8 @@ export default function AppChrome({ children }: AppChromeProps) {
             ref={pageRef}
             data-app-page
             className={cn(
-              "@container relative isolate flex-1 flex flex-col min-h-0",
+              // Eases the room for the panel toggle with the panel's slide
+              "@container relative isolate flex-1 flex flex-col min-h-0 [transition-property:--panel-toggle-reserve] ease-in-out duration-300 motion-reduce:transition-none",
               showBackground && "bg-cover bg-center bg-fixed"
             )}
             style={

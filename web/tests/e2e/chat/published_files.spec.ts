@@ -476,9 +476,21 @@ test.describe("Published files", () => {
         "aria-expanded",
         "false"
       );
+      // The share button keeps clear of the toggle over the header's end
+      await expect
+        .poll(() => chatPage.shareButtonEndGap(false))
+        .toBeGreaterThanOrEqual(0);
       await chatPage.rightPanelToggle.click();
       await expect(chatPage.publishedFilesPanel).toBeVisible();
       await chatPage.expectNoPublishedFiles();
+      // Beside the open panel, which holds the toggle, it keeps only the
+      // header's 16px padding
+      await expect
+        .poll(() => chatPage.shareButtonEndGap(true))
+        .toBeLessThanOrEqual(20);
+      await expect
+        .poll(() => chatPage.shareButtonEndGap(true))
+        .toBeGreaterThanOrEqual(0);
 
       await chatPage.rightPanelToggle.click();
       await expect(chatPage.publishedFilesPanel).toBeHidden();

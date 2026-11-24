@@ -39,6 +39,7 @@ export class ChatPage {
   // Layout containers
   readonly container: Locator;
   readonly scrollContainer: Locator;
+  readonly composerRow: Locator;
 
   // Message collections. Only messages near the viewport are mounted, so
   // these hold the rendered ones, not the whole chat.
@@ -78,6 +79,7 @@ export class ChatPage {
     this.inputBar = new InputBar(page);
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
+    this.composerRow = page.getByTestId("app-composer-row");
     this.humanMessages = page.locator("#onyx-human-message");
     this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
@@ -779,6 +781,39 @@ export class ChatPage {
         );
       })
       .toBeLessThanOrEqual(16);
+  }
+
+  /**
+   * At the end of the chat, the conversation reaches past the composer's
+   * bottom, so its scrollbar spans the page, while the latest turn ends above
+   * the composer.
+   */
+  async expectConversationUnderComposer(): Promise<void> {
+    await expect
+      .poll(async () => {
+        const conversation = await this.scrollContainer.boundingBox();
+        const composer = await this.composerRow.boundingBox();
+        const turn = await this.scrollContainer
+          .locator("[data-chat-turn]")
+          .last()
+          .boundingBox();
+        if (!conversation || !composer || !turn) return false;
+        return (
+          conversation.y + conversation.height >=
+            composer.y + composer.height && turn.y + turn.height <= composer.y
+        );
+      })
+      .toBe(true);
+  }
+
+  /** The gap from the share button to the panel toggle, or to the open panel. */
+  async shareButtonEndGap(panelOpen: boolean): Promise<number> {
+    const share = await this.shareMenuButton.boundingBox();
+    const end = await (
+      panelOpen ? this.publishedFilesPanel : this.rightPanelToggle
+    ).boundingBox();
+    if (!share || !end) return Number.NaN;
+    return end.x - (share.x + share.width);
   }
 
   async expectCopyButton(): Promise<void> {
