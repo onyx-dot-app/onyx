@@ -80,7 +80,6 @@ function thought(content: string): TimelineEvent {
 
 const endTurn: TimelineEvent = { type: "stop", stopReason: "end_turn" };
 
-// Opens a folded run card. Its fold button is named by the step count.
 // Opens the run card: the first fold control, the card's own.
 function openRun() {
   const fold = screen.queryAllByRole("button", { expanded: false })[0];

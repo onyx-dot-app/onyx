@@ -5,7 +5,9 @@ import { useTranslations } from "next-intl";
 import { Presence } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { prefersReducedMotion } from "@opal/utils";
-import { PacketType, StopReason } from "@/app/app/services/streamingModels";
+import { type Packet, StopReason } from "@/app/app/services/streamingModels";
+import { constructCurrentMemoryState } from "@/lib/timeline/chat/renderers/memory/memoryStateUtils";
+import { isMemoryToolPackets } from "@/lib/timeline/chat/packetHelpers";
 import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import {
@@ -98,6 +100,21 @@ function runStatus(
   const status = toChatTimelineEntry(step).status;
   if (status !== "streaming" || !stopPacketSeen) return status;
   return userStopped ? "stopped" : "done";
+}
+
+/** A memory step's tag, from the step's own packets. */
+function memoryStepTag(packets: Packet[]): React.ReactNode {
+  if (!isMemoryToolPackets(packets)) return undefined;
+  const memory = constructCurrentMemoryState(packets);
+  if (memory.operation === null) return undefined;
+  return (
+    <MemoryTagWithTooltip
+      memoryText={memory.memoryText}
+      memoryOperation={memory.operation}
+      memoryId={memory.memoryId}
+      memoryIndex={memory.index}
+    />
+  );
 }
 
 /** One run of a chat response's steps, on the shared run card. */
@@ -225,18 +242,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               // A finished memory step keeps its tag in its header, as the
               // collapsed run card does.
               headerAccessory={
-                memoryOperation &&
-                runStep.status === "done" &&
-                runStep.step.packets.some(
-                  (packet) => packet.obj.type === PacketType.MEMORY_TOOL_START
-                ) ? (
-                  <MemoryTagWithTooltip
-                    memoryText={memoryText ?? null}
-                    memoryOperation={memoryOperation}
-                    memoryId={memoryId ?? null}
-                    memoryIndex={memoryIndex ?? null}
-                  />
-                ) : undefined
+                runStep.status === "done"
+                  ? memoryStepTag(runStep.step.packets)
+                  : undefined
               }
             />
           </Presence>
