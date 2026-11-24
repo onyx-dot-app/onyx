@@ -35,8 +35,14 @@ def _list_of(*domains: str) -> str:
 @pytest.fixture(autouse=True)
 def no_network() -> Generator[mock.MagicMock, None, None]:
     """Unit tests never reach HubSpot. The default answer is a valid list
-    with one downloaded domain."""
-    with mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch:
+    with one downloaded domain. The URL is fixed too, so the environment's
+    setting cannot turn the download off and bypass the mock."""
+    with (
+        mock.patch(
+            "onyx.auth.free_mail_email_validator.FREE_MAIL_DOMAINS_URL", _TEST_URL
+        ),
+        mock.patch("onyx.auth.domain_blocklist.ssrf_safe_get") as fetch,
+    ):
         fetch.return_value = _response(200, _list_of("downloaded.example"))
         yield fetch
 
