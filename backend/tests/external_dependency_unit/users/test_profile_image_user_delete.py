@@ -42,13 +42,13 @@ def attach_profile_photo(
     file_ids: list[str] = []
 
     def attach(user: User) -> str:
+        user_ids.append(user.id)
         file_id = get_default_file_store().save_file(
             content=io.BytesIO(b"photo"),
             display_name=f"profile-image-{user.id}",
             file_origin=FileOrigin.USER_PROFILE_IMAGE,
             file_type=PROFILE_IMAGE_MIME_TYPE,
         )
-        user_ids.append(user.id)
         file_ids.append(file_id)
         user.profile_image_file_id = file_id
         db_session.commit()
