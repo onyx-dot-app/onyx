@@ -10,7 +10,7 @@ import React, {
 } from "react";
 import { Presence } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { cn } from "@opal/utils";
+import { cn, prefersReducedMotion } from "@opal/utils";
 import { AnswerText } from "@/lib/timeline/components/AnswerText";
 import {
   RESPONSE_CURSOR_ANCHOR_ATTRIBUTE,
@@ -71,7 +71,6 @@ function useTurnCursor(
     const root = rootRef.current;
     const cursor = cursorRef.current;
     if (!root || !cursor) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     let frame: number | null = null;
     let placed = false;
@@ -102,7 +101,7 @@ function useTurnCursor(
         glideUntil = performance.now() + CURSOR_GLIDE_MS;
       }
       anchorKind = kind;
-      cursor.style.transition = reducedMotion.matches
+      cursor.style.transition = prefersReducedMotion()
         ? "none"
         : performance.now() < glideUntil
           ? `opacity 250ms, transform ${CURSOR_GLIDE_MS}ms ease-out`
