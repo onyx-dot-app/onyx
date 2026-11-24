@@ -30,7 +30,6 @@ import {
 } from "@/lib/chat/publishedFiles";
 import { usePublishedFiles } from "@/lib/chat/hooks";
 import { fetchSettledChatSession } from "@/lib/chat/sessionReadiness";
-import { PANEL_TOGGLE_RESERVE } from "@/lib/outputPanel/layout";
 import { ChatRightPanel } from "@/sections/chat/ChatRightPanel";
 import {
   INITIAL_RIGHT_PANEL,
@@ -202,10 +201,7 @@ export default function SharedChatDisplay({
       <div className="flex flex-col h-full w-full overflow-hidden">
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
           {/* The end padding keeps the text clear of the panel toggle */}
-          <div
-            className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 ps-8 py-4"
-            style={{ paddingInlineEnd: PANEL_TOGGLE_RESERVE }}
-          >
+          <div className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 ps-8 pe-[max(2rem,var(--panel-toggle-reserve))] py-4">
             <Text as="p" font="heading-headline" color="text-04">
               {chatSession.description || t("header.untitledChat.title")}
             </Text>

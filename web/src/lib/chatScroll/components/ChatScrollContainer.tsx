@@ -775,7 +775,7 @@ const ChatScrollContainer = React.memo(
         <div
           className={
             className ??
-            "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-1"
+            "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden"
           }
         >
           <div

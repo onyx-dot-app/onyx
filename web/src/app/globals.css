@@ -222,7 +222,7 @@
 
   .default-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #888 transparent;
+    scrollbar-color: var(--border-02) transparent;
     overflow-y: scroll;
     overflow-x: hidden;
   }

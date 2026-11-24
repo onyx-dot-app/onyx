@@ -27,6 +27,7 @@ import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -290,6 +291,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const isPlainChat = !activeAgent || isAssistant(activeAgent);
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
+  const { hasBackground } = useAppBackground();
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   // Reset scroll button when session changes
@@ -780,6 +782,22 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [onboardingVisible, onboardingBottomRowPx]);
 
+  // In a chat, the messages scroll under the composer row, so the scrollbar
+  // spans the page. The row's height keeps the last message clear of it.
+  const [composerRow, setComposerRow] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const grid = composerRow?.parentElement;
+    if (!composerRow || !grid) return;
+    const observer = new ResizeObserver(() =>
+      grid.style.setProperty(
+        "--app-composer-height",
+        `${composerRow.offsetHeight}px`
+      )
+    );
+    observer.observe(composerRow);
+    return () => observer.disconnect();
+  }, [composerRow]);
+
   // Handle error case where no agents are available.
   // Only show this after agents have loaded to prevent flash during initial load.
   if (!activeAgent && !isLoadingAgents) {
@@ -869,7 +887,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     its scrollbar sits flush; non-chat siblings add their own px.
                     A leaving view leaves the flow, so the entering one does
                     not start below it and jump up when it unmounts. */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center relative *:data-[presence-phase=leaving]:absolute *:data-[presence-phase=leaving]:inset-0">
+                <div
+                  className={cn(
+                    "row-start-1 col-start-1 min-h-0 overflow-hidden flex flex-col items-center relative *:data-[presence-phase=leaving]:absolute *:data-[presence-phase=leaving]:inset-0",
+                    appPosition.isChat() && "row-end-3"
+                  )}
+                >
                   {/* ChatUI */}
                   <Presence
                     show={
@@ -901,6 +924,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                         wide={wideChatActive}
+                        footer={
+                          <div
+                            aria-hidden
+                            className="shrink-0 h-(--app-composer-height)"
+                          />
+                        }
                       >
                         <ChatUI
                           activeAgent={activeAgent!}
@@ -934,7 +963,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     width="full"
                     height="full"
                   >
-                    <div className="h-full w-full px-2 sm:px-4 pt-6 pb-12">
+                    <div className="h-full w-full px-2 sm:px-4 pt-6 pb-[calc(3rem+var(--app-composer-height,0px))]">
                       <Section justifyContent="start" gap={0}>
                         {/* A conversation's shape in the chat column, from the
                         top down like a real chat. More turns than fit, so it
@@ -1065,20 +1094,28 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                 {/* ── Middle-center: AppInputBar ── */}
                 <div
+                  ref={setComposerRow}
                   className={cn(
-                    "row-start-2 flex flex-col items-center px-2 sm:px-4",
+                    "row-start-2 col-start-1 flex flex-col items-center px-2 sm:px-4",
+                    // Over the chat's scroll area, which keeps its scrollbar
+                    appPosition.isChat() && "relative z-10 pointer-events-none",
                     onboardingVisible && "min-h-0",
                     sessionFetchError && "hidden"
                   )}
                 >
                   <div
                     className={cn(
-                      "relative w-full flex flex-col",
+                      "relative w-full flex flex-col pointer-events-auto",
+                      appPosition.isChat() && !hasBackground && "bg-background",
                       onboardingVisible && "min-h-0",
                       "md:max-w-(--app-chat-column-width)",
                       CHAT_WIDTH_TRANSITION
                     )}
                   >
+                    {/* Fades the messages that scroll under the composer */}
+                    {appPosition.isChat() && !hasBackground && (
+                      <div className="absolute bottom-full inset-x-0 h-6 bg-linear-to-t from-background to-transparent pointer-events-none" />
+                    )}
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appPosition.isChat() && showScrollButton && (
                       <div className="absolute -top-14 self-center">
