@@ -18,6 +18,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import ToolInvocation
+from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import FileRecord, User
@@ -30,7 +31,10 @@ from onyx.llm.models import ToolResult
 from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox import harness_factory
-from onyx.server.features.build.sandbox.file_copy_state import copy_generation_key
+from onyx.server.features.build.sandbox.file_copy_state import (
+    COPY_STATE_SECONDS,
+    copy_generation_key,
+)
 from onyx.server.features.build.sandbox.firecracker import harness_state
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
@@ -183,6 +187,13 @@ def store_file() -> Generator[StoreFile, None, None]:
     yield save
     for file_id in file_ids:
         store.delete_file(file_id, error_on_missing=False)
+
+
+def _generation(ref: HarnessSandboxRef) -> int:
+    """The chat's next copy generation, as a turn's first copy takes it."""
+    return get_cache_backend(tenant_id=ref.tenant_id).incr(
+        copy_generation_key(ref.session_id), ex=COPY_STATE_SECONDS
+    )
 
 
 def _file(file_id: str, path: str) -> VmChatFile:
@@ -418,7 +429,10 @@ def test_each_failure_has_its_reason(
     if reason == "the sandbox did not start":
         _, ref = new_turn()
         copies = TurnFileCopies(
-            ref, _NoStart(template="tpl-1", client_factory=client_factory), chat_files
+            ref,
+            _NoStart(template="tpl-1", client_factory=client_factory),
+            chat_files,
+            generation=_generation(ref),
         )
     else:
         turn, _ = new_turn(chat_files)
@@ -790,7 +804,7 @@ def test_a_copy_lost_with_its_pod_is_copied_again_by_the_next_turn(
     _, ref = new_turn()
     key = _key(ref, "attachments/big.bin")
     try:
-        TurnFileCopies(ref, pod, files)
+        TurnFileCopies(ref, pod, files, generation=_generation(ref))
         _wait_until(pod.broke.is_set)
         # The broken stream left nothing at the path.
         assert key not in node.agent.files
@@ -891,7 +905,7 @@ def test_a_file_is_written_unless_listed_in_place_and_files_that_left_go(
     # A chat file is in a directory of chat files.
     for path in ("notes.txt", "attachments/kept/notes.txt"):
         with pytest.raises(SandboxPathError):
-            TurnFileCopies(ref, sandbox, [_file(upload, path)])
+            TurnFileCopies(ref, sandbox, [_file(upload, path)], generation=0)
 
 
 def test_the_limits_of_one_file_and_of_the_bytes_written_in_one_turn(
@@ -1017,7 +1031,12 @@ def test_a_newer_turn_on_another_pod_takes_over_from_a_write_in_progress(
         template="tpl-1", client_factory=client_factory
     )
     other_pool = new_file_copy_pool()
-    TurnFileCopies(ref, other_pod, [_file(kept, "attachments/project/x.txt")])
+    TurnFileCopies(
+        ref,
+        other_pod,
+        [_file(kept, "attachments/project/x.txt")],
+        generation=_generation(ref),
+    )
     _wait_until(other_pool.idle)
     gate.set()
     _wait_until(idle)
@@ -1504,7 +1523,7 @@ def test_a_copy_taken_in_after_a_vm_restart_copies_onto_the_new_instance(
     _exec(turn)
     held, release = _hold(monkeypatch, sandbox)
     try:
-        TurnFileCopies(ref, sandbox, files)
+        TurnFileCopies(ref, sandbox, files, generation=_generation(ref))
         _wait_until(lambda: bool(held))
         _restart(client_factory, node, ref)
     finally:
@@ -1559,6 +1578,7 @@ def test_many_chats_copy_at_once_on_a_bounded_number_of_threads(
                 _file(file_id, f"attachments/c{i}-{j}.bin")
                 for j in range(files_per_chat)
             ],
+            generation=_generation(ref),
         )
     most_threads = copy_threads()
 
@@ -1658,7 +1678,12 @@ def test_a_slow_session_setup_does_not_delay_other_chats_in_its_vm(
         lambda held_ref: held_ref.session_id == slow_ref.session_id,
     )
     try:
-        TurnFileCopies(slow_ref, sandbox, [_file(file_id, "attachments/slow.txt")])
+        TurnFileCopies(
+            slow_ref,
+            sandbox,
+            [_file(file_id, "attachments/slow.txt")],
+            generation=_generation(slow_ref),
+        )
         _wait_until(lambda: bool(held))
         _, ref = new_turn(
             [_file(file_id, "attachments/a.txt"), _file(file_id, "attachments/b.txt")],
@@ -1703,7 +1728,12 @@ def test_vms_with_a_hung_session_setup_do_not_delay_another_vm(
     )
     try:
         for _, slow_ref in slow:
-            TurnFileCopies(slow_ref, sandbox, [_file(file_id, "attachments/slow.txt")])
+            TurnFileCopies(
+                slow_ref,
+                sandbox,
+                [_file(file_id, "attachments/slow.txt")],
+                generation=_generation(slow_ref),
+            )
         _wait_until(lambda: len(held) == 2 * file_copies.VM_INTAKES)
 
         _, ref = new_turn([_file(file_id, "attachments/ok.txt")])
@@ -1714,16 +1744,17 @@ def test_vms_with_a_hung_session_setup_do_not_delay_another_vm(
         release.set()
 
 
-class _TimedOutDeletes(_Wrapped):
-    """Session files whose deletes time out."""
+class _FailedDeletes(_Wrapped):
+    """Session files whose deletes raise `error`."""
 
-    def __init__(self, files: SessionFiles) -> None:
+    def __init__(self, files: SessionFiles, error: Exception) -> None:
         super().__init__(files)
+        self.error = error
         self.deleted: list[str] = []
 
     def delete(self, path: str) -> bool:
         self.deleted.append(path)
-        raise TimeoutError("the VM does not respond")
+        raise self.error
 
 
 def test_a_delete_that_times_out_is_tried_again_by_the_next_turn(
@@ -1744,10 +1775,10 @@ def test_a_delete_that_times_out_is_tried_again_by_the_next_turn(
         ]
     )
     _wait_until(idle)
-    timed_out: list[_TimedOutDeletes] = []
+    timed_out: list[_FailedDeletes] = []
 
     def wrap(files: SessionFiles) -> SessionFiles:
-        timed_out.append(_TimedOutDeletes(files))
+        timed_out.append(_FailedDeletes(files, TimeoutError("no response")))
         return timed_out[-1]
 
     session_files = sandbox.session_files
@@ -1798,7 +1829,7 @@ def test_a_vm_that_stops_during_a_copy_fails_the_rest_at_once(
     node.agent.write_gates["attachments/a.txt"] = gate
     turn, ref = new_turn()
     _exec(turn)
-    copies = TurnFileCopies(ref, sandbox, files)
+    copies = TurnFileCopies(ref, sandbox, files, generation=_generation(ref))
     _wait_until(lambda: "attachments/a.txt" in node.agent.write_waiting)
     _restart(client_factory, node, ref)
     gate.set()

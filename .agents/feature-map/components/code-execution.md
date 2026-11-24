@@ -481,9 +481,15 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         copy lists the three directories, writes
                                         the files that are not there at their
                                         size, and deletes the project and agent
-                                        files that left (never attachments/artifacts/,
-                                        the artifact downloads); a per-chat generation
-                                        lets the newest turn win.
+                                        files that left, never anything in
+                                        attachments/search/ or
+                                        attachments/artifacts/ (the artifact
+                                        downloads). SandboxTurn takes the chat's
+                                        next copy generation when it is created,
+                                        for both roots, so a later turn always
+                                        supersedes an earlier turn's late copies
+                                        (a background subagent's search), never
+                                        the reverse.
                                         Agent-host turns copy too, so an agent
                                         resumed on a restored VM has its files; deep
                                         research has no sandbox. The module docstring
@@ -495,6 +501,43 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         agent-host turns too; edits to
                                         attachments/ get ATTACHMENTS_NOT_SAVED_NOTE
                                         (sandbox_tools.py), and session saves skip it
+  TurnSearchFiles (sandbox/file_copies) SandboxTurn.search_files: the turn's copies
+                                        of search result files into the chat's
+                                        attachments/search/, shared by the root and
+                                        its subagents. ChatAgent passes its offer
+                                        as ToolContext.sandbox_search_files, so
+                                        direct, program and subagent searches use
+                                        it. SearchTool._build_search_result offers
+                                        the shown results' connector files whose
+                                        object is not confirmed missing, at most
+                                        SEARCH_FILE_MAX_BYTES (after
+                                        check_cancelled, so a stopped search
+                                        offers nothing); the turn
+                                        budget (MAX_TURN_SEARCH_FILES,
+                                        MAX_TURN_SEARCH_BYTES) decides which get a
+                                        path, named in the result with
+                                        prompts/sandbox_tools.py:SEARCH_FILE_GUIDANCE.
+                                        The search thread only counts and queues.
+                                        In the pod's copy slots, the intake checks
+                                        access once (get_accessible_documents_by_ids:
+                                        a readable document must still have the
+                                        file), lists attachments/search/, counts a
+                                        regular file of the size as a hit (logged),
+                                        picks the writes that fit in
+                                        MAX_CHAT_SEARCH_BYTES next to this turn's
+                                        offers and running writes, deletes the
+                                        oldest other search files only to make
+                                        room for them (file_copies._evictions; a
+                                        failed delete stops the intake with no
+                                        write), and writes them with the chat file
+                                        copy's retries, busy mark and slots. A file
+                                        that is not written gives its budget back.
+                                        An offered file that is refused, over a
+                                        limit, dropped or failed keeps its path;
+                                        SEARCH_FILE_GUIDANCE tells the model to
+                                        search again in a later turn.
+                                        No [files] line names them; a chat purge
+                                        deletes them with the working directory
   Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research
@@ -525,11 +568,13 @@ PowerPoint) and code files by extension
 text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
 (`chat/files.py:build_python_chat_files_from_search_docs`), only when the chat
-offers the Python tool (`ToolContext.python_stages_search_files`). The search
-tool maps each connector file to its name in `SearchDocsResponse.openable_file_names`
-(one file record query; the result's text uses the same names), so staging
-reads no file records and names no file itself; `PythonTool` applies the
-staging caps. Files already in
+offers the Python tool and has no sandbox
+(`ToolContext.python_stages_search_files`). The search tool maps each
+connector file to its name in `SearchDocsResponse.openable_file_names` (one
+file record query; the result's text uses the same names), so staging reads
+no file records and names no file itself; `PythonTool` applies the staging
+caps. A sandbox chat copies the files into the VM instead
+(`TurnSearchFiles`). Files already in
 `ChatAgent.chat_files` from an earlier step are not loaded again. Search documents
 and citations are retained without Python. `chat/agent.py:ChatAgent._update_tool_context` merges them into
 `chat_files` after the step and skips a filename already present, so the code in

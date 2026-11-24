@@ -41,6 +41,18 @@ CHAT_FILES_LAYOUT = (
     f"path outside {CHAT_FILES_DIR}/."
 )
 
+# A search result whose original file the chat's sandbox gets
+# (tools/tool_implementations/sandbox/file_copies.py); the path is relative to
+# the working directory, as the paths of chat files are.
+SEARCH_FILE_GUIDANCE = (
+    "Only a short excerpt from this document is shown below. The complete "
+    'file is in the sandbox at "{filename}"; read or analyze it with '
+    "exec_command. If the file is missing in the turn of this search, it may "
+    "still be copying; try again shortly. In a later turn, search again to "
+    "bring it back, or work from the excerpt.\n\n"
+    "Excerpt: {content}"
+)
+
 # The end of an edit, write or apply_patch result that changed a chat file.
 ATTACHMENTS_NOT_SAVED_NOTE = (
     f"Onyx can put back the original files in {CHAT_FILES_DIR}/ at any turn. "

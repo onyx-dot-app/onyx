@@ -99,12 +99,13 @@ def convert_inference_sections_to_llm_string(
     include_document_id: bool = False,
     note: str | None = None,
     file_names: Mapping[str, str] | None = None,
+    file_guidance: str = FILE_ASSOCIATED_GUIDANCE,
 ) -> tuple[str, dict[int, str]]:
     """Convert InferenceSection objects to a JSON string for LLM.
 
     `file_names`: by file ID, the name under which a tool opens the file of a
-    section. Such a section shows its center chunk with FILE_ASSOCIATED_GUIDANCE;
-    other sections show their combined content.
+    section. Such a section shows its center chunk with `file_guidance`, which
+    gets `filename` and `content`; other sections show their combined content.
 
     Returns a JSON string with document results and a citation mapping.
     """
@@ -150,9 +151,7 @@ def convert_inference_sections_to_llm_string(
                 url=link or None,
                 document_identifier=chunk.document_id if include_document_id else None,
                 file_name=filename,
-                content=FILE_ASSOCIATED_GUIDANCE.format(
-                    filename=filename, content=chunk.content
-                )
+                content=file_guidance.format(filename=filename, content=chunk.content)
                 if filename is not None
                 else section.combined_content,
                 metadata=json.dumps(chunk.metadata, ensure_ascii=False)

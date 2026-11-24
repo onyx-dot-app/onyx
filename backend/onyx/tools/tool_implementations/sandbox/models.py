@@ -2,6 +2,7 @@
 the chat file copies (file_copies.py). The saved-details unions import it,
 so it imports only models and constants."""
 
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -33,6 +34,29 @@ class VmChatFile(BaseModel):
 
     file_id: str
     path: str
+
+
+# The largest search result file that a sandbox chat copies into its VM.
+SEARCH_FILE_MAX_BYTES = 100 << 20
+
+
+class SearchResultFile(BaseModel):
+    """The file of shown search results that a tool can open."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # The title of the first result that shows it.
+    title: str
+    # The file record's size; None: not recorded.
+    size: int | None
+    # The shown results' documents that have this file.
+    document_ids: tuple[str, ...]
+
+
+# Offers a search's files (by file store ID) to the sandbox chat's turn, which
+# copies them into the VM in the background; gives the path, relative to the
+# working directory, of each file that it copies.
+SearchFileOffer = Callable[[Mapping[str, SearchResultFile]], dict[str, str]]
 
 
 class ExecCommandArguments(BaseModel):

@@ -17,6 +17,7 @@ from onyx.integrations.models import ActionSettings, ApprovalMode
 from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.tools.tool_implementations.sandbox.models import (
     PublishedFile,
+    SearchFileOffer,
     SpilledOutput,
 )
 from onyx.tools.tool_implementations.search.models import SearchContext
@@ -404,6 +405,9 @@ class ToolContext(BaseModel):
     # The chat stages the files of search results for the Python tool, so a
     # search result names them by their staged file names.
     python_stages_search_files: bool = False
+    # In a sandbox chat: copies the files of a search's shown results into
+    # the VM, and the result names them by their paths.
+    sandbox_search_files: SearchFileOffer | None = None
 
 
 class ToolCallInfo(BaseModel):

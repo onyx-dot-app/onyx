@@ -885,7 +885,7 @@ def test_file_store_files_stream_into_the_vm_and_its_sessions(
         file_origin=FileOrigin.OTHER,
         file_type="application/octet-stream",
     )
-    vm_path = f"{ONYX_VM_FILES_ROOT}/search-files/{file_id}/big.bin"
+    vm_path = f"{ONYX_VM_FILES_ROOT}/files/{file_id}/big.bin"
     try:
         with store.read_file(file_id, use_tempfile=True) as content:
             sandbox.write_file(ref, vm_path, content)

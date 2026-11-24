@@ -198,14 +198,22 @@ def get_accessible_documents_by_ids(
     user_email: str | None,
     external_group_ids: list[str],
     user_id: UUID | None = None,
+    prior_emails: list[str] | None = None,
 ) -> list[Document]:
-    """Return requested documents allowed by the retrieval-time access policy."""
+    """Return requested documents allowed by the retrieval-time access policy.
+    `prior_emails`: the user's earlier emails, which synced ACLs can still
+    name, as search matches them."""
     if not document_ids:
         return []
 
     stmt = select(Document).where(Document.id.in_(document_ids))
     stmt = apply_document_access_filter(
-        db_session, stmt, user_email, external_group_ids, user_id=user_id
+        db_session,
+        stmt,
+        user_email,
+        external_group_ids,
+        user_id=user_id,
+        prior_emails=prior_emails,
     )
     stmt = stmt.distinct()
     return list(db_session.execute(stmt).scalars().all())

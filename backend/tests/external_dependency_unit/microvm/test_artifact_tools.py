@@ -528,6 +528,7 @@ def test_the_chat_file_copies_leave_downloads_alone(
         ref,
         turn.sandbox,
         [VmChatFile(file_id=project_file, path="attachments/project/p.txt")],
+        generation=turn.copy_target().generation,
     )
     _wait_until(pool.idle)
     assert _vm_file(node, ref, "attachments/project/p.txt") == b"project"
