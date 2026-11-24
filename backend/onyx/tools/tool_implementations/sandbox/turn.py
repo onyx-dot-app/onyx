@@ -12,7 +12,7 @@ from onyx.server.features.build.sandbox.file_copy_state import (
     copy_generation_key,
 )
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
-from onyx.server.features.build.sandbox.models import HarnessSandboxRef, SkillsBundle
+from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.tools.tool_implementations.sandbox.file_copies import (
     COPY_CACHE_SECONDS,
     CopyTarget,
@@ -77,9 +77,6 @@ class SandboxTurn:
             logger.exception(
                 "sandbox_copy_generation_failed session=%s", chat_session_id
             )
-        self._skills_lock = threading.Lock()
-        self._skills_loaded = False
-        self._skills_bundle: SkillsBundle | None = None
         self.file_copies: TurnFileCopies | None = None
         self.search_files = TurnSearchFiles(self.copy_target, user_id)
 
@@ -150,31 +147,7 @@ class SandboxTurn:
                     ref.sandbox_id,
                     ref.session_id,
                 )
-        self._sync_skills(ref)
         return ref
-
-    def _sync_skills(self, ref: HarnessSandboxRef) -> None:
-        # Deferred: the skills push stack loads only when a tool runs.
-        from onyx.skills.push import build_chat_built_ins_bundle
-
-        with self._skills_lock:
-            try:
-                if not self._skills_loaded:
-                    with get_session_with_tenant(
-                        tenant_id=self._tenant_id
-                    ) as db_session:
-                        self._skills_bundle = build_chat_built_ins_bundle(db_session)
-                    self._skills_loaded = True
-                # Every call: a VM that replaced a stopped one mid-turn needs
-                # the push too, and an unchanged instance is skipped.
-                if self._skills_bundle is not None:
-                    self.sandbox.sync_skills(ref, self._skills_bundle)
-            except Exception:
-                logger.exception(
-                    "sandbox_skills_sync_failed sandbox=%s session=%s",
-                    ref.sandbox_id,
-                    ref.session_id,
-                )
 
     def end(self) -> None:
         """End the turn if a call started one. Never raises."""

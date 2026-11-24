@@ -45,9 +45,9 @@ from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
+    FileSet,
     HarnessSandboxRef,
     SandboxPathInfo,
-    SkillsBundle,
     session_workspace,
 )
 
@@ -298,9 +298,16 @@ class HarnessSandbox(abc.ABC):
         initialized. Every other call does this first."""
 
     @abc.abstractmethod
-    def sync_skills(self, ref: HarnessSandboxRef, bundle: SkillsBundle) -> None:
-        """Show the bundle's files read-only at CHAT_SKILLS_MOUNT_PATH. Skips
-        the transfer when this VM instance already shows the same bundle."""
+    def install_skill(
+        self,
+        ref: HarnessSandboxRef,
+        name: str,
+        version: str,
+        files: FileSet,
+    ) -> bool:
+        """Put the skill's files (`<name>/<path>` to bytes) in the read-only
+        folder `chat_skill_folder(name)`, unless the VM already has
+        `version`. True when it copied."""
 
     @abc.abstractmethod
     def exec_command(

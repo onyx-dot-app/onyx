@@ -1,9 +1,10 @@
 from onyx.tools.constants import SKILLS_READ_TOOL_NAME
 
-# Codex's skills instructions, without file paths, root aliases, bundled files
-# or scripts, which chat cannot open. The steps address the agent that reads
-# the catalog, which can be a Deep Research research agent, and name the skill
-# tools as that agent calls them.
+# Codex's skills instructions, adapted to chat: SKILL.md comes from the read
+# tool, and a skill's other files reach the sandbox only through the load
+# tool. The steps address the agent that reads the catalog, which can be a
+# Deep Research research agent, and name the skill tools as that agent calls
+# them.
 SKILLS_CATALOG_PROMPT = """<skills_instructions>
 ## Skills
 A skill is a set of instructions provided through a `SKILL.md` source. Below \
@@ -29,9 +30,12 @@ before taking task actions: call `{read_tool}` with its name, and act only \
 after you have read its result. If `{read_tool}` says the file continues, \
 call it again with `start_char` until the end. A skill in a <skill> block is \
 already loaded; do not read it again unless its block says it continues.
-  2) When a `SKILL.md` starts with a `Skill files:` line, its other files are \
-in the sandbox at that folder: read them and run its scripts with your sandbox \
-tools. You cannot open the other files of any other skill or run its scripts. \
+  2) When a `SKILL.md` starts with a `Skill files:` line, the skill has other \
+files, such as scripts. They are not in the sandbox until you call \
+`{load_tool}` with the skill's name. Call it before you read them or run its \
+scripts; then they are read-only at that folder. Do not decide that a \
+skill's files are missing before you load it. You cannot open the other \
+files of any other skill or run its scripts. \
 Follow its instructions as far as your tools allow, and tell the user when a \
 step needs a bundled file or script.
   3) Read each selected skill yourself before acting on it. Do not delegate \
@@ -50,9 +54,11 @@ instructions, a step needs a file or script you cannot open), state the issue, \
 pick the next-best approach, and continue.
 </skills_instructions>"""
 
-BUILT_IN_SKILL_FILES_LINE = (
-    "Skill files: {folder}/ (read-only). Run its scripts with their interpreter, "
-    "for example `python {folder}/scripts/<name>.py`.\n\n"
+SKILL_FILES_LINE = (
+    "Skill files: {folder}/ (read-only). Call {load_tool} before you use "
+    "them. Run its scripts with their interpreter, for example "
+    "`python {folder}/scripts/<name>.py`. To change a file, copy the skill "
+    "into your working directory first.\n\n"
 )
 
 SKILLS_UNAVAILABLE_INTEGRATIONS_LINE = (

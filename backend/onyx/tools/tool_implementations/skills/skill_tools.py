@@ -57,9 +57,9 @@ class _SkillTool(Tool):
     )
     arguments: ClassVar[type[BaseModel]]
 
-    def __init__(self, user: User, *, built_ins: bool) -> None:
+    def __init__(self, user: User, *, with_sandbox: bool) -> None:
         self.user = user
-        self.built_ins = built_ins
+        self.with_sandbox = with_sandbox
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
@@ -84,7 +84,9 @@ class SkillsListTool(_SkillTool):
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(SkillsListArguments, invocation.arguments)
         with get_session_with_current_tenant() as db_session:
-            skills = list_chat_skills(db_session, self.user, built_ins=self.built_ins)
+            skills = list_chat_skills(
+                db_session, self.user, with_sandbox=self.with_sandbox
+            )
         page = skills[request.offset : request.offset + SKILLS_PER_PAGE]
         lines = [
             f"- {skill.name}: {truncate_catalog_description(skill.description)}"
@@ -115,7 +117,7 @@ class SkillsReadTool(_SkillTool):
                 (
                     skill
                     for skill in list_chat_skills(
-                        db_session, self.user, built_ins=self.built_ins
+                        db_session, self.user, with_sandbox=self.with_sandbox
                     )
                     if skill.name == request.name
                 ),
@@ -129,9 +131,9 @@ class SkillsReadTool(_SkillTool):
                         f"{SKILLS_LIST_TOOL_NAME} for the skills you can use."
                     ),
                 )
-            skill_md = read_chat_skills_md([skill], self.user.id, db_session).get(
-                (skill.version_id, skill.path)
-            )
+            skill_md = read_chat_skills_md(
+                [skill], self.user.id, db_session, with_sandbox=self.with_sandbox
+            ).get((skill.version_id, skill.path))
         if skill_md is None:
             raise ToolCallException(
                 message=f"Unreadable skill: {request.name}",
@@ -163,7 +165,7 @@ def skills_catalog_message(
         return None
     with get_session_with_current_tenant() as db_session:
         skills = list_chat_skills(
-            db_session, list_tool.user, built_ins=list_tool.built_ins
+            db_session, list_tool.user, with_sandbox=list_tool.with_sandbox
         )
         catalog = render_skills_catalog(skills, context_window_tokens, called_name)
         if catalog is None:

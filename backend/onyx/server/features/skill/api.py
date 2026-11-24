@@ -370,7 +370,7 @@ def list_chat_skills_for_current_user(
 ) -> list[ChatSkill]:
     """The skills that the user's chat agents get, for the `@` picker. Built-ins
     are in it when the deployment has chat VMs."""
-    return list_chat_skills(db_session, user, built_ins=HARNESS_SANDBOX_ENABLED)
+    return list_chat_skills(db_session, user, with_sandbox=HARNESS_SANDBOX_ENABLED)
 
 
 @user_router.post("/bulk")

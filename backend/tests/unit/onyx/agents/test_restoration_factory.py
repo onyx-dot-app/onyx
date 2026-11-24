@@ -443,8 +443,8 @@ def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
         llm,
         tools=[
             EchoTool(),
-            SkillsListTool(_user_skills, built_ins=False),
-            SkillsReadTool(_user_skills, built_ins=False),
+            SkillsListTool(_user_skills, with_sandbox=False),
+            SkillsReadTool(_user_skills, with_sandbox=False),
         ],
     )
     state = original.capture_state().model_dump(mode="json")
@@ -473,8 +473,8 @@ def test_code_mode_offers_the_skill_tools_as_program_functions(
         llm,
         code_mode=True,
         tools=[
-            SkillsListTool(_user_skills, built_ins=False),
-            SkillsReadTool(_user_skills, built_ins=False),
+            SkillsListTool(_user_skills, with_sandbox=False),
+            SkillsReadTool(_user_skills, with_sandbox=False),
         ],
     )
     run_agent(agent, max_steps=3, messages=[UserMessage(content="Go")])
@@ -494,8 +494,8 @@ def test_restored_deep_research_offers_the_skill_tools_like_the_original(
     original = DeepResearchAgent(
         messages=[],
         allowed_tools=[
-            SkillsListTool(_user_skills, built_ins=False),
-            SkillsReadTool(_user_skills, built_ins=False),
+            SkillsListTool(_user_skills, with_sandbox=False),
+            SkillsReadTool(_user_skills, with_sandbox=False),
         ],
         llm=llm,
         token_counter=len,

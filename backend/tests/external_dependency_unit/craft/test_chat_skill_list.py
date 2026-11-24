@@ -30,13 +30,16 @@ from onyx.db.skill import (
 )
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.sandbox.models import CHAT_SKILLS_PATH
 from onyx.skills.built_in import CHAT_BUILT_IN_SKILL_IDS
 from onyx.skills.content import read_chat_skills_md, read_versions_skill_md
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
-from onyx.skills.push import build_chat_built_ins_bundle
+from onyx.skills.models import ChatSkill, ChatSkillFiles
+from onyx.skills.push import build_chat_skill_files
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
+    make_chat_custom_skill,
     make_external_app,
     make_group,
     make_skill,
@@ -141,12 +144,18 @@ def test_chat_skills_use_the_version_each_user_runs(
 
     author_skills = {
         skill.name: skill
-        for skill in list_chat_skills(db_session, author, built_ins=False)
+        for skill in list_chat_skills(db_session, author, with_sandbox=False)
     }
     org_skills = {
         skill.name: skill
-        for skill in list_chat_skills(db_session, org_only, built_ins=False)
+        for skill in list_chat_skills(db_session, org_only, with_sandbox=False)
     }
+
+    # Each user's version is its own copy key, so a new version replaces it.
+    author_files = build_chat_skill_files(author_skills[name], author, db_session)
+    org_files = build_chat_skill_files(org_skills[name], org_only, db_session)
+    assert author_files is not None and org_files is not None
+    assert author_files.version != org_files.version
 
     # Each skill has its version's description and short description.
     assert (
@@ -202,7 +211,7 @@ def test_chat_skills_keep_app_skills_and_leave_out_invalid_skills(
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=user)
     }
     chat_names = {
-        skill.name for skill in list_chat_skills(db_session, user, built_ins=False)
+        skill.name for skill in list_chat_skills(db_session, user, with_sandbox=False)
     }
 
     assert {app_skill.name, valid_skill.name} <= runtime_names
@@ -246,7 +255,7 @@ def test_chat_skills_follow_install_settings_and_the_name_order(
 
     chat = {
         skill.name: skill
-        for skill in list_chat_skills(db_session, user, built_ins=False)
+        for skill in list_chat_skills(db_session, user, with_sandbox=False)
     }
     runtime = {
         runtime.name: runtime.version.id
@@ -257,15 +266,15 @@ def test_chat_skills_follow_install_settings_and_the_name_order(
     assert hidden.name not in chat
     assert required.name in chat
     assert hidden.name in {
-        skill.name for skill in list_chat_skills(db_session, other, built_ins=False)
+        skill.name for skill in list_chat_skills(db_session, other, with_sandbox=False)
     }
     assert required.name not in {
-        skill.name for skill in list_chat_skills(db_session, other, built_ins=False)
+        skill.name for skill in list_chat_skills(db_session, other, with_sandbox=False)
     }
     # One skill keeps the name: the published one beats the user's own, as in
     # the sandbox.
     assert [
-        skill.name for skill in list_chat_skills(db_session, user, built_ins=False)
+        skill.name for skill in list_chat_skills(db_session, user, with_sandbox=False)
     ].count(name) == 1
     assert {skill.name: skill.version_id for skill in chat.values()} == runtime
     published_plugin = db_session.get(Plugin, published.id)
@@ -289,12 +298,12 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     user, _ = users
     assert not any(
         skill.built_in_skill_id
-        for skill in list_chat_skills(db_session, user, built_ins=False)
+        for skill in list_chat_skills(db_session, user, with_sandbox=False)
     )
 
     built_ins = {
         skill.name: skill
-        for skill in list_chat_skills(db_session, user, built_ins=True)
+        for skill in list_chat_skills(db_session, user, with_sandbox=True)
         if skill.built_in_skill_id is not None
     }
     assert "pptx" in built_ins
@@ -303,16 +312,80 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     )
 
     pptx = built_ins["pptx"]
-    skill_md = read_chat_skills_md([pptx], user.id, db_session)[
+    skill_md = read_chat_skills_md([pptx], user.id, db_session, with_sandbox=True)[
         (pptx.version_id, pptx.path)
     ]
-    assert skill_md.startswith("Skill files: /mnt/skills/pptx/")
-    assert "python /mnt/skills/pptx/scripts/lint.py" in skill_md
+    assert skill_md.startswith(f"Skill files: {CHAT_SKILLS_PATH}/pptx/")
+    assert f"python {CHAT_SKILLS_PATH}/pptx/scripts/lint.py" in skill_md
 
-    # Each mounted folder is a listed skill; the bundle is built once.
-    bundle = build_chat_built_ins_bundle(db_session)
-    assert bundle is not None
-    assert build_chat_built_ins_bundle(db_session) is bundle
-    with zipfile.ZipFile(io.BytesIO(bundle.zip_bytes)) as zf:
-        folders = {name.split("/", 1)[0] for name in zf.namelist()}
-    assert folders == set(built_ins)
+    # A skill with no other files has nothing to load.
+    only_md = [
+        skill
+        for skill in built_ins.values()
+        if list(_files(build_chat_skill_files(skill, user, db_session)))
+        == [f"{skill.name}/SKILL.md"]
+    ]
+    assert only_md
+    for skill in only_md:
+        text = read_chat_skills_md([skill], user.id, db_session, with_sandbox=True)[
+            (skill.version_id, skill.path)
+        ]
+        assert not text.startswith("Skill files:")
+
+
+def _files(skill_files: ChatSkillFiles | None) -> dict[str, bytes]:
+    assert skill_files is not None
+    return skill_files.files
+
+
+def _custom_chat_skill(
+    db_session: Session, bundle_ids: list[str], author: User, files: dict[str, str]
+) -> ChatSkill:
+    skill, _, bundle_id = make_chat_custom_skill(db_session, author, files)
+    bundle_ids.append(bundle_id)
+    return skill
+
+
+def test_a_custom_chat_skill_copies_its_folder_and_names_it(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    bundle_ids: list[str],
+    users: tuple[User, User],
+) -> None:
+    author, _ = users
+    name = f"copy-{author.id.hex[:8]}"
+    skill = _custom_chat_skill(
+        db_session,
+        bundle_ids,
+        author,
+        {
+            "SKILL.md": f"---\nname: {name}\ndescription: Copy\n---\n\n"
+            "Run python ${CLAUDE_SKILL_DIR}/scripts/run.py.\n",
+            "scripts/run.py": "print(1)\n",
+        },
+    )
+
+    files = _files(build_chat_skill_files(skill, author, db_session))
+    folder = f"{CHAT_SKILLS_PATH}/{name}"
+    assert sorted(files) == [f"{name}/SKILL.md", f"{name}/scripts/run.py"]
+    copied_md = files[f"{name}/SKILL.md"].decode()
+
+    key = (skill.version_id, skill.path)
+    with_sandbox = read_chat_skills_md(
+        [skill], author.id, db_session, with_sandbox=True
+    )
+    assert with_sandbox[key].startswith(f"Skill files: {folder}/ (read-only). ")
+    assert f"Run python {folder}/scripts/run.py." in with_sandbox[key]
+    assert f"Run python {folder}/scripts/run.py." in copied_md
+    without = read_chat_skills_md([skill], author.id, db_session, with_sandbox=False)
+    assert without[key].startswith(f"---\nname: {name}\n")
+
+    # A skill with only SKILL.md has nothing to load.
+    only_md = _custom_chat_skill(
+        db_session,
+        bundle_ids,
+        author,
+        {"SKILL.md": f"---\nname: only-{name}\ndescription: Only\n---\n\nHi.\n"},
+    )
+    text = read_chat_skills_md([only_md], author.id, db_session, with_sandbox=True)
+    assert text[(only_md.version_id, only_md.path)].startswith("---\nname: only-")

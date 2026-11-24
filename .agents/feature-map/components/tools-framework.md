@@ -168,12 +168,13 @@ and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
 chat agent's configured tools when the turn's user has a chat skill
 ([[skills]]): the agent's tools and the request's tool options do not
 remove them. Restored and child agents receive them with the other configured
-tools. The tools hold the user and `built_ins` (the turn's `sandbox_tools`;
+tools. The tools hold the user and `with_sandbox` (the turn's `sandbox_tools`;
 chat built-ins need the VM) and read the user's current chat skills on each
 call; `skills_read` checks that the user can still see the skill and
 returns its SKILL.md, frontmatter included, up to 32,000 characters per call
 (`SKILL_READ_MAX_CHARS`). A longer text ends with a note that gives the
-`start_char` offset of the next call. The Deep Research orchestrator binds
+`start_char` offset of the next call. `skills_read` copies no files; the
+sandbox tool `load_skill` copies a skill into the VM. The Deep Research orchestrator binds
 both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows. A direct call renders as a generic tool card with a short

@@ -247,13 +247,14 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
                                         logged, the call still runs)
-  SandboxTurn._sync_skills              before each call (calls wait on one lock): the turn
-                                        reads the available chat built-ins once
-                                        (skills/push.py:build_chat_built_ins_bundle; the
-                                        zip is built once per process for each set), then
-                                        HarnessSandbox.sync_skills shows them at /mnt/skills
-                                        and skips a VM instance that has them (an error is
-                                        logged; the next call tries again)
+  LoadSkillTool                         the load_skill tool (sandbox_tools.py; code mode
+                                        DEFERRED; only for users with chat skills):
+                                        skills/chat.py:load_chat_skill_files resolves the
+                                        skill at the version the user runs now and builds its
+                                        files (skills/push.py:build_chat_skill_files);
+                                        HarnessSandbox.install_skill then sends them as one tar
+                                        to the daemon's InstallSkill and waits (guest-daemon
+                                        README "Skills").
   ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
                                         command gets AGENT_BROWSER_SESSION=<chat session>, so
                                         chats in one VM keep separate browsers); each

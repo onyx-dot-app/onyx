@@ -17,7 +17,7 @@ from functools import partial
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.agents.tools import (
     ToolExecutionMode,
@@ -69,12 +69,16 @@ from onyx.server.features.build.sandbox.harness_base import (
     session_relative_path,
 )
 from onyx.server.features.build.sandbox.models import (
+    CHAT_SKILLS_PATH,
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
     SandboxPathInfo,
+    chat_skill_folder,
     session_workspace,
 )
+from onyx.skills.chat import SkillLoadError, load_chat_skill_files
+from onyx.tools.constants import LOAD_SKILL_TOOL_NAME
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -85,6 +89,7 @@ from onyx.tools.models import (
     CodeModeFunctionName,
     CodeModeResultKind,
     CodeModeResultSpec,
+    CustomToolCallSummary,
     ToolCallException,
     ToolContext,
 )
@@ -1084,6 +1089,48 @@ class ArtifactsDownloadTool(_ArtifactTool):
                 chat_id=found.chat_id,
                 cached=cached,
             ).model_dump_json()
+        )
+
+
+class LoadSkillArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, description="Skill name.")
+
+
+class LoadSkillTool(SandboxTool):
+    """Copies one of the user's skills into its read-only sandbox folder."""
+
+    NAME = LOAD_SKILL_TOOL_NAME
+    USE = None
+    DESCRIPTION = (
+        "Copy a skill's files into the sandbox, read-only, at "
+        f"{CHAT_SKILLS_PATH}/<name>/. Call it before you run the skill's "
+        "scripts or open its other files. It returns when the copy is done."
+    )
+    ARGUMENTS = LoadSkillArguments
+    display_name = "Load skill"
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(LoadSkillArguments, invocation.arguments)
+        try:
+            skill = load_chat_skill_files(self._turn.user_id, arguments.name)
+        except SkillLoadError as e:
+            raise ToolCallException(message=str(e), llm_facing_message=str(e)) from e
+        self._turn.sandbox.install_skill(
+            self._turn.start_call(), arguments.name, skill.version, skill.files
+        )
+        return ToolResult(
+            content=f"Skill '{arguments.name}' is at {chat_skill_folder(arguments.name)}/ (read-only).",
+            details=CustomToolCallSummary(
+                tool_name=self.name,
+                response_type="json",
+                tool_result={"skill": arguments.name},
+            ),
         )
 
 

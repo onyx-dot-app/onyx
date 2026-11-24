@@ -83,8 +83,12 @@ skills. The new image is an input to `deployment/craft-fc/rootfs/build-rootfs.sh
 assets, without OpenCode or the current Python sidecar. The existing converter
 adds init, the static Go daemon and relay, overlays, and the rootfs manifest.
 In a Firecracker VM, managed content mounts on read-only, noexec drives at
-`/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the
-same A/B slot mechanism); scripts run through interpreters. Each session has
+`/mnt/user-uploads` and `/mnt/spaces` (each swappable with the same A/B slot
+mechanism); scripts run through interpreters. Skills go to the guest daemon's
+root-owned folder `/var/lib/onyx/skills`, shared by every session, which
+`InstallSkill` fills when chat's `load_skill` runs ([[skills]]). It is on the
+writable `/var` overlay, outside the sandbox user's home, so the sandbox user
+can read it but not change it; a VM restart empties it. Each session has
 `/home/onyx/workspaces/<session-id>`, the default working directory of its
 commands; commands can still reach any path in the VM. The template boot
 makes `/tmp/onyx/{tool-results,artifacts}` on the `/tmp` tmpfs,
@@ -266,14 +270,10 @@ the stored token on each request, so a new token takes effect at once.
 `backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
 - `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
   agent, with session saves (capture, upload, discard, restore) and the
-  managed drive (put, swap). Chat's built-ins use the skills drive:
-  `FirecrackerHarnessSandbox.sync_skills` takes a `SkillsBundle` (a zip
-  with fixed entry times, so the same files give the same image ID), and,
-  under the per-sandbox lock
-  `sandbox_fc:skills_sync:<sandbox>`, puts and swaps the image only when
-  the `sandbox_fc:skills_image:<sandbox>` cache record names another VM
-  instance `(attempt, generation)` or another image. A woken or replaced VM is a
-  new instance, so its first chat turn pushes again. Stubs in `backend/onyx/microvm/generated/`; the
+  managed drive (put, swap). Chat does not use the managed drive for skills:
+  `FirecrackerHarnessSandbox.install_skill` sends one skill's files as a plain
+  tar to the daemon's `InstallSkill` (rules in the guest-daemon README,
+  "Skills"). The backend keeps no record of what a VM has. Stubs in `backend/onyx/microvm/generated/`; the
   `microvm-python-stubs` pre-commit hook fails when they differ from
   `microvm/proto` (`regenerate.sh --check`).
 - `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
