@@ -1,19 +1,20 @@
-from onyx.tools.constants import SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME
+from onyx.tools.constants import SKILLS_READ_TOOL_NAME
 
 # Codex's skills instructions, without file paths, root aliases, bundled files
 # or scripts, which chat cannot open. The steps address the agent that reads
-# the catalog, which can be a Deep Research research agent.
-SKILLS_CATALOG_PROMPT = f"""<skills_instructions>
+# the catalog, which can be a Deep Research research agent, and name the skill
+# tools as that agent calls them.
+SKILLS_CATALOG_PROMPT = """<skills_instructions>
 ## Skills
 A skill is a set of instructions provided through a `SKILL.md` source. Below \
 is the list of skills that can be used. Each entry includes a name and \
 description.
 ### Available skills
-{{skills}}
+{skills}
 ### How to use skills
 - Discovery: The list above is the skills available in this session (name + \
-description). Read a skill's `SKILL.md` with `{SKILLS_READ_TOOL_NAME}`. If the \
-list says that skills were omitted, call `{SKILLS_LIST_TOOL_NAME}` to see all \
+description). Read a skill's `SKILL.md` with `{read_tool}`. If the \
+list says that skills were omitted, call `{list_tool}` to see all \
 of them.
 - Trigger rules: If the user names a skill (with `@` or plain text) OR the \
 task clearly matches a skill's description shown above, you must use that \
@@ -24,10 +25,10 @@ skills across turns unless re-mentioned.
 be read, say so briefly and continue with the best fallback.
 - How to use a skill (progressive disclosure):
   1) After deciding to use a skill, you must read its `SKILL.md` completely \
-before taking task actions: call `{SKILLS_READ_TOOL_NAME}` with its name. If \
-`{SKILLS_READ_TOOL_NAME}` says the file continues, call it again with \
-`start_char` until the end. A skill in a <skill> block is already loaded; do \
-not read it again unless its block says it continues.
+before taking task actions: call `{read_tool}` with its name, and act only \
+after you have read its result. If `{read_tool}` says the file continues, \
+call it again with `start_char` until the end. A skill in a <skill> block is \
+already loaded; do not read it again unless its block says it continues.
   2) When a `SKILL.md` starts with a `Skill files:` line, its other files are \
 in the sandbox at that folder: read them and run its scripts with your sandbox \
 tools. You cannot open the other files of any other skill or run its scripts. \

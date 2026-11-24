@@ -1,7 +1,7 @@
 """The skills a chat agent can use: their catalog in its prompt, and the
 skills a message picks."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from itertools import accumulate
 from typing import Final
 from uuid import UUID
@@ -23,6 +23,7 @@ from onyx.prompts.skill_prompts import (
 )
 from onyx.skills.content import read_chat_skills_md
 from onyx.skills.models import ChatSkill
+from onyx.tools.constants import SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME
 
 # Codex limits: the catalog's skill lines use at most 2% of the context
 # window, at four UTF-8 bytes a token counted for each line with its newline;
@@ -49,10 +50,14 @@ def _catalog_line_tokens(line_bytes: int) -> int:
 
 
 def render_skills_catalog(
-    skills: Sequence[ChatSkill], context_window_tokens: int
+    skills: Sequence[ChatSkill],
+    context_window_tokens: int,
+    called_name: Callable[[str], str] = str,
 ) -> str | None:
     """The catalog of skill names and descriptions, each skill's short
-    description when it has one, fit to its budget as Codex fits it.
+    description when it has one, fit to its budget as Codex fits it. Its
+    instructions name the skill tools by `called_name`: the agent's name for
+    a tool, such as its code mode function.
 
     Over budget, each skill in turn gets one more description character until
     no more fit; a description cut for the budget has no ellipsis. If names
@@ -82,6 +87,13 @@ def render_skills_catalog(
             + (len(": ") + description_bytes[index][chars] if chars else 0)
         )
 
+    def catalog(lines: Sequence[str]) -> str:
+        return SKILLS_CATALOG_PROMPT.format(
+            skills="\n".join(lines),
+            read_tool=called_name(SKILLS_READ_TOOL_NAME),
+            list_tool=called_name(SKILLS_LIST_TOOL_NAME),
+        )
+
     def line(index: int, chars: int) -> str:
         if not chars:
             return f"- {skills[index].name}"
@@ -94,9 +106,7 @@ def render_skills_catalog(
 
     full = [len(cap) for cap in capped]
     if sum(map(line_tokens, range(len(skills)), full)) <= budget:
-        return SKILLS_CATALOG_PROMPT.format(
-            skills="\n".join(map(line, range(len(skills)), full))
-        )
+        return catalog(list(map(line, range(len(skills)), full)))
     remaining = budget - sum(line_tokens(index, 0) for index in range(len(skills)))
     if remaining >= 0:
         chars = [0] * len(skills)
@@ -111,9 +121,7 @@ def render_skills_catalog(
                     chars[index] = count + 1
                     remaining -= cost
                     changed = True
-        return SKILLS_CATALOG_PROMPT.format(
-            skills="\n".join(map(line, range(len(skills)), chars))
-        )
+        return catalog(list(map(line, range(len(skills)), chars)))
 
     kept: list[int] = []
     used = 0
@@ -131,9 +139,7 @@ def render_skills_catalog(
         if not kept:
             return None
         used -= line_tokens(kept.pop(), 0)
-    return SKILLS_CATALOG_PROMPT.format(
-        skills="\n".join([*(line(index, 0) for index in kept), omitted_line])
-    )
+    return catalog([*(line(index, 0) for index in kept), omitted_line])
 
 
 def accept_picked_skills(

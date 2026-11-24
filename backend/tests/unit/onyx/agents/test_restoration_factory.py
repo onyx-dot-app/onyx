@@ -465,6 +465,28 @@ def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
     assert names == [EchoTool().name, "skills_list", "skills_read"]
 
 
+def test_code_mode_offers_the_skill_tools_as_program_functions(
+    _user_skills: User,
+) -> None:
+    llm = ScriptedLLM([Delta(content="done")])
+    agent = _chat_agent(
+        llm,
+        code_mode=True,
+        tools=[
+            SkillsListTool(_user_skills, built_ins=False),
+            SkillsReadTool(_user_skills, built_ins=False),
+        ],
+    )
+    run_agent(agent, max_steps=3, messages=[UserMessage(content="Go")])
+
+    names, _, request = _offered(llm)
+    assert names == ["execute_code", "wait_code"]
+    # The catalog names the functions that programs call
+    assert "- triage: Sort." in request
+    assert "`tools.skills_read`" in request
+    assert "`tools.skills_list`" in request
+
+
 def test_restored_deep_research_offers_the_skill_tools_like_the_original(
     _user_skills: User,
 ) -> None:

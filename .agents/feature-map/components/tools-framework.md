@@ -176,8 +176,13 @@ returns its SKILL.md, frontmatter included, up to 32,000 characters per call
 `start_char` offset of the next call. The Deep Research orchestrator binds
 both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
-tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
-a short JSON summary, not the SKILL.md text.
+tool catalog rows. A direct call renders as a generic tool card with a short
+JSON summary, not the SKILL.md text. In code mode they are `IMMEDIATE`
+functions that return text (`tools.skills_list`, `tools.skills_read`), and the
+chat agent's skills catalog names them so. SKILL.md text that the program
+prints or returns goes into its `code_mode_delta` packets; the web timeline
+does not show program output ([[chat-frontend]]). Deep Research does not use
+code mode and calls them directly.
 
 **Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
 `exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and

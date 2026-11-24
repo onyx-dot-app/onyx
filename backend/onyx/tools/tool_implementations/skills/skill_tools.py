@@ -1,7 +1,7 @@
 """Tools that list the user's skills and read their instructions. Each call
 reads the user's current skills, as Codex reads the current files."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import ClassVar, Final
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,6 +23,8 @@ from onyx.tools.interface import (
 )
 from onyx.tools.models import (
     CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     CustomToolCallSummary,
     ToolCallException,
     ToolContext,
@@ -49,7 +51,10 @@ class SkillsReadArguments(BaseModel):
 
 class _SkillTool(Tool):
     id = None
-    code_mode_exposure = CodeModeExposure.DIRECT
+    code_mode_exposure = CodeModeExposure.IMMEDIATE
+    code_mode_result = CodeModeResultSpec(
+        kind=CodeModeResultKind.TEXT, annotation="str"
+    )
     arguments: ClassVar[type[BaseModel]]
 
     def __init__(self, user: User, *, built_ins: bool) -> None:
@@ -145,12 +150,14 @@ class SkillsReadTool(_SkillTool):
 
 
 def skills_catalog_message(
-    tools: Sequence[Tool], context_window_tokens: int
+    tools: Sequence[Tool],
+    context_window_tokens: int,
+    called_name: Callable[[str], str] = str,
 ) -> SystemMessage | None:
     """The catalog of the user's current skills, for the prompt of an agent
-    that has `skills_list`. Chat, Deep Research and research agents each
-    build it once, when the agent is built, so the prompt stays the same for
-    the agent's steps."""
+    that has `skills_list`, naming the skill tools by `called_name`. Chat,
+    Deep Research and research agents each build it once, when the agent is
+    built, so the prompt stays the same for the agent's steps."""
     list_tool = next((tool for tool in tools if isinstance(tool, SkillsListTool)), None)
     if list_tool is None:
         return None
@@ -158,7 +165,7 @@ def skills_catalog_message(
         skills = list_chat_skills(
             db_session, list_tool.user, built_ins=list_tool.built_ins
         )
-        catalog = render_skills_catalog(skills, context_window_tokens)
+        catalog = render_skills_catalog(skills, context_window_tokens, called_name)
         if catalog is None:
             return None
         unavailable = unavailable_need_names(

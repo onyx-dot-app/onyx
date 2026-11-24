@@ -160,9 +160,6 @@ class ChatAgent(Agent, RestorableFeature):
         # The tools the chat is configured with; restored and child agents receive
         # them, and code mode applies per agent.
         self.configured_tools = list(tools)
-        self.skills_catalog_message = skills_catalog_message(
-            self.configured_tools, llm.config.max_input_tokens
-        )
         self.code_mode = code_mode
         # Each agent instance has its own cells, so a restored run has none open;
         # a later run of this instance reopens them at its first step.
@@ -170,6 +167,14 @@ class ChatAgent(Agent, RestorableFeature):
             with_code_mode(self.configured_tools)
             if code_mode
             else (list(self.configured_tools), None)
+        )
+        code_tool = next(
+            (t for t in self.application_tools if isinstance(t, CodeModeTool)), None
+        )
+        self.skills_catalog_message = skills_catalog_message(
+            self.configured_tools,
+            llm.config.max_input_tokens,
+            str if code_tool is None else code_tool.called_name,
         )
         # Programs batch tool calls, so code mode gets its own cap when it applies.
         self.max_steps = (
