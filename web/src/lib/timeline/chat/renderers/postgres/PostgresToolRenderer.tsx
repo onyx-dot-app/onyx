@@ -87,6 +87,10 @@ export const PostgresToolRenderer: MessageRenderer<PostgresToolPacket, {}> = ({
       ),
     [start, t, locale, folder?.title]
   );
+  // A count (or a count grouped by a field) answers with a number.
+  const query = start?.query ?? {};
+  const listsDocuments =
+    !(query.count === true || query.count === "true") && !query.group_by;
   const documents = useMemo(
     () =>
       packets.flatMap((packet) =>
@@ -126,7 +130,11 @@ export const PostgresToolRenderer: MessageRenderer<PostgresToolPacket, {}> = ({
         chips.length === 0 && documents.length === 0 ? null : (
           <RetrievalBody
             queries={chips.map((chip) => chip.label)}
-            results={documents.map(documentToSourceInfo)}
+            // A count returns a number, not documents: it has no
+            // "Documents read" section, so no shimmer and no empty state.
+            results={
+              listsDocuments ? documents.map(documentToSourceInfo) : null
+            }
             isComplete={isComplete}
           />
         ),

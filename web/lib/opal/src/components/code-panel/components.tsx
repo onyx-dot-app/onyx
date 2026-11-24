@@ -1,6 +1,7 @@
 "use client";
 
 import "@opal/components/code-panel/styles.css";
+import { useLayoutEffect, useRef } from "react";
 import { Hoverable } from "@opal/core";
 import { Section } from "@opal/layouts";
 import { Text } from "@opal/components/text/components";
@@ -75,6 +76,11 @@ interface CodePanelOutputProps {
    * @default false
    */
   loading?: boolean;
+  /**
+   * Keep the newest output in view as it streams in, until the user scrolls
+   * up to read earlier output. @default false
+   */
+  follow?: boolean;
 }
 
 interface CodePanelContentProps {
@@ -224,9 +230,28 @@ function CodePanelOutput({
   children,
   error = false,
   loading = false,
+  follow = false,
 }: CodePanelOutputProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Whether the view is at the bottom; scrolling up leaves it there.
+  const atBottom = useRef(true);
+  useLayoutEffect(() => {
+    const output = ref.current;
+    if (follow && atBottom.current && output) {
+      output.scrollTop = output.scrollHeight;
+    }
+  }, [children, follow]);
   return (
-    <div className="opal-code-panel-output" data-error={error}>
+    <div
+      ref={ref}
+      className="opal-code-panel-output"
+      data-error={error}
+      onScroll={(event) => {
+        const output = event.currentTarget;
+        atBottom.current =
+          output.scrollHeight - output.scrollTop - output.clientHeight < 8;
+      }}
+    >
       {loading ? (
         <LineLoader width="2/3" />
       ) : (

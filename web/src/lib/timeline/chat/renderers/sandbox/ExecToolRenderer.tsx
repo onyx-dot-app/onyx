@@ -126,6 +126,7 @@ export function ExecToolRenderer({
           }
           output={panelOutput}
           outputLoading={outputLoading}
+          outputFollow={!isComplete}
           emptyLabel=""
           footer={exitCode}
         />
@@ -149,7 +150,9 @@ export function ExecToolRenderer({
             />
           )}
           {panelOutput ? (
-            <CodePanel.Output>{panelOutput}</CodePanel.Output>
+            <CodePanel.Output follow={!isComplete}>
+              {panelOutput}
+            </CodePanel.Output>
           ) : (
             outputLoading && <CodePanel.Output loading />
           )}
