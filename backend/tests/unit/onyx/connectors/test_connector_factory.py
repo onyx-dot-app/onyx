@@ -217,6 +217,7 @@ class TestConnectorMappingIntegrity:
             DocumentSource.INGESTION_API,  # This is handled differently
             DocumentSource.NOT_APPLICABLE,  # Special placeholder, no connector needed
             DocumentSource.USER_FILE,  # Special placeholder, no connector needed
+            DocumentSource.CHAT_ARTIFACT,  # Indexed from published files, no connector
             DocumentSource.CRAFT_FILE,  # Direct S3 upload via API, no connector needed
             # Add other legitimately unmapped sources here if they exist
         }

@@ -100,6 +100,15 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-chat-artifact-indexing",
+        "task": OnyxCeleryTask.CHECK_FOR_CHAT_ARTIFACT_INDEXING,
+        "schedule": timedelta(seconds=20),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
         "name": "check-for-indexing",
         "task": OnyxCeleryTask.CHECK_FOR_INDEXING,
         "schedule": timedelta(seconds=15),
@@ -431,6 +440,7 @@ _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-doc-permissions-sync",
     "check-for-external-group-sync",
     "backfill-cc-pair-ids",
+    "check-for-chat-artifact-indexing",
 }
 
 if DISABLE_VECTOR_DB:

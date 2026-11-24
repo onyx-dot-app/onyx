@@ -27,6 +27,10 @@ from onyx.db.chat import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_store.utils import chat_output_file_type
+from onyx.indexing.chat_artifact_index import (
+    delete_chat_artifacts_from_index,
+    send_chat_artifact_index_tasks,
+)
 from onyx.llm.cancellation import CancellationSignal, wait_for_future
 from onyx.microvm.models import FileType
 from onyx.server.features.build.sandbox.harness_base import (
@@ -279,7 +283,11 @@ def publish(
     except BaseException:
         # A failed clean-up must not replace the call's own error or Stop.
         try:
-            delete_unpublished_chat_artifacts(published)
+            # An indexing beat may have indexed an artifact that the
+            # clean-up deletes.
+            delete_chat_artifacts_from_index(
+                delete_unpublished_chat_artifacts(published)
+            )
         except Exception:
             logger.warning(
                 "artifact_publish_cleanup_failed files=%s",
@@ -287,6 +295,9 @@ def publish(
                 exc_info=True,
             )
         raise
+    send_chat_artifact_index_tasks(
+        [file.artifact_id for file in published if file.artifact_id is not None]
+    )
     return published
 
 
@@ -800,7 +811,8 @@ def manage(
     expected_current_version check, whose error `conflict_message` words for
     the calling tool. The name stays unless file_name renames it within its
     type; the title is the restored version's, or for an update the newest
-    version's."""
+    version's. After its commit, each operation sends the artifact's
+    indexing task, or deletes the removed artifact from the search index."""
     results: list[ManageResult] = []
     for operation in arguments.operations:
         cancellation.check()
@@ -851,6 +863,7 @@ def manage(
                         ).files
                     except ArtifactVersionConflict as error:
                         raise tool_error(conflict_message(error)) from error
+                    send_chat_artifact_index_tasks([added.library_file_id])
                     result = ManageResult(
                         operation=operation.operation,
                         ok=True,
@@ -881,6 +894,7 @@ def manage(
                                     library_file_id=file.library_file_id
                                 ),
                             )
+                        send_chat_artifact_index_tasks([file.library_file_id])
                         result = ManageResult(
                             operation=operation.operation,
                             ok=True,
@@ -891,12 +905,14 @@ def manage(
                             url=newest.url,
                         )
                     else:
+                        deleted_versions = delete_chat_artifact(file.library_file_id)
+                        delete_chat_artifacts_from_index([file.library_file_id])
                         result = ManageResult(
                             operation=operation.operation,
                             ok=True,
                             library_file_id=file.library_file_id,
                             file_name=file.file_name,
-                            deleted_versions=delete_chat_artifact(file.library_file_id),
+                            deleted_versions=deleted_versions,
                         )
         except ToolCallException as error:
             result = ManageResult(

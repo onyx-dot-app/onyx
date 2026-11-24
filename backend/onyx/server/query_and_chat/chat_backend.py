@@ -167,6 +167,7 @@ from onyx.file_store.serving import (
     ensure_filename_extension,
     resolve_inline_disposition,
 )
+from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
@@ -792,11 +793,12 @@ def delete_all_chat_sessions(
             "Some generated files could not be deleted yet. Try again shortly.",
         )
     try:
-        deleted_ids = delete_all_chat_sessions_for_user(
+        deleted_ids, artifact_ids = delete_all_chat_sessions_for_user(
             user=user, db_session=db_session
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+    delete_chat_artifacts_from_index(artifact_ids)
     purge_deleted_chat_sessions(user.id, deleted_ids)
     # Read after the delete commits: a park either commits first or refuses.
     if not HARD_DELETE_CHATS:
@@ -844,11 +846,12 @@ def delete_chat_session_by_id(
         actual_hard_delete = (
             hard_delete if hard_delete is not None else HARD_DELETE_CHATS
         )
-        delete_chat_session(
+        artifact_ids = delete_chat_session(
             user_id, session_id, db_session, hard_delete=actual_hard_delete
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+    delete_chat_artifacts_from_index(artifact_ids)
     purge_deleted_chat_sessions(user_id, [session_id])
     # Read after the delete commits: a park either commits first or refuses.
     if not actual_hard_delete:

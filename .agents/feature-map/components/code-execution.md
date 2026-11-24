@@ -574,8 +574,9 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         during the delete waits and then makes a new
                                         artifact. A delete that stops after its last file
                                         leaves a row without a version: a publish at its
-                                        path replaces the row with a new artifact, and a
-                                        save by its ID is not found
+                                        path replaces the row with a new artifact and
+                                        removes the row's search document, and a save by
+                                        its ID is not found
                                         (db/chat.save_chat_artifact). Every new name passes
                                         _checked_name: a name that safe_file_name keeps (the
                                         VM name rule), with the artifact's current

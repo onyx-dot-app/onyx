@@ -312,7 +312,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         )
 
 
-class DocumentChunkEnricher:
+class DocumentChunkEnricher(ChunkEnrichmentContext):
     """Pre-computed metadata for per-chunk enrichment of connector documents."""
 
     def __init__(

@@ -91,6 +91,7 @@ from onyx.db.enums import (
     CapabilityCheckRunStatus,
     CapabilityCheckTrigger,
     CapabilityReportRunStatus,
+    ChatArtifactIndexStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
     ConnectorEventStatus,
@@ -5728,7 +5729,10 @@ class ChatArtifact(Base):
     VM path in the chat. Its files inherit the chat's access, and a hard chat
     delete deletes them
     (db/chat.py:delete_messages_and_files_from_chat_session) before the
-    cascade from the chat removes the rows."""
+    cascade from the chat removes the rows. Its newest available version is
+    one search document, visible only to the owner; every path that removes
+    the row or deletes its chat removes the document after its commit
+    (indexing/chat_artifact_index.py:delete_chat_artifacts_from_index)."""
 
     __tablename__ = "chat_artifact"
     __table_args__ = (
@@ -5739,6 +5743,12 @@ class ChatArtifact(Base):
             "ix_chat_artifact_user_id_updated_at",
             "user_id",
             desc("updated_at"),
+        ),
+        # The artifacts that the indexing beat sends.
+        Index(
+            "ix_chat_artifact_index_pending",
+            "id",
+            postgresql_where=text("index_status = 'PENDING'"),
         ),
     )
 
@@ -5768,6 +5778,24 @@ class ChatArtifact(Base):
     # The latest change (publish or rename)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    # The search index's copy of the newest available version. Every publish
+    # sets PENDING (save_chat_artifact), the indexing task sets INDEXED
+    # (background/celery/tasks/chat_artifact_indexing), and a chat delete sets
+    # REMOVED (stop_indexing_chat_artifacts__no_commit).
+    index_status: Mapped[ChatArtifactIndexStatus] = mapped_column(
+        Enum(
+            ChatArtifactIndexStatus,
+            native_enum=False,
+            name="chatartifactindexstatus",
+        ),
+        nullable=False,
+        server_default=ChatArtifactIndexStatus.PENDING.value,
+    )
+    # Pickups by the indexing task since the latest change. Counted before the
+    # slow work, so a worker the kernel kills mid-file still spent one.
+    index_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
     )
 
 

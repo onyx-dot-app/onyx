@@ -23,8 +23,14 @@ from onyx.configs.constants import (
     NO_AUTH_PLACEHOLDER_USER_EMAIL,
     SLACK_SERVICE_ACCOUNT_EMAIL,
 )
-from onyx.db.enums import AccountType, MarketplaceKind, Permission
+from onyx.db.enums import (
+    AccountType,
+    ChatArtifactIndexStatus,
+    MarketplaceKind,
+    Permission,
+)
 from onyx.db.models import (
+    ChatArtifact,
     ChatMessage,
     ChatSession,
     DocumentSet,
@@ -680,6 +686,17 @@ def reconcile_user_email__no_commit(
         .where(MCPServer.owner == old_email)
         .values(owner=normalized_new_email)
     )
+    # The search documents of the user's published files carry the old email
+    # as their ACL; the indexing beat writes them again with the new one. The
+    # files of deleted chats (REMOVED) have no document.
+    db_session.execute(
+        update(ChatArtifact)
+        .where(
+            ChatArtifact.user_id == user_id,
+            ChatArtifact.index_status != ChatArtifactIndexStatus.REMOVED,
+        )
+        .values(index_status=ChatArtifactIndexStatus.PENDING, index_attempts=0)
+    )
     return old_email, prior_emails
 
 
@@ -982,12 +999,18 @@ class UserDeleteCleanup(BaseModel):
 
     file_ids: list[str] = []
     affected_user_ids: set[UUID] = set()
+    # Their search documents match the user's email, which a new account can
+    # take.
+    chat_artifact_ids: list[UUID] = []
 
 
 def finish_user_delete(cleanup: UserDeleteCleanup, db_session: Session) -> None:
-    # onyx.skills.push imports this module.
+    # onyx.skills.push imports this module, and the index module imports it
+    # through onyx.db.connector_alerts.
+    from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
     from onyx.skills.push import push_skills_and_commit
 
+    delete_chat_artifacts_from_index(cleanup.chat_artifact_ids)
     delete_files_best_effort(cleanup.file_ids, "user delete cleanup")
     if cleanup.affected_user_ids:
         push_skills_and_commit(cleanup.affected_user_ids, db_session)
@@ -1021,7 +1044,14 @@ def delete_user_from_db__no_commit(
                 ],
             },
         )
-    cleanup = UserDeleteCleanup()
+    cleanup = UserDeleteCleanup(
+        # Before the cascade from the user removes the rows.
+        chat_artifact_ids=list(
+            db_session.scalars(
+                select(ChatArtifact.id).where(ChatArtifact.user_id == user_to_delete.id)
+            )
+        )
+    )
     if user_to_delete.profile_image_file_id:
         cleanup.file_ids.append(user_to_delete.profile_image_file_id)
     # A personal marketplace holds only copies of its repository.

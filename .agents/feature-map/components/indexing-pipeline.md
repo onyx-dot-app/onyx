@@ -35,6 +35,10 @@ inline when they are on.
 - **A user uploads a file** in chat or a project. It goes through the same
   chunk, embed and write steps with no fetch phase and no cc-pair
   (`UserFileIndexingAdapter`, [[file-store-and-user-files]]).
+- **The model publishes a file** in a sandbox chat. Its newest version goes
+  through the same steps, one document per artifact, with no document row and
+  no content hash (`ChatArtifactIndexingAdapter`,
+  [[file-store-and-user-files]] "Published file text and search").
 - **An embedding rate limit** slows indexing down, not search.
 
 ## Scope
@@ -43,7 +47,7 @@ This component owns the path from a connector's `Document` stream to chunks in
 the index: the two phases, staging, checkpoints, the dedup gate, chunking
 (text, image and tabular), contextual RAG, embedding, the write, the
 `IndexAttempt` lifecycle and its errors, heartbeats, the tabular re-chunk
-migration, and the user-file adapter.
+migration, and the user-file and published-file adapters.
 
 Its neighbours own:
 - [[connectors]]: how a connector reads a source and yields documents,

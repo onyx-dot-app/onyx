@@ -58,6 +58,10 @@ task CHECK_FOR_USER_FILE_DELETE: Beat check that sends a delete task for each us
 task DELETE_SINGLE_USER_FILE: Deletes one user file from the index and file store.
 task CHECK_FOR_INCOGNITO_FILE_CLEANUP: Beat check that retries teardown of incognito chat contexts and their blobs.
 
+# Published files (chat artifacts)
+task CHECK_FOR_CHAT_ARTIFACT_INDEXING: Beat check that sends an indexing task for each published file waiting to be indexed.
+task PROCESS_SINGLE_CHAT_ARTIFACT: Extracts and indexes one published file, on the user file worker.
+
 # Connector capability checks and edits
 task CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS: Beat check that starts the checks of every pair whose check is due.
 task RUN_CAPABILITY_CHECKS: Calls the source for each capability check of a scope, too slow for an API request.
@@ -133,6 +137,7 @@ beat check-for-user-file-processing: Finds user files to process every 20 second
 beat check-for-user-file-project-sync: Finds user files to sync every 20 seconds.
 beat check-for-user-file-delete: Finds user files to delete every 20 seconds.
 beat check-for-incognito-file-cleanup: Retries incognito teardown every 10 minutes.
+beat check-for-chat-artifact-indexing: Finds published files to index every 20 seconds.
 beat check-for-scheduled-capability-checks: Starts due capability checks every 5 minutes.
 beat check-for-stale-capability-runs: Retires stale check runs every 10 minutes.
 beat cleanup-old-capability-check-runs: Deletes old check runs daily.

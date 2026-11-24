@@ -1,7 +1,7 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from typing import NoReturn, Tuple
+from typing import Literal, NoReturn, Tuple
 from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
@@ -55,6 +55,7 @@ from onyx.chat.models import (
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
+    CHAT_ARTIFACT_INDEX_MAX_ATTEMPTS,
     FileOrigin,
     MessageType,
 )
@@ -63,6 +64,7 @@ from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.document_set import require_document_set_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    ChatArtifactIndexStatus,
     IncognitoRecordMode,
     record_mode_persists_content,
 )
@@ -95,6 +97,7 @@ from onyx.file_store.file_store import (
 )
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.staging import delete_files_best_effort
+from onyx.indexing.models import ChatArtifactIndexInput
 from onyx.llm.models import GenerationRequestParams, TextContent, ThinkingContent
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
@@ -366,7 +369,12 @@ def delete_chat_artifact_files(versions: Sequence[tuple[str, str | None]]) -> No
     version, the file last: its delete cascades to its version, which links
     the others. A failed delete keeps the file and version, so a later hard
     chat delete retries all three. Raises the first failure after it tries
-    every version."""
+    every version.
+
+    This is the cleanup of one version. The search index holds one document
+    for each artifact, not each version, so the callers that remove artifact
+    rows delete them from the index after their commit
+    (indexing/chat_artifact_index.py:delete_chat_artifacts_from_index)."""
     file_store = get_default_file_store()
     failures: list[Exception] = []
     for file_id, thumbnail_file_id in versions:
@@ -647,8 +655,10 @@ def save_chat_session_name_if_unnamed(
 
 def delete_all_chat_sessions_for_user(
     user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
-) -> list[UUID]:
-    """Returns the ids of the chat sessions that were not deleted before."""
+) -> tuple[list[UUID], list[UUID]]:
+    """Returns the ids of the chat sessions that were not deleted before, and
+    the ids of the artifacts of every deleted chat, which the caller deletes
+    from the search index after this commits."""
     user_id = user.id
 
     chat_sessions = (
@@ -669,12 +679,21 @@ def delete_all_chat_sessions_for_user(
     # Only the sessions read above: one that a concurrent request creates now
     # stays, instead of going without its cleanup.
     if hard_delete:
+        artifact_ids: list[UUID] = []
         for chat_session_id in chat_session_ids:
+            # Each cleanup commits, so a chat's artifacts stop indexing with
+            # its own cleanup: a failed cleanup leaves the later chats indexed.
+            artifact_ids += stop_indexing_chat_artifacts__no_commit(
+                db_session, [chat_session_id]
+            )
             delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(
             delete(ChatSession).where(ChatSession.id.in_(chat_session_ids))
         )
     else:
+        artifact_ids = stop_indexing_chat_artifacts__no_commit(
+            db_session, chat_session_ids
+        )
         db_session.execute(
             update(ChatSession)
             .where(ChatSession.id.in_(chat_session_ids))
@@ -682,7 +701,7 @@ def delete_all_chat_sessions_for_user(
         )
 
     db_session.commit()
-    return newly_deleted_ids
+    return newly_deleted_ids, artifact_ids
 
 
 def delete_chat_session(
@@ -691,7 +710,9 @@ def delete_chat_session(
     db_session: Session,
     include_deleted: bool = False,
     hard_delete: bool = HARD_DELETE_CHATS,
-) -> None:
+) -> list[UUID]:
+    """Returns the ids of the chat's artifacts, which the caller deletes from
+    the search index after this commits."""
     chat_session = get_chat_session_by_id(
         chat_session_id=chat_session_id,
         user_id=user_id,
@@ -702,6 +723,9 @@ def delete_chat_session(
     if chat_session.deleted and not include_deleted:
         raise ValueError("Cannot delete an already deleted chat session")
 
+    artifact_ids = stop_indexing_chat_artifacts__no_commit(
+        db_session, [chat_session_id]
+    )
     if hard_delete:
         delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session_id))
@@ -712,6 +736,26 @@ def delete_chat_session(
         chat_session.deleted = True
 
     db_session.commit()
+    return artifact_ids
+
+
+def stop_indexing_chat_artifacts__no_commit(
+    db_session: Session, chat_session_ids: Sequence[UUID]
+) -> list[UUID]:
+    """Mark the artifacts of chats being deleted REMOVED, since the caller
+    deletes their documents from the index after the commit, and return their
+    ids. The update waits for an indexing task that is writing one of them
+    (it holds the row), so the index delete comes after that write."""
+    if not chat_session_ids:
+        return []
+    return list(
+        db_session.scalars(
+            update(ChatArtifact)
+            .where(ChatArtifact.chat_session_id.in_(chat_session_ids))
+            .values(index_status=ChatArtifactIndexStatus.REMOVED, index_attempts=0)
+            .returning(ChatArtifact.id)
+        )
+    )
 
 
 def get_chat_sessions_older_than(
@@ -1073,6 +1117,9 @@ _ARTIFACT_CHAT_NOT_DELETED = ChatArtifact.chat_session_id.in_(
 # lock can have started before the one it waited for, so it never moves the
 # time back.
 _ARTIFACT_CHANGED_AT = func.greatest(ChatArtifact.updated_at, func.clock_timestamp())
+# A change to an artifact's newest version or name: the indexing beat writes
+# its document again.
+_INDEX_PENDING = {"index_status": ChatArtifactIndexStatus.PENDING, "index_attempts": 0}
 
 
 def _delete_versionless_artifacts(
@@ -1126,9 +1173,15 @@ def save_chat_artifact(
     thumbnail get the artifact chat's access and file list, and its hard
     delete; a new artifact gets the chat's owner. An artifact row without a
     version is a deleted one: a save at its path replaces it with a new
-    artifact, and a save by its ID raises ArtifactNotFound. A thumbnail that
-    fails to save is left out. `name` is the file's name; the
-    result has the artifact's name, which a rename sets."""
+    artifact and deletes its document from the search index after the
+    commit, and a save by its ID raises ArtifactNotFound. A thumbnail that
+    fails to save is left out. `name` is the file's name; the result has the
+    artifact's name, which a rename sets. The artifact becomes PENDING for
+    the search index; the caller sends its indexing task after this returns
+    (indexing/chat_artifact_index.py:send_chat_artifact_index_tasks)."""
+    # The index module imports this one.
+    from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
+
     file_store = get_default_file_store()
     file_id = str(uuid4())
     thumbnail_file_id: str | None = None
@@ -1147,6 +1200,7 @@ def save_chat_artifact(
                 exc_info=True,
             )
     saved: list[tuple[UUID, UUID, str, str | None, int, str | None]] = []
+    stale_ids: list[UUID] = []
 
     def add_version(db_session: Session) -> None:
         # The upsert or update locks the artifact's row until the commit, so
@@ -1158,10 +1212,12 @@ def save_chat_artifact(
             # files leaves (delete_chat_artifact). The publish takes a new
             # artifact ID, so no link of the deleted artifact opens the new
             # file.
-            _delete_versionless_artifacts(
-                db_session,
-                ChatArtifact.chat_session_id == target.chat_session_id,
-                ChatArtifact.path == target.path,
+            stale_ids.extend(
+                _delete_versionless_artifacts(
+                    db_session,
+                    ChatArtifact.chat_session_id == target.chat_session_id,
+                    ChatArtifact.path == target.path,
+                )
             )
             locked = db_session.execute(
                 postgresql.insert(ChatArtifact)
@@ -1174,7 +1230,7 @@ def save_chat_artifact(
                 )
                 .on_conflict_do_update(
                     index_elements=[ChatArtifact.chat_session_id, ChatArtifact.path],
-                    set_={"updated_at": _ARTIFACT_CHANGED_AT},
+                    set_={"updated_at": _ARTIFACT_CHANGED_AT, **_INDEX_PENDING},
                 )
                 .returning(
                     ChatArtifact.id,
@@ -1196,6 +1252,7 @@ def save_chat_artifact(
                 )
                 .values(
                     updated_at=_ARTIFACT_CHANGED_AT,
+                    **_INDEX_PENDING,
                     **({"name": name} if rename else {}),
                 )
                 .returning(
@@ -1278,6 +1335,7 @@ def save_chat_artifact(
         if thumbnail_file_id is not None:
             delete_files_best_effort([thumbnail_file_id], "unpublished thumbnail")
         raise
+    delete_chat_artifacts_from_index(stale_ids)
     [(saved_artifact_id, chat_id, saved_path, saved_name, version, saved_title)] = saved
     return PublishedFile(
         file_id=file_id,
@@ -1340,11 +1398,14 @@ def append_copied_artifact_version(
     )
 
 
-def delete_unpublished_chat_artifacts(published: Sequence[PublishedFile]) -> None:
+def delete_unpublished_chat_artifacts(
+    published: Sequence[PublishedFile],
+) -> list[UUID]:
     """Delete the files and thumbnails of a publish that failed
     (delete_chat_artifact_files), then the artifacts that they leave without a
     version, so a failed publish sets no artifact's first publish or version
-    numbers."""
+    numbers. Returns the ids of the deleted artifacts, which the caller
+    deletes from the search index."""
     try:
         delete_chat_artifact_files(
             [(file.file_id, file.thumbnail_file_id) for file in published]
@@ -1358,10 +1419,20 @@ def delete_unpublished_chat_artifacts(published: Sequence[PublishedFile]) -> Non
         )
     artifact_ids = sorted({file.artifact_id for file in published if file.artifact_id})
     if not artifact_ids:
-        return
+        return []
     with get_session_with_current_tenant() as db_session:
-        _delete_versionless_artifacts(db_session, ChatArtifact.id.in_(artifact_ids))
+        deleted = _delete_versionless_artifacts(
+            db_session, ChatArtifact.id.in_(artifact_ids)
+        )
+        # An artifact that keeps versions may have been indexed with a
+        # deleted one; the beat indexes it again.
+        db_session.execute(
+            update(ChatArtifact)
+            .where(ChatArtifact.id.in_(artifact_ids))
+            .values(**_INDEX_PENDING)
+        )
         db_session.commit()
+    return sorted(deleted)
 
 
 def delete_chat_artifact(artifact_id: UUID) -> int:
@@ -1407,14 +1478,15 @@ def delete_chat_artifact(artifact_id: UUID) -> int:
 def rename_chat_artifact(db_session: Session, artifact_id: UUID, name: str) -> None:
     """Give the artifact `artifact_id` the name `name`, which every read of
     its name uses (_newest_available_version), and bump its updated_at as a
-    publish does. Its file records keep their names. An artifact that is
-    gone, or whose chat is deleted, raises ArtifactNotFound. The caller
-    checks the user's access and the name, and commits."""
+    publish does, which makes it PENDING for the search index. Its file
+    records keep their names. An artifact that is gone, or whose chat is
+    deleted, raises ArtifactNotFound. The caller checks the user's access
+    and the name, commits, and sends its indexing task."""
     if (
         db_session.execute(
             update(ChatArtifact)
             .where(ChatArtifact.id == artifact_id, _ARTIFACT_CHAT_NOT_DELETED)
-            .values(name=name, updated_at=_ARTIFACT_CHANGED_AT)
+            .values(name=name, updated_at=_ARTIFACT_CHANGED_AT, **_INDEX_PENDING)
             .returning(ChatArtifact.id)
         ).one_or_none()
         is None
@@ -1724,6 +1796,170 @@ def get_user_published_file(
     artifact = _listed_artifact(row)
     artifact.latest_version_number = row.latest_version
     return artifact
+
+
+def start_chat_artifact_indexing(
+    db_session: Session, artifact_id: UUID
+) -> ChatArtifactIndexInput | Literal["remove", "skip"]:
+    """The indexing task's pickup of the artifact, committed before the slow
+    work, as consume_user_file_processing_attempt counts a user file's:
+    - "skip": it is not PENDING, or this pickup is past
+      CHAT_ARTIFACT_INDEX_MAX_ATTEMPTS and marked it FAILED.
+    - "remove": it is gone, or it has nothing to index: its chat is deleted
+      (a publish raced the delete; it becomes REMOVED), or no version is
+      available (the beat retries it until it is FAILED). The pickup stays
+      counted, and the caller deletes it from the index.
+    - Otherwise one pickup is counted, and the input to index comes back."""
+    # The update locks the row first, so the read below and the pickup see
+    # the same publish.
+    picked = db_session.execute(
+        update(ChatArtifact)
+        .where(
+            ChatArtifact.id == artifact_id,
+            ChatArtifact.index_status == ChatArtifactIndexStatus.PENDING,
+        )
+        .values(
+            index_attempts=ChatArtifact.index_attempts + 1,
+            index_status=case(
+                (
+                    ChatArtifact.index_attempts + 1 > CHAT_ARTIFACT_INDEX_MAX_ATTEMPTS,
+                    ChatArtifactIndexStatus.FAILED,
+                ),
+                else_=ChatArtifact.index_status,
+            ),
+        )
+        .returning(
+            ChatArtifact.index_status,
+            ChatArtifact.index_attempts,
+            ChatArtifact.updated_at,
+        )
+    ).one_or_none()
+    if picked is None:
+        exists_now = db_session.scalar(
+            select(ChatArtifact.id).where(ChatArtifact.id == artifact_id)
+        )
+        db_session.rollback()
+        return "skip" if exists_now is not None else "remove"
+    if picked.index_status == ChatArtifactIndexStatus.FAILED:
+        db_session.commit()
+        return "skip"
+    newest = _newest_available_version()
+    row = db_session.execute(
+        select(
+            ChatArtifact.created_at,
+            ChatSession.deleted,
+            # fastapi-users declares email as a plain str.
+            User.__table__.c.email,
+            newest,
+        )
+        .join(ChatSession, ChatSession.id == ChatArtifact.chat_session_id)
+        .join(User, ChatArtifact.user_id == User.id)
+        .outerjoin(newest, true())
+        .where(ChatArtifact.id == artifact_id)
+    ).one()
+    if row.deleted:
+        db_session.execute(
+            update(ChatArtifact)
+            .where(ChatArtifact.id == artifact_id)
+            .values(index_status=ChatArtifactIndexStatus.REMOVED)
+        )
+    db_session.commit()
+    if row.deleted or row.file_id is None:
+        return "remove"
+    return ChatArtifactIndexInput(
+        artifact_id=artifact_id,
+        updated_at=picked.updated_at,
+        index_attempts=picked.index_attempts,
+        created_at=row.created_at,
+        owner_email=row.email,
+        link=artifact_url(artifact_id, row.version),
+        file_id=row.file_id,
+        file_name=row.name,
+        file_size=row.file_size or 0,
+        title=row.title,
+    )
+
+
+def lock_chat_artifact_for_indexing_nowait(
+    db_session: Session, indexed: ChatArtifactIndexInput
+) -> bool:
+    """Lock the artifact's row while the indexing task writes its document,
+    so a delete of the artifact or its chat waits for the write. False when
+    the artifact is gone, its chat is deleted, or a publish or a newer pickup
+    changed it since this pickup (the newer one writes). Raises
+    OperationalError when another transaction holds the row."""
+    return (
+        db_session.execute(
+            select(ChatArtifact.id)
+            .join(ChatSession, ChatSession.id == ChatArtifact.chat_session_id)
+            .where(
+                ChatArtifact.id == indexed.artifact_id,
+                ChatArtifact.updated_at == indexed.updated_at,
+                ChatArtifact.index_attempts == indexed.index_attempts,
+                ChatSession.deleted.is_(False),
+            )
+            .with_for_update(of=ChatArtifact, nowait=True)
+        ).first()
+        is not None
+    )
+
+
+def mark_chat_artifact_indexed__no_commit(
+    db_session: Session, indexed: ChatArtifactIndexInput
+) -> None:
+    """Mark the artifact INDEXED. The caller holds the row lock of
+    lock_chat_artifact_for_indexing_nowait, which found the row unchanged
+    since the pickup."""
+    db_session.execute(
+        update(ChatArtifact)
+        .where(ChatArtifact.id == indexed.artifact_id)
+        .values(index_status=ChatArtifactIndexStatus.INDEXED)
+    )
+
+
+def fetch_pending_chat_artifact_ids(db_session: Session, limit: int) -> list[UUID]:
+    """At most `limit` PENDING artifacts, from ix_chat_artifact_index_pending."""
+    return list(
+        db_session.scalars(
+            select(ChatArtifact.id)
+            .where(ChatArtifact.index_status == ChatArtifactIndexStatus.PENDING)
+            .order_by(ChatArtifact.id)
+            .limit(limit)
+        )
+    )
+
+
+def check_indexed_chat_artifacts_exist(db_session: Session) -> bool:
+    """Whether any published file has a search document, so internal search
+    has something to find without connectors or user files."""
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    ChatArtifact.index_status == ChatArtifactIndexStatus.INDEXED
+                )
+            )
+        )
+    )
+
+
+def flag_chat_artifacts_for_reindex__no_commit(db_session: Session) -> None:
+    """Make every artifact that is not REMOVED PENDING with no attempts, so
+    the indexing beat writes each into the index that an embedding model swap
+    made PRESENT. The reset attempts also stop a task that picked the
+    artifact up for the old index from writing it
+    (lock_chat_artifact_for_indexing_nowait)."""
+    db_session.execute(
+        update(ChatArtifact)
+        .where(
+            ChatArtifact.index_status != ChatArtifactIndexStatus.REMOVED,
+            or_(
+                ChatArtifact.index_status != ChatArtifactIndexStatus.PENDING,
+                ChatArtifact.index_attempts != 0,
+            ),
+        )
+        .values(**_INDEX_PENDING)
+    )
 
 
 def get_or_create_root_message(

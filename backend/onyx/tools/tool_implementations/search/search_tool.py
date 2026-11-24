@@ -757,8 +757,10 @@ class SearchTool(Tool):
         - Regular connectors (team knowledge)
         - Federated connectors (e.g., Slack)
         - User files (User Knowledge mode)
+        - Indexed published files (chat artifacts)
         """
         from onyx.configs.app_configs import DISABLE_VECTOR_DB
+        from onyx.db.chat import check_indexed_chat_artifacts_exist
         from onyx.db.connector import check_user_files_exist
 
         if DISABLE_VECTOR_DB:
@@ -768,6 +770,7 @@ class SearchTool(Tool):
             check_connectors_exist(db_session)
             or check_federated_connectors_exist(db_session)
             or check_user_files_exist(db_session)
+            or check_indexed_chat_artifacts_exist(db_session)
         )
 
     @property
