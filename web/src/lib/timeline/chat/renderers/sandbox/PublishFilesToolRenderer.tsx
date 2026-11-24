@@ -1,7 +1,5 @@
 import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { Section } from "@opal/layouts";
-import { Text } from "@opal/components";
 import { SvgFiles } from "@opal/icons";
 import { stripBidiControls } from "@opal/utils";
 import {
@@ -11,10 +9,8 @@ import {
   PublishFilesToolPacket,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
-import {
-  SandboxCallContent,
-  SandboxCallError,
-} from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
+import { SandboxCallContent } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
+import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import { useSandboxCallStatus } from "@/lib/sandbox/hooks";
 import { publishedFileLabel } from "@/lib/chat/publishedFiles";
 
@@ -48,7 +44,7 @@ export function PublishFilesToolRenderer({
     }
     return { start, end };
   }, [packets]);
-  const { error, stopped } = useSandboxCallStatus(
+  const { isComplete, error, stopped } = useSandboxCallStatus(
     packets,
     end,
     stopPacketSeen,
@@ -81,44 +77,26 @@ export function PublishFilesToolRenderer({
         ? t("sandbox.publish.published.status", { count: end.files.length })
         : t("header.publishingFiles.label");
 
+  // One panel: the description (as a comment) and the files, one per line,
+  // then the output band, which waits with a loading shimmer while the
+  // files publish, or shows the error.
+  const fileLines = rows
+    .map((row) =>
+      row.path !== row.label
+        ? `${stripBidiControls(row.path)}  # ${row.label}`
+        : stripBidiControls(row.path)
+    )
+    .join("\n");
   const content = (
     <SandboxCallContent renderType={renderType}>
-      {start?.description && (
-        <Text as="p" font="secondary-body" color="text-03">
-          {start.description}
-        </Text>
-      )}
-
-      {rows.length > 0 && (
-        <Section gap={0.5} alignItems="start" height="fit">
-          {rows.map((row, index) => (
-            <Section
-              key={`${row.path}-${index}`}
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="start"
-              gap={0.5}
-              height="fit"
-            >
-              <Text dir="auto" font="secondary-action" color="text-04">
-                {row.label}
-              </Text>
-              {row.path !== row.label && (
-                <Text
-                  dir="ltr"
-                  font="secondary-mono"
-                  color="text-03"
-                  wordWrap="break-all"
-                >
-                  {stripBidiControls(row.path)}
-                </Text>
-              )}
-            </Section>
-          ))}
-        </Section>
-      )}
-
-      {error !== null && <SandboxCallError error={error} />}
+      <CommandBody
+        command={fileLines}
+        comment={start?.description ?? undefined}
+        output=""
+        error={error ?? undefined}
+        outputLoading={!isComplete}
+        emptyLabel=""
+      />
     </SandboxCallContent>
   );
 

@@ -12245,9 +12245,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName} could not reach its server"
-        },
-        "waitingIndicator": {
-          "text": "Waiting for response..."
         }
       },
       "customToolAuth": {
@@ -12571,7 +12568,7 @@
             "status": "Reading..."
           },
           "read": {
-            "label": "Read"
+            "label": "Documents read"
           },
           "header": {
             "default": "Searching internal documents",
@@ -12622,9 +12619,6 @@
           },
           "querying": {
             "status": "Querying knowledge base..."
-          },
-          "listed": {
-            "label": "{count, plural, one {# document listed} other {# documents listed}}"
           },
           "query": {
             "table": {
@@ -12685,12 +12679,6 @@
           },
           "ran": {
             "status": "Ran Python"
-          },
-          "runningCode": {
-            "label": "Running code..."
-          },
-          "writingCode": {
-            "status": "Writing code..."
           }
         },
         "reasoning": {
@@ -12741,7 +12729,7 @@
           "exec": {
             "status": "{phase, select, running {Running command...} started {Started command} failed {Command failed} canceled {Canceled} done {Ran command} other {Ran command}}",
             "workdir": {
-              "label": "In {workdir}"
+              "label": "in {workdir}"
             }
           },
           "stdin": {
@@ -12749,9 +12737,6 @@
             "noSession": {
               "status": "{kind, select, send {{phase, select, running {Sending input to the session...} failed {Could not send input to the session} canceled {Canceled} done {Sent input to the session} other {Sent input to the session}}} check {{phase, select, running {Checking the session...} failed {Could not check the session} canceled {Canceled} done {Checked the session} other {Checked the session}}} other {Session}}"
             }
-          },
-          "output": {
-            "title": "Output"
           },
           "exitCode": {
             "label": "Exit code {exitCode}"

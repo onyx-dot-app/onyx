@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Presence, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { LineLoader } from "@opal/loaders";
 import { SvgSearch } from "@opal/icons";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/connectors/utils";
@@ -43,7 +44,8 @@ interface RetrievalBodyProps {
    * step that only searches; another step reads its results.
    */
   results: SourceInfo[] | null;
-  /** A finished step with no results says so; a running one shows a cursor. */
+  /** A finished step with no results says so; a running one shows a loading
+   *  shimmer where they will appear. */
   isComplete: boolean;
   /** Show only the results, without queries or the "Read" label. */
   compact?: boolean;
@@ -125,49 +127,59 @@ export function RetrievalBody({
         </Text>
       )}
 
-      {showResults &&
-        (resultList.length > 0 ? (
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            height="fit"
-            gap={1}
-            wrap
-          >
-            {resultList.slice(0, visibleResults).map((source) => {
-              const url = source.sourceUrl;
-              return (
-                <Presence
-                  key={source.id}
-                  appear={!initialResultIds.has(source.id)}
-                  width="fit"
-                  grow
-                >
-                  <Tag
-                    icon={sourceIcon(source)}
-                    title={source.title}
-                    truncate
-                    onClick={url ? () => openExternalLink(url) : undefined}
-                  />
-                </Presence>
-              );
-            })}
-            {hiddenResults > 0 && (
-              <Tag
-                title={t("searchChips.showMore.label", {
-                  count: hiddenResults,
-                })}
-                onClick={() =>
-                  setVisibleResults((count) => count + RESULTS_PER_EXPANSION)
-                }
-              />
-            )}
-          </Section>
-        ) : isComplete ? (
-          <Text as="p" font="main-ui-muted" color="text-03">
-            {t("internalSearch.noResults.text")}
-          </Text>
-        ) : null)}
+      {showResults && (
+        // The shimmer swaps out for the first results; later ones grow in.
+        <Presence.Swap
+          swapKey={
+            resultList.length > 0 ? "results" : isComplete ? "none" : "loading"
+          }
+        >
+          {resultList.length > 0 ? (
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              height="fit"
+              gap={1}
+              wrap
+            >
+              {resultList.slice(0, visibleResults).map((source) => {
+                const url = source.sourceUrl;
+                return (
+                  <Presence
+                    key={source.id}
+                    appear={!initialResultIds.has(source.id)}
+                    width="fit"
+                    grow
+                  >
+                    <Tag
+                      icon={sourceIcon(source)}
+                      title={source.title}
+                      truncate
+                      onClick={url ? () => openExternalLink(url) : undefined}
+                    />
+                  </Presence>
+                );
+              })}
+              {hiddenResults > 0 && (
+                <Tag
+                  title={t("searchChips.showMore.label", {
+                    count: hiddenResults,
+                  })}
+                  onClick={() =>
+                    setVisibleResults((count) => count + RESULTS_PER_EXPANSION)
+                  }
+                />
+              )}
+            </Section>
+          ) : isComplete ? (
+            <Text as="p" font="main-ui-muted" color="text-03">
+              {t("internalSearch.noResults.text")}
+            </Text>
+          ) : (
+            <LineLoader width="2/3" />
+          )}
+        </Presence.Swap>
+      )}
     </Section>
   );
 }

@@ -12245,9 +12245,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
-        },
-        "waitingIndicator": {
-          "text": "응답 대기 중..."
         }
       },
       "customToolAuth": {
@@ -12571,7 +12568,7 @@
             "status": "읽는 중..."
           },
           "read": {
-            "label": "읽었습니다"
+            "label": "읽은 문서"
           },
           "header": {
             "default": "내부 문서 검색 중",
@@ -12622,9 +12619,6 @@
           },
           "querying": {
             "status": "지식 베이스 조회 중..."
-          },
-          "listed": {
-            "label": "{count, plural, one {문서 #개 나열됨} other {문서 #개 나열됨}}"
           },
           "query": {
             "table": {
@@ -12685,12 +12679,6 @@
           },
           "ran": {
             "status": "Python을 실행했습니다"
-          },
-          "runningCode": {
-            "label": "코드 실행 중..."
-          },
-          "writingCode": {
-            "status": "코드 작성 중..."
           }
         },
         "reasoning": {
@@ -12749,9 +12737,6 @@
             "noSession": {
               "status": "{kind, select, send {{phase, select, running {세션에 입력을 보내는 중...} failed {세션에 입력을 보내지 못함} canceled {취소됨} done {세션에 입력을 보냄} other {세션에 입력을 보냄}}} check {{phase, select, running {세션 확인 중...} failed {세션을 확인하지 못함} canceled {취소됨} done {세션 확인함} other {세션 확인함}}} other {세션}}"
             }
-          },
-          "output": {
-            "title": "출력"
           },
           "exitCode": {
             "label": "종료 코드 {exitCode}"

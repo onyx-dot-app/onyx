@@ -12245,9 +12245,6 @@
         },
         "unreachableStatus": {
           "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"
-        },
-        "waitingIndicator": {
-          "text": "في انتظار الاستجابة..."
         }
       },
       "customToolAuth": {
@@ -12571,7 +12568,7 @@
             "status": "جارٍ القراءة..."
           },
           "read": {
-            "label": "تمت القراءة"
+            "label": "المستندات المقروءة"
           },
           "header": {
             "default": "جارٍ البحث في المستندات الداخلية",
@@ -12622,9 +12619,6 @@
           },
           "querying": {
             "status": "جارٍ الاستعلام عن قاعدة المعرفة..."
-          },
-          "listed": {
-            "label": "{count, plural, one {مستند واحد مُدرج} other {# مستندات مُدرجة}}"
           },
           "query": {
             "table": {
@@ -12685,12 +12679,6 @@
           },
           "ran": {
             "status": "تم تشغيل Python"
-          },
-          "runningCode": {
-            "label": "جارٍ تشغيل الكود..."
-          },
-          "writingCode": {
-            "status": "جارٍ كتابة الكود..."
           }
         },
         "reasoning": {
@@ -12749,9 +12737,6 @@
             "noSession": {
               "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة...} failed {تعذر إرسال إدخال إلى الجلسة} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة} other {تم إرسال إدخال إلى الجلسة}}} check {{phase, select, running {جارٍ فحص الجلسة...} failed {تعذر فحص الجلسة} canceled {أُلغي} done {تم فحص الجلسة} other {تم فحص الجلسة}}} other {الجلسة}}"
             }
-          },
-          "output": {
-            "title": "المخرجات"
           },
           "exitCode": {
             "label": "رمز الخروج {exitCode}"

@@ -79,15 +79,8 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   children,
 }) => {
   const t = useTranslations("chat.messages.timeline");
-  const {
-    code,
-    stdout,
-    stderr,
-    fileIds,
-    isStreaming,
-    isExecuting,
-    isComplete,
-  } = constructCurrentPythonState(packets);
+  const { code, stdout, stderr, fileIds, isExecuting, isComplete } =
+    constructCurrentPythonState(packets);
 
   useEffect(() => {
     if (isComplete) {
@@ -104,28 +97,6 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   // Shared content for all states - used by both FULL and compact modes
   const content = (
     <div className="flex flex-col space-y-2">
-      {/* Loading indicator when streaming or executing */}
-      {(isStreaming || isExecuting) && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="flex gap-0.5">
-            <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
-            <div
-              className="w-1 h-1 bg-current rounded-full animate-pulse"
-              style={{ animationDelay: "0.1s" }}
-            ></div>
-            <div
-              className="w-1 h-1 bg-current rounded-full animate-pulse"
-              style={{ animationDelay: "0.2s" }}
-            ></div>
-          </div>
-          <span>
-            {isStreaming
-              ? t("python.writingCode.status")
-              : t("python.runningCode.label")}
-          </span>
-        </div>
-      )}
-
       <CommandBody
         command={code.trim()}
         language="python"
@@ -136,6 +107,8 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
         // A finished run already carries its no-output text; before then,
         // empty means the code is still being written.
         emptyLabel=""
+        // Running: the output panel waits with a loading shimmer.
+        outputLoading={Boolean(isExecuting)}
       />
 
       {/* File count */}

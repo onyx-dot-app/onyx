@@ -5,6 +5,7 @@ import { Hoverable } from "@opal/core";
 import { Section } from "@opal/layouts";
 import { Text } from "@opal/components/text/components";
 import { CopyButton } from "@opal/components/buttons/copy-button/components";
+import { LineLoader } from "@opal/loaders/line-loader/components";
 import type { RichStr } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -66,9 +67,14 @@ interface CodePanelColumnsProps {
 
 interface CodePanelOutputProps {
   /** The output text. */
-  children: string;
+  children?: string;
   /** Error output: red text on a red tint. @default false */
   error?: boolean;
+  /**
+   * The output is still awaited: a line shimmer in place of the text.
+   * @default false
+   */
+  loading?: boolean;
 }
 
 interface CodePanelContentProps {
@@ -214,16 +220,24 @@ function CodePanelColumns({ children }: CodePanelColumnsProps) {
 }
 
 /** Output under the code, or error output. */
-function CodePanelOutput({ children, error = false }: CodePanelOutputProps) {
+function CodePanelOutput({
+  children,
+  error = false,
+  loading = false,
+}: CodePanelOutputProps) {
   return (
     <div className="opal-code-panel-output" data-error={error}>
-      <Text
-        as="p"
-        font="secondary-mono"
-        color={error ? "status-error-05" : "text-03"}
-      >
-        {children}
-      </Text>
+      {loading ? (
+        <LineLoader width="2/3" />
+      ) : (
+        <Text
+          as="p"
+          font="secondary-mono"
+          color={error ? "status-error-05" : "text-03"}
+        >
+          {children}
+        </Text>
+      )}
     </div>
   );
 }

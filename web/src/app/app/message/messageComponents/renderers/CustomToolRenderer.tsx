@@ -225,24 +225,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                   <CodePanel.Output>{String(data)}</CodePanel.Output>
                 )
               ) : (
-                <CodePanel.Content>
-                  <div className="flex items-center gap-2 text-sm text-text-03">
-                    <div className="flex gap-0.5">
-                      <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
-                      <div
-                        className="w-1 h-1 bg-current rounded-full animate-pulse"
-                        style={{ animationDelay: "0.1s" }}
-                      ></div>
-                      <div
-                        className="w-1 h-1 bg-current rounded-full animate-pulse"
-                        style={{ animationDelay: "0.2s" }}
-                      ></div>
-                    </div>
-                    <Text font="secondary-body" color="text-03">
-                      {t("customTool.waitingIndicator.text")}
-                    </Text>
-                  </div>
-                </CodePanel.Content>
+                // The response is still awaited.
+                <CodePanel.Output loading />
               )}
             </>
           )}
