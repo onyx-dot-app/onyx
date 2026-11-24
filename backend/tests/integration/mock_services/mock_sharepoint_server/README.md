@@ -17,7 +17,7 @@ The server answers for three Microsoft hosts, each under a path prefix:
 | --- | --- | --- |
 | `/login` | `login.microsoftonline.com` | OpenID configuration, instance discovery, and `POST /{tenant}/oauth2/v2.0/token`: the client credentials grant with a client secret or a certificate assertion |
 | `/graph` | `graph.microsoft.com` | Sites: `sites/getAllSites`, `sites/{hostname}:/{path}`, `sites/root`, `sites/{id}`, `sites/{id}/drives`. Drive items: `root/delta`, `children`, item by id or by path (`root:/{path}`), `content`, `permissions`, `listItem`. Site pages: the listing and one page, with and without `$expand=canvasLayout`. Directory: `groups`, `groups/{id}`, `members`, `transitiveMembers` (with the `microsoft.graph.group` and `microsoft.graph.user` casts), `users`, `users/{id}` |
-| `/sharepoint/<host>` | `<tenant>.sharepoint.com` | SharePoint REST (`_api/web/...`): `RoleAssignments` of the web, a list, a list item, a folder (`GetFolderById`) and a file (`getFileByServerRelativeUrl`), `siteGroups/GetByName(...)/Users`, `getFolderByServerRelativePath`. Also the pre-authenticated download URL (`_layouts/15/download.aspx`) |
+| `/sharepoint/<host>` | `<tenant>.sharepoint.com` | SharePoint REST (`_api/web/...`): `RoleAssignments` of the web, a list, a list item, a folder (`GetFolderById`) and a file (`getFileByServerRelativeUrl`), `siteGroups/GetByName(...)/Users`, `getFolderByServerRelativePath`, a library (`lists/GetById(...)`, with `HasUniqueRoleAssignments` and its root folder) and its items (`lists/GetById(...)/items`, with `HasUniqueRoleAssignments`, `FileRef` and `FileDirRef`). Also the pre-authenticated download URL (`_layouts/15/download.aspx`) |
 
 Each link in a response (`@odata.nextLink`, `@odata.deltaLink`, `webUrl`,
 `@microsoft.graph.downloadUrl`, `Location`, `__next`) names the real Microsoft host, not the mock.
@@ -250,7 +250,7 @@ cursor saved before the walk does. `action` is `create` (with `file`), `modify` 
   `graph.item.content`, `graph.item.permissions`, `graph.item.list_item`, `graph.groups.list`,
   `graph.group.get`, `graph.group.members`, `graph.group.transitive_members`, `graph.users.list`,
   `graph.user.get`, `rest.web.get`, `rest.role_assignments`, `rest.site_group_users`,
-  `rest.folder.get`, `download_url.get`, and `graph.unmatched`, `rest.unmatched`,
+  `rest.folder.get`, `rest.list.get`, `rest.list.items`, `download_url.get`, and `graph.unmatched`, `rest.unmatched`,
   `login.unmatched` for a call with no route.
 - `ru`, `ru_by_app`, `ru_per_minute` and `quota_window` (the RU in the current windows and the
   seconds left of each pause).
