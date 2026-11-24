@@ -27,7 +27,7 @@ from tests.external_dependency_unit.connectors.sharepoint.conftest import (
 _RETRY_AFTER_SECONDS = 2
 
 
-class _StopAfterLimiter(SourceApiLimiter):
+class StopAfterLimiter(SourceApiLimiter):
     """Lets ``calls`` calls through, then raises the stop signal, as the
     shared limiter does when the attempt stops during a wait."""
 
@@ -173,7 +173,7 @@ def test_a_stop_during_a_limiter_wait_ends_the_fetching_walk(
     """The stop is not a failure of one document, drive or site: the walk
     raises it, and yields no failure for it."""
     connector = mock_sharepoint.build_connector()
-    connector.set_source_api_limiter(_StopAfterLimiter(calls))
+    connector.set_source_api_limiter(StopAfterLimiter(calls))
 
     with pytest.raises(ConnectorStopSignal):
         load_all_from_connector(connector, 0, time.time())
@@ -187,7 +187,7 @@ def test_a_stop_during_a_limiter_wait_ends_the_slim_walk(
     """Permission sync marks a document that the slim walk does not list as
     private, so a stop must end the walk and not skip the rest of it."""
     connector = mock_sharepoint.build_connector(certificate=True)
-    connector.set_source_api_limiter(_StopAfterLimiter(calls))
+    connector.set_source_api_limiter(StopAfterLimiter(calls))
 
     with pytest.raises(ConnectorStopSignal):
         for _ in connector.retrieve_all_slim_docs_perm_sync(0, time.time()):
