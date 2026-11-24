@@ -34,6 +34,7 @@ from ee.onyx.server.tenants.schema_management import (
     drop_schema,
     run_alembic_migrations,
 )
+from onyx.auth.free_mail_email_validator import is_free_mail_email
 from onyx.configs.app_configs import (
     ANTHROPIC_DEFAULT_API_KEY,
     AUTO_PROVISION_DEFAULT_LLM_PROVIDERS,
@@ -195,6 +196,9 @@ PLAYGROUND_REFUSAL_CODES = {
 }
 # The control plane did not answer, so the rules could not run.
 PLAYGROUND_CHECK_FAILED_CODE = "PLAYGROUND_CHECK_FAILED"
+# Not a work address: the web asks for one. Decided here, without the
+# control plane, since it depends on the address alone.
+PLAYGROUND_FREE_MAIL_CODE = "PLAYGROUND_FREE_MAIL"
 
 
 async def fetch_sign_up_domain_state(email: str) -> SignUpDomainState:
@@ -216,11 +220,20 @@ async def fetch_sign_up_domain_state(email: str) -> SignUpDomainState:
 
 
 async def check_playground_sign_up(email: str, start_new_team: bool) -> None:
-    """Refuses a playground sign-up the control plane rules out.
+    """Refuses a playground sign-up that is not from a work address, or that
+    the control plane rules out.
 
+    A free-mail address is refused first: it is not one company, so the
+    domain rules do not apply and the control plane is not asked.
     `active_tenant` passes when the person chose to start a new team. A
     control plane that cannot answer refuses too: no tenant without the rules.
     """
+    if is_free_mail_email(email):
+        logger.info(
+            "Playground sign-up refused: free-mail domain %s",
+            email.rsplit("@", 1)[-1].lower(),
+        )
+        raise OnyxError(OnyxErrorCode.REGISTRATION_DISABLED, PLAYGROUND_FREE_MAIL_CODE)
     try:
         state = await fetch_sign_up_domain_state(email)
     except Exception:

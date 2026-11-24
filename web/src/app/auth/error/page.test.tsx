@@ -115,6 +115,19 @@ describe("auth error page", () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
+  test("tells a free-mail sign-up to use a work email", async () => {
+    mockError = "PLAYGROUND_FREE_MAIL";
+
+    render(<Page />);
+
+    expect(await screen.findByText("Use your work email.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Contact sales" })).toHaveAttribute(
+      "href",
+      "https://www.onyx.app/contact-sales"
+    );
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
   test("tells a playground sign-up the check did not run", async () => {
     mockError = "PLAYGROUND_CHECK_FAILED";
 
