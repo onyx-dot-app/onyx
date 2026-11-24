@@ -154,35 +154,31 @@ test.describe("Onboarding Flow @exclusive", () => {
     }) => {
       const client = new OnyxApiClient(page.request);
       const namePromptPage = new OnboardingNamePromptPage(page);
-      // The input's top once the layout stops moving
-      const settledInputTop = async () => {
-        let top = Number.NaN;
-        await expect
-          .poll(async () => {
-            const box = await namePromptPage.chatInput.boundingBox();
-            const next = box?.y ?? Number.NaN;
-            const settled = next === top;
-            top = next;
-            return settled;
-          })
-          .toBe(true);
-        return top;
-      };
 
       const sessionId = await client.createChatSession("Onboarding return");
       try {
-        await page.goto(`/app?chatId=${sessionId}`);
-        await expect(namePromptPage.chatInput).toBeVisible({ timeout: 15000 });
+        // Where a fresh load places the input, once the layout stops moving
+        await namePromptPage.goto();
+        await expect(namePromptPage.namePrompt).toBeVisible();
+        let freshTop = Number.NaN;
+        await expect
+          .poll(async () => {
+            const top = await namePromptPage.chatInputTop();
+            const settled = top === freshTop;
+            freshTop = top;
+            return settled;
+          })
+          .toBe(true);
+
+        await namePromptPage.goto(sessionId);
         // From the chat's layout, where the bottom row is empty
         await new AppSidebarPage(page).newSession();
         await expect(namePromptPage.namePrompt).toBeVisible();
-        const returnedTop = await settledInputTop();
-
-        await namePromptPage.reload();
-        await expect(namePromptPage.namePrompt).toBeVisible();
-        expect(
-          Math.abs(returnedTop - (await settledInputTop()))
-        ).toBeLessThanOrEqual(2);
+        await expect
+          .poll(async () =>
+            Math.abs((await namePromptPage.chatInputTop()) - freshTop)
+          )
+          .toBeLessThanOrEqual(2);
       } finally {
         await client.deleteChatSession(sessionId);
       }

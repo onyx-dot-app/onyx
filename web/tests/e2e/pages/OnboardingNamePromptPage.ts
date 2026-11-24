@@ -29,6 +29,19 @@ export class OnboardingNamePromptPage {
     return me.personalization;
   }
 
+  /** Open /app, or the given chat session, and wait for the chat input. */
+  async goto(chatSessionId?: string): Promise<void> {
+    await this.page.goto(
+      chatSessionId ? `/app?chatId=${chatSessionId}` : "/app"
+    );
+    await expect(this.chatInput).toBeVisible({ timeout: 15000 });
+  }
+
+  /** The chat input's top edge, or NaN while it has no box. */
+  async chatInputTop(): Promise<number> {
+    return (await this.chatInput.boundingBox())?.y ?? Number.NaN;
+  }
+
   /** Reload /app and wait for the chat input. */
   async reload(): Promise<void> {
     await this.page.reload();
