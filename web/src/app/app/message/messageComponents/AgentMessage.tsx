@@ -20,7 +20,10 @@ import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
 import { HumanMessageBubble } from "@/app/app/message/HumanMessage";
-import type { TurnGroup } from "@/lib/timeline/chat/transformers";
+import type {
+  TransformedStep,
+  TurnGroup,
+} from "@/lib/timeline/chat/transformers";
 import type {
   GroupedPacket,
   PlacedImage,
@@ -866,12 +869,29 @@ function buildSectionSegments(
     )
   );
 
-  // A turn's generated images, in the order they arrived.
+  // Each image follows the step that made it: a direct call's step is keyed
+  // by its turn and tab, a code mode program's call by the program's key and
+  // the call's sub-turn. An image whose step is not shown yet follows its
+  // turn instead.
+  const stepKeys = new Set(
+    section.toolGroups.flatMap((group) => group.steps.map((step) => step.key))
+  );
+  const imagesByStep = new Map<string, GeneratedImage[]>();
   const imagesByTurn = new Map<number, GeneratedImage[]>();
   for (const image of section.images) {
-    const turnImages = imagesByTurn.get(image.turnIndex) ?? [];
-    turnImages.push(image);
-    imagesByTurn.set(image.turnIndex, turnImages);
+    const callKey = getToolKey(image.turnIndex, image.tabIndex);
+    const stepKey =
+      image.subTurnIndex === null
+        ? callKey
+        : `${callKey}-${image.subTurnIndex}`;
+    if (stepKeys.has(stepKey)) {
+      imagesByStep.set(stepKey, [...(imagesByStep.get(stepKey) ?? []), image]);
+    } else {
+      imagesByTurn.set(image.turnIndex, [
+        ...(imagesByTurn.get(image.turnIndex) ?? []),
+        image,
+      ]);
+    }
   }
 
   // At one turn, a step comes before its images, then its text, then its
@@ -921,19 +941,33 @@ function buildSectionSegments(
     } else if ("record" in item) {
       segments.push({ kind: "record", record: item.record });
     } else {
-      const last = segments[segments.length - 1];
-      if (last?.kind === "run") last.turnGroups.push(item.group);
-      else
-        segments.push({
-          kind: "run",
-          // The first run keeps the waiting card's key, so a wait for the
-          // user becomes that run's card instead of being replaced by a new
-          // one.
-          key: segments.some((s) => s.kind === "run")
-            ? (item.group.steps[0]?.key ?? String(item.turn))
-            : LIVE_RUN_KEY,
-          turnGroups: [item.group],
-        });
+      const pushRun = (group: TurnGroup) => {
+        const last = segments[segments.length - 1];
+        if (last?.kind === "run") last.turnGroups.push(group);
+        else
+          segments.push({
+            kind: "run",
+            // The first run keeps the waiting card's key, so a wait for the
+            // user becomes that run's card instead of being replaced by a
+            // new one.
+            key: segments.some((s) => s.kind === "run")
+              ? (group.steps[0]?.key ?? String(item.turn))
+              : LIVE_RUN_KEY,
+            turnGroups: [group],
+          });
+      };
+      // A step that made images ends its run there: its images follow it,
+      // and the group's later steps start a new run.
+      let steps: TransformedStep[] = [];
+      for (const step of item.group.steps) {
+        steps.push(step);
+        const images = imagesByStep.get(step.key);
+        if (images === undefined) continue;
+        pushRun({ ...item.group, steps });
+        segments.push({ kind: "images", key: `images-${step.key}`, images });
+        steps = [];
+      }
+      if (steps.length > 0) pushRun({ ...item.group, steps });
     }
   }
 

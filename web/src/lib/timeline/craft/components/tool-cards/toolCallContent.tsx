@@ -57,7 +57,7 @@ const PAST_TENSE: Record<string, string> = {
  * The step's title. Bash/execute, search, skills and read/edit lead with a
  * verb, then the actual command, pattern, skill or file path in a code span;
  * everything else is plain text. `done` puts the verb in the past tense; a
- * running verb title ends with an ellipsis.
+ * running title ends with an ellipsis.
  */
 export function renderToolCallHeader(
   toolCall: ToolCallState,
@@ -68,7 +68,7 @@ export function renderToolCallHeader(
   const ellipsis = done ? "" : "...";
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
-      return toolCall.description;
+      return toolCall.description + ellipsis;
     }
     return verbWithCode(verb("Running"), toolCall.command, ellipsis);
   }
@@ -84,7 +84,7 @@ export function renderToolCallHeader(
   ) {
     return verbWithCode(verb(toolCall.title), toolCall.description, ellipsis);
   }
-  return toolCall.description || verb(toolCall.title) + ellipsis;
+  return (toolCall.description || verb(toolCall.title)) + ellipsis;
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {

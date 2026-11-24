@@ -44,6 +44,10 @@ export { parseToolKey };
 
 export interface PlacedImage extends GeneratedImage {
   turnIndex: number;
+  /** The parallel call (tab) of the turn that made it. */
+  tabIndex: number;
+  /** The call of a code mode program that made it; null for a direct call. */
+  subTurnIndex: number | null;
 }
 
 export interface PlacedPublishedFile extends PublishedFile {
@@ -321,7 +325,12 @@ function handleImagePacket(state: ProcessorState, packet: Packet): void {
   for (const image of delta.images) {
     if (seenFileIds.has(image.file_id)) continue;
     seenFileIds.add(image.file_id);
-    newImages.push({ ...image, turnIndex: packet.placement.turn_index });
+    newImages.push({
+      ...image,
+      turnIndex: packet.placement.turn_index,
+      tabIndex: packet.placement.tab_index ?? 0,
+      subTurnIndex: packet.placement.sub_turn_index ?? null,
+    });
   }
   if (newImages.length > 0) {
     // A new array, so memoized consumers see the change

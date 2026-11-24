@@ -124,6 +124,9 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     A replayed call sends its pages with empty `urls`, so on a replay `urls` do not show which URLs opened
 
     **Image Generation**
+    - `tool_call_argument_delta` (with `tool_type` set to `generate_image`) streams the model's `prompt`, in
+    `argument_deltas`, while the model writes it. It comes before `image_generation_start`.
+    A replayed call has no `tool_call_argument_delta`
     - `image_generation_start`, `image_generation_heartbeat`, and `image_generation_final`
 
     **Code Execution**
