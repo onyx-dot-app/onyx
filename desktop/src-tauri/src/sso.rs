@@ -257,6 +257,9 @@ pub async fn start_in_browser(
         epoch,
         attempt,
     });
+    // The browser hands the result back through onyx://.
+    #[cfg(all(windows, not(debug_assertions)))]
+    crate::remove_other_user_link_handler("before browser sign-in");
     app.opener()
         .open_url(authorize.as_str(), None::<&str>)
         .map_err(|e| format!("Could not open your browser: {e}"))?;

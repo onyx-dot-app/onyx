@@ -187,6 +187,14 @@ impl AppState {
             session_store::KEEP_READ_FAILURE,
             || session_store::load(server),
         )?;
+        if self.config.get().rejects_token(server, &token) {
+            // A sign-out could not delete it: try again, and never use it.
+            match session_store::clear(server) {
+                Ok(()) => self.forget_rejected(server),
+                Err(e) => log::warn!("could not delete a signed-out session token: {e}"),
+            }
+            return None;
+        }
         if !self
             .config
             .get()
@@ -240,9 +248,22 @@ impl AppState {
             },
         )?;
         *cache = Some((server.to_string(), token.to_string()));
+        // The store now holds the new token, not the rejected one.
+        self.forget_rejected(server);
         self.forget_read_failure();
         self.end_epoch();
         Ok(true)
+    }
+
+    fn forget_rejected(&self, server: &str) {
+        if !self.config.get().rejected_tokens.contains_key(server) {
+            return;
+        }
+        if let Err(e) = self.config.update(|c| {
+            c.rejected_tokens.remove(server);
+        }) {
+            log::warn!("could not update the signed-out token record: {e}");
+        }
     }
 
     /// Replaces `old` with `new` only if `old` is still the stored session;
@@ -273,6 +294,15 @@ impl AppState {
             _ => session_store::load(server).ok().flatten(),
         };
         let cleared = session_store::clear(server);
+        if let (Err(_), Some(token)) = (&cleared, &token) {
+            // Kept in config, so the token is refused also after a restart.
+            let fingerprint = crate::config::token_fingerprint(server, token);
+            if let Err(e) = self.config.update(|c| {
+                c.rejected_tokens.insert(server.to_string(), fingerprint);
+            }) {
+                log::warn!("could not record the signed-out token: {e}");
+            }
+        }
         self.forget_read_failure();
         self.end_epoch();
         (token, cleared)

@@ -119,7 +119,10 @@ install of this app upgrades it in place. See
   sign-out again in the background while it runs. The token stays in memory only: it is not
   written back to the keychain, so after a quit the server session ends only when it expires. If
   the OS credential store cannot delete the stored token, the sign-out still closes the main
-  window and opens sign-in, logs the error, and shows a warning. The launcher, onboarding and sign-in show one line for each of the same errors,
+  window and opens sign-in, logs the error, and shows a warning. It records a SHA-256
+  fingerprint of that token (never the token) in `config.json` (`rejectedTokens`), so the token
+  is never used again, also after a restart. A later read deletes it from the store, and a new
+  sign-in to that server drops the record. The launcher, onboarding and sign-in show one line for each of the same errors,
   for example "Can't find <host>. Check the server address." (`src-tauri/src/reachability.rs`).
 - If the HTTP client cannot start (for example, a broken OpenSSL configuration), a dialog
   says so and the app quits.
@@ -579,7 +582,8 @@ How the app differs from macOS:
     (`HKCU\...\Uninstall\Onyx`). Its user sees two "Onyx" entries in Apps until they remove
     the older one; the app says so once at its first launch.
   - At launch, a release build deletes a per-user `onyx://` entry
-    (`HKCU\Software\Classes\onyx`) that starts another program. The earlier desktop app
+    (`HKCU\Software\Classes\onyx`) that starts another program, and again before each browser
+    sign-in. The earlier desktop app
     wrote one at each launch, and it would win over the entry that the installers write for
     all users.
   - Both installers refuse to install an older version over a newer one. Uninstall the newer

@@ -190,8 +190,11 @@ fn link_command_is_other_program(command: &str, exe: &std::path::Path) -> bool {
     !program.eq_ignore_ascii_case(&exe.to_string_lossy())
 }
 
+/// Takes onyx:// back from another program (`when`: for the log). Runs at
+/// launch and before each browser sign-in: the earlier desktop app, while it
+/// is still installed, writes its own entry each time it starts.
 #[cfg(all(windows, not(debug_assertions)))]
-fn remove_other_user_link_handler() {
+fn remove_other_user_link_handler(when: &str) {
     use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
     const KEY: &str = r"Software\Classes\onyx";
@@ -209,7 +212,7 @@ fn remove_other_user_link_handler() {
         return;
     }
     match hkcu.delete_subkey_all(KEY) {
-        Ok(()) => log::info!("deleted a per-user onyx:// entry for another program"),
+        Ok(()) => log::info!("deleted a per-user onyx:// entry for another program ({when})"),
         Err(e) => log::warn!("could not delete the per-user onyx:// entry: {e}"),
     }
 }
@@ -362,7 +365,7 @@ fn main() {
                     log::warn!("could not register onyx:// links: {e}");
                 }
                 #[cfg(all(target_os = "windows", not(debug_assertions)))]
-                remove_other_user_link_handler();
+                remove_other_user_link_handler("at launch");
                 #[cfg(target_os = "linux")]
                 register_links(handle);
                 let link_app = handle.clone();

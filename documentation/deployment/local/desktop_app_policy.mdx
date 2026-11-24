@@ -42,7 +42,10 @@ Deploy the policy before you deploy the new app, so that the first launch alread
 | `LaunchAtLogin` | boolean | Turns **Launch at login** on or off, and locks the switch in **Preferences**. See [Launch at login](#launch-at-login). |
 | `DisableNotifications` | boolean | Turns off desktop notifications. |
 
-A change to `ServerURL` or `LockServerURL` applies at the next launch of the app.
+A change to `ServerURL` applies at the next launch of the app.
+If the new managed server is locked and is not the server in use,
+**Preferences** says that Onyx uses it after a restart. If a policy read turns `LockServerURL` on,
+the app locks the server in use right away. Turning the lock off takes effect at the next launch.
 A change to the other keys applies at the next policy read.
 
 Booleans accept `true` and `false`, `1` and `0`, and `yes` and `no`, also as strings.

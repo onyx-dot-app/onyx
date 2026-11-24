@@ -134,6 +134,7 @@ fn read_preview(path: &Path) -> Option<Config> {
     // The preview's tokens are under its own credential service, and the
     // managed server is read again from the policy.
     config.session_servers.clear();
+    config.rejected_tokens.clear();
     config.managed_server_url = None;
     Some(config)
 }

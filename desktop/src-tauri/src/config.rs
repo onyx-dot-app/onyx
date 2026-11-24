@@ -38,6 +38,11 @@ pub struct Config {
     /// The last valid managed `ServerURL`, used while the policy is invalid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_server_url: Option<String>,
+    /// Per server, the fingerprint (`token_fingerprint`) of a token that a
+    /// sign-out could not delete from the OS store. That token is never used
+    /// again. The token itself is never written here.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub rejected_tokens: BTreeMap<String, String>,
     /// Windows: the notice about the earlier app's per-user install was shown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub earlier_install_notice_shown: Option<bool>,
@@ -60,10 +65,29 @@ impl Config {
 
     /// Whether a token found in the OS store for `server` may be used. A
     /// token with no record came from an earlier install, or from before the
-    /// user deleted the app's data.
+    /// user deleted the app's data. A token that a sign-out could not delete
+    /// is never used, with or without a record.
     pub fn trusts_stored_token(&self, server: &str, needs_record: bool) -> bool {
         !needs_record || self.session_servers.contains(server)
     }
+
+    /// Whether `token` is the one a sign-out from `server` could not delete.
+    pub fn rejects_token(&self, server: &str, token: &str) -> bool {
+        self.rejected_tokens.get(server).map(String::as_str)
+            == Some(token_fingerprint(server, token).as_str())
+    }
+}
+
+/// SHA-256 (hex) of the server and the token, so a rejected token can be
+/// recognized without keeping it.
+pub fn token_fingerprint(server: &str, token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::new()
+        .chain_update(server.as_bytes())
+        .chain_update([0u8])
+        .chain_update(token.as_bytes())
+        .finalize();
+    digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 pub struct ConfigStore {
@@ -137,6 +161,29 @@ mod tests {
         config.session_servers.insert(SERVER.to_string());
         assert!(config.trusts_stored_token(SERVER, true));
         assert!(!config.trusts_stored_token("https://other.example.com", true));
+    }
+
+    #[test]
+    fn a_rejected_token_is_known_by_its_fingerprint_only() {
+        let fingerprint = token_fingerprint(SERVER, "secret-token");
+        assert_eq!(fingerprint.len(), 64);
+        assert!(!fingerprint.contains("secret-token"));
+        assert_ne!(fingerprint, token_fingerprint(SERVER, "other-token"));
+        assert_ne!(
+            fingerprint,
+            token_fingerprint("https://other.example.com", "secret-token")
+        );
+        let mut config = Config::default();
+        assert!(!config.rejects_token(SERVER, "secret-token"));
+        config
+            .rejected_tokens
+            .insert(SERVER.to_string(), fingerprint);
+        assert!(config.rejects_token(SERVER, "secret-token"));
+        assert!(!config.rejects_token(SERVER, "new-token"));
+        assert!(!config.rejects_token("https://other.example.com", "secret-token"));
+        let raw = serde_json::to_string(&config).unwrap();
+        assert!(raw.contains("rejectedTokens"));
+        assert!(!raw.contains("secret-token"));
     }
 
     #[test]
