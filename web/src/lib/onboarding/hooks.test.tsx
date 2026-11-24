@@ -331,3 +331,129 @@ describe("useShowOnboarding", () => {
     });
   });
 });
+
+describe("useShowOnboarding isOnboardingResolved", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockUser = null;
+    mockProviderStatus.llmProviders = [];
+    mockProviderStatus.isLoadingProviders = false;
+    mockProviderStatus.hasProviders = false;
+  });
+
+  it("is false while the user is loading", () => {
+    const { result } = renderUseShowOnboarding({ userId: undefined });
+    expect(result.current.isOnboardingResolved).toBe(false);
+  });
+
+  it("is false while providers are loading", () => {
+    const { result } = renderUseShowOnboarding({ isLoadingProviders: true });
+    expect(result.current.isOnboardingResolved).toBe(false);
+  });
+
+  it("is false while chat sessions are loading", () => {
+    const { result } = renderUseShowOnboarding({
+      isLoadingChatSessions: true,
+    });
+    expect(result.current.isOnboardingResolved).toBe(false);
+  });
+
+  it("is true with the final decision once everything has loaded", () => {
+    const { result, rerender } = renderUseShowOnboarding({
+      isLoadingChatSessions: true,
+    });
+    expect(result.current.isOnboardingResolved).toBe(false);
+
+    rerender({
+      activeAgent: undefined,
+      isLoadingChatSessions: false,
+      chatSessionsCount: 0,
+      userId: "user-1",
+    });
+
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.showOnboarding).toBe(true);
+  });
+
+  it("never reports a resolved, visible onboarding for a dismissed user", () => {
+    localStorage.setItem("onyx:onboardingCompleted:user-1", "true");
+    mockProviderStatus.isLoadingProviders = true;
+    const renders: Array<ReturnType<typeof useShowOnboarding>> = [];
+
+    const { result } = renderHook(() => {
+      const value = useShowOnboarding({
+        activeAgent: undefined,
+        isLoadingChatSessions: true,
+        chatSessionsCount: 0,
+        userId: "user-1",
+      });
+      renders.push(value);
+      return value;
+    });
+
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.onboardingDismissed).toBe(true);
+    expect(result.current.showOnboarding).toBe(false);
+    expect(
+      renders.filter(
+        (render) =>
+          render.isOnboardingResolved &&
+          !render.onboardingDismissed &&
+          render.showOnboarding
+      )
+    ).toEqual([]);
+  });
+
+  it("does not resolve a new user from the previous user's dismissal", () => {
+    localStorage.setItem("onyx:onboardingCompleted:user-1", "true");
+    const { result, rerender } = renderUseShowOnboarding();
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.onboardingDismissed).toBe(true);
+
+    rerender({
+      activeAgent: undefined,
+      isLoadingChatSessions: true,
+      chatSessionsCount: 0,
+      userId: "user-2",
+    });
+
+    expect(result.current.isOnboardingResolved).toBe(false);
+    expect(result.current.onboardingDismissed).toBe(false);
+  });
+
+  it("is false again for a new user until that user is evaluated", () => {
+    const { result, rerender } = renderUseShowOnboarding();
+    expect(result.current.isOnboardingResolved).toBe(true);
+
+    rerender({
+      activeAgent: undefined,
+      isLoadingChatSessions: true,
+      chatSessionsCount: 0,
+      userId: "user-2",
+    });
+
+    expect(result.current.isOnboardingResolved).toBe(false);
+  });
+
+  it("resolves again for a user who comes back after a dismissed user", () => {
+    localStorage.setItem("onyx:onboardingCompleted:user-2", "true");
+    const params = {
+      activeAgent: undefined,
+      isLoadingChatSessions: false,
+      chatSessionsCount: 0,
+    };
+    const { result, rerender } = renderUseShowOnboarding();
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.showOnboarding).toBe(true);
+
+    rerender({ ...params, userId: "user-2" });
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.onboardingDismissed).toBe(true);
+
+    rerender({ ...params, userId: "user-1" });
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.onboardingDismissed).toBe(false);
+    expect(result.current.showOnboarding).toBe(true);
+  });
+});
