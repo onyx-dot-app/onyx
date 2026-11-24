@@ -101,6 +101,7 @@ from onyx.tools.tool_constructor import (
 )
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    LoadSkillTool,
     sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -1088,7 +1089,7 @@ def create_chat_agent(
         turn = (
             SandboxTurn(
                 tenant_id=get_current_tenant_id(),
-                user_id=user.id,
+                user=user,
                 chat_session_id=setup.chat_session_id,
                 vm_chat_files=setup.vm_chat_files,
                 copy_vm_chat_files=setup.copy_vm_chat_files,
@@ -1105,6 +1106,8 @@ def create_chat_agent(
                     )
                 )
             ]
+            if setup.has_chat_skills:
+                tools.append(LoadSkillTool(turn))
         return build_chat_agent(
             AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
             agent_id,

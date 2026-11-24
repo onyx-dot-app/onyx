@@ -6,6 +6,7 @@ import io
 import itertools
 import posixpath
 import shlex
+import tarfile
 import threading
 import time
 import zipfile
@@ -162,6 +163,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # Each file's modification time in seconds since the epoch, set by a
         # write; a file with none lists no modified_at.
         self.file_times: dict[tuple[str, str, str], float] = {}
+        # InstallSkill calls that copied a skill: (sandbox_id, name).
+        self.skill_installs: list[tuple[str, str]] = []
         # (sandbox_id, session_id, path) -> target of a symlink, as stored.
         self.links: dict[tuple[str, str, str], str] = {}
         # StatFiles facts of a path, as the guest daemon's os.Root reports
@@ -1549,6 +1552,71 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         return sandboxd_pb2.ListFilesResponse(
             entries=listing[:limit], truncated=len(listing) > limit or depth_cut
         )
+
+    def InstallSkill(  # noqa: N802
+        self,
+        request_iterator: Iterator[sandboxd_pb2.InstallSkillRequest],
+        context: grpc.ServicerContext,
+    ) -> sandboxd_pb2.InstallSkillResponse:
+        """The daemon's skills folder is /mnt/skills here (the real one is a
+        link to it). It keeps the old folder unless the whole tar is good."""
+        first = next(request_iterator)
+        if first.WhichOneof("part") != "header":
+            abort_daemon(
+                context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "header first"
+            )
+        header = first.header
+        folder = f"/mnt/skills/{header.name}"
+        with self.agent.lock:
+            sandbox_id = self._ready(context)
+            version_key = (sandbox_id, "", f"{folder}/.version")
+            if self.agent.files.get(version_key) == header.version.encode():
+                # As the daemon does: answer without reading the tar.
+                return sandboxd_pb2.InstallSkillResponse(installed=False)
+        data = b"".join(request.data for request in request_iterator)
+        if (
+            len(data) != header.size_bytes
+            or hashlib.sha256(data).hexdigest() != header.sha256
+        ):
+            abort_daemon(
+                context, SandboxDaemonErrorReason.ARCHIVE_INVALID, "size or sha256"
+            )
+        with self.agent.lock:
+            staged: dict[tuple[str, str, str], tuple[bytes, int]] = {}
+            with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+                for member in tar.getmembers():
+                    if not member.isfile() or not member.name.startswith(
+                        f"{header.name}/"
+                    ):
+                        abort_daemon(
+                            context,
+                            SandboxDaemonErrorReason.ARCHIVE_INVALID,
+                            member.name,
+                        )
+                    extracted = tar.extractfile(member)
+                    content = b"" if extracted is None else extracted.read()
+                    mode = 0o755 if member.mode & 0o111 else 0o644
+                    staged[(sandbox_id, "", f"/mnt/skills/{member.name}")] = (
+                        content,
+                        mode,
+                    )
+            for key in [
+                k
+                for k in self.agent.files
+                if k[:2] == (sandbox_id, "") and k[2].startswith(folder + "/")
+            ]:
+                del self.agent.files[key]
+                self.agent.file_modes.pop(key, None)
+            for key, (content, mode) in staged.items():
+                self.agent.files[key] = content
+                self.agent.file_modes[key] = mode
+            self.agent.files[version_key] = header.version.encode()
+            self.agent.skill_installs.append((sandbox_id, header.name))
+            return sandboxd_pb2.InstallSkillResponse(
+                installed=True,
+                files=len(staged),
+                expanded_bytes=sum(len(c) for c, _ in staged.values()),
+            )
 
     def DeleteFile(  # noqa: N802
         self, request: sandboxd_pb2.DeleteFileRequest, context: grpc.ServicerContext

@@ -701,6 +701,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     ),
                     self._user.id,
                     session,
+                    built_ins=self._sandbox_tools,
                 )
                 if any(picks)
                 else [AcceptedPicks() for _ in received]
