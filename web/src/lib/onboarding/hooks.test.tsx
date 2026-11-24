@@ -435,4 +435,25 @@ describe("useShowOnboarding isOnboardingResolved", () => {
 
     expect(result.current.isOnboardingResolved).toBe(false);
   });
+
+  it("resolves again for a user who comes back after a dismissed user", () => {
+    localStorage.setItem("onyx:onboardingCompleted:user-2", "true");
+    const params = {
+      activeAgent: undefined,
+      isLoadingChatSessions: false,
+      chatSessionsCount: 0,
+    };
+    const { result, rerender } = renderUseShowOnboarding();
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.showOnboarding).toBe(true);
+
+    rerender({ ...params, userId: "user-2" });
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.onboardingDismissed).toBe(true);
+
+    rerender({ ...params, userId: "user-1" });
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.onboardingDismissed).toBe(false);
+    expect(result.current.showOnboarding).toBe(true);
+  });
 });

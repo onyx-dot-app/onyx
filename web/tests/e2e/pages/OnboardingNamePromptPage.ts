@@ -15,6 +15,7 @@ export class OnboardingNamePromptPage {
   readonly onboardingHeader: Locator;
   readonly nameStep: Locator;
   readonly noAgentModal: Locator;
+  readonly initializingLoader: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -24,6 +25,7 @@ export class OnboardingNamePromptPage {
     this.onboardingHeader = page.locator('[data-label="onboarding-header"]');
     this.nameStep = page.locator('[aria-label="onboarding-name-step"]');
     this.noAgentModal = page.getByText("No Agent Available");
+    this.initializingLoader = page.getByText(/^Initializing /);
   }
 
   /** The signed-in user's saved personalization, read from `/api/me`. */
@@ -61,6 +63,7 @@ export class OnboardingNamePromptPage {
     });
     await this.page.goto("/app");
     await requested;
+    await expect(this.initializingLoader).toBeVisible({ timeout: 15000 });
     await expect(this.chatInput).toBeHidden();
     release();
   }

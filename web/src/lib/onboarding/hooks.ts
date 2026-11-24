@@ -428,6 +428,7 @@ export function useShowOnboarding({
     // If onboarding was previously dismissed, never show it again. Storage is
     // read here too: the effect above sets the state one render later.
     if (onboardingDismissed || readOnboardingCompleted(userId)) {
+      hasCheckedOnboardingForUserId.current = userId;
       setShowOnboarding(false);
       setResolvedUserId(userId);
       return;

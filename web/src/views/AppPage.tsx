@@ -193,12 +193,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
-  const { user } = useUser();
+  const { user, userResolution } = useUser();
   // `useUser()` reports null while loading, so gating on it would redirect during
   // the /me load window. Read the raw result instead (undefined = loading, null =
   // resolved signed-out). This matters for anonymous users specifically: they're
   // kept on the login page, so unlike logged-in users they wouldn't bounce back.
-  const { user: resolvedUser, isLoading: isLoadingUser } = useCurrentUser();
+  const { user: resolvedUser } = useCurrentUser();
 
   const activeAgent = useActiveAgent();
 
@@ -808,7 +808,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // its final layout instead of showing the plain input and then sliding it
   // into the onboarding layout.
   const onboardingPending =
-    isWelcomeFocus && (isLoadingUser || (!!user && !isOnboardingResolved));
+    isWelcomeFocus &&
+    (userResolution === "loading" || (!!user && !isOnboardingResolved));
 
   if (!isReady || onboardingPending) return <OnyxInitializingLoader />;
 
