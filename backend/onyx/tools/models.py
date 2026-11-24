@@ -567,6 +567,10 @@ class CodeModeFunctionName(BaseModel):
     name: str
     # A group of tools, such as the MCP server of an MCP tool.
     namespace: str | None = None
+    # What the namespace's tools are for, from the group's owner, such as an
+    # MCP integration's description. The `execute_code` description lists
+    # the first line beside each deferred namespace.
+    namespace_description: str | None = None
 
     @property
     def qualified(self) -> str:

@@ -623,22 +623,108 @@ def test_preferences_name_a_tool_as_its_program_function() -> None:
     assert tool.operation_names(CapabilityEntry(tool_id=8)) == []
 
 
-def test_description_names_deferred_tool_groups_for_any_tool() -> None:
-    description = (
-        _make_tool(
-            FakeTool(
-                "refund",
-                echo,
-                exposure=CodeModeExposure.DEFERRED,
-                namespace="billing",
-            ),
-            FakeTool("archive", echo, exposure=CodeModeExposure.DEFERRED),
-        )
-        .tool_definition()
-        .description
+_DEFERRED_HEADING = (
+    "  Deferred tool namespaces (`tool_search` with a namespace finds its "
+    "functions; call each by the name in its stub):"
+)
+
+
+def _deferred_lines(*tools: FakeTool | FakeMCPTool) -> list[str]:
+    """The deferred namespace block of the description, heading first."""
+    description = _make_tool(*tools).tool_definition().description
+    note = description[description.index("- More functions are available") :]
+    note = note[: note.index("\n\nFunctions (")]
+    return note.splitlines()[1:]
+
+
+def _block_bytes(lines: list[str]) -> int:
+    return sum(len(f"{line}\n".encode()) for line in lines) + 1
+
+
+def _deferred(
+    name: str, namespace: str | None, namespace_description: str | None = None
+) -> FakeTool:
+    return FakeTool(
+        name,
+        echo,
+        exposure=CodeModeExposure.DEFERRED,
+        namespace=namespace,
+        namespace_description=namespace_description,
     )
-    assert "those of the tool group `billing`, other tools." in description
-    assert "MCP" not in description
+
+
+def test_description_lists_each_deferred_namespace_with_its_description() -> None:
+    lines = _deferred_lines(
+        _deferred("refund", "billing", "Refund and bill customers.\nMore text."),
+        _deferred("invoice", "billing", "Refund and bill customers.\nMore text."),
+        _deferred("page", "alerts"),
+        _deferred("ask", "chat", "\n\n  Ask a person.  \nMore text."),
+        _deferred("archive", None),
+        _deferred("search", "docs", "x" * 300),
+    )
+    assert lines == [
+        _DEFERRED_HEADING,
+        "  - alerts",
+        "  - billing: Refund and bill customers.",
+        "  - chat: Ask a person.",
+        f"  - docs: {'x' * 247}...",
+        # The OpenAPI-style function without a namespace.
+        "  Other deferred functions are in no namespace.",
+    ]
+
+
+def test_deferred_namespace_names_take_the_budget_before_descriptions() -> None:
+    # 40 names fit the budget; 250 characters of description each do not.
+    lines = _deferred_lines(
+        *(_deferred("f", f"group_{n:02}", "\u00e9" * 250) for n in range(40))
+    )
+    assert len(lines) == 41
+    assert _block_bytes(lines) <= 4 * 1024
+    assert lines[1] == f"  - group_00: {'\u00e9' * 250}"
+    # Descriptions fill the rest in order: one is cut at a character
+    # boundary, and the later ones are bare.
+    [cut] = [line for line in lines[1:] if line.endswith("...")]
+    assert set(cut.split(": ", 1)[1][:-3]) == {"\u00e9"}
+    assert lines[-1] == "  - group_39"
+    assert 4 * 1024 - 8 < _block_bytes(lines)
+
+
+def test_built_in_namespaces_come_first_and_keep_their_descriptions() -> None:
+    lines = _deferred_lines(
+        FakeMCPTool("hello", echo, {"type": "object"}, server_description="m" * 200),
+        _deferred("f", "zeta", "z" * 200),
+        # Bare names that leave room for about one description.
+        *(_deferred("f", f"group_{n:03}_{'n' * 4}") for n in range(197)),
+    )
+    assert lines[1] == "  - group_000_nnnn"
+    # The built-in namespace keeps its description; the MCP one loses it.
+    assert lines[198] == f"  - zeta: {'z' * 200}"
+    assert lines[199].startswith("  - mcp__1__acme")
+    assert len(lines[199]) < len("  - mcp__1__acme: ") + 50
+    assert len(lines) == 200
+    assert _block_bytes(lines) <= 4 * 1024
+
+
+def test_deferred_namespaces_beyond_the_budget_are_counted() -> None:
+    lines = _deferred_lines(
+        *(_deferred("f", f"group_{n:03}_{'n' * 40}", "Unused.") for n in range(100))
+    )
+    listed = [line for line in lines[1:] if line.startswith("  - ")]
+    assert listed == [f"  - group_{n:03}_{'n' * 40}" for n in range(len(listed))]
+    assert lines[-1] == (f"  ... {100 - len(listed)} additional namespaces omitted.")
+    assert _block_bytes(lines) <= 4 * 1024
+
+
+def test_names_past_the_first_that_does_not_fit_are_omitted() -> None:
+    long_name = "a" * 5_000
+    assert _deferred_lines(_deferred("f", long_name)) == [
+        _DEFERRED_HEADING,
+        "  ... 1 additional namespace omitted.",
+    ]
+    # The list is the first namespaces in order, so built-in ones stay.
+    assert _deferred_lines(
+        _deferred("f", long_name), _deferred("f", "b"), _deferred("f", "c")
+    ) == [_DEFERRED_HEADING, "  ... 3 additional namespaces omitted."]
 
 
 def test_without_deferred_functions_there_is_no_tool_search() -> None:

@@ -180,16 +180,28 @@ class ToolStubs(BaseModel):
         return {TOOL_SEARCH_FUNCTION: self.tool_index.tool_search}
 
     @property
-    def deferred_namespaces(self) -> list[str]:
-        """The namespaces of the deferred functions, in name order."""
-        return sorted(
-            {
-                namespace
-                for function in self.functions.values()
-                if function.deferred
-                and (namespace := function.tool.code_mode_function_name.namespace)
-            }
-        )
+    def deferred_namespaces(self) -> dict[str, str | None]:
+        """Each namespace of the deferred functions and its description:
+        the built-in namespaces in name order, then those of integrations
+        (MCP servers), in name order. The tools of one namespace share its
+        owner's description."""
+        namespaces: dict[str, tuple[bool, str | None]] = {}
+        for function in self.functions.values():
+            name = function.tool.code_mode_function_name
+            if function.deferred and name.namespace is not None:
+                namespaces.setdefault(
+                    name.namespace,
+                    (
+                        function.tool.integration_action is not None,
+                        name.namespace_description,
+                    ),
+                )
+        return {
+            namespace: description
+            for namespace, (_, description) in sorted(
+                namespaces.items(), key=lambda item: (item[1][0], item[0])
+            )
+        }
 
     @property
     def has_deferred_functions_without_namespace(self) -> bool:

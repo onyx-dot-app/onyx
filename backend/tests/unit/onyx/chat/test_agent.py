@@ -1253,6 +1253,7 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
         else MCPTool(
             integration_id=42,
             integration_name="remote",
+            integration_description=None,
             server_url="https://example.com",
             transport=None,
             acting_user_id=None,
