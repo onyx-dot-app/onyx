@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Line, Presence, Text } from "@opal/components";
 import { SvgSparkle } from "@opal/icons";
 import { formatDurationSeconds } from "@opal/time";
@@ -49,7 +49,7 @@ export interface RunCardProps<S extends RunCardStep> {
   /** The server's duration, shown for a run that did not work here. */
   durationSeconds?: number;
   /** The finished header's text, in place of the duration. */
-  doneText?: string;
+  doneText?: string | RichStr;
   /** The header's icon while the run works and once it is done. */
   icon?: IconFunctionComponent;
   /**

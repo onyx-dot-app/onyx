@@ -7,12 +7,6 @@ import { TimelineRendererOutput } from "./TimelineRendererComponent";
 export interface TimelineStepComposerProps {
   /** Results produced by the active renderer. */
   results: TimelineRendererOutput;
-  /** Whether the overall step is the last in the timeline (affects connector). */
-  isLastStep: boolean;
-  /** Whether the overall step is the first in the timeline (affects connector). */
-  isFirstStep: boolean;
-  /** Whether RunStep should show collapse controls. */
-  collapsible?: boolean;
   /** The step's status; it decides the first row's icon and failed tint. */
   status?: TimelineEntryStatus;
 }
@@ -23,9 +17,6 @@ export interface TimelineStepComposerProps {
  */
 export function TimelineStepComposer({
   results,
-  isLastStep,
-  isFirstStep,
-  collapsible = true,
   status = "done",
 }: TimelineStepComposerProps) {
   return (

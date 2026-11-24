@@ -62,11 +62,7 @@ export function RunStep({
       ? {
           expandable: true as const,
           expanded: open,
-          expandedContent: (
-            // Starts under the header's title text: its inset (0.25rem), the
-            // icon (1.25rem), the gap (0.25rem) and the text's own 2px.
-            <div className="ps-[calc(1.75rem+2px)]">{body}</div>
-          ),
+          expandedContent: body,
         }
       : { expandable: false as const };
 
@@ -80,6 +76,8 @@ export function RunStep({
       // Filled while open; otherwise only on hover.
       filled={open}
       onClick={() => setOpen((prev) => !prev)}
+      // The body starts under the title text.
+      bodyInset="title"
       {...cardBody}
     />
   );

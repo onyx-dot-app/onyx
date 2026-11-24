@@ -219,6 +219,16 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             />
           </Presence>
         ))}
+        {/* A short run has no run card of its own, so a wait for the user's
+            approval or answer shows as a header-only card under its steps. */}
+        <Presence show={awaitingUser !== null} grow>
+          <RunCard
+            steps={[]}
+            workingText={headerText}
+            isActive
+            renderStep={() => null}
+          />
+        </Presence>
       </Section>
     </TimelineRoot>
   );

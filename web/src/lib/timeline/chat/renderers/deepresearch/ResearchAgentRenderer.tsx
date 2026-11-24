@@ -288,12 +288,7 @@ export const ResearchAgentRenderer: MessageRenderer<
               isHover={isHover}
             >
               {(results: TimelineRendererOutput) => (
-                <TimelineStepComposer
-                  results={results}
-                  isLastStep={isLastNestedStep}
-                  isFirstStep={!researchTask && index === 0}
-                  collapsible={true}
-                />
+                <TimelineStepComposer results={results} />
               )}
             </TimelineRendererComponent>
           );

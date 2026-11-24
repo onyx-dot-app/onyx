@@ -39,6 +39,11 @@ type LineCardHeaderProps =
 
 type LineProps = LineExpandableProps &
   LineCardHeaderProps & {
+    /**
+     * Where the body starts: `flush` with the card's padding, or `title`,
+     * under the header's title text (past its icon). @default "flush"
+     */
+    bodyInset?: "flush" | "title";
     /** Trailing content at the end of the header, such as the fold button. */
     rightChildren?: React.ReactNode;
     /** Fills the card with `background-tint-00`, e.g. while it is open. */
@@ -80,7 +85,12 @@ function LineCardTitle({
           {shimmer ? (
             <TextLoader font="main-ui-action">{text}</TextLoader>
           ) : (
-            <Text font="main-ui-action" color="inherit">
+            <Text
+              font="main-ui-action"
+              color="inherit"
+              maxLines={1}
+              overflowTooltip
+            >
               {title}
             </Text>
           )}
@@ -109,6 +119,7 @@ function Line({
   expandable,
   expanded,
   expandedContent,
+  bodyInset = "flush",
 }: LineProps) {
   return (
     <LineRoot
@@ -130,6 +141,9 @@ function Line({
             button carries the label (e.g. "N steps") and lights up while the
             header is hovered. */}
         <Collapsible.Header
+          // The fold button is named after the card, e.g. "Expand Searched
+          // the web".
+          name={title}
           rightChildren={rightChildren}
           size="md"
           foldButton={
@@ -150,7 +164,10 @@ function Line({
         </Collapsible.Header>
         {expandable && (
           <Collapsible.Content>
-            <div className="opal-line-body" data-opal-line-body-inset="flush">
+            <div
+              className="opal-line-body"
+              data-opal-line-body-inset={bodyInset}
+            >
               {expandedContent}
             </div>
           </Collapsible.Content>

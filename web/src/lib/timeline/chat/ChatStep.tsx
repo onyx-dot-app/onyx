@@ -40,15 +40,9 @@ export const ChatStep = React.memo(function ChatStep({
 }: ChatStepProps) {
   const renderStep = useCallback(
     (results: TimelineRendererOutput) => (
-      <TimelineStepComposer
-        results={results}
-        isLastStep={position.isLast}
-        isFirstStep={position.isFirst}
-        collapsible
-        status={status}
-      />
+      <TimelineStepComposer results={results} status={status} />
     ),
-    [position.isFirst, position.isLast, status]
+    [status]
   );
 
   return (
