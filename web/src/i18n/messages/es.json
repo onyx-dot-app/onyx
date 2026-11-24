@@ -13522,9 +13522,7 @@
     },
     "activity": {
       "trigger": {
-        "label": "Actividad",
-        "needsYou": "{count, plural, one {# te necesita} other {# te necesitan}}",
-        "running": "{count, plural, one {# agente en ejecución} other {# agentes en ejecución}}"
+        "label": "Actividad"
       },
       "needsYou": {
         "title": "Te necesita",

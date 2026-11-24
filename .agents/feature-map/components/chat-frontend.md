@@ -813,8 +813,8 @@ Status polls every 2 seconds while `has_startable_input` or
 `has_active_subagents` is true. `stopSubagents` posts
 `/api/chat/chat-session/{id}/stop-subagents`, then revalidates status.
 The header's activity button (`sections/chat/ChatActivity.tsx`) shows once a
-chat has a waiting request, a background agent or a published file. It names
-what waits for the user, else the running agents, and toggles a card that
+chat has a waiting request, a background agent or a published file. It is
+always the icon alone, so the header never shifts, and toggles a card that
 stays open until that button closes it. The card portals into the page column's
 `activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
 at the chat region's top end, so the header keeps its width and buttons. With

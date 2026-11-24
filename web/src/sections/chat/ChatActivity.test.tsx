@@ -117,7 +117,7 @@ test("a waiting approval leads the trigger and its row scrolls to the card", asy
   showReply([approval("run_command", "researcher")]);
   renderActivity();
 
-  act(() => screen.getByRole("button", { name: "1 needs you" }).click());
+  act(() => screen.getByRole("button", { name: "Activity" }).click());
   expect(screen.getByText("Needs You")).toBeVisible();
   expect(screen.getByText("researcher")).toBeVisible();
   act(() => screen.getByText("Approve run_command").click());
@@ -125,7 +125,7 @@ test("a waiting approval leads the trigger and its row scrolls to the card", asy
   expect(useToolRequestUi.getState().nudge?.requestId).toBe("run_command");
   // The card stays open until the user closes it
   expect(screen.getByText("Needs You")).toBeVisible();
-  act(() => screen.getByRole("button", { name: "1 needs you" }).click());
+  act(() => screen.getByRole("button", { name: "Activity" }).click());
   expect(screen.queryByText("Needs You")).toBeNull();
 });
 
@@ -137,7 +137,7 @@ test("a request this client already decided leaves the card at once", async () =
   });
   renderActivity();
 
-  act(() => screen.getByRole("button", { name: "1 needs you" }).click());
+  act(() => screen.getByRole("button", { name: "Activity" }).click());
   expect(screen.getByText("Approve send_email")).toBeVisible();
   expect(screen.queryByText("Approve run_command")).toBeNull();
 });
@@ -154,16 +154,13 @@ test("an agent that a streaming reply starts shows while the reply streams", asy
     useChatSessionStore.getState().updateChatState("s", "streaming");
     renderActivity();
     await act(async () => jest.advanceTimersByTimeAsync(0));
-    expect(
-      screen.queryByRole("button", { name: "1 agent running" })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Activity" })).toBeNull();
 
     agents = [agent("/root/poet", "running")];
     status = { ...STATUS, has_active_subagents: true };
     await act(async () => jest.advanceTimersByTimeAsync(5000));
-    expect(
-      screen.getByRole("button", { name: "1 agent running" })
-    ).toBeVisible();
+    act(() => screen.getByRole("button", { name: "Activity" }).click());
+    expect(screen.getByText("poet")).toBeVisible();
   } finally {
     jest.useRealTimers();
   }
@@ -180,9 +177,7 @@ test("lists running agents on one line each and folds the finished ones", async 
   );
   renderActivity();
 
-  const trigger = await screen.findByRole("button", {
-    name: "1 agent running",
-  });
+  const trigger = await screen.findByRole("button", { name: "Activity" });
   act(() => trigger.click());
   expect(screen.getByText("poet")).toBeVisible();
   expect(screen.getByText("Running")).toBeVisible();

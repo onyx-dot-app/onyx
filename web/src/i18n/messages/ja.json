@@ -13522,9 +13522,7 @@
     },
     "activity": {
       "trigger": {
-        "label": "アクティビティ",
-        "needsYou": "{count, plural, other {#件の対応が必要}}",
-        "running": "{count, plural, other {#個のエージェントが実行中}}"
+        "label": "アクティビティ"
       },
       "needsYou": {
         "title": "対応が必要",

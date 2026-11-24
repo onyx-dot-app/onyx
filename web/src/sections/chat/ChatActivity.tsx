@@ -112,9 +112,6 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
   const [showFinished, setShowFinished] = useState(false);
   const finishedAgents = agents.filter(isFinished);
   const liveAgents = agents.filter((agent) => !isFinished(agent));
-  const running = liveAgents.filter(
-    (agent) => agent.status === "running"
-  ).length;
   const agentRow = (agent: ChatSubagent) => {
     const state = agentState(agent);
     return (
@@ -141,35 +138,17 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
 
   const nudge = (requestId: string) => () =>
     useToolRequestUi.getState().nudgeRequest(requestId);
-  // The trigger names what waits for the user, else the running agents
-  const trigger: { icon: IconFunctionComponent; label?: string } =
-    waiting.length > 0
-      ? {
-          icon: SvgAlertCircle,
-          label: t("trigger.needsYou", { count: waiting.length }),
-        }
-      : running > 0
-        ? {
-            icon: SpinningLoader,
-            label: t("trigger.running", { count: running }),
-          }
-        : { icon: SvgActivity };
-  const { label } = trigger;
-
   return (
     <>
       <Button
-        icon={trigger.icon}
-        prominence={waiting.length > 0 ? "secondary" : "tertiary"}
-        size={label ? "sm" : undefined}
-        tooltip={label ? undefined : t("trigger.label")}
-        aria-label={label ? undefined : t("trigger.label")}
+        icon={SvgActivity}
+        prominence="tertiary"
+        tooltip={t("trigger.label")}
+        aria-label={t("trigger.label")}
         aria-expanded={open}
         aria-controls="chat-activity"
         onClick={() => setOpen((value) => !value)}
-      >
-        {label}
-      </Button>
+      />
       {open &&
         activitySlot &&
         createPortal(

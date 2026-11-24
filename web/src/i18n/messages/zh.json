@@ -13522,9 +13522,7 @@
     },
     "activity": {
       "trigger": {
-        "label": "活动",
-        "needsYou": "{count, plural, other {# 项需要你处理}}",
-        "running": "{count, plural, other {# 个智能体运行中}}"
+        "label": "活动"
       },
       "needsYou": {
         "title": "需要你处理",

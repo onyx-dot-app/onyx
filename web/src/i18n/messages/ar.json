@@ -13522,9 +13522,7 @@
     },
     "activity": {
       "trigger": {
-        "label": "النشاط",
-        "needsYou": "{count, plural, one {# يحتاج إليك} other {# تحتاج إليك}}",
-        "running": "{count, plural, one {وكيل # قيد التشغيل} other {# وكلاء قيد التشغيل}}"
+        "label": "النشاط"
       },
       "needsYou": {
         "title": "يحتاج إليك",

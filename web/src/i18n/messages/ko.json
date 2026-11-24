@@ -13522,9 +13522,7 @@
     },
     "activity": {
       "trigger": {
-        "label": "활동",
-        "needsYou": "{count, plural, other {#개 확인 필요}}",
-        "running": "{count, plural, other {에이전트 #개 실행 중}}"
+        "label": "활동"
       },
       "needsYou": {
         "title": "확인 필요",
