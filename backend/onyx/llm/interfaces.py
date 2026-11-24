@@ -6,6 +6,11 @@ from collections.abc import Generator
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.model_capabilities import (
+    ToolFamily,
+    is_claude_model,
+    model_identity_names,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationEvent,
@@ -68,6 +73,17 @@ class LLMConfig(BaseModel):
     model_configuration_id: int | None = None
     # This disables the "model_" protected namespace for pydantic
     model_config = ConfigDict(protected_namespaces=())
+
+    @property
+    def tool_family(self) -> ToolFamily:
+        """The tool shapes that this model gets."""
+        return (
+            ToolFamily.CLAUDE
+            if is_claude_model(
+                model_identity_names(self.model_name, self.deployment_name)
+            )
+            else ToolFamily.OPENAI
+        )
 
 
 class LLM(abc.ABC):

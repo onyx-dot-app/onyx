@@ -4,8 +4,8 @@ from onyx.chat.renderer import ToolRenderer, tool_renderer
 from onyx.llm.models import ToolCall, ToolResultMessage
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.constants import EXEC_TOOL_NAME
 from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCall,
     CodeModeCallStarted,
@@ -42,7 +42,7 @@ def test_live_tool_packets_carry_the_tool_display_name() -> None:
 
 def test_code_mode_calls_carry_the_called_tool_display_name() -> None:
     renderer = tool_renderer(
-        ToolCall(id="code", name=CodeModeTool.NAME, arguments={"code": ""}),
+        ToolCall(id="code", name=EXEC_TOOL_NAME, arguments={"code": ""}),
         Placement(turn_index=0),
     )
     renderer.start()

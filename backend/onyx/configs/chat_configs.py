@@ -14,7 +14,7 @@ MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 # ending a runaway turn; set the env var to change it.
 MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 30)
 # The cycle cap when code mode applies. Programs batch tool calls, and each
-# wait_code observation of a running cell takes a cycle, so it is only a safety
+# wait observation of a running cell takes a cycle, so it is only a safety
 # cap, never lower than MAX_LLM_CYCLES.
 CODE_MODE_MAX_LLM_CYCLES: int = max(MAX_LLM_CYCLES, 100)
 
@@ -122,7 +122,7 @@ SKIP_DEEP_RESEARCH_CLARIFICATION = (
 CHAT_EXECUTION_TIMEOUT_S = 3600
 
 
-# Offer chat tools as Python functions inside `execute_code` instead of directly.
+# Offer chat tools as Python functions inside code mode programs instead of directly.
 CODE_MODE_ENABLED = os.environ.get("CODE_MODE_ENABLED", "false").lower() == "true"
 # "true" removes the postgres_query tool, which every turn with internal search
 # otherwise gets.

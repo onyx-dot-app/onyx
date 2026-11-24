@@ -242,15 +242,18 @@ class FakeModelClient(LLM):
     """Canonical client for deterministic runtime tests."""
 
     def __init__(
-        self, reply: Callable[[GenerationRequest, CancellationSignal], AssistantMessage]
+        self,
+        reply: Callable[[GenerationRequest, CancellationSignal], AssistantMessage],
+        model_name: str = "test-model",
     ) -> None:
         self.reply = reply
+        self.model_name = model_name
 
     @property
     def config(self) -> LLMConfig:
         return LLMConfig(
             model_provider="openai",
-            model_name="test-model",
+            model_name=self.model_name,
             max_input_tokens=4096,
             temperature=0,
         )

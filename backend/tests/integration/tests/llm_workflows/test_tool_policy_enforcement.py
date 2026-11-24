@@ -104,7 +104,7 @@ def test_preferred_tool_executes_when_available(
     assert any(
         tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response.used_tools
     )
-    # Code mode also reports the `execute_code` call that ran the search.
+    # Code mode also reports the `exec` call that ran the search.
     [search] = [
         entry
         for entry in response.tool_call_debug
@@ -168,7 +168,7 @@ def test_search_preference_uses_inline_project_files(
     assert response.full_message == "The code is HARBOR-5729."
     assert not response.used_tools
     [request] = mock_llm.requests_in("inline-project")
-    # In code mode, an offered search is a function in the execute_code
+    # In code mode, an offered search is a function in the exec
     # description rather than a tool of its own.
     assert "internal_search" not in json.dumps(request.body.get("tools", []))
     assert "The user selected these operations" not in request.prompt_text
@@ -299,7 +299,7 @@ def test_preference_is_optional_and_does_not_leak_into_followup(
     assert first.error is second.error is None
     assert first.used_tools == second.used_tools == []
     first_request, second_request = mock_llm.requests_in("chat")
-    # Code mode names the search as a function of execute_code programs.
+    # Code mode names the search as a function of exec programs.
     operation = "tools.internal_search" if CODE_MODE_ENABLED else "internal_search"
     assert f"The user selected these operations for this request: {operation}" in str(
         first_request.body["messages"]

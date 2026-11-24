@@ -123,7 +123,6 @@ from onyx.llm.factory import (
     get_llm_token_counter,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.model_capabilities import model_identity_names
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.override_models import LLMOverride
 from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
@@ -758,10 +757,7 @@ def prepare_chat_turn(
                 ),
                 token_counter=token_counter,
                 sandbox_tools=sandbox_tools_for_model(
-                    model_identity_names(
-                        selected_models[0][0].config.model_name,
-                        selected_models[0][0].config.deployment_name,
-                    )
+                    selected_models[0][0].config.tool_family
                 )
                 if sandbox_tools
                 else (),

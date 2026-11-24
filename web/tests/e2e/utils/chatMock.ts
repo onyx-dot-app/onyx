@@ -261,7 +261,7 @@ export interface CodeModeCellStreamOptions {
   toolOutput: string;
   message: string;
   /**
-   * "wait": a wait_code call reports the call's end and the program's end.
+   * "wait": a wait call reports the call's end and the program's end.
    * "response_end": the answer arrives while the cell runs, and the closing
    * record reports the rest.
    */

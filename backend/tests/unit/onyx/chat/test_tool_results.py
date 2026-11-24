@@ -155,6 +155,7 @@ def test_later_prompts_replay_program_observations_with_their_images() -> None:
         heading=observation_heading(details),
         status=details.status,
         cell_id=details.cell_id,
+        wait_name="wait",
         cell_calls=details.calls,
         max_chars=4_000,
         end=None,
@@ -164,15 +165,13 @@ def test_later_prompts_replay_program_observations_with_their_images() -> None:
     references = [{"file_id": "image-1", "revised_prompt": "a red fox"}]
     assert content.endswith(f"Generated images: {json.dumps(references)}")
     program = ToolResultMessage(
-        tool_call_id="code", tool_name="execute_code", content=content, details=details
+        tool_call_id="code", tool_name="exec", content=content, details=details
     )
 
     prompt = prepare_prompt(
         [
             UserMessage(content="Draw a fox"),
-            AssistantMessage(
-                content=[ToolCall(id="code", name="execute_code", arguments={})]
-            ),
+            AssistantMessage(content=[ToolCall(id="code", name="exec", arguments={})]),
             program,
             AssistantMessage(content=[TextContent(text="Here it is.")]),
             UserMessage(content="Make it blue"),

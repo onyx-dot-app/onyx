@@ -26,8 +26,8 @@ SANDBOX_GUIDANCE = """
 ## Sandbox
 You have a private Linux VM for this chat. Its files persist across turns in your working directory, the chat's session directory. {uses}
 """.lstrip()
-# In code mode the tools are functions of `execute_code` programs.
-SANDBOX_CODE_MODE_NOTE = " Call them from `execute_code` programs."
+# In code mode the tools are functions of the programs of the run tool `{name}`.
+SANDBOX_CODE_MODE_NOTE = " Call them from `{name}` programs."
 EXEC_COMMAND_USE = "run commands with {name}"
 WRITE_STDIN_USE = "use {name} for commands that are still running"
 APPLY_PATCH_USE = "edit files with {name}"
@@ -224,8 +224,8 @@ Usage:
 {_TEXT_SCOPE}
 """
 
-# The artifact tool (sandbox_tools.ArtifactTool). tool_search matches its
-# first sentence.
+# The artifact tool (sandbox_tools.ArtifactTool). The code mode program search
+# matches its first sentence.
 ARTIFACT_DESCRIPTION = f"""Publish, replace, list, search, read, find in, rename, restore and delete the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
 
 Actions:

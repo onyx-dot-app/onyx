@@ -1047,12 +1047,12 @@ def test_a_program_that_waits_for_approval_pauses_and_continues(
         f"tools.{hello_function}(name='team'))\n"
         "print('ticket', ticket)\nprint('greeting', greeting)\n"
     )
-    program = ToolCall(id="program", name="execute_code", arguments={"code": code})
+    program = ToolCall(id="program", name="exec", arguments={"code": code})
     mock_llm.conversation(
         "chat",
         Reply(
             tool_calls=[program],
-            conditions=RequestConditions(offers=["execute_code"]),
+            conditions=RequestConditions(offers=["exec"]),
         ),
         Reply(text="Done.", conditions=RequestConditions(has_results_for=["program"])),
     )
@@ -1109,13 +1109,13 @@ def _cells(first: str, second: str) -> tuple[ToolCall, ToolCall, ToolCall]:
     return (
         ToolCall(
             id="cell1",
-            name="execute_code",
+            name="exec",
             arguments={"code": f"yield_control()\n{first}"},
         ),
-        ToolCall(id="cell2", name="execute_code", arguments={"code": second}),
+        ToolCall(id="cell2", name="exec", arguments={"code": second}),
         ToolCall(
             id="wait1",
-            name="wait_code",
+            name="wait",
             arguments={"cell_id": 1, "yield_time_ms": 20_000},
         ),
     )
@@ -1127,7 +1127,7 @@ def _one_call_per_reply(calls: list[ToolCall]) -> list[Reply]:
         Reply(
             tool_calls=[call],
             conditions=RequestConditions(
-                offers=["execute_code"],
+                offers=["exec"],
                 has_results_for=[previous.id for previous in calls[:index]],
             ),
         )
@@ -1217,7 +1217,7 @@ def test_a_cell_that_runs_while_a_program_waits_keeps_its_result(
     assert cell1_result is not None and wait_result is not None
     if decide == "after_the_stop":
         # The answer stopped only after cell 1 ended: its closing record holds
-        # the end, and wait_code points to it.
+        # the end, and wait points to it.
         assert "Cell 1 completed after this output, before the run paused." in (
             cell1_result
         )
@@ -1242,7 +1242,7 @@ def test_a_background_cell_keeps_its_own_approval_request(
 ) -> None:
     """Cell 1 asks for approval in the background while cell 2 waits for its
     own. Both requests stay open while the answer is saved; after both
-    decisions, cell 1 continues and wait_code returns its result."""
+    decisions, cell 1 continues and wait returns its result."""
     monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", True)
     hello_function = function_name(connected_mcp_server.callable_name("hello"))
     cell1, cell2, wait1 = _cells(
@@ -2046,10 +2046,8 @@ def test_a_program_in_an_agent_parks_and_continues(
     mock_llm.conversation(
         task,
         Reply(
-            tool_calls=[
-                ToolCall(id="program", name="execute_code", arguments={"code": code})
-            ],
-            conditions=RequestConditions(offers=["execute_code"]),
+            tool_calls=[ToolCall(id="program", name="exec", arguments={"code": code})],
+            conditions=RequestConditions(offers=["exec"]),
         ),
         Reply(
             text="Mailer report.",

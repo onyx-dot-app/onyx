@@ -67,6 +67,12 @@ DENIED_CALL_MESSAGE = "The tool call was not approved, so it did not run."
 # What the model sees for an approved call whose tool was removed, or whose
 # parameters changed, while the call waited.
 UNAVAILABLE_CALL_MESSAGE = "This tool is no longer available, so this call did not run."
+# What the model sees for a call that started, then waited for input or lost
+# its owner, and whose tool was removed: its effects so far are not known.
+STOPPED_CALL_MESSAGE = (
+    "This tool is no longer available, so this call stopped before it finished "
+    "and was not run again. It may have had effects: check before you retry."
+)
 
 
 class ToolBatch:
@@ -250,22 +256,25 @@ class ToolBatch:
                             suspend = self.run.suspension_requested
                         if suspend:
                             continue
+                        if (
+                            tool is None
+                            and not isinstance(pending, PendingToolInput)
+                            and self._was_started(call)
+                        ):
+                            # The call started, then waited for input or child
+                            # runs or lost its owner, and its tool was removed.
+                            if pending is not None:
+                                self.run.resolve_tool_wait(call)
+                            self.run.record_tool_results(
+                                ToolResult(content=STOPPED_CALL_MESSAGE, is_error=True),
+                                [call],
+                            )
+                            continue
                         if isinstance(pending, (PendingToolInput, NestedInputWait)):
                             self._continue_input_wait(call, pending)
                             continue
                         if isinstance(pending, ChildRunWait):
-                            if self.run.coordination is None:
-                                raise ValueError(
-                                    "Child dependency requires an execution coordinator"
-                                )
-                            children = self.run.coordination.completed_child_states(
-                                pending.run_ids
-                            )
-                            if children is None:
-                                self.run.watch_children(pending.run_ids)
-                                continue
-                            self.run.resolve_tool_wait(call)
-                            self._start([call], children=children)
+                            self._continue_child_wait(call, pending)
                             continue
                         self._start_compatible_calls(call, index, completed_call_ids)
                     if not self.run.suspension_requested:
@@ -285,6 +294,17 @@ class ToolBatch:
             self.run.cancellation_signal.cancel()
             self.run.notify_tool_activity()
             raise
+
+    def _continue_child_wait(self, call: ToolCall, pending: ChildRunWait) -> None:
+        """Continue a call once its child runs completed, or watch them."""
+        if self.run.coordination is None:
+            raise ValueError("Child dependency requires an execution coordinator")
+        children = self.run.coordination.completed_child_states(pending.run_ids)
+        if children is None:
+            self.run.watch_children(pending.run_ids)
+            return
+        self.run.resolve_tool_wait(call)
+        self._start([call], children=children)
 
     def _continue_input_wait(
         self, call: ToolCall, pending: PendingToolInput | NestedInputWait

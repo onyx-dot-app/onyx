@@ -73,7 +73,7 @@ def cut_middle(
 
 
 def output_chars(requested: int) -> int:
-    """A requested `max_output_chars`, clamped to 1..MAX_OUTPUT_CHARS."""
+    """A requested character budget, clamped to 1..MAX_OUTPUT_CHARS."""
     return min(max(requested, 1), MAX_OUTPUT_CHARS)
 
 

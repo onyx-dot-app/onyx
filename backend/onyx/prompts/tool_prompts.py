@@ -19,9 +19,10 @@ If it is unclear which tool to use, consider using multiple in parallel to be ef
 """.lstrip()
 
 
+# `{name}` is the code mode run tool's name in the model's shape.
 CODE_MODE_GUIDANCE = """
-## execute_code
-Call tools from Python programs with `execute_code`; its description lists the functions. Batch independent calls in one `execute_code` with `asyncio.gather`, and inspect every result. Keep dependent or judgment-based follow-ups in a later call. Avoid unnecessary output.
+## {name}
+Call tools from Python programs with `{name}`; its description lists the functions. Batch independent calls in one `{name}` with `asyncio.gather`, and inspect every result. Keep dependent or judgment-based follow-ups in a later call. Avoid unnecessary output.
 """.lstrip()
 
 

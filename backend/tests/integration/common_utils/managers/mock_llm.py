@@ -54,7 +54,7 @@ def tool_call_reply(
     conditions: RequestConditions | None = None,
 ) -> Reply:
     """A reply that calls tools the way the server offers them: native tool
-    calls, or with code mode on, one `execute_code` program that awaits each
+    calls, or with code mode on, one `exec` program that awaits each
     call in order. A program calls a tool as `tools.<name>`, with the other
     characters of its name as `_`; it can call a deferred (MCP or custom)
     function without `tool_search`. The
@@ -81,12 +81,10 @@ def tool_call_reply(
         for call in calls
     )
     return Reply(
-        tool_calls=[
-            ToolCall(id=calls[0].id, name="execute_code", arguments={"code": program})
-        ],
+        tool_calls=[ToolCall(id=calls[0].id, name="exec", arguments={"code": program})],
         conditions=base.model_copy(
             update={
-                "offers": [*base.offers, "execute_code"],
+                "offers": [*base.offers, "exec"],
                 "tool_choice": tool_choice or base.tool_choice,
             }
         ),

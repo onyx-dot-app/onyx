@@ -261,7 +261,7 @@ A request that no `NestedInputWait` holds stays open: the run saves it in `RunPr
 Its answer goes to `AgentTool.continue_open_input` of the tool that made the call, such as for a program that waits in the background.
 The tool returns the requests that it took; the run ends those, and offers the others again at its next wake.
 The run offers one call's answered requests together, so a tool keeps all requests that one task waits for under one call.
-For example, a code cell opens all of its requests under the call that started it, also while a `wait_code` call observes it.
+For example, a code cell opens all of its requests under the call that started it, also while a wait call observes it.
 The `before_tool_call` hook then sees the step of that call; for a cell rebuilt from a saved run, it sees the step in which the cell continued.
 Open requests end with the run.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
@@ -605,6 +605,7 @@ A new execution owner can register the same run ID once ownership is released.
 Pass executable tools to `Agent(tools=...)`; the runtime restores the saved step's declarations and execution permissions against them.
 A saved call runs only when the agent still has its tool with the same `parameters` schema; descriptions, other tools, their order and phases can differ.
 An approved call whose tool is gone or changed gets `UNAVAILABLE_CALL_MESSAGE` instead, and later steps use the current tools.
+A call that already started, then waited for nested input or child runs or lost its owner, and whose tool is gone gets `STOPPED_CALL_MESSAGE`: it may have had effects.
 `Agent.resume(..., deadline_at=...)` replaces the saved deadline.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.

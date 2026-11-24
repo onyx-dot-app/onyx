@@ -961,6 +961,6 @@ def test_user_without_custom_skills_gets_no_skills_tools(
     assert response.full_message == "Plain answer."
     (request,) = mock_llm.requests_in("chat")
     assert "<skills_instructions>" not in request.prompt_text
-    # Code mode declares program functions inside `execute_code`.
+    # Code mode declares program functions inside `exec`.
     declared_tools = json.dumps(request.body.get("tools", []))
     assert not [name for name in _SKILLS_TOOLS if name in declared_tools]

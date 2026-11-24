@@ -1,7 +1,7 @@
 # Code Execution
 
 > `run_python` sends Python code to an external Code Interpreter service.
-> Code mode's `execute_code` runs
+> Code mode's run tool (`exec`, or `repl` for Claude models) runs
 > a Python program that calls the other chat tools in local Monty sandbox
 > workers, and the sandbox tools run commands, edit files and publish files
 > in the user's Firecracker VM.
@@ -17,19 +17,22 @@
   assistant writes Python, the user sees the code, then the output as it
   streams. Files that the code writes, such as a chart or a CSV, appear as
   downloads. Files that the user attached to the chat are available to the code.
-- **With code mode on** (`CODE_MODE_ENABLED=true`), the chat model gets the
-  `execute_code` and `wait_code` tools instead of the tools it can nest, when
-  it has any. Deep research does not use code mode. A
+- **With code mode on** (`CODE_MODE_ENABLED=true`), the chat model gets a
+  run tool and a wait tool instead of the tools it can nest, when it has
+  any. Each tool family gets its own shape of them
+  (`backend/onyx/tools/tool_implementations/code_mode/shapes.py`): `exec` and `wait` for OpenAI and all other models, `repl` and
+  `poll` for Claude models. Deep research does not use code mode. A
   preferred Action that became a function is named as one in the reminder. One program can run
   several searches and MCP calls in parallel and print only what the answer
   needs. Each program runs in a cell. When the cell still runs after
-  `yield_time_ms` (default 30 s) or calls `yield_control()`, the call returns
-  the output so far and the cell keeps running. The model gets the rest with
-  `wait_code`, or stops the cell with `wait_code(terminate=true)`.
+  `yield_time_ms` (`timeout` for `repl`; default 30 s) or calls
+  `yield_control()`, the call returns the output so far and the cell keeps
+  running. The model gets the rest with the wait tool, or stops the cell with
+  `wait(terminate=true)` (`poll(terminate=true)`).
 - **The user sees the tool calls, not the code.** Each tool call that a
   program makes shows as its own timeline step, the same as a direct call:
   searches, MCP and custom tools, URL reads, images. The program, its output,
-  cells and `wait_code` calls stay hidden. A call that is still running when
+  cells and wait calls stay hidden. A call that is still running when
   its cell yields shows as running until it ends or the response stops it.
   While a program works between calls, the timeline header reads "Working".
   Images that a program generates show above the answer. Each program starts
@@ -117,21 +120,64 @@ run_python (stateless, one call = one execution)
 ```
 
 ```
-execute_code / wait_code (code mode; a cell per program, a store per chat)
-  chat/execution.py:create_chat_agent   ChatAgent(code_mode=CODE_MODE_ENABLED); the flag is
-                                        saved in ChatFeatureState.code_mode, and restoration
-                                        uses the saved value, not the env flag
+run / wait tools (code mode; a cell per program, a store per chat)
+  chat/execution.py:create_chat_agent   ChatAgent(code_mode=CODE_MODE_ENABLED); the agent
+                                        takes its shapes from llm.config.tool_family. The
+                                        flag is saved in ChatFeatureState.code_mode, and
+                                        restoration uses the saved value, not the env flag
+  llm/interfaces.py:LLMConfig.tool_family
+                                        ToolFamily.CLAUDE when model_capabilities.
+                                        is_claude_model(model_identity_names) holds, else
+                                        OPENAI: the one rule that picks every tool shape
+                                        (code mode, question tool, sandbox file tools)
+  code_mode/shapes.py:CODE_MODE_SHAPES  one CodeModeShape per family: run/wait tool names
+                                        and argument models (RunToolArguments /
+                                        WaitToolArguments subclasses; each run model names
+                                        its yield argument, YIELD_ARGUMENT), the program search
+                                        function (a ProgramFunction: name and stub) and its
+                                        host function, and the describe function, if any.
+                                        with_code_mode builds CodeCells(shape); the run and
+                                        wait tools and the cells read the shape there. OPENAI: exec
+                                        (code, yield_time_ms, max_output_tokens) / wait
+                                        (cell_id, yield_time_ms, max_tokens, terminate),
+                                        tool_search(query, limit); token budgets convert to
+                                        characters at APPROX_CHARS_PER_TOKEN. CLAUDE: repl
+                                        (code, timeout) / poll (cell_id, timeout,
+                                        terminate), search_tools(query, max) and
+                                        describe_tool(name); default output budget. Each
+                                        argument model's request() gives the RunRequest /
+                                        WaitRequest that CodeCells serves, so the engine is
+                                        the same for every shape. Extra arguments are
+                                        ignored (non-strict definitions)
+  RUN_TOOL_NAMES / WAIT_TOOL_NAMES /    every shape's names plus execute_code / wait_code,
+  CODE_MODE_TOOL_NAMES                  which saved chats hold; the renderer, spill limits
+                                        and other name-keyed checks read these sets
   code_mode_tool.py:with_code_mode      ChatAgent only: by Tool.code_mode_exposure, DIRECT
                                         tools stay direct; IMMEDIATE and DEFERRED ->
-                                        CodeModeTool(inner, cells=CodeCells()) and
-                                        WaitCodeTool(cells); the definitions stay fixed for
-                                        every step, the final step included
+                                        CodeModeTool(inner, cells=CodeCells(shape), ...)
+                                        and WaitCodeTool(cells, programs), which read the
+                                        shape from the cells; the definitions stay
+                                        fixed for every step, the final step included. The
+                                        shape names the tools in every model-facing text
+                                        (descriptions, notes, rejections, restored results)
+  chat/restoration.py:restore_chat_agent
+                                        the active LLM's family, as restored children and
+                                        sandbox tools use (a parked run resumes only on its
+                                        own model). A call that started, then waited for
+                                        input or child runs or lost its owner, and whose
+                                        tool is gone gets agents/tool_execution.py:
+                                        STOPPED_CALL_MESSAGE (it may have had effects). A
+                                        direct call of another shape's tool or program
+                                        function, copied from history, gets a hint that
+                                        names this shape's (CodeModeTool.inner_call_hint;
+                                        the search only with deferred functions)
   CodeModeTool.operation_names          how the preference reminder names a preferred tool
                                         that became a function (prompt.py:
                                         program_function_operation)
   chat/prompt_utils.py:callable_tools   offered tools, then each tool's inner_tools; the
-                                        prompt reads both and adds CODE_MODE_GUIDANCE when
-                                        execute_code is offered; in both modes
+                                        prompt reads both and adds CODE_MODE_GUIDANCE (with
+                                        the shape's run name) when code mode applies; in
+                                        both modes
                                         SearchTool._run, not the prompt, caps queries at 3
   stubs.py:build_tool_stubs             function names `<namespace>__<name>` from
                                         Tool.code_mode_function_name (MCP: server), as
@@ -140,8 +186,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         `listed_text` (no DEFERRED ones, in the description);
                                         `program_text(code)` types one program: the listed
                                         functions, the DEFERRED ones whose names the code
-                                        uses, and the imported modules; tool_search()
-                                        (tool_search.py, BM25) only when some are DEFERRED,
+                                        uses, and the imported modules; the shape's search
+                                        function (tool_search.py, BM25) only when some are
+                                        DEFERRED, and its describe function, if any,
                                         scoring the name, namespace and description plus
                                         PARAMETER_WEIGHT times a separate score of the
                                         argument schema's property names and descriptions
@@ -151,7 +198,8 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         id in the branch; store snapshot = store.py:store_snapshot
     CodeCell                            a driver thread runs the program inside a
                                         code_mode_cell span (status, duration, call count,
-                                        tool names); the call returns at yield_time_ms, at
+                                        tool names); the call returns at its yield time
+                                        (yield_time_ms, or timeout for repl), at
                                         yield_control(), or at the end
       execute_program                   sandbox.py: checkout a new Monty worker (the wait
                                         observes Stop), feed the imports of IMPORTABLE_MODULES
@@ -192,8 +240,11 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         hold its end (tools/tool_implementations/code_mode/prompt.py:closed_cell_text)
   each observation                      taken under the cell lock, formatted after it:
                                         prompt.py:format_content (model text, cut once
-                                        in the middle to max_output_chars, 40,000 by
-                                        default, at most 160,000) and
+                                        in the middle to the call's character budget:
+                                        max_output_tokens / max_tokens times
+                                        APPROX_CHARS_PER_TOKEN for exec / wait, 40,000
+                                        by default and for repl / poll, at most
+                                        160,000) and
                                         CodeModeExecutionResult (each part cut to the
                                         same budget): a CellWindow
                                         (stdout, calls, commit at the program's end,
@@ -243,11 +294,10 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
   chat/execution.py:create_chat_agent   builds the tools with one SandboxTurn for every
                                         agent, as it adds the skill tools; a durable resume
                                         prepares the turn again and builds them the same way.
-                                        sandbox_tools_for_model(model names) owns the set and
-                                        its order: when any of the turn LLM's names
-                                        (model_identity_names) contains "claude"
-                                        (model_capabilities.is_claude_model, the one rule that
-                                        LLM requests and prompt caching use too), EditTool,
+                                        sandbox_tools_for_model(family) owns the set and
+                                        its order: for ToolFamily.CLAUDE
+                                        (LLMConfig.tool_family, the one family decision that
+                                        also picks the code mode and question tool shapes), EditTool,
                                         WriteTool and ArtifactTool, the tools Claude models
                                         work with; else ApplyPatchTool,
                                         LibraryCreateLibraryFileTool, LibraryListTool,
@@ -393,7 +443,7 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         (list_artifacts, materialize): code mode
                                         DEFERRED in the group `library`
                                         (tools.library__list / __prepare_materialize, found
-                                        with tool_search), JSON_OBJECT results
+                                        with the shape's search), JSON_OBJECT results
                                         (ArtifactList, MaterializedItems), no saved
                                         details (the generic card shows the JSON),
                                         PARALLEL, and run again after a lost server
@@ -1148,7 +1198,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     it (`Tool.code_mode_exposure`, abstract): `DIRECT` (its own tool),
     `IMMEDIATE` (a function whose stub the description lists: the built-in
     tools) or `DEFERRED` (a callable function that the description omits; the
-    model finds it with `tool_search(query)`: MCP and OpenAPI tools, and the
+    model finds it with `tool_search(query)` (`search_tools` for Claude models): MCP and OpenAPI tools, and the
     sandbox library tools in the group `library`). A tool
     that waits for a child run (`Tool.result_from_children`) must be `DIRECT`.
     `tools/tool_implementations/code_mode/code_mode_tool.py:with_code_mode`
@@ -1174,9 +1224,11 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     the program's stubs declare as `class tools`, so the type checker checks
     each call. Bare names stay free for the program's own functions, and a
     model does not read the functions as tools that it can call directly.
-    `store`, `load`, `yield_control` and `tool_search` stay globals; a
+    `store`, `load`, `yield_control`, the `ToolMatch` type and the shape's
+    search and describe functions (`tool_search` in the OpenAI shape;
+    `search_tools` and `describe_tool` in the Claude shape) stay globals; a
     function can take one of their names, and only the result types that the
-    stubs declare avoid them. An explicit `import tools` or
+    stubs declare avoid them (`tools/tool_implementations/code_mode/shapes.py:PROGRAM_SEARCH_NAMES`, every shape's). An explicit `import tools` or
     `from tools import f` stops the program before it runs
     (`TOOLS_IMPORT_MESSAGE`). The system prompt's tool sections name each
     tool as the model calls it (`CodeModeTool.called_name`). A
@@ -1194,14 +1246,14 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     a later message can edit it. Action preferences are advisory:
     `build_chat_prompt` asks each offered tool for `Tool.operation_names`, and
     `CodeModeTool` answers with its functions, so the reminder names a nested
-    tool as a function of `execute_code` programs.
+    tool as a function of `exec` programs.
     Nested calls get the run's `before_tool_call` hook and approval gate as
     direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
     `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
     `ToolResult` decision becomes the call's result, so a denial raises in the
     program as a tool error does. The cell keeps one gate (`CodeCell._gate`):
     each of its requests belongs to the call that started it, or that rebuilt
-    it in this process, also while `wait_code` observes it, so the run offers
+    it in this process, also while `wait` observes it, so the run offers
     their answers together; `before_tool_call` sees that call's step, or for
     a cell rebuilt from a saved run, the step in which it continued. A request decision shows the request at once,
     also for a cell that runs in the background, and the call waits without a
@@ -1275,7 +1327,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     source, and the result formatter builds those types; `tools/tool_implementations/code_mode/stubs.py` imports no other tool
     implementation. An error result raises
     `RuntimeError` with the error text. Each `CodeModeCall` keeps its tool call id
-    (`<execute_code call id>:<index>`, the same in traces, saved history and the
+    (`<exec call id>:<index>`, the same in traces, saved history and the
     UI), the tool row id (for reconnect cards) and a bounded copy of the text
     (`MAX_SAVED_CALL_CHARS`, `MAX_SAVED_EXECUTION_CHARS`). `chat/tool_results.py`
     owns two fields with phases: `metadata` (search planning) is set while the
@@ -1292,7 +1344,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     code mode result's documents and citations from its calls' search details,
     in every window; [[citations]] reads them through that accessor.
 16. `code-mode-store` **Only `store()` values outlive a program, and the
-    conversation holds them.** Each `execute_code` call runs in a fresh
+    conversation holds them.** Each `exec` call runs in a fresh
     interpreter, so variables, functions and imports do not carry over. A
     program keeps JSON values with `store(key, value)` and reads them with
     `load(key)` (None when missing); both are plain functions, declared in
@@ -1366,8 +1418,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     The call's status is `error`. `CodeModeTool` sets it to
     `tools/tool_implementations/code_mode/code_mode_tool.py:INTERRUPTED_PROGRAM_RESULT`
     (an error without details). `WaitCodeTool` sets it to
-    `tools/tool_implementations/code_mode/code_mode_tool.py:INTERRUPTED_WAIT_RESULT`,
-    an error without details: the cell's last saved observation stays
+    an error without details that names the shape's wait tool
+    (`tools/tool_implementations/code_mode/code_mode_tool.py:RESTORED_WAIT_MESSAGE`): the cell's last saved observation stays
     `running`. At the end of every run, `Agent.on_finish`
     (`chat/agent.py:_finished_cells`) calls `CodeCells.finish`. It stops each
     open cell (`terminated`, or `cancelled` when Stop stopped it first), waits
@@ -1379,7 +1431,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     run suspends (see `ToolInvocation.run_work`), `Agent.on_suspend`
     (`chat/agent.py:_suspended_cells`) calls `CodeCells.suspend`, which does
     the same with `reason="suspended"` before the run captures its state. A
-    cell that ended keeps its end in that closing record; a later `wait_code`
+    cell that ended keeps its end in that closing record; a later `wait`
     of the cell says so (`tools/tool_implementations/code_mode/prompt.py:closed_cell_text`). A cell whose program
     waits for input, with or without an observation, is saved instead
     (`CodeCells.saved`); its requests stay open. For a
@@ -1388,7 +1440,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     after them is not known; a cell that stays saved gets none. A cell that a
     restored run rebuilds takes its last running observation from the
     recorded results, so it gets its closing record as a live cell does, also
-    when it ends in the background with no `wait_code`. The run applies the amendments before it saves
+    when it ends in the background with no `wait`. The run applies the amendments before it saves
     and publishes `ToolResultAmendedEvent` for each, before `AgentEndEvent`.
     Their calls, also the unfinished ones, may have had effects. The final
     `code_mode_delta` has `status="cancelled"` live and on replay. A tool whose
@@ -1420,8 +1472,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   Onyx and the model's tool stubs.
 - **A code mode program can outlive its step, as a Codex cell does.** A
   program that waits on slow tools or sleeps would otherwise hold the model
-  step until it ends. `execute_code` returns at `yield_time_ms` and the cell
-  keeps running; the model works on and gets the rest with `wait_code`. A cell
+  step until it ends. `exec` returns at `yield_time_ms` and the cell
+  keeps running; the model works on and gets the rest with `wait`. A cell
   never outlives its response: `CodeCells.finish` stops it, and a closing
   record saves what it did after its last observation, so the saved history
   and the next turn see its side effects. Its driver and tool call threads join
@@ -1532,7 +1584,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   `web/src/lib/timeline/chat/hooks/packetProcessor.test.ts`
   (cells and closing records, live and replay order).
   Playwright: `web/tests/e2e/chat/code_mode.spec.ts` (a call that outlives a yield reads
-  as one direct call, with `wait_code` or at response end) and
+  as one direct call, with `wait` or at response end) and
   `web/tests/e2e/chat/tool_history.spec.ts` (a custom tool call, direct or from
   a program, after a reload). Mobile:
   `mobile/src/chat/timeline/__tests__/grouping.test.ts` and

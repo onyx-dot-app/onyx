@@ -32,7 +32,7 @@ LOAD_FUNCTION = "load"
 STORE_FUNCTIONS: frozenset[str] = frozenset({STORE_FUNCTION, LOAD_FUNCTION})
 
 STORE_STUBS = '''def store(key: str, value: Any) -> None:
-    """Save a JSON value for later execute_code calls in this chat; None deletes the key."""
+    """Save a JSON value for later programs in this chat; None deletes the key."""
     ...
 
 

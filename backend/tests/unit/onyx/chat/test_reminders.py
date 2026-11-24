@@ -13,8 +13,8 @@ from onyx.prompts.chat_prompts import (
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
 )
+from onyx.tools.constants import EXEC_TOOL_NAME
 from onyx.tools.models import GeneratedImage
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCall,
     CodeModeExecutionResult,
@@ -60,7 +60,7 @@ def _direct_image() -> ToolResultMessage:
 def _nested_image() -> ToolResultMessage:
     return ToolResultMessage(
         tool_call_id="code",
-        tool_name=CodeModeTool.NAME,
+        tool_name=EXEC_TOOL_NAME,
         content="Execution completed",
         details=CodeModeExecutionResult(
             cell_id=1,

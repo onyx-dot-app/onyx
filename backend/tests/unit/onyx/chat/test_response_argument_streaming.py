@@ -62,7 +62,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolCallArgumentDelta,
     WriteStdinStart,
 )
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.constants import EXEC_TOOL_NAME, EXECUTE_CODE_TOOL_NAME, REPL_TOOL_NAME
 from onyx.tools.tool_implementations.sandbox.models import FileToolName
 
 
@@ -341,18 +341,28 @@ def code_deltas(packets: list[Packet], name: str) -> list[str]:
     ]
 
 
-@pytest.mark.parametrize("name", ["run_python", CodeModeTool.NAME])
+# Clients know the run tool of every shape, and of saved chats, by one tool
+# type.
+@pytest.mark.parametrize(
+    ("name", "tool_type"),
+    [
+        ("run_python", "run_python"),
+        (EXEC_TOOL_NAME, EXECUTE_CODE_TOOL_NAME),
+        (REPL_TOOL_NAME, EXECUTE_CODE_TOOL_NAME),
+        (EXECUTE_CODE_TOOL_NAME, EXECUTE_CODE_TOOL_NAME),
+    ],
+)
 def test_code_reports_merge_the_text_between_them(
-    monkeypatch: pytest.MonkeyPatch, name: str
+    monkeypatch: pytest.MonkeyPatch, name: str, tool_type: str
 ) -> None:
     use_clock(monkeypatch, 0)
     live = Live()
     for fragment in ['{"code": "a', *["b"] * 100, 'c"}']:
         live.add(fragment, name=name)
     # The first fragment reports; the rest wait for the interval or the end.
-    assert code_deltas(live.packets, name) == ["a"]
+    assert code_deltas(live.packets, tool_type) == ["a"]
     live.end()
-    assert code_deltas(live.packets, name) == ["a", "b" * 100 + "c"]
+    assert code_deltas(live.packets, tool_type) == ["a", "b" * 100 + "c"]
 
 
 def test_a_report_after_the_interval_holds_the_fragments_since_the_last(

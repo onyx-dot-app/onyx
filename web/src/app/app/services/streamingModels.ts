@@ -543,9 +543,9 @@ export interface CodeModeStart extends BaseObj {
   type: "code_mode_start";
   // Empty on later observations of a cell
   code: string;
-  // From the call arguments: null for execute_code, whose cell gets its id when it runs
+  // From the call arguments: null for a run call, whose cell gets its id when it runs
   cell_id?: number | null;
-  // 0 starts a cell (execute_code); 1 continues one (wait_code)
+  // 0 starts a cell (a run call); 1 continues one (a wait call)
   observation?: number;
 }
 
