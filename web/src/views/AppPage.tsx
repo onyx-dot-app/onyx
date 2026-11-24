@@ -10,14 +10,7 @@ import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
 import { getUserAddressedName } from "@/lib/users/svc";
 import { endIncognitoSession } from "@/app/app/services/lib";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useLlmManager } from "@/lib/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
@@ -265,6 +258,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onboardingState,
     onboardingActions,
     isLoadingOnboarding,
+    isOnboardingResolved,
     finishOnboarding,
     hideOnboarding,
   } = useShowOnboarding({
@@ -761,44 +755,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (appPosition.isNewSession() || appPosition.isAgent()) &&
     (state.phase === "idle" || state.phase === "classifying");
 
-  // `user` is null while it loads, and the onboarding renders nothing until
-  // it arrives.
   const onboardingVisible =
     isWelcomeFocus &&
-    !!user &&
+    isOnboardingResolved &&
     (showOnboarding || !getUserAddressedName(user)) &&
     !onboardingDismissed;
-
-  // While onboarding is open, the bottom row keeps the height it had when
-  // onboarding appeared. New onboarding steps then grow upward instead of
-  // moving the input down. The height is read once the rows stop sliding
-  // from the previous layout, which can leave the row empty. The grid is
-  // state, so a grid that mounts later (after the no-agent modal) is measured.
-  const [grid, setGrid] = useState<HTMLDivElement | null>(null);
-  const bottomRowRef = useRef<HTMLDivElement>(null);
-  const [onboardingBottomRowPx, setOnboardingBottomRowPx] = useState<
-    number | null
-  >(null);
-  useLayoutEffect(() => {
-    if (!onboardingVisible) {
-      setOnboardingBottomRowPx(null);
-      return;
-    }
-    const row = bottomRowRef.current;
-    if (onboardingBottomRowPx !== null || !grid || !row) return;
-    const slides = grid.getAnimations();
-    if (slides.length === 0) {
-      setOnboardingBottomRowPx(row.offsetHeight);
-      return;
-    }
-    let cancelled = false;
-    void Promise.allSettled(slides.map((slide) => slide.finished)).then(() => {
-      if (!cancelled) setOnboardingBottomRowPx(row.offsetHeight);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [onboardingVisible, onboardingBottomRowPx, grid]);
 
   // In a chat, the messages scroll under the composer row, so the scrollbar
   // spans the page. The row's height keeps the last message clear of it.
@@ -829,13 +790,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // otherwise blow the column past the viewport and clip the right edge.
     gridTemplateColumns: "minmax(0, 1fr)",
     // Onboarding: welcome floored at content height, form row compressible
-    // (scrolls), bottom row absorbs slack. Centered when short, pinned when tall.
+    // (scrolls). The bottom row is a fixed share of the page, so the input's
+    // place depends only on the page height: no onboarding step, earlier
+    // layout or load order can move it.
     gridTemplateRows: onboardingVisible
-      ? `minmax(min-content, 1fr) minmax(0, max-content) ${
-          onboardingBottomRowPx === null
-            ? "minmax(0, 1fr)"
-            : `minmax(0, ${onboardingBottomRowPx}px)`
-        }`
+      ? "minmax(min-content, 1fr) minmax(0, max-content) 30%"
       : isSearch
         ? "0fr auto 1fr"
         : appPosition.isChat()
@@ -886,7 +845,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             >
               {/* Main content grid — 3 rows, animated */}
               <div
-                ref={setGrid}
                 className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
                 style={gridStyle}
               >
@@ -1237,10 +1195,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div
-                  ref={bottomRowRef}
-                  className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4"
-                >
+                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
                   {/* Agent description below input */}
                   {(appPosition.isNewSession() || appPosition.isAgent()) &&
                     !isPlainChat && (

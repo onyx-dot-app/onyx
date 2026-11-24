@@ -331,3 +331,72 @@ describe("useShowOnboarding", () => {
     });
   });
 });
+
+describe("useShowOnboarding isOnboardingResolved", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockUser = null;
+    mockProviderStatus.llmProviders = [];
+    mockProviderStatus.isLoadingProviders = false;
+    mockProviderStatus.hasProviders = false;
+  });
+
+  it("is false while the user is loading", () => {
+    const { result } = renderUseShowOnboarding({ userId: undefined });
+    expect(result.current.isOnboardingResolved).toBe(false);
+  });
+
+  it("is false while providers are loading", () => {
+    const { result } = renderUseShowOnboarding({ isLoadingProviders: true });
+    expect(result.current.isOnboardingResolved).toBe(false);
+  });
+
+  it("is false while chat sessions are loading", () => {
+    const { result } = renderUseShowOnboarding({
+      isLoadingChatSessions: true,
+    });
+    expect(result.current.isOnboardingResolved).toBe(false);
+  });
+
+  it("is true with the final decision once everything has loaded", () => {
+    const { result, rerender } = renderUseShowOnboarding({
+      isLoadingChatSessions: true,
+    });
+    expect(result.current.isOnboardingResolved).toBe(false);
+
+    rerender({
+      activeAgent: undefined,
+      isLoadingChatSessions: false,
+      chatSessionsCount: 0,
+      userId: "user-1",
+    });
+
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.showOnboarding).toBe(true);
+  });
+
+  it("is true with dismissed set in the same render when dismissed in storage", () => {
+    localStorage.setItem("onyx:onboardingCompleted:user-1", "true");
+
+    const { result } = renderUseShowOnboarding({ isLoadingProviders: true });
+
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.onboardingDismissed).toBe(true);
+    expect(result.current.showOnboarding).toBe(false);
+  });
+
+  it("is false again for a new user until that user is evaluated", () => {
+    const { result, rerender } = renderUseShowOnboarding();
+    expect(result.current.isOnboardingResolved).toBe(true);
+
+    rerender({
+      activeAgent: undefined,
+      isLoadingChatSessions: true,
+      chatSessionsCount: 0,
+      userId: "user-2",
+    });
+
+    expect(result.current.isOnboardingResolved).toBe(false);
+  });
+});
