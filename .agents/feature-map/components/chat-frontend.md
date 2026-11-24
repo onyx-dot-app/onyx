@@ -835,7 +835,8 @@ the `spawn_agent` children (`ChatConfiguration`; Deep Research workers are
 foreground): `id`, `path`, `status` and `stopped_by_user`, with no
 transcript. The list loads again when the status changes
 `has_active_subagents` or `latest_response_id`, and polls while agents are
-active or a reply streams. An idle chat that sees a running or unknown
+active. The status it reads also polls while a reply streams, so agents that
+the reply starts show. An idle chat that sees a running or unknown
 response refreshes history and attaches to the stream.
 `app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
 the latest response's last packet is a turn-level stop. `AppInputBar` then
