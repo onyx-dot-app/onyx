@@ -261,13 +261,18 @@ mod platform {
     }
 
     /// Brings the launcher to the foreground after a notification click.
-    /// Windows gives the foreground only to the app the user last used, here
-    /// the notification host, so this joins that thread's input for the call.
+    /// Windows gives the foreground only to the process that got the last
+    /// input, here the notification host. If the first try fails, a
+    /// synthetic Alt press makes this process the one with the last input;
+    /// no other thread's input queue is joined.
     #[cfg(windows)]
     pub fn take_foreground(app: &AppHandle) {
-        use ::windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+        use ::windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+            KEYEVENTF_KEYUP, VK_MENU,
+        };
         use ::windows::Win32::UI::WindowsAndMessaging::{
-            BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+            BringWindowToTop, GetForegroundWindow, SetForegroundWindow,
         };
 
         let Some(window) = app.get_webview_window(LAUNCHER) else {
@@ -276,23 +281,30 @@ mod platform {
         let Ok(hwnd) = window.hwnd() else {
             return;
         };
+        let alt = |flags: KEYBD_EVENT_FLAGS| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_MENU,
+                    dwFlags: flags,
+                    ..Default::default()
+                },
+            },
+        };
+        let size = std::mem::size_of::<INPUT>() as i32;
         // SAFETY: plain Win32 calls on the main thread with a live window
-        // handle; the input of the two threads is joined only for this call.
+        // handle; SendInput reads only the local array.
         let raised = unsafe {
-            let foreground = GetForegroundWindow();
-            if foreground == hwnd {
+            if GetForegroundWindow() == hwnd {
                 return;
             }
-            let theirs = GetWindowThreadProcessId(foreground, None);
-            let ours = GetCurrentThreadId();
-            let attached =
-                theirs != 0 && theirs != ours && AttachThreadInput(ours, theirs, true).as_bool();
             let _ = BringWindowToTop(hwnd);
-            let raised = SetForegroundWindow(hwnd).as_bool();
-            if attached {
-                let _ = AttachThreadInput(ours, theirs, false);
+            SetForegroundWindow(hwnd).as_bool() || {
+                SendInput(&[alt(KEYBD_EVENT_FLAGS(0))], size);
+                let raised = SetForegroundWindow(hwnd).as_bool();
+                SendInput(&[alt(KEYEVENTF_KEYUP)], size);
+                raised
             }
-            raised
         };
         if !raised {
             log::warn!("Windows did not bring the launcher to the foreground");

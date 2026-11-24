@@ -52,6 +52,21 @@ struct Pending {
     /// (for example, a certificate only the web view rejects). Automatic
     /// checks would pass and reload the failing page, so only Retry checks.
     retry_by_hand: bool,
+    /// The main window still holds a page that loaded, and no load failed
+    /// since: recovery shows that page again instead of loading `path`, so
+    /// unsaved edits stay.
+    keep_page: bool,
+}
+
+impl Pending {
+    /// Another outage report while the window shows. A failed load or a
+    /// new page to open means the hidden page is not kept.
+    fn merge(&mut self, path: &str, reason: Unreachable, retry_by_hand: bool, keep_page: bool) {
+        self.path = path.to_string();
+        self.status.reason = reason;
+        self.retry_by_hand |= retry_by_hand;
+        self.keep_page &= keep_page;
+    }
 }
 
 /// Main-window navigations, by id. A load belongs to the navigation that was
@@ -115,7 +130,7 @@ impl Offline {
 /// recovery. Does nothing if the session `epoch` ended meanwhile (sign-out,
 /// server change). On error the main window is shown again.
 pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Result<(), String> {
-    show_with(app, path, reason, epoch, false)
+    show_with(app, path, reason, epoch, false, false)
 }
 
 fn show_with(
@@ -124,6 +139,7 @@ fn show_with(
     reason: Unreachable,
     epoch: u64,
     retry_by_hand: bool,
+    keep_page: bool,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
     let Ok(server) = state.server() else {
@@ -139,9 +155,7 @@ fn show_with(
         }
         match pending.as_mut() {
             Some(p) => {
-                p.path = path.to_string();
-                p.status.reason = reason;
-                p.retry_by_hand |= retry_by_hand;
+                p.merge(path, reason, retry_by_hand, keep_page);
                 None
             }
             None => {
@@ -158,6 +172,7 @@ fn show_with(
                         retry_by_hand,
                     },
                     retry_by_hand,
+                    keep_page,
                 });
                 Some(id)
             }
@@ -224,6 +239,7 @@ pub fn defer_open(app: &AppHandle, path: &str) -> bool {
             return false;
         };
         p.path = path.to_string();
+        p.keep_page = false;
     }
     if let Some(window) = app.get_webview_window(windows::OFFLINE) {
         windows::bring_forward(app, &window);
@@ -328,43 +344,53 @@ async fn monitor(app: AppHandle, id: u64) {
             dismiss(&app);
             return;
         };
-        if let Err(reason) = check(&state, &server).await {
-            update(&app, Some(id), |s| s.reason = reason);
-            continue;
+        match check(&state, &server).await {
+            Ok(signed_in) => {
+                recover(&app, id, signed_in);
+                return;
+            }
+            Err(reason) => {
+                update(&app, Some(id), |s| s.reason = reason);
+            }
         }
-        recover(&app, id);
-        return;
     }
 }
 
 /// The API and the web UI answer, and the stored session is valid, rejected
-/// (sign-in follows) or absent. A failed check keeps the offline window and
-/// its backoff.
-async fn check(state: &AppState, server: &str) -> Result<(), Unreachable> {
+/// (sign-in follows) or absent. Returns whether the session is valid. A
+/// failed check keeps the offline window and its backoff.
+async fn check(state: &AppState, server: &str) -> Result<bool, Unreachable> {
     state.api.health(server).await?;
     match state.token(server) {
-        Some(token) => state.api.session_valid(server, &token).await.map(|_| ()),
-        None => Ok(()),
+        Some(token) => state.api.session_valid(server, &token).await,
+        None => Ok(false),
     }
 }
 
-fn recover(app: &AppHandle, id: u64) {
-    let path = {
+fn recover(app: &AppHandle, id: u64, signed_in: bool) {
+    let (path, keep_page) = {
         let offline = app.state::<Offline>();
         let mut pending = offline.pending();
         match pending.take() {
-            Some(p) if p.id == id => p.path,
+            Some(p) if p.id == id => (p.path, p.keep_page),
             other => {
                 *pending = other;
                 return;
             }
         }
     };
+    windows::close(app, windows::OFFLINE);
+    if keep_page && signed_in {
+        if let Some(main) = app.get_webview_window(main_window::LABEL) {
+            log::info!("server reachable again; showing the main window's page");
+            windows::bring_forward(app, &main);
+            return;
+        }
+    }
     log::info!(
         "server reachable again; loading {}",
         main_window::log_safe(&path)
     );
-    windows::close(app, windows::OFFLINE);
     windows::route_to(app, &path);
 }
 
@@ -478,7 +504,7 @@ async fn check_idle(app: &AppHandle) {
         return;
     };
     log::warn!("the server stopped answering while the main window was open");
-    if let Err(e) = show(app, &path, reason, epoch) {
+    if let Err(e) = show_with(app, &path, reason, epoch, false, true) {
         log::warn!("the main window keeps its page: {e}");
     }
 }
@@ -569,10 +595,12 @@ fn web_error_kind(status: i32, certs_handled: bool) -> WebErrorKind {
         1..=5 if certs_handled => WebErrorKind::Ignored,
         1..=5 => WebErrorKind::Tls,
         // Server unreachable, timeout, invalid response, connection reset,
-        // disconnected, cannot connect, host name not resolved.
-        6..=8 | 10..=13 => WebErrorKind::Connection,
+        // disconnected, cannot connect, host name not resolved. Redirect
+        // failed too: with the error page off it leaves a blank page, and
+        // if the server answers, only Retry checks again.
+        6..=8 | 10..=13 | 15 => WebErrorKind::Connection,
         // Unknown (also HTTP errors), aborted (downloads), canceled,
-        // redirect failed, unexpected, sign-in required.
+        // unexpected, sign-in required.
         _ => WebErrorKind::Ignored,
     }
 }
@@ -785,7 +813,7 @@ fn webview_failed(app: &AppHandle, uri: &str, known: Option<Unreachable>) {
         {
             return;
         }
-        if let Err(e) = show_with(&app, &path, reason, epoch, by_hand) {
+        if let Err(e) = show_with(&app, &path, reason, epoch, by_hand, false) {
             log::warn!("the main window keeps the failed page: {e}");
         }
     });
@@ -804,8 +832,40 @@ pub fn load_finished(app: &AppHandle) {
 mod tests {
     use super::{
         failed_uri, idle_check_due, path_of, recovery_uri, web_error_kind, webview_failure, Loads,
-        WebErrorKind,
+        OfflineStatus, Pending, WebErrorKind,
     };
+
+    #[test]
+    fn a_failed_load_or_a_new_page_drops_the_kept_page() {
+        let pending = |keep_page: bool| Pending {
+            id: 1,
+            path: "/app".into(),
+            status: OfflineStatus {
+                host: "onyx.example".into(),
+                reason: Unreachable::Refused,
+                checking: false,
+                next_retry_ms: None,
+                server_locked: false,
+                retry_by_hand: false,
+            },
+            retry_by_hand: false,
+            keep_page,
+        };
+        // A second idle report keeps the page.
+        let mut idle = pending(true);
+        idle.merge("/app", Unreachable::Timeout, false, true);
+        assert!(idle.keep_page);
+        // A failed load while the window shows does not.
+        let mut failed = pending(true);
+        failed.merge("/chat", Unreachable::Refused, true, false);
+        assert!(!failed.keep_page);
+        assert!(failed.retry_by_hand);
+        assert_eq!(failed.path, "/chat");
+        // A load failure never becomes a kept page.
+        let mut load = pending(false);
+        load.merge("/app", Unreachable::Refused, false, true);
+        assert!(!load.keep_page);
+    }
 
     #[test]
     fn a_failed_load_without_a_web_source_uses_the_navigation() {
@@ -896,8 +956,8 @@ mod tests {
 
     #[test]
     fn web_view2_failures_that_show_the_offline_window() {
-        // Cannot connect, host name not resolved, timeout.
-        for status in [12, 13, 7] {
+        // Cannot connect, host name not resolved, timeout, redirect failed.
+        for status in [12, 13, 7, 15] {
             assert_eq!(web_error_kind(status, true), WebErrorKind::Connection);
         }
         // Certificate is invalid (for example, an unknown authority).

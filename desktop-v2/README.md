@@ -101,7 +101,9 @@ no space.
   that the web view cannot finish (for example, connection refused) shows this window instead
   of the web view's error page (on Windows, the main window is blank until then). On Linux and
   Windows, the app also checks the server every 60 seconds while the main window is on screen,
-  so an outage while no page loads also shows this window after two failed checks. A certificate error also shows this window, not the web
+  so an outage while no page loads also shows this window after two failed checks. When the
+  server is back, the main window shows that page again without a reload, so unsaved edits stay.
+  A certificate error also shows this window, not the web
   view's certificate page, so the user cannot continue to the page. If the app's own check passes but the web view still fails (for
   example, a certificate that only the web view does not trust), the window checks again
   only on **Retry**. Otherwise it checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when

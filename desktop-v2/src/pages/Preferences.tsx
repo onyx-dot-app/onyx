@@ -193,14 +193,31 @@ function Preferences() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Only the latest read or change may set `prefs`: reads can finish out
+  // of order.
+  const generation = useRef(0);
+
+  function updatePrefs(change: (p: Prefs | null) => Prefs | null) {
+    generation.current += 1;
+    setPrefs(change);
+  }
+
+  async function reload() {
+    const current = ++generation.current;
+    const next = await getPrefs();
+    if (current === generation.current) setPrefs(next);
+  }
 
   // Each open reads managed policy again. Opening Preferences again while
   // it is still open only focuses the window, so focus reads it too.
   useEffect(() => {
-    const load = () => void getPrefs().then(setPrefs);
+    const load = () => void reload();
     load();
     window.addEventListener("focus", load);
-    return () => window.removeEventListener("focus", load);
+    return () => {
+      window.removeEventListener("focus", load);
+      generation.current += 1;
+    };
   }, []);
 
   async function run(action: () => Promise<void>) {
@@ -211,7 +228,7 @@ function Preferences() {
       setError(errorMessage(e));
       // A failed action can still have changed something (a server change
       // signs out first), so show the app's real state again.
-      void getPrefs().then(setPrefs);
+      void reload();
     }
   }
 
@@ -221,7 +238,7 @@ function Preferences() {
     await run(async () => {
       await setHotkey(accelerator);
       // Also refreshes the shortcut notice.
-      setPrefs(await getPrefs());
+      await reload();
       setSaved(true);
     });
   }
@@ -229,14 +246,14 @@ function Preferences() {
   async function onLaunchAtLogin(enabled: boolean) {
     await run(async () => {
       await setLaunchAtLogin(enabled);
-      setPrefs((p) => (p ? { ...p, launchAtLogin: enabled } : p));
+      updatePrefs((p) => (p ? { ...p, launchAtLogin: enabled } : p));
     });
   }
 
   async function onNotifyAnswers(enabled: boolean) {
     await run(async () => {
       await setNotifyAnswers(enabled);
-      setPrefs((p) => (p ? { ...p, notifyAnswers: enabled } : p));
+      updatePrefs((p) => (p ? { ...p, notifyAnswers: enabled } : p));
     });
   }
 
