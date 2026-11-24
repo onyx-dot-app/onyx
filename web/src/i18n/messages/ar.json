@@ -12377,6 +12377,9 @@
           "tooltip": "السابق"
         }
       },
+      "messageTime": {
+        "yesterdayLabel": "أمس في {time}"
+      },
       "multiModelPanel": {
         "deselectButton": {
           "tooltip": "إلغاء تحديد الإجابة المفضلة"

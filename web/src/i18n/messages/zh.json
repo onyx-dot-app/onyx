@@ -12377,6 +12377,9 @@
           "tooltip": "上一条"
         }
       },
+      "messageTime": {
+        "yesterdayLabel": "昨天 {time}"
+      },
       "multiModelPanel": {
         "deselectButton": {
           "tooltip": "取消选择首选回复"

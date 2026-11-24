@@ -12377,6 +12377,9 @@
           "tooltip": "Anterior"
         }
       },
+      "messageTime": {
+        "yesterdayLabel": "Ontem às {time}"
+      },
       "multiModelPanel": {
         "deselectButton": {
           "tooltip": "Remover a resposta preferida"

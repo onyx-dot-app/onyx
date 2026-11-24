@@ -11,6 +11,7 @@ import { SvgChevronDown, SvgChevronUp, SvgEdit, SvgSparkle } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import { useOverflow } from "@opal/hooks";
 import FileDisplay from "./FileDisplay";
+import MessageTime from "@/lib/timeline/chat/message/MessageTime";
 import { placeMentions, MENTION_TRIGGER } from "@/lib/chat/mentions";
 import type {
   ComposedMention,
@@ -196,6 +197,7 @@ interface HumanMessageProps {
   content: string;
   files?: FileDescriptor[];
   mentions?: ComposedMention[];
+  timeSent?: string;
 
   // Message navigation - nodeId for tree position, messageId for editing
   nodeId: number;
@@ -222,6 +224,7 @@ function arePropsEqual(
     prev.messageId === next.messageId &&
     prev.files === next.files &&
     prev.mentions === next.mentions &&
+    prev.timeSent === next.timeSent &&
     prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
     prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
     prev.onEdit === next.onEdit
@@ -233,6 +236,7 @@ const HumanMessage = React.memo(function HumanMessage({
   content: initialContent,
   files,
   mentions,
+  timeSent,
   nodeId,
   messageId,
   otherMessagesCanSwitchTo,
@@ -284,7 +288,7 @@ const HumanMessage = React.memo(function HumanMessage({
 
   const copyEditButtonContent = useMemo(
     () => (
-      <div className="flex flex-row shrink px-1">
+      <div className="flex flex-row items-center shrink px-1">
         <CopyButton
           getCopyText={() => content}
           prominence="tertiary"
@@ -346,8 +350,16 @@ const HumanMessage = React.memo(function HumanMessage({
             <HumanMessageBubble content={content} mentions={mentions} />
           </div>
         )}
-        <div className="flex justify-end pt-1">
+        <div className="flex justify-end items-center pt-1">
           {!isEditing && isMobile && copyEditButton}
+          {/* The send time sits under the bubble, at its end. */}
+          {!isEditing && timeSent && (
+            <Hoverable.Item group="humanMessage" variant="appear-on-hover">
+              <div className="px-1">
+                <MessageTime timeSent={timeSent} />
+              </div>
+            </Hoverable.Item>
+          )}
           {currentMessageInd !== undefined &&
             onMessageSelection &&
             otherMessagesCanSwitchTo &&

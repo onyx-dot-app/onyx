@@ -12377,6 +12377,9 @@
           "tooltip": "Zurück"
         }
       },
+      "messageTime": {
+        "yesterdayLabel": "Gestern um {time}"
+      },
       "multiModelPanel": {
         "deselectButton": {
           "tooltip": "Bevorzugte Antwort entfernen"

@@ -12377,6 +12377,9 @@
           "tooltip": "前へ"
         }
       },
+      "messageTime": {
+        "yesterdayLabel": "昨日 {time}"
+      },
       "multiModelPanel": {
         "deselectButton": {
           "tooltip": "優先する応答の選択を解除"

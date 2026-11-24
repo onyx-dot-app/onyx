@@ -12377,6 +12377,9 @@
           "tooltip": "이전"
         }
       },
+      "messageTime": {
+        "yesterdayLabel": "어제 {time}"
+      },
       "multiModelPanel": {
         "deselectButton": {
           "tooltip": "선호 응답 선택 해제"

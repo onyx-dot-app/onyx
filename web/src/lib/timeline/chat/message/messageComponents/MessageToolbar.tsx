@@ -40,6 +40,8 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
 import { getModelIcon } from "@/lib/languageModels/utils";
+import MessageTime from "@/lib/timeline/chat/message/MessageTime";
+import { Hoverable } from "@opal/core";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
@@ -133,6 +135,8 @@ export interface MessageToolbarProps {
   // Citations
   citations: StreamingCitation[];
   documentMap: Map<string, OnyxDocument>;
+
+  timeSent?: string;
 }
 
 export default function MessageToolbar({
@@ -154,6 +158,7 @@ export default function MessageToolbar({
   currentModelProvider,
   citations,
   documentMap,
+  timeSent,
 }: MessageToolbarProps) {
   const t = useTranslations("chat.messages");
   // The message's own model. chatState carries the globally selected model,
@@ -444,6 +449,14 @@ export default function MessageToolbar({
             )}
           </div>
         </TooltipGroup>
+        {/* The send time sits at the row's end, apart from the actions. */}
+        {timeSent && (
+          <Hoverable.Item group="agentMessage" variant="appear-on-hover">
+            <div className="px-2">
+              <MessageTime timeSent={timeSent} />
+            </div>
+          </Hoverable.Item>
+        )}
       </div>
     </>
   );
