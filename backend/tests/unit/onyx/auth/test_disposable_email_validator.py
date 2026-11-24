@@ -36,8 +36,16 @@ def _response(
 @pytest.fixture(autouse=True)
 def no_network() -> Generator[None, None, None]:
     """Unit tests never reach the real list. A refresh that no test patches
-    further gets an empty list, so only the built-in domains apply."""
-    with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
+    further gets an empty list, so only the built-in domains apply. The URL is
+    fixed too, so the environment's setting cannot turn the download off and
+    bypass the mock."""
+    with (
+        mock.patch(
+            "onyx.auth.disposable_email_validator.DISPOSABLE_EMAIL_DOMAINS_URL",
+            _TEST_URL,
+        ),
+        mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client,
+    ):
         client = mock_client.return_value.__enter__.return_value
         client.get.return_value = _response(200, json_body=[])
         yield
