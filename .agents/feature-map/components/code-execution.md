@@ -61,11 +61,12 @@
   that it published in the user's own chats and copies them into the current
   chat's working directory (generic tool cards), and with
   `library_replace_library_file` it adds a version to one of them;
-  `library_manage_library` deletes them after the user approves. In code
-  mode all of these are the deferred group `library`. Claude models get the
-  same operations as one `artifact` tool instead (actions publish, list, read
-  and delete), in its own deferred group `artifact`, for compatibility with
-  how they work with artifacts. Every result links each version as
+  `library_manage_library` renames and deletes them, a delete after the user
+  approves. In code mode all of these are the deferred group `library`.
+  Claude models get the same operations as one `artifact` tool instead
+  (actions publish, list, read, rename and delete), in its own deferred
+  group `artifact`, for compatibility with how they work with artifacts.
+  Every result links each version as
   `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
   the output panel.
 
@@ -475,7 +476,8 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         (file_copies.in_place) is cached under every
                                         policy, any other file there is written over.
                                         Other copies take harness_base.safe_file_name
-                                        of file_name or the record's name (the rule
+                                        of file_name or the artifact's effective
+                                        name, which rename sets (the rule
                                         chat_file_name uses, without the prefix); the
                                         listing (file_copies.MAX_LISTED, hidden
                                         entries included) decides a conflict, and a
@@ -539,23 +541,28 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
   LibraryManageLibraryTool (SEQUENTIAL)      library_manage_library, DEFERRED manage_library, the
                                         generic card; _LibraryTool and _FileTool, with the
                                         default interrupted result. `operations` (1-20) is a
-                                        list of a union on `operation` (delete); each target
-                                        is {kind: "file", library_file_id | file_id (any
-                                        version), version_number?}. artifact_operations.manage
-                                        runs them in order, each in its own transaction, from
-                                        the database and the file store only (never the VM),
-                                        one ManageResult each ({operation, ok, error?,
-                                        library_file_id, file_name, deleted_versions, ...});
-                                        the call fails only when none succeeds. It checks the
-                                        Stop before each operation, as materialize does: a
-                                        Stop ends the call, and the next operation does not
-                                        start. delete (artifact_operations._deleted_file): the
-                                        target by get_user_published_file (a listable chat of
-                                        the user, from any chat); a version_number, or the
-                                        artifact tool's /v<N>, must be the newest version,
-                                        else the delete is refused, because it removes every
-                                        version. Then db/chat.delete_chat_artifact holds the
-                                        artifact's row lock while it removes the whole
+                                        list of a union on `operation` (delete, rename);
+                                        each target is {kind: "file", library_file_id | file_id
+                                        (any version), version_number?}.
+                                        artifact_operations.manage runs them in order, each
+                                        in its own transaction, from the database and the
+                                        file store only (never the VM), one ManageResult
+                                        each ({operation, ok, error?, library_file_id,
+                                        file_id, version_number, file_name, url,
+                                        deleted_versions}); the call fails only when none
+                                        succeeds. It checks the Stop before each operation,
+                                        as materialize does: a Stop ends the call, and the
+                                        next operation does not start. Each target resolves
+                                        with artifact_operations._published_file, the one
+                                        lookup of a file reference (get_user_published_file:
+                                        a listable chat of the user, from any chat; a
+                                        missing version is a tool error that names the
+                                        newest). delete (artifact_operations._deleted_file):
+                                        a version_number, or the artifact tool's /v<N>, must
+                                        be the newest version, else the delete is refused,
+                                        because it removes every version. Then
+                                        db/chat.delete_chat_artifact holds the artifact's
+                                        row lock while it removes the whole
                                         artifact, every version, also one published after the
                                         approval, oldest version first; a failed file delete
                                         stops it, so the newest version stays and a later
@@ -565,16 +572,31 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         leaves a row without a version: a publish at its
                                         path replaces the row with a new artifact, and a
                                         save by its ID is not found
-                                        (db/chat.save_chat_artifact). Approval: approval_details (both
+                                        (db/chat.save_chat_artifact). rename: a new name that
+                                        safe_file_name keeps (the VM name rule) and with the
+                                        current extension, any case, by the list's last-dot
+                                        rule (models.py:artifact_extension), after a
+                                        non-empty name;
+                                        db/chat.rename_chat_artifact sets ChatArtifact.name
+                                        and bumps updated_at as a publish does (an
+                                        artifact whose chat is deleted raises
+                                        ArtifactNotFound, the not-found tool error); the result
+                                        is the artifact's newest version, whichever version
+                                        the target names. Approval: approval_details (both
                                         families call
                                         artifact_operations.delete_approval_details) parses
-                                        the arguments and returns None, with no database work,
-                                        for a call without a delete or with bad arguments;
-                                        otherwise it resolves the targets as the delete does:
-                                        headline "Delete <path>" or "Delete N published
-                                        files", payload {"Delete": ["<path> (N versions) from
-                                        chat “<title>”"]}, where <path> is the display path's
-                                        folder with the file's name. A target that the
+                                        the arguments with parse_tool_arguments and returns
+                                        None, with no database work, for a call without a
+                                        delete or with arguments that the call refuses;
+                                        otherwise it resolves the delete targets as the
+                                        delete does: headline "Delete <path>" or "Delete N
+                                        published files", payload {"Delete": ["<path> (N
+                                        versions) from chat “<title>”"], "Also in this
+                                        call": a line per other operation that names the
+                                        file it changes (the lookup's "<path> from chat
+                                        “<title>”", else the target ID)}, where <path> is the display path's
+                                        folder with the file's name, N from the lookup's
+                                        latest_version_number. A delete target that the
                                         delete refuses or finds nothing for still asks: an
                                         older version shows "<path> version N (not its
                                         newest version, M; the delete refuses it while it is not the newest)", a
@@ -582,13 +604,16 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         not published yet; the delete removes the file and
                                         every version)", and any other target shows as
                                         given ("<id> (not found yet)"), as another chat can
-                                        still publish it. One request covers the whole call
+                                        still publish it. One request covers the whole call,
+                                        other operations included
   ArtifactTool (`artifact`, SEQUENTIAL)  one tool with an action per artifact operation,
                                         for Claude models. One flat ArtifactArguments
                                         model; each action takes only its own arguments
                                         (models.py:ARTIFACT_ACTION_ARGUMENTS, whose publish
                                         paths, ARTIFACT_PUBLISH_PATHS, the renderer reads
-                                        too), and the tool builds the library tools'
+                                        too), and delete and rename need url (rename also
+                                        name): a model validator, so the approval hook and
+                                        the call refuse the same calls. The tool builds the library tools'
                                         arguments of its operation: publish (default;
                                         file_path with title, or file_paths, all or none)
                                         -> publish, and with url and file_path ->
@@ -605,8 +630,9 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         exists) -> materialize, a url's /v<N> as the item's
                                         version_number; delete (url of the newest version, or
                                         without /v<N>) ->
-                                        manage's delete, behind the same approval. Empty
-                                        and too-long lists are
+                                        manage's delete, behind the same approval; rename
+                                        (url, name) -> manage's rename. Empty and too-long
+                                        lists are
                                         refused in the tool's own argument names before
                                         the VM wakes. It inherits _LibraryTool and
                                         _FileTool: execution settings are per tool, so the

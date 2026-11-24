@@ -146,11 +146,11 @@ Usage:
 - Files published earlier, in this chat and in the user's other chats, can be found with library_list and copied into the VM with library_prepare_materialize.
 """
 
-LIBRARY_LIST_DESCRIPTION = """Lists the files published in the user's chats, this chat included: the newest version of each file. By default, the most recently published come first.
+LIBRARY_LIST_DESCRIPTION = """Lists the files published in the user's chats, this chat included: the newest version of each file. By default, the files with the latest change (publish or rename) come first.
 
 Usage:
-- `sort` orders by first publish (created_at), latest publish (modified_at), file name or size; `sort_order` is asc or desc.
-- `filters` keeps files by publish time, by extension, or by category. `chat_id` lists the files of one chat. `query` finds text in the file name, the file's title or the chat's title, in any case.
+- `sort` orders by first publish (created_at), latest change, a publish or rename (modified_at), file name or size; `sort_order` is asc or desc.
+- `filters` keeps files by first publish, by latest change (publish or rename), by extension, or by category. `chat_id` lists the files of one chat. `query` finds text in the file name, the file's title or the chat's title, in any case.
 - Each entry has the file's `library_file_id`, which stays the same across versions, and the `file_id` of its newest version, the path relative to its chat's working directory, and its chat. A version_number over 1 means that older versions exist.
 - When more files exist, the result has a `next_cursor`. Send it with the same other arguments to get the next page.
 """
@@ -173,23 +173,25 @@ Usage:
 - The user sees a download card for the new version. `title` defaults to the current version's title.
 """
 
-LIBRARY_MANAGE_LIBRARY_DESCRIPTION = f"""Deletes published files of the user's chats, this chat included.
+LIBRARY_MANAGE_LIBRARY_DESCRIPTION = f"""Renames and deletes published files of the user's chats, this chat included.
 
 Usage:
 - `operations` runs up to {MANAGE_LIBRARY_MAX_OPERATIONS} operations in order. Each gives one result; a failed operation does not stop the others.
+- rename: `{{"operation": "rename", "target": {{"library_file_id": ...}}, "new_name": "summary.md"}}`. `target` takes a `library_file_id` or the `file_id` of any version. The new name is a file name, not a path, with the current extension. Every version and later publishes of the same path keep it.
 - delete: `{{"operation": "delete", "target": {{"library_file_id": ...}}}}` deletes the file with all its versions; its download cards stop working. `target` takes a `library_file_id` or the `file_id` of any version; a `version_number` must be the newest.
 - Deleting asks the user, and the whole call waits for the answer. Put deletes in their own call.
 """
 
 # The artifact tool (sandbox_tools.ArtifactTool). tool_search matches its
 # first sentence.
-ARTIFACT_DESCRIPTION = f"""Publish, replace, list, read and delete the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
+ARTIFACT_DESCRIPTION = f"""Publish, replace, list, read, rename and delete the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
 
 Actions:
 - publish (the default): gives `file_path`, or up to {PUBLISH_FILES_MAX_FILES} `file_paths`, from the VM to the user; all are published, or none. Each file is at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Publishing the same path again adds a new version. Publish only finished deliverables, and do not paste their contents into your reply.
 - publish with `url` and `file_path`: adds a version to that published file, also one of another chat; it keeps its name and type, so `file_path` needs its extension. Use the url from your last result: if the file has a newer version than the url names, the call fails and changes nothing. `force` adds the version anyway; older versions stay.
 - list: the user's published files from all their chats, newest first. `type` keeps one type (image, sheet, slides, report, other); `query` finds text in the name, the title or the chat's title; `after` takes the `next_cursor` of the previous page.
 - read: copies up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} published files into `out_dir`, in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/. Name them with `url` (a url from an earlier result; one that ends in /v<N> names that version), or with `path` or `paths`, each a url or a file ID. To change a file, read it into a directory outside {CHAT_FILES_DIR}/, change it there, and publish it with its url.
+- rename: gives the file at `url` the file name `name`, not a path, with the current extension. Every version and later publishes keep it.
 - delete: deletes the file at `url` (the url of its newest version, or one without /v<N>) with all its versions, after the user approves; its download cards stop working.
 - A url is a link the user can open; give it to the user to point at a file.
 """
@@ -199,6 +201,8 @@ ARTIFACT_RESULTS = (
     "version_number, file_name, title, artifact_type, mime_type, "
     "file_size_bytes, created_at, modified_at, chat_id, chat_title, path, url}], "
     "next_cursor}. read: {items: [{library_file_id, file_id, version_number, "
-    "file_name, path, file_size_bytes, mime_type, url, status, error}]}. delete: "
+    "file_name, path, file_size_bytes, mime_type, url, status, error}]}. rename: "
+    "{results: [{operation, ok, library_file_id, file_id, version_number, "
+    "file_name, url}]}. delete: "
     "{results: [{operation, ok, library_file_id, file_name, deleted_versions}]}."
 )

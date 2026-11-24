@@ -267,7 +267,8 @@
   follows its newest version: a reload's list or a live publish of a newer
   version updates an open tab. A card of an older version, or an artifact
   link that names a version, pins the tab to that version, labelled "v{version} of {latest}"; the newest version has no
-  label. The five most recent file viewers stay
+  label. A tab's name comes from the list, so a reload after a rename
+  updates it, also on a pinned tab. The five most recent file viewers stay
   mounted, so switching back does not load the file again; a hidden one
   leaves layout (`content-visibility: hidden`). During a drag of the panel's
   edge, the content follows the width live, as in Craft, under an overlay

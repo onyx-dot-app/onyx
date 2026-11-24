@@ -38,6 +38,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     LibraryListFilters,
     LibraryPrepareMaterializeArguments,
     ListedArtifact,
+    ManageLibraryArguments,
     SortOrder,
     artifact_type,
     artifact_url,
@@ -327,6 +328,19 @@ _LONG_ID = "x" * (ARTIFACTS_PATH_MAX_CHARS + 1)
             {"items": [{"file_id": "f"}], "destination": {"directory": _LONG_ID}},
             "destination.directory",
         ),
+        (
+            ManageLibraryArguments,
+            {
+                "operations": [
+                    {
+                        "operation": "rename",
+                        "target": {"file_id": "f"},
+                        "new_name": _LONG_ID,
+                    }
+                ]
+            },
+            "operations.0.rename.new_name",
+        ),
     ],
 )
 def test_text_that_a_result_echoes_is_refused_when_too_long(
@@ -544,7 +558,14 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
             {"action": "read", "url": "report.pdf", "out_dir": "x"},
             "'report.pdf' is not an artifact url",
         ),
-        ({"action": "delete"}, "delete takes url"),
+        ({"action": "delete"}, "Invalid tool arguments: delete takes url"),
+        (
+            {
+                "action": "rename",
+                "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b",
+            },
+            "Invalid tool arguments: rename takes url and name",
+        ),
         ({"action": "open"}, None),
         ({"icon": "x"}, None),
         *(
@@ -560,6 +581,7 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
                 ({"action": "read", "path": _LONG_PATH, "out_dir": "x"}, "path"),
                 ({"action": "read", "paths": [_LONG_PATH], "out_dir": "x"}, "paths.0"),
                 ({"action": "read", "path": "f", "out_dir": _LONG_PATH}, "out_dir"),
+                ({"action": "rename", "url": "u", "name": _LONG_PATH}, "name"),
             )
         ),
     ],

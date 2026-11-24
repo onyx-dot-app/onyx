@@ -21,6 +21,7 @@ from onyx.db.chat import (
     delete_unpublished_chat_artifacts,
     get_user_published_file,
     get_user_published_files,
+    rename_chat_artifact,
     save_chat_artifact,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -55,6 +56,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactCursor,
     ArtifactFileReference,
     ArtifactList,
+    DeleteOperation,
     KeptTitle,
     LibraryFileTarget,
     LibraryListArguments,
@@ -70,6 +72,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     MaterializedItems,
     PublishedFile,
     PublishFileArgument,
+    RenameOperation,
     artifact_extension,
     artifact_url,
     shown_artifact,
@@ -595,23 +598,52 @@ def _reference_text(reference: ArtifactFileReference) -> str:
     )
 
 
+def _card_chat(file: ListedArtifact) -> str:
+    """How an approval card names the chat of `file`."""
+    return (
+        f"chat \u201c{file.chat_title}\u201d" if file.chat_title else "an untitled chat"
+    )
+
+
+def _other_operation_line(operation: RenameOperation, name: str) -> str:
+    """The card line of an operation that a delete's approval covers too,
+    for the file named `name`."""
+    return f"rename {name} to {operation.new_name}"
+
+
 def delete_approval_details(
-    user_id: UUID, targets: Sequence[LibraryFileTarget]
-) -> ToolApprovalDetails:
-    """The approval card of a call that deletes `targets`, which both tool
-    families show: a line for each of the user's artifacts that they name,
-    as the delete finds it (`_deleted_file`), with its display path, its
-    newest version number and its chat. A target that the delete refuses
-    or finds nothing for yet still gets a line: a version older than the
-    newest, which the delete refuses, and a version newer than the newest,
-    which another chat can still publish, by the artifact's display path;
-    any other target as given, as another chat can still publish it. It
-    never raises: a failed lookup asks with the targets as given."""
+    user_id: UUID, operations: Sequence[DeleteOperation | RenameOperation]
+) -> ToolApprovalDetails | None:
+    """The approval card of a call with these operations, which both tool
+    families show; None for a call without a delete. A line for each of
+    the user's artifacts that the deletes name, as the delete finds it
+    (`_deleted_file`), with its display path, its newest version number
+    and its chat. A delete target that the delete refuses or finds nothing
+    for yet still gets a line: a version older than the newest, which the
+    delete refuses, and a version newer than the newest, which another chat
+    can still publish, by the artifact's display path; any other target as
+    given, as another chat can still publish it. Each other operation gets
+    a line, which the approval covers too, with the display path and the
+    chat of the file that it changes. It never raises: a failed lookup asks with the
+    targets as given."""
+    deletes = [
+        operation.target
+        for operation in operations
+        if isinstance(operation, DeleteOperation)
+    ]
+    others = [
+        operation
+        for operation in operations
+        if not isinstance(operation, DeleteOperation)
+    ]
+    if not deletes:
+        return None
     # Each artifact's or unresolved target's card name and line
     entries: dict[UUID | str, tuple[str, str]] = {}
+    also: list[JsonValue] = []
     try:
         with get_session_with_current_tenant() as db_session:
-            for target in targets:
+            for target in deletes:
                 try:
                     file = shown_artifact(_deleted_file(db_session, user_id, target))
                 except ToolCallException:
@@ -641,21 +673,32 @@ def delete_approval_details(
                 name = _card_path(file)
                 # A lookup always sets the newest version.
                 versions = file.latest_version_number
-                chat = (
-                    f"chat \u201c{file.chat_title}\u201d"
-                    if file.chat_title
-                    else "an untitled chat"
-                )
                 entries[file.library_file_id] = (
                     name,
                     f"{name} ({versions} version{'' if versions == 1 else 's'}) "
-                    f"from {chat}",
+                    f"from {_card_chat(file)}",
                 )
+            for operation in others:
+                try:
+                    shown = shown_artifact(
+                        _published_file(db_session, user_id, operation.target)
+                    )
+                    name = f"{_card_path(shown)} from {_card_chat(shown)}"
+                except ToolCallException:
+                    name = _reference_text(operation.target)
+                also.append(_other_operation_line(operation, name))
     except Exception:
         logger.exception("artifacts_delete_approval_lookup_failed")
+        also = [
+            _other_operation_line(operation, _reference_text(operation.target))
+            for operation in others
+        ]
         return ToolApprovalDetails(
             display_name="Delete published files",
-            payload={"Delete": [_reference_text(target) for target in targets]},
+            payload={
+                "Delete": [_reference_text(target) for target in deletes],
+                **({"Also in this call": also} if also else {}),
+            },
         )
     names = [name for name, _line in entries.values()]
     lines: list[JsonValue] = [line for _name, line in entries.values()]
@@ -663,7 +706,10 @@ def delete_approval_details(
         display_name=f"Delete {names[0]}"
         if len(names) == 1
         else f"Delete {len(names)} published files",
-        payload={"Delete": lines},
+        payload={
+            "Delete": lines,
+            **({"Also in this call": also} if also else {}),
+        },
     )
 
 
@@ -679,21 +725,66 @@ def manage(
     materialize: a started operation ends, and the next one does not
     start. A delete removes the artifact with every version
     (delete_chat_artifact), also the versions published since the user
-    approved it; the tools ask first (delete_approval_details)."""
+    approved it; the tools ask first (delete_approval_details). A rename's
+    name must be one that safe_file_name keeps, so the file keeps it in the
+    VM, with a name before the current extension, which gives the file's
+    type."""
     results: list[ManageResult] = []
     for operation in arguments.operations:
         cancellation.check()
         try:
             with artifact_errors(f"The {operation.operation}"):
                 with get_session_with_current_tenant() as db_session:
-                    file = _deleted_file(db_session, user_id, operation.target)
-                result = ManageResult(
-                    operation=operation.operation,
-                    ok=True,
-                    library_file_id=file.library_file_id,
-                    file_name=file.file_name,
-                    deleted_versions=delete_chat_artifact(file.library_file_id),
-                )
+                    file = (
+                        _published_file(db_session, user_id, operation.target)
+                        if isinstance(operation, RenameOperation)
+                        else _deleted_file(db_session, user_id, operation.target)
+                    )
+                if isinstance(operation, RenameOperation):
+                    name = operation.new_name
+                    if safe_file_name([name]) != name:
+                        raise tool_error(
+                            f"{name!r} is not a file name that the VM keeps; "
+                            f"try {safe_file_name([name])!r}"
+                        )
+                    extension = artifact_extension(file.file_name)
+                    if artifact_extension(name) != extension:
+                        raise tool_error(
+                            f"The file's content is {file.file_name}, so its name "
+                            + (
+                                "must have no extension"
+                                if extension is None
+                                else f"must end in {'.' + extension!r}"
+                            )
+                        )
+                    if name.rpartition(".")[:2] == ("", "."):
+                        raise tool_error(f"{name!r} has no name before its extension")
+                    with get_session_with_current_tenant() as db_session:
+                        rename_chat_artifact(db_session, file.library_file_id, name)
+                        db_session.commit()
+                        # The target can name an older version.
+                        newest = _published_file(
+                            db_session,
+                            user_id,
+                            ArtifactFileReference(library_file_id=file.library_file_id),
+                        )
+                    result = ManageResult(
+                        operation=operation.operation,
+                        ok=True,
+                        library_file_id=newest.library_file_id,
+                        file_id=newest.file_id,
+                        version_number=newest.version_number,
+                        file_name=newest.file_name,
+                        url=newest.url,
+                    )
+                else:
+                    result = ManageResult(
+                        operation=operation.operation,
+                        ok=True,
+                        library_file_id=file.library_file_id,
+                        file_name=file.file_name,
+                        deleted_versions=delete_chat_artifact(file.library_file_id),
+                    )
         except ToolCallException as error:
             result = ManageResult(
                 operation=operation.operation,

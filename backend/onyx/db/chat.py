@@ -1062,6 +1062,10 @@ def get_chat_message_page_ids(
 _ARTIFACT_CHAT_NOT_DELETED = ChatArtifact.chat_session_id.in_(
     select(ChatSession.id).where(ChatSession.deleted.is_(False))
 )
+# An artifact's updated_at after a change: a change that waited on the row
+# lock can have started before the one it waited for, so it never moves the
+# time back.
+_ARTIFACT_CHANGED_AT = func.greatest(ChatArtifact.updated_at, func.clock_timestamp())
 
 
 def _delete_versionless_artifacts(
@@ -1113,7 +1117,8 @@ def save_chat_artifact(
     list, and its hard delete; a new artifact gets the chat's owner. An
     artifact row without a version is a deleted one: a save at its path
     replaces it with a new artifact, and a save by its ID raises
-    ArtifactNotFound. A thumbnail that fails to save is left out."""
+    ArtifactNotFound. A thumbnail that fails to save is left out. `name` is
+    the file's name; the result has the artifact's name, which a rename sets."""
     file_store = get_default_file_store()
     file_id = str(uuid4())
     thumbnail_file_id: str | None = None
@@ -1131,16 +1136,13 @@ def save_chat_artifact(
                 file_id,
                 exc_info=True,
             )
-    saved: list[tuple[UUID, UUID, str, int, str | None]] = []
-    # A publish that waited on the row lock can have started before the one
-    # it waited for; it never moves the time back.
-    updated_at = func.greatest(ChatArtifact.updated_at, func.clock_timestamp())
+    saved: list[tuple[UUID, UUID, str, str | None, int, str | None]] = []
 
     def add_version(db_session: Session) -> None:
         # The upsert or update locks the artifact's row until the commit, so
         # concurrent publishes of one artifact take turns, and the next
         # statements read the versions they committed.
-        locked: Row[tuple[UUID, UUID, str]] | None
+        locked: Row[tuple[UUID, UUID, str, str | None]] | None
         if isinstance(target, ArtifactAtPath):
             # A row without a version is what a delete that stopped after its
             # files leaves (delete_chat_artifact). The publish takes a new
@@ -1162,10 +1164,13 @@ def save_chat_artifact(
                 )
                 .on_conflict_do_update(
                     index_elements=[ChatArtifact.chat_session_id, ChatArtifact.path],
-                    set_={"updated_at": updated_at},
+                    set_={"updated_at": _ARTIFACT_CHANGED_AT},
                 )
                 .returning(
-                    ChatArtifact.id, ChatArtifact.chat_session_id, ChatArtifact.path
+                    ChatArtifact.id,
+                    ChatArtifact.chat_session_id,
+                    ChatArtifact.path,
+                    ChatArtifact.name,
                 )
             ).one()
         else:
@@ -1179,9 +1184,12 @@ def save_chat_artifact(
                     .where(ChatArtifactVersion.artifact_id == ChatArtifact.id)
                     .exists(),
                 )
-                .values(updated_at=updated_at)
+                .values(updated_at=_ARTIFACT_CHANGED_AT)
                 .returning(
-                    ChatArtifact.id, ChatArtifact.chat_session_id, ChatArtifact.path
+                    ChatArtifact.id,
+                    ChatArtifact.chat_session_id,
+                    ChatArtifact.path,
+                    ChatArtifact.name,
                 )
             ).one_or_none()
             if locked is None:
@@ -1221,6 +1229,7 @@ def save_chat_artifact(
                 locked.id,
                 locked.chat_session_id,
                 locked.path,
+                locked.name,
                 version.version,
                 version.title,
             )
@@ -1248,13 +1257,13 @@ def save_chat_artifact(
         if thumbnail_file_id is not None:
             delete_files_best_effort([thumbnail_file_id], "unpublished thumbnail")
         raise
-    [(saved_artifact_id, chat_id, saved_path, version, saved_title)] = saved
+    [(saved_artifact_id, chat_id, saved_path, saved_name, version, saved_title)] = saved
     return PublishedFile(
         file_id=file_id,
         artifact_id=saved_artifact_id,
         version=version,
         chat_id=chat_id,
-        name=name,
+        name=saved_name or name,
         title=saved_title,
         path=saved_path,
         size=len(content),
@@ -1327,20 +1336,43 @@ def delete_chat_artifact(artifact_id: UUID) -> int:
     return len(versions)
 
 
+def rename_chat_artifact(db_session: Session, artifact_id: UUID, name: str) -> None:
+    """Give the artifact `artifact_id` the name `name`, which every read of
+    its name uses (_newest_available_version), and bump its updated_at as a
+    publish does. Its file records keep their names. An artifact that is
+    gone, or whose chat is deleted, raises ArtifactNotFound. The caller
+    checks the user's access and the name, and commits."""
+    if (
+        db_session.execute(
+            update(ChatArtifact)
+            .where(ChatArtifact.id == artifact_id, _ARTIFACT_CHAT_NOT_DELETED)
+            .values(name=name, updated_at=_ARTIFACT_CHANGED_AT)
+            .returning(ChatArtifact.id)
+        ).one_or_none()
+        is None
+    ):
+        raise ArtifactNotFound(artifact_id)
+
+
 def _newest_available_version(
     version: int | None = None, *, file_id: str | None = None, alias: str = "newest"
 ) -> LateralFromClause:
     """The newest version of the ChatArtifact row in the enclosing query
     whose object is not missing and whose record is a published file, or
     the version `version` or `file_id` when it is one, with its file record,
-    as a LATERAL subquery named `alias` (one row, or none)."""
+    as a LATERAL subquery named `alias` (one row, or none). Its `name` is
+    the artifact's effective name, which every read of an artifact's name
+    uses: the name that a rename gave the artifact, else the version's file
+    name."""
     return (
         select(
             ChatArtifactVersion.version,
             ChatArtifactVersion.file_id,
             ChatArtifactVersion.title,
             ChatArtifactVersion.thumbnail_file_id,
-            FileRecord.display_name,
+            func.coalesce(
+                ChatArtifact.name, FileRecord.display_name, ChatArtifactVersion.file_id
+            ).label("name"),
             FileRecord.file_type,
             FileRecord.file_size,
         )
@@ -1382,7 +1414,7 @@ def _published_file_view(row: Row) -> PublishedFileView:
         artifact_id=row.id,
         version=row.version,
         chat_id=row.chat_session_id,
-        name=row.display_name or row.file_id,
+        name=row.name,
         title=row.title,
         path=row.path,
         # A file without a recorded size shows as 0.
@@ -1427,14 +1459,13 @@ def _listable_chat(user_id: UUID) -> ColumnElement[bool]:
 
 
 def _listed_artifact(row: Row) -> ListedArtifact:
-    name = row.display_name or row.file_id
     return ListedArtifact(
         library_file_id=row.id,
         file_id=row.file_id,
         version_number=row.version,
-        file_name=name,
+        file_name=row.name,
         title=row.title,
-        artifact_type=artifact_type(name),
+        artifact_type=artifact_type(row.name),
         mime_type=row.file_type,
         # A file without a recorded size shows as 0.
         file_size_bytes=row.file_size or 0,
@@ -1467,7 +1498,7 @@ def get_user_published_files(
     other sorts read and sort all of the user's matching artifacts. An
     artifact that changes its sort key while the caller pages can move past
     the cursor or behind it. `name`, `size`, the type filters and `query` use
-    the newest available version. An entry's name, path and chat title are
+    the newest available version and the artifact's effective name. An entry's name, path and chat title are
     cut to their ARTIFACTS_*_MAX_CHARS, a path to its end. None when
     `chat_session_id` is not a listable chat of the user."""
     listable = _listable_chat(user_id)
@@ -1480,7 +1511,7 @@ def get_user_published_files(
     ):
         return None
     newest = _newest_available_version()
-    name = func.coalesce(newest.c.display_name, newest.c.file_id)
+    name = newest.c.name
     # The text after the last dot, as artifact_type reads it; NULL without one.
     extension = func.lower(func.substring(name, r"\.([^.]*)$"))
     key = {
@@ -1551,7 +1582,7 @@ def get_user_published_files(
     if query:
         statement = statement.where(
             or_(
-                newest.c.display_name.icontains(query, autoescape=True),
+                name.icontains(query, autoescape=True),
                 newest.c.title.icontains(query, autoescape=True),
                 ChatSession.description.icontains(query, autoescape=True),
             )

@@ -359,6 +359,29 @@ test("an older version's card opens that version in the artifact's tab, which sa
   expect(screen.queryByRole("tab", { name: /v\d of/ })).toBeNull();
 });
 
+test("a file tab takes the name that a reload lists after a rename, also on an older version", async () => {
+  const first = { ...reportVersion(1), title: null };
+  const second = { ...reportVersion(2), title: null };
+  renderChat([[first], [second]]);
+  applyLoad([second], [[first], [second]]);
+  update({ type: "openFile", file: second, pinned: false });
+  expect(screen.getByRole("tab", { name: "report.md" })).toBeVisible();
+
+  await act(async () => {
+    applyLoad([{ ...second, name: "summary.md" }], [[first], [second]]);
+  });
+  expect(screen.getByRole("tab", { name: "summary.md" })).toBeVisible();
+  expect(
+    screen.getByRole("region", { name: "Preview of summary.md" })
+  ).toBeInTheDocument();
+
+  update({ type: "openFile", file: first, pinned: true });
+  expect(
+    screen.getByRole("tab", { name: "summary.md (v1 of 2)" })
+  ).toBeVisible();
+  expect(screen.queryByRole("tab", { name: /report\.md/ })).toBeNull();
+});
+
 test("an open tab follows the newest version after a reload and a live publish; a pinned tab keeps its version", async () => {
   const first = reportVersion(1);
   renderChat([[first]]);

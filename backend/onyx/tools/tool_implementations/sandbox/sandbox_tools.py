@@ -21,6 +21,7 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolProgress,
 )
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.model_capabilities import is_claude_model
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
@@ -921,15 +922,8 @@ class LibraryManageLibraryTool(_LibraryTool, _FileTool):
             parsed = parse_tool_arguments(ManageLibraryArguments, arguments)
         except ToolCallException:
             return None
-        deletes = [
-            operation.target
-            for operation in parsed.operations
-            if operation.operation == "delete"
-        ]
-        return (
-            artifact_operations.delete_approval_details(self._turn.user_id, deletes)
-            if deletes
-            else None
+        return artifact_operations.delete_approval_details(
+            self._turn.user_id, parsed.operations
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
@@ -984,13 +978,34 @@ class ArtifactTool(_LibraryTool, _FileTool):
             return None
         return artifact_operations.delete_approval_details(
             self._turn.user_id,
-            [LibraryFileTarget(library_file_id=artifact_id, version_number=version)],
+            [
+                DeleteOperation(
+                    operation="delete",
+                    target=LibraryFileTarget(
+                        library_file_id=artifact_id, version_number=version
+                    ),
+                )
+            ],
         )
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:
         return CodeModeResultSpec(
             kind=CodeModeResultKind.JSON_OBJECT, returns=ARTIFACT_RESULTS
+        )
+
+    def _manage(
+        self, cancellation: CancellationSignal, operation: dict[str, JsonValue]
+    ) -> ToolResult:
+        """The result of one library_manage_library operation."""
+        return ToolResult(
+            content=artifact_operations.manage(
+                self._turn.user_id,
+                cancellation,
+                parse_tool_arguments(
+                    ManageLibraryArguments, {"operations": [operation]}
+                ),
+            ).model_dump_json()
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
@@ -1063,26 +1078,24 @@ class ArtifactTool(_LibraryTool, _FileTool):
                 content=ArtifactPublished.of(published).model_dump_json(),
                 details=PublishedFiles(files=published),
             )
-        if action == "delete":
-            if reference is None:
-                raise tool_error("delete takes url")
+        if reference is not None and action in ("delete", "rename"):
             artifact_id, version = reference
-            return ToolResult(
-                content=artifact_operations.manage(
-                    self._turn.user_id,
-                    invocation.cancellation,
-                    ManageLibraryArguments(
-                        operations=[
-                            DeleteOperation(
-                                operation="delete",
-                                target=LibraryFileTarget(
-                                    library_file_id=artifact_id, version_number=version
-                                ),
-                            )
-                        ]
-                    ),
-                ).model_dump_json()
+            operation: dict[str, JsonValue] = (
+                {
+                    "operation": "delete",
+                    "target": {
+                        "library_file_id": str(artifact_id),
+                        "version_number": version,
+                    },
+                }
+                if action == "delete"
+                else {
+                    "operation": "rename",
+                    "target": {"library_file_id": str(artifact_id)},
+                    "new_name": arguments.name,
+                }
             )
+            return self._manage(invocation.cancellation, operation)
         if action == "list":
             return ToolResult(
                 content=artifact_operations.list_artifacts(
