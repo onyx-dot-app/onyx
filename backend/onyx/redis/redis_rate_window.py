@@ -32,7 +32,8 @@ A window with a start share keeps its share past an idle time. It stores its
 share in Redis whenever the share changes, for STORED_SHARE_TTL_SECONDS. A
 window with no state, for example in a new run, starts from the stored share
 and grows slowly from it. With no stored share, it starts from its start
-share and grows with the recovery above.
+share, and that share is its ceiling. It also grows slowly, because a fast
+growth from a cold start passes the rate of the service in a few minutes.
 
 One try does a small, bounded amount of work, whatever the number of
 requests in the window. Each request in the log carries the units of the log
@@ -356,6 +357,11 @@ for i = 1, n do
       factor = start_share
       starts[i] = 2
       redis.call('HSET', meta, 'factor', tostring(factor), 'grown_at', now)
+      if factor < 1 then
+        -- The service accepted no share yet: the start share is the
+        -- ceiling, so the window grows slowly from it.
+        redis.call('HSET', meta, 'ceiling', tostring(factor))
+      end
     end
     redis.call('PEXPIRE', meta, math.max(period, meta_ttl))
   end
