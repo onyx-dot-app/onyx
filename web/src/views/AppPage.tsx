@@ -769,8 +769,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // While onboarding is open, the bottom row keeps the height it had when
   // onboarding appeared. New onboarding steps then grow upward instead of
   // moving the input down. The height is read once the rows stop sliding
-  // from the previous layout, which can leave the row empty.
-  const gridRef = useRef<HTMLDivElement>(null);
+  // from the previous layout, which can leave the row empty. The grid is
+  // state, so a grid that mounts later (after the no-agent modal) is measured.
+  const [grid, setGrid] = useState<HTMLDivElement | null>(null);
   const bottomRowRef = useRef<HTMLDivElement>(null);
   const [onboardingBottomRowPx, setOnboardingBottomRowPx] = useState<
     number | null
@@ -780,7 +781,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       setOnboardingBottomRowPx(null);
       return;
     }
-    const grid = gridRef.current;
     const row = bottomRowRef.current;
     if (onboardingBottomRowPx !== null || !grid || !row) return;
     const slides = grid.getAnimations();
@@ -795,7 +795,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [onboardingVisible, onboardingBottomRowPx]);
+  }, [onboardingVisible, onboardingBottomRowPx, grid]);
 
   // Handle error case where no agents are available.
   // Only show this after agents have loaded to prevent flash during initial load.
@@ -878,7 +878,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             >
               {/* Main content grid — 3 rows, animated */}
               <div
-                ref={gridRef}
+                ref={setGrid}
                 className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
                 style={gridStyle}
               >

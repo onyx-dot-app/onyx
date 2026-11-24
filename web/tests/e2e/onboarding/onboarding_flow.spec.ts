@@ -154,34 +154,48 @@ test.describe("Onboarding Flow @exclusive", () => {
     }) => {
       const client = new OnyxApiClient(page.request);
       const namePromptPage = new OnboardingNamePromptPage(page);
-      // The input's top once two readings in a row match, or NaN before that
-      let lastTop = Number.NaN;
-      const settledInputTop = async () => {
-        const top = await namePromptPage.chatInputTop();
-        const settled = top === lastTop;
-        lastTop = top;
-        return settled ? top : Number.NaN;
-      };
 
       const sessionId = await client.createChatSession("Onboarding return");
       try {
         // The user arrives after the first render
         await namePromptPage.gotoBeforeUserLoads();
         await expect(namePromptPage.namePrompt).toBeVisible();
-        await expect.poll(settledInputTop).not.toBeNaN();
-        const freshTop = lastTop;
+        const freshTop = await namePromptPage.settledChatInputTop();
 
         await namePromptPage.gotoChat(sessionId);
         // From the chat's layout, where the bottom row is empty
         await new AppSidebarPage(page).newSession();
         await expect(namePromptPage.namePrompt).toBeVisible();
-        lastTop = Number.NaN;
         await expect
-          .poll(async () => Math.abs((await settledInputTop()) - freshTop))
+          .poll(async () =>
+            Math.abs((await namePromptPage.chatInputTop()) - freshTop)
+          )
           .toBeLessThanOrEqual(2);
+        // Stops there instead of sliding through
+        expect(
+          Math.abs((await namePromptPage.settledChatInputTop()) - freshTop)
+        ).toBeLessThanOrEqual(2);
       } finally {
         await client.deleteChatSession(sessionId);
       }
+    });
+
+    test("a new step keeps the input in place after the agents load late", async ({
+      page,
+    }) => {
+      const namePromptPage = new OnboardingNamePromptPage(page);
+      // The page mounts only after a retry of the agents request
+      await namePromptPage.gotoAfterAgentsFail();
+      await expect(namePromptPage.onboardingHeader).toBeVisible();
+      const welcomeTop = await namePromptPage.settledChatInputTop();
+
+      await namePromptPage.onboardingHeader
+        .getByRole("button", { name: "Next" })
+        .click();
+      await expect(namePromptPage.nameStep).toBeVisible();
+      expect(
+        Math.abs((await namePromptPage.settledChatInputTop()) - welcomeTop)
+      ).toBeLessThanOrEqual(2);
     });
   });
 
