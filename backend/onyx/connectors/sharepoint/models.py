@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
+from onyx.connectors.microsoft_utils.models import SharepointSecurable
 from onyx.connectors.models import CheckRowText, ListingPayload
 
 
@@ -106,6 +107,15 @@ class SharepointListingPayload(ListingPayload):
     list_item_id: str | None = None
     # The file's ``parentReference.path``.
     parent_path: str | None = None
+    # The folder, library or site whose role assignments the file has, when
+    # the listing read that the file has none of its own. Conversion then
+    # gives the file the access of that securable. None, the safe value:
+    # the file gets a permission read of its own.
+    inherited_access_from: SharepointSecurable | None = None
+    # When the listing read the library that ``inherited_access_from`` comes
+    # from. Conversion reads the file's own permissions when this read is
+    # older than CONTAINER_ACCESS_TTL_SECONDS.
+    inheritance_read_at: datetime | None = None
     mime_type: str | None = None
     size: int | None = None
     last_modified_by_display_name: str | None = None

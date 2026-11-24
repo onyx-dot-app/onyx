@@ -722,6 +722,12 @@ class MockMicrosoftApi:
         routes: list[tuple[str, str, _RestHandler]] = [
             (r"web", "rest.web.get", self._rest_web),
             (r"web/roleassignments", "rest.role_assignments", self._rest_web_roles),
+            (r"web/lists/getbyid\('([^']+)'\)", "rest.list.get", self._rest_list),
+            (
+                r"web/lists/getbyid\('([^']+)'\)/items",
+                "rest.list.items",
+                self._rest_list_items,
+            ),
             (
                 r"web/lists/getbyid\('([^']+)'\)/roleassignments",
                 "rest.role_assignments",
@@ -1776,6 +1782,59 @@ class MockMicrosoftApi:
                     "Title": site.display_name,
                     "Url": site.web_url,
                     "ServerRelativeUrl": "/" + site.web_url.split("/", 3)[3],
+                    "HasUniqueRoleAssignments": True,
                 }
             },
         )
+
+    def _server_relative(self, drive: MockDrive, names: list[str]) -> str:
+        site_path = "/" + self.corpus.site_of(drive).web_url.split("/", 3)[3]
+        return "/".join([site_path, drive.url_name, *names])
+
+    def _rest_list(
+        self, _request: ApiRequest, site: MockSite, list_id: str
+    ) -> MockResponse:
+        """A library, with its root folder and its flag for role
+        assignments of its own."""
+        drive = self.corpus.drive_by_list_id(site, list_id)
+        if drive is None:
+            return rest_not_found("List does not exist.")
+        return json_response(
+            200,
+            {
+                "d": {
+                    "__metadata": {"type": "SP.List"},
+                    "Id": drive.list_id,
+                    "HasUniqueRoleAssignments": drive.unique_assignments is not None,
+                    "RootFolder": {
+                        "__metadata": {"type": "SP.Folder"},
+                        "ServerRelativeUrl": self._server_relative(drive, []),
+                    },
+                }
+            },
+        )
+
+    def _rest_list_items(
+        self, request: ApiRequest, site: MockSite, list_id: str
+    ) -> MockResponse:
+        """The files and folders of a library, with their paths and their
+        flag for role assignments of their own."""
+        drive = self.corpus.drive_by_list_id(site, list_id)
+        if drive is None:
+            return rest_not_found("List does not exist.")
+        rows: list[dict[str, Any]] = []
+        for item in self.corpus.drive_items(drive.id):
+            if item.is_root:
+                continue
+            names = self.corpus.path_names(item)
+            rows.append(
+                {
+                    "__metadata": {"type": "SP.ListItem"},
+                    "Id": item.list_item_id,
+                    "FSObjType": 1 if item.is_folder else 0,
+                    "FileRef": self._server_relative(drive, names),
+                    "FileDirRef": self._server_relative(drive, names[:-1]),
+                    "HasUniqueRoleAssignments": item.unique_assignments is not None,
+                }
+            )
+        return self._rest_page(request, rows)

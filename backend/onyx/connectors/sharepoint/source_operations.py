@@ -90,6 +90,7 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
 from onyx.connectors.microsoft_utils.models import (
     EntraMember,
     MicrosoftTokenInfo,
+    SharepointLibraryInheritance,
     SharepointPrincipal,
     SharepointRoleAssignment,
     SharepointSecurable,
@@ -730,6 +731,22 @@ class SharepointSourceOperations(SourceOperations):
         return self._reads().list_site_group_users(
             site_url=site_url, group_name=group_name, max_rows=max_rows
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Reads the items of a library over the REST context that "
+            "list_role_assignments uses, which the permission check reads. "
+            "A failure only makes each file read its own permissions."
+        ),
+    )
+    def get_library_inheritance(
+        self, *, site_url: str, list_id: str
+    ) -> SharepointLibraryInheritance:
+        """For each file and folder of the library, if it has role
+        assignments of its own. One read for each 5,000 items."""
+        return self._reads().get_library_inheritance(site_url=site_url, list_id=list_id)
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},

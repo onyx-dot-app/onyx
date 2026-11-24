@@ -22,6 +22,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
     parse_graph_datetime,
 )
+from onyx.connectors.microsoft_utils.models import SharepointSecurable
 from onyx.connectors.models import SlimDocumentStub
 from onyx.connectors.sharepoint.models import (
     SharepointListedKind,
@@ -89,6 +90,8 @@ def drive_item_stub(
     list_id: str | None,
     parent_hierarchy_raw_node_id: str,
     listing_run_id: str | None,
+    inherited_access_from: SharepointSecurable | None = None,
+    inheritance_read_at: datetime | None = None,
 ) -> SlimDocumentStub:
     encrypted_download_url = (
         _encrypt_download_url(item.download_url) if item.download_url else None
@@ -114,6 +117,8 @@ def drive_item_stub(
             list_id=list_id,
             list_item_id=item.list_item_id,
             parent_path=item.parent_reference_path,
+            inherited_access_from=inherited_access_from,
+            inheritance_read_at=inheritance_read_at,
             mime_type=item.mime_type,
             size=item.size,
             last_modified_by_display_name=item.last_modified_by_display_name,
