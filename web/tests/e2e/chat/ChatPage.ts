@@ -39,6 +39,7 @@ export class ChatPage {
   // Layout containers
   readonly container: Locator;
   readonly scrollContainer: Locator;
+  readonly composerRow: Locator;
 
   // Message collections. Only messages near the viewport are mounted, so
   // these hold the rendered ones, not the whole chat.
@@ -78,6 +79,7 @@ export class ChatPage {
     this.inputBar = new InputBar(page);
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
+    this.composerRow = page.getByTestId("app-composer-row");
     this.humanMessages = page.locator("#onyx-human-message");
     this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
@@ -790,7 +792,7 @@ export class ChatPage {
     await expect
       .poll(async () => {
         const conversation = await this.scrollContainer.boundingBox();
-        const composer = await this.inputBar.container.boundingBox();
+        const composer = await this.composerRow.boundingBox();
         const turn = await this.scrollContainer
           .locator("[data-chat-turn]")
           .last()

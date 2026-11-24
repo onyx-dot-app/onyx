@@ -1085,6 +1085,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 {/* ── Middle-center: AppInputBar ── */}
                 <div
                   ref={setComposerRow}
+                  data-testid="app-composer-row"
                   className={cn(
                     "row-start-2 col-start-1 flex flex-col items-center px-2 sm:px-4",
                     // Over the chat's scroll area, which keeps its scrollbar
