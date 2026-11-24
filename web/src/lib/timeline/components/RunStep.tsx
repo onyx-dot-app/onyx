@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { Line, type LineVariant } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
-import { HoistedStepHeader } from "@/lib/timeline/components/headers/HoistedStepHeader";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 import { STEP_ICONS } from "@/lib/timeline/icons";
@@ -84,7 +83,6 @@ export function RunStep({
   asCard = false,
 }: RunStepProps) {
   const [ownExpanded, setOwnExpanded] = useState(defaultExpanded);
-  const [headerHovered, setHeaderHovered] = useState(false);
   const shownTitle = status === "done" ? (doneTitle ?? title) : title;
 
   if (asCard) {
@@ -105,22 +103,18 @@ export function RunStep({
       : { expandable: false as const };
     return (
       <TimelineRoot>
-        {/* The header toggles the card and draws the chevron, so the card
-            has no click of its own. Filled while open or hovered. */}
+        {/* The card's own title: the step's icon and title, shimmering
+            while it runs. The header toggles the card, with a chevron; the
+            card fills while open or hovered. */}
         <Line
           flavour="card"
-          filled={ownExpanded || headerHovered}
+          icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
+          title={plainTitle}
+          shimmer={running}
+          filled={ownExpanded}
+          onClick={() => setOwnExpanded((prev) => !prev)}
           {...cardBody}
-        >
-          <HoistedStepHeader
-            icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
-            title={plainTitle}
-            shimmer={running}
-            open={ownExpanded}
-            onToggle={() => setOwnExpanded((prev) => !prev)}
-            onHoverChange={setHeaderHovered}
-          />
-        </Line>
+        />
       </TimelineRoot>
     );
   }

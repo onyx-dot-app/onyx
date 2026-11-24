@@ -178,6 +178,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         memoryId,
         memoryIndex,
       }}
+      // Each step renders as a hoisted step does, so a step looks the same
+      // in a collapsed run card as on its own.
       renderStep={(runStep, position) => (
         <ChatStep
           step={runStep.step}
@@ -186,6 +188,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           chatState={chatState}
           stopPacketSeen={stopPacketSeen}
           stopReason={stopReason}
+          asCard
         />
       )}
     />

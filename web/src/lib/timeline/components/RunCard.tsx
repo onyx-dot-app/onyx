@@ -9,12 +9,8 @@ import { useTranslations } from "next-intl";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
-import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
-import {
-  CompletedHeader,
-  MemoryTagWithTooltip,
-} from "@/lib/timeline/components/headers/CompletedHeader";
-import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
+import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import type {
   TimelineEntryStatus,
   TimelineStepPosition,
@@ -147,6 +143,17 @@ export function RunCard<S extends RunCardStep>({
   const visible = steps.length > 0 || isRunning;
   const foldable = steps.length > 0;
 
+  const headerTitle = isRunning
+    ? workingText
+    : stopped
+      ? t("interruptedThinking.label")
+      : (doneText ??
+        (finishedSeconds
+          ? t("thoughtDuration.label", {
+              duration: formatDurationSeconds(finishedSeconds),
+            })
+          : t("thoughtUnknownDuration.label")));
+
   return (
     <Presence show={visible} appear={arrivedLive} grow>
       <TimelineRoot>
@@ -223,27 +230,15 @@ export function RunCard<S extends RunCardStep>({
               ))}
             </Section>
           }
-        >
-          {/* The header swaps when the run's state changes: working,
-              stopped or done. While working, a new activity ("Thinking" to
-              "Searching...") updates the text in place, so the shimmer
-              never restarts. */}
-          <Presence.Swap
-            swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
-          >
-            {isRunning ? (
-              <StreamingHeader headerText={workingText} icon={icon} />
-            ) : stopped ? (
-              <StoppedHeader />
-            ) : (
-              <CompletedHeader
-                processingDurationSeconds={finishedSeconds}
-                text={doneText}
-                icon={icon}
-              />
-            )}
-          </Presence.Swap>
-        </Line>
+          // The card's own title, the same header a hoisted run card has.
+          // It swaps when the run's state changes (working, stopped, done);
+          // while working, a new activity updates the text in place, so the
+          // shimmer never restarts.
+          icon={stopped && !isRunning ? STEP_ICONS.stopped : icon}
+          title={headerTitle}
+          titleKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+          shimmer={isRunning}
+        />
       </TimelineRoot>
     </Presence>
   );

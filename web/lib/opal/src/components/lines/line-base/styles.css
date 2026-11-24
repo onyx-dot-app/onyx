@@ -44,6 +44,19 @@
   @apply text-text-04;
 }
 
+/* A card's own title (`title`): the icon box and the title inline, as
+   `Content` lays out an inline title, inset as a run card's title is. Its
+   icon takes the title's colour. */
+.opal-line-card-title {
+  @apply flex flex-row items-center gap-1 min-w-0;
+  margin: var(--padding-text-2) var(--padding-text-4);
+  --content-foreground-icon: currentColor;
+}
+.opal-line-card-title-text {
+  @apply block min-w-0;
+  padding-inline: 2px;
+}
+
 /* A card's header that toggles it darkens its title the same way. A title
    of your own takes `.opal-line-title` (an icon in it with `currentColor`
    follows). */
