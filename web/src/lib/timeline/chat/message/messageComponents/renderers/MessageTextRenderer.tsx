@@ -31,6 +31,7 @@ import { extractChatImageFileId } from "@/app/app/components/files/images/utils"
 import { useInResponse } from "@/lib/timeline/components/Response";
 import { ResponseCursorAnchor } from "@/lib/timeline/components/ResponseCursor";
 import { AnswerMarkdown } from "@/lib/answerText/components";
+import { prefersReducedMotion } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
@@ -250,7 +251,8 @@ export const MessageTextRenderer: MessageRenderer<
     animate &&
     !shouldUseAutoPlaybackSync &&
     stopReason !== StopReason.USER_CANCELLED &&
-    smoothStreamingEnabled;
+    smoothStreamingEnabled &&
+    !prefersReducedMotion();
 
   const isStreamFinished = isFinalAnswerComplete(packets);
 
