@@ -4736,18 +4736,26 @@ def _file_pages(data: bytes) -> list[SearchResult]:
 def _open_url_packets(parts: Sequence[object]) -> list[packets.PacketObj]:
     """The open_url card's packets and the citations of streamed parts or
     replayed packets. Replay sends saved documents, which add their row IDs;
-    the comparison keeps the fields that both have."""
+    the comparison keeps the fields that both have. A live call sends each
+    page as it opens, in no fixed order, and a replay sends them together, so
+    the pages are one packet, in document ID order."""
     objects: list[packets.PacketObj] = []
+    merged: packets.OpenUrlDocuments | None = None
     for part in parts:
         obj = part.obj if isinstance(part, packets.Packet) else part
         if isinstance(obj, packets.OpenUrlDocuments):
-            objects.append(
-                packets.OpenUrlDocuments(
-                    documents=[
+            if merged is None:
+                merged = packets.OpenUrlDocuments(documents=[])
+                objects.append(merged)
+            merged.documents = sorted(
+                [
+                    *merged.documents,
+                    *(
                         SearchDoc.model_validate(dict(document))
                         for document in obj.documents
-                    ]
-                )
+                    ),
+                ],
+                key=lambda document: document.document_id,
             )
         elif isinstance(
             obj, (packets.OpenUrlStart, packets.OpenUrlUrls, packets.CitationInfo)
@@ -4831,9 +4839,13 @@ def test_open_url_spills_whole_pages_and_the_model_keeps_excerpts_and_citations(
         for packet in live
         if isinstance(packet, packets.OpenUrlDocuments)
     ]
-    assert [document.match_highlights for document in documents] == [
-        [_excerpt(index, page)] for index, page in enumerate(pages, start=1)
-    ]
+    excerpts = {
+        WEB_SEARCH_PREFIX + page.url: [_excerpt(index, page)]
+        for index, page in enumerate(pages, start=1)
+    }
+    assert {
+        document.document_id: document.match_highlights for document in documents
+    } == excerpts
     [replayed] = chat.replayed(db_session)
     assert _open_url_packets(replayed) == live
 
