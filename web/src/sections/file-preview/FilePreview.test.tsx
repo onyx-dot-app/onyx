@@ -206,17 +206,18 @@ describe("text formats", () => {
     const view = renderPreview("page.html");
 
     const frame = await screen.findByTitle("page.html");
-    expect(frame).toHaveAttribute("sandbox", "allow-scripts");
+    expect(frame).toHaveAttribute("sandbox", "");
     // A fixed prologue carries the policy; the page follows unchanged
     const srcdoc = frame.getAttribute("srcdoc") ?? "";
     expect(srcdoc).toMatch(
       /^<!DOCTYPE html><meta http-equiv="Content-Security-Policy" content="default-src 'none';[^"]*form-action 'none'">/
     );
     expect(srcdoc.replace(/^<!DOCTYPE html><meta [^>]*>/, "")).toBe(html);
-    // Nothing loads from the network, so the page cannot send its contents out
-    expect(srcdoc.match(/^<!DOCTYPE html><meta [^>]*>/)?.[0]).not.toMatch(
-      /https?:/
-    );
+    // No script runs and nothing loads from the network, so the page cannot
+    // send its contents out
+    const prologue = srcdoc.match(/^<!DOCTYPE html><meta [^>]*>/)?.[0];
+    expect(prologue).toContain("script-src 'none'");
+    expect(prologue).not.toMatch(/https?:/);
     // The parser applies the policy whatever head-like text the file has
     const parsed = new DOMParser().parseFromString(
       srcdoc.replace(html, "<!-- <head> --><script>fetch('/x')</script>"),

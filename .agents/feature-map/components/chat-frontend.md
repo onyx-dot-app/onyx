@@ -502,14 +502,14 @@ A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
 the workbook, and an image or an unsupported file reads no body: the image
 loads from the file URL in an `<img>`. SVG loads as text, because the server
 serves it as `application/octet-stream`, and renders from a `data:` URL. HTML
-renders through `srcdoc` with `sandbox="allow-scripts"` and no
-`allow-same-origin`, so its scripts cannot reach Onyx's page, cookies or API.
-A fixed prologue (`<!DOCTYPE html>` and a CSP meta) that
-`sections/file-preview/FilePreview.tsx` puts before the file stops every
-network load: the page runs only its inline scripts and styles and its
-`data:`/`blob:` images, fonts and media, so it cannot send the file's contents
-to another site. A page that loads from a CDN shows without it. Decision: CDN
-loads come back only with a real browser surface for previews, not by
+renders through `srcdoc` with an empty `sandbox`: an opaque origin with no
+scripts, so it cannot reach Onyx's page, cookies or API, and the sandbox
+refuses a meta refresh. A fixed prologue (`<!DOCTYPE html>` and a CSP meta)
+that `sections/file-preview/FilePreview.tsx` puts before the file also sets
+`script-src 'none'` and stops every network load: the page shows only its
+inline styles and its `data:`/`blob:` images, fonts and media, so it cannot
+send the file's contents to another site. Scripted or CDN parts do not show. Decision: scripts
+and CDN loads come back only with a real browser surface for previews, not by
 loosening this policy; the page's CSP applies too. Other bodies
 are read up to the format's limit while they stream, because the server sends
 no length. Text over 200,000 characters shows without highlighting, and

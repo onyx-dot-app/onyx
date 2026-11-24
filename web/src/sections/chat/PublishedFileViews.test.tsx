@@ -145,7 +145,7 @@ test("a file's preview renders HTML in a sandboxed frame with its own actions", 
 
   const preview = screen.getByRole("region", { name: "Preview of Q3 report" });
   const frame = await within(preview).findByTitle("report.html");
-  expect(frame).toHaveAttribute("sandbox", "allow-scripts");
+  expect(frame).toHaveAttribute("sandbox", "");
   expect(frame.getAttribute("srcdoc")).toMatch(
     /^<!DOCTYPE html><meta http-equiv="Content-Security-Policy"[^>]*><h1>Quarterly report<\/h1>$/
   );
