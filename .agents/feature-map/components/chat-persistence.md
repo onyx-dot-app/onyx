@@ -126,7 +126,10 @@ GET /chat/get-chat-session/{id}
                                            then ID), with its artifact_id and
                                            version. The path comes from the
                                            artifact, the title from the
-                                           version. Versions whose object is
+                                           version, the name from the
+                                           subquery's effective name (a
+                                           rename's ChatArtifact.name, else
+                                           the file record's). Versions whose object is
                                            missing (file_size -1) are left out
   translate_assistant_message_to_packets   runtime rows: read_chat_execution,
                                            read_response_replay_data ->

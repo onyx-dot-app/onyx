@@ -105,16 +105,29 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   reloadFiles,
 }: ChatRightPanelProps) {
   const t = useTranslations("chat.rightPanel");
-  // Each tab's shown file and its artifact's newest version
-  const fileTabs = state.fileTabs.map(({ file, pinned }) => {
-    const newest = newestVersion(file, files);
-    return {
-      id: rightPanelFileTab(file),
-      file: pinned ? file : newest,
-      newest,
-      pinned,
-    };
-  });
+  // Each tab's shown file, with the name that the list gives its artifact,
+  // and the artifact's newest version
+  const fileTabs = useMemo(
+    () =>
+      state.fileTabs.map(({ file, pinned }) => {
+        const newest = newestVersion(file, files);
+        const shownVersion = pinned ? file : newest;
+        // A rename reaches the list, not the file that the tab opened with
+        const name =
+          files.find((listed) => artifactKey(listed) === artifactKey(file))
+            ?.name ?? file.name;
+        return {
+          id: rightPanelFileTab(file),
+          file:
+            shownVersion.name === name
+              ? shownVersion
+              : { ...shownVersion, name },
+          newest,
+          pinned,
+        };
+      }),
+    [state.fileTabs, files]
+  );
   const fileByTab = new Map(fileTabs.map((tab) => [tab.id, tab.file]));
   const shown =
     state.activeId === RIGHT_PANEL_SOURCES_TAB || fileByTab.has(state.activeId)
@@ -162,7 +175,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
         closable: true,
         movable: true,
       };
-      if (newest === file) return { ...tab, label: name };
+      if (newest.file_id === file.file_id) return { ...tab, label: name };
       const values = {
         name,
         version: file.version ?? 1,
