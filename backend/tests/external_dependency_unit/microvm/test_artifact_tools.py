@@ -84,10 +84,10 @@ from onyx.tools.tool_implementations.sandbox.models import (
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
+    LibraryCreateLibraryFileTool,
     LibraryListTool,
     LibraryPrepareMaterializeTool,
     LibraryReplaceLibraryFileTool,
-    PublishFilesTool,
     SandboxTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -163,7 +163,7 @@ def _chat(db_session: Session, owner: User, title: str = "A chat") -> UUID:
 
 
 def _publish(chat_session_id: UUID, name: str, data: bytes) -> str:
-    """The file ID of a file that publish_files saved in the chat."""
+    """The file ID of a file that a publish saved in the chat."""
     return save_chat_artifact(
         data,
         name=name,
@@ -1263,9 +1263,9 @@ def test_a_chat_lists_and_copies_files_published_in_other_chats(
         ChatLLM(
             [
                 tool_step(
-                    PublishFilesTool.NAME,
+                    LibraryCreateLibraryFileTool.NAME,
                     "publish",
-                    {"files": [{"path": "out/report.csv", "title": "Report"}]},
+                    {"file": "out/report.csv", "title": "Report"},
                 ),
                 Delta(content="Done."),
             ]
@@ -1290,8 +1290,8 @@ def test_a_chat_lists_and_copies_files_published_in_other_chats(
                 content=[
                     ToolCall(
                         id="child-publish",
-                        name=PublishFilesTool.NAME,
-                        arguments={"files": [{"path": "report-notes.md"}]},
+                        name=LibraryCreateLibraryFileTool.NAME,
+                        arguments={"file": "report-notes.md"},
                     )
                 ]
             )
@@ -1418,9 +1418,9 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
         if tool["function"]["name"] == "execute_code"
     ]
     assert (
-        "\n  - library: Find the files that you published in this chat and the "
-        "user's other chats, copy them into this chat, and add versions to "
-        "them.\n" in description
+        "\n  - library: Find the user's published files, copy them into this "
+        "chat and add versions to them; create a file here to give it to the "
+        "user.\n" in description
     )
     assert "library__prepare_materialize" not in description
     text = last_tool_text(llm, "code")
@@ -1428,6 +1428,33 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
     path = _landed(file_id, "report.csv")
     assert f"{path} written" in text
     assert _vm_file(node, chat.ref(db_session), path) == b"a,b\n"
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_program_finds_the_publish_tool_with_tool_search(
+    db_session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = ChatLLM(
+        [
+            code_step(
+                "code",
+                "matches = await tool_search('publish a file for the user')\n"
+                "print([match['name'] for match in matches][:3])\n",
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm, code_mode=True)
+
+    [description] = [
+        tool["function"]["description"]
+        for tool in llm.requests[0]["tools"]
+        if tool["function"]["name"] == "execute_code"
+    ]
+    assert "library__create_library_file" not in description
+    # It is among the three best matches.
+    assert "'library__create_library_file'" in last_tool_text(llm, "code")
 
 
 @pytest.mark.usefixtures("sandbox", "node")
@@ -1449,8 +1476,12 @@ def test_only_the_chats_owner_gets_the_sandbox_tools(
             ).send(llm)
             return {tool["function"]["name"] for tool in llm.requests[0]["tools"]}
 
-        assert {PublishFilesTool.NAME, LibraryListTool.NAME} <= offered(owned)
-        assert not {PublishFilesTool.NAME, LibraryListTool.NAME} & offered(ownerless)
+        assert {LibraryCreateLibraryFileTool.NAME, LibraryListTool.NAME} <= offered(
+            owned
+        )
+        assert not {LibraryCreateLibraryFileTool.NAME, LibraryListTool.NAME} & offered(
+            ownerless
+        )
     finally:
         db_session.rollback()
         db_session.execute(delete(ChatSession).where(ChatSession.id == ownerless))
@@ -1512,9 +1543,9 @@ class _Library(_Family):
         self, call_id: str, paths: list[str], title: str | None = None
     ) -> Delta:
         return tool_step(
-            PublishFilesTool.NAME,
+            LibraryCreateLibraryFileTool.NAME,
             call_id,
-            {"files": [{"path": path, "title": title} for path in paths]},
+            {"file": paths[0], "title": title} if len(paths) == 1 else {"files": paths},
         )
 
     def list(

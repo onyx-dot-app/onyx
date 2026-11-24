@@ -16,7 +16,9 @@ from onyx.tools.tool_implementations.sandbox.models import (
     PublishedFile,
     PublishedFiles,
 )
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import PublishFilesTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    LibraryCreateLibraryFileTool,
+)
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 
 
@@ -53,23 +55,22 @@ def test_a_title_is_stored_trimmed_without_nul_and_within_its_limit(
     )
     turn.sandbox.read_file.return_value = b"data"
 
-    result = PublishFilesTool(turn)._run(
-        ToolInvocation(
-            call_id="publish",
-            arguments={
-                "files": [
-                    {"path": "a.csv", "title": "Q3\u0000 report"},
-                    {"path": "b.csv", "title": "x" * 1000},
-                    {"path": "c.csv", "title": "\u0000"},
-                    {"path": "d.csv", "title": "  Summary  "},
-                    {"path": "e.csv", "title": " \t "},
-                ]
-            },
-            cancellation=CancellationSignal(),
-            update=lambda _progress: None,
-        ),
-        MagicMock(),
-    )
+    for path, title in (
+        ("a.csv", "Q3\u0000 report"),
+        ("b.csv", "x" * 1000),
+        ("c.csv", "\u0000"),
+        ("d.csv", "  Summary  "),
+        ("e.csv", " \t "),
+    ):
+        result = LibraryCreateLibraryFileTool(turn)._run(
+            ToolInvocation(
+                call_id="publish",
+                arguments={"file": path, "title": title},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            MagicMock(),
+        )
 
     expected = [
         "Q3 report",
@@ -120,21 +121,10 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
         None if path.endswith(".docx") else b"jpeg"
     )
 
-    result = PublishFilesTool(turn)._run(
+    result = LibraryCreateLibraryFileTool(turn)._run(
         ToolInvocation(
             call_id="publish",
-            arguments={
-                "files": [
-                    {"path": name}
-                    for name in (
-                        "a.pdf",
-                        "b.PPTX",
-                        "c.docx",
-                        "d.md",
-                        "big.pdf",
-                    )
-                ]
-            },
+            arguments={"files": ["a.pdf", "b.PPTX", "c.docx", "d.md", "big.pdf"]},
             cancellation=CancellationSignal(),
             update=lambda _progress: None,
         ),
@@ -208,12 +198,10 @@ def test_the_renders_of_a_call_share_one_budget(
     turn.sandbox.read_file.return_value = b"data"
     turn.sandbox.render_first_page.side_effect = render
 
-    PublishFilesTool(turn)._run(
+    LibraryCreateLibraryFileTool(turn)._run(
         ToolInvocation(
             call_id="publish",
-            arguments={
-                "files": [{"path": name} for name in ("a.pdf", "b.pptx", "c.docx")]
-            },
+            arguments={"files": ["a.pdf", "b.pptx", "c.docx"]},
             cancellation=CancellationSignal(),
             update=lambda _progress: None,
         ),
@@ -275,10 +263,10 @@ def test_a_failed_clean_up_keeps_the_stop_or_the_error_of_the_call(
     turn.sandbox.read_file.side_effect = read_file
 
     with pytest.raises(AgentCancelled if stopped else ToolCallException):
-        PublishFilesTool(turn)._run(
+        LibraryCreateLibraryFileTool(turn)._run(
             ToolInvocation(
                 call_id="publish",
-                arguments={"files": [{"path": "a.md"}, {"path": "b.md"}]},
+                arguments={"files": ["a.md", "b.md"]},
                 cancellation=signal,
                 update=lambda _progress: None,
             ),
@@ -327,10 +315,10 @@ def test_an_unexpected_save_failure_is_a_tool_error_and_cleans_up(
     turn.sandbox.read_file.return_value = b"data"
 
     with pytest.raises(ToolCallException, match="The publish failed; try again"):
-        PublishFilesTool(turn)._run(
+        LibraryCreateLibraryFileTool(turn)._run(
             ToolInvocation(
                 call_id="publish",
-                arguments={"files": [{"path": "a.md"}, {"path": "b.md"}]},
+                arguments={"files": ["a.md", "b.md"]},
                 cancellation=CancellationSignal(),
                 update=lambda _progress: None,
             ),

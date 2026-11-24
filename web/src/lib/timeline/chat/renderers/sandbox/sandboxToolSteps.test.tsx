@@ -1079,7 +1079,7 @@ test("published files show in the timeline and as download cards after the answe
   }
 });
 
-test("a publish_files call with invalid arguments still shows its step and error", async () => {
+test("a publishing call with invalid arguments still shows its step and error", async () => {
   const call = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([

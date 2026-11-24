@@ -93,7 +93,7 @@ RENDER_FIRST_PAGE_SUFFIXES = frozenset({".pdf", ".pptx", ".docx"})
 # Largest file that callers render, and largest JPEG that it reads back.
 RENDER_FIRST_PAGE_MAX_INPUT_BYTES = 20 << 20
 RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES = 4 << 20
-# The renders of one publish_files call end by this budget, which starts once
+# The renders of one publish call end by this budget, which starts once
 # the call has its sandbox. A file after it publishes without a thumbnail.
 RENDER_FIRST_PAGE_BUDGET_SECONDS = 30.0
 
@@ -350,7 +350,7 @@ class HarnessSandbox(abc.ABC):
     ) -> Generator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 
-    # Files: only what exec_command cannot do well. publish_files needs exact
+    # Files: only what exec_command cannot do well. A publish needs exact
     # bytes (exec output is text), and apply_patch needs exact writes of any
     # content (no shell quoting) and typed path facts. Paths are relative to
     # the session directory, or absolute inside it; read_file, write_file,

@@ -5721,7 +5721,7 @@ class FileContent(Base):
 
 
 class ChatArtifact(Base):
-    """A file that the model published from its sandbox (publish_files) into a
+    """A file that the model published from its sandbox (artifact_operations) into a
     root chat, across its versions (ChatArtifactVersion): every publish of one
     VM path in the chat. Its files inherit the chat's access, and a hard chat
     delete deletes them

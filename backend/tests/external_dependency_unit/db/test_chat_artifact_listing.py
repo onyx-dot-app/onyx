@@ -116,7 +116,7 @@ def _publish(
     published_at: datetime | None = None,
     thumbnail: bytes | None = None,
 ) -> PublishedFile:
-    """A file that publish_files saved for the chat at `path`, as the next
+    """A file that a publish saved for the chat at `path`, as the next
     publish, at a time after every earlier one unless `published_at`."""
     name = path.rsplit("/", 1)[-1]
     file = save_chat_artifact(

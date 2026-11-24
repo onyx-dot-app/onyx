@@ -1,20 +1,23 @@
 import base64
 import json
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel, JsonValue
 
 from onyx.agents.tools import ToolInvocation
+from onyx.chat.prompt_utils import build_system_prompt
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
-from onyx.tools.interface import parse_tool_arguments
-from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
 from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.models import (
@@ -45,10 +48,10 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     EditTool,
     ExecCommandTool,
+    LibraryCreateLibraryFileTool,
     LibraryListTool,
     LibraryPrepareMaterializeTool,
     LibraryReplaceLibraryFileTool,
-    PublishFilesTool,
     WriteStdinTool,
     WriteTool,
     sandbox_tools_for_model,
@@ -71,31 +74,13 @@ def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() 
         ExecCommandTool,
         WriteStdinTool,
         ApplyPatchTool,
-        PublishFilesTool,
+        LibraryCreateLibraryFileTool,
         LibraryListTool,
         LibraryPrepareMaterializeTool,
         LibraryReplaceLibraryFileTool,
     )
     shared = {ExecCommandTool, WriteStdinTool}
     assert not (set(claude) - shared) & (set(other) - shared)
-
-
-def test_code_mode_defers_the_artifact_tool_of_claude_models() -> None:
-    turn = MagicMock(spec=SandboxTurn)
-    turn.vm_chat_files = []
-    stubs = build_tool_stubs(
-        [tool(turn) for tool in sandbox_tools_for_model(["claude-sonnet-4-5"])]
-    )
-
-    assert stubs.deferred_namespaces == {
-        "artifact": "Give files from the VM to the user, and find and copy the "
-        "files published in this chat and the user's other chats."
-    }
-    assert [
-        name for name, function in stubs.functions.items() if function.deferred
-    ] == ["artifact__artifact"]
-    assert "artifact__" not in stubs.listed_text
-    assert "artifact(" not in stubs.listed_text
 
 
 def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
@@ -106,18 +91,19 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
     )
 
     assert stubs.deferred_namespaces == {
-        "library": "Find the files that you published in this chat and the "
-        "user's other chats, copy them into this chat, and add versions to them."
+        "library": "Find the user's published files, copy them into this chat "
+        "and add versions to them; create a file here to give it to the user."
     }
     assert {
         name for name, function in stubs.functions.items() if function.deferred
     } == {
+        "library__create_library_file",
         "library__list",
         "library__prepare_materialize",
         "library__replace_library_file",
     }
     assert "library__" not in stubs.listed_text
-    assert "def publish_files(" in stubs.listed_text
+    assert "create_library_file" not in stubs.listed_text
     assert stubs.tool_index is not None
     # The program gets the result as a typed dict.
     materialize = stubs.functions["library__prepare_materialize"]
@@ -125,6 +111,64 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
     assert any(
         "class MaterializedItem(TypedDict)" in declaration
         for declaration in materialize.declarations
+    )
+
+
+@pytest.mark.parametrize(
+    ("model", "group"), [("claude-sonnet-4-5", "artifact"), ("gpt-5.1", "library")]
+)
+def test_no_immediate_text_names_an_artifact_function_in_code_mode(
+    model: str, group: str
+) -> None:
+    """Every artifact function is deferred in its family's group: only the
+    deferred-groups note names the group, and no listed function, tool
+    description or system prompt names a function of it."""
+    turn = MagicMock(spec=SandboxTurn)
+    turn.vm_chat_files = []
+    tools: list[Tool] = [tool(turn) for tool in sandbox_tools_for_model([model])]
+    artifact_functions = [
+        tool for tool in tools if tool.code_mode_function_name.namespace == group
+    ]
+    assert artifact_functions
+    assert all(
+        tool.code_mode_exposure is CodeModeExposure.DEFERRED
+        for tool in artifact_functions
+    )
+    offered, _ = with_code_mode(tools)
+    # get_company_context reads the KV store.
+    with patch("onyx.chat.prompt_utils.get_company_context", return_value=None):
+        prompt = build_system_prompt("base", tools=offered, include_user_info=False)
+    immediate = [prompt, *(tool.tool_definition().description for tool in offered)]
+    assert any(f"\n  - {group}: " in text for text in immediate)
+    for tool in artifact_functions:
+        function = tool.code_mode_function_name
+        for name in {
+            tool.name,
+            f"{function.namespace}__{function.name}",
+            f"{function.namespace}.{function.name}",
+        } - {group}:
+            # A whole name: the note names the group, which the artifact
+            # tool's name is.
+            assert not any(
+                re.search(rf"\b{re.escape(name)}\b", text) for text in immediate
+            ), name
+
+
+def test_the_deferred_note_says_what_the_library_group_is_for() -> None:
+    turn = MagicMock(spec=SandboxTurn)
+    turn.vm_chat_files = []
+    offered, _ = with_code_mode(
+        [tool(turn) for tool in sandbox_tools_for_model(["gpt-5.1"])]
+    )
+    [description] = [
+        tool.tool_definition().description
+        for tool in offered
+        if tool.name == "execute_code"
+    ]
+    assert (
+        "\n  - library: Find the user's published files, copy them into this "
+        "chat and add versions to them; create a file here to give it to the "
+        "user.\n" in description
     )
 
 
@@ -537,4 +581,34 @@ def test_the_artifact_tool_refuses_arguments_that_do_not_fit_the_action(
     assert outcome.is_error
     if error is not None:
         assert outcome.content == error
+    turn.start_call.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("arguments", "error"),
+    [
+        ({}, "give exactly one of file and files"),
+        ({"file": "a.md", "files": ["b.md"]}, "give exactly one of file and files"),
+        ({"files": ["a.md"], "title": "A"}, "title goes with file"),
+        ({"files": []}, None),
+        ({"path": "a.md"}, None),
+    ],
+)
+def test_create_file_takes_one_file_or_several_without_starting_the_vm(
+    arguments: dict[str, JsonValue], error: str | None
+) -> None:
+    turn = MagicMock(spec=SandboxTurn)
+    outcome = LibraryCreateLibraryFileTool(turn).run(
+        ToolInvocation(
+            call_id="create",
+            arguments=arguments,
+            cancellation=CancellationSignal(),
+            update=lambda _progress: None,
+        ),
+        ToolContext(),
+    )
+    assert isinstance(outcome, ToolResult)
+    assert outcome.is_error
+    if error is not None:
+        assert error in outcome.content
     turn.start_call.assert_not_called()

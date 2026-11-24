@@ -57,7 +57,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.sandbox.models import PublishFileArgument
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
-    PublishFilesTool,
+    LibraryCreateLibraryFileTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
@@ -320,7 +320,9 @@ def test_image_failure_renders_error_at_tool_placement(display_error: bool) -> N
 def test_a_publish_with_invalid_arguments_renders_an_empty_publish_card(
     arguments: dict[str, JsonValue],
 ) -> None:
-    call = ModelToolCall(id="publish", name=PublishFilesTool.NAME, arguments=arguments)
+    call = ModelToolCall(
+        id="publish", name=LibraryCreateLibraryFileTool.NAME, arguments=arguments
+    )
     result = ToolResultMessage(
         tool_call_id=call.id,
         tool_name=call.name,

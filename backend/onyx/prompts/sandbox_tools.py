@@ -133,19 +133,19 @@ Usage:
 - Paths are relative to the chat session directory, or absolute inside it. To change files elsewhere, use exec_command.
 """
 
-PUBLISH_FILES_DESCRIPTION = f"""Gives files from the VM to the user. Each file shows as a download card in your reply.
+LIBRARY_CREATE_LIBRARY_FILE_DESCRIPTION = f"""Publishes files from the VM for the user: this is how a file you made reaches the user. Each file shows as a download card in your reply.
 
 Usage:
 - Make and check files anywhere in the VM. Publish only finished deliverables, not drafts, scripts or intermediate files.
-- Each path must be a regular file of at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Copy a file from elsewhere into the working directory first.
-- One call publishes at most {PUBLISH_FILES_MAX_FILES} files. If one file fails, the call publishes none.
-- Publishing the same path again adds a new version of that file; earlier cards keep their version.
+- `file` is one file, with an optional `title`; `files` is up to {PUBLISH_FILES_MAX_FILES} files instead. Each must be a regular file of at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Copy a file from elsewhere into the working directory first.
+- If one file fails, the call publishes none.
+- Publishing the same path again adds a new version of that file; earlier cards keep their version. To add a version to a file of another chat, use library_replace_library_file.
 - Do not paste the contents of a published file into your reply.
 - Do not tell the user that a file is available unless this tool succeeded.
-- Files published earlier, in this chat and in the user's other chats, can be found and copied into the VM with the library tools.
+- Files published earlier, in this chat and in the user's other chats, can be found with library_list and copied into the VM with library_prepare_materialize.
 """
 
-LIBRARY_LIST_DESCRIPTION = """Lists the files that were published with publish_files in the user's chats, this chat included: the newest version of each file. By default, the most recently published come first.
+LIBRARY_LIST_DESCRIPTION = """Lists the files published in the user's chats, this chat included: the newest version of each file. By default, the most recently published come first.
 
 Usage:
 - `sort` orders by first publish (created_at), latest publish (modified_at), file name or size; `sort_order` is asc or desc.
@@ -157,7 +157,7 @@ Usage:
 LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION = f"""Copies published files from the user's chats into this chat's working directory. The call ends when the copies are done, and gives each item's path and status.
 
 Usage:
-- Each item takes a `file_id` (that version), from library_list or a publish_files result, or a `library_file_id` (its newest version), from library_list.
+- Each item takes a `file_id` (that version) or a `library_file_id` (its newest version), from library_list or a library_create_library_file result.
 - By default, a copy goes to {ARTIFACT_FILES_DIR}/<short file ID>-<name>, and a second copy of the same file uses the one that is there. `destination.directory`, an item's `relative_directory` and `file_name` choose another place and name in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/.
 - `destination.conflict_policy` applies to every copy except one to the default {ARTIFACT_FILES_DIR}/<short file ID>-<name>. It decides what happens when a file is already there: dedupe (the default) adds " (N)" to the name, overwrite replaces it, error fails the item. Under every policy, a copy to the default {ARTIFACT_FILES_DIR}/<short file ID>-<name> uses the file that is there when its size matches, and writes it again otherwise.
 - One call copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files. A failed item does not stop the others.
@@ -167,7 +167,7 @@ Usage:
 LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION = f"""Adds a version to a published file of the user's chats, this chat included, from a file in the VM. The file keeps its name, type and place in its chat; earlier versions and their cards stay.
 
 Usage:
-- `library_file_id` is from library_list. `file` is the new content, at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}, with the published file's extension. For a file of another type, publish a new file instead.
+- `library_file_id` is from library_list or a library_create_library_file result. `file` is the new content, at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}, with the published file's extension. For a file of another type, publish a new file instead.
 - Pass the version_number that you last read as `expected_current_version`. If the file has a newer version, the call fails and changes nothing: copy the newest version with library_prepare_materialize, merge your change, and replace again.
 - The user sees a download card for the new version. `title` defaults to the current version's title.
 """

@@ -1121,7 +1121,7 @@ describe("packetProcessor", () => {
       mime_type: "text/csv",
     });
 
-    test("collects every publish_files result once per file", () => {
+    test("collects every publishing call's result once per file", () => {
       const state = createInitialState(1);
       const packets = [
         createPacket(
@@ -1138,7 +1138,7 @@ describe("packetProcessor", () => {
         createPacket(
           PacketType.CODE_MODE_START,
           { turn_index: 1 },
-          { code: "await publish_files(files=[...])" }
+          { code: "await library__create_library_file(files=[...])" }
         ),
         createPacket(
           PacketType.PUBLISH_FILES_END,

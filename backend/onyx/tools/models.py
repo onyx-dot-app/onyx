@@ -431,7 +431,7 @@ class ToolCallInfo(BaseModel):
     generated_files: list[PythonExecutionFile] | None = None
     # File-store ids of blobs custom tools saved during the call.
     generated_file_ids: list[str] | None = None
-    # Files that publish_files copied from the sandbox during the call.
+    # Files that the call published from the sandbox.
     published_files: list[PublishedFile] | None = None
 
     @property

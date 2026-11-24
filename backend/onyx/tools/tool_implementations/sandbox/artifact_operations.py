@@ -1,6 +1,6 @@
 """The operations over the user's published files (artifacts) that both
-tool families run: the library tools and publish_files, and the artifact
-tool (sandbox_tools.py). Each takes the library tools' argument model, runs
+tool families run: the library tools and the artifact tool
+(sandbox_tools.py). Each takes the library tools' argument model, runs
 one operation and returns its typed result; errors that the model can act
 on are ToolCallExceptions (errors.py:artifact_errors)."""
 
@@ -177,7 +177,7 @@ def publish(
             delete_unpublished_chat_artifacts(published)
         except Exception:
             logger.warning(
-                "publish_files_cleanup_failed files=%s",
+                "artifact_publish_cleanup_failed files=%s",
                 [file.file_id for file in published],
                 exc_info=True,
             )
