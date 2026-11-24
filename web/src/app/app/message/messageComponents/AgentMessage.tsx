@@ -697,17 +697,27 @@ const AgentMessage = React.memo(function AgentMessage({
                             awaitingUser === null &&
                             !(isLastSection && codeModeWorking)
                           ) {
+                            // After images, the trailing cursor is the one.
                             const working =
                               isLastSection &&
                               !stopPacketSeen &&
-                              !segments.some((s) => s.kind === "text");
+                              !segments.some((s) => s.kind === "text") &&
+                              !endsWithRun(segments);
                             return working ? responseCursorItem() : null;
                           }
                           const isLiveRun =
                             segments.findLastIndex((s) => s.kind === "run") ===
                             index;
                           if (!isLiveRun) {
-                            // A run that text follows has settled.
+                            // A run that text follows has settled. A run that
+                            // an image split off can still have a running
+                            // parallel step, which keeps its own status; only
+                            // the live run's header works.
+                            const settled =
+                              !isLastSection ||
+                              segments
+                                .slice(index + 1)
+                                .some((s) => s.kind === "text");
                             return {
                               kind: "run",
                               key: `run-${segment.key}`,
@@ -715,7 +725,7 @@ const AgentMessage = React.memo(function AgentMessage({
                                 <AgentTimeline
                                   turnGroups={segment.turnGroups}
                                   chatState={effectiveChatState}
-                                  stopPacketSeen
+                                  stopPacketSeen={stopPacketSeen || settled}
                                   hasDisplayContent
                                   finalAnswerComing
                                 />
@@ -812,7 +822,11 @@ export default AgentMessage;
 function endsWithRun(segments: SectionSegment[]): boolean {
   // Auth cards that arrive before the answer sit after the run; the run
   // still ends the section, so the cursor keeps its slot under them.
-  const last = segments.findLast((s) => s.kind !== "extras");
+  // An empty run renders nothing once text or images precede it.
+  const last = segments.findLast(
+    (s) =>
+      s.kind !== "extras" && !(s.kind === "run" && s.turnGroups.length === 0)
+  );
   return (
     last?.kind === "images" ||
     (last?.kind === "run" && last.turnGroups.length > 0)
