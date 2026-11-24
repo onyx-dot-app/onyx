@@ -441,35 +441,55 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## Builds and releases
 
-`.github/workflows/desktop-v2.yml`:
+Pull requests (`.github/workflows/desktop.yml`):
 
-- On pull requests that touch `desktop-v2/`, CI runs the checks and builds an unsigned
+- On pull requests that touch `desktop/`, CI runs the checks and builds an unsigned
   universal (Apple silicon and Intel) DMG as a workflow artifact for reviewers. macOS blocks
   an unsigned app on first launch: right-click it, choose **Open**, then **Open** again.
 - The same pull requests also run the checks on Windows and Linux, and build unsigned x64
-  installers as artifacts: NSIS (`.exe`) and MSI on Windows, AppImage and `.deb` on Linux.
-  These installers are not signed. They are for review only, not for customers. Their version
+  installers as artifacts: NSIS (`.exe`) and MSI on Windows, AppImage, `.deb` and `.rpm` on
+  Linux. These installers are for review only, not for customers. Their version
   has the workflow run number as build metadata (for example `0.1.0+454`), so the About dialog,
   the package and the installed programs list tell builds apart. Each one has
   a GitHub build provenance attestation (`gh attestation verify <file> --repo
   onyx-dot-app/onyx`). Pull requests from forks get no installer artifacts.
-- Run the workflow by hand on `main` with a version (for example `0.2.0`) to publish a signed
-  and notarized universal DMG, its update archive and `latest.json`. They go to a GitHub
-  pre-release tagged `desktop-v2-v<version>`, which is never marked as the latest release, so
-  v1's downloads and auto-update are not affected. Releases are macOS only for now. The job
-  gets the signing secrets only after the JavaScript build, and only in its signing step.
+
+Releases (`build-desktop` and `publish-desktop-update-feed` in
+`.github/workflows/deployment.yml`): each version tag that is not a beta or cloud tag builds
+the app with the version of
+the tag (Windows drops a pre-release suffix, because MSI versions are numbers only) and uploads
+it to the draft GitHub release of that tag. The asset names are `[name]_[arch][ext]`:
+
+| Platform | Assets |
+|---|---|
+| macOS (universal) | `Onyx_universal.dmg`, `Onyx_universal.app.tar.gz` (update archive) |
+| Windows x64 | `Onyx_x64.exe` (NSIS), `Onyx_x64.msi` |
+| Windows arm64 | `Onyx_arm64.exe` (NSIS) |
+| Linux x64 | `Onyx_amd64.deb`, `Onyx_x86_64.rpm`, `Onyx_amd64.AppImage` |
+| Linux arm64 | `Onyx_arm64.deb`, `Onyx_aarch64.rpm` |
+
+Each update archive and installer that the updater can use has a `.sig` file. Linux builds run on
+Ubuntu 22.04 (x64 and arm64) and fail if a file needs a glibc newer than 2.35. The macOS build is
+signed and notarized with the Apple secrets. The secrets come from AWS Secrets Manager only after
+the JavaScript build, and that build does not run again in the Tauri build
+(`beforeBuildCommand` is null in the release config). After all builds succeed,
+`publish-desktop-update-feed` writes one `latest.json` for all platforms and uploads it to the
+same release. See [Auto-update](#auto-update).
+
+`.github/workflows/desktop-downloads.yml` (weekly, or by hand) writes the download counts of the
+desktop assets of every release to its job summary.
 
 ### Windows code signing
 
 The Windows installers and the app are not Authenticode-signed yet, so SmartScreen shows
-"Unknown publisher". The Windows build step in `desktop-v2.yml` has a hook for it: when the
-repository variable `DESKTOP_V2_WINDOWS_SIGN_COMMAND` is set, the build passes it to Tauri as
+"Unknown publisher". The release build (`build-desktop`) has a hook for it: when the
+repository variable `DESKTOP_WINDOWS_SIGN_COMMAND` is set, the build passes it to Tauri as
 `bundle.windows.signCommand`. Tauri then runs the command for each file it signs (the app, the
 NSIS uninstaller, the NSIS installer and the MSI) and puts the file path in place of `%1`. Tauri
 splits the command at spaces, so a path in it cannot contain a space. A later step then fails
 the build if one of the installers, or the app inside the MSI or the NSIS installer, has no
 valid signature. Tauri restores the unsigned app in `target/release` after it packages each
-installer, so that copy is not checked.
+installer, so that copy is not checked. Pull request builds are never signed.
 
 Release engineering must supply:
 
@@ -480,10 +500,7 @@ Release engineering must supply:
   `trusted-signing-cli -e <endpoint> -a <account> -c <profile> -d "Onyx" %1`, and the tool
   it calls, installed in the job.
 - The credentials for that command. Prefer short-lived OIDC credentials (the job already has
-  `id-token: write`) over a stored secret.
-- A decision about where to sign. Today the hook is in the pull request job, which runs branch
-  code. To sign only releases, add a Windows job to the protected `release` environment and
-  move the hook there.
+  `id-token: write` and runs in the protected `release` environment) over a stored secret.
 - The publisher name. `tauri.windows.conf.json` sets `bundle.publisher` to `Onyx`. Make it
   agree with the certificate's subject name.
 
@@ -521,8 +538,8 @@ How the app differs from macOS:
 - On Linux the main window lets the page write the clipboard after a request finishes (for
   example **Create Share Link**). Reading the clipboard still needs a paste. The text context
   menu shows WebKit's standard items only.
-- No auto-update: the update feed has macOS builds only, so the app does not check for updates
-  and has no **Check for Updates…** item. Install a new version by hand.
+- No auto-update yet: the app does not check for updates and has no **Check for Updates…**
+  item. Install a new version by hand.
 - The session cookie goes in through wry's cookie API. Its domain has no leading dot, so
   WebView2 and WebKitGTK keep it host-only, as macOS does. WebView2 and WebKitGTK show
   `alert()`, `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
@@ -636,11 +653,16 @@ also check the version in the signature, so a changed feed cannot offer an old s
 under a new version number.
 The managed `DisableAutoUpdate` key turns off all checks.
 
-- The feed (`plugins.updater.endpoints`) must be HTTPS. It points at a feed that does not exist
-  yet, so checks fail quietly until the feed is set up.
-- The public key in `tauri.conf.json` is a development key. Before the first release, create
-  the release key pair, put the public key here and the private key in CI's secrets. If that
-  private key is lost, installed apps can never update again.
+- The feed (`plugins.updater.endpoints`) is
+  `https://github.com/onyx-dot-app/onyx/releases/latest/download/latest.json`: the
+  `latest.json` of the release that is marked as the latest on GitHub. A draft release or a
+  pre-release is never offered.
+- `latest.json` also has `windows-x86_64`, `windows-aarch64` (the NSIS installers) and
+  `linux-x86_64` (the AppImage) entries, but Windows and Linux builds do not check for updates
+  yet.
+- CI signs the update archives with the private key in AWS Secrets Manager
+  (`deploy/desktop-v2-updater-private-key` and its password). It must be the pair of the public
+  key in `tauri.conf.json`. If that private key is lost, installed apps can never update again.
 
 To test an update end to end on one Mac, make a key pair with `bun run tauri signer generate`,
 then build an old and a new version with a config overlay that points the feed at a local
@@ -705,7 +727,7 @@ stderr. If the folder cannot be written, the app runs without a log.
   callback. The preview build (`app.onyx.desktop.v2`, "Onyx v2") also registers the `onyx://`
   scheme; with both apps installed, macOS sends the sign-in link to whichever app registered it
   last. Uninstall the preview build.
-- Windows and Linux are a preview: no signed builds, no auto-update feed, and no QA harness
+- Windows and Linux: no Authenticode signature yet, no auto-update, and no QA harness
   input (it posts AppKit events). Aonyx is a plain always-on-top window there, so clicking it
   can take focus from the app you are in.
 - On Windows, if the launcher opens while another app holds the foreground lock, Windows can
