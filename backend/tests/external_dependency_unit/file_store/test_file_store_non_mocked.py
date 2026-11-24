@@ -3,18 +3,21 @@ import time
 import uuid
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import AbstractContextManager
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, TypedDict, cast
 from unittest.mock import patch
 
 import pytest
 from botocore.exceptions import ClientError
+from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import QueuePool
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.file_store.file_store import S3BackedFileStore
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.file_store.file_store import S3BackedFileStore, record_uploaded_object
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -1180,3 +1183,48 @@ class TestS3BackedFileStore:
         file_size = file_store.get_file_size(nonexistent_file_id)
 
         assert file_size is None
+
+
+@pytest.mark.usefixtures("db_session", "tenant_context")
+def test_a_failed_record_commit_lets_the_callers_connection_go_before_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cleanup after a failed commit takes a connection of its own, so the
+    caller's session gives its connection back first: an exhausted pool
+    cannot keep the cleanup from deleting the object."""
+    pool = SqlEngine.get_engine().pool
+    assert isinstance(pool, QueuePool)
+    checked_out_at_cleanup: list[int] = []
+    cleanup_session = get_session_with_current_tenant
+
+    def counted_cleanup_session() -> AbstractContextManager[Session]:
+        checked_out_at_cleanup.append(pool.checkedout())
+        return cleanup_session()
+
+    def fail(_session: Session) -> None:
+        raise RuntimeError("the caller's commit check failed")
+
+    monkeypatch.setattr(
+        "onyx.file_store.file_store.get_session_with_current_tenant",
+        counted_cleanup_session,
+    )
+    deleted: list[str] = []
+    object_key = f"orphan-{uuid.uuid4()}"
+    checked_out = pool.checkedout()
+    with get_session_with_current_tenant() as db_session:
+        event.listen(db_session, "before_commit", fail, once=True)
+        with pytest.raises(RuntimeError):
+            record_uploaded_object(
+                file_id=f"{uuid.uuid4()}.txt",
+                display_name=None,
+                file_origin=FileOrigin.OTHER,
+                file_type="text/plain",
+                file_metadata=None,
+                file_size=1,
+                bucket_name="bucket",
+                object_key=object_key,
+                db_session=db_session,
+                delete_object=lambda: deleted.append(object_key),
+            )
+    assert checked_out_at_cleanup == [checked_out]
+    assert deleted == [object_key]

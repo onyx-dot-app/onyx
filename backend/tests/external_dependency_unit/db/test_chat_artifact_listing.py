@@ -4,12 +4,15 @@ available version of each artifact, each sort and its cursor, the filters,
 the query match, and the scope of the user's own root chats that are not
 deleted."""
 
+import contextvars
+import threading
 from datetime import datetime, timedelta, timezone
 from itertools import count, product
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
@@ -35,22 +38,33 @@ from onyx.file_store.file_store import (
     get_default_file_store,
 )
 from onyx.file_store.utils import save_chat_output_file
+from onyx.llm.cancellation import CancellationSignal
 from onyx.server.features.build.sandbox.harness_base import chat_file_name
-from onyx.server.features.build.sandbox.models import session_workspace
+from onyx.server.features.build.sandbox.models import (
+    HarnessSandboxRef,
+    session_workspace,
+)
 from onyx.server.query_and_chat.chat_backend import get_chat_artifact
 from onyx.server.query_and_chat.models import ChatArtifactFile
+from onyx.tools.models import ToolCallException
+from onyx.tools.tool_implementations.sandbox.artifact_operations import replace_file
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_CHAT_TITLE_MAX_CHARS,
     ARTIFACTS_NAME_MAX_CHARS,
     ARTIFACTS_PATH_MAX_CHARS,
+    ArtifactAtPath,
+    ArtifactById,
     ArtifactCursor,
     ArtifactSort,
+    ArtifactVersionConflict,
     LibraryListFilters,
+    LibraryReplaceLibraryFileArguments,
     ListedArtifact,
     PublishedFile,
     SortOrder,
     artifact_url,
 )
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from tests.external_dependency_unit.conftest import MakeTestUser
 
 pytestmark = pytest.mark.usefixtures("tenant_context", "initialize_file_store")
@@ -109,8 +123,7 @@ def _publish(
         name.encode(),
         name=name,
         mime_type="text/plain",
-        chat_session_id=chat.id,
-        path=path,
+        target=ArtifactAtPath(chat_session_id=chat.id, path=path),
         title=title,
         thumbnail=thumbnail,
     )
@@ -622,8 +635,7 @@ def test_a_later_publish_never_moves_the_latest_publish_back(
         b"again",
         name="a.md",
         mime_type="text/plain",
-        chat_session_id=chat.id,
-        path="/w/a.md",
+        target=ArtifactAtPath(chat_session_id=chat.id, path="/w/a.md"),
         title=None,
         thumbnail=None,
     )
@@ -712,3 +724,192 @@ def test_the_artifact_route_says_how_each_user_may_open_a_version(
     db_session.commit()
     assert opened(owner) is None
     assert opened(other, 1) is None
+
+
+def test_concurrent_replaces_take_turns_and_a_stale_one_keeps_nothing(
+    db_session: Session, owner: User
+) -> None:
+    """Replaces of one artifact wait on its row lock: each gets the next
+    version, and of two that expect the same version, one fails without a
+    file record."""
+    chat = _chat(db_session, owner)
+    first = _publish(db_session, chat, "/w/a.md")
+    artifact_id = first.artifact_id
+    assert artifact_id is not None
+
+    def replace_twice(expected: int | None) -> list[int | str]:
+        barrier = threading.Barrier(2)
+        outcomes: list[int | str] = []
+
+        def replace() -> None:
+            barrier.wait()
+            try:
+                saved = save_chat_artifact(
+                    b"next",
+                    name="ignored.md",
+                    mime_type="text/plain",
+                    title=None,
+                    thumbnail=None,
+                    target=ArtifactById(artifact_id=artifact_id),
+                    expected_version=expected,
+                )
+                outcomes.append(saved.version or 0)
+            except ArtifactVersionConflict as error:
+                outcomes.append(f"conflict at {error.current_version}")
+
+        threads = [
+            threading.Thread(target=contextvars.copy_context().run, args=(replace,))
+            for _ in range(2)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        return sorted(outcomes, key=str)
+
+    assert replace_twice(None) == [2, 3]
+    records = db_session.scalars(select(func.count(FileRecord.file_id))).one()
+    assert replace_twice(3) == [4, "conflict at 4"]
+    db_session.expire_all()
+    assert db_session.scalars(select(func.count(FileRecord.file_id))).one() == (
+        records + 1
+    )
+    versions = db_session.scalars(
+        select(ChatArtifactVersion.version).where(
+            ChatArtifactVersion.artifact_id == artifact_id
+        )
+    ).all()
+    assert sorted(versions) == [1, 2, 3, 4]
+
+
+def test_the_expected_version_is_the_newest_available_one(
+    db_session: Session, owner: User
+) -> None:
+    """The check reads the version that the model sees: a newest version
+    whose object is gone does not count. The new version still follows the
+    highest number."""
+    chat = _chat(db_session, owner)
+    _publish(db_session, chat, "/w/a.md")
+    gone = _publish(db_session, chat, "/w/a.md")
+    artifact_id = gone.artifact_id
+    assert artifact_id is not None
+    db_session.execute(
+        update(FileRecord)
+        .where(FileRecord.file_id == gone.file_id)
+        .values(file_size=FILE_SIZE_MISSING_SENTINEL)
+    )
+    db_session.commit()
+
+    def save(expected: int) -> PublishedFile:
+        return save_chat_artifact(
+            b"next",
+            name="a.md",
+            mime_type="text/plain",
+            title=None,
+            thumbnail=None,
+            target=ArtifactById(artifact_id=artifact_id),
+            expected_version=expected,
+        )
+
+    with pytest.raises(ArtifactVersionConflict) as conflict:
+        save(2)
+    assert conflict.value.current_version == 1
+    assert save(1).version == 3
+
+
+def test_a_replace_without_a_title_keeps_a_title_published_during_it(
+    db_session: Session, owner: User
+) -> None:
+    """A replace with no title takes the newest version's title when it
+    saves, so a new title that another chat publishes while the replace
+    reads its file stays. The version names the artifact's chat, not the
+    replacing one."""
+    owning_chat = _chat(db_session, owner)
+    first = _publish(db_session, owning_chat, "/w/a.md", "Old")
+    artifact_id = first.artifact_id
+    assert artifact_id is not None
+
+    def read_during_a_retitle(*_args: object, **_kwargs: object) -> bytes:
+        save_chat_artifact(
+            b"retitled",
+            name="a.md",
+            mime_type="text/plain",
+            title="New",
+            thumbnail=None,
+            target=ArtifactById(artifact_id=artifact_id),
+        )
+        return b"replaced"
+
+    turn = MagicMock(spec=SandboxTurn)
+    turn.user_id = owner.id
+    turn.start_call.return_value = HarnessSandboxRef(
+        tenant_id="tenant",
+        sandbox_id=uuid4(),
+        session_id=_chat(db_session, owner).id,
+    )
+    turn.sandbox.read_file.side_effect = read_during_a_retitle
+
+    replaced = replace_file(
+        turn,
+        CancellationSignal(),
+        LibraryReplaceLibraryFileArguments(library_file_id=artifact_id, file="a.md"),
+    )
+
+    assert (replaced.version, replaced.title, replaced.chat_id) == (
+        3,
+        "New",
+        owning_chat.id,
+    )
+    assert (
+        db_session.scalar(
+            select(ChatArtifactVersion.title).where(
+                ChatArtifactVersion.file_id == replaced.file_id
+            )
+        )
+        == "New"
+    )
+
+
+def test_a_replace_into_a_chat_deleted_during_it_writes_no_version(
+    db_session: Session, owner: User
+) -> None:
+    """The artifact's chat is checked under the row lock: a chat deleted
+    while the replace reads its file gets the not-found error and no
+    version."""
+    owning_chat = _chat(db_session, owner)
+    first = _publish(db_session, owning_chat, "/w/a.md")
+    artifact_id = first.artifact_id
+    assert artifact_id is not None
+
+    def read_during_a_delete(*_args: object, **_kwargs: object) -> bytes:
+        db_session.execute(
+            update(ChatSession)
+            .where(ChatSession.id == owning_chat.id)
+            .values(deleted=True)
+        )
+        db_session.commit()
+        return b"replaced"
+
+    turn = MagicMock(spec=SandboxTurn)
+    turn.user_id = owner.id
+    turn.start_call.return_value = HarnessSandboxRef(
+        tenant_id="tenant",
+        sandbox_id=uuid4(),
+        session_id=_chat(db_session, owner).id,
+    )
+    turn.sandbox.read_file.side_effect = read_during_a_delete
+
+    with pytest.raises(ToolCallException, match="No published file"):
+        replace_file(
+            turn,
+            CancellationSignal(),
+            LibraryReplaceLibraryFileArguments(
+                library_file_id=artifact_id, file="a.md"
+            ),
+        )
+
+    assert db_session.scalars(
+        select(ChatArtifactVersion.version).where(
+            ChatArtifactVersion.artifact_id == artifact_id
+        )
+    ).all() == [1]

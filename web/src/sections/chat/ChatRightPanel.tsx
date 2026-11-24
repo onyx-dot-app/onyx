@@ -621,7 +621,7 @@ export function openPublishedFileInChat(
 }
 
 /** The open chat's right panel, for a reply's file cards. */
-export const CHAT_FILES_PANEL: PublishedFilesPanel = {
+export const CHAT_FILES_PANEL: Omit<PublishedFilesPanel, "chatId"> = {
   openFile: openPublishedFileInChat,
   showFiles: () =>
     useChatSessionStore.getState().updateCurrentRightPanel({

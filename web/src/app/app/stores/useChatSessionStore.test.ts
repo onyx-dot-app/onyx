@@ -16,6 +16,7 @@ const FILE_A: PublishedFile = {
   artifact_id: "artifact-a",
   version: 1,
   thumbnail_file_id: null,
+  chat_id: null,
 };
 
 function panel(sessionId: string) {

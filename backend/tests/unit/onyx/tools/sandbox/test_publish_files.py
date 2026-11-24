@@ -12,6 +12,7 @@ from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_TITLE_CHARS,
+    ArtifactAtPath,
     PublishedFile,
     PublishedFiles,
 )
@@ -29,7 +30,7 @@ def test_a_title_is_stored_trimmed_without_nul_and_within_its_limit(
         *,
         name: str,
         mime_type: str,
-        path: str,
+        target: ArtifactAtPath,
         title: str | None,
         **_: object,
     ) -> PublishedFile:
@@ -40,7 +41,7 @@ def test_a_title_is_stored_trimmed_without_nul_and_within_its_limit(
             version=1,
             name=name,
             title=title,
-            path=path,
+            path=target.path,
             size=len(content),
             mime_type=mime_type,
         )
@@ -91,7 +92,7 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
         *,
         name: str,
         mime_type: str,
-        path: str,
+        target: ArtifactAtPath,
         thumbnail: bytes | None,
         **_: object,
     ) -> PublishedFile:
@@ -99,7 +100,7 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
         return PublishedFile(
             file_id=name,
             name=name,
-            path=path,
+            path=target.path,
             size=len(content),
             mime_type=mime_type,
             thumbnail_file_id=None if thumbnail is None else f"{name}-thumbnail",
@@ -175,10 +176,19 @@ def test_the_renders_of_a_call_share_one_budget(
     monkeypatch.setattr(artifact_operations, "RENDER_FIRST_PAGE_BUDGET_SECONDS", 10.0)
 
     def save(
-        content: bytes, *, name: str, mime_type: str, path: str, **_: object
+        content: bytes,
+        *,
+        name: str,
+        mime_type: str,
+        target: ArtifactAtPath,
+        **_: object,
     ) -> PublishedFile:
         return PublishedFile(
-            file_id=name, name=name, path=path, size=len(content), mime_type=mime_type
+            file_id=name,
+            name=name,
+            path=target.path,
+            size=len(content),
+            mime_type=mime_type,
         )
 
     def render(_ref: HarnessSandboxRef, _path: str, **_: object) -> bytes:
@@ -228,12 +238,21 @@ def test_a_failed_clean_up_keeps_the_stop_or_the_error_of_the_call(
     cleaned: list[list[str]] = []
 
     def save(
-        content: bytes, *, name: str, mime_type: str, path: str, **_: object
+        content: bytes,
+        *,
+        name: str,
+        mime_type: str,
+        target: ArtifactAtPath,
+        **_: object,
     ) -> PublishedFile:
         if stopped:
             signal.cancel("user")
         return PublishedFile(
-            file_id=name, name=name, path=path, size=len(content), mime_type=mime_type
+            file_id=name,
+            name=name,
+            path=target.path,
+            size=len(content),
+            mime_type=mime_type,
         )
 
     def clean_up(published: list[PublishedFile]) -> None:
@@ -278,12 +297,21 @@ def test_an_unexpected_save_failure_is_a_tool_error_and_cleans_up(
     cleaned: list[list[str]] = []
 
     def save(
-        content: bytes, *, name: str, mime_type: str, path: str, **_: object
+        content: bytes,
+        *,
+        name: str,
+        mime_type: str,
+        target: ArtifactAtPath,
+        **_: object,
     ) -> PublishedFile:
         if name == "b.md":
             raise RuntimeError("the database is gone")
         return PublishedFile(
-            file_id=name, name=name, path=path, size=len(content), mime_type=mime_type
+            file_id=name,
+            name=name,
+            path=target.path,
+            size=len(content),
+            mime_type=mime_type,
         )
 
     monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)

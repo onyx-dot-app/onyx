@@ -1009,6 +1009,7 @@ test("published files show in the timeline and as download cards after the answe
     artifact_id: "artifact-report",
     version,
     thumbnail_file_id: null,
+    chat_id: null,
   });
   const view = render(
     renderMessage([

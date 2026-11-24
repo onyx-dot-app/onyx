@@ -25,6 +25,7 @@ test("a card shows the title, type and size, and downloads the file", () => {
           artifact_id: "artifact-report",
           version: 1,
           thumbnail_file_id: null,
+          chat_id: null,
         },
         {
           file_id: "file-2",
@@ -37,6 +38,7 @@ test("a card shows the title, type and size, and downloads the file", () => {
           artifact_id: "artifact-report",
           version: 2,
           thumbnail_file_id: null,
+          chat_id: null,
         },
       ]}
     />
@@ -79,6 +81,7 @@ test("files that show one name also show their path in the chat's folder", () =>
     artifact_id: null,
     version: null,
     thumbnail_file_id: null,
+    chat_id: null,
   });
   render(
     <PublishedFileCards
@@ -124,6 +127,7 @@ test("a path or name that the model chose cannot reorder the type and size", () 
     artifact_id: null,
     version: null,
     thumbnail_file_id: null,
+    chat_id: null,
   };
   render(
     <PublishedFileCards
@@ -156,10 +160,11 @@ test("a click opens the file in the Files panel, not in a modal", () => {
     artifact_id: null,
     version: null,
     thumbnail_file_id: null,
+    chat_id: null,
   };
   render(
     <PublishedFilesPanelContext.Provider
-      value={{ openFile: open, showFiles: jest.fn() }}
+      value={{ chatId: null, openFile: open, showFiles: jest.fn() }}
     >
       <PublishedFileCards files={[file]} />
     </PublishedFilesPanelContext.Provider>
@@ -186,6 +191,7 @@ test("without a Files panel, every file shows as a card", () => {
     artifact_id: null,
     version: null,
     thumbnail_file_id: null,
+    chat_id: null,
   }));
   render(<PublishedFileCards files={files} />);
 
@@ -213,6 +219,7 @@ test("without a Files panel, a click previews the file in a modal", async () => 
           artifact_id: null,
           version: null,
           thumbnail_file_id: null,
+          chat_id: null,
         },
       ]}
     />
@@ -254,6 +261,7 @@ test("a card and its preview show the name without its bidi controls", async () 
           artifact_id: null,
           version: null,
           thumbnail_file_id: null,
+          chat_id: null,
         },
       ]}
     />
@@ -266,4 +274,40 @@ test("a card and its preview show the name without its bidi controls", async () 
   const dialog = await screen.findByRole("dialog");
   expect(dialog).toHaveTextContent("photo.gpj");
   expect(dialog.textContent).not.toContain("\u202E");
+});
+
+test("another chat's files all show as cards, as the Files list leaves them out", () => {
+  const file = (index: number, chatId: string) => ({
+    file_id: `${chatId}-file-${index}`,
+    name: `${chatId}-${index}.md`,
+    title: null,
+    path: `/home/onyx/${chatId}-${index}.md`,
+    display_path: `${chatId}-${index}.md`,
+    size: 8,
+    mime_type: "text/markdown",
+    artifact_id: null,
+    version: null,
+    thumbnail_file_id: null,
+    chat_id: chatId,
+  });
+  const otherChat = Array.from({ length: 6 }, (_, index) => file(index, "b"));
+  const thisChat = Array.from({ length: 7 }, (_, index) => file(index, "a"));
+  render(
+    <PublishedFilesPanelContext.Provider
+      value={{ chatId: "a", openFile: jest.fn(), showFiles: jest.fn() }}
+    >
+      <PublishedFileCards files={[...otherChat, ...thisChat]} />
+    </PublishedFilesPanelContext.Provider>
+  );
+
+  const shown = screen
+    .getAllByRole("button", { name: /^Preview / })
+    .map((card) => card.getAttribute("aria-label"));
+  expect(shown).toEqual([
+    ...otherChat.map((other) => `Preview ${other.name}`),
+    ...thisChat.slice(0, 5).map((own) => `Preview ${own.name}`),
+  ]);
+  expect(screen.getByRole("button", { name: /^View all/ })).toHaveTextContent(
+    "7"
+  );
 });

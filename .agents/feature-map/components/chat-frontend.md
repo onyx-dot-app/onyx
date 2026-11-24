@@ -190,8 +190,10 @@
   the turn ends (stopped and failed turns too), each file that the turn
   published shows as a download card after the answer, with its title (else
   its file name), type and size. As in Craft, a reply shows at most five
-  cards, then a "View all N files" button that opens the panel's Files list;
-  a page without the panel shows every card. Every publish of one path in a chat is a version of one
+  cards of the chat's own files, then a "View all N files" button that opens
+  the panel's Files list; a file of another chat, which that list leaves out,
+  always shows as a card (`belongsToChat`, the chat ID from
+  `PublishedFilesPanel`). A page without the panel shows every card. Every publish of one path in a chat is a version of one
   artifact (`artifact_id`, `version`). A click opens the card's version in
   its artifact's tab in the right panel; a page without the panel (NRF)
   opens it in the preview modal. Each card shows only its file; a later publish of the same path adds
@@ -561,7 +563,9 @@ that gave it, and the file IDs that the loads' packets replayed
 sequence it took as its fetch started, and an older page adds its packets). A replayed file that the
 list leaves out stays out: an older version, a file saved without an
 artifact or one whose object is missing. Without a list, the packets give all the
-files.
+files. A version that the chat added to another chat's artifact (its
+`chat_id` is that chat) stays out, as the list leaves it out; its reply
+card shows it.
 A shared chat has no live publishes, so its load's list alone gives its
 files, until the panel's reload adds a newer page's list. A file tab (`ChatRightPanelState.fileTabs`, keyed by
 `rightPanelFileTab`, the artifact) keeps the file that it opened with and

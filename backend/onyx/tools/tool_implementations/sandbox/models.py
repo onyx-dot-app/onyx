@@ -5,6 +5,7 @@ so it imports only models and constants."""
 import re
 from collections.abc import Callable, Mapping
 from datetime import datetime
+from enum import Enum
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -245,6 +246,9 @@ class PublishedFile(BaseModel):
     # its own.
     artifact_id: UUID | None = None
     version: int | None = None
+    # The root chat that owns the artifact, which can be another chat than
+    # the one that published this version. Details saved without it have none.
+    chat_id: UUID | None = None
     # The file name, which the download keeps.
     name: str
     title: str | None = None
@@ -468,6 +472,73 @@ class LibraryListArguments(BaseModel):
     )
 
 
+class LibraryReplaceLibraryFileArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    library_file_id: UUID = Field(
+        description="The library file to add a version to, from any of your chats."
+    )
+    file: str = Field(
+        description="The new content: a file in the VM, relative to the working "
+        "directory or absolute, with the library file's extension."
+    )
+    expected_current_version: int | None = Field(
+        default=None,
+        description="The version_number that you last read. The replace fails "
+        "when the library file has a newer one.",
+    )
+    title: str | None = Field(
+        default=None,
+        description="A short title for the new version. Defaults to the "
+        "current version's title.",
+    )
+
+
+class ArtifactAtPath(BaseModel):
+    """The root chat's artifact of a VM path, which the first publish of the
+    path creates."""
+
+    model_config = ConfigDict(frozen=True)
+
+    chat_session_id: UUID
+    path: str
+
+
+class ArtifactById(BaseModel):
+    """An artifact that exists; its path stays."""
+
+    model_config = ConfigDict(frozen=True)
+
+    artifact_id: UUID
+
+
+# The artifact that a publish adds a version to.
+ArtifactTarget = ArtifactAtPath | ArtifactById
+
+
+class KeptTitle(Enum):
+    """The title of a new version that keeps the artifact's: its newest
+    available version's when the save holds the artifact's row lock."""
+
+    NEWEST = "newest"
+
+
+class ArtifactVersionConflict(Exception):
+    """A new version named a current version that is no longer the
+    artifact's newest available one; nothing was saved."""
+
+    def __init__(self, current_version: int) -> None:
+        super().__init__(f"The artifact's current version is {current_version}")
+        self.current_version = current_version
+
+
+class ArtifactNotFound(Exception):
+    """The artifact is gone, or its chat is deleted; nothing was saved."""
+
+    def __init__(self, artifact_id: UUID) -> None:
+        super().__init__(f"No published file {artifact_id} in your chats")
+
+
 class _CursorBase(BaseModel):
     sort_order: SortOrder
     artifact_id: UUID
@@ -644,7 +715,7 @@ ARTIFACT_PUBLISH_PATHS = ("file_path", "file_paths")
 # The arguments that each action of the artifact tool takes.
 ArtifactAction = Literal["publish", "list", "read"]
 ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
-    "publish": frozenset({*ARTIFACT_PUBLISH_PATHS, "title"}),
+    "publish": frozenset({*ARTIFACT_PUBLISH_PATHS, "title", "url", "force"}),
     "list": frozenset({"scope", "type", "query", "limit", "after"}),
     "read": frozenset({"url", "path", "paths", "out_dir"}),
 }
@@ -677,8 +748,14 @@ class ArtifactArguments(BaseModel):
     )
     url: _EchoedText | None = Field(
         default=None,
-        description="read: the url of a published file from an earlier result. "
-        "A url that ends in /v<N> names that version.",
+        description="read: the url of a published file from an earlier result; "
+        "one that ends in /v<N> names that version. publish with file_path: "
+        "the file to add a version to, by the url of the version you last saw.",
+    )
+    force: bool | None = Field(
+        default=None,
+        description="publish with url: add the version even when the file has a "
+        "newer version than the url names. Older versions stay.",
     )
     path: _EchoedText | None = Field(
         default=None, description="read: a file ID, or the url of a published file."
@@ -726,7 +803,8 @@ class PublishedArtifact(BaseModel):
 
 
 class ArtifactPublished(BaseModel):
-    """What the artifact tool's publish returns."""
+    """What a publish or replace returns to the model, in both tool
+    families."""
 
     files: list[PublishedArtifact]
 

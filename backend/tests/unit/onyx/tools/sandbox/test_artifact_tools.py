@@ -47,6 +47,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ExecCommandTool,
     LibraryListTool,
     LibraryPrepareMaterializeTool,
+    LibraryReplaceLibraryFileTool,
     PublishFilesTool,
     WriteStdinTool,
     WriteTool,
@@ -73,6 +74,7 @@ def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() 
         PublishFilesTool,
         LibraryListTool,
         LibraryPrepareMaterializeTool,
+        LibraryReplaceLibraryFileTool,
     )
     shared = {ExecCommandTool, WriteStdinTool}
     assert not (set(claude) - shared) & (set(other) - shared)
@@ -105,11 +107,15 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
 
     assert stubs.deferred_namespaces == {
         "library": "Find the files that you published in this chat and the "
-        "user's other chats, and copy them into this chat."
+        "user's other chats, copy them into this chat, and add versions to them."
     }
     assert {
         name for name, function in stubs.functions.items() if function.deferred
-    } == {"library__list", "library__prepare_materialize"}
+    } == {
+        "library__list",
+        "library__prepare_materialize",
+        "library__replace_library_file",
+    }
     assert "library__" not in stubs.listed_text
     assert "def publish_files(" in stubs.listed_text
     assert stubs.tool_index is not None
@@ -364,6 +370,18 @@ def _entry(index: int) -> tuple[ListedArtifact, ArtifactCursor]:
     )
 
 
+@pytest.mark.parametrize(("name", "file"), [("README", ".csv"), (".csv", "README")])
+def test_a_new_version_keeps_the_type_by_the_lists_last_dot_rule(
+    name: str, file: str
+) -> None:
+    """The list reads a file's type from the text after the last dot, so a
+    version that adds or drops that text is refused."""
+    artifact = _entry(1)[0].model_copy(update={"file_name": name})
+
+    with pytest.raises(ToolCallException, match="is not a file of the type of"):
+        artifact_operations.check_same_type(artifact, f"/workspace/{file}")
+
+
 def test_a_full_page_never_spills(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ARTIFACTS_LIST_MAX_CHARS < RESULT_MAX_CHARS
     rows = [_entry(index) for index in range(ARTIFACTS_LIST_MAX_LIMIT + 1)]
@@ -429,18 +447,34 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
         (
             {"file_path": "a.md", "out_dir": "x"},
             "Action publish does not take out_dir; it takes file_path, "
-            "file_paths, title",
+            "file_paths, force, title, url",
         ),
         (
             {"action": "list", "url": "x"},
             "Action list does not take url; it takes after, limit, query, scope, type",
         ),
+        (
+            {
+                "file_path": "a.md",
+                "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b",
+            },
+            "Pass the url from your last result, which names the version you "
+            "saw, or force:true",
+        ),
+        (
+            {
+                "file_paths": ["a.md"],
+                "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b/v1",
+            },
+            "title and url go with file_path",
+        ),
+        ({"file_path": "a.md", "force": True}, "force goes with url"),
         ({}, "publish takes file_path or file_paths"),
         (
             {"file_path": "a.md", "file_paths": ["b.md"]},
             "publish takes file_path or file_paths",
         ),
-        ({"file_paths": ["a.md"], "title": "A"}, "title goes with file_path"),
+        ({"file_paths": ["a.md"], "title": "A"}, "title and url go with file_path"),
         ({"file_paths": []}, "publish takes file_path or file_paths"),
         (
             {"file_paths": ["a.md"] * (PUBLISH_FILES_MAX_FILES + 1)},

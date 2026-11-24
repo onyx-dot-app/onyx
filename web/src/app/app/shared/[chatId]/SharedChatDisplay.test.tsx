@@ -57,6 +57,7 @@ const REPORT: PublishedFile = {
   artifact_id: "artifact-report",
   version: 1,
   thumbnail_file_id: null,
+  chat_id: null,
 };
 
 function message(

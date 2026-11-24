@@ -35,6 +35,7 @@ from onyx.prompts.sandbox_tools import (
     EXEC_COMMAND_USE,
     LIBRARY_LIST_DESCRIPTION,
     LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION,
+    LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION,
     PUBLISH_FILES_DESCRIPTION,
     SANDBOX_CODE_MODE_NOTE,
     SANDBOX_GUIDANCE,
@@ -88,12 +89,14 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactArguments,
     ArtifactList,
     ArtifactPublished,
+    ArtifactVersionConflict,
     EditArguments,
     ExecCommandArguments,
     ExecCommandOutput,
     FileToolName,
     LibraryListArguments,
     LibraryPrepareMaterializeArguments,
+    LibraryReplaceLibraryFileArguments,
     MaterializeDestination,
     MaterializedItems,
     MaterializeItem,
@@ -732,7 +735,7 @@ class WriteTool(_FileTool):
 
 class PublishFilesTool(_FileTool):
     """Gives files from the VM to the user
-    (artifact_operations.create_files). It takes turns with the file tools,
+    (artifact_operations.publish). It takes turns with the file tools,
     so it publishes their changes."""
 
     NAME = "publish_files"
@@ -753,10 +756,10 @@ class PublishFilesTool(_FileTool):
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        published = artifact_operations.create_files(
+        published = artifact_operations.publish(
             self._turn,
             invocation.cancellation,
-            parse_tool_arguments(PublishFilesArguments, invocation.arguments),
+            parse_tool_arguments(PublishFilesArguments, invocation.arguments).files,
         )
         listed = "\n".join(
             f"- {file.path}: version {file.version}, file ID {file.file_id}, "
@@ -792,7 +795,7 @@ class _LibraryTool(SandboxTool):
     # The group's line in the execute_code description.
     CODE_MODE_NAMESPACE_DESCRIPTION = (
         "Find the files that you published in this chat and the user's other "
-        "chats, and copy them into this chat."
+        "chats, copy them into this chat, and add versions to them."
     )
     CODE_MODE_NAME: str
     RESULT: type[BaseModel]
@@ -859,6 +862,40 @@ class LibraryPrepareMaterializeTool(_LibraryTool):
         )
 
 
+class LibraryReplaceLibraryFileTool(_LibraryTool, _FileTool):
+    """Adds a version to an artifact of any of the user's chats
+    (artifact_operations.replace_file). It returns PublishedFiles, so the
+    call shows the publish card and the version joins this chat's message
+    files. A replace is not idempotent, so a call that a lost server left
+    running is not run again."""
+
+    NAME = "library_replace_library_file"
+    CODE_MODE_NAME = "replace_library_file"
+    DESCRIPTION = LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION
+    ARGUMENTS = LibraryReplaceLibraryFileArguments
+    RESULT = ArtifactPublished
+    display_name = "Replace Published File"
+    interrupted_result = INTERRUPTED_SANDBOX_RESULT
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(
+            LibraryReplaceLibraryFileArguments, invocation.arguments
+        )
+        try:
+            published = artifact_operations.replace_file(
+                self._turn, invocation.cancellation, arguments
+            )
+        except ArtifactVersionConflict as error:
+            raise tool_error(
+                f"Current version is {error.current_version}; materialize it and "
+                "merge your change, or omit expected_current_version"
+            ) from error
+        return ToolResult(
+            content=ArtifactPublished.of([published]).model_dump_json(),
+            details=PublishedFiles(files=[published]),
+        )
+
+
 class ArtifactTool(_LibraryTool, _FileTool):
     """One tool with an action for each artifact operation
     (artifact_operations.py), which Claude models get instead of
@@ -919,18 +956,52 @@ class ArtifactTool(_LibraryTool, _FileTool):
                 raise tool_error(
                     f"publish takes at most {PUBLISH_FILES_MAX_FILES} file_paths"
                 )
-            if arguments.title is not None and arguments.file_path is None:
-                raise tool_error("title goes with file_path")
-            published = artifact_operations.create_files(
-                self._turn,
-                invocation.cancellation,
-                PublishFilesArguments(
-                    files=[
+            if arguments.file_path is None and (
+                arguments.title is not None or arguments.url is not None
+            ):
+                raise tool_error("title and url go with file_path")
+            if arguments.force is not None and arguments.url is None:
+                raise tool_error("force goes with url")
+            if arguments.url is None:
+                published = artifact_operations.publish(
+                    self._turn,
+                    invocation.cancellation,
+                    [
                         PublishFileArgument(path=path, title=arguments.title)
                         for path in paths
+                    ],
+                )
+            else:
+                try:
+                    artifact_id, version = parse_artifact_url(arguments.url)
+                except ValueError as error:
+                    raise tool_error(str(error)) from error
+                if version is None and not arguments.force:
+                    raise tool_error(
+                        "Pass the url from your last result, which names the "
+                        "version you saw, or force:true"
+                    )
+                try:
+                    published = [
+                        artifact_operations.replace_file(
+                            self._turn,
+                            invocation.cancellation,
+                            LibraryReplaceLibraryFileArguments(
+                                library_file_id=artifact_id,
+                                file=paths[0],
+                                expected_current_version=None
+                                if arguments.force
+                                else version,
+                                title=arguments.title,
+                            ),
+                        )
                     ]
-                ),
-            )
+                except ArtifactVersionConflict as error:
+                    raise tool_error(
+                        f"Current version is {error.current_version}; read it, "
+                        "merge your change, then publish with the url from that "
+                        "result, or pass force:true"
+                    ) from error
             return ToolResult(
                 content=ArtifactPublished.of(published).model_dump_json(),
                 details=PublishedFiles(files=published),
@@ -1051,6 +1122,7 @@ def sandbox_tools_for_model(
         PublishFilesTool,
         LibraryListTool,
         LibraryPrepareMaterializeTool,
+        LibraryReplaceLibraryFileTool,
     )
 
 

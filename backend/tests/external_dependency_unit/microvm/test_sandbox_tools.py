@@ -3003,6 +3003,7 @@ def test_the_non_streaming_response_lists_published_files(
                 )
             ).one(),
             version=1,
+            chat_id=chat.chat_session_id,
             name="report.md",
             path=f"{session_workspace(chat.chat_session_id)}/report.md",
             size=9,

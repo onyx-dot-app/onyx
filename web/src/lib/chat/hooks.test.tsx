@@ -430,6 +430,7 @@ describe("usePublishedFiles", () => {
           artifact_id: "artifact-1",
           version: 1,
           thumbnail_file_id: null,
+          chat_id: null,
         },
       ],
       error: null,

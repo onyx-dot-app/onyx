@@ -111,9 +111,10 @@ def record_uploaded_object(
     When the write or commit fails, calls delete_object unless a committed
     record points at the object, then raises the original error. Such a record
     can be an earlier save of the same file ID, a renamed record or another ID
-    that sanitizes to the same key."""
+    that sanitizes to the same key. A failed write or commit rolls back the
+    caller's `db_session` before that cleanup."""
     try:
-        with get_session_with_current_tenant_if_none(db_session) as db_session:
+        with get_session_with_current_tenant_if_none(db_session) as session:
             upsert_filerecord(
                 file_id=file_id,
                 display_name=display_name or file_id,
@@ -121,13 +122,17 @@ def record_uploaded_object(
                 file_type=file_type,
                 bucket_name=bucket_name,
                 object_key=object_key,
-                db_session=db_session,
+                db_session=session,
                 file_metadata=file_metadata,
                 file_size=file_size,
             )
-            db_session.commit()
+            session.commit()
     except Exception:
         try:
+            # The caller's session holds its connection until it rolls back;
+            # the lookup takes another, which a full pool could withhold.
+            if db_session is not None:
+                db_session.rollback()
             with get_session_with_current_tenant() as cleanup_session:
                 referenced = get_object_keys_with_records(
                     bucket_name, [object_key], cleanup_session

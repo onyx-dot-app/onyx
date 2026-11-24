@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel, JsonValue
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import ToolInvocation
@@ -26,6 +26,7 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
     create_chat_session,
+    get_chat_published_files,
     get_user_published_files,
     save_chat_artifact,
 )
@@ -35,6 +36,7 @@ from onyx.db.models import (
     ChatArtifactVersion,
     ChatMessage,
     ChatSession,
+    FileRecord,
     User,
 )
 from onyx.db.sandbox import get_or_create_sandbox
@@ -64,6 +66,7 @@ from onyx.server.features.build.sandbox.models import (
     session_workspace,
 )
 from onyx.server.query_and_chat import streaming_models as packets
+from onyx.server.query_and_chat.chat_backend import delete_chat_session_by_id
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolContext, ToolOptions
@@ -71,6 +74,7 @@ from onyx.tools.tool_implementations.sandbox import artifact_operations, file_co
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
+    ArtifactAtPath,
     ArtifactList,
     LibraryListFilters,
     MaterializedItems,
@@ -82,7 +86,9 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     LibraryListTool,
     LibraryPrepareMaterializeTool,
+    LibraryReplaceLibraryFileTool,
     PublishFilesTool,
+    SandboxTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from tests.external_dependency_unit.chat.test_wait_agents import (
@@ -162,8 +168,10 @@ def _publish(chat_session_id: UUID, name: str, data: bytes) -> str:
         data,
         name=name,
         mime_type="text/plain",
-        chat_session_id=chat_session_id,
-        path=f"{session_workspace(chat_session_id)}/{name}",
+        target=ArtifactAtPath(
+            chat_session_id=chat_session_id,
+            path=f"{session_workspace(chat_session_id)}/{name}",
+        ),
         title=None,
         thumbnail=None,
     ).file_id
@@ -197,7 +205,7 @@ def _ref(db_session: Session, owner: User, chat_session_id: UUID) -> HarnessSand
 
 
 def _call(
-    tool: LibraryListTool | LibraryPrepareMaterializeTool,
+    tool: SandboxTool,
     arguments: dict[str, JsonValue],
     cancellation: CancellationSignal | None = None,
 ) -> ToolResult:
@@ -1411,7 +1419,8 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
     ]
     assert (
         "\n  - library: Find the files that you published in this chat and the "
-        "user's other chats, and copy them into this chat.\n" in description
+        "user's other chats, copy them into this chat, and add versions to "
+        "them.\n" in description
     )
     assert "library__prepare_materialize" not in description
     text = last_tool_text(llm, "code")
@@ -1487,6 +1496,13 @@ class _Family:
     ) -> Delta:
         raise NotImplementedError
 
+    def replace(
+        self, call_id: str, artifact_id: UUID, file: str, seen: int, force: bool
+    ) -> Delta:
+        """A new version of the artifact from `file`, by a caller that last
+        saw version `seen`; `force` adds it whatever the newest version."""
+        raise NotImplementedError
+
 
 class _Library(_Family):
     def llm(self, steps: list[Delta]) -> ChatLLM:
@@ -1525,6 +1541,19 @@ class _Library(_Family):
                     {"library_file_id": str(artifact_id), "version_number": version}
                 ],
                 "destination": {"directory": out_dir},
+            },
+        )
+
+    def replace(
+        self, call_id: str, artifact_id: UUID, file: str, seen: int, force: bool
+    ) -> Delta:
+        return tool_step(
+            LibraryReplaceLibraryFileTool.NAME,
+            call_id,
+            {
+                "library_file_id": str(artifact_id),
+                "file": file,
+                "expected_current_version": None if force else seen,
             },
         )
 
@@ -1569,6 +1598,19 @@ class _Artifact(_Family):
             ArtifactTool.NAME,
             call_id,
             {"action": "read", "url": url, "out_dir": out_dir},
+        )
+
+    def replace(
+        self, call_id: str, artifact_id: UUID, file: str, seen: int, force: bool
+    ) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {
+                "file_path": file,
+                "url": artifact_url(artifact_id, seen),
+                "force": force or None,
+            },
         )
 
 
@@ -1901,3 +1943,203 @@ def test_a_claude_program_finds_the_artifact_tool_and_publishes_with_it(
         and [file.artifact_id for file in part.obj.files] == [artifact.id]
         for part in parts
     )
+
+
+@pytest.mark.usefixtures("node")
+def test_a_replace_from_another_chat_versions_its_artifact_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    family: _Family,
+) -> None:
+    """Chat B adds version 2 to chat A's report: the artifact keeps its name,
+    path and title, A's panel shows the new version, B's card and message
+    files hold it, and a hard delete of B keeps it while one of A deletes
+    it."""
+    chat_a = _chat(db_session, user, "Reports")
+    first = save_chat_artifact(
+        b"v1",
+        name="report.md",
+        mime_type="text/markdown",
+        title="Report",
+        thumbnail=None,
+        target=ArtifactAtPath(
+            chat_session_id=chat_a, path=f"{session_workspace(chat_a)}/report.md"
+        ),
+    )
+    assert first.artifact_id is not None
+    chat_b = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    # The extension matches in any case.
+    sandbox.write_file(chat_b.ref(db_session), "draft-v2.MD", b"v2")
+    llm = family.llm(
+        [
+            family.replace("replace", first.artifact_id, "draft-v2.MD", 1, False),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat_b.send(llm)
+
+    start, end, section_end = _publish_packets(parts)
+    assert start == packets.PublishFilesStart(
+        files=[PublishFileArgument(path="draft-v2.MD")]
+    )
+    assert isinstance(end, packets.PublishFilesEnd) and end.error is None
+    [second] = end.files
+    # The live packet names the owning chat, A, not the calling chat.
+    assert (
+        second.artifact_id,
+        second.version,
+        second.chat_id,
+        second.name,
+        second.title,
+        second.path,
+    ) == (first.artifact_id, 2, chat_a, "report.md", "Report", first.path)
+    assert section_end == packets.SectionEnd()
+    [replayed] = chat_b.replayed(db_session)
+    assert _publish_packets(replayed) == [start, end, section_end]
+    [_, replayed_end, _] = _publish_packets(replayed)
+    assert isinstance(replayed_end, packets.PublishFilesEnd)
+    assert replayed_end.files[0].chat_id == chat_a
+    assert artifact_url(first.artifact_id, 2) in last_tool_text(llm, "replace")
+    # Chat A's panel lists the new version; chat B's answer holds it.
+    db_session.expire_all()
+    [listed] = get_chat_published_files(chat_a, db_session)
+    assert (listed.file_id, listed.version) == (second.file_id, 2)
+    [answer] = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat_b.chat_session_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    )
+    assert [descriptor["id"] for descriptor in answer.files or []] == [second.file_id]
+
+    store = get_default_file_store()
+    delete_chat_session_by_id(
+        chat_b.chat_session_id, hard_delete=True, user=user, db_session=db_session
+    )
+    assert store.read_file(second.file_id).read() == b"v2"
+    db_session.expire_all()
+    [listed] = get_chat_published_files(chat_a, db_session)
+    assert listed.file_id == second.file_id
+    delete_chat_session_by_id(
+        chat_a, hard_delete=True, user=user, db_session=db_session
+    )
+    db_session.expire_all()
+    assert db_session.get(FileRecord, second.file_id) is None
+
+
+@pytest.mark.usefixtures("node")
+def test_a_stale_replace_writes_nothing_and_force_adds_the_version(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    family: _Family,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    _publish(source, "report.md", b"v1")
+    newest = _publish(source, "report.md", b"v2")
+    artifact_id = _artifact_id(newest)
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    sandbox.write_file(chat.ref(db_session), "mine.md", b"mine")
+    records = db_session.scalars(select(func.count(FileRecord.file_id))).one()
+    llm = family.llm(
+        [
+            family.replace("stale", artifact_id, "mine.md", 1, False),
+            family.replace("forced", artifact_id, "mine.md", 1, True),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    assert last_tool_text(llm, "stale").startswith("Current version is 2;")
+    db_session.expire_all()
+    versions = db_session.scalars(
+        select(ChatArtifactVersion.version)
+        .where(ChatArtifactVersion.artifact_id == artifact_id)
+        .order_by(ChatArtifactVersion.version)
+    ).all()
+    assert versions == [1, 2, 3]
+    # The stale call left no file record; the forced one added its file.
+    assert (
+        db_session.scalars(select(func.count(FileRecord.file_id))).one() == records + 1
+    )
+    [stale_end, forced_end] = [
+        obj
+        for obj in _publish_packets(parts)
+        if isinstance(obj, packets.PublishFilesEnd)
+    ]
+    assert stale_end.files == [] and stale_end.error is not None
+    assert [file.version for file in forced_end.files] == [3]
+
+
+@pytest.mark.usefixtures("node")
+def test_a_replace_reads_the_type_from_the_normalized_path(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    family: _Family,
+) -> None:
+    """A trailing slash or dot names the same file, so the type check passes
+    and the file publishes."""
+    artifact_id = _artifact_id(
+        _publish(_chat(db_session, user, "Reports"), "report.md", b"v1")
+    )
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    sandbox.write_file(chat.ref(db_session), "draft.md", b"v2")
+    llm = family.llm(
+        [
+            family.replace("slash", artifact_id, "draft.md/", 1, False),
+            family.replace("dot", artifact_id, "./draft.md/.", 2, False),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    assert [
+        (obj.error, [file.version for file in obj.files])
+        for obj in _publish_packets(parts)
+        if isinstance(obj, packets.PublishFilesEnd)
+    ] == [(None, [2]), (None, [3])]
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_replace_of_a_file_that_is_not_yours_never_starts_the_vm(
+    db_session: Session,
+    node: RunningFakeAgent,
+    user: User,
+    make_test_user: MakeTestUser,
+) -> None:
+    stranger = make_test_user("artifact_tools_replace_stranger")
+    theirs = _artifact_id(_publish(_chat(db_session, stranger), "a.md", b"a"))
+    deleted_chat = _chat(db_session, user)
+    in_deleted = _artifact_id(_publish(deleted_chat, "b.md", b"b"))
+    db_session.execute(
+        update(ChatSession).where(ChatSession.id == deleted_chat).values(deleted=True)
+    )
+    db_session.commit()
+    turn = _turn(user, _chat(db_session, user))
+    tool = LibraryReplaceLibraryFileTool(turn)
+    for artifact_id in (theirs, in_deleted, uuid4()):
+        result = _call(tool, {"library_file_id": str(artifact_id), "file": "x.md"})
+        assert result.is_error
+        assert result.content == f"No published file {artifact_id} in your chats"
+
+    # A file of another type is refused too, in both families.
+    mine = _publish(_chat(db_session, user), "report.md", b"v1")
+    refusal = (
+        "draft.txt is not a file of the type of report.md; a new version keeps "
+        "the file's name and type, so publish it as a new file instead"
+    )
+    other_type = _call(
+        tool, {"library_file_id": str(_artifact_id(mine)), "file": "out/draft.txt"}
+    )
+    assert other_type.content == refusal
+    other_type = _call(
+        ArtifactTool(turn),
+        {"file_path": "out/draft.txt", "url": artifact_url(_artifact_id(mine), 1)},
+    )
+    assert other_type.content == refusal
+    assert node.agent.create_calls == 0

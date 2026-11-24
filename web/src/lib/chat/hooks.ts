@@ -918,6 +918,7 @@ export function useSendChatMessageFromURL({
 
 // A chat's loads of its file list and its message tree
 export interface PublishedFilesSource {
+  sessionId: string;
   loadedPublishedFiles: LoadedPublishedFiles;
   messageTree: MessageTreeState;
 }
@@ -937,10 +938,10 @@ export function publishedFilesOf(
   source: PublishedFilesSource | undefined | null
 ): PublishedFile[] {
   if (!source) return NO_PUBLISHED_FILES;
-  const { loadedPublishedFiles: loaded, messageTree } = source;
+  const { sessionId, loadedPublishedFiles: loaded, messageTree } = source;
   const cached = publishedFilesByTree.get(messageTree);
   if (cached && cached.loaded === loaded) return cached.files;
-  const files = chatPublishedFiles(loaded, messageTree);
+  const files = chatPublishedFiles(loaded, messageTree, sessionId);
   publishedFilesByTree.set(messageTree, { loaded, files });
   return files;
 }

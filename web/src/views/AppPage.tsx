@@ -524,6 +524,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       : null
   );
   useOpenArtifactFromUrl(loadedChatId, CHAT_FILES_PANEL.openFile);
+  const filesPanel = useMemo(
+    () => ({ ...CHAT_FILES_PANEL, chatId: storeSessionId }),
+    [storeSessionId]
+  );
 
   const retrievalEnabled = useChatSessionSupportsRetrieval();
 
@@ -855,7 +859,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   if (!isReady || onboardingPending) return <OnyxInitializingLoader />;
 
   return (
-    <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>
+    <PublishedFilesPanelContext.Provider value={filesPanel}>
       <AppPopup />
 
       {presentingDocument && (

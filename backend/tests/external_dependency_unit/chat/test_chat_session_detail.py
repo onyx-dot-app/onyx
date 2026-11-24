@@ -43,7 +43,7 @@ from onyx.file_store.file_store import (
 from onyx.file_store.utils import save_chat_output_file
 from onyx.server.features.build.sandbox.models import session_workspace
 from onyx.server.query_and_chat import chat_backend
-from onyx.tools.tool_implementations.sandbox.models import PublishedFile
+from onyx.tools.tool_implementations.sandbox.models import ArtifactAtPath, PublishedFile
 from onyx.utils.threadpool_concurrency import (
     TimeoutThread,
     run_in_background,
@@ -193,8 +193,7 @@ def _publish(
         name.encode(),
         name=name,
         mime_type="text/markdown",
-        chat_session_id=chat.id,
-        path=path,
+        target=ArtifactAtPath(chat_session_id=chat.id, path=path),
         title=title,
         thumbnail=None,
     )
@@ -306,8 +305,7 @@ def test_concurrent_publishes_of_one_path_number_their_versions_without_gaps(
                     b"a",
                     name="a.md",
                     mime_type="text/markdown",
-                    chat_session_id=chat.id,
-                    path="/w/a.md",
+                    target=ArtifactAtPath(chat_session_id=chat.id, path="/w/a.md"),
                     title=None,
                     thumbnail=None,
                 )
@@ -417,8 +415,7 @@ def test_a_thumbnail_goes_when_its_file_fails_to_save(
             b"%PDF",
             name=name,
             mime_type="application/pdf",
-            chat_session_id=chat.id,
-            path=f"/w/{name}",
+            target=ArtifactAtPath(chat_session_id=chat.id, path=f"/w/{name}"),
             title=None,
             thumbnail=b"jpeg",
         )
@@ -444,8 +441,7 @@ def test_a_file_publishes_without_a_thumbnail_that_fails_to_save(
         b"%PDF",
         name=name,
         mime_type="application/pdf",
-        chat_session_id=chat.id,
-        path=f"/w/{name}",
+        target=ArtifactAtPath(chat_session_id=chat.id, path=f"/w/{name}"),
         title=None,
         thumbnail=b"jpeg",
     )
