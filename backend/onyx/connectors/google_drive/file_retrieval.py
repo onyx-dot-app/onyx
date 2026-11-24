@@ -167,7 +167,6 @@ def get_external_access_for_folder(
     google_domain: str,
     ops: GoogleDriveSourceOperations,
     user_email: str,
-    add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Extract ExternalAccess from a folder's permissions.
@@ -183,9 +182,6 @@ def get_external_access_for_folder(
         google_domain: The company's Google Workspace domain (e.g., "company.com")
         ops: The gateway that fetches the permission details
         user_email: The user to read the permissions as
-        add_prefix: When True, prefix group IDs with source type (for indexing path).
-                   When False (default), leave unprefixed (for permission sync path
-                   where upsert_document_external_perms handles prefixing).
 
     Returns:
         ExternalAccess with extracted permission info
@@ -193,7 +189,7 @@ def get_external_access_for_folder(
     # Try to get the EE implementation
     get_folder_access_fn = cast(
         Callable[
-            [GoogleDriveFileType, str, GoogleDriveSourceOperations, str, bool],
+            [GoogleDriveFileType, str, GoogleDriveSourceOperations, str],
             ExternalAccess,
         ],
         fetch_versioned_implementation_with_fallback(
@@ -203,7 +199,7 @@ def get_external_access_for_folder(
         ),
     )
 
-    return get_folder_access_fn(folder, google_domain, ops, user_email, add_prefix)
+    return get_folder_access_fn(folder, google_domain, ops, user_email)
 
 
 def _get_fields_for_file_type(field_type: DriveFileFieldType) -> str:
