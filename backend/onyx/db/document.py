@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
+from onyx.access.utils import build_ext_group_names_for_storage
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -1228,7 +1229,10 @@ def upsert_documents(
                                 doc.external_access.external_user_emails
                             ),
                             "external_user_group_ids": list(
-                                doc.external_access.external_user_group_ids
+                                build_ext_group_names_for_storage(
+                                    doc.external_access.external_user_group_ids,
+                                    source,
+                                )
                             ),
                             "is_public": doc.external_access.is_public,
                         }
