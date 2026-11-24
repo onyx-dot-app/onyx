@@ -13,7 +13,7 @@ from typing import Any, cast
 from urllib.parse import SplitResult, quote, unquote, urlsplit
 from uuid import uuid4
 
-from pydantic import AliasChoices, BaseModel, Field, ValidationError
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from typing_extensions import override
 
 from onyx.configs.app_configs import (
@@ -824,6 +824,20 @@ def site_drive_from_graph(drive: SharepointDrive) -> SiteDrive:
     )
 
 
+class _LibraryInheritanceRead(BaseModel):
+    """One read of which items of a library have role assignments of their
+    own, for one listing run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # (listing run id, site URL, list id)
+    key: tuple[str, str, str]
+    started_at: datetime
+    finished_at: datetime
+    # The securable of each file that inherits, by list item id.
+    sources: dict[int, SharepointSecurable]
+
+
 class SharepointConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -875,13 +889,9 @@ class SharepointConnector(
         self._run_permission_caches: dict[str, SharedSharepointPermissionCache] = {}
         self._run_permission_caches_lock = threading.Lock()
         self._container_locks = [threading.Lock() for _ in range(_CONTAINER_LOCK_COUNT)]
-        # The inheritance of the library that the stub listing lists now:
-        # (listing run id, site URL, list id), when it was read, and the
-        # securable of each file that inherits, by list item id. One library
-        # at a time.
-        self._library_inheritance: (
-            tuple[tuple[str, str, str], datetime, dict[int, SharepointSecurable]] | None
-        ) = None
+        # The inheritance of the library that the stub listing lists now.
+        # One library at a time.
+        self._library_inheritance: _LibraryInheritanceRead | None = None
         # The self-checks that this object started, by listing run.
         self._self_checks_started: dict[str, int] = {}
         self._self_checks_lock = threading.Lock()
@@ -1932,10 +1942,13 @@ class SharepointConnector(
     ) -> tuple[SharepointSecurable, datetime] | None:
         """The securable whose role assignments the listed file has, when
         the read of its library says that it has none of its own, and when
-        the library was read. None for a
+        that read started: an item on any page of the read was seen after
+        that time, so its age is never too young. None for a
         read of its own: the file has its own, it is not in the read (it is
         newer than the read), or the read failed. A new listing run reads the
-        library again, and so does a run after CONTAINER_ACCESS_TTL_SECONDS."""
+        library again, and so does a run CONTAINER_ACCESS_TTL_SECONDS after
+        the read ended, so a read longer than that is not repeated for each
+        file. Its files then read their own in conversion."""
         if not drive.list_id or not driveitem.list_item_id:
             return None
         try:
@@ -1946,10 +1959,11 @@ class SharepointConnector(
         cached = self._library_inheritance
         if (
             cached is None
-            or cached[0] != key
-            or datetime.now(timezone.utc) - cached[1]
+            or cached.key != key
+            or datetime.now(timezone.utc) - cached.finished_at
             > timedelta(seconds=CONTAINER_ACCESS_TTL_SECONDS)
         ):
+            started_at = datetime.now(timezone.utc)
             sources: dict[int, SharepointSecurable] = {}
             try:
                 sources = inherited_access_sources(
@@ -1968,10 +1982,15 @@ class SharepointConnector(
                     drive.display_name,
                     e,
                 )
-            cached = (key, datetime.now(timezone.utc), sources)
+            cached = _LibraryInheritanceRead(
+                key=key,
+                started_at=started_at,
+                finished_at=datetime.now(timezone.utc),
+                sources=sources,
+            )
             self._library_inheritance = cached
-        source = cached[2].get(list_item_id)
-        return (source, cached[1]) if source is not None else None
+        source = cached.sources.get(list_item_id)
+        return (source, cached.started_at) if source is not None else None
 
     def _list_site_page_stubs(
         self,

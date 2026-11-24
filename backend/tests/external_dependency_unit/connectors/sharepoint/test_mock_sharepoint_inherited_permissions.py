@@ -361,3 +361,35 @@ def test_the_self_check_turns_inheritance_off_on_a_difference(
 
     assert rest == {stub.id: expected[stub.id] for stub in inheriting[1:]}
     assert mock.op_count(_ROLE_READS) >= len(inheriting) - 1
+
+
+def test_a_stub_ages_from_the_start_of_the_read_of_its_library(
+    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Items on any page of the read were seen after the read started, so the
+    stub's age never counts from a later time."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    original = SharepointSourceOperations.get_library_inheritance
+    starts: list[datetime] = []
+
+    def timed(
+        self: SharepointSourceOperations, **kwargs: Any
+    ) -> SharepointLibraryInheritance:
+        starts.append(datetime.now(timezone.utc))
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(SharepointSourceOperations, "get_library_inheritance", timed)
+    listing = list_stubs(
+        mock.build_connector(certificate=True), include_permissions=True
+    )
+
+    read_times = {
+        p.inheritance_read_at
+        for p in _file_payloads(listing.stubs).values()
+        if p.inherited_access_from is not None
+    }
+    assert read_times
+    for read_at in read_times:
+        assert read_at is not None
+        assert any(started >= read_at for started in starts)
