@@ -5732,7 +5732,7 @@ class ChatArtifact(Base):
     __table_args__ = (
         # Also the index of the chat's artifacts
         UniqueConstraint("chat_session_id", "path"),
-        # The user's artifacts by latest publish (artifacts_list).
+        # The user's artifacts by latest publish (library_list).
         Index(
             "ix_chat_artifact_user_id_updated_at",
             "user_id",

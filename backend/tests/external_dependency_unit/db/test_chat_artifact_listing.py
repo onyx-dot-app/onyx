@@ -1,10 +1,11 @@
 """The artifact tools' queries (`db/chat.py:get_user_published_files` and
 `get_user_published_file`) against Postgres and the file store: the newest
-available version of each artifact, the order and the cursor, the query
-match, and the scope of the user's own root chats that are not deleted."""
+available version of each artifact, each sort and its cursor, the filters,
+the query match, and the scope of the user's own root chats that are not
+deleted."""
 
 from datetime import datetime, timedelta, timezone
-from itertools import count
+from itertools import count, product
 from uuid import uuid4
 
 import pytest
@@ -38,8 +39,11 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_NAME_MAX_CHARS,
     ARTIFACTS_PATH_MAX_CHARS,
     ArtifactCursor,
+    ArtifactSort,
+    LibraryListFilters,
     ListedArtifact,
     PublishedFile,
+    SortOrder,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 
@@ -125,17 +129,23 @@ def _list(
     *,
     query: str | None = None,
     chat: ChatSession | None = None,
+    filters: LibraryListFilters | None = None,
+    sort: ArtifactSort = "modified_at",
+    sort_order: SortOrder = "desc",
     limit: int = 50,
-    before: ArtifactCursor | None = None,
+    cursor: ArtifactCursor | None = None,
 ) -> tuple[list[ListedArtifact], ArtifactCursor | None]:
-    """A page and the cursor of the next one, as artifacts_list pages."""
+    """A page and the cursor of the next one, as library_list pages."""
     rows = get_user_published_files(
         db_session,
         user.id,
         query=query,
         chat_session_id=None if chat is None else chat.id,
+        filters=filters or LibraryListFilters(),
+        sort=sort,
+        sort_order=sort_order,
         limit=limit,
-        before=before,
+        cursor=cursor,
     )
     assert rows is not None
     return [artifact for artifact, _ in rows[:limit]], (
@@ -159,33 +169,41 @@ def test_the_list_has_the_newest_available_version_of_each_artifact_newest_first
 
     entries, after = _list(db_session, owner)
     assert after is None
+    report_artifact = db_session.get_one(ChatArtifact, report_v2.artifact_id)
+    notes_artifact = db_session.get_one(ChatArtifact, notes.artifact_id)
     assert entries == [
         ListedArtifact(
+            library_file_id=report_artifact.id,
             file_id=report_v2.file_id,
-            name="report.csv",
+            version_number=2,
+            file_name="report.csv",
             title="Report, revised",
-            path="out/report.csv",
-            version=2,
+            artifact_type="sheet",
+            mime_type="text/plain",
+            file_size_bytes=len(b"report.csv"),
+            created_at=report_artifact.created_at,
+            modified_at=report_artifact.updated_at,
             chat_id=first.id,
             chat_title="First chat",
-            published_at=entries[0].published_at,
-            size=len(b"report.csv"),
-            mime_type="text/plain",
+            path="out/report.csv",
         ),
         ListedArtifact(
+            library_file_id=notes_artifact.id,
             file_id=notes.file_id,
-            name="notes.md",
+            version_number=1,
+            file_name="notes.md",
             title=None,
-            path="/tmp/onyx/notes.md",
-            version=1,
+            artifact_type="report",
+            mime_type="text/plain",
+            file_size_bytes=len(b"notes.md"),
+            created_at=notes_artifact.created_at,
+            modified_at=notes_artifact.updated_at,
             chat_id=second.id,
             chat_title="Second chat",
-            published_at=entries[1].published_at,
-            size=len(b"notes.md"),
-            mime_type="text/plain",
+            path="/tmp/onyx/notes.md",
         ),
     ]
-    assert entries[0].published_at > entries[1].published_at
+    assert entries[0].modified_at > entries[1].modified_at
 
     # A version whose object is gone gives way to the version before it; the
     # artifact keeps its place.
@@ -196,7 +214,9 @@ def test_the_list_has_the_newest_available_version_of_each_artifact_newest_first
     )
     db_session.commit()
     entries, _ = _list(db_session, owner)
-    assert [(entry.file_id, entry.version, entry.title) for entry in entries] == [
+    assert [
+        (entry.file_id, entry.version_number, entry.title) for entry in entries
+    ] == [
         (report_v1.file_id, 1, "Report"),
         (notes.file_id, 1, None),
     ]
@@ -233,42 +253,155 @@ def test_the_query_matches_the_name_title_or_chat_title_in_any_case(
     assert found("nothing like it") == []
 
 
-def test_the_cursor_pages_through_every_artifact_once(
+@pytest.mark.parametrize(
+    ("sort", "sort_order"),
+    list(product(["created_at", "modified_at", "name", "size"], ["asc", "desc"])),
+)
+def test_each_sort_pages_through_every_artifact_once_in_its_order(
+    db_session: Session, owner: User, sort: ArtifactSort, sort_order: SortOrder
+) -> None:
+    first = _chat(db_session, owner, "First")
+    second = _chat(db_session, owner, "Second")
+    # Each sort has a tie, which the artifact ID orders: the two b.txt files
+    # tie on every key, and two other files on each time.
+    at = _PUBLISHED_AT - timedelta(days=10)
+    for chat, name, modified_days, created_days in (
+        (first, "b.txt", 0, 2),
+        (second, "b.txt", 0, 2),
+        (first, "dd.csv", 1, 0),
+        (first, "a.md", 2, 2),
+        (second, "ccc.pdf", 1, 1),
+    ):
+        file = _publish(
+            db_session,
+            chat,
+            f"/w/{name}",
+            published_at=at + timedelta(days=modified_days),
+        )
+        db_session.execute(
+            update(ChatArtifact)
+            .where(ChatArtifact.id == file.artifact_id)
+            .values(created_at=at - timedelta(days=created_days))
+        )
+    db_session.commit()
+
+    entries, _ = _list(db_session, owner, sort=sort, sort_order=sort_order)
+    key = {
+        "created_at": lambda entry: entry.created_at,
+        "modified_at": lambda entry: entry.modified_at,
+        "name": lambda entry: entry.file_name,
+        "size": lambda entry: entry.file_size_bytes,
+    }[sort]
+    expected = _ids(
+        sorted(
+            entries,
+            key=lambda entry: (key(entry), str(entry.library_file_id)),
+            reverse=sort_order == "desc",
+        )
+    )
+    assert len(expected) == 5
+    assert _ids(entries) == expected
+
+    # Five files in pages of two: three pages, and the last has no cursor.
+    paged: list[str] = []
+    cursor: ArtifactCursor | None = None
+    for page_number in range(3):
+        if page_number:
+            assert cursor is not None
+            assert (cursor.sort, cursor.sort_order) == (sort, sort_order)
+        page, cursor = _list(
+            db_session,
+            owner,
+            sort=sort,
+            sort_order=sort_order,
+            limit=2,
+            cursor=cursor,
+        )
+        paged.extend(_ids(page))
+    assert cursor is None
+    assert paged == expected
+
+    # A last page that is full has no cursor.
+    entries, after = _list(db_session, owner, sort=sort, sort_order=sort_order, limit=5)
+    assert len(entries) == 5
+    assert after is None
+
+
+def test_the_filters_keep_files_by_time_extension_and_category(
     db_session: Session, owner: User
 ) -> None:
     chat = _chat(db_session, owner)
-    newest = _publish(db_session, chat, "/w/newest.txt")
-    # Three artifacts with one publish time: the artifact ID orders them.
-    tied_at = _PUBLISHED_AT - timedelta(days=1)
-    tied = [
-        _publish(db_session, chat, f"/w/tied-{index}.txt", published_at=tied_at)
-        for index in range(3)
-    ]
-    oldest = _publish(
-        db_session, chat, "/w/oldest.txt", published_at=tied_at - timedelta(days=1)
+    sheet = _publish(
+        db_session, chat, "/w/Old.XLSX", published_at=_PUBLISHED_AT - timedelta(days=10)
     )
+    deck = _publish(
+        db_session, chat, "/w/deck.pptx", published_at=_PUBLISHED_AT - timedelta(days=1)
+    )
+    photo = _publish(db_session, chat, "/w/photo.png")
+    bare = _publish(db_session, chat, "/w/notes")
+    data = _publish(db_session, chat, "/w/data.json")
+    deck_created = _PUBLISHED_AT - timedelta(days=5)
+    for file, created_at in (
+        (sheet, _PUBLISHED_AT - timedelta(days=20)),
+        (deck, deck_created),
+    ):
+        db_session.execute(
+            update(ChatArtifact)
+            .where(ChatArtifact.id == file.artifact_id)
+            .values(created_at=created_at)
+        )
+    db_session.commit()
 
-    pages: list[list[str]] = []
-    before: ArtifactCursor | None = None
-    while True:
-        entries, before = _list(db_session, owner, limit=2, before=before)
-        pages.append(_ids(entries))
-        if before is None:
-            break
-    tied_order = [
-        file.file_id
-        for file in sorted(tied, key=lambda file: str(file.artifact_id), reverse=True)
-    ]
-    assert pages == [
-        [newest.file_id, tied_order[0]],
-        tied_order[1:],
-        [oldest.file_id],
-    ]
+    def found(filters: dict[str, object]) -> set[str]:
+        entries, _ = _list(
+            db_session, owner, filters=LibraryListFilters.model_validate(filters)
+        )
+        return set(_ids(entries))
 
-    # A last page that is full has no cursor.
-    entries, after = _list(db_session, owner, limit=5)
-    assert len(entries) == 5
-    assert after is None
+    recent = {photo.file_id, bare.file_id, data.file_id}
+    # After is inclusive, before exclusive; a date is midnight UTC.
+    assert found({"created_after": deck_created.isoformat()}) == recent | {deck.file_id}
+    assert found({"created_before": deck_created.isoformat()}) == {sheet.file_id}
+    assert found({"modified_before": "2026-11-19"}) == {sheet.file_id}
+    assert found({"modified_after": "2026-11-19T00:00:00"}) == recent | {deck.file_id}
+    assert found({"modified_after": "2026-11-11", "modified_before": "2026-11-20"}) == {
+        deck.file_id
+    }
+
+    assert found({"include_file_types": [".xlsx"]}) == {sheet.file_id}
+    assert found({"include_file_types": ["PNG", "pptx"]}) == {
+        photo.file_id,
+        deck.file_id,
+    }
+    # A file without an extension is not excluded.
+    assert found({"exclude_file_types": ["xlsx", ".Png"]}) == {
+        deck.file_id,
+        bare.file_id,
+        data.file_id,
+    }
+
+    by_category = {
+        category: _list(
+            db_session, owner, filters=LibraryListFilters(category=category)
+        )[0]
+        for category in ("image", "sheet", "slides", "report", "other")
+    }
+    assert {
+        category: set(_ids(entries)) for category, entries in by_category.items()
+    } == {
+        "image": {photo.file_id},
+        "sheet": {sheet.file_id},
+        "slides": {deck.file_id},
+        "report": set(),
+        "other": {bare.file_id, data.file_id},
+    }
+    # The filter and the entries' artifact_type agree.
+    assert all(
+        entry.artifact_type == category
+        for category, entries in by_category.items()
+        for entry in entries
+    )
+    assert found({"category": "image", "modified_before": "2026-11-19"}) == set()
 
 
 def test_only_the_users_own_root_chats_that_are_not_deleted_are_listed(
@@ -297,29 +430,27 @@ def test_only_the_users_own_root_chats_that_are_not_deleted_are_listed(
 
     assert _ids(_list(db_session, owner)[0]) == [mine.file_id]
     assert _ids(_list(db_session, owner, chat=own)[0]) == [mine.file_id]
-    for chat in (deleted, public_of_other, private_of_other, child):
+    for chat_id in (
+        deleted.id,
+        public_of_other.id,
+        private_of_other.id,
+        child.id,
+        uuid4(),
+    ):
         assert (
             get_user_published_files(
                 db_session,
                 owner.id,
                 query=None,
-                chat_session_id=chat.id,
+                chat_session_id=chat_id,
+                filters=LibraryListFilters(),
+                sort="modified_at",
+                sort_order="desc",
                 limit=50,
-                before=None,
+                cursor=None,
             )
             is None
         )
-    assert (
-        get_user_published_files(
-            db_session,
-            owner.id,
-            query=None,
-            chat_session_id=uuid4(),
-            limit=50,
-            before=None,
-        )
-        is None
-    )
 
     assert get_user_published_file(db_session, owner.id, mine.file_id) is not None
     for file in (in_deleted, in_public, in_private, in_child):
@@ -344,7 +475,11 @@ def test_the_download_lookup_takes_any_version_and_refuses_other_files(
     try:
         found = get_user_published_file(db_session, owner.id, first.file_id)
         assert found is not None
-        assert (found.version, found.title, found.chat_id) == (1, "First", chat.id)
+        assert (found.version_number, found.title, found.chat_id) == (
+            1,
+            "First",
+            chat.id,
+        )
         for file_id in (thumbnail_id, image, str(uuid4())):
             assert get_user_published_file(db_session, owner.id, file_id) is None
 
@@ -400,7 +535,7 @@ def test_a_list_entry_is_bounded_and_the_download_lookup_is_whole(
     )
 
     [entry], _ = _list(db_session, owner)
-    assert entry.name == long_name[:ARTIFACTS_NAME_MAX_CHARS]
+    assert entry.file_name == long_name[:ARTIFACTS_NAME_MAX_CHARS]
     assert len(entry.path) == ARTIFACTS_PATH_MAX_CHARS
     assert entry.path.startswith("…")
     assert entry.path.endswith(long_name[-(ARTIFACTS_PATH_MAX_CHARS - 1) :])
@@ -410,9 +545,10 @@ def test_a_list_entry_is_bounded_and_the_download_lookup_is_whole(
     # extension.
     found = get_user_published_file(db_session, owner.id, published.file_id)
     assert found is not None
-    assert (found.name, found.chat_title) == (long_name, long_title)
+    assert (found.file_name, found.chat_title) == (long_name, long_title)
     assert found.path == f"{deep}/{long_name}"
-    assert chat_file_name(found.file_id, found.name).endswith(".pptx")
+    assert found.artifact_type == "slides"
+    assert chat_file_name(found.file_id, found.file_name).endswith(".pptx")
 
 
 def test_a_later_publish_never_moves_the_latest_publish_back(

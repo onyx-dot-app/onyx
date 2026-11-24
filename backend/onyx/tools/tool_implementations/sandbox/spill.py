@@ -43,6 +43,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ExecCommandTool,
+    LibraryListTool,
     WriteStdinTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -85,9 +86,10 @@ _ENCODE_CHARS = 1 << 20
 # The modification time of a listed file that has none: it goes last.
 _UNKNOWN_AGE = datetime.max.replace(tzinfo=timezone.utc)
 # Tools whose content the limits of one result and one step do not cut: they
-# cut it themselves (the code mode cells, exec), page through it (read_file
-# and skills_read, so a spill would only be read back), or the model cites it
-# whole. A full value still spills.
+# cut it themselves (the code mode cells, exec), page through it (read_file,
+# skills_read and library_list, whose page keeps within
+# ARTIFACTS_LIST_MAX_CHARS, so a spill would only be read back), or the model
+# cites it whole. A full value still spills.
 _OWN_LIMITS = frozenset(
     {
         CODE_MODE_TOOL_NAME,
@@ -96,6 +98,7 @@ _OWN_LIMITS = frozenset(
         WriteStdinTool.NAME,
         FILE_READER_TOOL_NAME,
         SKILLS_READ_TOOL_NAME,
+        LibraryListTool.NAME,
         *CITEABLE_TOOLS_NAMES,
     }
 )

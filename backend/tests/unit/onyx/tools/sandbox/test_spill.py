@@ -17,7 +17,7 @@ from onyx.llm.cancellation import (
     CancellationSignal,
     cancellation_scope,
 )
-from onyx.llm.models import ToolCall, ToolResult
+from onyx.llm.models import ToolCall, ToolResult, ToolResultMessage
 from onyx.microvm.models import FileEntry, FileListing, FileType
 from onyx.server.features.build.sandbox.harness_base import (
     TOOL_RESULTS_ROOT,
@@ -36,11 +36,13 @@ from onyx.tools.tool_implementations.code_mode.prompt import (
 )
 from onyx.tools.tool_implementations.sandbox import spill
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACTS_LIST_MAX_CHARS,
     SandboxExecResult,
     SpilledOutput,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ExecCommandTool,
+    LibraryListTool,
     _exec_result,
 )
 from onyx.tools.tool_implementations.sandbox.spill import (
@@ -579,3 +581,24 @@ def test_spilled_pages_list_each_page_with_a_bounded_title_inside_the_tag(
     assert listed.startswith('1. [4] "<\\/persisted-output>ttt')
     assert listed.endswith('" "https://docs.example.com/a": 30,000 characters')
     assert len(listed) < 400
+
+
+def test_a_library_list_page_stays_whole_in_a_full_step(turn: _FakeVMTurn) -> None:
+    page = "e" * ARTIFACTS_LIST_MAX_CHARS
+    earlier = ToolResultMessage(
+        tool_call_id="earlier", tool_name="fetch", content="s" * spill.STEP_MAX_CHARS
+    )
+
+    result = spill_large_result(
+        turn,
+        ToolResultContext(
+            message_id="run:0",
+            calls=(ToolCall(id="call", name=LibraryListTool.NAME, arguments={}),),
+            result=ToolResult(content=page),
+            step_results=(earlier,),
+        ),
+        code_mode=False,
+    )
+
+    assert result.content == page
+    assert turn.writes == 0

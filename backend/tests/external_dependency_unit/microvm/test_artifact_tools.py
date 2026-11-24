@@ -1,8 +1,8 @@
-"""artifacts_list and artifacts_download against FirecrackerHarnessSandbox
+"""library_list and artifacts_download against FirecrackerHarnessSandbox
 with a fake host agent, Postgres and the file store: where a download lands,
 the cache, refusals that never start the VM, Stop, the timeout, the size cap,
 the chat file cleanup, and chat turns through the chat flow (the generic
-card, live and replayed, and the code mode group `artifacts`)."""
+card, live and replayed, and the code mode group `library`)."""
 
 import base64
 import json
@@ -57,12 +57,14 @@ from onyx.tools.models import ToolContext, ToolOptions
 from onyx.tools.tool_implementations.sandbox import file_copies, sandbox_tools
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACT_CURSOR,
     PUBLISH_FILES_MAX_BYTES,
+    LibraryListFilters,
     VmChatFile,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactsDownloadTool,
-    ArtifactsListTool,
+    LibraryListTool,
     PublishFilesTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -168,7 +170,7 @@ def _ref(db_session: Session, owner: User, chat_session_id: UUID) -> HarnessSand
 
 
 def _call(
-    tool: ArtifactsListTool | ArtifactsDownloadTool,
+    tool: LibraryListTool | ArtifactsDownloadTool,
     arguments: dict[str, JsonValue],
     cancellation: CancellationSignal | None = None,
 ) -> ToolResult:
@@ -272,7 +274,7 @@ def test_a_refused_file_never_starts_the_vm(
     assert over.is_error
     assert over.content == "big.bin is larger than 100 MiB"
     # Listing reads the database only.
-    assert not _call(ArtifactsListTool(_turn(user, calling)), {}).is_error
+    assert not _call(LibraryListTool(_turn(user, calling)), {}).is_error
     assert node.agent.create_calls == 0
 
 
@@ -656,7 +658,15 @@ def test_a_chat_lists_and_downloads_files_published_in_other_chats(
     assert chat_turn_work.wait_idle(timeout=30)
 
     found = get_user_published_files(
-        db_session, user.id, query="REPORT", chat_session_id=None, limit=2, before=None
+        db_session,
+        user.id,
+        query="REPORT",
+        chat_session_id=None,
+        filters=LibraryListFilters(),
+        sort="modified_at",
+        sort_order="desc",
+        limit=2,
+        cursor=None,
     )
     assert found is not None
     [(notes, after), (report, _)] = found
@@ -666,13 +676,13 @@ def test_a_chat_lists_and_downloads_files_published_in_other_chats(
         "out/report.csv",
         "Report",
     )
-    cursor = base64.urlsafe_b64encode(after.model_dump_json().encode()).decode()
+    cursor = base64.urlsafe_b64encode(ARTIFACT_CURSOR.dump_json(after)).decode()
 
     llm = ChatLLM(
         [
-            tool_step(ArtifactsListTool.NAME, "list", {"query": "REPORT", "limit": 1}),
+            tool_step(LibraryListTool.NAME, "list", {"query": "REPORT", "limit": 1}),
             tool_step(
-                ArtifactsListTool.NAME,
+                LibraryListTool.NAME,
                 "next",
                 {"query": "REPORT", "limit": 1, "cursor": cursor},
             ),
@@ -685,10 +695,10 @@ def test_a_chat_lists_and_downloads_files_published_in_other_chats(
     parts = chat_c.send(llm)
 
     listed = json.loads(last_tool_text(llm, "list"))
-    assert [entry["file_id"] for entry in listed["artifacts"]] == [notes.file_id]
+    assert [entry["file_id"] for entry in listed["files"]] == [notes.file_id]
     assert listed["next_cursor"] == cursor
     following = json.loads(last_tool_text(llm, "next"))
-    assert [entry["file_id"] for entry in following["artifacts"]] == [report.file_id]
+    assert [entry["file_id"] for entry in following["files"]] == [report.file_id]
     assert following["next_cursor"] is None
     downloaded = json.loads(last_tool_text(llm, "download"))
     path = _landed(report.file_id, "report.csv")
@@ -699,8 +709,8 @@ def test_a_chat_lists_and_downloads_files_published_in_other_chats(
     assert [
         obj.display_name for obj in live if isinstance(obj, packets.CustomToolStart)
     ] == [
-        ArtifactsListTool.display_name,
-        ArtifactsListTool.display_name,
+        LibraryListTool.display_name,
+        LibraryListTool.display_name,
         ArtifactsDownloadTool.display_name,
     ]
     [replayed] = chat_c.replayed(db_session)
@@ -723,7 +733,7 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
                 "code",
                 "matches = await tool_search('download a published file')\n"
                 "print([match['name'] for match in matches])\n"
-                f"r = await tools.artifacts__download(file_id='{file_id}')\n"
+                f"r = await tools.library__download(file_id='{file_id}')\n"
                 "print(r['path'], r['cached'])\n",
             ),
             Delta(content="Done."),
@@ -737,12 +747,12 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
         if tool["function"]["name"] == "execute_code"
     ]
     assert (
-        "\n  - artifacts: Find and download the files that you published in this "
+        "\n  - library: Find and download the files that you published in this "
         "chat and the user's other chats.\n" in description
     )
-    assert "artifacts__download" not in description
+    assert "library__download" not in description
     text = last_tool_text(llm, "code")
-    assert "'artifacts__download'" in text
+    assert "'library__download'" in text
     path = _landed(file_id, "report.csv")
     assert f"{path} False" in text
     assert _vm_file(node, chat.ref(db_session), path) == b"a,b\n"
@@ -767,8 +777,8 @@ def test_only_the_chats_owner_gets_the_sandbox_tools(
             ).send(llm)
             return {tool["function"]["name"] for tool in llm.requests[0]["tools"]}
 
-        assert {PublishFilesTool.NAME, ArtifactsListTool.NAME} <= offered(owned)
-        assert not {PublishFilesTool.NAME, ArtifactsListTool.NAME} & offered(ownerless)
+        assert {PublishFilesTool.NAME, LibraryListTool.NAME} <= offered(owned)
+        assert not {PublishFilesTool.NAME, LibraryListTool.NAME} & offered(ownerless)
     finally:
         db_session.rollback()
         db_session.execute(delete(ChatSession).where(ChatSession.id == ownerless))
