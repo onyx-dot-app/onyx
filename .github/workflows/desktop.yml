@@ -3,12 +3,12 @@ concurrency:
   group: Desktop-v2-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-# Desktop v2 (desktop-v2/) is a preview that lives beside desktop/. It has its
+# Desktop v2 (desktop/) is a preview that lives beside desktop/. It has its
 # own checks and builds, and never touches v1's release in deployment.yml.
 on:
   pull_request:
     paths:
-      - "desktop-v2/**"
+      - "desktop/**"
       - "web/lib/opal/**"
       - ".github/workflows/desktop-v2.yml"
   # Manual release: a signed, notarized universal DMG on a GitHub pre-release
@@ -55,8 +55,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            desktop-v2/src-tauri/target/
-          key: ${{ runner.os }}-desktop-v2-cargo-${{ hashFiles('desktop-v2/src-tauri/Cargo.lock') }}
+            desktop/src-tauri/target/
+          key: ${{ runner.os }}-desktop-v2-cargo-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-desktop-v2-cargo-
 
@@ -66,34 +66,34 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install desktop-v2 dependencies
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: bun install --frozen-lockfile
 
       # Also needed before Clippy: tauri::generate_context! reads dist/.
       - name: Build the local windows
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: bun run vite:build
 
       - name: Check Rust formatting
-        working-directory: ./desktop-v2/src-tauri
+        working-directory: ./desktop/src-tauri
         run: cargo fmt --check
 
       - name: Run Clippy
-        working-directory: ./desktop-v2/src-tauri
+        working-directory: ./desktop/src-tauri
         run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Run Rust tests
-        working-directory: ./desktop-v2/src-tauri
+        working-directory: ./desktop/src-tauri
         run: cargo test --locked
 
       - name: Type-check the local windows
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: bun run typecheck
 
       # Unsigned: reviewers open it with right-click > Open. The cache restores
       # target/, so an older DMG is removed before the build.
       - name: Build universal DMG
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: |
           rm -rf src-tauri/target/universal-apple-darwin/release/bundle
           bun run tauri build --target universal-apple-darwin --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
@@ -104,7 +104,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: onyx-desktop-v2-macos-universal-${{ github.run_id }}
-          path: desktop-v2/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          path: desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           retention-days: 14
           if-no-files-found: error
 
@@ -121,8 +121,8 @@ jobs:
             artifact: windows-x64
             bundles: nsis,msi
             bundle-paths: |
-              desktop-v2/src-tauri/target/release/bundle/nsis/*.exe
-              desktop-v2/src-tauri/target/release/bundle/msi/*.msi
+              desktop/src-tauri/target/release/bundle/nsis/*.exe
+              desktop/src-tauri/target/release/bundle/msi/*.msi
           # The oldest supported Ubuntu LTS: the bundles need the glibc they
           # are built with or newer.
           - name: Linux x64
@@ -130,8 +130,8 @@ jobs:
             artifact: linux-x64
             bundles: appimage,deb
             bundle-paths: |
-              desktop-v2/src-tauri/target/release/bundle/appimage/*.AppImage
-              desktop-v2/src-tauri/target/release/bundle/deb/*.deb
+              desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+              desktop/src-tauri/target/release/bundle/deb/*.deb
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
     permissions:
@@ -182,8 +182,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            desktop-v2/src-tauri/target/
-          key: ${{ matrix.platform }}-desktop-v2-cargo-${{ hashFiles('desktop-v2/src-tauri/Cargo.lock') }}
+            desktop/src-tauri/target/
+          key: ${{ matrix.platform }}-desktop-v2-cargo-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ matrix.platform }}-desktop-v2-cargo-
 
@@ -192,27 +192,27 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install desktop-v2 dependencies
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: bun install --frozen-lockfile
 
       - name: Build the local windows
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: bun run vite:build
 
       - name: Check Rust formatting
-        working-directory: ./desktop-v2/src-tauri
+        working-directory: ./desktop/src-tauri
         run: cargo fmt --check
 
       - name: Run Clippy
-        working-directory: ./desktop-v2/src-tauri
+        working-directory: ./desktop/src-tauri
         run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Run Rust tests
-        working-directory: ./desktop-v2/src-tauri
+        working-directory: ./desktop/src-tauri
         run: cargo test --locked
 
       - name: Type-check the local windows
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: bun run typecheck
 
       # Unsigned: for reviewers only.
@@ -224,7 +224,7 @@ jobs:
       # (README, "Windows code signing"). Tauri then signs the app, the
       # uninstaller and both installers.
       - name: Build installers
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         env:
           BUNDLES: ${{ matrix.bundles }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
@@ -250,7 +250,7 @@ jobs:
 
       - name: Check Authenticode signatures
         if: runner.os == 'Windows' && github.event.pull_request.head.repo.full_name == github.repository && vars.DESKTOP_V2_WINDOWS_SIGN_COMMAND != ''
-        working-directory: ./desktop-v2/src-tauri/target/release
+        working-directory: ./desktop/src-tauri/target/release
         shell: pwsh
         # Tauri restores the unsigned app in target/release after each
         # package, so the app is checked inside the installers.
@@ -277,7 +277,7 @@ jobs:
       # .deb or the AppImage may need a newer glibc.
       - name: Check the glibc floor
         if: runner.os == 'Linux'
-        working-directory: ./desktop-v2/src-tauri/target/release/bundle
+        working-directory: ./desktop/src-tauri/target/release/bundle
         run: |
           set -euo pipefail
           FLOOR=2.35
@@ -355,11 +355,11 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install desktop-v2 dependencies
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: bun install --frozen-lockfile
 
       - name: Inject version
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: |
           sed "s/^version = .*/version = \"${VERSION}\"/" src-tauri/Cargo.toml > src-tauri/Cargo.toml.tmp
           mv src-tauri/Cargo.toml.tmp src-tauri/Cargo.toml
@@ -378,7 +378,7 @@ jobs:
 
       # Third-party JavaScript runs here, before the job has any credential.
       - name: Build the local windows
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: bun run vite:build
 
       - name: Configure AWS credentials
@@ -395,7 +395,7 @@ jobs:
       # are built only here, so local and PR builds need no key. A null
       # beforeBuildCommand stops Vite from running again with the secrets set.
       - name: Build, sign and notarize
-        working-directory: ./desktop-v2
+        working-directory: ./desktop
         run: |
           set -euo pipefail
           fetch() {
@@ -434,7 +434,7 @@ jobs:
             -- --locked
 
       - name: Collect release files
-        working-directory: ./desktop-v2/src-tauri/target/universal-apple-darwin/release/bundle
+        working-directory: ./desktop/src-tauri/target/universal-apple-darwin/release/bundle
         env:
           REPO: ${{ github.repository }}
         run: |
@@ -464,5 +464,5 @@ jobs:
             --prerelease \
             --latest=false \
             --title "Onyx Desktop v2 ${VERSION} (preview)" \
-            --notes "Preview build of the native macOS app (desktop-v2/). Universal: Apple silicon and Intel. The default desktop app is still v1." \
+            --notes "Preview build of the native macOS app (desktop/). Universal: Apple silicon and Intel. The default desktop app is still v1." \
             "${RUNNER_TEMP}"/release/*

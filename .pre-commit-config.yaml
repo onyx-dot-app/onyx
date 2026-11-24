@@ -500,7 +500,7 @@ repos:
         language: system
         entry: bun install
         pass_filenames: false
-        files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
+        files: ^(package\.json|bun\.lock|(widget|examples/widget)/package\.json)$
         stages: [post-checkout, post-merge, post-rewrite]
       - id: root-bun-install-check
         name: root bun install
@@ -508,7 +508,7 @@ repos:
         language: system
         entry: bun install
         pass_filenames: false
-        files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
+        files: ^(package\.json|bun\.lock|(widget|examples/widget)/package\.json)$
 
       # `bun run` rather than `bunx` here and below: it runs the binary that
       # bun.lock pinned and installed, where `bunx` falls back to downloading
@@ -554,7 +554,7 @@ repos:
 
       # Needs a Rust toolchain + GTK3/WebKitGTK headers, absent on the shared
       # Quality-Checks-PR runner -- that workflow SKIPs both hooks and relies on
-      # pr-desktop-build.yml as the actual CI gate instead.
+      # desktop.yml as the actual CI gate instead.
       - id: desktop-rust-fmt
         name: desktop cargo fmt
         entry: bash -c 'cd desktop/src-tauri && cargo fmt --check'
@@ -562,28 +562,13 @@ repos:
         pass_filenames: false
         files: ^desktop/src-tauri/src/.*\.rs$
 
+      # tauri::generate_context! reads desktop/dist, which a Vite build makes.
       - id: desktop-rust-clippy
         name: desktop cargo clippy
-        entry: bash -c 'cd desktop/src-tauri && cargo clippy --all-targets --all-features -- -D warnings'
+        entry: bash -c 'mkdir -p desktop/dist && cd desktop/src-tauri && cargo clippy --all-targets -- -D warnings'
         language: system
         pass_filenames: false
         files: ^desktop/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
-
-      # desktop-v2/ (preview app beside desktop/). Same toolchain needs and the
-      # same CI split: desktop-v2.yml is the gate.
-      - id: desktop-v2-rust-fmt
-        name: desktop-v2 cargo fmt
-        entry: bash -c 'cd desktop-v2/src-tauri && cargo fmt --check'
-        language: system
-        pass_filenames: false
-        files: ^desktop-v2/src-tauri/src/.*\.rs$
-
-      - id: desktop-v2-rust-clippy
-        name: desktop-v2 cargo clippy
-        entry: bash -c 'mkdir -p desktop-v2/dist && cd desktop-v2/src-tauri && cargo clippy --all-targets -- -D warnings'
-        language: system
-        pass_filenames: false
-        files: ^desktop-v2/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
 
       # mobile/ is a standalone Expo (SDK 56) app with its own bun.lock — it is NOT
       # part of the root bun workspace, so it gets its own install + lockfile-check
