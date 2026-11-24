@@ -316,7 +316,8 @@ export function PanelTabStrip({
                       className="text-text-03"
                       aria-hidden
                     >
-                      <Icon className="size-3" />
+                      {/* A button's icon size */}
+                      <Icon className="size-4" />
                     </Section>
                   );
                   return (
@@ -377,7 +378,7 @@ export function PanelTabStrip({
                           tabIndex={
                             active || (!activeTabId && index === 0) ? 0 : -1
                           }
-                          font="secondary-body"
+                          font="main-ui-body"
                           onKeyDown={(event) => {
                             if (disabled) return;
                             if (event.key === "Enter" || event.key === " ") {
