@@ -197,9 +197,13 @@ class MicrosoftRateBudgetEntry(BaseModel):
 
 class MicrosoftRateBudgets(BaseModel):
     """The other Microsoft connectors on the app registration of a
-    credential, and the sum of the RU per minute that they set."""
+    credential that the caller can see, and the sum of the RU per minute
+    that all of them set."""
 
     connectors: list[MicrosoftRateBudgetEntry]
+    # The connectors that the caller cannot see and that set RU per minute.
+    # The total counts them.
+    hidden_connector_count: int = 0
     total_ru_per_minute: int
 
 

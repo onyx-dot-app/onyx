@@ -293,7 +293,7 @@ def fetch_microsoft_app_cc_pairs(
     registration as ``credential``: the same directory (tenant) id and client
     id, on any credential row. Microsoft limits the calls of the app, so
     these connectors share its rate limit. Empty when the credential names no
-    app. No user filter: only an admin reads this."""
+    app. No user filter: the caller filters the pairs that it names."""
     identity = stored_microsoft_app_identity(
         credential.source, _stored_json(credential)
     )

@@ -17,6 +17,8 @@ interface MicrosoftRateBudgetEntry {
 
 interface MicrosoftRateBudgets {
   connectors: MicrosoftRateBudgetEntry[];
+  /** Connectors that the user cannot see and that set RU per minute. */
+  hidden_connector_count: number;
   total_ru_per_minute: number;
 }
 
@@ -52,20 +54,25 @@ export default function MicrosoftRateBudgetNote({
     );
   }
 
-  const withValue = data.connectors.filter(
-    (connector) => connector.ru_per_minute !== null
-  );
+  const named = data.connectors
+    .filter((connector) => connector.ru_per_minute !== null)
+    .map(
+      (connector) =>
+        `${connector.name} (${format.number(connector.ru_per_minute ?? 0)})`
+    );
+  if (data.hidden_connector_count > 0) {
+    named.push(
+      t("connectors.microsoft.fields.ru_per_minute.hidden", {
+        count: data.hidden_connector_count,
+      })
+    );
+  }
   return (
     <Text font="secondary-body" color="text-03" as="p">
-      {withValue.length === 0
+      {named.length === 0
         ? t("connectors.microsoft.fields.ru_per_minute.none")
         : t("connectors.microsoft.fields.ru_per_minute.others", {
-            connectors: withValue
-              .map(
-                (connector) =>
-                  `${connector.name} (${format.number(connector.ru_per_minute ?? 0)})`
-              )
-              .join(", "),
+            connectors: named.join(", "),
             total: format.number(data.total_ru_per_minute),
           })}
     </Text>

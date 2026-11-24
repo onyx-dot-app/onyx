@@ -28,6 +28,7 @@ class _Setup:
         self.client_id = client_id
         self.credential_ids: list[int] = []
         self.connector_ids: list[int] = []
+        self.users: list[User] = [admin]
 
 
 def _credential(
@@ -36,6 +37,8 @@ def _credential(
     source: DocumentSource,
     prefix: str,
     client_id: str | None = None,
+    admin_public: bool = True,
+    owner: User | None = None,
 ) -> Credential:
     credential = create_credential(
         CredentialBase(
@@ -45,11 +48,11 @@ def _credential(
                 f"{prefix}_directory_id": setup.directory_id.upper(),
                 f"{prefix}_client_secret": _SECRET,
             },
-            admin_public=True,
+            admin_public=admin_public,
             source=source,
             name=f"test-credential-{uuid4().hex[:8]}",
         ),
-        setup.admin,
+        owner or setup.admin,
         db_session,
     )
     setup.credential_ids.append(credential.id)
@@ -62,6 +65,7 @@ def _pair(
     credential: Credential,
     source: DocumentSource,
     ru_per_minute: int | None,
+    access_type: AccessType = AccessType.PUBLIC,
 ) -> Connector:
     connector = Connector(
         name=f"test-connector-{uuid4().hex[:8]}",
@@ -79,7 +83,7 @@ def _pair(
             credential_id=credential.id,
             name=f"pair of {connector.name}",
             status=ConnectorCredentialPairStatus.ACTIVE,
-            access_type=AccessType.PUBLIC,
+            access_type=access_type,
             auto_sync_options=None,
             creator_id=setup.admin.id,
         )
@@ -105,7 +109,8 @@ def setup(db_session: Session) -> Generator[_Setup, None, None]:
         delete(Credential).where(Credential.id.in_(state.credential_ids))
     )
     db_session.commit()
-    delete_test_user(db_session, admin)
+    for user in state.users:
+        delete_test_user(db_session, user)
 
 
 def test_the_listing_has_the_connectors_of_the_app_on_every_credential(
@@ -132,7 +137,7 @@ def test_the_listing_has_the_connectors_of_the_app_on_every_credential(
     budgets = list_microsoft_rate_budgets(
         sharepoint_credential.id,
         exclude_connector_id=edited.id,
-        _=setup.admin,
+        user=setup.admin,
         db_session=db_session,
     )
 
@@ -160,7 +165,7 @@ def test_the_listing_has_the_connectors_of_the_app_on_every_credential(
     everything = list_microsoft_rate_budgets(
         teams_credential.id,
         exclude_connector_id=None,
-        _=setup.admin,
+        user=setup.admin,
         db_session=db_session,
     )
     assert everything.total_ru_per_minute == 1650
@@ -169,7 +174,7 @@ def test_the_listing_has_the_connectors_of_the_app_on_every_credential(
     other = list_microsoft_rate_budgets(
         other_app_credential.id,
         exclude_connector_id=None,
-        _=setup.admin,
+        user=setup.admin,
         db_session=db_session,
     )
     assert [entry.ru_per_minute for entry in other.connectors] == [4000]
@@ -191,11 +196,61 @@ def test_a_credential_with_no_app_registration_has_no_listing(
     setup.credential_ids.append(slack.id)
 
     budgets = list_microsoft_rate_budgets(
-        slack.id, exclude_connector_id=None, _=setup.admin, db_session=db_session
+        slack.id, exclude_connector_id=None, user=setup.admin, db_session=db_session
     )
     assert (budgets.connectors, budgets.total_ru_per_minute) == ([], 0)
 
     with pytest.raises(OnyxError):
         list_microsoft_rate_budgets(
-            -1, exclude_connector_id=None, _=setup.admin, db_session=db_session
+            -1, exclude_connector_id=None, user=setup.admin, db_session=db_session
+        )
+
+
+def test_a_user_who_is_not_an_admin_sees_only_the_connectors_they_can_read(
+    db_session: Session, setup: _Setup
+) -> None:
+    """The total counts every connector on the app; the list names only the
+    connectors that the caller can read."""
+    reader = create_test_user(db_session, "ru_budget_reader")
+    setup.users.append(reader)
+    # The owner of a credential can use it, as a group manager can use a
+    # credential shared with the group.
+    credential = _credential(
+        db_session, setup, DocumentSource.SHAREPOINT, "sp", owner=reader
+    )
+    visible = _pair(db_session, setup, credential, DocumentSource.SHAREPOINT, 500)
+    _pair(
+        db_session,
+        setup,
+        credential,
+        DocumentSource.SHAREPOINT,
+        900,
+        access_type=AccessType.PRIVATE,
+    )
+    _pair(
+        db_session,
+        setup,
+        credential,
+        DocumentSource.SHAREPOINT,
+        None,
+        access_type=AccessType.PRIVATE,
+    )
+
+    budgets = list_microsoft_rate_budgets(
+        credential.id, exclude_connector_id=None, user=reader, db_session=db_session
+    )
+
+    assert [entry.connector_id for entry in budgets.connectors] == [visible.id]
+    assert budgets.hidden_connector_count == 1
+    assert budgets.total_ru_per_minute == 1400
+
+    private_credential = _credential(
+        db_session, setup, DocumentSource.SHAREPOINT, "sp", admin_public=False
+    )
+    with pytest.raises(OnyxError):
+        list_microsoft_rate_budgets(
+            private_credential.id,
+            exclude_connector_id=None,
+            user=reader,
+            db_session=db_session,
         )
