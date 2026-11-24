@@ -25,6 +25,9 @@ export interface RunStepProps {
   defaultExpanded?: boolean;
   /** The body has no header (the body is its own control). */
   hideHeader?: boolean;
+  /** Still working without a running status (e.g. Craft's thinking keeps
+   *  its own icon): with no body yet, it opens onto the loading shimmer. */
+  loading?: boolean;
 }
 
 function statusIcon(
@@ -53,6 +56,7 @@ export function RunStep({
   body = null,
   defaultExpanded = false,
   hideHeader = false,
+  loading = false,
 }: RunStepProps) {
   const [open, setOpen] = useState(defaultExpanded);
   if (hideHeader) return <>{body}</>;
@@ -62,7 +66,8 @@ export function RunStep({
   // is a loading shimmer. A finished step with nothing to show is a static
   // row, so a click cannot open it.
   const shownBody =
-    body ?? (status === "streaming" ? <LineLoader width="2/3" /> : null);
+    body ??
+    (status === "streaming" || loading ? <LineLoader width="2/3" /> : null);
   const hasBody = shownBody !== null;
   const cardBody = hasBody
     ? {
