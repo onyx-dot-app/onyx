@@ -14117,7 +14117,15 @@
     },
     "playground": {
       "restricted": {
-        "description": "이 기능은 플레이그라운드에서 사용할 수 없습니다. 자체 Onyx에서는 사용할 수 있습니다. [영업팀에 문의]({salesUrl})",
+        "enterprise": {
+          "description": "이 기능은 Enterprise 기능입니다. 플레이그라운드에서는 사용할 수 없습니다. 자체 Onyx에서는 사용할 수 있습니다. [영업팀에 문의]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "기능을 사용해 보실 수 있도록 자체 모델 키를 설정해 두었습니다. 자체 Onyx에서는 고객님의 키로 실행됩니다. [영업팀에 문의]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "이 기능은 플레이그라운드에서 꺼져 있습니다. 자체 Onyx에서는 사용할 수 있습니다. [영업팀에 문의]({salesUrl})"
+        },
         "title": "플레이그라운드 제한",
         "tooltip": "플레이그라운드에서는 사용할 수 없습니다. 자체 Onyx에서는 사용할 수 있습니다."
       }

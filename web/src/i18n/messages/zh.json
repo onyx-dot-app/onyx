@@ -14117,7 +14117,15 @@
     },
     "playground": {
       "restricted": {
-        "description": "此功能在 Playground 中不可用。您自己的 Onyx 包含此功能。[联系销售]({salesUrl})",
+        "enterprise": {
+          "description": "这是企业版功能，在 Playground 中不可用。您自己的 Onyx 包含此功能。[联系销售]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "我们已配置自己的模型密钥，方便您试用这些功能。您自己的 Onyx 使用您的密钥运行。[联系销售]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "此功能在 Playground 中已关闭。您自己的 Onyx 包含此功能。[联系销售]({salesUrl})"
+        },
         "title": "Playground 限制",
         "tooltip": "在 Playground 中不可用。您自己的 Onyx 包含此功能。"
       }

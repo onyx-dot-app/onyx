@@ -22,9 +22,18 @@ test("a read-only region disables form controls and is inert", () => {
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   // The disabled fieldset does not reach a focusable div; inert does.
   expect(screen.getByTestId("card").closest("[inert]")).not.toBeNull();
-  expect(
-    screen.getByText("Available on the Enterprise plan")
-  ).toBeInTheDocument();
+});
+
+test("the reason stays outside the inert part, so it is still announced", () => {
+  render(
+    <ReadOnlyRegion tooltip="Available on the Enterprise plan">
+      <Content />
+    </ReadOnlyRegion>
+  );
+
+  const reason = screen.getByText("Available on the Enterprise plan");
+  expect(reason).toBeInTheDocument();
+  expect(reason.closest("[inert]")).toBeNull();
 });
 
 test("readOnly false renders the children as they are", () => {

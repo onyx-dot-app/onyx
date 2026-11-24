@@ -33,10 +33,12 @@ export interface ReadOnlyRegionProps {
  * on a plan that does not include it, a form while a request is pending.
  *
  * Built on `Disabled`, which dims the region, blocks the pointer and disables
- * the form controls inside. On top of that the region is `inert`, so the
+ * the form controls inside. On top of that the children are `inert`, so the
  * browser also skips elements that are focusable without being form controls
  * (cards and rows with a key handler). Nothing inside can take focus, so no
- * popup or editor can open from it.
+ * popup or editor can open from it. Only the children are inert, not the
+ * wrapper: the reason stays in the accessibility tree and the tooltip stays
+ * reachable by pointer.
  *
  * @example
  * ```tsx
@@ -51,12 +53,10 @@ export function ReadOnlyRegion({
   children,
 }: ReadOnlyRegionProps) {
   return (
-    <Disabled
-      disabled={readOnly}
-      inert={readOnly || undefined}
-      tooltip={tooltip}
-    >
-      {children}
+    <Disabled disabled={readOnly} tooltip={tooltip}>
+      <div className="contents" inert={readOnly || undefined}>
+        {children}
+      </div>
     </Disabled>
   );
 }

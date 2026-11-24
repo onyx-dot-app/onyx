@@ -1,5 +1,3 @@
-import { Tier } from "@/lib/tiers/types";
-
 /**
  * A feature the playground (the free trial) can restrict. Mirrors
  * `PlaygroundRestrictedFeature` in `backend/onyx/server/playground.py`, and
@@ -21,25 +19,42 @@ export enum PlaygroundRestrictedFeature {
   EMBEDDING = "embedding",
 }
 
+/** Why a feature is restricted: picks the one line the notice shows. */
+export enum PlaygroundRestrictionReason {
+  /** The playground runs on our model keys so the user can try the features. */
+  OWN_KEYS = "own_keys",
+  /** An Enterprise feature, shown but not configurable on the trial. */
+  ENTERPRISE = "enterprise",
+  /** Simply switched off on the trial. */
+  SWITCHED_OFF = "switched_off",
+}
+
 /**
- * The plan that includes each feature, shown as a badge so the user sees what
- * their own Onyx would include. `null` for a feature the trial simply switches
- * off. A new feature must be listed here, or the build fails.
+ * The reason for each feature. A new feature must be listed here, or the
+ * build fails.
  */
-export const PLAYGROUND_FEATURE_PLAN: Record<
+export const PLAYGROUND_FEATURE_REASON: Record<
   PlaygroundRestrictedFeature,
-  Tier | null
+  PlaygroundRestrictionReason
 > = {
-  [PlaygroundRestrictedFeature.LLM_PROVIDERS]: Tier.ENTERPRISE,
-  [PlaygroundRestrictedFeature.CONTEXTUAL_RAG]: Tier.ENTERPRISE,
-  [PlaygroundRestrictedFeature.SSO]: Tier.ENTERPRISE,
-  [PlaygroundRestrictedFeature.SCIM]: Tier.ENTERPRISE,
-  [PlaygroundRestrictedFeature.WHITELABEL]: Tier.ENTERPRISE,
-  [PlaygroundRestrictedFeature.HOOKS]: Tier.ENTERPRISE,
-  [PlaygroundRestrictedFeature.LOG_EXPORT]: Tier.ENTERPRISE,
-  [PlaygroundRestrictedFeature.STANDARD_ANSWERS]: Tier.ENTERPRISE,
-  [PlaygroundRestrictedFeature.ANONYMOUS_ACCESS]: null,
-  [PlaygroundRestrictedFeature.LLM_GATEWAY]: null,
-  [PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS]: null,
-  [PlaygroundRestrictedFeature.EMBEDDING]: null,
+  [PlaygroundRestrictedFeature.LLM_PROVIDERS]:
+    PlaygroundRestrictionReason.OWN_KEYS,
+  [PlaygroundRestrictedFeature.CONTEXTUAL_RAG]:
+    PlaygroundRestrictionReason.ENTERPRISE,
+  [PlaygroundRestrictedFeature.SSO]: PlaygroundRestrictionReason.ENTERPRISE,
+  [PlaygroundRestrictedFeature.SCIM]: PlaygroundRestrictionReason.ENTERPRISE,
+  [PlaygroundRestrictedFeature.WHITELABEL]:
+    PlaygroundRestrictionReason.ENTERPRISE,
+  [PlaygroundRestrictedFeature.HOOKS]: PlaygroundRestrictionReason.ENTERPRISE,
+  [PlaygroundRestrictedFeature.LOG_EXPORT]:
+    PlaygroundRestrictionReason.ENTERPRISE,
+  [PlaygroundRestrictedFeature.STANDARD_ANSWERS]:
+    PlaygroundRestrictionReason.ENTERPRISE,
+  [PlaygroundRestrictedFeature.ANONYMOUS_ACCESS]:
+    PlaygroundRestrictionReason.SWITCHED_OFF,
+  [PlaygroundRestrictedFeature.LLM_GATEWAY]:
+    PlaygroundRestrictionReason.SWITCHED_OFF,
+  [PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS]:
+    PlaygroundRestrictionReason.SWITCHED_OFF,
+  [PlaygroundRestrictedFeature.EMBEDDING]: PlaygroundRestrictionReason.OWN_KEYS,
 };

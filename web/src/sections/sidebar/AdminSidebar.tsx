@@ -20,7 +20,7 @@ import {
   Badge,
   type BadgeProps,
 } from "@opal/components";
-import { SvgSearch, SvgX } from "@opal/icons";
+import { SvgLock, SvgSearch, SvgX } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import {
   useBillingInformation,
@@ -33,10 +33,7 @@ import {
 } from "@/lib/constants";
 import { Tier } from "@/lib/tiers/types";
 import { useBetaTag, usePlans } from "@/lib/tiers/hooks";
-import {
-  PLAYGROUND_FEATURE_PLAN,
-  type PlaygroundRestrictedFeature,
-} from "@/lib/playground/types";
+import type { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import useFilter from "@/hooks/useFilter";
 import { AccountPopover } from "@/lib/app/components";
 import {
@@ -117,21 +114,17 @@ export default function AdminSidebar() {
   const betaTag: BadgeProps = useBetaTag();
   const sectionTag = (sectionId: AdminNavSectionId | null) =>
     sectionId && BETA_SECTION_IDS.has(sectionId) ? betaTag : undefined;
-  // A restricted page carries the badge of the plan that includes it, so
-  // the user sees what their own Onyx would include.
+  // A restricted page carries a small lock: the page opens, read-only,
+  // under the playground notice. A badge would cover the label.
   const itemTag = (
     beta: boolean | undefined,
     restrictedFeatureKey: PlaygroundRestrictedFeature | undefined
-  ) => {
-    const plan = restrictedFeatureKey
-      ? PLAYGROUND_FEATURE_PLAN[restrictedFeatureKey]
-      : null;
-    return plan ? (
-      <Badge {...plans[plan].tag} />
+  ) =>
+    restrictedFeatureKey ? (
+      <SvgLock size={14} className="stroke-text-03" />
     ) : beta ? (
       <Badge {...betaTag} />
     ) : undefined;
-  };
 
   // Search the labels the user reads, not the underlying ids.
   const itemExtractor = useCallback(

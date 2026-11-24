@@ -2,15 +2,18 @@
  * @jest-environment jsdom
  */
 import { renderHook } from "@testing-library/react";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { NextIntlClientProvider } from "next-intl";
 import englishMessages from "@/i18n/messages/en.json";
 import {
   usePlaygroundRestriction,
   usePlaygroundRestrictions,
 } from "@/lib/playground/hooks";
-import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
+import {
+  PlaygroundRestrictedFeature,
+  PlaygroundRestrictionReason,
+} from "@/lib/playground/types";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/tiers/types";
 
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: jest.fn(),
@@ -58,7 +61,7 @@ test("holds what the server reports", () => {
 // usePlaygroundRestriction
 // ---------------------------------------------------------------------------
 
-test("an Enterprise-only feature is restricted with the Enterprise plan", () => {
+test("an Enterprise-only feature is restricted with the Enterprise reason", () => {
   stubRestrictions([PlaygroundRestrictedFeature.SSO]);
   const { result } = renderHook(
     () => usePlaygroundRestriction(PlaygroundRestrictedFeature.SSO),
@@ -67,12 +70,15 @@ test("an Enterprise-only feature is restricted with the Enterprise plan", () => 
     }
   );
   expect(result.current.restricted).toBe(true);
-  expect(result.current.plan).toBe(Tier.ENTERPRISE);
+  expect(result.current.reason).toBe(PlaygroundRestrictionReason.ENTERPRISE);
   expect(result.current.title).toBe("Playground Limit");
+  expect(toPlainString(result.current.description)).toContain(
+    "Enterprise feature"
+  );
   expect(result.current.tooltip).toContain("Not available on the playground");
 });
 
-test("a switched-off feature is restricted without a plan badge", () => {
+test("a switched-off feature says it is off on the playground", () => {
   stubRestrictions([PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS]);
   const { result } = renderHook(
     () =>
@@ -82,7 +88,20 @@ test("a switched-off feature is restricted without a plan badge", () => {
     { wrapper }
   );
   expect(result.current.restricted).toBe(true);
-  expect(result.current.plan).toBeUndefined();
+  expect(result.current.reason).toBe(PlaygroundRestrictionReason.SWITCHED_OFF);
+  expect(toPlainString(result.current.description)).toContain("switched off");
+});
+
+test("the model pages say the playground runs on our keys", () => {
+  stubRestrictions([PlaygroundRestrictedFeature.LLM_PROVIDERS]);
+  const { result } = renderHook(
+    () => usePlaygroundRestriction(PlaygroundRestrictedFeature.LLM_PROVIDERS),
+    { wrapper }
+  );
+  expect(result.current.reason).toBe(PlaygroundRestrictionReason.OWN_KEYS);
+  expect(toPlainString(result.current.description)).toContain(
+    "our own model keys"
+  );
 });
 
 test("a feature the server does not list is not restricted", () => {
@@ -105,5 +124,5 @@ test("a surface without a feature key is never restricted", () => {
     wrapper,
   });
   expect(result.current.restricted).toBe(false);
-  expect(result.current.plan).toBeUndefined();
+  expect(result.current.reason).toBeUndefined();
 });

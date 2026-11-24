@@ -6,11 +6,11 @@ import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 import { CONTACT_SALES_URL } from "@/lib/constants";
 import {
-  PLAYGROUND_FEATURE_PLAN,
+  PLAYGROUND_FEATURE_REASON,
+  PlaygroundRestrictionReason,
   type PlaygroundRestrictedFeature,
 } from "@/lib/playground/types";
 import { useSettings } from "@/lib/settings/hooks";
-import type { Tier } from "@/lib/tiers/types";
 
 /** The features the playground restricts. Empty off the playground. */
 export function usePlaygroundRestrictions(): ReadonlySet<PlaygroundRestrictedFeature> {
@@ -24,8 +24,8 @@ export function usePlaygroundRestrictions(): ReadonlySet<PlaygroundRestrictedFea
 export interface PlaygroundRestriction {
   /** True when the feature is restricted on this deployment. */
   restricted: boolean;
-  /** The plan that includes the feature, for a badge. Absent for a feature that is simply off. */
-  plan: Tier | undefined;
+  /** Why, which picks the description. Absent for a surface without a feature key. */
+  reason: PlaygroundRestrictionReason | undefined;
   title: string;
   description: RichStr;
   tooltip: string;
@@ -33,10 +33,10 @@ export interface PlaygroundRestriction {
 
 /**
  * Whether `featureKey` is restricted here, with the copy every restricted
- * surface shows: a short title, the one-line reason with the sales link, and a
- * tooltip for a disabled control.
+ * surface shows: a short title, the one-line reason for that feature with the
+ * sales link, and a tooltip for a disabled control.
  *
- *   const { restricted, plan } = usePlaygroundRestriction("sso");
+ *   const { restricted, description } = usePlaygroundRestriction(PlaygroundRestrictedFeature.SSO);
  *
  * Pass `undefined` for a surface without a feature key: it is never restricted.
  */
@@ -46,20 +46,25 @@ export function usePlaygroundRestriction(
   const t = useTranslations("common.playground");
   const restrictions = usePlaygroundRestrictions();
   const restricted = featureKey !== undefined && restrictions.has(featureKey);
-  const plan: Tier | undefined =
+  const reason =
     featureKey !== undefined
-      ? (PLAYGROUND_FEATURE_PLAN[featureKey] ?? undefined)
+      ? PLAYGROUND_FEATURE_REASON[featureKey]
       : undefined;
-  return useMemo(
-    () => ({
+  return useMemo(() => {
+    const args = { salesUrl: CONTACT_SALES_URL };
+    // Literal keys, so the message ids stay statically checkable.
+    const description =
+      reason === PlaygroundRestrictionReason.OWN_KEYS
+        ? t("restricted.ownKeys.description", args)
+        : reason === PlaygroundRestrictionReason.SWITCHED_OFF
+          ? t("restricted.switchedOff.description", args)
+          : t("restricted.enterprise.description", args);
+    return {
       restricted,
-      plan,
+      reason,
       title: t("restricted.title"),
-      description: markdown(
-        t("restricted.description", { salesUrl: CONTACT_SALES_URL })
-      ),
+      description: markdown(description),
       tooltip: t("restricted.tooltip"),
-    }),
-    [restricted, plan, t]
-  );
+    };
+  }, [restricted, reason, t]);
 }

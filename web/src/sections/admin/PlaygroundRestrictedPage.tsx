@@ -5,7 +5,6 @@ import { SvgLock } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { usePlaygroundRestriction } from "@/lib/playground/hooks";
 import type { PlaygroundRestrictedFeature } from "@/lib/playground/types";
-import { PlanTag } from "@/lib/tiers/components";
 
 export interface PlaygroundRestrictedPageProps {
   /** The page's feature key. `undefined` renders the children as they are. */
@@ -27,7 +26,7 @@ export default function PlaygroundRestrictedPage({
   featureKey,
   children,
 }: PlaygroundRestrictedPageProps) {
-  const { restricted, plan, title, description } =
+  const { restricted, title, description } =
     usePlaygroundRestriction(featureKey);
   if (!restricted) return <>{children}</>;
 
@@ -40,12 +39,7 @@ export default function PlaygroundRestrictedPage({
       data-testid="playground-restricted-page"
     >
       <Section padding={4} height="auto">
-        <MessageCard
-          icon={SvgLock}
-          title={title}
-          description={description}
-          rightChildren={plan ? <PlanTag plan={plan} /> : undefined}
-        />
+        <MessageCard icon={SvgLock} title={title} description={description} />
       </Section>
       <ReadOnlyRegion>{children}</ReadOnlyRegion>
     </Section>

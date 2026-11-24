@@ -43,11 +43,10 @@ test("a restricted page shows the notice and disables its controls", () => {
   );
 
   expect(screen.getByText("Playground Limit")).toBeInTheDocument();
-  expect(screen.getByText("Enterprise Plan")).toBeInTheDocument();
   // The markdown source, since react-markdown is stubbed above.
   expect(
     screen.getByText(
-      /\[Talk to sales\]\(https:\/\/www\.onyx\.app\/contact-sales\)/
+      /Enterprise feature.*\[Talk to sales\]\(https:\/\/www\.onyx\.app\/contact-sales\)/
     )
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Add provider" })).toBeDisabled();
@@ -56,7 +55,7 @@ test("a restricted page shows the notice and disables its controls", () => {
   expect(screen.getByTestId("provider-card").closest("[inert]")).not.toBeNull();
 });
 
-test("a switched-off feature shows the notice without a plan badge", () => {
+test("a switched-off feature says it is off on the playground", () => {
   stubRestrictions([PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS]);
   render(
     <PlaygroundRestrictedPage
@@ -67,7 +66,9 @@ test("a switched-off feature shows the notice without a plan badge", () => {
   );
 
   expect(screen.getByText("Playground Limit")).toBeInTheDocument();
-  expect(screen.queryByText("Enterprise Plan")).not.toBeInTheDocument();
+  expect(
+    screen.getByText(/switched off on the playground/)
+  ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Add provider" })).toBeDisabled();
 });
 

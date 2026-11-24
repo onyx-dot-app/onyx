@@ -14117,7 +14117,15 @@
     },
     "playground": {
       "restricted": {
-        "description": "この機能はプレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})",
+        "enterprise": {
+          "description": "これはEnterprise機能です。プレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "機能をお試しいただけるよう、当社のモデルキーを設定しています。ご自身のOnyxではご自身のキーで動作します。[営業に相談]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "この機能はプレイグラウンドでは無効になっています。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})"
+        },
         "title": "プレイグラウンドの制限",
         "tooltip": "プレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。"
       }

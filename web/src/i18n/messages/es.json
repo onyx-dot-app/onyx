@@ -14117,7 +14117,15 @@
     },
     "playground": {
       "restricted": {
-        "description": "Esta función no está disponible en el playground. Su propio Onyx la tiene. [Hablar con ventas]({salesUrl})",
+        "enterprise": {
+          "description": "Esta es una función Enterprise. No está disponible en el playground. Su propio Onyx la tiene. [Hablar con ventas]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "Configuramos nuestras propias claves de modelo para que pueda probar las funciones. Su propio Onyx funciona con sus claves. [Hablar con ventas]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "Esta función está desactivada en el playground. Su propio Onyx la tiene. [Hablar con ventas]({salesUrl})"
+        },
         "title": "Límite del playground",
         "tooltip": "No disponible en el playground. Su propio Onyx la tiene."
       }
