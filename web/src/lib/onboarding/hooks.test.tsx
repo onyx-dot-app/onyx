@@ -376,14 +376,50 @@ describe("useShowOnboarding isOnboardingResolved", () => {
     expect(result.current.showOnboarding).toBe(true);
   });
 
-  it("is true with dismissed set in the same render when dismissed in storage", () => {
+  it("never reports a resolved, visible onboarding for a dismissed user", () => {
     localStorage.setItem("onyx:onboardingCompleted:user-1", "true");
+    mockProviderStatus.isLoadingProviders = true;
+    const renders: Array<ReturnType<typeof useShowOnboarding>> = [];
 
-    const { result } = renderUseShowOnboarding({ isLoadingProviders: true });
+    const { result } = renderHook(() => {
+      const value = useShowOnboarding({
+        activeAgent: undefined,
+        isLoadingChatSessions: true,
+        chatSessionsCount: 0,
+        userId: "user-1",
+      });
+      renders.push(value);
+      return value;
+    });
 
     expect(result.current.isOnboardingResolved).toBe(true);
     expect(result.current.onboardingDismissed).toBe(true);
     expect(result.current.showOnboarding).toBe(false);
+    expect(
+      renders.filter(
+        (render) =>
+          render.isOnboardingResolved &&
+          !render.onboardingDismissed &&
+          render.showOnboarding
+      )
+    ).toEqual([]);
+  });
+
+  it("does not resolve a new user from the previous user's dismissal", () => {
+    localStorage.setItem("onyx:onboardingCompleted:user-1", "true");
+    const { result, rerender } = renderUseShowOnboarding();
+    expect(result.current.isOnboardingResolved).toBe(true);
+    expect(result.current.onboardingDismissed).toBe(true);
+
+    rerender({
+      activeAgent: undefined,
+      isLoadingChatSessions: true,
+      chatSessionsCount: 0,
+      userId: "user-2",
+    });
+
+    expect(result.current.isOnboardingResolved).toBe(false);
+    expect(result.current.onboardingDismissed).toBe(false);
   });
 
   it("is false again for a new user until that user is evaluated", () => {

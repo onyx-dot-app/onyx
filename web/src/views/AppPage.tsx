@@ -198,7 +198,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // the /me load window. Read the raw result instead (undefined = loading, null =
   // resolved signed-out). This matters for anonymous users specifically: they're
   // kept on the login page, so unlike logged-in users they wouldn't bounce back.
-  const { user: resolvedUser } = useCurrentUser();
+  const { user: resolvedUser, isLoading: isLoadingUser } = useCurrentUser();
 
   const activeAgent = useActiveAgent();
 
@@ -804,7 +804,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             : "1fr auto 1fr",
   };
 
-  if (!isReady) return <OnyxInitializingLoader />;
+  // The welcome screen waits for the onboarding decision, so it mounts once in
+  // its final layout instead of showing the plain input and then sliding it
+  // into the onboarding layout.
+  const onboardingPending =
+    isWelcomeFocus && (isLoadingUser || (!!user && !isOnboardingResolved));
+
+  if (!isReady || onboardingPending) return <OnyxInitializingLoader />;
 
   return (
     <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>

@@ -813,8 +813,10 @@ ignores keys during IME composition.
 **First-run onboarding.** `AppPage` renders
 `web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
 `web/src/lib/onboarding/hooks.ts:useShowOnboarding` decides whether it shows.
-`AppPage` renders it only once `isOnboardingResolved` is true: the user,
-providers, chat sessions and dismissed flag have all loaded. While it shows,
+The welcome screen shows a loader until `isOnboardingResolved` is true, so it
+mounts once in its final layout. A saved dismissal resolves the decision at
+once. Otherwise the hook waits until the provider and chat session requests
+stop loading; a failed request also stops loading. While onboarding shows,
 the grid's bottom row is a fixed 30% of the page, so steps grow upward and the
 input's place does not depend on the previous layout or the load order.
 The step order is in `web/src/lib/onboarding/constants.ts:STEP_CONFIG`.
