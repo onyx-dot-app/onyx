@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser, apiLogin } from "@tests/e2e/utils/auth";
 import { OnboardingNamePromptPage } from "@tests/e2e/pages/OnboardingNamePromptPage";
+import { AppSidebarPage } from "@tests/e2e/pages/AppSidebarPage";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
@@ -146,6 +147,45 @@ test.describe("Onboarding Flow @exclusive", () => {
       await expectElementScreenshot(llmStep, {
         name: "onboarding-llm-step",
       });
+    });
+
+    test("the input returns to its place after leaving a chat", async ({
+      page,
+    }) => {
+      const client = new OnyxApiClient(page.request);
+      const namePromptPage = new OnboardingNamePromptPage(page);
+      // The input's top once the layout stops moving
+      const settledInputTop = async () => {
+        let top = Number.NaN;
+        await expect
+          .poll(async () => {
+            const box = await namePromptPage.chatInput.boundingBox();
+            const next = box?.y ?? Number.NaN;
+            const settled = next === top;
+            top = next;
+            return settled;
+          })
+          .toBe(true);
+        return top;
+      };
+
+      const sessionId = await client.createChatSession("Onboarding return");
+      try {
+        await page.goto(`/app?chatId=${sessionId}`);
+        await expect(namePromptPage.chatInput).toBeVisible({ timeout: 15000 });
+        // From the chat's layout, where the bottom row is empty
+        await new AppSidebarPage(page).newSession();
+        await expect(namePromptPage.namePrompt).toBeVisible();
+        const returnedTop = await settledInputTop();
+
+        await namePromptPage.reload();
+        await expect(namePromptPage.namePrompt).toBeVisible();
+        expect(
+          Math.abs(returnedTop - (await settledInputTop()))
+        ).toBeLessThanOrEqual(2);
+      } finally {
+        await client.deleteChatSession(sessionId);
+      }
     });
   });
 
