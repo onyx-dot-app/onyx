@@ -106,9 +106,8 @@ def select_reembed_strategy(
     `contextual_rag_model_configuration_id` only matters when contextual RAG is
     on in present or future — if it is off in both, no enrichment exists in
     either index, so a stale model-id difference must not force AUGMENTATION.
-    Model/prefix/normalize/dimension and multipass changes only alter the vectors
-    (or large/mini chunks the port doesn't read), so they fall through to
-    MODEL_ONLY."""
+    Model/prefix/normalize/dimension changes alter the vectors, so they fall through
+    to MODEL_ONLY."""
     rag_relevant = present_ss.enable_contextual_rag or future_ss.enable_contextual_rag
     augmentation_changed = (
         present_ss.enable_contextual_rag != future_ss.enable_contextual_rag
@@ -143,6 +142,10 @@ VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS: frozenset[str] = frozenset(
         "reclaim_last_error",
         "pending_cc_pair_deletions",
         "vector_quantization",
+        # Multipass adds mini/large chunk embeddings, which OpenSearch does not
+        # store. Large chunks also raise the embed trim limit, so
+        # _stored_vectors_reusable compares large_chunks_enabled.
+        "multipass_indexing",
         "enable_contextual_rag",
         "contextual_rag_model_configuration_id",
     }
@@ -157,10 +160,14 @@ def _stored_vectors_reusable(
     what re-embedding under FUTURE would produce."""
     present_state = inspect(present_ss)
     future_state = inspect(future_ss)
-    return all(
-        present_state.attrs[column.key].value == future_state.attrs[column.key].value
-        for column in inspect(SearchSettings).column_attrs
-        if column.key not in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS
+    return (
+        all(
+            present_state.attrs[column.key].value
+            == future_state.attrs[column.key].value
+            for column in inspect(SearchSettings).column_attrs
+            if column.key not in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS
+        )
+        and present_ss.large_chunks_enabled == future_ss.large_chunks_enabled
     )
 
 
