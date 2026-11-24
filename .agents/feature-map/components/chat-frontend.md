@@ -67,6 +67,11 @@
   takes focus (`tabIndex={-1}`) on a click in empty space. So only keys with
   focus inside the page count: not keys on the sidebar, or on `body` before
   the first click.
+- **The composer keeps a draft for each chat** and one for the new chat
+  (`sections/input/AppInputBar.tsx`, `useDraft` with `storage: "local"`). The
+  draft holds the text, its `@` picks and the uploaded files, and survives
+  reload and browser closure. A send or an emptied input clears it, and
+  logout removes all of them.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button stops every active

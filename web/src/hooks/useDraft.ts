@@ -8,18 +8,21 @@ export function draftKey(scope: string, entityId: string): string {
   return `${STORAGE_PREFIX}:${scope}:${entityId}`;
 }
 
-function getStorage(): Storage | null {
+// "local" keeps the draft across reloads and closed tabs.
+export type DraftStorage = "session" | "local";
+
+function getStorage(kind: DraftStorage): Storage | null {
   if (typeof window === "undefined") return null;
   try {
-    // sessionStorage access throws when storage is blocked.
-    return window.sessionStorage;
+    // Storage access throws when storage is blocked.
+    return kind === "local" ? window.localStorage : window.sessionStorage;
   } catch {
     return null;
   }
 }
 
-export function clearDraft(key: string) {
-  const storage = getStorage();
+export function clearDraft(key: string, kind: DraftStorage = "session") {
+  const storage = getStorage(kind);
   if (!storage) return;
   try {
     storage.removeItem(key);
@@ -35,8 +38,11 @@ function defaultIsEmpty<T>(value: T): boolean {
 }
 
 /** Reads a draft now, also for a page that is not open. */
-export function readDraft<T>(key: string): T | null {
-  const storage = getStorage();
+export function readDraft<T>(
+  key: string,
+  kind: DraftStorage = "session"
+): T | null {
+  const storage = getStorage(kind);
   if (!storage) return null;
   try {
     const raw = storage.getItem(key);
@@ -50,9 +56,10 @@ export function readDraft<T>(key: string): T | null {
 export function writeDraft<T>(
   key: string,
   value: T,
-  isEmpty: (value: T) => boolean = defaultIsEmpty
+  isEmpty: (value: T) => boolean = defaultIsEmpty,
+  kind: DraftStorage = "session"
 ) {
-  const storage = getStorage();
+  const storage = getStorage(kind);
   if (!storage) return;
   try {
     if (isEmpty(value)) {
@@ -69,6 +76,7 @@ export interface UseDraftOptions<T> {
   key: string;
   debounceMs?: number;
   isEmpty?: (value: T) => boolean;
+  storage?: DraftStorage;
 }
 
 export interface UseDraftReturn<T> {
@@ -86,6 +94,7 @@ export function useDraft<T>({
   key,
   debounceMs = 300,
   isEmpty = defaultIsEmpty,
+  storage = "session",
 }: UseDraftOptions<T>): UseDraftReturn<T> {
   // Key-tagged so `loaded` is derived, giving a false->true edge on every key
   // change that consumers rely on to re-seed.
@@ -101,8 +110,8 @@ export function useDraft<T>({
   }, [isEmpty]);
 
   useEffect(() => {
-    setEntry({ key, draft: readDraft<T>(key) });
-  }, [key]);
+    setEntry({ key, draft: readDraft<T>(key, storage) });
+  }, [key, storage]);
 
   // Cancel a pending write on key change/unmount so it can't land under the old
   // key.
@@ -132,7 +141,7 @@ export function useDraft<T>({
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       const write = () => {
         timerRef.current = null;
-        writeDraft(key, value, isEmptyRef.current);
+        writeDraft(key, value, isEmptyRef.current, storage);
       };
       if (debounceMs === 0) write();
       else {
@@ -140,7 +149,7 @@ export function useDraft<T>({
         timerRef.current = setTimeout(write, debounceMs);
       }
     },
-    [key, debounceMs]
+    [key, debounceMs, storage]
   );
 
   const clear = useCallback(() => {
@@ -148,9 +157,9 @@ export function useDraft<T>({
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    clearDraft(key);
+    clearDraft(key, storage);
     setEntry({ key, draft: null });
-  }, [key]);
+  }, [key, storage]);
 
   const loaded = entry !== null && entry.key === key;
   const draft = loaded ? entry.draft : null;

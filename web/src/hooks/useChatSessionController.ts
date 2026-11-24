@@ -150,7 +150,8 @@ export default function useChatSessionController({
       priorChatSessionId !== null &&
       existingChatSessionId !== priorChatSessionId;
 
-    // Clear uploaded files on any session change (they're already in context)
+    // Clear files on any session change; the composer restores the next
+    // chat's draft files.
     if (isCreatingNewSession || isSwitchingBetweenSessions) {
       setCurrentMessageFiles([]);
     }

@@ -113,6 +113,7 @@ jest.mock("@/hooks/useDraft", () => ({
   draftKey: (scope: string, id: string) => `${scope}:${id}`,
   writeDraft: (...args: unknown[]) => mockWriteDraft(...args),
   readDraft: () => null,
+  clearDraft: jest.fn(),
   useDraft: () => ({
     loaded: true,
     draft: undefined,
@@ -1414,8 +1415,9 @@ test("an edited queued message is saved as the draft before the composer shows i
   // A chat switch cancels the composer's delayed save, so the text is saved now.
   expect(mockWriteDraft).toHaveBeenCalledWith(
     "chat:session",
-    { message: "Queued follow-up", mentions: [] },
-    expect.any(Function)
+    expect.objectContaining({ message: "Queued follow-up", mentions: [] }),
+    expect.any(Function),
+    "local"
   );
 });
 
@@ -1476,8 +1478,9 @@ test("an edit that finishes after a chat switch returns its text to its own chat
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
       "chat:session",
-      { message: "Queued follow-up", mentions: [] },
-      expect.any(Function)
+      expect.objectContaining({ message: "Queued follow-up", mentions: [] }),
+      expect.any(Function),
+      "local"
     )
   );
   expect(textbox).toHaveTextContent(/^$/);
@@ -1506,8 +1509,9 @@ test.each([
     await waitFor(() =>
       expect(mockWriteDraft).toHaveBeenCalledWith(
         "chat:session",
-        { message: "Keep this draft", mentions: [] },
-        expect.any(Function)
+        expect.objectContaining({ message: "Keep this draft", mentions: [] }),
+        expect.any(Function),
+        "local"
       )
     );
     expect(mockWriteDraft).not.toHaveBeenCalledWith(
@@ -1540,8 +1544,9 @@ test("a failed submission that ends after the composer closes goes to the chat's
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
       "chat:session",
-      { message: "Keep this draft", mentions: [] },
-      expect.any(Function)
+      expect.objectContaining({ message: "Keep this draft", mentions: [] }),
+      expect.any(Function),
+      "local"
     )
   );
 });

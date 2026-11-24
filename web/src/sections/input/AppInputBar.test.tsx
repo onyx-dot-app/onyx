@@ -263,23 +263,54 @@ test("incognito greys out Deep Research and explains why", async () => {
   );
 });
 
-describe("restore after a failed send", () => {
-  function projectFile(id: string): ProjectFile {
-    return {
-      id,
-      name: `${id}.txt`,
-      project_id: null,
-      user_id: null,
-      file_id: `${id}-file-id`,
-      created_at: "2026-01-01T00:00:00Z",
-      status: UserFileStatus.COMPLETED,
-      file_type: "text/plain",
-      last_accessed_at: "2026-01-01T00:00:00Z",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
-      token_count: null,
-      chunk_count: null,
+function projectFile(id: string): ProjectFile {
+  return {
+    id,
+    name: `${id}.txt`,
+    project_id: null,
+    user_id: null,
+    file_id: `${id}-file-id`,
+    created_at: "2026-01-01T00:00:00Z",
+    status: UserFileStatus.COMPLETED,
+    file_type: "text/plain",
+    last_accessed_at: "2026-01-01T00:00:00Z",
+    chat_file_type: ChatFileType.PLAIN_TEXT,
+    token_count: null,
+    chunk_count: null,
+  };
+}
+
+test("a reload restores the draft text and its uploaded files", async () => {
+  jest.useFakeTimers();
+  try {
+    const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
+    const uploading = {
+      ...projectFile("uploading-file"),
+      status: UserFileStatus.UPLOADING,
     };
+    mockProjectsContext.currentMessageFiles = [
+      projectFile("draft-file"),
+      uploading,
+    ];
+    const first = render(<Composer />);
+    await user.type(screen.getByRole("textbox"), "unsent text");
+    // The draft saves after a delay.
+    act(() => jest.advanceTimersByTime(300));
+    first.unmount();
+    expect(sessionStorage.length).toBe(0);
+
+    mockProjectsContext.currentMessageFiles = [];
+    render(<Composer />);
+    expect(screen.getByRole("textbox")).toHaveTextContent("unsent text");
+    expect(mockProjectsContext.setCurrentMessageFiles).toHaveBeenCalledWith([
+      projectFile("draft-file"),
+    ]);
+  } finally {
+    jest.useRealTimers();
   }
+});
+
+describe("restore after a failed send", () => {
   const failedFiles = [projectFile("failed-file")] satisfies ProjectFile[];
 
   test("puts the message, its picks and its files back into an empty composer", async () => {

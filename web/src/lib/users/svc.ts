@@ -4,6 +4,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { CustomRefreshTokenResponse } from "@/lib/users/types";
 import { clearOutputThumbnailCache } from "@/app/craft/services/outputThumbnailCache";
 import { CHAT_PANEL_STORAGE_PREFIX } from "@/lib/chat/rightPanel";
+import { draftKey, type DraftStorage } from "@/hooks/useDraft";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -26,6 +27,22 @@ export async function revalidateCurrentUser(): Promise<void> {
   await mutate(SWR_KEYS.me);
 }
 
+/** Removes every key that starts with one of `prefixes`. */
+function removeStorageKeys(kind: DraftStorage, prefixes: string[]) {
+  try {
+    const storage =
+      kind === "local" ? window.localStorage : window.sessionStorage;
+    for (let index = storage.length - 1; index >= 0; index--) {
+      const key = storage.key(index);
+      if (key && prefixes.some((prefix) => key.startsWith(prefix))) {
+        storage.removeItem(key);
+      }
+    }
+  } catch {
+    // Disabled browser storage must not prevent logout.
+  }
+}
+
 export async function logout(): Promise<Response> {
   const response = await fetch("/auth/logout", {
     method: "POST",
@@ -33,21 +50,12 @@ export async function logout(): Promise<Response> {
   });
   if (response.ok) {
     clearOutputThumbnailCache();
-    try {
-      const storage = window.sessionStorage;
-      for (let index = storage.length - 1; index >= 0; index--) {
-        const key = storage.key(index);
-        if (
-          key?.startsWith("onyx:craft:") ||
-          key?.startsWith("onyx:draft:craft:") ||
-          key?.startsWith(CHAT_PANEL_STORAGE_PREFIX)
-        ) {
-          storage.removeItem(key);
-        }
-      }
-    } catch {
-      // Disabled browser storage must not prevent logout.
-    }
+    removeStorageKeys("session", [
+      "onyx:craft:",
+      draftKey("craft", ""),
+      CHAT_PANEL_STORAGE_PREFIX,
+    ]);
+    removeStorageKeys("local", [draftKey("chat", "")]);
     // Drop the cached /api/me so any subsequent useCurrentUser read does not
     // hand callers the just-signed-out user from the SWR dedup window.
     await mutate(SWR_KEYS.me, null, { revalidate: false });

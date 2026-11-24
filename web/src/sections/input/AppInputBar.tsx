@@ -55,7 +55,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
-import { ProjectFile } from "@/lib/projects/types";
+import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { isFilePending } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
@@ -138,15 +138,32 @@ export interface AppInputBarProps {
   queue: ChatSessionQueue;
 }
 
-// Older drafts are plain text, or have mentions without an `index`.
-type StoredChatDraft = ComposedMessage | string;
+interface ChatDraft extends ComposedMessage {
+  // Uploaded files only; a file still uploading has no stable id.
+  files?: ProjectFile[];
+}
 
-function toChatDraft(draft: StoredChatDraft): ComposedMessage {
+// Older drafts are plain text, or have mentions without an `index`.
+type StoredChatDraft = ChatDraft | string;
+
+function toChatDraft(draft: StoredChatDraft): ChatDraft {
   return typeof draft === "string" ? { message: draft, mentions: [] } : draft;
 }
 
+function toStoredChatDraft(
+  composed: ComposedMessage,
+  files: ProjectFile[]
+): ChatDraft {
+  return {
+    message: composed.message,
+    mentions: composed.mentions,
+    files: files.filter((file) => file.status === UserFileStatus.COMPLETED),
+  };
+}
+
 function isChatDraftEmpty(draft: StoredChatDraft): boolean {
-  return !toChatDraft(draft).message.trim();
+  const { message, files } = toChatDraft(draft);
+  return !message.trim() && !files?.length;
 }
 
 const AppInputBar = React.memo(
@@ -335,7 +352,10 @@ const AppInputBar = React.memo(
     } = useDraft<StoredChatDraft>({
       key: chatDraftStorageKey,
       isEmpty: isChatDraftEmpty,
+      storage: "local",
     });
+    const { currentMessageFiles, setCurrentMessageFiles } =
+      useProjectsContext();
     const draftSeededRef = useRef(false);
     const skipNextDraftSaveRef = useRef(false);
     const prevDraftKeyRef = useRef(chatDraftStorageKey);
@@ -381,8 +401,15 @@ const AppInputBar = React.memo(
         skipNextDraftSaveRef.current = true;
         const draft = toChatDraft(chatDraft);
         setMessage(draft.message, draft.mentions);
+        if (draft.files?.length) setCurrentMessageFiles(draft.files);
       }
-    }, [chatDraftLoaded, chatDraft, initialMessage, setMessage]);
+    }, [
+      chatDraftLoaded,
+      chatDraft,
+      initialMessage,
+      setMessage,
+      setCurrentMessageFiles,
+    ]);
 
     useEffect(() => {
       if (!chatDraftLoaded || !draftSeededRef.current) return;
@@ -390,8 +417,8 @@ const AppInputBar = React.memo(
         skipNextDraftSaveRef.current = false;
         return;
       }
-      saveChatDraft(composed);
-    }, [composed, chatDraftLoaded, saveChatDraft]);
+      saveChatDraft(toStoredChatDraft(composed, currentMessageFiles));
+    }, [composed, currentMessageFiles, chatDraftLoaded, saveChatDraft]);
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
       const wasRecording = isRecordingRef.current;
@@ -401,9 +428,6 @@ const AppInputBar = React.memo(
       }
       setIsRecording(nextIsRecording);
     }, []);
-
-    const { currentMessageFiles, setCurrentMessageFiles } =
-      useProjectsContext();
 
     // While the agent's questions wait, typed text answers them instead of
     // starting a turn, also while a foreground part of the response runs.
@@ -552,9 +576,9 @@ const AppInputBar = React.memo(
         mountedRef.current &&
         useChatSessionStore.getState().currentSessionId === sessionId;
       const key = draftKey("chat", sessionId);
-      const newer = isOpen
-        ? composedRef.current
-        : toChatDraft(readDraft<StoredChatDraft>(key) ?? "");
+      const newer: ChatDraft = isOpen
+        ? { ...composedRef.current, files: currentMessageFiles }
+        : toChatDraft(readDraft<StoredChatDraft>(key, "local") ?? "");
       const offset = returned.message.length + 2;
       const combined: ComposedMessage = newer.message.trim()
         ? {
@@ -569,13 +593,14 @@ const AppInputBar = React.memo(
             ],
           }
         : returned;
+      const stored = toStoredChatDraft(combined, newer.files ?? []);
       if (!isOpen) {
-        writeDraft(key, combined, isChatDraftEmpty);
+        writeDraft(key, stored, isChatDraftEmpty, "local");
         return;
       }
       // The composer saves its draft after a delay that a chat switch cancels;
       // the server no longer holds this text, so it is saved at once.
-      writeDraft(chatDraftStorageKey, combined, isChatDraftEmpty);
+      writeDraft(chatDraftStorageKey, stored, isChatDraftEmpty, "local");
       setMessage(combined.message, combined.mentions);
       setCursorToEnd();
     }
