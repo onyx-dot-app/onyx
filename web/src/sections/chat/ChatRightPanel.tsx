@@ -49,6 +49,7 @@ import {
 import {
   OUTPUT_PANEL_HEADER_CONTROL_WIDTH,
   PANEL_TOGGLE_RESERVE,
+  PANEL_TOGGLE_RESERVE_VAR,
 } from "@/lib/outputPanel/layout";
 import { retainedFileViewers } from "@/lib/outputPanel/tabs";
 import { getFileIcon } from "@/lib/utils";
@@ -345,6 +346,15 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // closing gives focus back to it when it closed the panel, or when the move
   // or the panel took focus.
   const closedByToggleRef = useRef(false);
+  // The open panel holds the toggle, so the page needs no room for it
+  useLayoutEffect(() => {
+    const page = workspace.page.current;
+    if (!open || !page) return;
+    page.style.setProperty(PANEL_TOGGLE_RESERVE_VAR, "0px");
+    return () => {
+      page.style.removeProperty(PANEL_TOGGLE_RESERVE_VAR);
+    };
+  }, [open, workspace.page]);
   const toggle = sessionId !== null && (
     // At Craft's place: centered in the 52px header row, 12px from the end
     <div className="absolute end-3 top-3 z-30">

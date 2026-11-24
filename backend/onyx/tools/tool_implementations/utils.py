@@ -1,7 +1,7 @@
 import json
+from collections.abc import Mapping
 
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.tools.constants import MAX_OUTPUT_CHARS
 from onyx.tools.models import (
     CodeModeResultKind,
@@ -93,20 +93,21 @@ SEARCH_RESULTS_CODE_MODE_RESULT = CodeModeResultSpec(
 def convert_inference_sections_to_llm_string(
     top_sections: list[InferenceSection],
     citation_start: int = 1,
-    limit: int | None = None,
     include_source_type: bool = True,
     include_link: bool = False,
     include_document_id: bool = False,
     note: str | None = None,
+    file_names: Mapping[str, str] | None = None,
+    file_guidance: str = FILE_ASSOCIATED_GUIDANCE,
 ) -> tuple[str, dict[int, str]]:
     """Convert InferenceSection objects to a JSON string for LLM.
 
+    `file_names`: by file ID, the name under which a tool opens the file of a
+    section. Such a section shows its center chunk with `file_guidance`, which
+    gets `filename` and `content`; other sections show their combined content.
+
     Returns a JSON string with document results and a citation mapping.
     """
-    # Apply limit if specified
-    if limit is not None:
-        top_sections = top_sections[:limit]
-
     # Group sections by document_id to assign same citation_id to sections from same document
     document_id_to_citation_id: dict[str, int] = {}
     citation_mapping: dict[int, str] = {}
@@ -130,8 +131,8 @@ def convert_inference_sections_to_llm_string(
             else None
         )
         filename = (
-            sandbox_filename_for_document(chunk.semantic_identifier, chunk.file_id)
-            if chunk.file_id is not None
+            file_names.get(chunk.file_id)
+            if file_names is not None and chunk.file_id is not None
             else None
         )
         results.append(
@@ -145,9 +146,7 @@ def convert_inference_sections_to_llm_string(
                 url=link or None,
                 document_identifier=chunk.document_id if include_document_id else None,
                 file_name=filename,
-                content=FILE_ASSOCIATED_GUIDANCE.format(
-                    filename=filename, content=chunk.content
-                )
+                content=file_guidance.format(filename=filename, content=chunk.content)
                 if filename is not None
                 else section.combined_content,
                 metadata=json.dumps(chunk.metadata, ensure_ascii=False)

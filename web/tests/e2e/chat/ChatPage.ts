@@ -39,6 +39,7 @@ export class ChatPage {
   // Layout containers
   readonly container: Locator;
   readonly scrollContainer: Locator;
+  readonly composerRow: Locator;
 
   // Message collections. Only messages near the viewport are mounted, so
   // these hold the rendered ones, not the whole chat.
@@ -78,6 +79,7 @@ export class ChatPage {
     this.inputBar = new InputBar(page);
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
+    this.composerRow = page.getByTestId("app-composer-row");
     this.humanMessages = page.locator("#onyx-human-message");
     this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
@@ -298,6 +300,87 @@ export class ChatPage {
   /** A tab of the right panel's tab strip, by its label. */
   rightPanelTab(label: string): Locator {
     return this.page.getByRole("tab", { name: label, exact: true });
+  }
+
+  rightPanelTabStrip(): Locator {
+    return this.page.getByRole("tablist", { name: "Output tabs" });
+  }
+
+  /** Checks the right panel's tabs, in order, by name. */
+  async expectRightPanelTabs(labels: string[]): Promise<void> {
+    await expect(this.rightPanelTabStrip().getByRole("tab")).toHaveText(labels);
+  }
+
+  /** The tab strip's scroll offset, in pixels. */
+  async rightPanelTabsScrollLeft(): Promise<number> {
+    return this.rightPanelTabStrip().evaluate((strip) => strip.scrollLeft);
+  }
+
+  /** Sends one touch, from `from` through `to`, with Chrome's input events. */
+  private async touchDrag(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    whileHeld?: () => Promise<void>
+  ): Promise<void> {
+    const cdp = await this.page.context().newCDPSession(this.page);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [from],
+    });
+    await whileHeld?.();
+    for (let step = 1; step <= 10; step++) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [
+          {
+            x: from.x + ((to.x - from.x) * step) / 10,
+            y: from.y + ((to.y - from.y) * step) / 10,
+          },
+        ],
+      });
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await cdp.detach();
+  }
+
+  private async center(locator: Locator): Promise<{ x: number; y: number }> {
+    const box = await locator.boundingBox();
+    if (!box) throw new Error("The element has no box");
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }
+
+  /** Swipes a finger across the tab strip, `distance` pixels to the right. */
+  async swipeRightPanelTabs(distance: number): Promise<void> {
+    const from = await this.center(this.rightPanelTabStrip());
+    await this.touchDrag(from, { x: from.x + distance, y: from.y });
+  }
+
+  /** Presses and holds a tab until it lifts, then drags it onto `target`. */
+  async holdAndDragRightPanelTab(label: string, target: string): Promise<void> {
+    const tab = this.rightPanelTab(label);
+    await this.touchDrag(
+      await this.center(tab),
+      await this.center(this.rightPanelTab(target)),
+      () =>
+        expect(
+          this.rightPanelTabStrip().locator('[role="presentation"]', {
+            has: tab,
+          })
+        ).toHaveClass(/shadow-md/)
+    );
+  }
+
+  /** Drags a tab onto `target` with the mouse. */
+  async mouseDragRightPanelTab(label: string, target: string): Promise<void> {
+    const from = await this.center(this.rightPanelTab(label));
+    const to = await this.center(this.rightPanelTab(target));
+    await this.page.mouse.move(from.x, from.y);
+    await this.page.mouse.down();
+    await this.page.mouse.move(to.x, to.y, { steps: 10 });
+    await this.page.mouse.up();
   }
 
   /**
@@ -779,6 +862,39 @@ export class ChatPage {
         );
       })
       .toBeLessThanOrEqual(16);
+  }
+
+  /**
+   * At the end of the chat, the conversation reaches past the composer's
+   * bottom, so its scrollbar spans the page, while the latest turn ends above
+   * the composer.
+   */
+  async expectConversationUnderComposer(): Promise<void> {
+    await expect
+      .poll(async () => {
+        const conversation = await this.scrollContainer.boundingBox();
+        const composer = await this.composerRow.boundingBox();
+        const turn = await this.scrollContainer
+          .locator("[data-chat-turn]")
+          .last()
+          .boundingBox();
+        if (!conversation || !composer || !turn) return false;
+        return (
+          conversation.y + conversation.height >=
+            composer.y + composer.height && turn.y + turn.height <= composer.y
+        );
+      })
+      .toBe(true);
+  }
+
+  /** The gap from the share button to the panel toggle, or to the open panel. */
+  async shareButtonEndGap(panelOpen: boolean): Promise<number> {
+    const share = await this.shareMenuButton.boundingBox();
+    const end = await (
+      panelOpen ? this.publishedFilesPanel : this.rightPanelToggle
+    ).boundingBox();
+    if (!share || !end) return Number.NaN;
+    return end.x - (share.x + share.width);
   }
 
   async expectCopyButton(): Promise<void> {

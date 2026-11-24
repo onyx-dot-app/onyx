@@ -87,7 +87,7 @@ In a Firecracker VM, managed content mounts on read-only, noexec drives at
 same A/B slot mechanism); scripts run through interpreters. Each session has
 `/home/onyx/workspaces/<session-id>`, the default working directory of its
 commands; commands can still reach any path in the VM. The template boot
-makes `/tmp/onyx/{tool-results,search-files,artifacts}` on the `/tmp` tmpfs,
+makes `/tmp/onyx/{tool-results,artifacts}` on the `/tmp` tmpfs,
 owned by the sandbox user, and the template snapshot keeps them. Chat writes
 large tool results to `tool-results` ([[code-execution]]). A VM has
 8 GiB of guest memory by default; the host agent charges a starting VM half
@@ -354,7 +354,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   write and a delete that share the session path checks of `write_file` and
   `delete_file`, a listing of one directory, and one busy mark; a purged
   session is refused, and a write that finds its session purged deletes the
-  session directory again; each turn's background chat file copy uses one: see
+  session directory again; each turn's background copies of chat files and
+  search result files use them: see
   the docstring of `tools/tool_implementations/sandbox/file_copies.py`
   ([[code-execution]])), and busy signals (turn,
   background-copy and parked-approval marks).
@@ -422,7 +423,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   (node reports, `get_eviction_policy`, 15 min) saves each session on the
   VM first, in the background: CaptureSession of the session's top-level
   directories and files (without dependencies, caches and the chat file
-  copies in `attachments/`; files go under
+  and search result file copies in `attachments/`; files go under
   `.onyx-top-level` in the archive, which older daemons restore as a
   directory; a later save sends that directory as a root, and the daemon
   takes its files back as top-level files), presigned upload, file

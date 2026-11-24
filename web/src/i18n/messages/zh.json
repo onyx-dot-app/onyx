@@ -17806,7 +17806,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {1 个技能} other {{skills} 个技能}}",
       "loadFailed": "无法加载你的插件。",
       "filter": {
         "all": "所有插件"

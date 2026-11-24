@@ -495,7 +495,10 @@ const ChatUI = React.memo(
                 justifyContent="start"
                 height="fit"
                 gap={12}
-                className={cn(latest && "min-h-[calc(100cqh-3rem)]")}
+                className={cn(
+                  latest &&
+                    "min-h-[calc(100cqh-3rem-var(--app-composer-height,0px))]"
+                )}
               >
                 {messages
                   .slice(turn.start, turn.end)

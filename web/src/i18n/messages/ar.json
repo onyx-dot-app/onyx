@@ -17806,7 +17806,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {مهارة واحدة} other {{skills} مهارات}}",
       "loadFailed": "تعذر تحميل الإضافات.",
       "filter": {
         "all": "كل الإضافات"

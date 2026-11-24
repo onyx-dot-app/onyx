@@ -207,8 +207,10 @@
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the
   same place over the header, the panel beside the page and a panel over it.
-  The header and the panel's controls keep out of its room
-  (`lib/outputPanel/layout.ts:PANEL_TOGGLE_RESERVE`). It has one label and
+  The panel's controls keep out of its room
+  (`lib/outputPanel/layout.ts:PANEL_TOGGLE_RESERVE`). The header keeps out of
+  it only while the panel is closed; beside the open panel, which holds the
+  toggle, the share button keeps only the header's padding. It has one label and
   `aria-expanded`, and it acts on what the user sees: on a shown panel it
   closes any tab, Sources too; on a hidden panel, also one whose stored state
   shows Sources that the page hides, it shows the last shown Files tab, else
@@ -252,7 +254,8 @@
   Craft's new-file marker until the panel shows it, also as a new version
   in its open tab. Several files can be open at once; tabs switch
   with a click or the arrow keys, reorder by drag or Alt+arrow among the
-  file tabs, and closing
+  file tabs (on a touch screen, a swipe scrolls the strip and a press and
+  hold starts the drag), and closing
   the active tab returns to the tab used before it, else to Files. Files and
   Sources cannot close or move, and a file tab cannot move before them. File
   tabs of one shown name show their paths. An artifact has one tab, which
@@ -547,7 +550,10 @@ app shell's right slot, as the shared view places `ChatRightPanel`. Both
 always mount it, so a card opens its file also when the list holds no files;
 closed, the panel takes no room. The panel draws its own toggle once the chat
 has a session, and the header leaves room for it at its end
-(`layouts/chromes/AppChrome.tsx`, the shared view's header padding). In the
+(`layouts/chromes/AppChrome.tsx`, the shared view's header padding). That room
+is `--panel-toggle-reserve`, a registered property in `app/globals.css`: the
+open panel sets it to zero on the page element, and the page eases it with
+the panel's slide. In the
 DOM, the toggle follows what the user sees: a closed panel puts it in the
 workspace's `panelToggleSlot`, before the page, and an open panel puts it
 before its tabs. Closing gives focus back to it when the move or the panel
@@ -992,8 +998,8 @@ up its own branding.
     script write stops a trackpad fling.
     **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
     user message and its replies) in a `data-chat-turn` element. The latest turn
-    has `min-height: calc(100cqh - 3rem)` (the scroll element is a size
-    container): at the end of every chat, in every tab and after a reload, the
+    has `min-height: calc(100cqh - 3rem - var(--app-composer-height))` (the
+    scroll element is a size container): at the end of every chat, in every tab and after a reload, the
     latest user message sits 1rem below the top, with space below it, while the
     turn fits in that height. A taller turn ends at the bottom, and its user
     message is above the viewport. Nothing
@@ -1003,6 +1009,12 @@ up its own branding.
     never moves the view). The scroll-to-bottom button ignores the latest
     turn's unfilled space. Text that grows inside that space changes no scroll
     height, so a ResizeObserver watches the latest turn's rows.
+    In a chat, `views/AppPage.tsx` lays the composer row over the scroll area,
+    so the scrollbar spans the page. `@opal/hooks:usePublishedHeight`
+    publishes the row's height as `--app-composer-height`, which keeps the
+    chat's end clear of the composer: a footer spacer (not content, so "at the
+    bottom" ignores it), the latest turn's minimum height, and
+    `scroll-padding-bottom` for focus and `scrollIntoView`.
     Each chat's position (end, or a row and offset) and its row heights live
     in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
     them from loaded rows only, so a switch never waits on the network. Rows

@@ -169,12 +169,13 @@ def _restored_call(
 def staged_result_details(
     details: BaseModel | None,
     known_file_ids: set[str],
-    read_files: Callable[[list[SearchDoc]], list[ChatFile]],
+    read_files: Callable[[Mapping[str, str]], list[ChatFile]],
 ) -> BaseModel | None:
-    """The result with the files of its documents staged for later Python calls.
+    """The result with the files of its searches staged for later Python calls.
 
-    `read_files` reads the files of documents. Files that the result already
-    stages, or that are in `known_file_ids`, are not read again.
+    `read_files` reads files, by file ID, under the names that the searches
+    gave them. Files that the result already stages, or that are in
+    `known_file_ids`, are not read again.
     """
     staged_type: type[StagedChatFiles]
     if isinstance(details, SearchDocsResponse):
@@ -183,14 +184,23 @@ def staged_result_details(
         staged_type = ChatCodeModeResult
     else:
         return details
-    sources = tool_result_sources(details)
     staged = list(details.staged_files) if isinstance(details, StagedChatFiles) else []
     staged_ids = {file.file_id for file in staged}
-    added = [
-        doc
-        for doc in (sources.documents if sources is not None else [])
-        if doc.file_id not in staged_ids and doc.file_id not in known_file_ids
-    ]
+    # By file ID: the name of each new file that a search found a tool of the
+    # chat can open; the first search that names a file names it.
+    added: dict[str, str] = {}
+    for search in (
+        [details]
+        if isinstance(details, SearchDocsResponse)
+        else [
+            call.details
+            for call in details.all_calls()
+            if isinstance(call.details, SearchDocsResponse)
+        ]
+    ):
+        for file_id, name in search.openable_file_names.items():
+            if file_id not in staged_ids and file_id not in known_file_ids:
+                added.setdefault(file_id, name)
     if isinstance(details, StagedChatFiles) and not added:
         return details
     staged.extend(read_files(added))

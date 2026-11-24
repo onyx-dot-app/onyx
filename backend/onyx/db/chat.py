@@ -10,6 +10,7 @@ from sqlalchemy import (
     Row,
     String,
     Text,
+    and_,
     any_,
     bindparam,
     case,
@@ -24,13 +25,14 @@ from sqlalchemy import (
     or_,
     select,
     true,
+    tuple_,
     update,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
-from sqlalchemy.sql.selectable import CTE, Select
+from sqlalchemy.sql.selectable import CTE, LateralFromClause, Select
 
 from onyx.agents.models import (
     CompactionCheckpoint,
@@ -99,8 +101,14 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.tools.models import IntegrationEntry, ToolOptions
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACTS_CHAT_TITLE_MAX_CHARS,
+    ARTIFACTS_NAME_MAX_CHARS,
+    ARTIFACTS_PATH_MAX_CHARS,
+    ArtifactCursor,
+    ListedArtifact,
     PublishedFile,
     PublishedFileView,
+    published_display_path,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -1032,7 +1040,8 @@ def save_chat_artifact(
     `chat_session_id` as the next version of the chat's artifact at `path`,
     with `thumbnail`, a JPEG of its first page, if set. The file and its
     thumbnail get the chat's access, the chat's file list, and its hard
-    delete. A thumbnail that fails to save is left out."""
+    delete; the artifact gets the chat's owner. A thumbnail that fails to
+    save is left out."""
     file_store = get_default_file_store()
     file_id = str(uuid4())
     thumbnail_file_id: str | None = None
@@ -1058,10 +1067,22 @@ def save_chat_artifact(
         # the versions they committed.
         artifact_id = db_session.execute(
             postgresql.insert(ChatArtifact)
-            .values(chat_session_id=chat_session_id, path=path)
+            .values(
+                chat_session_id=chat_session_id,
+                user_id=select(ChatSession.user_id)
+                .where(ChatSession.id == chat_session_id)
+                .scalar_subquery(),
+                path=path,
+            )
             .on_conflict_do_update(
                 index_elements=[ChatArtifact.chat_session_id, ChatArtifact.path],
-                set_={"updated_at": func.now()},
+                # A publish that waited on the row lock can have started
+                # before the one it waited for; it never moves the time back.
+                set_={
+                    "updated_at": func.greatest(
+                        ChatArtifact.updated_at, func.clock_timestamp()
+                    )
+                },
             )
             .returning(ChatArtifact.id)
         ).scalar_one()
@@ -1156,42 +1177,49 @@ def delete_unpublished_chat_artifacts(published: Sequence[PublishedFile]) -> Non
         db_session.commit()
 
 
+def _newest_available_version() -> LateralFromClause:
+    """The newest version of the ChatArtifact row in the enclosing query
+    whose object is not missing, with its file record, as a LATERAL subquery
+    (one row, or none)."""
+    return (
+        select(
+            ChatArtifactVersion.version,
+            ChatArtifactVersion.file_id,
+            ChatArtifactVersion.title,
+            ChatArtifactVersion.thumbnail_file_id,
+            ChatArtifactVersion.created_at.label("published_at"),
+            FileRecord.display_name,
+            FileRecord.file_type,
+            FileRecord.file_size,
+        )
+        .join(FileRecord, FileRecord.file_id == ChatArtifactVersion.file_id)
+        .where(
+            ChatArtifactVersion.artifact_id == ChatArtifact.id,
+            FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
+        )
+        .order_by(ChatArtifactVersion.version.desc())
+        .limit(1)
+        .lateral("newest")
+    )
+
+
 def get_chat_published_files(
     chat_session_id: UUID, db_session: Session
 ) -> list[PublishedFileView]:
     """The files that the model published in a chat, its subagents' files
     included: the latest version of each artifact, by the artifact's first
     publish. Versions whose object is missing are left out."""
-    latest = (
-        select(
-            ChatArtifact.id.label("artifact_id"),
-            ChatArtifact.path,
-            ChatArtifact.created_at,
-            ChatArtifactVersion.version,
-            ChatArtifactVersion.file_id,
-            ChatArtifactVersion.title,
-            ChatArtifactVersion.thumbnail_file_id,
-            FileRecord.display_name,
-            FileRecord.file_type,
-            FileRecord.file_size,
-        )
-        .join(ChatArtifactVersion, ChatArtifactVersion.artifact_id == ChatArtifact.id)
-        .join(FileRecord, FileRecord.file_id == ChatArtifactVersion.file_id)
-        .where(
-            ChatArtifact.chat_session_id == chat_session_id,
-            FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
-        )
-        .distinct(ChatArtifact.id)
-        .order_by(ChatArtifact.id, ChatArtifactVersion.version.desc())
-        .subquery()
-    )
+    newest = _newest_available_version()
     rows = db_session.execute(
-        select(latest).order_by(latest.c.created_at, latest.c.artifact_id)
+        select(ChatArtifact.id, ChatArtifact.path, newest)
+        .join(newest, true())
+        .where(ChatArtifact.chat_session_id == chat_session_id)
+        .order_by(ChatArtifact.created_at, ChatArtifact.id)
     ).all()
     return [
         PublishedFileView(
             file_id=row.file_id,
-            artifact_id=row.artifact_id,
+            artifact_id=row.id,
             version=row.version,
             name=row.display_name or row.file_id,
             title=row.title,
@@ -1203,6 +1231,141 @@ def get_chat_published_files(
         )
         for row in rows
     ]
+
+
+def _listable_chat(user_id: UUID) -> ColumnElement[bool]:
+    """The chats whose published files the artifact tools reach: the user's
+    own root chats that are not deleted. Never another user's chat, also not
+    a public one; the owner's exact match leaves out chats without one."""
+    return and_(
+        ChatSession.user_id == user_id,
+        ChatSession.deleted.is_(False),
+        ChatSession.spawned_by_message_id.is_(None),
+    )
+
+
+def _listed_artifact(row: Row) -> ListedArtifact:
+    return ListedArtifact(
+        file_id=row.file_id,
+        name=row.display_name or row.file_id,
+        title=row.title,
+        path=published_display_path(row.path),
+        version=row.version,
+        chat_id=row.chat_session_id,
+        chat_title=row.description,
+        published_at=row.published_at,
+        # A file without a recorded size shows as 0.
+        size=row.file_size or 0,
+        mime_type=row.file_type,
+    )
+
+
+def get_user_published_files(
+    db_session: Session,
+    user_id: UUID,
+    *,
+    query: str | None,
+    chat_session_id: UUID | None,
+    limit: int,
+    before: ArtifactCursor | None,
+) -> list[tuple[ListedArtifact, ArtifactCursor]] | None:
+    """Up to `limit` + 1 of the files that the model published in the user's
+    listable chats (`_listable_chat`), each with the cursor that starts after
+    it: the newest available version of each artifact, by the artifact's
+    latest publish, newest first. An artifact published again while the caller pages
+    moves to the first page, so later pages skip it. `query` matches the file
+    name, the version's title or the chat's title, in any case, after the
+    version is chosen. An entry's name, path and chat title are cut to their
+    ARTIFACTS_*_MAX_CHARS, a path to its end. None when `chat_session_id` is
+    not a listable chat of the user."""
+    listable = _listable_chat(user_id)
+    if (
+        chat_session_id is not None
+        and db_session.scalar(
+            select(ChatSession.id).where(ChatSession.id == chat_session_id, listable)
+        )
+        is None
+    ):
+        return None
+    newest = _newest_available_version()
+    statement = (
+        select(
+            ChatArtifact.id,
+            ChatArtifact.path,
+            ChatArtifact.updated_at,
+            ChatArtifact.chat_session_id,
+            ChatSession.description,
+            newest,
+        )
+        .join(ChatSession, ChatSession.id == ChatArtifact.chat_session_id)
+        .join(newest, true())
+        # ix_chat_artifact_user_id_updated_at gives the order, so the scan
+        # stops at the limit.
+        .where(ChatArtifact.user_id == user_id, listable)
+        .order_by(ChatArtifact.updated_at.desc(), ChatArtifact.id.desc())
+        .limit(limit + 1)
+    )
+    if chat_session_id is not None:
+        statement = statement.where(ChatArtifact.chat_session_id == chat_session_id)
+    if before is not None:
+        statement = statement.where(
+            tuple_(ChatArtifact.updated_at, ChatArtifact.id)
+            < tuple_(literal(before.updated_at), literal(before.artifact_id))
+        )
+    if query:
+        statement = statement.where(
+            or_(
+                newest.c.display_name.icontains(query, autoescape=True),
+                newest.c.title.icontains(query, autoescape=True),
+                ChatSession.description.icontains(query, autoescape=True),
+            )
+        )
+    page: list[tuple[ListedArtifact, ArtifactCursor]] = []
+    for row in db_session.execute(statement):
+        artifact = _listed_artifact(row)
+        artifact.name = artifact.name[:ARTIFACTS_NAME_MAX_CHARS]
+        if len(artifact.path) > ARTIFACTS_PATH_MAX_CHARS:
+            artifact.path = "…" + artifact.path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :]
+        if artifact.chat_title is not None:
+            artifact.chat_title = artifact.chat_title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]
+        page.append(
+            (artifact, ArtifactCursor(updated_at=row.updated_at, artifact_id=row.id))
+        )
+    return page
+
+
+def get_user_published_file(
+    db_session: Session, user_id: UUID, file_id: str
+) -> ListedArtifact | None:
+    """The published file `file_id`, any version of its artifact, when it is
+    in a listable chat of the user (`_listable_chat`) and its object is not
+    missing; else None. Any other file, such as a thumbnail or an upload, is
+    None. Its name, path and chat title are not cut."""
+    row = db_session.execute(
+        select(
+            ChatArtifact.path,
+            ChatArtifact.chat_session_id,
+            ChatSession.description,
+            ChatArtifactVersion.version,
+            ChatArtifactVersion.file_id,
+            ChatArtifactVersion.title,
+            ChatArtifactVersion.created_at.label("published_at"),
+            FileRecord.display_name,
+            FileRecord.file_type,
+            FileRecord.file_size,
+        )
+        .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+        .join(ChatSession, ChatSession.id == ChatArtifact.chat_session_id)
+        .join(FileRecord, FileRecord.file_id == ChatArtifactVersion.file_id)
+        .where(
+            ChatArtifactVersion.file_id == file_id,
+            ChatArtifact.user_id == user_id,
+            _listable_chat(user_id),
+            FileRecord.file_origin == FileOrigin.CHAT_ARTIFACT,
+            FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
+        )
+    ).one_or_none()
+    return None if row is None else _listed_artifact(row)
 
 
 def get_or_create_root_message(

@@ -224,9 +224,33 @@ calls the index directly for admin document inspection.
    plus any decision-model pick from beyond the top hits.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
    list means none. Do not feed `details` fields back into the prompt. In chat,
-   `ChatAgent._finalize_tool` stages the connector files of all `search_docs`
-   for the Python tool, when the chat offers it, by `SearchDoc.file_id`, which
-   `populate_file_ids_on_sections` fills ([[code-execution]]). The saved result
+   `ChatAgent._finalize_tool` stages, for the Python tool when the chat offers
+   it and has no sandbox, the files that `SearchDocsResponse.openable_file_names`
+   maps to their names ([[code-execution]]); a file that fails to read is
+   logged and skipped, though the result still names it.
+   `SearchTool._build_search_result`
+   fills that map with one file record query over the documents'
+   `SearchDoc.file_id` (which `populate_file_ids_on_sections` fills):
+   connector files that the file store still has. The field is live only;
+   saved and streamed results lack it, and `SearchDoc.file_id` stays on every
+   document. The model's string names a shown result's file, with its
+   excerpt, only when a tool can open it: it passes `file_names` to
+   `convert_inference_sections_to_llm_string`. In a sandbox chat,
+   `ToolContext.sandbox_search_files` offers the shown results' files (at most
+   `SEARCH_FILE_MAX_BYTES`) to the turn's copy into the VM, and the result
+   gives the path in attachments/search/ that the copy returns
+   (`SEARCH_FILE_GUIDANCE`, [[code-execution]]); that file can be missing
+   when the model reads it, because the copy can still run or can skip it
+   (no access, over a limit or the cap, a failed write, or no response from
+   the VM), so the guidance tells the model to try again or search again.
+   In a chat without a sandbox that stages files (`ToolContext.python_stages_search_files`), it gives the
+   staged name (`FILE_ASSOCIATED_GUIDANCE`) from the same map that the
+   staging reads. A file that `ToolContext.chat_files` already has keeps its
+   staged name. Other names come from `harness_base.search_file_name`
+   (`chat_file_name` with a hash prefix of the file ID) and the raw title of
+   the first shown chunk with the file; a staged file that no shown chunk has
+   takes the first document's title. Other results, deep research and the search API show
+   `combined_content`. The saved result
    (`chat/response.py:_saved_message`) drops `search_docs` and the planning
    metadata. The `ToolCall` row keeps the selected documents, so replay and
    later turns cannot see the candidates before selection.
