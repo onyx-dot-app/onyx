@@ -4,8 +4,14 @@ from io import BytesIO
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+from onyx.file_processing.extract_file_text import XLSX_TRUNCATION_MARKER
 from onyx.file_store.models import ChatFileType, UserFileMetadata
-from onyx.file_store.utils import load_user_file_content, store_plaintext
+from onyx.file_store.utils import (
+    get_or_extract_artifact_text,
+    get_or_extract_plaintext,
+    load_user_file_content,
+    store_plaintext,
+)
 
 _UTILS_MODULE = "onyx.file_store.utils"
 
@@ -17,7 +23,7 @@ def test_store_plaintext_persists_non_empty_content(
     file_store = MagicMock()
     mock_get_file_store.return_value = file_store
 
-    assert store_plaintext("file-1", "hello world") is True
+    assert store_plaintext("plaintext_file-1", "hello world") is True
 
     file_store.save_file.assert_called_once()
     assert file_store.save_file.call_args.kwargs["file_id"] == "plaintext_file-1"
@@ -29,12 +35,12 @@ def test_store_plaintext_persists_empty_content(
 ) -> None:
     """Empty content must be cached too: it marks unprocessable files
     (e.g. .zip) so subsequent chat turns don't re-fetch and re-attempt
-    extraction. See _get_or_extract_plaintext in onyx/chat/files.py.
+    extraction. See get_or_extract_plaintext.
     """
     file_store = MagicMock()
     mock_get_file_store.return_value = file_store
 
-    assert store_plaintext("file-2", "") is True
+    assert store_plaintext("plaintext_file-2", "") is True
 
     file_store.save_file.assert_called_once()
     assert file_store.save_file.call_args.kwargs["file_id"] == "plaintext_file-2"
@@ -48,7 +54,7 @@ def test_store_plaintext_returns_false_on_save_failure(
     file_store.save_file.side_effect = RuntimeError("boom")
     mock_get_file_store.return_value = file_store
 
-    assert store_plaintext("file-3", "data") is False
+    assert store_plaintext("plaintext_file-3", "data") is False
 
 
 def _build_load_user_file_mocks(
@@ -128,3 +134,91 @@ def test_load_user_file_non_empty_plaintext_used_as_is(
 
     assert chat_file.content == b"extracted text"
     assert chat_file.file_type == ChatFileType.PLAIN_TEXT
+
+
+class TestGetOrExtractPlaintext:
+    """The text cache that chat file loading and published file text read."""
+
+    def test_cache_hit_skips_extraction(self) -> None:
+        file_store = MagicMock()
+        file_store.read_file.return_value = BytesIO(b"cached text")
+        extract_fn = MagicMock(return_value="should not be called")
+
+        with (
+            patch(
+                f"{_UTILS_MODULE}.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch(f"{_UTILS_MODULE}.store_plaintext") as store_plaintext,
+        ):
+            result = get_or_extract_plaintext("plaintext_file-1", extract_fn)
+
+        assert result == "cached text"
+        extract_fn.assert_not_called()
+        store_plaintext.assert_not_called()
+
+    def test_cache_miss_stores_extracted_text(self) -> None:
+        file_store = MagicMock()
+        file_store.read_file.side_effect = RuntimeError("not in store")
+        extract_fn = MagicMock(return_value="extracted text")
+
+        with (
+            patch(
+                f"{_UTILS_MODULE}.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch(f"{_UTILS_MODULE}.store_plaintext") as store_plaintext,
+        ):
+            result = get_or_extract_plaintext("plaintext_file-2", extract_fn)
+
+        assert result == "extracted text"
+        extract_fn.assert_called_once()
+        store_plaintext.assert_called_once_with("plaintext_file-2", "extracted text")
+
+    def test_cache_miss_caches_empty_extraction(self) -> None:
+        """Files extract_file_text cannot process (e.g. .zip) return "".
+        We must still cache that result so we don't re-fetch the file from
+        object storage on every subsequent chat turn.
+        """
+        file_store = MagicMock()
+        file_store.read_file.side_effect = RuntimeError("not in store")
+        extract_fn = MagicMock(return_value="")
+
+        with (
+            patch(
+                f"{_UTILS_MODULE}.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch(f"{_UTILS_MODULE}.store_plaintext") as store_plaintext,
+        ):
+            result = get_or_extract_plaintext("plaintext_file-3", extract_fn)
+
+        assert result == ""
+        extract_fn.assert_called_once()
+        store_plaintext.assert_called_once_with("plaintext_file-3", "")
+
+
+def test_a_sheet_cut_at_the_cell_cap_is_truncated() -> None:
+    file_store = MagicMock()
+    file_store.read_file.return_value = BytesIO(
+        f"a,b\n{XLSX_TRUNCATION_MARKER}\f".encode()
+    )
+
+    with patch(f"{_UTILS_MODULE}.get_default_file_store", return_value=file_store):
+        text = get_or_extract_artifact_text("file-1", "big.xlsx", 10)
+
+    assert text is not None
+    assert text.truncated
+
+
+def test_a_text_file_that_holds_the_sheet_marker_is_not_truncated() -> None:
+    file_store = MagicMock()
+    file_store.read_file.return_value = BytesIO(
+        f"notes\n{XLSX_TRUNCATION_MARKER}".encode()
+    )
+
+    with patch(f"{_UTILS_MODULE}.get_default_file_store", return_value=file_store):
+        text = get_or_extract_artifact_text("file-1", "notes.txt", 10)
+
+    assert text is not None
+    assert not text.truncated

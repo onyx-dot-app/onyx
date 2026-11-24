@@ -1,6 +1,6 @@
 import io
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -34,9 +34,9 @@ from onyx.file_store.models import (
 )
 from onyx.file_store.utils import (
     get_default_file_store,
+    get_or_extract_plaintext,
     load_in_memory_chat_files,
     plaintext_file_name_for_id,
-    store_plaintext,
 )
 from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import UserMessage
@@ -489,37 +489,6 @@ def build_file_context(
     return FileContextResult(message=message, tool_metadata=metadata)
 
 
-def _get_or_extract_plaintext(
-    file_id: str,
-    extract_fn: Callable[[], str],
-    store_on_miss: bool = True,
-) -> str:
-    """Read cached text, or extract it without replacing a pending worker result."""
-    file_store = get_default_file_store()
-    plaintext_key = plaintext_file_name_for_id(file_id)
-
-    # Try cached plaintext first.
-    try:
-        plaintext_io = file_store.read_file(plaintext_key, mode="b")
-        return plaintext_io.read().decode("utf-8")
-    except Exception:
-        logger.info("Cache miss for file with id=%s", file_id)
-
-    # Cache miss — extract and store.  We cache the result unconditionally
-    # (including the empty string) so that files we cannot extract text from
-    # (e.g. .zip, or any extension without a handler in extract_file_text)
-    # don't get re-fetched from object storage and re-attempted on every
-    # subsequent chat turn.  Transient extraction errors surface as raised
-    # exceptions, not empty returns, so they propagate without poisoning the
-    # cache.  Callers pass store_on_miss=False when another writer owns the
-    # canonical plaintext for this key (e.g. the user-file worker, whose
-    # result may include image captions this inline extraction can't produce).
-    content_text = extract_fn()
-    if store_on_miss:
-        store_plaintext(file_id, content_text)
-    return content_text
-
-
 def _load_chat_file(
     file_descriptor: FileDescriptor,
     token_count: int,
@@ -570,8 +539,10 @@ def _load_chat_file(
             # While the worker is still processing, don't store the inline
             # extraction under its key: the worker's canonical plaintext (which
             # may include image captions) should be what later turns read.
-            content_text = _get_or_extract_plaintext(
-                cache_key, _extract, store_on_miss=not content_pending
+            content_text = get_or_extract_plaintext(
+                plaintext_file_name_for_id(cache_key),
+                _extract,
+                store_on_miss=not content_pending,
             )
         except Exception as e:
             logger.warning(
