@@ -30,6 +30,7 @@ import Dropzone from "react-dropzone";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
+import usePublishedHeight from "@/hooks/usePublishedHeight";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
@@ -785,18 +786,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // In a chat, the messages scroll under the composer row, so the scrollbar
   // spans the page. The row's height keeps the last message clear of it.
   const [composerRow, setComposerRow] = useState<HTMLDivElement | null>(null);
-  useLayoutEffect(() => {
-    const grid = composerRow?.parentElement;
-    if (!composerRow || !grid) return;
-    const observer = new ResizeObserver(() =>
-      grid.style.setProperty(
-        "--app-composer-height",
-        `${composerRow.offsetHeight}px`
-      )
-    );
-    observer.observe(composerRow);
-    return () => observer.disconnect();
-  }, [composerRow]);
+  usePublishedHeight(composerRow, "--app-composer-height");
 
   // Handle error case where no agents are available.
   // Only show this after agents have loaded to prevent flash during initial load.
@@ -1106,7 +1096,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <div
                     className={cn(
                       "relative w-full flex flex-col pointer-events-auto",
-                      appPosition.isChat() && !hasBackground && "bg-background",
+                      appPosition.isChat() &&
+                        (hasBackground ? "backdrop-blur-md" : "bg-background"),
                       onboardingVisible && "min-h-0",
                       "md:max-w-(--app-chat-column-width)",
                       CHAT_WIDTH_TRANSITION

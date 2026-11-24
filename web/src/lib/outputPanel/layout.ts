@@ -13,6 +13,10 @@ export const MIN_OUTPUT_WIDTH = 280;
 // 12px inset, as Craft's toggle, its 28px button and a 4px gap. The chat's
 // header and the panel's size button keep out of it.
 export const PANEL_TOGGLE_RESERVE = 44;
+// The page content's room for the toggle, registered in globals.css with
+// PANEL_TOGGLE_RESERVE as its initial value. The open panel sets it to zero.
+export const PANEL_TOGGLE_RESERVE_VAR = "--panel-toggle-reserve";
+export const PANEL_TOGGLE_ROOM = `var(${PANEL_TOGGLE_RESERVE_VAR})`;
 // The panel's share of the workspace before the user resizes it
 export const DEFAULT_PANEL_PROPORTION = 0.5;
 

@@ -43,7 +43,7 @@ import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
-import { PANEL_TOGGLE_RESERVE } from "@/lib/outputPanel/layout";
+import { PANEL_TOGGLE_ROOM } from "@/lib/outputPanel/layout";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -139,9 +139,17 @@ function Header() {
         isMobile) &&
         !appPosition.isSharedChat() && (
           <RootLayout.Header>
-            {/* The header keeps out of the room for the chat's right panel
-                toggle while the toggle sits over the header's end */}
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4 pe-[max(0.5rem,var(--panel-toggle-reserve))] sm:pe-[max(1rem,var(--panel-toggle-reserve))] transition-[padding] ease-in-out duration-300 motion-reduce:transition-none">
+            {/* A chat's header keeps out of the room for the chat's right
+                panel toggle, which the closed panel places over the header's
+                end */}
+            <div
+              className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4"
+              style={
+                appPosition.isChat()
+                  ? { paddingInlineEnd: `max(1rem, ${PANEL_TOGGLE_ROOM})` }
+                  : undefined
+              }
+            >
               {/*
           Left:
           - (mobile) sidebar toggle
@@ -373,13 +381,6 @@ export interface AppChromeProps {
   children: React.ReactNode;
 }
 
-// The room the page's content keeps for the chat's right panel toggle. The
-// page sets it to zero while the toggle is not in its slot over the page.
-// Its users ease the change with the panel's slide.
-const WORKSPACE_STYLE = {
-  "--panel-toggle-reserve": `${PANEL_TOGGLE_RESERVE}px`,
-};
-
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -450,14 +451,14 @@ export default function AppChrome({ children }: AppChromeProps) {
         <div
           ref={workspaceRef}
           className="relative flex flex-row flex-1 min-h-0"
-          style={WORKSPACE_STYLE}
         >
-          <div ref={setPanelToggleSlot} className="peer" />
+          <div ref={setPanelToggleSlot} />
           <div
             ref={pageRef}
             data-app-page
             className={cn(
-              "@container relative isolate flex-1 flex flex-col min-h-0 peer-empty:[--panel-toggle-reserve:0px]",
+              // Eases the room for the panel toggle with the panel's slide
+              "@container relative isolate flex-1 flex flex-col min-h-0 [transition-property:--panel-toggle-reserve] ease-in-out duration-300 motion-reduce:transition-none",
               showBackground && "bg-cover bg-center bg-fixed"
             )}
             style={
