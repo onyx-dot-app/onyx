@@ -761,14 +761,20 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (appPosition.isNewSession() || appPosition.isAgent()) &&
     (state.phase === "idle" || state.phase === "classifying");
 
+  // `user` is null while it loads, and the onboarding renders nothing until
+  // it arrives.
   const onboardingVisible =
     isWelcomeFocus &&
+    !!user &&
     (showOnboarding || !getUserAddressedName(user)) &&
     !onboardingDismissed;
 
   // While onboarding is open, the bottom row keeps the height it had when
   // onboarding appeared. New onboarding steps then grow upward instead of
-  // moving the input down.
+  // moving the input down. The height is read once the rows stop sliding
+  // from the previous layout, which can leave the row empty. The grid is
+  // state, so a grid that mounts later (after the no-agent modal) is measured.
+  const [grid, setGrid] = useState<HTMLDivElement | null>(null);
   const bottomRowRef = useRef<HTMLDivElement>(null);
   const [onboardingBottomRowPx, setOnboardingBottomRowPx] = useState<
     number | null
@@ -778,10 +784,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       setOnboardingBottomRowPx(null);
       return;
     }
-    if (onboardingBottomRowPx === null && bottomRowRef.current) {
-      setOnboardingBottomRowPx(bottomRowRef.current.offsetHeight);
+    const row = bottomRowRef.current;
+    if (onboardingBottomRowPx !== null || !grid || !row) return;
+    const slides = grid.getAnimations();
+    if (slides.length === 0) {
+      setOnboardingBottomRowPx(row.offsetHeight);
+      return;
     }
-  }, [onboardingVisible, onboardingBottomRowPx]);
+    let cancelled = false;
+    void Promise.allSettled(slides.map((slide) => slide.finished)).then(() => {
+      if (!cancelled) setOnboardingBottomRowPx(row.offsetHeight);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onboardingVisible, onboardingBottomRowPx, grid]);
 
   // In a chat, the messages scroll under the composer row, so the scrollbar
   // spans the page. The row's height keeps the last message clear of it.
@@ -869,6 +886,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             >
               {/* Main content grid — 3 rows, animated */}
               <div
+                ref={setGrid}
                 className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
                 style={gridStyle}
               >

@@ -45,7 +45,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.server.metrics import code_mode as metrics
-from onyx.tools.constants import DEFAULT_MAX_OUTPUT_CHARS, PYTHON_TOOL_NAME
+from onyx.tools.constants import DEFAULT_MAX_OUTPUT_CHARS
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
 from onyx.tools.models import (
@@ -750,10 +750,6 @@ class CodeCell:
         self._gate: NestedCallGate | None = invocation.nested_calls
         # Files of documents that nested calls found, for later Python calls of
         # the program, as the chat stages them for direct calls.
-        self._stages_files = any(
-            function.tool.name == PYTHON_TOOL_NAME
-            for function in program.stubs.functions.values()
-        )
         self._staged_files: list[ChatFile] = []
         # Commits the store dropped before the cell started; observation 0
         # reports them.
@@ -1790,7 +1786,7 @@ class CodeCell:
         finally:
             if cites:
                 self._citations.release(used)
-        if self._stages_files:
+        if context.python_stages_search_files:
             known = {file.file_id for file in context.chat_files if file.file_id}
             staged = staged_result_details(
                 result.details, known, build_python_chat_files_from_search_docs

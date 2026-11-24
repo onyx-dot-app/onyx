@@ -5,6 +5,7 @@ import type { RootContent } from "hast";
 import { createLowlight } from "lowlight";
 import { cn } from "@opal/utils";
 import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
+import { indentJson } from "@/lib/filePreview/indentJson";
 import "@/app/app/message/custom-code-styles.css";
 
 // Longer text shows without highlighting, which would block the page.
@@ -38,20 +39,15 @@ interface CodeFilePreviewProps {
 
 /**
  * Code, data and plain text on a code background. Grammars load on demand;
- * until then, and for unknown languages, the text shows plain. JSON shows
- * indented. Code shows line numbers; plain text wraps instead.
+ * until then, and for unknown languages, the text shows plain. Single-line
+ * JSON shows indented. Code shows line numbers; plain text wraps instead.
  */
 export function CodeFilePreview({ text, language }: CodeFilePreviewProps) {
   const plaintext = language === "plaintext";
-  const shown = useMemo(() => {
-    if (language !== "json") return text;
-    try {
-      return JSON.stringify(JSON.parse(text), null, 2);
-    } catch {
-      // Malformed JSON shows as it is
-      return text;
-    }
-  }, [text, language]);
+  const shown = useMemo(
+    () => (language === "json" ? indentJson(text) : text),
+    [text, language]
+  );
   const highlight = !plaintext && shown.length <= MAX_HIGHLIGHTED_CHARACTERS;
   const languages = useHighlightLanguages(highlight);
   const content = useMemo(() => {

@@ -4480,11 +4480,12 @@ def test_a_turn_without_a_sandbox_call_copies_nothing(
     chat.send(ChatLLM([Delta(content="Hi.")]), file_descriptors=[attach("a.txt", b"a")])
     assert chat_turn_work.wait_idle(timeout=30)
     assert str(chat.ref(db_session).sandbox_id) not in node.agent.vms
+    # The turn holds its copy generation from its start.
     assert (
         get_cache_backend(tenant_id=TENANT_ID).get(
             copy_generation_key(chat.chat_session_id)
         )
-        is None
+        == b"1"
     )
 
 

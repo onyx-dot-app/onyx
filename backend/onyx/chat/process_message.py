@@ -545,9 +545,13 @@ def prepare_chat_turn(
             # multi-model turn has no sandbox tools and publishes no files;
             # the web's file cards rely on it. Bots get no sandbox until they
             # have service-account sandboxes. Deep research gets no sandbox.
+            # Only the chat's owner gets it: the session directory and the
+            # published files belong to the owner's chat (a chat without an
+            # owner, which any user can open, gets none).
             sandbox_tools = (
                 HARNESS_SANDBOX_ENABLED
                 and not user.is_anonymous
+                and chat_session.user_id == user.id
                 and new_msg_req.origin
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
                 and chat_session.incognito_record_mode is None
