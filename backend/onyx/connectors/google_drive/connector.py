@@ -548,7 +548,6 @@ class GoogleDriveConnector(
             ThreadSafeDict[str, ThreadSafeSet[str]] | None
         ) = None,
         permission_sync_context: PermissionSyncContext | None = None,
-        add_prefix: bool = False,
     ) -> list[HierarchyNode]:
         """
         Get all NEW ancestor hierarchy nodes for a batch of files.
@@ -584,8 +583,6 @@ class GoogleDriveConnector(
                 (folder, email) is encountered again (modified in place).
             permission_sync_context: If provided, permissions will be fetched for hierarchy nodes.
                 Contains google_domain and primary_admin_email needed for permission syncing.
-            add_prefix: When True, prefix group IDs with source type (for indexing path).
-                       When False (default), leave unprefixed (for permission sync path).
 
         Returns:
             List of HierarchyNode objects for new ancestors (ordered parent-first)
@@ -664,7 +661,6 @@ class GoogleDriveConnector(
                         folder,
                         permission_sync_context.google_domain,
                         service,
-                        add_prefix,
                     )
                     if permission_sync_context
                     else None
@@ -1822,7 +1818,6 @@ class GoogleDriveConnector(
                 fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
                 failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
                 permission_sync_context=permission_sync_context,
-                add_prefix=True,
             )
             if files_batch
             else []
@@ -2045,7 +2040,6 @@ class GoogleDriveConnector(
             seen_hierarchy_node_raw_ids=ThreadSafeSet(),
             fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
             permission_sync_context=permission_sync_context,
-            add_prefix=True,
         )
 
         func_with_args = [
