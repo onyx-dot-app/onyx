@@ -765,8 +765,14 @@ test.describe("Published file tabs on a touch screen", () => {
       .poll(() => chatPage.rightPanelTabsScrollLeft())
       .toBeGreaterThan(0);
     await chatPage.expectRightPanelTabs(order);
-    await chatPage.swipeRightPanelTabs(150);
-    await expect.poll(() => chatPage.rightPanelTabsScrollLeft()).toBe(0);
+    // The strip holds more than one swipe, and a swipe carries on after the
+    // finger lifts, so swipes back until it is at its start
+    await expect
+      .poll(async () => {
+        await chatPage.swipeRightPanelTabs(150);
+        return chatPage.rightPanelTabsScrollLeft();
+      })
+      .toBe(0);
     await chatPage.expectRightPanelTabs(order);
 
     await chatPage.holdAndDragRightPanelTab(titles[0]!, titles[1]!);
