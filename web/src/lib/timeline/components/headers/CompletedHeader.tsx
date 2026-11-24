@@ -101,20 +101,25 @@ export function MemoryTagWithTooltip({
 
 export interface CompletedHeaderProps {
   processingDurationSeconds?: number;
+  /** Shown in place of the duration. */
+  text?: string;
 }
 
 /** The finished run's title: how long it took, for every run. A saved
  *  memory adds its tag on the card's right side (see RunCard). */
 export function CompletedHeader({
   processingDurationSeconds = 0,
+  text,
 }: CompletedHeaderProps) {
   const t = useTranslations("chat.messages.timeline");
 
-  const durationText = processingDurationSeconds
-    ? t("thoughtDuration.label", {
-        duration: formatDurationSeconds(processingDurationSeconds),
-      })
-    : t("thoughtUnknownDuration.label");
+  const durationText =
+    text ??
+    (processingDurationSeconds
+      ? t("thoughtDuration.label", {
+          duration: formatDurationSeconds(processingDurationSeconds),
+        })
+      : t("thoughtUnknownDuration.label"));
 
   return (
     <Section

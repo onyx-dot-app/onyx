@@ -12519,6 +12519,12 @@
           },
           "browsing": {
             "label": "{count, plural, =0 {正在浏览} other {正在浏览 # 个页面}}"
+          },
+          "doingWork": {
+            "label": "正在处理..."
+          },
+          "didWork": {
+            "label": "已完成处理"
           }
         },
         "internalSearch": {

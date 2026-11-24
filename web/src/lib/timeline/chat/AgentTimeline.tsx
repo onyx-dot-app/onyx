@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { useTranslations } from "next-intl";
+import { Presence } from "@opal/components";
+import { Section } from "@opal/layouts";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import {
@@ -15,6 +18,12 @@ import { RunCard } from "@/lib/timeline/components/RunCard";
 import { ChatStep } from "@/lib/timeline/chat/ChatStep";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
 import type { AwaitingUser } from "@/lib/chat/toolApprovals";
+
+/**
+ * Hoisted vs collapsed: a run with at most this many steps shows each step as
+ * its own card; a run with more collapses into one run card. Change it here.
+ */
+export const MAX_HOISTED_STEPS = 5;
 
 export interface AgentTimelineProps {
   /** Turn groups from usePacketProcessor */
@@ -103,6 +112,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const { memoryText, memoryOperation, memoryId, memoryIndex } =
     useTimelineStepState(turnGroups);
   const streamingStartTime = useStreamingStartTime();
+  const t = useTranslations("chat.messages.timeline");
 
   const steps = useMemo<ChatRunStep[]>(
     () =>
@@ -120,10 +130,40 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const isActive =
     !stopPacketSeen && (!hasDisplayContent || awaitingUser !== null);
 
+  // Hoisted: a short run has no run card; each of its steps is its own card,
+  // with the step's title as its header. Once a run has more steps, they all
+  // collapse into one run card.
+  if (steps.length > 0 && steps.length <= MAX_HOISTED_STEPS) {
+    return (
+      <Section alignItems="stretch" gap={3} height="auto">
+        {steps.map((runStep) => (
+          // A step that arrives while the run works rises in; a saved
+          // run's steps appear at once.
+          <Presence key={runStep.id} appear={isActive} grow>
+            <ChatStep
+              step={runStep.step}
+              status={runStep.status}
+              position={{ isFirst: true, isLast: true }}
+              chatState={chatState}
+              stopPacketSeen={stopPacketSeen}
+              stopReason={stopReason}
+              asCard
+            />
+          </Presence>
+        ))}
+      </Section>
+    );
+  }
+
   return (
+    // Collapsed: the run's steps in one card, summed up rather than titled
+    // by its current step. A wait for the user still says so.
     <RunCard
       steps={steps}
-      workingText={headerText}
+      workingText={
+        awaitingUser !== null ? headerText : t("header.doingWork.label")
+      }
+      doneText={t("header.didWork.label")}
       isActive={isActive}
       isStopped={stopPacketSeen && userStopped}
       autoCollapse={hasDisplayContent}

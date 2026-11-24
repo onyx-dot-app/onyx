@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import type { LineVariant } from "@opal/components";
+import { Line, type LineVariant } from "@opal/components";
+import { Content, Section } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
+import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
+import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import type {
@@ -35,6 +38,11 @@ export interface RunStepProps {
   isHover?: boolean;
   /** The surface when the step has not failed. */
   surfaceBackground?: TimelineSurfaceBackground;
+  /**
+   * Draw the step as its own run card, outside any run: the card's header
+   * is the step's title, and opening the card shows the step's body.
+   */
+  asCard?: boolean;
 }
 
 function statusIcon(
@@ -74,8 +82,63 @@ export function RunStep({
   hideHeader = false,
   isHover = false,
   surfaceBackground,
+  asCard = false,
 }: RunStepProps) {
   const [ownExpanded, setOwnExpanded] = useState(defaultExpanded);
+  const shownTitle = status === "done" ? (doneTitle ?? title) : title;
+
+  if (asCard) {
+    const running = status === "streaming";
+    const foldable = body !== null;
+    const cardBody = foldable
+      ? {
+          expandable: true as const,
+          expanded: ownExpanded,
+          expandedContent: (
+            <div className="px-(--timeline-header-text-padding-x) pb-(--timeline-header-text-padding-y)">
+              {body}
+            </div>
+          ),
+        }
+      : { expandable: false as const };
+    return (
+      <TimelineRoot>
+        <Line
+          flavour="card"
+          filled={running || ownExpanded}
+          onClick={foldable ? () => setOwnExpanded((prev) => !prev) : undefined}
+          rightChildren={headerAccessory}
+          {...cardBody}
+        >
+          {running ? (
+            // A running step's title shimmers, as a run's working header does.
+            <StreamingHeader
+              headerText={
+                typeof shownTitle === "string"
+                  ? shownTitle
+                  : (shownTitle?.raw ?? "")
+              }
+            />
+          ) : (
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              gap={0}
+              height="fit"
+              className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
+            >
+              <Content
+                font="main-ui-action"
+                icon={statusIcon(status) ?? icon}
+                title={shownTitle ?? ""}
+                titleColor="text-03"
+              />
+            </Section>
+          )}
+        </Line>
+      </TimelineRoot>
+    );
+  }
   // A step without a header always shows its body.
   const isExpanded = hideHeader || ownExpanded;
   const failed = status === "error";
@@ -84,7 +147,7 @@ export function RunStep({
   return (
     <StepContainer
       stepIcon={statusIcon(status) ?? icon}
-      header={status === "done" ? (doneTitle ?? title) : title}
+      header={shownTitle}
       headerKey={titleKey}
       headerAccessory={headerAccessory}
       isExpanded={isExpanded}

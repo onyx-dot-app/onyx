@@ -50,6 +50,8 @@ export interface RunCardProps<S extends RunCardStep> {
   streamingStartTime?: number;
   /** The server's duration, shown for a run that did not work here. */
   durationSeconds?: number;
+  /** The finished header's text, in place of the duration. */
+  doneText?: string;
   summary?: RunCardSummary;
 }
 
@@ -68,6 +70,7 @@ export function RunCard<S extends RunCardStep>({
   autoCollapse = false,
   streamingStartTime,
   durationSeconds,
+  doneText,
   summary,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
@@ -213,7 +216,10 @@ export function RunCard<S extends RunCardStep>({
             ) : stopped ? (
               <StoppedHeader />
             ) : (
-              <CompletedHeader processingDurationSeconds={finishedSeconds} />
+              <CompletedHeader
+                processingDurationSeconds={finishedSeconds}
+                text={doneText}
+              />
             )}
           </Presence.Swap>
         </Line>

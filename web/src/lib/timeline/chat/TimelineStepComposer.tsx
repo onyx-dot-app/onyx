@@ -15,6 +15,8 @@ export interface TimelineStepComposerProps {
   collapsible?: boolean;
   /** The step's status; it decides the first row's icon and failed tint. */
   status?: TimelineEntryStatus;
+  /** Draw each step as its own run card (see `RunStep`'s `asCard`). */
+  asCard?: boolean;
 }
 
 /**
@@ -27,6 +29,7 @@ export function TimelineStepComposer({
   isFirstStep,
   collapsible = true,
   status = "done",
+  asCard = false,
 }: TimelineStepComposerProps) {
   return (
     <>
@@ -50,6 +53,7 @@ export function TimelineStepComposer({
             isHover={result.isHover}
             surfaceBackground={result.surfaceBackground}
             body={result.content}
+            asCard={asCard}
           />
         )
       )}
