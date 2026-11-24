@@ -111,17 +111,16 @@ function useTurnCursor(
       }
       const kind = anchor.getAttribute(RESPONSE_CURSOR_ANCHOR_ATTRIBUTE);
       const now = performance.now();
-      if (
-        placed &&
-        (!visible || kind !== anchorKind) &&
-        !reducedMotion.matches
-      ) {
+      const reduced = prefersReducedMotion();
+      if (reduced) {
+        // Reduced motion (also turned on mid-glide): no glide, the cursor
+        // jumps to its marker.
+        glide = null;
+      } else if (placed && (!visible || kind !== anchorKind)) {
         glide = { from: position, start: now };
       }
       anchorKind = kind;
-      cursor.style.transition = prefersReducedMotion()
-        ? "none"
-        : "opacity 250ms";
+      cursor.style.transition = reduced ? "none" : "opacity 250ms";
       const rootRect = root.getBoundingClientRect();
       const anchorRect = anchor.getBoundingClientRect();
       // Physical offsets: the cursor sits at `left-0`, in any direction.
