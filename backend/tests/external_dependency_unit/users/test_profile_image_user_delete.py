@@ -1,7 +1,7 @@
 """Deleting a user deletes their profile photo file on every delete path."""
 
 import io
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
@@ -33,35 +33,38 @@ from tests.external_dependency_unit.conftest import (
 
 
 @pytest.fixture
-def users_to_clean_up(db_session: Session) -> Generator[list[UUID], None, None]:
-    """Deletes the users that a failed test appends, with their API keys and
-    profile photos."""
+def attach_profile_photo(
+    db_session: Session,
+) -> Generator[Callable[[User], str], None, None]:
+    """Gives a user a profile photo. Teardown deletes the users and photos
+    that a failed test leaves, with the users' API keys."""
     user_ids: list[UUID] = []
-    yield user_ids
+    file_ids: list[str] = []
+
+    def attach(user: User) -> str:
+        file_id = get_default_file_store().save_file(
+            content=io.BytesIO(b"photo"),
+            display_name=f"profile-image-{user.id}",
+            file_origin=FileOrigin.USER_PROFILE_IMAGE,
+            file_type=PROFILE_IMAGE_MIME_TYPE,
+        )
+        user_ids.append(user.id)
+        file_ids.append(file_id)
+        user.profile_image_file_id = file_id
+        db_session.commit()
+        return file_id
+
+    yield attach
     db_session.rollback()
     db_session.expire_all()
     for user_id in user_ids:
         user = db_session.get(User, user_id)
-        if user is None:
-            continue
-        file_id = user.profile_image_file_id
-        db_session.execute(delete(ApiKey).where(ApiKey.user_id == user_id))
-        delete_test_user(db_session, user)
-        db_session.commit()
-        if file_id is not None:
-            get_default_file_store().delete_file(file_id, error_on_missing=False)
-
-
-def _attach_profile_photo(db_session: Session, user: User) -> str:
-    file_id = get_default_file_store().save_file(
-        content=io.BytesIO(b"photo"),
-        display_name=f"profile-image-{user.id}",
-        file_origin=FileOrigin.USER_PROFILE_IMAGE,
-        file_type=PROFILE_IMAGE_MIME_TYPE,
-    )
-    user.profile_image_file_id = file_id
-    db_session.commit()
-    return file_id
+        if user is not None:
+            db_session.execute(delete(ApiKey).where(ApiKey.user_id == user_id))
+            delete_test_user(db_session, user)
+            db_session.commit()
+    for file_id in file_ids:
+        get_default_file_store().delete_file(file_id, error_on_missing=False)
 
 
 def _assert_user_and_photo_gone(
@@ -76,13 +79,12 @@ def _assert_user_and_photo_gone(
 @pytest.mark.parametrize("delete_path", ["admin", "auth"])
 async def test_deleting_a_user_deletes_their_profile_photo(
     db_session: Session,
-    users_to_clean_up: list[UUID],
+    attach_profile_photo: Callable[[User], str],
     delete_path: str,
 ) -> None:
     user = create_test_user(db_session, "photo-owner")
     user_id = user.id
-    users_to_clean_up.append(user_id)
-    file_id = _attach_profile_photo(db_session, user)
+    file_id = attach_profile_photo(user)
 
     if delete_path == "admin":
         delete_user_from_db(user, db_session)
@@ -98,7 +100,7 @@ async def test_deleting_a_user_deletes_their_profile_photo(
 
 
 def test_deleting_the_discord_service_key_deletes_its_user_photo(
-    db_session: Session, users_to_clean_up: list[UUID]
+    db_session: Session, attach_profile_photo: Callable[[User], str]
 ) -> None:
     get_or_create_discord_service_api_key(db_session, get_current_tenant_id())
     db_session.commit()
@@ -107,8 +109,7 @@ def test_deleting_the_discord_service_key_deletes_its_user_photo(
     service_user = db_session.get(User, service_key.user_id)
     assert service_user is not None
     service_user_id = service_user.id
-    users_to_clean_up.append(service_user_id)
-    file_id = _attach_profile_photo(db_session, service_user)
+    file_id = attach_profile_photo(service_user)
 
     delete_service_api_key_endpoint(MagicMock(), db_session)
 
@@ -117,12 +118,11 @@ def test_deleting_the_discord_service_key_deletes_its_user_photo(
 
 @pytest.mark.asyncio(loop_scope="module")
 async def test_last_admin_leaving_deletes_their_profile_photo(
-    db_session: Session, users_to_clean_up: list[UUID]
+    db_session: Session, attach_profile_photo: Callable[[User], str]
 ) -> None:
     admin = create_test_user(db_session, "last-admin", is_admin=True)
     admin_id = admin.id
-    users_to_clean_up.append(admin_id)
-    file_id = _attach_profile_photo(db_session, admin)
+    file_id = attach_profile_photo(admin)
 
     module = "ee.onyx.server.tenants.team_membership_api"
     with (
