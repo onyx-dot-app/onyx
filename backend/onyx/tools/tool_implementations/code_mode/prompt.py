@@ -1,6 +1,7 @@
 """Text that the model reads for code mode: tool descriptions and each result."""
 
 import json
+import re
 from collections.abc import Sequence
 from typing import NamedTuple
 
@@ -44,6 +45,8 @@ MAX_NAMESPACE_DESCRIPTION_CHARS = 250
 # Bytes kept for the omitted-namespaces line when the names do not all fit.
 _OMITTED_LINE_RESERVE_BYTES = 64
 _CUT_SUFFIX = "..."
+# The characters that `str.splitlines` breaks lines at.
+_LINE_BREAK = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
 _DEFERRED_NAMESPACES_HEADING = (
     "\n  Deferred tool namespaces (`tool_search` with a namespace finds its "
     "functions; call each by the name in its stub):\n"
@@ -93,7 +96,7 @@ def _deferred_note(stubs: ToolStubs) -> str:
         for namespace, description in descriptions.items():
             # The description bytes that fit after ": ".
             cap = remaining - 2
-            first_line = (description or "").strip().partition("\n")[0].rstrip()
+            first_line = _LINE_BREAK.split((description or "").strip(), 1)[0].rstrip()
             if cap <= len(_CUT_SUFFIX) or not first_line:
                 lines.append(f"  - {namespace}")
                 continue

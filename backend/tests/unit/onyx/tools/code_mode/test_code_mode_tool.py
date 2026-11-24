@@ -658,7 +658,8 @@ def test_description_lists_each_deferred_namespace_with_its_description() -> Non
         _deferred("refund", "billing", "Refund and bill customers.\nMore text."),
         _deferred("invoice", "billing", "Refund and bill customers.\nMore text."),
         _deferred("page", "alerts"),
-        _deferred("ask", "chat", "\n\n  Ask a person.  \nMore text."),
+        _deferred("ask", "chat", "\n\n  Ask a person.  \u2028More text."),
+        _deferred("log", "events", "Read events.\rMore text."),
         _deferred("archive", None),
         _deferred("search", "docs", "x" * 300),
     )
@@ -668,6 +669,7 @@ def test_description_lists_each_deferred_namespace_with_its_description() -> Non
         "  - billing: Refund and bill customers.",
         "  - chat: Ask a person.",
         f"  - docs: {'x' * 247}...",
+        "  - events: Read events.",
         # The OpenAPI-style function without a namespace.
         "  Other deferred functions are in no namespace.",
     ]
