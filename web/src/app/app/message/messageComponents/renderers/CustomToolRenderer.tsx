@@ -147,7 +147,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       // One panel: the request, then the response (waiting, files, JSON,
       // text or the tool's error), each under its own title row. Nothing to
       // open until the request or a response arrives.
-      toolArgsJson || (showResponse && !isRunning) ? (
+      toolArgsJson || error || hasFiles || hasData ? (
         <CodePanel>
           {toolArgsJson && (
             <>
