@@ -85,7 +85,7 @@ function LineCardTitle({
         {/* One line: a long title truncates, shimmering or settled. */}
         <div className="opal-line-card-title-text">
           {shimmer ? (
-            <TextLoader font="main-ui-action">{text}</TextLoader>
+            <TextLoader font="main-ui-action">{title}</TextLoader>
           ) : (
             <Text
               as="p"

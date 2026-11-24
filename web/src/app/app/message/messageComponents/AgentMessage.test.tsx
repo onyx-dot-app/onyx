@@ -902,7 +902,10 @@ test("a running program shows working over a parallel turn", async () => {
     />
   );
   try {
-    expect(await screen.findByText("Working")).toBeInTheDocument();
+    // The parallel searches show as their own steps, still working.
+    expect(
+      await screen.findAllByText("Searching internal documents")
+    ).toHaveLength(2);
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   } finally {
     view.unmount();
@@ -1005,7 +1008,7 @@ test("a program without tool calls shows only a working header", async () => {
   );
   const view = render(renderMessage(running));
   try {
-    expect(await screen.findByText("Working")).toBeInTheDocument();
+    expect(await screen.findByText("Doing some work...")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/36|sum\(range|step/i);
 
     // A finished response is no longer working, even with no final delta.
@@ -1019,7 +1022,7 @@ test("a program without tool calls shows only a working header", async () => {
       ])
     );
     await waitFor(() =>
-      expect(screen.queryByText("Working")).not.toBeInTheDocument()
+      expect(screen.queryByText("Doing some work...")).not.toBeInTheDocument()
     );
   } finally {
     view.unmount();
@@ -1366,7 +1369,9 @@ test("a tool step after an accepted user message follows that message", async ()
     const bubble = await screen.findByText("Use the latest report");
     // Each search gets its own timeline, on its side of the user message.
     expect(screen.queryByText("2 steps")).not.toBeInTheDocument();
-    const timelines = screen.getAllByRole("button", { name: "1 step" });
+    const timelines = screen.getAllByRole("button", {
+      name: "Expand Searched internal documents",
+    });
     expect(timelines).toHaveLength(2);
     expect(
       timelines[0]!.compareDocumentPosition(bubble) &

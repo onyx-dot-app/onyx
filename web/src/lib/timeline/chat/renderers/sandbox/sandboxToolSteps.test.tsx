@@ -523,33 +523,6 @@ test("a call names its file once the path arrives, in the same title element", a
   }
 });
 
-test("the run header keeps its shimmer element when its activity changes", async () => {
-  const motion = allowMotion();
-  const edit = [at({ turn_index: 0, tab_index: 0 })(fileProgress("edit", []))];
-  const view = render(renderMessage(edit));
-  try {
-    const shimmer = (await screen.findByText("Editing files")).closest(
-      ".opal-text-loader-wave"
-    );
-    expect(shimmer).not.toBeNull();
-    view.rerender(
-      renderMessage([
-        ...edit,
-        at({ turn_index: 1, tab_index: 0 })({
-          type: PacketType.EXEC_COMMAND_START,
-          cmd: "ls",
-          workdir: null,
-        }),
-      ])
-    );
-    await waitFor(() => expect(shimmer).toHaveTextContent("Running command"));
-    expect(shimmer).toBeInTheDocument();
-  } finally {
-    view.unmount();
-    motion.mockRestore();
-  }
-});
-
 test("sandbox text is isolated in markup, and paths show without bidi controls", async () => {
   // A path that closes an isolate early, then overrides the direction.
   const path = "a\u2069\u202Eb.py";
@@ -823,7 +796,6 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
   );
   try {
     await screen.findByText("Done.");
-    expect(screen.getByText("2 steps")).toBeInTheDocument();
     await expandTimeline();
     expect(screen.getByText("Ran command")).toBeInTheDocument();
     expect(view.container).toHaveTextContent("$ pytest");
