@@ -41,7 +41,11 @@ pub struct Config {
     /// Per server, the fingerprints (`token_fingerprint`) of the tokens that a
     /// sign-out could not delete from the OS store. These tokens are never
     /// used again. The tokens themselves are never written here.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        default,
+        deserialize_with = "lenient_rejected_tokens",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub rejected_tokens: BTreeMap<String, BTreeSet<String>>,
     /// Windows: the notice about the earlier app's per-user install was shown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -77,6 +81,49 @@ impl Config {
             .get(server)
             .is_some_and(|set| set.contains(&token_fingerprint(server, token)))
     }
+}
+
+/// Reads `rejectedTokens` without ever failing the whole config: a server
+/// maps to one fingerprint (the first format) or a list of them. Any other
+/// value is dropped and logged.
+fn lenient_rejected_tokens<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, BTreeSet<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(rejected_tokens_from(value))
+}
+
+fn rejected_tokens_from(value: serde_json::Value) -> BTreeMap<String, BTreeSet<String>> {
+    use serde_json::Value;
+    let Value::Object(entries) = value else {
+        log::warn!("rejectedTokens in config.json is not an object; ignored");
+        return BTreeMap::new();
+    };
+    let mut out = BTreeMap::new();
+    for (server, value) in entries {
+        let set: Option<BTreeSet<String>> = match value {
+            Value::String(one) => Some(BTreeSet::from([one])),
+            Value::Array(items) => items
+                .into_iter()
+                .map(|item| match item {
+                    Value::String(s) => Some(s),
+                    _ => None,
+                })
+                .collect(),
+            _ => None,
+        };
+        match set {
+            Some(set) if !set.is_empty() => {
+                out.insert(server, set);
+            }
+            Some(_) => {}
+            None => log::warn!("a rejectedTokens entry in config.json is not valid; ignored"),
+        }
+    }
+    out
 }
 
 /// The fingerprints to record when a sign-out cannot delete the stored
@@ -225,6 +272,50 @@ mod tests {
         config.rejected_tokens.insert(SERVER.to_string(), both);
         assert!(config.rejects_token(SERVER, "renewed"));
         assert!(config.rejects_token(SERVER, "stored"));
+    }
+
+    #[test]
+    fn rejected_tokens_read_both_formats() {
+        let config: Config = serde_json::from_str(
+            r#"{"serverUrl": "https://a.example.com",
+                "rejectedTokens": {"https://a.example.com": "aa", "https://b.example.com": ["bb", "cc"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(config.server_url.as_deref(), Some("https://a.example.com"));
+        assert_eq!(
+            config.rejected_tokens.get("https://a.example.com"),
+            Some(&BTreeSet::from(["aa".to_string()]))
+        );
+        assert_eq!(
+            config.rejected_tokens.get("https://b.example.com"),
+            Some(&BTreeSet::from(["bb".to_string(), "cc".to_string()]))
+        );
+        // Written in the list format only.
+        let raw = serde_json::to_string(&config).unwrap();
+        assert!(raw.contains(r#""https://a.example.com":["aa"]"#));
+    }
+
+    #[test]
+    fn a_bad_rejected_tokens_value_keeps_the_other_settings() {
+        for bad in [
+            r#""garbage""#,
+            "42",
+            r#"{"https://a.example.com": 7}"#,
+            r#"{"https://a.example.com": ["aa", 1]}"#,
+        ] {
+            let config: Config = serde_json::from_str(&format!(
+                r#"{{"serverUrl": "https://a.example.com", "hotkey": "Alt+Space", "rejectedTokens": {bad}}}"#
+            ))
+            .unwrap();
+            assert_eq!(config.server_url.as_deref(), Some("https://a.example.com"));
+            assert_eq!(config.hotkey(), "Alt+Space");
+            assert!(config.rejected_tokens.is_empty(), "{bad}");
+        }
+        let mixed: Config = serde_json::from_str(
+            r#"{"rejectedTokens": {"https://a.example.com": 7, "https://b.example.com": "bb"}}"#,
+        )
+        .unwrap();
+        assert_eq!(mixed.rejected_tokens.len(), 1);
     }
 
     #[test]
