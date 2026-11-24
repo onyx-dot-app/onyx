@@ -1,3 +1,28 @@
+https://github.com/user-attachments/assets/3c0ea38a-d3a6-4bcd-8348-1d3427b67587
+
+[![Watch the film](onyx-readme-yc-poster.jpg)](https://orchestrastudios.ai/films/onyx)
+
+## 🎬 We made Onyx a film
+
+Hi Onyx team — I'm Remy Tennant, founder of Orchestra Studios. This is a gift — a film we made specially for your company, directed from your product itself: your actual screens, in motion.
+
+We're running a promotional campaign: **we're giving away 100 videos to YC companies over the next 30 days, first come, first served.** We came to you first because we admire how Onyx connects 50+ workplace apps while respecting permissions and data sovereignty — an air-gappable, self-hosted context layer, with Agentic RAG and Deep Research, that makes an AI coworker who actually knows what your team knows. Our film is called "Onyx Finds What Others Miss," because that's the promise your users repeat back to you. So we went ahead and made yours — the short film above. I think it came out great, and I'd love you to have it.
+
+**Use it as-is, or claim it and get the real thing:**
+- This copy is yours either way. Want just the video? Trim the outro card off the end and use it — no signup, no strings. It's 720p only because GitHub caps README videos at 10 MB; that's the whole reason, not a teaser.
+- **Claim it at [orchestrastudios.ai/YC](https://orchestrastudios.ai/YC)** and you get the full 1080p master — plus the project itself, transferred to you the moment you sign up.
+- Claiming means the film becomes *code you own*, not a file you're stuck with: edit any scene, line or voice, re-audition, re-render as often as you like. When your product changes, it can re-render from your code, so it never goes stale.
+- Want changes? Just tell me what you'd fix — I'll hand it to the AI agent embedded in the project. It makes the edits and re-renders. First round's on us, no sweat.
+
+**No strings attached.** No card, no sales call, no deadline on the gift itself — the film above is yours whether or not you ever claim the project. Why free? Orchestra just launched, and this is our launch campaign: we're giving a film to 100 YC companies, first come first served. We're YC founders ourselves, so we started with our own community — and a claimed project is worth more to us than a fee. That's the whole exchange.
+
+Questions? Email me at **remy@orchestrastudios.ai**.
+
+— Remy Tennant
+Orchestra Studios
+
+---
+
 <a name="readme-top"></a>
 
 <h2 align="center">
