@@ -62,7 +62,7 @@ class _FakeVMTurn(SandboxTurn):
         self.chat_session_id = uuid4()
         super().__init__(
             tenant_id="t",
-            user_id=uuid4(),
+            user=MagicMock(id=uuid4()),
             chat_session_id=self.chat_session_id,
             vm_chat_files=[],
             copy_vm_chat_files=False,

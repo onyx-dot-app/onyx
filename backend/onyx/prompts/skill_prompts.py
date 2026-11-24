@@ -49,9 +49,11 @@ instructions, a step needs a file or script you cannot open), state the issue, \
 pick the next-best approach, and continue.
 </skills_instructions>"""
 
-BUILT_IN_SKILL_FILES_LINE = (
-    "Skill files: {folder}/ (read-only). Run its scripts with their interpreter, "
-    "for example `python {folder}/scripts/<name>.py`.\n\n"
+SKILL_FILES_LINE = (
+    "Skill files: {folder}/ (read-only). Call {load_tool} before you use "
+    "them. Run its scripts with their interpreter, for example "
+    "`python {folder}/scripts/<name>.py`. To change a file, copy the skill "
+    "into your working directory first.\n\n"
 )
 
 SKILLS_UNAVAILABLE_INTEGRATIONS_LINE = (

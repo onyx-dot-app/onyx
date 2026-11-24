@@ -14,7 +14,7 @@ from contextlib import closing, contextmanager
 from functools import partial
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.agents.tools import (
     ToolExecutionMode,
@@ -53,12 +53,14 @@ from onyx.server.features.build.sandbox.harness_base import (
     session_relative_path,
 )
 from onyx.server.features.build.sandbox.models import (
+    CHAT_SKILLS_PATH,
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
     SandboxPathInfo,
     session_workspace,
 )
+from onyx.tools.constants import LOAD_SKILL_TOOL_NAME
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -68,6 +70,7 @@ from onyx.tools.models import (
     CodeModeExposure,
     CodeModeResultKind,
     CodeModeResultSpec,
+    CustomToolCallSummary,
     ToolCallException,
     ToolContext,
 )
@@ -104,7 +107,7 @@ from onyx.tools.tool_implementations.sandbox.patch import (
     summarize,
     update_contents,
 )
-from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn, SkillLoadError
 from onyx.tools.tool_implementations.utils import cut_middle, output_chars
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -831,6 +834,46 @@ class PublishFilesTool(_FileTool):
             content="Published. The user sees a download card for each file; "
             f"do not repeat their contents.\n{listed}",
             details=PublishedFiles(files=published),
+        )
+
+
+class LoadSkillArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, description="Skill name.")
+
+
+class LoadSkillTool(SandboxTool):
+    """Copies one of the user's skills into its read-only sandbox folder.
+    Only a turn whose user has chat skills gets it."""
+
+    NAME = LOAD_SKILL_TOOL_NAME
+    USE = None
+    DESCRIPTION = (
+        "Copy a skill's files into the sandbox, read-only, at "
+        f"{CHAT_SKILLS_PATH}/<name>/. Call it before you run the skill's "
+        "scripts or open its other files. It returns when the copy is done."
+    )
+    ARGUMENTS = LoadSkillArguments
+    display_name = "Load skill"
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(LoadSkillArguments, invocation.arguments)
+        try:
+            folder = self._turn.load_skill(self._turn.start_call(), arguments.name)
+        except SkillLoadError as e:
+            raise ToolCallException(message=str(e), llm_facing_message=str(e)) from e
+        return ToolResult(
+            content=f"Skill '{arguments.name}' is at {folder}/ (read-only).",
+            details=CustomToolCallSummary(
+                tool_name=self.name,
+                response_type="json",
+                tool_result={"skill": arguments.name},
+            ),
         )
 
 

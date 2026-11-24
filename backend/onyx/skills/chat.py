@@ -141,6 +141,8 @@ def accept_picked_skills(
     skills: Sequence[ChatSkill],
     user_id: UUID,
     db_session: Session,
+    *,
+    built_ins: bool,
 ) -> list[AcceptedPicks]:
     """Resolve the skills that each message picked, from one read with the
     user's current access.
@@ -162,6 +164,7 @@ def accept_picked_skills(
         },
         user_id,
         db_session,
+        built_ins=built_ins,
     )
     # Stored counts use one tokenizer, as question counts do.
     tokenizer = get_tokenizer(None, None)

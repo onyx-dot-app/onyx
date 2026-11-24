@@ -43,7 +43,10 @@ from onyx.server.features.skill.models import (
 )
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.push import build_user_skills_payload
+from onyx.skills.push import (
+    build_chat_custom_skill_files,
+    build_user_skills_payload,
+)
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
     skills_catalog_message,
@@ -224,6 +227,15 @@ def test_three_skills_load_as_three_run_time_and_chat_skills(
     ]
     assert files["beta/notes.md"] == b"beta notes"
     assert not any(path.startswith((".claude-plugin", "skills/")) for path in files)
+
+    beta = next(
+        skill
+        for skill in list_chat_skills(db_session, author, built_ins=True)
+        if skill.name == "beta"
+    )
+    copied = build_chat_custom_skill_files(beta, author, db_session)
+    assert copied is not None
+    assert sorted(copied) == ["beta/SKILL.md", "beta/notes.md"]
 
 
 def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(

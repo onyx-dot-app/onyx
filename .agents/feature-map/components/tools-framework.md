@@ -172,7 +172,8 @@ chat built-ins need the VM) and read the user's current chat skills on each
 call; `skills_read` checks that the user can still see the skill and
 returns its SKILL.md, frontmatter included, up to 32,000 characters per call
 (`SKILL_READ_MAX_CHARS`). A longer text ends with a note that gives the
-`start_char` offset of the next call. The Deep Research orchestrator binds
+`start_char` offset of the next call. `skills_read` copies no files; the
+sandbox tool `load_skill` copies a skill into the VM. The Deep Research orchestrator binds
 both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
