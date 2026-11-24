@@ -77,7 +77,11 @@ function useTurnCursor(
     let placed = false;
     let visible = false;
     let anchorKind: string | null = null;
-    let glideUntil = 0;
+    let position = { x: 0, y: 0 };
+    // A glide eases from where it started to where the marker is now, so it
+    // lands smoothly also on a marker that moves, such as one under a run
+    // card that opens.
+    let glide: { from: { x: number; y: number }; start: number } | null = null;
     const place = () => {
       frame = null;
       const anchors = root.querySelectorAll(
@@ -106,19 +110,40 @@ function useTurnCursor(
         return;
       }
       const kind = anchor.getAttribute(RESPONSE_CURSOR_ANCHOR_ATTRIBUTE);
-      if (placed && (!visible || kind !== anchorKind)) {
-        glideUntil = performance.now() + CURSOR_GLIDE_MS;
+      const now = performance.now();
+      if (
+        placed &&
+        (!visible || kind !== anchorKind) &&
+        !reducedMotion.matches
+      ) {
+        glide = { from: position, start: now };
       }
       anchorKind = kind;
       cursor.style.transition = prefersReducedMotion()
         ? "none"
-        : performance.now() < glideUntil
-          ? `opacity 250ms, transform ${CURSOR_GLIDE_MS}ms ease-out`
-          : "opacity 250ms";
+        : "opacity 250ms";
       const rootRect = root.getBoundingClientRect();
       const anchorRect = anchor.getBoundingClientRect();
       // Physical offsets: the cursor sits at `left-0`, in any direction.
-      cursor.style.transform = `translate(${anchorRect.left - rootRect.left}px, ${anchorRect.top - rootRect.top}px)`;
+      const target = {
+        x: anchorRect.left - rootRect.left,
+        y: anchorRect.top - rootRect.top,
+      };
+      position = target;
+      if (glide) {
+        const progress = (now - glide.start) / CURSOR_GLIDE_MS;
+        if (progress >= 1) {
+          glide = null;
+        } else {
+          // Ease out (cubic).
+          const eased = 1 - (1 - progress) ** 3;
+          position = {
+            x: glide.from.x + (target.x - glide.from.x) * eased,
+            y: glide.from.y + (target.y - glide.from.y) * eased,
+          };
+        }
+      }
+      cursor.style.transform = `translate(${position.x}px, ${position.y}px)`;
       cursor.style.opacity = "1";
       placed = true;
       visible = true;
