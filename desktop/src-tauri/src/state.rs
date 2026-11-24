@@ -276,8 +276,12 @@ impl AppState {
         if cache.as_ref() != Some(&(server.to_string(), old.to_string())) {
             return false;
         }
+        // The next renewal saves again. Until then the stored token is the
+        // older one, and a failed sign-out rejects both.
         if let Err(e) = session_store::store(server, new) {
-            log::warn!("could not save the renewed session: {e}");
+            log::warn!(
+                "could not save the renewed session; the stored token is now older than the one in use: {e}"
+            );
         }
         *cache = Some((server.to_string(), new.to_string()));
         true
@@ -289,20 +293,29 @@ impl AppState {
     /// the server logout) and the result of clearing the stored one.
     pub fn end_session(&self, server: &str) -> (Option<String>, Result<(), String>) {
         let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
-        let token = match cache.take() {
+        let in_memory = match cache.take() {
             Some((cached_server, token)) if cached_server == server => Some(token),
-            _ => session_store::load(server).ok().flatten(),
+            _ => None,
         };
+        let stored = session_store::load(server).ok().flatten();
         let cleared = session_store::clear(server);
-        if let (Err(_), Some(token)) = (&cleared, &token) {
-            // Kept in config, so the token is refused also after a restart.
-            let fingerprint = crate::config::token_fingerprint(server, token);
-            if let Err(e) = self.config.update(|c| {
-                c.rejected_tokens.insert(server.to_string(), fingerprint);
-            }) {
-                log::warn!("could not record the signed-out token: {e}");
+        if cleared.is_err() {
+            // Kept in config, so neither token is used again, also after a
+            // restart.
+            let rejected =
+                crate::config::tokens_to_reject(server, in_memory.as_deref(), stored.as_deref());
+            if !rejected.is_empty() {
+                if let Err(e) = self.config.update(|c| {
+                    c.rejected_tokens
+                        .entry(server.to_string())
+                        .or_default()
+                        .extend(rejected);
+                }) {
+                    log::warn!("could not record the signed-out token: {e}");
+                }
             }
         }
+        let token = in_memory.or(stored);
         self.forget_read_failure();
         self.end_epoch();
         (token, cleared)

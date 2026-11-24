@@ -38,11 +38,11 @@ pub struct Config {
     /// The last valid managed `ServerURL`, used while the policy is invalid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_server_url: Option<String>,
-    /// Per server, the fingerprint (`token_fingerprint`) of a token that a
-    /// sign-out could not delete from the OS store. That token is never used
-    /// again. The token itself is never written here.
+    /// Per server, the fingerprints (`token_fingerprint`) of the tokens that a
+    /// sign-out could not delete from the OS store. These tokens are never
+    /// used again. The tokens themselves are never written here.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub rejected_tokens: BTreeMap<String, String>,
+    pub rejected_tokens: BTreeMap<String, BTreeSet<String>>,
     /// Windows: the notice about the earlier app's per-user install was shown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub earlier_install_notice_shown: Option<bool>,
@@ -73,9 +73,25 @@ impl Config {
 
     /// Whether `token` is the one a sign-out from `server` could not delete.
     pub fn rejects_token(&self, server: &str, token: &str) -> bool {
-        self.rejected_tokens.get(server).map(String::as_str)
-            == Some(token_fingerprint(server, token).as_str())
+        self.rejected_tokens
+            .get(server)
+            .is_some_and(|set| set.contains(&token_fingerprint(server, token)))
     }
+}
+
+/// The fingerprints to record when a sign-out cannot delete the stored
+/// token: every token that can still be loaded for `server`. The token in
+/// memory and the stored one differ when a renewed token could not be saved.
+pub fn tokens_to_reject(
+    server: &str,
+    in_memory: Option<&str>,
+    stored: Option<&str>,
+) -> BTreeSet<String> {
+    in_memory
+        .into_iter()
+        .chain(stored)
+        .map(|token| token_fingerprint(server, token))
+        .collect()
 }
 
 /// SHA-256 (hex) of the server and the token, so a rejected token can be
@@ -177,13 +193,38 @@ mod tests {
         assert!(!config.rejects_token(SERVER, "secret-token"));
         config
             .rejected_tokens
-            .insert(SERVER.to_string(), fingerprint);
+            .insert(SERVER.to_string(), BTreeSet::from([fingerprint]));
         assert!(config.rejects_token(SERVER, "secret-token"));
         assert!(!config.rejects_token(SERVER, "new-token"));
         assert!(!config.rejects_token("https://other.example.com", "secret-token"));
         let raw = serde_json::to_string(&config).unwrap();
         assert!(raw.contains("rejectedTokens"));
         assert!(!raw.contains("secret-token"));
+    }
+
+    #[test]
+    fn sign_out_rejects_both_the_renewed_and_the_stored_token() {
+        let both = tokens_to_reject(SERVER, Some("renewed"), Some("stored"));
+        assert_eq!(
+            both,
+            BTreeSet::from([
+                token_fingerprint(SERVER, "renewed"),
+                token_fingerprint(SERVER, "stored"),
+            ])
+        );
+        assert_eq!(
+            tokens_to_reject(SERVER, Some("same"), Some("same")).len(),
+            1
+        );
+        assert_eq!(
+            tokens_to_reject(SERVER, None, Some("stored")),
+            BTreeSet::from([token_fingerprint(SERVER, "stored")])
+        );
+        assert!(tokens_to_reject(SERVER, None, None).is_empty());
+        let mut config = Config::default();
+        config.rejected_tokens.insert(SERVER.to_string(), both);
+        assert!(config.rejects_token(SERVER, "renewed"));
+        assert!(config.rejects_token(SERVER, "stored"));
     }
 
     #[test]

@@ -120,8 +120,9 @@ install of this app upgrades it in place. See
   written back to the keychain, so after a quit the server session ends only when it expires. If
   the OS credential store cannot delete the stored token, the sign-out still closes the main
   window and opens sign-in, logs the error, and shows a warning. It records a SHA-256
-  fingerprint of that token (never the token) in `config.json` (`rejectedTokens`), so the token
-  is never used again, also after a restart. A later read deletes it from the store, and a new
+  fingerprint of each token that could still be loaded (never the token) in `config.json`
+  (`rejectedTokens`): the one in use and the stored one, which differ when a renewed token could
+  not be saved. These tokens are never used again, also after a restart. A later read deletes it from the store, and a new
   sign-in to that server drops the record. The launcher, onboarding and sign-in show one line for each of the same errors,
   for example "Can't find <host>. Check the server address." (`src-tauri/src/reachability.rs`).
 - If the HTTP client cannot start (for example, a broken OpenSSL configuration), a dialog
