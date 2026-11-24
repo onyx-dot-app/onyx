@@ -23,8 +23,8 @@ export function usePlaygroundRestrictions(): ReadonlySet<PlaygroundRestrictedFea
 
 export interface PlaygroundRestriction {
   /**
-   * True once the settings have loaded, so `restricted` is an answer. False
-   * while they load and while the request fails and retries.
+   * True once the core settings have arrived, so `restricted` is an answer.
+   * False while they load and while the request fails and retries.
    */
   known: boolean;
   /** True when the feature is restricted on this deployment. */
@@ -49,9 +49,12 @@ export function usePlaygroundRestriction(
   featureKey: PlaygroundRestrictedFeature | undefined
 ): PlaygroundRestriction {
   const t = useTranslations("common.playground");
+  const { playground_restrictions } = useSettings();
   const restrictions = usePlaygroundRestrictions();
-  const { isLoading, error } = useSettings();
-  const known = !isLoading && error === undefined;
+  // The server always sends the list, so its absence means the core settings
+  // have not arrived: still loading, or failed and retrying. The branding
+  // request does not change this, unlike the settings hook's own flags.
+  const known = playground_restrictions !== undefined;
   const restricted = featureKey !== undefined && restrictions.has(featureKey);
   const reason =
     featureKey !== undefined

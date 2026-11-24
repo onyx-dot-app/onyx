@@ -16,15 +16,15 @@ jest.mock("react-markdown", () => ({
 
 const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
+// `arrived` false stands for settings that have not come back yet: the
+// hook then serves the defaults, which carry no list.
 function stubRestrictions(
   restrictions: PlaygroundRestrictedFeature[],
-  isLoading = false,
-  error: Error | undefined = undefined
+  arrived = true
 ) {
   mockUseSettings.mockReturnValue({
-    isLoading,
-    error,
-    playground_restrictions: restrictions,
+    isLoading: !arrived,
+    playground_restrictions: arrived ? restrictions : undefined,
   } as ReturnType<typeof useSettings>);
 }
 
@@ -91,8 +91,8 @@ test("an unrestricted page renders as it is", () => {
   expect(screen.getByTestId("provider-card").closest("[inert]")).toBeNull();
 });
 
-test("a page with a feature key waits for the settings before it is live", () => {
-  stubRestrictions([], true);
+test("a page with a feature key waits for the core settings before it is live", () => {
+  stubRestrictions([], false);
   render(
     <PlaygroundRestrictedPage featureKey={PlaygroundRestrictedFeature.SSO}>
       <Page />
@@ -103,19 +103,23 @@ test("a page with a feature key waits for the settings before it is live", () =>
   expect(screen.queryByText("Playground Limit")).not.toBeInTheDocument();
 });
 
-test("a page with a feature key stays held while the settings request fails", () => {
-  stubRestrictions([], false, new Error("settings unavailable"));
+test("a branding outage does not hold a page whose core settings loaded", () => {
+  mockUseSettings.mockReturnValue({
+    error: new Error("branding unavailable"),
+    playground_restrictions: [PlaygroundRestrictedFeature.SSO],
+  } as ReturnType<typeof useSettings>);
   render(
     <PlaygroundRestrictedPage featureKey={PlaygroundRestrictedFeature.SSO}>
       <Page />
     </PlaygroundRestrictedPage>
   );
 
-  expect(screen.queryByRole("button", { name: "Add provider" })).toBeNull();
+  expect(screen.getByText("Playground Limit")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Add provider" })).toBeDisabled();
 });
 
 test("a page without a feature key renders while the settings load", () => {
-  stubRestrictions([], true);
+  stubRestrictions([], false);
   render(
     <PlaygroundRestrictedPage featureKey={undefined}>
       <Page />

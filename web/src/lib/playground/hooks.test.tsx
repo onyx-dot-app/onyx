@@ -41,7 +41,7 @@ function wrapper({ children }: { children: React.ReactNode }) {
 // usePlaygroundRestrictions
 // ---------------------------------------------------------------------------
 
-test("is empty when the server reports no restrictions", () => {
+test("is empty while the settings have not arrived", () => {
   stubRestrictions(undefined);
   const { result } = renderHook(() => usePlaygroundRestrictions(), { wrapper });
   expect(result.current.size).toBe(0);
@@ -115,7 +115,8 @@ test("a feature the server does not list is not restricted", () => {
   expect(result.current.restricted).toBe(false);
 });
 
-test("the answer is not known while the settings load or fail", () => {
+test("the answer is known once the core settings have arrived", () => {
+  // Still loading: the server has not sent the list yet.
   mockUseSettings.mockReturnValue({
     isLoading: true,
   } as ReturnType<typeof useSettings>);
@@ -126,6 +127,7 @@ test("the answer is not known while the settings load or fail", () => {
   expect(loading.result.current.known).toBe(false);
   expect(loading.result.current.restricted).toBe(false);
 
+  // Failed: the defaults carry no list.
   mockUseSettings.mockReturnValue({
     isLoading: false,
     error: new Error("settings unavailable"),
@@ -135,6 +137,20 @@ test("the answer is not known while the settings load or fail", () => {
     { wrapper }
   );
   expect(failed.result.current.known).toBe(false);
+
+  // A branding outage is not a core failure: the list arrived, so the
+  // answer is known even though the settings hook reports an error.
+  mockUseSettings.mockReturnValue({
+    isLoading: false,
+    error: new Error("branding unavailable"),
+    playground_restrictions: [PlaygroundRestrictedFeature.SSO],
+  } as ReturnType<typeof useSettings>);
+  const branding = renderHook(
+    () => usePlaygroundRestriction(PlaygroundRestrictedFeature.SSO),
+    { wrapper }
+  );
+  expect(branding.result.current.known).toBe(true);
+  expect(branding.result.current.restricted).toBe(true);
 
   stubRestrictions([]);
   const loaded = renderHook(
