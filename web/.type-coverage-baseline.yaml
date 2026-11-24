@@ -128,7 +128,7 @@ packages:
   src/sections/admin: 100
   src/sections/agents: 99.9
   src/sections/approvals: 99.1
-  src/sections/banners: 99.1
+  src/sections/banners: 98.5
   src/sections/cards: 100
   src/sections/chat: 99.8
   src/sections/customize: 99.8

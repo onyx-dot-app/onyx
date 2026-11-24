@@ -12,12 +12,6 @@ class ResourceIssue(str, Enum):
     VECTOR_MEMORY = "vector_memory"
 
 
-class ResourceHealth(BaseModel):
-    checked_at: datetime | None = None
-    issues: list[ResourceIssue] = Field(default_factory=list)
-    stale: bool = True
-
-
 class ResourceSnapshot(BaseModel):
     checked_at: datetime
     issues: list[ResourceIssue]
