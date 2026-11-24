@@ -4,6 +4,7 @@
  * list stays complete.
  */
 export const CHAT_SHORTCUTS = {
+  commandPalette: "mod+k",
   newChat: "mod+shift+o",
   toggleSidebar: "mod+e",
   openModelPicker: "mod+/",

@@ -16706,9 +16706,6 @@
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "Criar novo projeto \"<name>{projectName}</name>\""
-      },
       "footer": {
         "openAction": {
           "label": "Abrir"
@@ -16727,23 +16724,14 @@
       },
       "list": {
         "empty": {
-          "text": "Ainda não há chats nem projetos"
+          "text": "Ainda não há chats"
         },
         "noResults": {
           "text": "Nenhum resultado encontrado"
         }
       },
-      "newProject": {
-        "label": "Novo projeto"
-      },
       "newSession": {
         "label": "Nova sessão"
-      },
-      "noMoreResults": {
-        "text": "Não há mais resultados"
-      },
-      "projectsFilter": {
-        "label": "Projetos"
       },
       "recentFilter": {
         "label": "Recente"
@@ -16752,10 +16740,25 @@
         "label": "Sessões recentes"
       },
       "searchInput": {
-        "placeholder": "Pesquisar sessões de chat, projetos..."
+        "placeholder": "Pesquisar sessões de chat..."
       },
       "sessionsFilter": {
         "label": "Sessões"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "Trocar modelo"
+        },
+        "nextChat": {
+          "label": "Próxima sessão"
+        },
+        "previousChat": {
+          "label": "Sessão anterior"
+        },
+        "title": "Atalhos",
+        "toggleSidebar": {
+          "label": "Alternar barra lateral"
+        }
       }
     },
     "notifications": {

@@ -53,6 +53,11 @@
   the caret by paragraph on macOS. None runs while a modal is open.
   `web/src/lib/shortcuts/constants.ts` lists them;
   `sections/sidebar/ChatShortcuts.tsx` binds them with Opal's `useHotkey`.
+  Cmd/Ctrl+K opens or closes the sidebar's search menu
+  (`sections/sidebar/ChatSearchCommandMenu.tsx`). The menu shows Recent
+  Sessions and Shortcuts. Search matches chat sessions and shortcut labels.
+  Shortcuts includes New Session and shows the keys for the user's platform.
+  Each shortcut action runs after the menu closes.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button stops every active

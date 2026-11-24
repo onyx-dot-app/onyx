@@ -374,7 +374,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
 const CommandMenuContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   CommandMenuContentProps
->(({ children }, ref) => {
+>(({ children, onCloseAutoFocus }, ref) => {
   const t = useTranslations("common.commandMenu");
   const { handleKeyDown } = useCommandMenuContext();
   const { centerX, hasContainerCenter } = useContainerCenter();
@@ -395,6 +395,7 @@ const CommandMenuContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         onKeyDown={handleKeyDown}
+        onCloseAutoFocus={onCloseAutoFocus}
         style={
           hasContainerCenter && centerX !== null ? { left: centerX } : undefined
         }
