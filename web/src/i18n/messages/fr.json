@@ -12353,6 +12353,11 @@
           "text": "Génération d'images arrêtée"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Image indisponible"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "Copier le tableau"

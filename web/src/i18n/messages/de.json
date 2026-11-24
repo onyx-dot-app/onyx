@@ -12353,6 +12353,11 @@
           "text": "Bildgenerierung gestoppt"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Bild nicht verfügbar"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "Tabelle kopieren"

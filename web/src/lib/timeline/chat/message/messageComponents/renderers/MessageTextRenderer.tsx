@@ -17,6 +17,7 @@ import { isFinalAnswerComplete } from "@/app/app/services/packetUtils";
 import {
   stripPartialCitations,
   ScrollableTable,
+  MarkdownImage,
 } from "@/lib/timeline/chat/message/messageComponents/markdownUtils";
 import { BlinkingBar } from "../../BlinkingBar";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -304,6 +305,7 @@ export const MessageTextRenderer: MessageRenderer<
 
   const markdownComponents = useMemo<Components>(
     () => ({
+      img: MarkdownImage,
       a: ({ href, children }) => {
         const s = stateRef.current;
         const imageFileId = extractChatImageFileId(

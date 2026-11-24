@@ -12353,6 +12353,11 @@
           "text": "图片生成已停止"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "图片不可用"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "复制表格"

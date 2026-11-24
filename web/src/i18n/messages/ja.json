@@ -12353,6 +12353,11 @@
           "text": "画像の生成を停止しました"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "画像を表示できません"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "表をコピー"

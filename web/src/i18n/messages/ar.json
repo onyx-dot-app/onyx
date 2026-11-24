@@ -12353,6 +12353,11 @@
           "text": "تم إيقاف توليد الصورة"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "الصورة غير متاحة"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "نسخ الجدول"

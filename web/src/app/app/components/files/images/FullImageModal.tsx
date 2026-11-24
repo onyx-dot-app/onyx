@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
-import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { cn } from "@opal/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useTranslations } from "next-intl";
 
 interface FullImageModalProps {
-  fileId: string;
+  src: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function FullImageModal({
-  fileId,
+  src,
   open,
   onOpenChange,
 }: FullImageModalProps) {
@@ -22,8 +21,8 @@ export function FullImageModal({
   // pre-fetch image
   useEffect(() => {
     const img = new Image();
-    img.src = buildImgUrl(fileId);
-  }, [fileId]);
+    img.src = src;
+  }, [src]);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -37,7 +36,7 @@ export function FullImageModal({
           )}
         >
           <img
-            src={buildImgUrl(fileId)}
+            src={src}
             alt={t("fullImageModal.image.alt")}
             className="max-w-full max-h-full"
           />

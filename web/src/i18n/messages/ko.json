@@ -12353,6 +12353,11 @@
           "text": "이미지 생성 중지됨"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "이미지를 사용할 수 없습니다"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "표 복사"
