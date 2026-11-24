@@ -271,8 +271,25 @@ class TestStaleWhileRevalidate:
             assert client.get.call_count == 1
 
 
+def _join_refresh(blocklist: RemoteDomainBlocklist) -> None:
+    """No refresh thread may outlive the test, or the network mock."""
+    thread = blocklist._refresh_thread
+    if thread is not None:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+
+
 class TestDisposableDomains:
     """The built-in domains and the module-level check."""
+
+    @pytest.fixture(autouse=True)
+    def owned_instance(self) -> Generator[None, None, None]:
+        """`is_disposable_email` goes through the module instance. Swap in one
+        the test owns, and join its refresh before the network mock goes."""
+        blocklist = disposable_domain_blocklist()
+        with mock.patch("onyx.auth.disposable_email_validator._blocklist", blocklist):
+            yield
+        _join_refresh(blocklist)
 
     def test_fallback_domains_included(self) -> None:
         """Test that fallback domains are always included."""
