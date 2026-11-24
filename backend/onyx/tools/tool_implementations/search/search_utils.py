@@ -35,6 +35,22 @@ def weighted_reciprocal_rank_fusion(
     id_extractor: Callable[[T], str],
     k: int = RRF_K_VALUE,
 ) -> list[T]:
+    """The items of `weighted_reciprocal_rank_fusion_with_scores`, without
+    their scores."""
+    return [
+        item
+        for item, _ in weighted_reciprocal_rank_fusion_with_scores(
+            ranked_results, weights, id_extractor, k
+        )
+    ]
+
+
+def weighted_reciprocal_rank_fusion_with_scores(
+    ranked_results: list[list[T]],
+    weights: list[float],
+    id_extractor: Callable[[T], str],
+    k: int = RRF_K_VALUE,
+) -> list[tuple[T, float]]:
     """
     Merge multiple ranked result lists using weighted Reciprocal Rank Fusion (RRF).
 
@@ -56,14 +72,15 @@ def weighted_reciprocal_rank_fusion(
            Typical values are 50-60. Lower values give more weight to top results.
 
     Returns:
-        List of items sorted by their weighted RRF score in descending order.
-        Each unique item appears only once, even if it was in multiple input lists.
+        List of items with their weighted RRF scores, sorted by score in
+        descending order. Each unique item appears only once, even if it was
+        in multiple input lists.
 
     Example:
         >>> results1 = [doc_a, doc_b, doc_c]  # Semantic search results
         >>> results2 = [doc_c, doc_a, doc_d]  # Keyword search results
         >>> weights = [1.2, 1.0]  # Semantic query weighted higher
-        >>> merged = weighted_reciprocal_rank_fusion(
+        >>> merged = weighted_reciprocal_rank_fusion_with_scores(
         ...     [results1, results2],
         ...     weights,
         ...     lambda doc: doc.document_id
@@ -114,7 +131,7 @@ def weighted_reciprocal_rank_fusion(
             id_to_source_index[id],  # Tertiary: round-robin by cycling through sources
         ),
     )
-    return [id_to_item[item_id] for item_id in sorted_ids]
+    return [(id_to_item[item_id], rrf_scores[item_id]) for item_id in sorted_ids]
 
 
 def section_to_dict(section: InferenceSection, section_num: int) -> dict:

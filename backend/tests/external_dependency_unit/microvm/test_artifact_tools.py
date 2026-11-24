@@ -1,9 +1,11 @@
-"""library_list and library_prepare_materialize against
+"""library_list, library_prepare_materialize and library_search against
 FirecrackerHarnessSandbox with a fake host agent, Postgres and the file
-store: where a copy lands, the cache, the conflict policies, refusals that
-never start the VM, item errors, Stop, the write slots and tries, the chat
-file cleanup, and chat turns through the chat flow (the generic card, live
-and replayed, and the code mode group `library`). Then the operations of
+store, and for search also OpenSearch and the model server: where a copy
+lands, the cache, the conflict policies, refusals that never start the VM,
+item errors, Stop, the write slots and tries, the chat file cleanup, what a
+search finds, filters, sorts and pages, and chat turns through the chat flow
+(the generic card, live and replayed, and the code mode group `library`).
+Then the operations of
 both tool families, and the text tools library_read and library_find: lines,
 pages, versions, matching, refusals, the cached text and the result limit."""
 
@@ -12,7 +14,9 @@ import json
 import threading
 import time
 from collections.abc import Callable, Generator, Sequence
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from itertools import product
 from typing import IO
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -28,6 +32,9 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunStatus
 from onyx.agents.tools import ToolInvocation
+from onyx.background.celery.tasks.chat_artifact_indexing.tasks import (
+    process_single_chat_artifact,
+)
 from onyx.cache.interface import CacheBackend
 from onyx.chat import process_message
 from onyx.chat.execution import chat_turn_work
@@ -52,10 +59,13 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.sandbox import get_or_create_sandbox
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import build_opensearch_document_index
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing import extract_file_text
 from onyx.file_store.constants import ARTIFACT_TEXT_MAX_FILE_BYTES
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import LLMConfig
@@ -69,6 +79,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.microvm.models import FileListing
+from onyx.natural_language_processing.utils import HuggingFaceTokenizer, get_tokenizer
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
@@ -105,6 +116,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_CHAT_TITLE_MAX_CHARS,
     ARTIFACTS_PATH_MAX_CHARS,
     DELETE_OF_A_VERSION,
+    LIBRARY_SEARCH_CHUNKS_PER_QUERY,
     ArtifactAtPath,
     ArtifactById,
     ArtifactList,
@@ -117,6 +129,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     FoundText,
     LibraryFileTarget,
     LibraryListFilters,
+    LibrarySearchResult,
     ManageLibraryArguments,
     ManageResult,
     ManageResults,
@@ -138,6 +151,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibraryPrepareMaterializeTool,
     LibraryReadTool,
     LibraryReplaceLibraryFileTool,
+    LibrarySearchTool,
     SandboxTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -1304,8 +1318,8 @@ def test_a_chat_lists_and_copies_files_published_in_other_chats(
     user: User,
 ) -> None:
     """Chat A publishes a report, a subagent of chat B publishes its notes,
-    and chat C finds both with a query and a cursor, then copies the
-    report. The generic cards stream as the reload replays them."""
+    and chat C finds both with a cursor, then copies the report. The generic
+    cards stream as the reload replays them."""
     chat_a = _sandbox_chat(db_session, user, monkeypatch, "Quarter")
     chat_b = _sandbox_chat(db_session, user, monkeypatch, "Notes")
     chat_c = _sandbox_chat(db_session, user, monkeypatch, "Today")
@@ -1378,7 +1392,6 @@ def test_a_chat_lists_and_copies_files_published_in_other_chats(
     found = get_user_published_files(
         db_session,
         user.id,
-        query="REPORT",
         chat_session_id=None,
         filters=LibraryListFilters(),
         sort="modified_at",
@@ -1398,12 +1411,8 @@ def test_a_chat_lists_and_copies_files_published_in_other_chats(
 
     llm = ChatLLM(
         [
-            tool_step(LibraryListTool.NAME, "list", {"query": "REPORT", "limit": 1}),
-            tool_step(
-                LibraryListTool.NAME,
-                "next",
-                {"query": "REPORT", "limit": 1, "cursor": cursor},
-            ),
+            tool_step(LibraryListTool.NAME, "list", {"limit": 1}),
+            tool_step(LibraryListTool.NAME, "next", {"limit": 1, "cursor": cursor}),
             tool_step(
                 LibraryPrepareMaterializeTool.NAME,
                 "copy",
@@ -1577,6 +1586,9 @@ class _Family:
     ) -> Delta:
         raise NotImplementedError
 
+    def search(self, call_id: str, query: str, limit: int, cursor: str | None) -> Delta:
+        raise NotImplementedError
+
     def replace(
         self,
         call_id: str,
@@ -1701,6 +1713,13 @@ class _Library(_Family):
                 ],
                 "destination": {"directory": out_dir},
             },
+        )
+
+    def search(self, call_id: str, query: str, limit: int, cursor: str | None) -> Delta:
+        return tool_step(
+            LibrarySearchTool.NAME,
+            call_id,
+            {"search_query": [{"q": query}], "top_k": limit, "cursor": cursor},
         )
 
     def replace(
@@ -1873,6 +1892,13 @@ class _Artifact(_Family):
             ArtifactTool.NAME,
             call_id,
             {"action": "read", "url": url, "out_dir": out_dir},
+        )
+
+    def search(self, call_id: str, query: str, limit: int, cursor: str | None) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {"action": "list", "query": query, "limit": limit, "after": cursor},
         )
 
     def replace(
@@ -3495,7 +3521,6 @@ def test_a_rename_names_the_file_everywhere_and_later_publishes_keep_it(
     page = get_user_published_files(
         db_session,
         user.id,
-        query=None,
         chat_session_id=None,
         filters=LibraryListFilters(),
         sort="name",
@@ -4150,3 +4175,456 @@ def test_read_and_find_results_stay_within_their_limit_at_worst_case_sizes(
         item.next_match_offset == len(item.matches) and item.total_matches_seen == 3_000
         for item in finds
     )
+
+
+# Searching published files
+
+
+Index = Callable[[Sequence[str]], list[UUID]]
+
+
+@pytest.fixture
+def index() -> Generator[Index, None, None]:
+    """Indexes published files, by file ID, with their task as a worker
+    does, and refreshes the index so that a search sees them; deletes their
+    documents at the end."""
+    indexed: list[UUID] = []
+
+    def run(file_ids: Sequence[str]) -> list[UUID]:
+        artifact_ids = [_artifact_id(file_id) for file_id in file_ids]
+        indexed.extend(artifact_ids)
+        for artifact_id in artifact_ids:
+            process_single_chat_artifact.run(
+                artifact_id=str(artifact_id),  # ty: ignore[invalid-argument-type]
+                tenant_id=TENANT_ID,  # ty: ignore[invalid-argument-type]
+            )
+        with get_session_with_current_tenant() as db_session:
+            search_settings = get_current_search_settings(db_session)
+        # The lookup refreshes the index first.
+        build_opensearch_document_index(search_settings).get_documents_with_any_chunk(
+            [str(artifact_id) for artifact_id in artifact_ids]
+        )
+        return artifact_ids
+
+    yield run
+    delete_chat_artifacts_from_index(indexed)
+
+
+def _search(
+    user: User, chat_session_id: UUID, arguments: dict[str, JsonValue]
+) -> LibrarySearchResult:
+    result = _call(LibrarySearchTool(_turn(user, chat_session_id)), arguments)
+    assert not result.is_error, result.content
+    return LibrarySearchResult.model_validate_json(result.content)
+
+
+def _names(result: LibrarySearchResult) -> list[str]:
+    return [hit.file.file_name for hit in result.results]
+
+
+def _published_at(file_id: str, created_at: datetime, updated_at: datetime) -> None:
+    with get_session_with_current_tenant() as db_session:
+        db_session.execute(
+            update(ChatArtifact)
+            .where(ChatArtifact.id == _artifact_id(file_id))
+            .values(created_at=created_at, updated_at=updated_at)
+        )
+        db_session.commit()
+
+
+@pytest.mark.usefixtures("full_deployment_setup", "fake_embeddings")
+def test_a_chat_finds_a_file_by_its_content_and_copies_it_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    user: User,
+    family: _Family,
+    make_test_user: MakeTestUser,
+    index: Index,
+) -> None:
+    """Chat A publishes a survey; chat C finds it by a word of its body,
+    with a snippet, then copies it. Another user's file with the same word
+    never shows. The generic cards stream as the reload replays them."""
+    word = f"quokka{uuid4().hex[:8]}"
+    body = f"# Survey\n\nThe team counted {word} near the river bend.\n".encode()
+    chat_a = _sandbox_chat(db_session, user, monkeypatch, "Field work")
+    sandbox.write_file(chat_a.ref(db_session), "out/survey.md", body)
+    chat_a.send(
+        family.llm(
+            [
+                family.publish("publish", ["out/survey.md"], "Survey"),
+                Delta(content="Done."),
+            ]
+        )
+    )
+    db_session.expire_all()
+    [artifact] = db_session.scalars(
+        select(ChatArtifact).where(
+            ChatArtifact.chat_session_id == chat_a.chat_session_id
+        )
+    ).all()
+    [file_id] = db_session.scalars(
+        select(ChatArtifactVersion.file_id).where(
+            ChatArtifactVersion.artifact_id == artifact.id
+        )
+    ).all()
+    stranger = make_test_user("artifact_search_stranger")
+    theirs = _publish(
+        _chat(db_session, stranger), "theirs.md", f"{word} lives here.".encode()
+    )
+    index([file_id, theirs])
+
+    chat_c = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [
+            family.search("search", word, 5, None),
+            family.read("copy", artifact.id, None, "work"),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat_c.send(llm)
+
+    found = LibrarySearchResult.model_validate_json(last_tool_text(llm, "search"))
+    [hit] = found.results
+    assert (hit.file.library_file_id, hit.file.file_name, hit.file.title) == (
+        artifact.id,
+        "survey.md",
+        "Survey",
+    )
+    assert (hit.file.chat_id, hit.file.url) == (
+        chat_a.chat_session_id,
+        artifact_url(artifact.id, 1),
+    )
+    assert hit.content_indexed
+    assert hit.snippets and word in hit.snippets[0]
+    assert (found.next_cursor, found.complete, found.content_search) == (
+        None,
+        True,
+        None,
+    )
+    [copied] = MaterializedItems.model_validate_json(last_tool_text(llm, "copy")).items
+    assert copied.path == "work/survey.md"
+    assert _vm_file(node, chat_c.ref(db_session), "work/survey.md") == body
+    live = _card_packets(parts)
+    assert len([obj for obj in live if isinstance(obj, packets.CustomToolStart)]) == 2
+    [replayed] = chat_c.replayed(db_session)
+    assert _card_packets(replayed) == live
+
+
+@pytest.mark.usefixtures("sandbox", "full_deployment_setup", "fake_embeddings")
+def test_content_matches_need_the_index_and_names_match_without_it(
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+    index: Index,
+) -> None:
+    source, calling = chats
+    word = f"wombat{uuid4().hex[:8]}"
+    survey = _publish(source, "survey.md", f"Counting {word} at dusk.".encode())
+    index([survey])
+    # Published, and not indexed yet.
+    plan = f"{word}-plan.md"
+    _publish(source, plan, b"Nothing to see.")
+
+    def search(query: str, *, title_only: bool = False) -> LibrarySearchResult:
+        return _search(
+            user,
+            calling,
+            {"search_query": [{"q": query, "search_title_only": title_only}]},
+        )
+
+    found = search(word)
+    assert [(hit.file.file_name, hit.content_indexed) for hit in found.results] == [
+        ("survey.md", True),
+        (plan, False),
+    ]
+    assert found.results[0].snippets and word in found.results[0].snippets[0]
+    assert found.results[1].snippets == []
+    # Title only: every word in the name, the title or the chat title.
+    assert _names(search(word, title_only=True)) == [plan]
+    assert _names(search("REPORTS survey", title_only=True)) == ["survey.md"]
+    assert _names(search("reports elephant", title_only=True)) == []
+
+    # A new version waits for the index: the result shows it, and its
+    # content still matches the version before it.
+    newer = _publish(source, "survey.md", b"Rewritten without the animal.")
+    [hit] = [hit for hit in search(word).results if hit.file.file_name == "survey.md"]
+    assert (hit.file.file_id, hit.file.version_number, hit.content_indexed) == (
+        newer,
+        2,
+        False,
+    )
+    assert hit.snippets and word in hit.snippets[0]
+    index([newer])
+    [hit] = [hit for hit in search(word).results if hit.file.file_name == "survey.md"]
+    assert hit.content_indexed
+    assert word not in " ".join(hit.snippets or [])
+    # Search reads the database and the index only.
+    assert node.agent.create_calls == 0
+
+
+@pytest.mark.usefixtures("sandbox", "full_deployment_setup", "fake_embeddings")
+def test_a_name_match_not_indexed_yet_stays_on_the_first_page(
+    user: User,
+    chats: tuple[UUID, UUID],
+    index: Index,
+) -> None:
+    """The nearest chunks of a dozen unrelated indexed files never push a
+    file whose name matches off the first page."""
+    source, calling = chats
+    word = f"lemur{uuid4().hex[:8]}"
+    index(
+        [
+            _publish(
+                source, f"memo-{number}.md", f"Memo {number} on logistics.".encode()
+            )
+            for number in range(12)
+        ]
+    )
+    plan = f"{word}-plan.md"
+    _publish(source, plan, b"Nothing to see.")
+
+    found = _search(user, calling, {"search_query": [{"q": word}]})
+
+    assert plan in _names(found)
+
+
+@pytest.mark.usefixtures("sandbox", "full_deployment_setup", "fake_embeddings")
+def test_a_sort_other_than_relevance_lists_only_matching_files(
+    user: User,
+    chats: tuple[UUID, UUID],
+    index: Index,
+) -> None:
+    source, calling = chats
+    word = f"tapir{uuid4().hex[:8]}"
+    survey = _publish(source, "survey.md", f"Counting {word} at dawn.".encode())
+    unrelated = _publish(source, "unrelated.md", b"Quarterly logistics memo.")
+    index([survey, unrelated])
+
+    found = _search(
+        user, calling, {"search_query": [{"q": word}], "sort": "modified_at"}
+    )
+
+    assert _names(found) == ["survey.md"]
+
+
+@pytest.mark.usefixtures("sandbox", "full_deployment_setup", "fake_embeddings")
+def test_a_long_file_never_hides_the_shorter_files_that_match(
+    user: User,
+    chats: tuple[UUID, UUID],
+    index: Index,
+) -> None:
+    """The matching chunks of one long file are more than a content query
+    retrieves; the short files that match still show."""
+    source, calling = chats
+    word = f"okapi{uuid4().hex[:8]}"
+    long = _publish(
+        source,
+        "long.md",
+        " ".join(
+            [f"The {word} grazes."] * LIBRARY_SEARCH_CHUNKS_PER_QUERY * 100
+        ).encode(),
+    )
+    filler = " ".join(["Trucks carry the freight."] * 50)
+    shorts = [
+        _publish(source, f"short-{number}.md", f"{filler} A {word}. {filler}".encode())
+        for number in range(3)
+    ]
+    with get_session_with_current_tenant() as db_session:
+        settings = get_current_search_settings(db_session)
+    # Not needed once the indexing tokenizer counts without truncation: a
+    # tokenizer that cuts at 128 tokens leaves the long file one chunk.
+    tokenizer = get_tokenizer(settings.model_name, settings.provider_type)
+    assert isinstance(tokenizer, HuggingFaceTokenizer)
+    truncation = tokenizer.encoder.truncation
+    tokenizer.encoder.no_truncation()
+    try:
+        index([long, *shorts])
+    finally:
+        if truncation is not None:
+            tokenizer.encoder.enable_truncation(**truncation)
+
+    found = _search(
+        user,
+        calling,
+        {"search_query": [{"q": word}], "sort": "name", "sort_order": "asc"},
+    )
+
+    assert _names(found) == ["long.md", "short-0.md", "short-1.md", "short-2.md"]
+
+
+@pytest.mark.usefixtures("sandbox")
+@pytest.mark.parametrize(
+    "question", ["What is the Q3 budget?", "What's the Q3 budget?", "Q3_budget"]
+)
+def test_a_question_matches_a_file_name_without_its_stopwords_and_punctuation(
+    user: User,
+    chats: tuple[UUID, UUID],
+    question: str,
+) -> None:
+    source, calling = chats
+    _publish(source, "q3-budget.xlsx", b"x")
+    _publish(source, "q4-budget.xlsx", b"x")
+
+    found = _search(
+        user,
+        calling,
+        {"search_query": [{"q": question, "search_title_only": True}]},
+    )
+
+    assert _names(found) == ["q3-budget.xlsx"]
+
+
+@pytest.mark.usefixtures("sandbox", "full_deployment_setup", "fake_embeddings")
+def test_filters_the_chat_and_file_refs_keep_the_files_that_a_search_reaches(
+    db_session: Session,
+    user: User,
+    chats: tuple[UUID, UUID],
+    index: Index,
+) -> None:
+    source, calling = chats
+    archive = _chat(db_session, user, "Archive")
+    word = f"numbat{uuid4().hex[:8]}"
+    notes_v1 = _publish(source, "notes.md", f"First notes on {word}.".encode())
+    notes = _publish(source, "notes.md", f"Notes on {word}.".encode())
+    table = _publish(source, "table.csv", f"animal,count\n{word},3\n".encode())
+    log = _publish(archive, "log.txt", f"Saw a {word} today.".encode())
+    now = datetime.now(timezone.utc)
+    for file_id, days in ((notes, 10), (table, 5), (log, 1)):
+        _published_at(file_id, now - timedelta(days=days), now - timedelta(days=days))
+    index([notes, table, log])
+
+    def found(**arguments: JsonValue) -> list[str]:
+        return sorted(
+            _names(_search(user, calling, {"search_query": [{"q": word}], **arguments}))
+        )
+
+    assert found() == ["log.txt", "notes.md", "table.csv"]
+    assert found(filters={"include_file_types": ["CSV"]}) == ["table.csv"]
+    assert found(filters={"exclude_file_types": [".md", "csv"]}) == ["log.txt"]
+    assert found(filters={"category": "sheet"}) == ["table.csv"]
+    cutoff = (now - timedelta(days=3)).isoformat()
+    assert found(filters={"created_after": cutoff}) == ["log.txt"]
+    assert found(filters={"created_before": cutoff}) == ["notes.md", "table.csv"]
+    assert found(filters={"modified_after": cutoff}) == ["log.txt"]
+    assert found(filters={"modified_before": cutoff}) == ["notes.md", "table.csv"]
+    assert found(chat_id=str(archive)) == ["log.txt"]
+    notes_id = str(_artifact_id(notes))
+    assert found(scope={"file_refs": [{"library_file_id": notes_id}]}) == ["notes.md"]
+    assert found(scope={"file_refs": [{"file_id": notes}, {"file_id": table}]}) == [
+        "notes.md",
+        "table.csv",
+    ]
+
+    tool = LibrarySearchTool(_turn(user, calling))
+    unknown = str(uuid4())
+    for arguments, error in (
+        (
+            {"scope": {"file_refs": [{"file_id": notes_v1}]}},
+            f"{notes_v1} is version 1 of {notes_id}; only the newest version is "
+            "searchable: find text in that version instead",
+        ),
+        (
+            {
+                "scope": {
+                    "file_refs": [{"library_file_id": notes_id, "version_number": 1}]
+                }
+            },
+            f"{notes_id} is version 1 of {notes_id}; only the newest version is "
+            "searchable: find text in that version instead",
+        ),
+        (
+            {"scope": {"file_refs": [{"library_file_id": unknown}]}},
+            f"No published file {unknown} in your chats",
+        ),
+        ({"chat_id": unknown}, f"No chat {unknown} of yours"),
+    ):
+        refused = _call(tool, {"search_query": [{"q": word}], **arguments})
+        assert refused.is_error
+        assert refused.content == error
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_each_sort_orders_the_matches_and_pages_never_overlap(
+    db_session: Session,
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    source, calling = chats
+    word = f"kiwi{uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc)
+    # (name, size, days since the first publish, days since the latest)
+    shapes = [
+        ("b", 30, 5, 1),
+        ("d", 10, 4, 3),
+        ("a", 50, 3, 2),
+        ("e", 20, 2, 5),
+        ("c", 40, 1, 4),
+    ]
+    for name, size, created, updated in shapes:
+        file_id = _publish(source, f"{name}-{word}.txt", b"x" * size)
+        _published_at(
+            file_id, now - timedelta(days=created), now - timedelta(days=updated)
+        )
+    _publish(_chat(db_session, user), "unrelated.txt", b"x")
+    by_name = {
+        name: (size, created, updated) for name, size, created, updated in shapes
+    }
+    expected = {
+        # The name matches rank by the latest change (publish or rename).
+        "relevance": sorted(by_name, key=lambda name: by_name[name][2]),
+        "created_at": sorted(by_name, key=lambda name: -by_name[name][1]),
+        "modified_at": sorted(by_name, key=lambda name: -by_name[name][2]),
+        "name": sorted(by_name),
+        "size": sorted(by_name, key=lambda name: by_name[name][0]),
+    }
+
+    for sort, order in product(expected, ("asc", "desc")):
+        seen: list[str] = []
+        cursor: str | None = None
+        # Five files, two a page.
+        for _ in range(3):
+            page = _search(
+                user,
+                calling,
+                {
+                    "search_query": [{"q": word, "search_title_only": True}],
+                    "sort": sort,
+                    "sort_order": order,
+                    "top_k": 2,
+                    "cursor": cursor,
+                },
+            )
+            seen += [name.split("-")[0] for name in _names(page)]
+            cursor = page.next_cursor
+        assert cursor is None, (sort, order)
+        assert seen == (
+            expected[sort]
+            if sort == "relevance" or order == "asc"
+            else expected[sort][::-1]
+        ), (sort, order)
+    assert node.agent.create_calls == 0
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_without_a_search_index_only_names_and_titles_match(
+    monkeypatch: pytest.MonkeyPatch,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    source, calling = chats
+    word = f"emu{uuid4().hex[:8]}"
+    _publish(source, "body.md", f"The {word} runs.".encode())
+    _publish(source, f"{word}.md", b"Nothing here.")
+
+    def no_index(*_args: object) -> None:
+        raise AssertionError("no search index to query")
+
+    monkeypatch.setattr(artifact_operations, "DISABLE_VECTOR_DB", True)
+    monkeypatch.setattr(artifact_operations, "search_chunks", no_index)
+    found = _search(user, calling, {"search_query": [{"q": word}]})
+    assert _names(found) == [f"{word}.md"]
+    assert found.content_search == "unavailable"
+    assert not found.results[0].content_indexed

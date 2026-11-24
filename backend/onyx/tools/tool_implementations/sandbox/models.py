@@ -15,6 +15,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StringConstraints,
     TypeAdapter,
     computed_field,
     model_validator,
@@ -314,19 +315,20 @@ class PublishedFiles(BaseModel):
 # library_list: the most entries of one page, and the default.
 ARTIFACTS_LIST_MAX_LIMIT = 50
 ARTIFACTS_LIST_DEFAULT_LIMIT = 25
-# The longest query, and the longest name, path and chat title that a page
-# keeps; a version's title is at most PUBLISH_FILES_MAX_TITLE_CHARS.
-# ARTIFACTS_PATH_MAX_CHARS also bounds each path, url, file ID or name that
-# the artifact tool takes: its results echo them and are never spilled.
+# The longest library_search query, and the longest name, path and chat
+# title that a page keeps; a version's title is at most
+# PUBLISH_FILES_MAX_TITLE_CHARS. ARTIFACTS_PATH_MAX_CHARS also bounds each
+# path, url, file ID or name that the artifact tool takes: its results echo
+# them and are never spilled.
 ARTIFACTS_QUERY_MAX_CHARS = 200
 ARTIFACTS_NAME_MAX_CHARS = 200
 ARTIFACTS_PATH_MAX_CHARS = 300
 ARTIFACTS_CHAT_TITLE_MAX_CHARS = 200
 # The most extensions that one file type filter takes.
 ARTIFACTS_MAX_FILE_TYPES = 50
-# The longest result of a list, read or find: a list page drops its last
-# entries to fit, and a read or find stops its text there. Below
-# spill.RESULT_MAX_CHARS, the spill limit of one result, and the spill
+# The longest result of a list, search, read or find: a list or search page
+# drops its last entries to fit, and a read or find stops its text there.
+# Below spill.RESULT_MAX_CHARS, the spill limit of one result, and the spill
 # exempts these tools, so the step's budget does not spill one either.
 ARTIFACT_RESULT_MAX_CHARS = 40_000
 # Model text that a result or its error can echo. Such a result may never
@@ -487,12 +489,6 @@ class LibraryListArguments(BaseModel):
     chat_id: _EchoedText | None = Field(
         default=None,
         description="List only the files of this chat (a chat_id of an entry).",
-    )
-    query: str | None = Field(
-        default=None,
-        description="Case-insensitive text to find in the file name, the "
-        f"file's title or the chat's title, at most {ARTIFACTS_QUERY_MAX_CHARS} "
-        "characters.",
     )
 
 
@@ -1092,6 +1088,129 @@ class ArtifactsFound(BaseModel):
     items: list[FoundText]
 
 
+# library_search: the most queries and file references of one call; the
+# results by default and at most on one page; the files that a search ranks
+# (its window), which its pages and sorts go through; the newest files of the
+# user that a search reaches; the chunks that each retrieval of a content
+# query gives and the most retrievals of one query; the snippets of a file
+# and the longest snippet.
+LIBRARY_SEARCH_MAX_QUERIES = 3
+LIBRARY_SEARCH_MAX_FILE_REFS = 20
+LIBRARY_SEARCH_DEFAULT_TOP_K = 10
+LIBRARY_SEARCH_MAX_TOP_K = 25
+LIBRARY_SEARCH_WINDOW = 100
+LIBRARY_SEARCH_MAX_CANDIDATES = 10_000
+LIBRARY_SEARCH_CHUNKS_PER_QUERY = 100
+LIBRARY_SEARCH_RETRIEVALS_PER_QUERY = 3
+LIBRARY_SEARCH_MAX_SNIPPETS = 3
+LIBRARY_SEARCH_SNIPPET_MAX_CHARS = 300
+
+LibrarySearchSort = Literal["relevance", ArtifactSort]
+
+
+class LibrarySearchQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    q: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True, min_length=1, max_length=ARTIFACTS_QUERY_MAX_CHARS
+        ),
+    ] = Field(
+        description="What to find: words or a question about the content, or "
+        "words of the name or title."
+    )
+    search_title_only: bool = Field(
+        default=False,
+        description="Match every word in the file name, the file's title or "
+        "the chat's title, not the content.",
+    )
+
+
+class LibrarySearchScope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_refs: list[ArtifactFileReference] = Field(
+        min_length=1,
+        max_length=LIBRARY_SEARCH_MAX_FILE_REFS,
+        description="Search only these files, each at its newest version.",
+    )
+
+
+class LibrarySearchArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    search_query: list[LibrarySearchQuery] = Field(
+        min_length=1,
+        max_length=LIBRARY_SEARCH_MAX_QUERIES,
+        description="One to three queries; a file that matches several ranks higher.",
+    )
+    filters: LibraryListFilters | None = None
+    scope: LibrarySearchScope | None = None
+    chat_id: _EchoedText | None = Field(
+        default=None,
+        description="Search only the files of this chat (a chat_id of a result).",
+    )
+    result_format: Literal["snippets", "metadata_only"] = Field(
+        default="snippets",
+        description="metadata_only leaves out the snippets.",
+    )
+    sort: LibrarySearchSort = Field(
+        default="relevance",
+        description="relevance: best match first. The others match content "
+        "by its words only, and order the best matches by first publish "
+        "(created_at), latest change, a publish or rename (modified_at), file "
+        "name or size.",
+    )
+    sort_order: SortOrder = Field(
+        default="desc", description="For the sorts other than relevance."
+    )
+    # The tool clamps top_k.
+    top_k: int = Field(
+        default=LIBRARY_SEARCH_DEFAULT_TOP_K,
+        description=f"The most results, from 1 to {LIBRARY_SEARCH_MAX_TOP_K}.",
+    )
+    cursor: str | None = Field(
+        default=None,
+        description="The next_cursor of the previous page, with the same "
+        "arguments otherwise.",
+    )
+
+
+class LibrarySearchCursor(BaseModel):
+    """Where the next page of a search starts in its window. A cursor is its
+    JSON in base64url."""
+
+    offset: int = Field(ge=0)
+
+
+class LibrarySearchHit(BaseModel):
+    """A file that a search found, at its newest available version."""
+
+    file: ListedArtifact
+    # The fused rank score (reciprocal rank fusion over the queries).
+    score: float
+    # False: the newest version is not in the search index yet, so the
+    # content search missed it or matched an older version.
+    content_indexed: bool
+    # Text of the file's best matching chunks; none for metadata_only.
+    snippets: Annotated[list[str] | None, OMITTED_WHEN_NONE] = None
+
+
+class LibrarySearchResult(BaseModel):
+    """What library_search returns."""
+
+    results: list[LibrarySearchHit]
+    # None: no more results.
+    next_cursor: str | None
+    # False: the user has more than LIBRARY_SEARCH_MAX_CANDIDATES files in
+    # scope, and only the newest were searched.
+    complete: bool
+    # Set when the deployment has no search index: only names and titles
+    # matched.
+    content_search: Annotated[Literal["unavailable"] | None, OMITTED_WHEN_NONE] = None
+
+
 # The arguments that each action of the artifact tool takes.
 ArtifactAction = Literal["publish", "list", "read", "delete", "rename", "restore"]
 ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
@@ -1116,7 +1235,7 @@ class ArtifactArguments(BaseModel):
     action: ArtifactAction = Field(
         default="publish",
         description="publish (the default) gives files from the VM to the user; "
-        "list finds published files; read shows their text, finds text in them "
+        "list finds published files, by content with query; read shows their text, finds text in them "
         "with query, or copies them into the VM with out_dir; delete deletes a "
         "published file, after the user approves; rename renames a published "
         "file; restore makes an older version the newest.",
@@ -1186,12 +1305,13 @@ class ArtifactArguments(BaseModel):
     )
     query: str | None = Field(
         default=None,
-        description="list: text to find in the file name, the file's title or "
-        "the chat's title. read: text to find in the files' lines, in any case.",
+        description="list: search the files' content, names and titles; best "
+        "matches first. read: text to find in the files' lines, in any case.",
     )
     limit: int | None = Field(
         default=None,
-        description=f"list: the most files, from 1 to {ARTIFACTS_LIST_MAX_LIMIT}. "
+        description=f"list: the most files, from 1 to {ARTIFACTS_LIST_MAX_LIMIT}; "
+        f"with query, to {LIBRARY_SEARCH_MAX_TOP_K}. "
         f"read: the most lines, at most {READ_MAX_LINES}; with query, the most "
         f"matches, at most {FIND_MAX_MATCHES}.",
     )

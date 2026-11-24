@@ -42,6 +42,7 @@ from onyx.prompts.sandbox_tools import (
     LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION,
     LIBRARY_READ_DESCRIPTION,
     LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION,
+    LIBRARY_SEARCH_DESCRIPTION,
     SANDBOX_CODE_MODE_NOTE,
     SANDBOX_GUIDANCE,
     WRITE_DESCRIPTION,
@@ -110,6 +111,8 @@ from onyx.tools.tool_implementations.sandbox.models import (
     LibraryPrepareMaterializeArguments,
     LibraryReadArguments,
     LibraryReplaceLibraryFileArguments,
+    LibrarySearchArguments,
+    LibrarySearchResult,
     ManageLibraryArguments,
     ManageResults,
     MaterializeDestination,
@@ -985,6 +988,24 @@ class LibraryManageLibraryTool(_LibraryTool, _FileTool):
         )
 
 
+class LibrarySearchTool(_LibraryTool):
+    NAME = "library_search"
+    CODE_MODE_NAME = "search"
+    DESCRIPTION = LIBRARY_SEARCH_DESCRIPTION
+    ARGUMENTS = LibrarySearchArguments
+    RESULT = LibrarySearchResult
+    display_name = "Search Published Files"
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        return ToolResult(
+            content=artifact_operations.search_artifacts(
+                self._turn.user_id,
+                invocation.cancellation,
+                parse_tool_arguments(LibrarySearchArguments, invocation.arguments),
+            ).model_dump_json()
+        )
+
+
 def _artifact_conflict_message(error: ArtifactVersionConflict) -> str:
     """The artifact tool's words for a new version whose url names a version
     that is not the newest."""
@@ -1178,6 +1199,22 @@ class ArtifactTool(_LibraryTool, _FileTool):
                     "version_reason": arguments.label,
                 },
             )
+        if action == "list" and (arguments.query or "").strip():
+            return ToolResult(
+                content=artifact_operations.search_artifacts(
+                    self._turn.user_id,
+                    invocation.cancellation,
+                    parse_tool_arguments(
+                        LibrarySearchArguments,
+                        {
+                            "search_query": [{"q": arguments.query}],
+                            "filters": {"category": arguments.type},
+                            "top_k": arguments.limit,
+                            "cursor": arguments.after,
+                        },
+                    ),
+                ).model_dump_json()
+            )
         if action == "list":
             return ToolResult(
                 content=artifact_operations.list_artifacts(
@@ -1187,7 +1224,6 @@ class ArtifactTool(_LibraryTool, _FileTool):
                         {
                             "limit": arguments.limit,
                             "cursor": arguments.after,
-                            "query": arguments.query,
                             "filters": {"category": arguments.type},
                         },
                     ),
@@ -1324,6 +1360,7 @@ def sandbox_tools_for_model(
         LibraryFindTool,
         LibraryReplaceLibraryFileTool,
         LibraryManageLibraryTool,
+        LibrarySearchTool,
     )
 
 

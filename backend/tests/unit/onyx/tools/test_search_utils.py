@@ -12,6 +12,7 @@ from onyx.tools.tool_implementations.search.search_tool import deduplicate_queri
 from onyx.tools.tool_implementations.search.search_utils import (
     _retrieve_adjacent_chunks,
     weighted_reciprocal_rank_fusion,
+    weighted_reciprocal_rank_fusion_with_scores,
 )
 
 # =============================================================================
@@ -33,6 +34,18 @@ class MockDocument(NamedTuple):
 
 class TestWeightedReciprocalRankFusion:
     """Test suite for weighted_reciprocal_rank_fusion function."""
+
+    def test_scores_are_the_weighted_reciprocal_rank_sums(self) -> None:
+        fused = weighted_reciprocal_rank_fusion_with_scores(
+            ranked_results=[["a", "b"], ["b"], []],
+            weights=[1.0, 2.0, 1.0],
+            id_extractor=str,
+            k=10,
+        )
+
+        assert [item for item, _ in fused] == ["b", "a"]
+        assert fused[0][1] == pytest.approx(1 / 12 + 2 / 11)
+        assert fused[1][1] == pytest.approx(1 / 11)
 
     def test_single_result_list(self) -> None:
         """Test RRF with a single result list."""
