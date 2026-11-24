@@ -522,7 +522,10 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         access once (get_accessible_documents_by_ids:
                                         a readable document must still have the
                                         file), lists attachments/search/, counts a
-                                        regular file of the size as a hit (logged),
+                                        regular file of the size, modified
+                                        SEARCH_COPY_CLOCK_SKEW or more after the
+                                        file record's updated_at, as a hit
+                                        (logged),
                                         picks the writes that fit in
                                         MAX_CHAT_SEARCH_BYTES next to this turn's
                                         offers and running writes, deletes the

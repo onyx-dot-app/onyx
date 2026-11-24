@@ -19,10 +19,12 @@ The rules:
   directories, and the search file copy lists attachments/search/, one level
   each, so a large tree that the model makes there costs the listing
   nothing. A file is in place when the listing shows a regular file of its
-  size at its path; the copy writes any other file. So a VM restart,
-  or a file that is missing or has another size, gets the file again. A
-  listing that fails other than by a timeout is unknown, and the copy writes
-  every file.
+  size at its path; a search file's copy must also be newer than its file
+  record's last write by SEARCH_COPY_CLOCK_SKEW, as a connector keeps a
+  file's ID when its content changes. The copy writes any other file. So a
+  VM restart, or a file that is missing, has another size or changed, gets
+  the file again. A listing that fails other than by a timeout is unknown,
+  and the copy writes every file.
 - Cleanup. The chat file copy deletes the entries of attachments/project/
   and attachments/agent/ that are not in its set of chat files (a file that
   left the project or the agent). Other entries in attachments/ (the
@@ -50,8 +52,10 @@ The rules:
   truncated or failed listing deletes nothing. A failed delete stops the
   intake: no other file is deleted or written. Only this eviction deletes
   search files. Accepted: an eviction can delete a file that a later
-  command of an earlier turn's result opens, and a file ID whose bytes
-  change at the same size keeps the old copy.
+  command of an earlier turn's result opens; until its write lands, a
+  changed file's path holds the earlier content; and a write of a file's
+  earlier content that lands over SEARCH_COPY_CLOCK_SKEW after a re-save of
+  its file ID keeps that content.
 - Links. A directory of chat files that the model replaced with a link or a
   file is not listed, cleaned up or written to; its files are not copied, and
   the link stays. A directory whose type a failed or truncated listing did
@@ -87,7 +91,7 @@ from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Context, copy_context
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import partial
 from typing import IO, NamedTuple, cast
@@ -158,6 +162,10 @@ _CLEANED_DIRS = (PROJECT_FILES_DIR, AGENT_FILES_DIR)
 MAX_TURN_SEARCH_FILES = 50
 MAX_TURN_SEARCH_BYTES = 512 * _MIB
 MAX_CHAT_SEARCH_BYTES = _GIB
+# A search file's copy stays only when it is this much newer than its file
+# record's last write, so a VM clock that runs ahead of the database's still
+# gets a changed file again.
+SEARCH_COPY_CLOCK_SKEW = timedelta(minutes=1)
 # The modification time of a listed file that has none: it goes last.
 _UNKNOWN_AGE = datetime.max.replace(tzinfo=timezone.utc)
 # The status line names at most this many files of each state.
@@ -899,6 +907,8 @@ class _SearchFile(NamedTuple):
     path: str
     # The file record's size; None: not recorded.
     size: int | None
+    # The file record's last write.
+    updated_at: datetime
     document_ids: tuple[str, ...]
 
 
@@ -965,6 +975,7 @@ class TurnSearchFiles:
                     file_id,
                     f"{SEARCH_FILES_DIR}/{search_file_name(file_id, file.title)}",
                     file.size,
+                    file.updated_at,
                     file.document_ids,
                 )
                 self._offered[file_id] = offered
@@ -1105,11 +1116,13 @@ class TurnSearchFiles:
             writes = [
                 _File(file.path, file.file_id, size)
                 for file, size in sized
-                if not (
-                    file.path in held
-                    and held[file.path].type is FileType.REGULAR
-                    and held[file.path].size == size
-                )
+                if (entry := held.get(file.path)) is None
+                or entry.type is not FileType.REGULAR
+                or entry.size != size
+                # A copy with no time, or not clearly newer than the record's
+                # last write, may hold an earlier content of the file ID.
+                or entry.modified_at is None
+                or entry.modified_at < file.updated_at + SEARCH_COPY_CLOCK_SKEW
             ]
             in_place = len(sized) - len(writes)
             evicted: list[str] = []

@@ -49,6 +49,8 @@ class SearchResultFile(BaseModel):
     title: str
     # The file record's size; None: not recorded.
     size: int | None
+    # The file record's last write.
+    updated_at: datetime
     # The shown results' documents that have this file.
     document_ids: tuple[str, ...]
 
