@@ -5,6 +5,11 @@ on:
     tags:
       - "*"
   workflow_dispatch:
+    inputs:
+      desktop:
+        description: "Test run: also build the desktop app and its latest.json into a draft release"
+        type: boolean
+        default: false
 
 # Set restrictive default permissions for all jobs. Jobs that need more permissions
 # should explicitly declare them.
@@ -331,7 +336,7 @@ jobs:
     needs:
       - determine-builds
       - audit-gate
-    if: needs.determine-builds.outputs.build-desktop == 'true'
+    if: needs.determine-builds.outputs.build-desktop == 'true' || (inputs.desktop && needs.determine-builds.outputs.is-test-run == 'true')
     runs-on: ubuntu-slim
     timeout-minutes: 10
     permissions:
@@ -401,7 +406,7 @@ jobs:
     needs:
       - determine-builds
       - create-release
-    if: needs.determine-builds.outputs.build-desktop == 'true'
+    if: needs.determine-builds.outputs.build-desktop == 'true' || (inputs.desktop && needs.determine-builds.outputs.is-test-run == 'true')
     permissions:
       id-token: write
       contents: write
@@ -695,7 +700,7 @@ jobs:
       - determine-builds
       - create-release
       - build-desktop
-    if: needs.determine-builds.outputs.build-desktop == 'true'
+    if: needs.determine-builds.outputs.build-desktop == 'true' || (inputs.desktop && needs.determine-builds.outputs.is-test-run == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

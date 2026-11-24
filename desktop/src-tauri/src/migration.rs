@@ -2,11 +2,14 @@
 //!
 //! - The earlier desktop app (same bundle ID, `app.onyx.desktop`) kept its
 //!   `config.json` in another folder, in snake_case. Its server URL and a
-//!   custom summon shortcut are imported. The file is then renamed to
-//!   `config.json.imported`: it stays as a backup and is not imported again.
+//!   custom summon shortcut are imported.
 //! - The preview build (`app.onyx.desktop.v2`) used this app's format. Its
-//!   settings are copied once; its file does not change. Session tokens stay
-//!   in its own credential store entries, so the user signs in again.
+//!   settings are copied. Session tokens stay in its own credential store
+//!   entries, so the user signs in again.
+//!
+//! The imported file is then renamed to `config.json.imported`: it stays as
+//! a backup, and a launch after the user deletes this app's data does not
+//! import it again.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -84,11 +87,13 @@ pub fn import_previous(config_path: &Path, sources: &Sources) -> Option<Source> 
         log::warn!("could not save the imported settings: {e}");
         return None;
     }
-    if source == Source::Earlier {
-        if let Some(path) = sources.earlier.as_deref() {
-            if let Err(e) = fs::rename(path, path.with_extension("json.imported")) {
-                log::warn!("could not rename the earlier app's config.json: {e}");
-            }
+    let imported = match source {
+        Source::Preview => sources.preview.as_deref(),
+        Source::Earlier => sources.earlier.as_deref(),
+    };
+    if let Some(path) = imported {
+        if let Err(e) = fs::rename(path, path.with_extension("json.imported")) {
+            log::warn!("could not rename {}: {e}", path.display());
         }
     }
     Some(source)
@@ -306,9 +311,22 @@ mod tests {
         assert_eq!(config.hotkey(), "Alt+Space");
         assert!(config.session_servers.is_empty());
         assert_eq!(config.managed_server_url, None);
-        // The source files stay as they were.
-        assert!(preview(&d).exists());
+        assert!(!preview(&d).exists());
+        assert!(preview(&d).with_extension("json.imported").exists());
         assert!(earlier(&d).exists());
+        // Deleting this app's data does not bring the preview's settings back.
+        fs::remove_file(&d.target).unwrap();
+        assert_eq!(
+            import_previous(&d.target, &d.sources),
+            Some(Source::Earlier)
+        );
+        let config = ConfigStore::load(d.target.clone()).get();
+        assert_eq!(
+            config.server_url.as_deref(),
+            Some("https://earlier.example.com")
+        );
+        fs::remove_file(&d.target).unwrap();
+        assert_eq!(import_previous(&d.target, &d.sources), None);
     }
 
     #[test]

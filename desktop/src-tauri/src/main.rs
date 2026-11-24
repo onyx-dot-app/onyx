@@ -173,6 +173,89 @@ fn link_command_is_other_program(command: &str, exe: &std::path::Path) -> bool {
     !program.eq_ignore_ascii_case(&exe.to_string_lossy())
 }
 
+/// The uninstaller of the earlier desktop app's per-user install, from its
+/// `UninstallString`, if that install is not the one that runs (`exe`).
+/// Windows paths, as strings, so the rule is tested on every platform.
+#[cfg_attr(not(all(windows, not(debug_assertions))), allow(dead_code))]
+fn earlier_user_uninstaller(uninstall_string: &str, exe: &str) -> Option<String> {
+    let path = uninstall_string.trim().trim_matches('"');
+    let (dir, name) = path.rsplit_once(['\\', '/'])?;
+    let absolute = dir.as_bytes().get(1..3) == Some(b":\\".as_slice()) || dir.starts_with(r"\\");
+    let exe_dir = exe.rsplit_once(['\\', '/']).map(|(dir, _)| dir);
+    let same_install = exe_dir.is_some_and(|exe_dir| exe_dir.eq_ignore_ascii_case(dir));
+    (name.eq_ignore_ascii_case("uninstall.exe") && absolute && !same_install)
+        .then(|| path.to_string())
+}
+
+/// The earlier desktop app's setup program installed for the current user
+/// only (uninstall entry in HKCU). Left in place, it is a second "Onyx" in
+/// Apps and claims onyx:// for the user. Its silent uninstall keeps its data.
+/// It runs here, as the user, never from the elevated installer: the user can
+/// change that entry and its files. It removes the "Onyx" Run value, so it
+/// runs before launch at login is set. The wait is bounded.
+#[cfg(all(windows, not(debug_assertions)))]
+fn remove_earlier_user_install(product_name: &str) {
+    use std::time::{Duration, Instant};
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    let key = format!(r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{product_name}");
+    let Ok(uninstall) = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(key)
+        .and_then(|key| key.get_value::<String, _>("UninstallString"))
+    else {
+        return;
+    };
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let Some(uninstaller) =
+        earlier_user_uninstaller(&uninstall, &exe.to_string_lossy()).map(std::path::PathBuf::from)
+    else {
+        return;
+    };
+    let Some(dir) = uninstaller.parent().map(std::path::Path::to_path_buf) else {
+        return;
+    };
+    // "_?=" runs the NSIS uninstaller in place, so the wait covers the uninstall.
+    let mut child = match std::process::Command::new(&uninstaller)
+        .arg("/S")
+        .arg(format!("_?={}", dir.display()))
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(e) => {
+            log::warn!("could not start the earlier app's uninstaller: {e}");
+            return;
+        }
+    };
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => {
+                let _ = std::fs::remove_file(&uninstaller);
+                let _ = std::fs::remove_dir(&dir);
+                log::info!("removed the earlier app's per-user install");
+                return;
+            }
+            Ok(Some(status)) => {
+                log::warn!("the earlier app's uninstaller failed: {status}");
+                return;
+            }
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Ok(None) => {
+                log::warn!("the earlier app's uninstaller did not finish in time");
+                return;
+            }
+            Err(e) => {
+                log::warn!("could not wait for the earlier app's uninstaller: {e}");
+                return;
+            }
+        }
+    }
+}
+
 #[cfg(all(windows, not(debug_assertions)))]
 fn remove_other_user_link_handler() {
     use winreg::enums::HKEY_CURRENT_USER;
@@ -309,6 +392,8 @@ fn main() {
             let config = ConfigStore::load(config_path);
             let policy = policy::with_remembered_server(policy::read(handle), &config);
             policy::log_effective(&policy);
+            #[cfg(all(windows, not(debug_assertions)))]
+            remove_earlier_user_install(&handle.package_info().name);
             policy::apply_launch_at_login(handle, &policy);
             app.manage(AppState::new(config, policy, api));
 
@@ -429,9 +514,38 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        is_onyx_link_handler, legacy_link_handler, link_command_is_other_program,
-        packaged_desktop_file, registers_links_at_runtime,
+        earlier_user_uninstaller, is_onyx_link_handler, legacy_link_handler,
+        link_command_is_other_program, packaged_desktop_file, registers_links_at_runtime,
     };
+
+    #[test]
+    fn only_another_installs_uninstaller_is_run() {
+        let exe = r"C:\Program Files\Onyx\onyx.exe";
+        let earlier = r"C:\Users\a\AppData\Local\Onyx\uninstall.exe";
+        assert_eq!(
+            earlier_user_uninstaller(&format!("\"{earlier}\""), exe).as_deref(),
+            Some(earlier)
+        );
+        assert_eq!(
+            earlier_user_uninstaller(earlier, exe).as_deref(),
+            Some(earlier)
+        );
+        assert_eq!(
+            earlier_user_uninstaller(r#""C:\Program Files\Onyx\uninstall.exe""#, exe),
+            None
+        );
+        assert_eq!(
+            earlier_user_uninstaller(r#""c:\program files\onyx\Uninstall.exe""#, exe),
+            None
+        );
+        assert_eq!(
+            earlier_user_uninstaller(r#""C:\Users\a\evil.exe" /S"#, exe),
+            None
+        );
+        assert_eq!(earlier_user_uninstaller(r"Onyx\uninstall.exe", exe), None);
+        assert_eq!(earlier_user_uninstaller("uninstall.exe", exe), None);
+        assert_eq!(earlier_user_uninstaller("", exe), None);
+    }
 
     #[test]
     fn a_link_command_for_another_program_is_found() {

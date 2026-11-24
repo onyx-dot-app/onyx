@@ -130,8 +130,15 @@ The installers do not set policy values. Deploy the values separately.
 
 ## Linux
 
-The app reads `/etc/onyx-desktop/policy.json`: one JSON object with the same keys. Make the file readable by all users.
-A UTF-8 byte order mark is allowed.
+The app reads `/etc/onyx-desktop/policy.json`: one JSON object with the same keys. A UTF-8 byte order mark is allowed.
+
+Make the file readable by all users and writable only by root, for example `root:root` with mode `644`.
+The app does not trust the file if the file, or a directory above it,
+is not owned by root or is writable by group or others. A sticky directory such as `/tmp` is allowed.
+Each symbolic link on the path must also be owned by root,
+and the directories on the way to its target get the same check.
+A file that the app does not trust counts as a policy that it cannot read (see [Invalid policy](#invalid-policy)),
+so the server is locked and updates are off.
 
 ```json
 {

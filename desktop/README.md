@@ -144,10 +144,10 @@ and binary name (`onyx`), so this app takes its place:
 - Windows: the MSI has the same UpgradeCode (Tauri derives it from the product name), so it
   upgrades an earlier MSI install. The NSIS installer (`.exe`) installs for all users into
   `Program Files\Onyx`. The earlier `.exe` installed for the current user only, into
-  `%LOCALAPPDATA%\Onyx`. The new installer runs that per-user uninstaller silently first
-  (`src-tauri/windows/installer-hooks.nsh`). The uninstall keeps the earlier app's data.
-  Only the per-user install of the user who runs the installer goes. Other users of the
-  computer remove theirs by hand.
+  `%LOCALAPPDATA%\Onyx`. At each user's first launch, the new app runs that user's per-user
+  uninstaller silently, as the user (`remove_earlier_user_install` in `src-tauri/src/main.rs`).
+  The uninstall keeps the earlier app's data. The elevated installer never runs it: the user
+  can change that uninstall entry and its files.
 - Linux: the `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and
   `dnf` upgrade the earlier package.
 
@@ -156,8 +156,9 @@ At the first launch, before it reads `config.json`, the app imports settings onc
 
 - From the preview build (`app.onyx.desktop.v2`), if its `config.json` exists: all settings,
   except the record of saved session tokens. The preview's tokens stay in its own credential
-  store entries (service `app.onyx.desktop.v2`), so the user signs in once. The preview's file
-  does not change.
+  store entries (service `app.onyx.desktop.v2`), so the user signs in once. The app then renames
+  the preview's file to `config.json.imported`, so a later delete of this app's data does not
+  bring the preview's settings back.
 - Else from the earlier app's `config.json`: `server_url` (only a URL that onboarding accepts)
   and a `summon_shortcut` that is not its default. The app ignores other keys, a file that is
   not valid JSON, and values of the wrong type. After the import, the app renames the file to
@@ -474,7 +475,9 @@ signed and notarized with the Apple secrets. The secrets come from AWS Secrets M
 the JavaScript build, and that build does not run again in the Tauri build
 (`beforeBuildCommand` is null in the release config). After all builds succeed,
 `publish-desktop-update-feed` writes one `latest.json` for all platforms and uploads it to the
-same release. See [Auto-update](#auto-update).
+same release. See [Auto-update](#auto-update). To test the release build without a release, run
+the workflow by hand on a branch with **desktop** checked: it builds every desktop target and
+`latest.json` into a draft release `v0.0.0-dev+<sha>`, which nobody publishes.
 
 `.github/workflows/desktop-downloads.yml` (weekly, or by hand) writes the download counts of the
 desktop assets of every release to its job summary.
@@ -565,11 +568,11 @@ How the app differs from macOS:
     installer stops before its first page (a silent install exits with code 1638). The MSI
     stops when the NSIS version is installed. Uninstall the other one first. This also
     applies to an MSI install of the earlier desktop app: upgrade it with the MSI.
-  - The NSIS installer silently uninstalls the earlier desktop app's per-user install
-    (`HKCU\...\Uninstall\Onyx`) of the user who runs it. That uninstall keeps the earlier
-    app's data. The MSI does not do this. After an MSI or LocalSystem install, a user who
-    still has the earlier per-user install sees two "Onyx" entries in Apps. Uninstall the
-    earlier one there.
+  - At launch, a release build silently uninstalls the earlier desktop app's per-user install
+    (`HKCU\...\Uninstall\Onyx`) of the current user, as that user and without elevation.
+    The uninstall keeps the earlier app's data. This works after an NSIS, MSI or
+    LocalSystem install. Until a user starts the new app, that user sees two "Onyx" entries
+    in Apps.
   - At launch, a release build deletes a per-user `onyx://` entry
     (`HKCU\Software\Classes\onyx`) that starts another program. The earlier desktop app
     wrote one at each launch, and it would win over the entry that the installers write for

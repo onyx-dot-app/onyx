@@ -365,8 +365,9 @@ panel picks up the new session when the user returns.
   customer sites ignore the new type ([[#widget-bundle-outlives-backend]]).
 - `desktop-native-feature` **Add a desktop native feature.** Copy the
   `get_prefs` command in `desktop/src-tauri/src/commands.rs`, and register it
-  in the `generate_handler!` list in `desktop/src-tauri/src/main.rs`. Grant it
-  only to the local window that needs it, in
+  in the `generate_handler!` list in `desktop/src-tauri/src/main.rs` and in
+  `COMMANDS` in `desktop/src-tauri/build.rs`, which generates its
+  `allow-<command>` permission. Grant it only to the local window that needs it, in
   `desktop/src-tauri/capabilities/<window>.json`
   ([[#desktop-ipc-local-windows-only]]). A command that opens a window must be
   `async` ([[#desktop-window-commands-async]]). Add a Rust unit test next to

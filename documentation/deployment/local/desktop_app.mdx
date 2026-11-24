@@ -97,11 +97,10 @@ This app replaces the previous Onyx desktop app. It has the same name and app ID
 so you install it over the previous app. You do not uninstall the previous app first.
 
 - **macOS**: the new `Onyx.app` replaces the previous one in **Applications**.
-- **Windows**: the new MSI upgrades a previous MSI install. The new setup program (`.exe`) removes the previous
-  setup program install of the user who runs it, then installs for all users.
-  The previous app installed for the current user only. If the setup program runs as another account (for example,
-  SYSTEM in Intune), the previous per-user install stays.
-  The user then sees two **Onyx** entries in **Settings > Apps** and can uninstall the earlier one there.
+- **Windows**: the new MSI upgrades a previous MSI install. The new setup program (`.exe`) installs for all users.
+  The previous setup program installed for the current user only. At each user's first launch,
+  the new app uninstalls that user's previous per-user install and keeps its data. Until the user starts the new app,
+  **Settings > Apps** shows two **Onyx** entries.
 - **Linux**: the new `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and `dnf` upgrade
   the previous package.
 
