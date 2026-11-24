@@ -1331,9 +1331,7 @@ def get_chat_artifact(
     else:
         # The same 404, so callers cannot probe for artifacts of others.
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
-    return ChatArtifactFile(
-        **file.model_dump(exclude={"display_path"}), chat_id=chat.id, access=access
-    )
+    return ChatArtifactFile(**file.model_dump(exclude={"display_path"}), access=access)
 
 
 @router.get("/file/{file_id:path}", tags=PUBLIC_API_TAGS)

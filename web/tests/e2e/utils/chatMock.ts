@@ -209,6 +209,7 @@ export function publishFilesPackets(
           artifact_id: file.artifactId,
           version: file.version,
           thumbnail_file_id: file.thumbnailFileId ?? null,
+          chat_id: null,
         })),
         error: null,
       },

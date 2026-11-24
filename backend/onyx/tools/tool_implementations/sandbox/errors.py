@@ -5,6 +5,10 @@ from contextlib import contextmanager
 
 from onyx.server.features.build.sandbox.harness_base import HarnessSandboxError
 from onyx.tools.models import ToolCallException
+from onyx.tools.tool_implementations.sandbox.models import (
+    ArtifactNotFound,
+    ArtifactVersionConflict,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -27,13 +31,14 @@ def sandbox_errors_as_tool_errors() -> Iterator[None]:
 @contextmanager
 def artifact_errors(action: str) -> Iterator[None]:
     """The tool errors of an artifact operation's `action` ("The copy"): a
-    tool error as it is, a sandbox error's own message, or a fixed one; the
-    details go to the log."""
+    tool error as it is, a sandbox error's or a missing artifact's own
+    message, or a fixed one; the details go to the log. A version conflict
+    passes, for each tool to word."""
     try:
         yield
-    except ToolCallException:
+    except (ToolCallException, ArtifactVersionConflict):
         raise
-    except HarnessSandboxError as error:
+    except (HarnessSandboxError, ArtifactNotFound) as error:
         raise tool_error(str(error)) from error
     except TimeoutError as error:
         logger.warning("artifact_tool_timed_out action=%s", action, exc_info=True)

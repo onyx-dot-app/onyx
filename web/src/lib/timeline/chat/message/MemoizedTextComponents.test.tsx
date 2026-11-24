@@ -133,7 +133,9 @@ describe("artifact link", () => {
 
   async function clickLink(href: string) {
     render(
-      <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>
+      <PublishedFilesPanelContext.Provider
+        value={{ ...CHAT_FILES_PANEL, chatId: "a" }}
+      >
         <MemoizedAnchor href={href} updatePresentingDocument={jest.fn()}>
           the report
         </MemoizedAnchor>
@@ -169,7 +171,9 @@ describe("artifact link", () => {
 
   test("a slower response to an earlier click does not replace a later click's file", async () => {
     render(
-      <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>
+      <PublishedFilesPanelContext.Provider
+        value={{ ...CHAT_FILES_PANEL, chatId: "a" }}
+      >
         <MemoizedAnchor
           href={`https://onyx.example.com/app/artifacts/${ARTIFACT_ID}/v1`}
           updatePresentingDocument={jest.fn()}

@@ -322,8 +322,9 @@ exec_command / write_stdin / apply_patch + publish_files + library_list + librar
                                         The file tools and publish_files share one
                                         sequence_group: their calls of one step run one at
                                         a time, so a publish sees the step's earlier edits
-  PublishFilesTool (SEQUENTIAL)         artifact_operations.create_files (the
-                                        artifact tool's publish runs it too): at most
+  PublishFilesTool (SEQUENTIAL)         artifact_operations.publish (the artifact
+                                        tool's publish and replace_file run it too): at
+                                        most
                                         PUBLISH_FILES_MAX_FILES (20) files a call;
                                         for each file in order: HarnessSandbox.read_file
                                         (a working-directory path, or an absolute path
@@ -475,6 +476,38 @@ exec_command / write_stdin / apply_patch + publish_files + library_list + librar
                                         they skip, such as node_modules, virtual
                                         environments and caches
                                         (firecracker/session_saves.py)
+  LibraryReplaceLibraryFileTool (SEQUENTIAL)  library_replace_library_file, DEFERRED
+                                        library.replace_library_file; _LibraryTool and
+                                        _FileTool, with the default interrupted result
+                                        (not idempotent): artifact_operations.replace_file
+                                        looks the artifact up first
+                                        (get_user_published_file by library_file_id: a
+                                        listable chat of the user, any chat, the newest
+                                        available version) and refuses a file whose
+                                        extension, in any case, is not the artifact's
+                                        (check_same_type, for every new version), so a
+                                        refused one never wakes the VM; then publish
+                                        reads the VM file with the publish_files rules and
+                                        saves it into that artifact
+                                        (db/chat.save_chat_artifact with
+                                        ArtifactById: an UPDATE locks the row and bumps
+                                        updated_at, and an artifact whose chat is deleted
+                                        raises ArtifactNotFound, the not-found tool error;
+                                        expected_version is checked against
+                                        the newest available version, the one the model
+                                        sees, under that lock, and a mismatch raises
+                                        ArtifactVersionConflict with that number inside the
+                                        commit hook, so the record and its upload roll
+                                        back; the new version is the highest number plus
+                                        one). The version keeps the artifact's name and
+                                        path and, without a title, the newest version's
+                                        title. Returns PublishedFiles (the publish card:
+                                        renderer publish_card_files maps `file` and
+                                        `title`; the version joins this chat's message
+                                        files and access) and, to the model,
+                                        ArtifactPublished, the publish result model of the
+                                        artifact tool. errors.py:artifact_errors lets the
+                                        conflict through, and each family words it
   ArtifactTool (`artifact`, SEQUENTIAL)  one tool with an action per artifact operation,
                                         for Claude models. One flat ArtifactArguments
                                         model; each action takes only its own arguments
@@ -483,12 +516,17 @@ exec_command / write_stdin / apply_patch + publish_files + library_list + librar
                                         too), and the tool builds the library tools'
                                         arguments of its operation: publish (default;
                                         file_path with title, or file_paths, all or none)
-                                        -> create_files and PublishedFiles details, so the
-                                        same publish card, message files and access; list
-                                        (scope "mine", type = category, query, limit,
-                                        after = cursor; newest first) -> list_artifacts;
-                                        read (url, or path and paths, each a url or a file
-                                        ID; out_dir required until a read without it
+                                        -> publish, and with url and file_path ->
+                                        replace_file (the url's /v<N> is
+                                        expected_current_version; a url without /v<N> is
+                                        refused unless force, which drops the check);
+                                        both give
+                                        PublishedFiles details, so the same publish card,
+                                        message files and access; list (scope "mine", type
+                                        = category, query, limit, after = cursor; newest
+                                        first) -> list_artifacts; read (url, or path and
+                                        paths, each a url or a file ID; out_dir required
+                                        until a read without it
                                         exists) -> materialize, a url's /v<N> as the item's
                                         version_number. Empty and too-long lists are
                                         refused in the tool's own argument names before

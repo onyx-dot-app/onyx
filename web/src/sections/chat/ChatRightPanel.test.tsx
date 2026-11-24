@@ -80,6 +80,7 @@ const REPORT: PublishedFile = {
   artifact_id: "artifact-report",
   version: 1,
   thumbnail_file_id: null,
+  chat_id: null,
 };
 const CHART: PublishedFile = {
   ...REPORT,
@@ -144,7 +145,9 @@ function Chat({
     <AppWorkspaceElementsContext.Provider value={elements}>
       <div ref={workspace} data-workspace-width={workspaceWidth}>
         <div ref={setPanelToggleSlot} />
-        <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>
+        <PublishedFilesPanelContext.Provider
+          value={{ ...CHAT_FILES_PANEL, chatId: "session" }}
+        >
           <div ref={page} data-testid="page">
             {replies.map((files, index) => (
               <PublishedFileCards key={index} files={files} />
@@ -1016,6 +1019,7 @@ test("a card opens its own file, also one that the Files list does not hold", as
     artifact_id: null,
     version: null,
     thumbnail_file_id: null,
+    chat_id: null,
   };
   renderChat([[pathless]]);
   applyLoad([], [[pathless]]);

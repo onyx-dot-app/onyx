@@ -136,7 +136,11 @@ file's title. The sandbox tools `library_list` and `library_prepare_materialize`
 deleted; the default list order reads the index on `(user_id, updated_at
 DESC)`, and the other sorts read all of the owner's artifacts. The save writes the file record, upserts the artifact (its row
 lock serializes concurrent publishes of one path) and adds the next version in
-one commit. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
+one commit. A replace (`library_replace_library_file`, or the artifact
+tool's publish with a url) adds the version to an existing artifact by ID
+instead (`ArtifactById`), also from another chat of the owner: the artifact
+keeps its chat, path, name and type (the file's extension must match), and
+the version's file joins the replacing chat's message files. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
 thumbnail: `HarnessSandbox.render_first_page` draws a JPEG of its first page in
 the VM, and the save writes it first as a `FileOrigin.CHAT_ARTIFACT_THUMBNAIL`
 record that `ChatArtifactVersion.thumbnail_file_id` links (`ON DELETE SET

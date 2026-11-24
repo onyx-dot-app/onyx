@@ -92,6 +92,7 @@ export default function SharedChatDisplay({
       0
     );
     return {
+      sessionId: chatSession.chat_session_id,
       messageTree: sharedMessageTree,
       loadedPublishedFiles:
         reloaded?.page.chat_session_id === chatSession.chat_session_id
@@ -158,6 +159,7 @@ export default function SharedChatDisplay({
 
   const firstMessage = messages[0];
   const filesPanel: PublishedFilesPanel = {
+    chatId: sessionId,
     openFile,
     showFiles: () =>
       dispatchRightPanel({ type: "showTab", tabId: RIGHT_PANEL_FILES_TAB }),

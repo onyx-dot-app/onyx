@@ -1269,6 +1269,7 @@ describe("with stubbed server checks", () => {
       artifact_id: "artifact-notes",
       version: 1,
       thumbnail_file_id: null,
+      chat_id: null,
     };
     jest.mocked(fetchSettledChatSession).mockResolvedValue({
       ...savedSession([], null),

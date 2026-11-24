@@ -51,8 +51,10 @@
   response holds the messages and, for each answer, the packets that rebuild
   it. A latest-page load and a shared chat's load also hold
   `published_files`: the latest version of each artifact (every publish of
-  one path) that the model or its subagents published in the chat, on every
-  branch. A send that names a
+  one path) that the chat owns, on every branch. The list follows the owning
+  chat: it holds the versions that other chats add to this chat's files, and
+  leaves out the versions that this chat adds to other chats' files. A send
+  that names a
   parent off the active branch fails with "not on the latest mainline".
 
 ---
@@ -419,7 +421,12 @@ its child sessions: first the files and thumbnails of the root session's
 response that ended without its save, such as an interrupted parked one),
 then message files (`save_chat_turn` also adds each
 `publish_files` call's `PublishedFiles` to the response's `ChatMessage.files`
-in its one save), then the checkpoint blobs by file ID prefix under the root
+in its one save), except a file that is still a `chat_artifact_version` file
+or thumbnail: this chat's versions are gone by then, so it belongs to another
+chat's artifact that a replace from this chat versioned, and that chat's
+delete deletes it (one query per message batch). Deleting the owning chat
+deletes such a version, and the other chat's card then gets not-found. Then
+the checkpoint blobs by file ID prefix under the root
 session ID, then messages (tool calls,
 response items and checkpoints cascade), then `SearchDoc` rows no message links
 to. `delete_chat_artifact_files` deletes each thumbnail before its file (a

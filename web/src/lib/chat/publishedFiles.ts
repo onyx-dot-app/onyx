@@ -85,6 +85,17 @@ export function artifactKey(
 }
 
 /**
+ * Whether the Files list of the chat `chatId` holds `file`: a file of the
+ * chat, or one saved without a chat.
+ */
+export function belongsToChat(
+  file: Pick<PublishedFile, "chat_id">,
+  chatId: string | null
+): boolean {
+  return file.chat_id == null || file.chat_id === chatId;
+}
+
+/**
  * The newest version of `file`'s artifact among `file` and `files`: `file`
  * itself unless `files` holds a higher version. A file without a version is
  * version 1.
@@ -104,19 +115,24 @@ export function newestVersion(
 }
 
 /**
- * The chat's published files, on every branch: the newest version of each
- * artifact, newest artifact first. They are the server's list, then the
- * files that packets published after the loads, such as live publishes. A
- * replayed file that the list leaves out stays out: an older version, a file
- * whose object is missing or a file saved without an artifact. Without a
- * list, the packets give the files.
+ * The published files of the chat `chatId`, on every branch: the newest
+ * version of each artifact, newest artifact first. They are the server's
+ * list, then the files that packets published after the loads, such as live
+ * publishes. A replayed file that the list leaves out stays out: an older
+ * version, a file whose object is missing or a file saved without an
+ * artifact. Without a list, the packets give the files. A version that the
+ * chat added to another chat's artifact stays out, as the list leaves it
+ * out; its reply card shows it.
  */
 export function chatPublishedFiles(
   loaded: LoadedPublishedFiles,
-  messageTree: MessageTreeState
+  messageTree: MessageTreeState,
+  chatId: string
 ): PublishedFile[] {
   const packetFiles = [...messageTree.values()].flatMap((message) =>
-    readPublishedFiles(message.packets)
+    readPublishedFiles(message.packets).filter((file) =>
+      belongsToChat(file, chatId)
+    )
   );
   const files =
     loaded.listed === null

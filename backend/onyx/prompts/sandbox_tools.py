@@ -161,17 +161,26 @@ Usage:
 - By default, a copy goes to {ARTIFACT_FILES_DIR}/<short file ID>-<name>, and a second copy of the same file uses the one that is there. `destination.directory`, an item's `relative_directory` and `file_name` choose another place and name in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/.
 - `destination.conflict_policy` applies to every copy except one to the default {ARTIFACT_FILES_DIR}/<short file ID>-<name>. It decides what happens when a file is already there: dedupe (the default) adds " (N)" to the name, overwrite replaces it, error fails the item. Under every policy, a copy to the default {ARTIFACT_FILES_DIR}/<short file ID>-<name> uses the file that is there when its size matches, and writes it again otherwise.
 - One call copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files. A failed item does not stop the others.
-- The chat does not keep files in {CHAT_FILES_DIR}/: a sandbox restart removes them. To change a file, copy it to a directory outside {CHAT_FILES_DIR}/, change it there, and publish it from that path.
+- The chat does not keep files in {CHAT_FILES_DIR}/: a sandbox restart removes them. To change a file, copy it to a directory outside {CHAT_FILES_DIR}/, change it there, and add it as a new version with library_replace_library_file.
+"""
+
+LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION = f"""Adds a version to a published file of the user's chats, this chat included, from a file in the VM. The file keeps its name, type and place in its chat; earlier versions and their cards stay.
+
+Usage:
+- `library_file_id` is from library_list. `file` is the new content, at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}, with the published file's extension. For a file of another type, publish a new file instead.
+- Pass the version_number that you last read as `expected_current_version`. If the file has a newer version, the call fails and changes nothing: copy the newest version with library_prepare_materialize, merge your change, and replace again.
+- The user sees a download card for the new version. `title` defaults to the current version's title.
 """
 
 # The artifact tool (sandbox_tools.ArtifactTool). tool_search matches its
 # first sentence.
-ARTIFACT_DESCRIPTION = f"""Publish, list and read the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
+ARTIFACT_DESCRIPTION = f"""Publish, replace, list and read the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
 
 Actions:
 - publish (the default): gives `file_path`, or up to {PUBLISH_FILES_MAX_FILES} `file_paths`, from the VM to the user; all are published, or none. Each file is at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Publishing the same path again adds a new version. Publish only finished deliverables, and do not paste their contents into your reply.
+- publish with `url` and `file_path`: adds a version to that published file, also one of another chat; it keeps its name and type, so `file_path` needs its extension. Use the url from your last result: if the file has a newer version than the url names, the call fails and changes nothing. `force` adds the version anyway; older versions stay.
 - list: the user's published files from all their chats, newest first. `type` keeps one type (image, sheet, slides, report, other); `query` finds text in the name, the title or the chat's title; `after` takes the `next_cursor` of the previous page.
-- read: copies up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} published files into `out_dir`, in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/. Name them with `url` (a url from an earlier result; one that ends in /v<N> names that version), or with `path` or `paths`, each a url or a file ID. To change a file, read it into a directory outside {CHAT_FILES_DIR}/, change it there, and publish it.
+- read: copies up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} published files into `out_dir`, in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/. Name them with `url` (a url from an earlier result; one that ends in /v<N> names that version), or with `path` or `paths`, each a url or a file ID. To change a file, read it into a directory outside {CHAT_FILES_DIR}/, change it there, and publish it with its url.
 - A url is a link the user can open; give it to the user to point at a file.
 """
 ARTIFACT_RESULTS = (
