@@ -743,9 +743,10 @@ class SharepointSourceOperations(SourceOperations):
     )
     def get_library_inheritance(
         self, *, site_url: str, list_id: str
-    ) -> SharepointLibraryInheritance:
+    ) -> SharepointLibraryInheritance | None:
         """For each file and folder of the library, if it has role
-        assignments of its own. One read for each 5,000 items."""
+        assignments of its own. One read for each 5,000 items. None for a
+        library too large to read (LIBRARY_INHERITANCE_MAX_ITEMS)."""
         return self._reads().get_library_inheritance(site_url=site_url, list_id=list_id)
 
     @source_operation(

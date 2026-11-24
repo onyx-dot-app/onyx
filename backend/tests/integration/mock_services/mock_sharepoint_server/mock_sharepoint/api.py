@@ -1806,6 +1806,11 @@ class MockMicrosoftApi:
                     "__metadata": {"type": "SP.List"},
                     "Id": drive.list_id,
                     "HasUniqueRoleAssignments": drive.unique_assignments is not None,
+                    "ItemCount": sum(
+                        1
+                        for item in self.corpus.drive_items(drive.id)
+                        if not item.is_root
+                    ),
                     "RootFolder": {
                         "__metadata": {"type": "SP.Folder"},
                         "ServerRelativeUrl": self._server_relative(drive, []),
@@ -1837,4 +1842,14 @@ class MockMicrosoftApi:
                     "HasUniqueRoleAssignments": item.unique_assignments is not None,
                 }
             )
+        # `Id gt <n>` with `$orderby=Id` pages a large list by its indexed id.
+        # Query option names do not depend on case (the SDK sends `$orderBy`).
+        options = {key.lower(): value for key, value in request.query.items()}
+        id_filter = re.fullmatch(
+            r"\s*id\s+gt\s+(\d+)\s*", options.get("$filter", ""), re.IGNORECASE
+        )
+        if id_filter is not None:
+            rows = [row for row in rows if row["Id"] > int(id_filter.group(1))]
+        if options.get("$orderby", "").strip().lower() in ("id", "id asc"):
+            rows.sort(key=lambda row: row["Id"])
         return self._rest_page(request, rows)

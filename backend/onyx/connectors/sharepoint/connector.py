@@ -65,7 +65,10 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
-from onyx.connectors.microsoft_utils.models import SharepointSecurable
+from onyx.connectors.microsoft_utils.models import (
+    LIBRARY_INHERITANCE_MAX_ITEMS,
+    SharepointSecurable,
+)
 from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.microsoft_utils.sharepoint_access import (
     CONTAINER_ACCESS_TTL_SECONDS,
@@ -1966,12 +1969,18 @@ class SharepointConnector(
             started_at = datetime.now(timezone.utc)
             sources: dict[int, SharepointSecurable] = {}
             try:
-                sources = inherited_access_sources(
-                    self.ops.get_library_inheritance(
-                        site_url=site_url, list_id=drive.list_id
-                    ),
-                    drive.list_id,
+                library = self.ops.get_library_inheritance(
+                    site_url=site_url, list_id=drive.list_id
                 )
+                if library is None:
+                    logger.info(
+                        "Drive '%s' has more than %d items; each of its files "
+                        "reads its own permissions.",
+                        drive.display_name,
+                        LIBRARY_INHERITANCE_MAX_ITEMS,
+                    )
+                else:
+                    sources = inherited_access_sources(library, drive.list_id)
             except ConnectorStopSignal:
                 raise
             except Exception as e:

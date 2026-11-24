@@ -65,6 +65,12 @@ class SharepointListItemInheritance(BaseModel):
     has_unique_role_assignments: bool
 
 
+# A library with more items is not read: its files read their own
+# permissions. Conversion uses a read only while it is younger than
+# CONTAINER_ACCESS_TTL_SECONDS, and a larger read does not end in that time.
+LIBRARY_INHERITANCE_MAX_ITEMS = 50_000
+
+
 class SharepointLibraryInheritance(BaseModel):
     """Which items of a document library have role assignments of their own.
     An item without them has the role assignments of its nearest folder that
