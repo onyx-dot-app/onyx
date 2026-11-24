@@ -1,8 +1,8 @@
-"""The artifact tools' queries (`db/chat.py:get_user_published_files` and
-`get_user_published_file`) against Postgres and the file store: the newest
-available version of each artifact, each sort and its cursor, the filters,
-the query match, and the scope of the user's own root chats that are not
-deleted."""
+"""The artifact tools' queries (`db/chat.py:get_user_published_files`,
+`get_user_published_file` and the search's name match) against Postgres and
+the file store: the newest available version of each artifact, each sort and
+its cursor, the filters, the name match, and the scope of the user's own
+root chats that are not deleted."""
 
 import contextvars
 import threading
@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
     get_or_create_root_message,
+    get_user_artifact_search_candidates,
     get_user_published_file,
     get_user_published_files,
     save_chat_artifact,
@@ -150,7 +151,6 @@ def _list(
     db_session: Session,
     user: User,
     *,
-    query: str | None = None,
     chat: ChatSession | None = None,
     filters: LibraryListFilters | None = None,
     sort: ArtifactSort = "modified_at",
@@ -162,7 +162,6 @@ def _list(
     rows = get_user_published_files(
         db_session,
         user.id,
-        query=query,
         chat_session_id=None if chat is None else chat.id,
         filters=filters or LibraryListFilters(),
         sort=sort,
@@ -247,7 +246,7 @@ def test_the_list_has_the_newest_available_version_of_each_artifact_newest_first
     ]
 
 
-def test_the_query_matches_the_name_title_or_chat_title_in_any_case(
+def test_the_search_matches_words_in_the_name_title_or_chat_title_in_any_case(
     db_session: Session, owner: User
 ) -> None:
     sales = _chat(db_session, owner, "Sales Review")
@@ -264,18 +263,45 @@ def test_the_query_matches_the_name_title_or_chat_title_in_any_case(
     )
     db_session.commit()
 
+    by_artifact = {
+        file.artifact_id: file.file_id for file in (report, budget, in_sales, renamed)
+    }
+
     def found(query: str) -> list[str]:
-        return _ids(_list(db_session, owner, query=query)[0])
+        """The files whose name, title or chat title has every word of
+        `query`; a second, empty-handed query shows that each query matches
+        on its own."""
+        candidates = get_user_artifact_search_candidates(
+            db_session,
+            owner.id,
+            chat_session_id=None,
+            filters=LibraryListFilters(),
+            artifact_ids=None,
+            term_sets=[query.split(), ["nothing-matches-this"]],
+            limit=50,
+        )
+        assert candidates is not None
+        assert not any(matched[1] for _, matched in candidates)
+        return sorted(
+            by_artifact[artifact_id]
+            for artifact_id, matched in candidates
+            if matched[0]
+        )
 
     assert found("q3_report") == [report.file_id]
     assert found("BUDGET") == [budget.file_id]
     assert found("sales review") == [in_sales.file_id]
+    # Every word, each in any of the three.
+    assert found("review x.txt") == [in_sales.file_id]
+    assert found("budget review") == []
     assert found("final") == [renamed.file_id]
     assert found("old draft") == []
     # LIKE wildcards are plain characters.
     assert found("%") == [budget.file_id]
     assert found("_") == [report.file_id]
     assert found("nothing like it") == []
+    # No words match no file.
+    assert found("") == []
 
 
 @pytest.mark.parametrize(
@@ -466,7 +492,6 @@ def test_only_the_users_own_root_chats_that_are_not_deleted_are_listed(
             get_user_published_files(
                 db_session,
                 owner.id,
-                query=None,
                 chat_session_id=chat_id,
                 filters=LibraryListFilters(),
                 sort="modified_at",

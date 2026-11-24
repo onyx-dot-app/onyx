@@ -65,12 +65,14 @@
   copy of any of their versions as a new version, or deletes them after the
   user approves. With `library_read` and `library_find` it reads numbered
   lines or pages of any version of them and finds lines in them, on the
-  server, without the VM. In code mode all of these are the deferred group
-  `library`. Claude models get the same operations as one `artifact` tool
-  instead (actions publish, list, read, rename, restore and delete; read
-  shows text, finds text with `query`, or copies with `out_dir`), in its own
-  deferred group `artifact`, for compatibility with how they work with
-  artifacts. Every result links each version as
+  server, without the VM, and with `library_search` it finds them by
+  content, name and title, with snippets. In code mode all of these are the
+  deferred group `library`. Claude models get the same operations as one
+  `artifact` tool instead (actions publish, list, read, rename, restore and
+  delete; list with a query searches; read shows text, finds text with
+  `query`, or copies with `out_dir`), in its own deferred group `artifact`,
+  for compatibility with how they work with artifacts. Every result links
+  each version as
   `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
   the output panel.
 
@@ -84,7 +86,7 @@ stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
 `apply_patch`, `edit`, `write`, `library_create_library_file`, `library_list`,
 `library_prepare_materialize`, `library_replace_library_file`, `library_manage_library`,
-`library_read`, `library_find`, `artifact`) and the artifact operations that
+`library_read`, `library_find`, `library_search`, `artifact`) and the artifact operations that
 they share. Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
@@ -228,7 +230,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_read + library_find + library_replace_library_file + library_manage_library | edit + write + artifact (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_read + library_find + library_replace_library_file + library_manage_library + library_search | edit + write + artifact (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -423,12 +425,13 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         include/exclude_file_types and category by the
                                         newest name's text after its last dot
                                         (models.py:ARTIFACT_TYPE_EXTENSIONS, which also
-                                        gives each entry's artifact_type). A query (at
-                                        most 200 characters, kept until a search tool
-                                        takes it over) matches the file name, the
-                                        version's title or the chat's title (icontains,
-                                        autoescape); limit clamped to 1-50 (default
-                                        25). Each row comes with its ArtifactCursor
+                                        gives each entry's artifact_type). The list
+                                        has no query: library_search finds files by
+                                        text. limit clamped to 1-50 (default 25).
+                                        db/chat.py:_user_published_files is the one
+                                        scope, newest-version and filter builder of
+                                        the list, the search candidates and the
+                                        search's lookup by ID. Each row comes with its ArtifactCursor
                                         (sort, sort_order, sort key, artifact ID; a
                                         union by sort, so a name stays a string), whose
                                         base64url JSON is next_cursor; a cursor of
@@ -556,7 +559,8 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         inside its pages and refuses a start_line
                                         outside them), a cut find
                                         next_match_offset.
-                                        library_read, library_find and artifact are in spill._OWN_LIMITS
+                                        library_read, library_find, library_search and artifact
+                                        are in spill._OWN_LIMITS
   LibraryReplaceLibraryFileTool (SEQUENTIAL)  library_replace_library_file, DEFERRED
                                         library.replace_library_file; _LibraryTool and
                                         _FileTool, with the default interrupted result
@@ -687,6 +691,59 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         the call can also make the newer version. One
                                         request covers the whole call, other operations
                                         included
+  LibrarySearchTool (`library_search`)  _LibraryTool over
+                                        artifact_operations.search_artifacts, DEFERRED
+                                        library.search (tools.library__search),
+                                        reading only the database and the search index
+                                        (never start_call). Arguments: search_query (1-3
+                                        {q, search_title_only}), the list's filters
+                                        (LibraryListFilters), scope.file_refs (the
+                                        shared ArtifactFileReference; a version that is
+                                        not its latest_version_number is a tool error
+                                        pointing at a find in that version), chat_id, result_format (snippets
+                                        or metadata_only), sort (relevance or a list
+                                        sort) and sort_order, top_k (1-25, default 10),
+                                        cursor. db/chat.py:get_user_artifact_search_candidates
+                                        gives the newest 10,000 artifacts in scope (more:
+                                        complete false), each with whether every word of
+                                        each query, without stopwords (strip_stopwords)
+                                        and punctuation, is in its name, title or chat
+                                        title (icontains, autoescape). Each content query
+                                        runs context/search/retrieval/search_runner.py:
+                                        search_chunks in parallel (100 chunks, no
+                                        federated sources) with source_type
+                                        CHAT_ARTIFACT and attached_document_ids = the
+                                        candidates, and no ACL: the SQL scope is the
+                                        access check, so an email change never hides a
+                                        file. Relevance runs hybrid search; the other
+                                        sorts run keyword only (hybrid_alpha 0, no
+                                        EmbeddingModel), because vector search always
+                                        returns the nearest chunks. A file keeps at most
+                                        3 chunks of a query. Another retrieval, over the
+                                        files that no retrieval found, runs only when the
+                                        cap dropped chunks of a full retrieval, up to 3
+                                        retrievals, so a matching file can stay out of
+                                        the content ranking.
+                                        Each query gives two rankings: its content
+                                        matches by their best chunk, and its name matches
+                                        by latest change, a publish or rename (files
+                                        not indexed yet). A
+                                        title-only query, and every query with
+                                        DISABLE_VECTOR_DB (content_search "unavailable"),
+                                        gives the name ranking only. search_utils.py:
+                                        weighted_reciprocal_rank_fusion_with_scores fuses
+                                        the rankings (RRF_K_VALUE) into a window of 100
+                                        files, which get_user_published_files_by_id maps
+                                        back with the same scope (content_indexed =
+                                        index_status INDEXED). Other sorts reorder only
+                                        the window.
+                                        Snippets (search_snippet, at most 3 of 300
+                                        characters) are a chunk's match highlight, or its
+                                        text from just before the first query word when
+                                        highlights are off (OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED,
+                                        the default). The cursor is base64url JSON of
+                                        {offset} into the window, and a page keeps to
+                                        ARTIFACT_RESULT_MAX_CHARS
   ArtifactTool (`artifact`, SEQUENTIAL)  one tool with an action per artifact operation,
                                         for Claude models. One flat ArtifactArguments
                                         model; each action takes only its own arguments
@@ -704,8 +761,10 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         is the version_reason); both give
                                         PublishedFiles details, so the same publish card,
                                         message files and access; list (scope "mine", type
-                                        = category, query, limit, after = cursor; newest
-                                        first) -> list_artifacts; read (url, or path and
+                                        = category, limit, after = cursor; newest first)
+                                        -> list_artifacts, or with a query (q, type =
+                                        category, limit = top_k, after = cursor) ->
+                                        search_artifacts; read (url, or path and
                                         paths, each a url or a file ID; a url's /v<N> as the
                                         item's version_number) -> read (offset = start_line,
                                         limit = max_lines), with query -> find (literal;
@@ -750,8 +809,9 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         from those two limits (_OWN_LIMITS): the cells,
                                         exec_command, write_stdin, read_file, skills_read,
                                         library_list, library_manage_library, library_read,
-                                        library_find, artifact and CITEABLE_TOOLS_NAMES. A
-                                        cell's closing record sets the recorded result and its own output uncut
+                                        library_find, library_search, artifact and
+                                        CITEABLE_TOOLS_NAMES. A cell's closing record
+                                        sets the recorded result and its own output uncut
                                         as the full value. Where:
                                         the full value or the content, at most
                                         SPILL_MAX_BYTES (a lone surrogate becomes "?"), to

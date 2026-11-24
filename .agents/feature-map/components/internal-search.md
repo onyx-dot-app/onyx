@@ -38,6 +38,8 @@
   and its citation opens the file's artifact link. Other users, agents with
   knowledge and project chats never find it
   ([[file-store-and-user-files]] "Published file text and search").
+  In a sandbox chat, `library_search` searches only the user's published
+  files through the same retrieval ([[code-execution]]).
 
 ---
 

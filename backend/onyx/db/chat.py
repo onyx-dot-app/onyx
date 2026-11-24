@@ -19,6 +19,7 @@ from sqlalchemy import (
     desc,
     event,
     exists,
+    false,
     func,
     literal,
     nullsfirst,
@@ -1618,28 +1619,18 @@ def _listed_artifact(row: Row) -> ListedArtifact:
     )
 
 
-def get_user_published_files(
+def _user_published_files(
     db_session: Session,
     user_id: UUID,
     *,
-    query: str | None,
     chat_session_id: UUID | None,
     filters: LibraryListFilters,
-    sort: ArtifactSort,
-    sort_order: SortOrder,
-    limit: int,
-    cursor: ArtifactCursor | None,
-) -> list[tuple[ListedArtifact, ArtifactCursor]] | None:
-    """Up to `limit` + 1 of the files that the model published in the user's
-    listable chats (`_listable_chat`), each with the cursor that starts after
-    it: the newest available version of each artifact, in `sort` order with
-    the artifact ID as the tie-break. `modified_at` reads
-    ix_chat_artifact_user_id_updated_at in order and stops at the limit; the
-    other sorts read and sort all of the user's matching artifacts. An
-    artifact that changes its sort key while the caller pages can move past
-    the cursor or behind it. `name`, `size`, the type filters and `query` use
-    the newest available version and the artifact's effective name. Each entry
-    is cut as shown_artifact cuts it. None when
+) -> tuple[Select, LateralFromClause] | None:
+    """The files that the model published in the user's listable chats
+    (`_listable_chat`), only `chat_session_id`'s when set, that pass
+    `filters`: one row for each artifact with its chat's title and its
+    newest available version, the lateral `newest`, whose name (the
+    artifact's effective name) the type filters use. None when
     `chat_session_id` is not a listable chat of the user."""
     listable = _listable_chat(user_id)
     if (
@@ -1651,16 +1642,9 @@ def get_user_published_files(
     ):
         return None
     newest = _newest_available_version()
-    name = newest.c.name
-    # The text after the last dot, as artifact_type reads it; NULL without one.
-    extension = func.lower(func.substring(name, r"\.([^.]*)$"))
-    key = {
-        "created_at": ChatArtifact.created_at,
-        "modified_at": ChatArtifact.updated_at,
-        "name": name,
-        "size": func.coalesce(newest.c.file_size, 0),
-    }[sort]
-    descending = sort_order == "desc"
+    # The text after the last dot of the name, as artifact_type reads it;
+    # NULL without one.
+    extension = func.lower(func.substring(newest.c.name, r"\.([^.]*)$"))
     statement = (
         select(
             ChatArtifact.id,
@@ -1668,30 +1652,16 @@ def get_user_published_files(
             ChatArtifact.created_at,
             ChatArtifact.updated_at,
             ChatArtifact.chat_session_id,
+            ChatArtifact.index_status,
             ChatSession.description,
             newest,
-            key.label("sort_key"),
         )
         .join(ChatSession, ChatSession.id == ChatArtifact.chat_session_id)
         .join(newest, true())
         .where(ChatArtifact.user_id == user_id, listable)
-        .order_by(
-            *(
-                (key.desc(), ChatArtifact.id.desc())
-                if descending
-                else (key.asc(), ChatArtifact.id.asc())
-            )
-        )
-        .limit(limit + 1)
     )
     if chat_session_id is not None:
         statement = statement.where(ChatArtifact.chat_session_id == chat_session_id)
-    if cursor is not None:
-        position = tuple_(key, ChatArtifact.id)
-        after = tuple_(literal(cursor.key), literal(cursor.artifact_id))
-        statement = statement.where(
-            position < after if descending else position > after
-        )
     if filters.created_after is not None:
         statement = statement.where(ChatArtifact.created_at >= filters.created_after)
     if filters.created_before is not None:
@@ -1719,13 +1689,59 @@ def get_user_published_files(
         statement = statement.where(
             extension.in_(ARTIFACT_TYPE_EXTENSIONS[filters.category])
         )
-    if query:
-        statement = statement.where(
-            or_(
-                name.icontains(query, autoescape=True),
-                newest.c.title.icontains(query, autoescape=True),
-                ChatSession.description.icontains(query, autoescape=True),
+    return statement, newest
+
+
+def get_user_published_files(
+    db_session: Session,
+    user_id: UUID,
+    *,
+    chat_session_id: UUID | None,
+    filters: LibraryListFilters,
+    sort: ArtifactSort,
+    sort_order: SortOrder,
+    limit: int,
+    cursor: ArtifactCursor | None,
+) -> list[tuple[ListedArtifact, ArtifactCursor]] | None:
+    """Up to `limit` + 1 of the user's published files
+    (`_user_published_files`), as a page shows them (`shown_artifact`), each
+    with the cursor that starts after it, in `sort` order with the artifact
+    ID as the tie-break. `modified_at` reads
+    ix_chat_artifact_user_id_updated_at in order and stops at the limit; the
+    other sorts read and sort all of the user's matching artifacts. An
+    artifact that changes its sort key while the caller pages can move past
+    the cursor or behind it. `name` and `size` use the newest available
+    version. None when `chat_session_id` is not a listable chat of the
+    user."""
+    found = _user_published_files(
+        db_session, user_id, chat_session_id=chat_session_id, filters=filters
+    )
+    if found is None:
+        return None
+    statement, newest = found
+    key = {
+        "created_at": ChatArtifact.created_at,
+        "modified_at": ChatArtifact.updated_at,
+        "name": newest.c.name,
+        "size": func.coalesce(newest.c.file_size, 0),
+    }[sort]
+    descending = sort_order == "desc"
+    statement = (
+        statement.add_columns(key.label("sort_key"))
+        .order_by(
+            *(
+                (key.desc(), ChatArtifact.id.desc())
+                if descending
+                else (key.asc(), ChatArtifact.id.asc())
             )
+        )
+        .limit(limit + 1)
+    )
+    if cursor is not None:
+        position = tuple_(key, ChatArtifact.id)
+        after = tuple_(literal(cursor.key), literal(cursor.artifact_id))
+        statement = statement.where(
+            position < after if descending else position > after
         )
     return [
         (
@@ -1741,6 +1757,91 @@ def get_user_published_files(
         )
         for row in db_session.execute(statement)
     ]
+
+
+def get_user_artifact_search_candidates(
+    db_session: Session,
+    user_id: UUID,
+    *,
+    chat_session_id: UUID | None,
+    filters: LibraryListFilters,
+    artifact_ids: Collection[UUID] | None,
+    term_sets: Sequence[Sequence[str]],
+    limit: int,
+) -> list[tuple[UUID, tuple[bool, ...]]] | None:
+    """Up to `limit` of the user's published files that a search reaches
+    (`_user_published_files`), only `artifact_ids` when set, latest change
+    (publish or rename) first from ix_chat_artifact_user_id_updated_at: the ID of each, and for
+    each of `term_sets` whether every term is in the file's name, its title
+    or its chat's title, in any case; an empty term set matches no file.
+    None when `chat_session_id` is not a listable chat of the user."""
+    found = _user_published_files(
+        db_session, user_id, chat_session_id=chat_session_id, filters=filters
+    )
+    if found is None:
+        return None
+    statement, newest = found
+    statement = (
+        statement.with_only_columns(
+            ChatArtifact.id,
+            *(
+                (
+                    and_(
+                        *(
+                            or_(
+                                newest.c.name.icontains(term, autoescape=True),
+                                newest.c.title.icontains(term, autoescape=True),
+                                ChatSession.description.icontains(
+                                    term, autoescape=True
+                                ),
+                            )
+                            for term in terms
+                        )
+                    )
+                    if terms
+                    else false()
+                ).label(f"terms_{index}")
+                for index, terms in enumerate(term_sets)
+            ),
+        )
+        .order_by(ChatArtifact.updated_at.desc(), ChatArtifact.id.desc())
+        .limit(limit)
+    )
+    if artifact_ids is not None:
+        statement = statement.where(ChatArtifact.id.in_(artifact_ids))
+    return [
+        (row[0], tuple(bool(matched) for matched in row[1:]))
+        for row in db_session.execute(statement)
+    ]
+
+
+def get_user_published_files_by_id(
+    db_session: Session,
+    user_id: UUID,
+    artifact_ids: Collection[UUID],
+    *,
+    chat_session_id: UUID | None,
+    filters: LibraryListFilters,
+) -> dict[UUID, tuple[ListedArtifact, bool]]:
+    """The files of `artifact_ids` that are still among the user's
+    published files (`_user_published_files`), as a page shows them
+    (`shown_artifact`), each with whether its newest version is in the
+    search index (`ChatArtifactIndexStatus.INDEXED`)."""
+    found = _user_published_files(
+        db_session, user_id, chat_session_id=chat_session_id, filters=filters
+    )
+    if found is None or not artifact_ids:
+        return {}
+    statement, _ = found
+    return {
+        row.id: (
+            shown_artifact(_listed_artifact(row)),
+            row.index_status == ChatArtifactIndexStatus.INDEXED,
+        )
+        for row in db_session.execute(
+            statement.where(ChatArtifact.id.in_(artifact_ids))
+        )
+    }
 
 
 def get_user_published_file(

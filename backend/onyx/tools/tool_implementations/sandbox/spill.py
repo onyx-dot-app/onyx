@@ -48,6 +48,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibraryListTool,
     LibraryManageLibraryTool,
     LibraryReadTool,
+    LibrarySearchTool,
     WriteStdinTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -107,6 +108,7 @@ _OWN_LIMITS = frozenset(
         LibraryManageLibraryTool.NAME,
         LibraryReadTool.NAME,
         LibraryFindTool.NAME,
+        LibrarySearchTool.NAME,
         ArtifactTool.NAME,
         *CITEABLE_TOOLS_NAMES,
     }
