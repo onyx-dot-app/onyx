@@ -481,14 +481,14 @@ class IntermediateReportCitedDocs(BaseObj):
 ################################################
 # Nested tool calls use their own packets at sub_turn_index = call index.
 class CodeModeStart(BaseObj):
-    """Starts one observation of a cell: `execute_code` or `wait_code`."""
+    """Starts one observation of a cell: a run or a wait call."""
 
     type: Literal["code_mode_start"] = StreamingType.CODE_MODE_START.value
-    # Empty for wait_code.
+    # Empty for a wait call.
     code: str
-    # From the call arguments: None for execute_code, whose cell gets its id when it runs.
+    # From the call arguments: None for a run call, whose cell gets its id when it runs.
     cell_id: int | None = None
-    # 0 starts a cell (execute_code); 1 continues one (wait_code). The final delta
+    # 0 starts a cell (a run call); 1 continues one (a wait call). The final delta
     # carries the exact observation number.
     observation: int = 0
 

@@ -46,7 +46,7 @@ export const MOCK_LLM_MODELS = [
 ] as const;
 export const MOCK_LLM_DEFAULT_MODEL = MOCK_LLM_MODELS[0];
 /**
- * Whether the backend offers tools through `execute_code` programs. Set
+ * Whether the backend offers tools through `exec` programs. Set
  * CODE_MODE_ENABLED for the runner to the backend's value; CI sets both.
  */
 export const CODE_MODE_ENABLED =
@@ -101,7 +101,7 @@ export interface MockLlmScript {
 
 /**
  * A reply that calls tools the way the backend offers them: native tool calls,
- * or with code mode on, one `execute_code` program that awaits each call in
+ * or with code mode on, one `exec` program that awaits each call in
  * order, or with `concurrent` all calls at once through `asyncio.gather`.
  * Native tool calls in one reply always run in parallel. A program calls a
  * tool as `tools.<name>`, with the other characters of its name as `_`; it
@@ -131,10 +131,8 @@ export function mockLlmToolCallReply(
     ? `import asyncio\nawait asyncio.gather(${invocations.join(", ")})`
     : invocations.map((invocation) => `await ${invocation}`).join("\n");
   return {
-    tool_calls: [
-      { id: calls[0]!.id, name: "execute_code", arguments: { code } },
-    ],
-    conditions: { offers: ["execute_code"] },
+    tool_calls: [{ id: calls[0]!.id, name: "exec", arguments: { code } }],
+    conditions: { offers: ["exec"] },
   };
 }
 

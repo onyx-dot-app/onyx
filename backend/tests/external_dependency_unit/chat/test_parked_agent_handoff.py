@@ -43,8 +43,8 @@ from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat.chat_backend import (
     get_chat_session_processing_status,
 )
+from onyx.tools.constants import EXEC_TOOL_NAME
 from onyx.tools.models import ToolApprovalScope, ToolContext
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_chat_tool_approvals import (
@@ -73,7 +73,7 @@ def _reply(request: GenerationRequest, _signal: CancellationSignal) -> Assistant
         return AssistantMessage(content=[TextContent(text=results[-1].text)])
     return AssistantMessage(
         content=[
-            ToolCall(id="program", name=CodeModeTool.NAME, arguments={"code": PROGRAM})
+            ToolCall(id="program", name=EXEC_TOOL_NAME, arguments={"code": PROGRAM})
         ]
     )
 

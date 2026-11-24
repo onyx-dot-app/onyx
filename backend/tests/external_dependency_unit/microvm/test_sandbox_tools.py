@@ -189,7 +189,7 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.tools.constants import (
-    CODE_MODE_TOOL_NAME,
+    EXEC_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
     LOAD_SKILL_TOOL_NAME,
     POSTGRES_TOOL_NAME,
@@ -208,6 +208,10 @@ from onyx.tools.models import (
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CLAUDE_CODE_MODE,
+    OPENAI_CODE_MODE,
+)
 from onyx.tools.tool_implementations.open_url import open_url_tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     MAX_CHARS_ACROSS_URLS,
@@ -644,7 +648,9 @@ def test_a_program_gets_a_dict_from_exec_command_and_a_failed_call_raises(
         "except Exception as error:\n"
         "    print('raised:', error)\n"
     )
-    llm = ChatLLM([code_step("code", program), Delta(content="Done.")])
+    llm = ChatLLM(
+        [code_step(OPENAI_CODE_MODE, "code", program), Delta(content="Done.")]
+    )
     chat.send(llm, code_mode=True)
 
     text = last_tool_text(llm, "code")
@@ -665,6 +671,7 @@ def test_a_program_call_whose_saved_output_is_cut_is_marked_truncated(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 f"r = await tools.exec_command(cmd='echo {'x' * 3_000}')\n"
                 "print(len(r['output']))\n",
@@ -882,6 +889,7 @@ def test_a_stop_kills_the_command_that_a_program_call_waits_on(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 "await tools.exec_command(cmd='say partial', yield_time_ms=30000)",
             )
@@ -963,7 +971,13 @@ def test_a_stop_during_a_program_patch_ends_the_turn_after_its_write(
     releaser = threading.Thread(target=copy_context().run, args=(release_later,))
     releaser.start()
     join = _stop_when(chat, writing.is_set)
-    llm = ChatLLM([code_step("code", f"await tools.apply_patch(input={ADD_A!r})")])
+    llm = ChatLLM(
+        [
+            code_step(
+                OPENAI_CODE_MODE, "code", f"await tools.apply_patch(input={ADD_A!r})"
+            )
+        ]
+    )
     try:
         parts = chat.send(llm, code_mode=True)
     finally:
@@ -1173,7 +1187,9 @@ def test_a_numeric_session_id_keeps_the_exec_card(chat: SandboxChat) -> None:
     llm = ChatLLM(
         [
             code_step(
-                "code", "await tools.write_stdin(session_id='nope', yield_time_ms=1000)"
+                OPENAI_CODE_MODE,
+                "code",
+                "await tools.write_stdin(session_id='nope', yield_time_ms=1000)",
             ),
             Delta(content="Done."),
         ]
@@ -1748,7 +1764,9 @@ def test_a_program_edits_and_writes_files(
         "except Exception as error:\n"
         "    print('raised:', error)\n"
     )
-    llm = _claude([code_step("code", program), Delta(content="Done.")])
+    llm = _claude(
+        [code_step(CLAUDE_CODE_MODE, "code", program), Delta(content="Done.")]
+    )
     chat.send(llm, code_mode=True)
 
     assert (
@@ -1970,7 +1988,7 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
                 ),
                 ToolCall(
                     id="exec",
-                    name=CODE_MODE_TOOL_NAME if code_mode else ExecCommandTool.NAME,
+                    name=EXEC_TOOL_NAME if code_mode else ExecCommandTool.NAME,
                     arguments={"code": "await tools.exec_command(cmd='echo hi')"}
                     if code_mode
                     else {"cmd": "echo hi"},
@@ -2992,6 +3010,7 @@ def test_a_paged_chat_load_lists_the_latest_version_of_each_artifact(
             ChatLLM(
                 [
                     code_step(
+                        OPENAI_CODE_MODE,
                         "code",
                         "print(await tools.library__create_library_file(file='report.md'))\n",
                     ),
@@ -3064,6 +3083,7 @@ def test_a_program_publishes_files_that_belong_to_the_message(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 "print(await tools.library__create_library_file(file='report.md'))\n",
             ),
@@ -3458,9 +3478,7 @@ def _spills(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
 
 def _note(path: str, size: int, body: str, *, code_mode: bool = False) -> str:
     """The model's note of a spilled result."""
-    read_with = (
-        "exec_command in an execute_code program" if code_mode else "exec_command"
-    )
+    read_with = "exec_command in exec programs" if code_mode else "exec_command"
     return (
         f'<persisted-output path="{path}" bytes={size}>\n{body}\n'
         f"Read the file with {read_with} (grep, sed, head, tail). It lasts while "
@@ -3610,7 +3628,10 @@ def test_a_cell_over_its_output_limit_saves_its_output_to_the_vm(
 ) -> None:
     program = _ROWS_PROGRAM + "'done'\n"
     llm = ChatLLM(
-        [code_step("rows", program, max_output_chars=5_000), Delta(content="Done.")]
+        [
+            code_step(OPENAI_CODE_MODE, "rows", program, max_output_tokens=1_250),
+            Delta(content="Done."),
+        ]
     )
     parts = chat.send(llm, code_mode=True)
 
@@ -3653,7 +3674,10 @@ def test_a_cell_counts_the_printed_output_that_it_dropped_before_the_save(
     printed = 700_000
     program = f"print('h' * 1000 + 'm' * {printed - 2000} + 't' * 1000)\n"
     llm = ChatLLM(
-        [code_step("big", program, max_output_chars=5_000), Delta(content="Done.")]
+        [
+            code_step(OPENAI_CODE_MODE, "big", program, max_output_tokens=1_250),
+            Delta(content="Done."),
+        ]
     )
     chat.send(llm, code_mode=True)
 
@@ -3680,8 +3704,8 @@ def test_cell_results_within_their_limit_never_spill(
     program = f"print({rows!r}, end='')\nyield_control()\nprint({rows!r}, end='')\n"
     llm = ChatLLM(
         [
-            code_step("start", program, max_output_chars=160_000),
-            wait_step("more", 1, max_output_chars=160_000),
+            code_step(OPENAI_CODE_MODE, "start", program, max_output_tokens=40_000),
+            wait_step(OPENAI_CODE_MODE, "more", 1, max_tokens=40_000),
             Delta(content="Done."),
         ]
     )
@@ -3721,7 +3745,7 @@ def test_a_cell_that_closes_after_a_large_observation_spills_both_records(
     )
     llm = ChatLLM(
         [
-            code_step("start", program, max_output_chars=5_000),
+            code_step(OPENAI_CODE_MODE, "start", program, max_output_tokens=1_250),
             Delta(content="Started."),
         ]
     )
@@ -3807,7 +3831,7 @@ def test_the_file_status_follows_a_spilled_result(
     given = _scripted_status(monkeypatch)
     llm = ChatLLM(
         [
-            code_step("big", _ROWS_PROGRAM, max_output_chars=5_000),
+            code_step(OPENAI_CODE_MODE, "big", _ROWS_PROGRAM, max_output_tokens=1_250),
             Delta(content="Done."),
         ]
     )
@@ -3854,7 +3878,9 @@ def test_a_code_cell_gets_the_file_status_and_its_calls_do_not_read_it(
         "    print((await tools.exec_command(cmd='echo hi'))['output'])\n"
         f"print(await tools.apply_patch(input={ADD_A!r}))\n"
     )
-    llm = ChatLLM([code_step("code", program), Delta(content="Done.")])
+    llm = ChatLLM(
+        [code_step(OPENAI_CODE_MODE, "code", program), Delta(content="Done.")]
+    )
     chat.send(llm, code_mode=True)
 
     # One read, for the cell's result; the program's calls read none.
@@ -3885,7 +3911,10 @@ def test_a_closed_cell_keeps_one_file_status_line(
         "print('started')\nyield_control()\nawait asyncio.sleep(60)\n"
     )
     llm = ChatLLM(
-        [code_step("start", "import asyncio\n" + program), Delta(content="Started.")]
+        [
+            code_step(OPENAI_CODE_MODE, "start", "import asyncio\n" + program),
+            Delta(content="Started."),
+        ]
     )
     chat.send(llm, code_mode=True)
 
@@ -4004,9 +4033,9 @@ def test_parallel_cells_over_their_limit_spill_in_one_step_past_the_budget(
                 id=call_id,
                 index=index,
                 function=ResponseFunctionCall(
-                    name="execute_code",
+                    name="exec",
                     arguments=json.dumps(
-                        {"code": _ROWS_PROGRAM, "max_output_chars": 5_000}
+                        {"code": _ROWS_PROGRAM, "max_output_tokens": 1_250}
                     ),
                 ),
             )
@@ -4300,7 +4329,9 @@ def test_a_program_gets_all_the_output_that_a_command_kept(
         "result = await tools.exec_command(cmd='seq 20000')\n"
         "print(len(result['output']), result['output'].endswith('19999\\n20000\\n'))\n"
     )
-    llm = ChatLLM([code_step("count", program), Delta(content="Done.")])
+    llm = ChatLLM(
+        [code_step(OPENAI_CODE_MODE, "count", program), Delta(content="Done.")]
+    )
     chat.send(llm, code_mode=True)
 
     assert last_tool_text(llm, "count").endswith(f"Output:\n{len(output)} True")
@@ -4317,7 +4348,7 @@ def test_a_program_that_prints_a_mebibyte_of_command_output_spills_its_cell(
     program = (
         "result = await tools.exec_command(cmd='seq 300000')\nprint(result['output'])\n"
     )
-    llm = ChatLLM([code_step("big", program), Delta(content="Done.")])
+    llm = ChatLLM([code_step(OPENAI_CODE_MODE, "big", program), Delta(content="Done.")])
     chat.send(llm, code_mode=True)
 
     [(path, data)] = _spills(node, chat.ref(db_session)).items()
@@ -5053,7 +5084,11 @@ def test_a_page_past_the_call_limit_keeps_the_excerpt_that_the_model_got(
     if code_mode:
         llm = ChatLLM(
             [
-                code_step("cell", _program_pages([page.url for page in pages])),
+                code_step(
+                    OPENAI_CODE_MODE,
+                    "cell",
+                    _program_pages([page.url for page in pages]),
+                ),
                 Delta(content="Done."),
             ]
         )
@@ -5118,7 +5153,11 @@ def test_a_page_that_the_limit_cuts_short_keeps_its_excerpt(
     if code_mode:
         llm = ChatLLM(
             [
-                code_step("cell", _program_pages([page.url for page in pages])),
+                code_step(
+                    OPENAI_CODE_MODE,
+                    "cell",
+                    _program_pages([page.url for page in pages]),
+                ),
                 Delta(content="Done."),
             ]
         )
@@ -5152,7 +5191,9 @@ def test_a_program_gets_less_of_one_call_than_a_direct_call(
     pages = [_web_page(index, 150_000) for index in range(1, 3)]
     llm = ChatLLM(
         [
-            code_step("cell", _program_pages([page.url for page in pages])),
+            code_step(
+                OPENAI_CODE_MODE, "cell", _program_pages([page.url for page in pages])
+            ),
             Delta(content="Done."),
         ]
     )
@@ -5394,7 +5435,10 @@ def test_an_indexed_document_past_the_call_limit_keeps_more_than_its_excerpt(
     tool_ids = [get_builtin_tool(db_session, OpenURLTool).id]
     if code_mode:
         llm = ChatLLM(
-            [code_step("cell", _program_pages([url])), Delta(content="Done.")]
+            [
+                code_step(OPENAI_CODE_MODE, "cell", _program_pages([url])),
+                Delta(content="Done."),
+            ]
         )
         with use_mock_content_provider():
             chat.send(llm, tool_ids=tool_ids, code_mode=True)

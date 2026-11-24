@@ -571,7 +571,7 @@ Community downgrade clears it ([[billing]]).
    Runtime replay skips a call and its child steps when the stored result type
    is unknown. Legacy replay skips a call when its catalog row is missing.
    Both keep the separately saved assistant answer. Code mode has no tool row: `persistence.tool_ids`
-   maps `execute_code` and `wait_code` to None, and their calls save with a
+   maps the run and wait tools to None, and their calls save with a
    NULL `tool_id`.
 10. `shared-read-hides-deleted` **A shared read never returns a deleted
     session.** `db/chat.py:get_chat_session_by_id` adds `deleted IS FALSE`

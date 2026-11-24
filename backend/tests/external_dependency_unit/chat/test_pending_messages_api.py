@@ -632,7 +632,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
     """A send reaches the response at its next step boundary.
 
     With code mode, the send arrives while a program runs and the step waits
-    on it with `wait_code`; the program finishes before the next step reads it.
+    on it with `wait`; the program finishes before the next step reads it.
     """
     path = f"/chat/chat-session/{chat.id}/pending-messages"
     entered, release, waiting = Event(), Event(), Event()
@@ -676,9 +676,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
             program = "print('started')\nyield_control()\nstore('gate', 1)\n"
             return AssistantMessage(
                 content=[
-                    ModelToolCall(
-                        id="start", name="execute_code", arguments={"code": program}
-                    )
+                    ModelToolCall(id="start", name="exec", arguments={"code": program})
                 ]
             )
         if code_mode and len(requests) == 2:
@@ -687,7 +685,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
                 content=[
                     ModelToolCall(
                         id="wait",
-                        name="wait_code",
+                        name="wait",
                         arguments={"cell_id": 1, "yield_time_ms": 30000},
                     )
                 ]

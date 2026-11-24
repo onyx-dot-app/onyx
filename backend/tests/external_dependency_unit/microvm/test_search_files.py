@@ -65,6 +65,7 @@ from onyx.server.query_and_chat.chat_backend import delete_chat_session_by_id
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import PYTHON_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import CapabilityEntry, SearchResult, SearchResults, ToolOptions
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox import file_copies
 from onyx.tools.tool_implementations.sandbox.models import (
@@ -515,6 +516,7 @@ def test_a_search_in_a_program_copies_its_file(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "program",
                 f"r = await tools.internal_search(queries=[{QUERY!r}])\n"
                 "print(r['results'][0]['file_name'])\n",

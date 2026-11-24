@@ -105,6 +105,10 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolCallException, ToolContext, ToolOptions
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CLAUDE_CODE_MODE,
+    OPENAI_CODE_MODE,
+)
 from onyx.tools.tool_implementations.sandbox import (
     artifact_operations,
     file_copies,
@@ -1459,6 +1463,7 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 "matches = await tool_search('copy a published file')\n"
                 "print([match['name'] for match in matches])\n"
@@ -1475,7 +1480,7 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "execute_code"
+        if tool["function"]["name"] == "exec"
     ]
     assert (
         f"\n  - library: {LibraryListTool.CODE_MODE_NAMESPACE_DESCRIPTION}\n"
@@ -2307,8 +2312,9 @@ def test_a_claude_program_finds_the_artifact_tool_and_publishes_with_it(
     llm = _ClaudeLLM(
         [
             code_step(
+                CLAUDE_CODE_MODE,
                 "code",
-                "matches = await tool_search('publish a file')\n"
+                "matches = await search_tools('publish a file')\n"
                 "print([match['name'] for match in matches])\n"
                 "r = await tools.artifact__artifact(file_path='out/a.md')\n"
                 "print(r['files'][0]['url'])\n",
@@ -2321,7 +2327,7 @@ def test_a_claude_program_finds_the_artifact_tool_and_publishes_with_it(
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "execute_code"
+        if tool["function"]["name"] == CLAUDE_CODE_MODE.run_name
     ]
     assert "\n  - artifact: Give files from the VM to the user" in description
     assert "artifact__artifact" not in description

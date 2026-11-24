@@ -616,7 +616,7 @@ test("a later report of a code mode call replaces what the step shows", async ()
       display_name: "lookup_orders",
     },
   });
-  // The call is running when the program yields; the wait_code observation
+  // The call is running when the program yields; the wait observation
   // reports it again with as many packets.
   const yielded: Packet[] = [
     { placement: cell, obj: { type: PacketType.CODE_MODE_START, code: "" } },

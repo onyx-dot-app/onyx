@@ -27,7 +27,7 @@ from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     HarnessSandboxRef,
 )
-from onyx.tools.constants import CODE_MODE_TOOL_NAME, OPEN_URL_TOOL_NAME
+from onyx.tools.constants import EXEC_TOOL_NAME, OPEN_URL_TOOL_NAME
 from onyx.tools.models import SearchResult, SearchResults
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.code_mode.prompt import (
@@ -204,7 +204,7 @@ def _spill(
     *,
     call_id: str = "call",
     name: str = "fetch",
-    code_mode: bool = False,
+    code_mode_run_name: str | None = None,
 ) -> ToolResult:
     return spill_large_result(
         turn,
@@ -214,7 +214,7 @@ def _spill(
             result=ToolResult(content=result) if isinstance(result, str) else result,
             step_results=(),
         ),
-        code_mode=code_mode,
+        code_mode_run_name=code_mode_run_name,
     )
 
 
@@ -289,7 +289,7 @@ def test_a_bounded_library_result_past_the_steps_budget_stays_whole(
             result=ToolResult(content=text),
             step_results=(earlier,),
         ),
-        code_mode=False,
+        code_mode_run_name=None,
     )
 
     assert result.content == text
@@ -344,16 +344,17 @@ def test_a_preview_cannot_close_the_tag_in_any_case(turn: _FakeVMTurn) -> None:
 
 
 @pytest.mark.parametrize(
-    ("code_mode", "read_with"),
+    ("run_name", "read_with"),
     [
-        (False, "Read the file with exec_command (grep"),
-        (True, f"Read the file with exec_command in an {CODE_MODE_TOOL_NAME} program"),
+        (None, "Read the file with exec_command (grep"),
+        ("exec", "Read the file with exec_command in exec programs"),
+        ("repl", "Read the file with exec_command in repl programs"),
     ],
 )
 def test_the_note_says_why_the_file_can_be_missing_and_to_rerun_only_reads(
-    turn: _FakeVMTurn, code_mode: bool, read_with: str
+    turn: _FakeVMTurn, run_name: str | None, read_with: str
 ) -> None:
-    content = _spill(turn, "x" * 60_000, code_mode=code_mode).content
+    content = _spill(turn, "x" * 60_000, code_mode_run_name=run_name).content
 
     assert read_with in content
     assert (
@@ -527,7 +528,7 @@ def test_a_spilled_cell_card_shows_its_error_once(turn: _FakeVMTurn) -> None:
     result = _spill(
         turn,
         ToolResult(content="cut", details=details, full_value=full),
-        name=CODE_MODE_TOOL_NAME,
+        name=EXEC_TOOL_NAME,
     )
 
     saved = result.details
@@ -549,6 +550,7 @@ def test_a_cell_spills_even_when_its_cut_leaves_out_one_character(
         heading=heading,
         status="completed",
         cell_id=1,
+        wait_name="wait",
         cell_calls=[],
         max_chars=len(f"{heading}\n\n{output}") - 1,
         end=None,
@@ -560,7 +562,7 @@ def test_a_cell_spills_even_when_its_cut_leaves_out_one_character(
     _spill(
         turn,
         ToolResult(content=cell.text, details=details, full_value=cell.full_value),
-        name=CODE_MODE_TOOL_NAME,
+        name=EXEC_TOOL_NAME,
     )
 
     [data] = turn.files.values()

@@ -14,8 +14,12 @@ def test_wait_agents_refuses_while_a_code_cell_is_open() -> None:
     invocation = MagicMock(spec=ToolInvocation)
     invocation.arguments = {}
 
-    with pytest.raises(ToolCallException, match="code cell"):
-        WaitAgentsTool(has_open_cells=lambda: True)._run(invocation, MagicMock())
+    with pytest.raises(ToolCallException) as raised:
+        WaitAgentsTool(open_cell_wait_name=lambda: "poll")._run(invocation, MagicMock())
+    assert raised.value.llm_facing_message == (
+        "A code cell is still open, and ending your response would stop it. "
+        "Wait for it with poll first."
+    )
 
 
 def test_an_empty_agent_list_waits_for_all_agents() -> None:
@@ -35,7 +39,9 @@ def test_an_empty_agent_list_waits_for_all_agents() -> None:
         for name in ("alpha", "beta")
     ]
 
-    result = WaitAgentsTool(has_open_cells=lambda: False)._run(invocation, MagicMock())
+    result = WaitAgentsTool(open_cell_wait_name=lambda: None)._run(
+        invocation, MagicMock()
+    )
 
     assert result.content == "Waiting for 2 agents: /root/alpha, /root/beta."
     assert result.details == AgentWaitDetails(agent_ids=None)

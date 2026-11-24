@@ -581,13 +581,13 @@ class SearchResults(BaseModel):
 class CodeModeExposure(str, Enum):
     """How code mode offers a tool to the model."""
 
-    # Its own tool beside `execute_code`, never a function inside programs. Tools
+    # Its own tool beside the code mode run tool, never a function inside programs. Tools
     # that wait for child runs must use this: a program cannot wait for them.
     DIRECT = "direct"
-    # A function whose stub the `execute_code` description lists.
+    # A function whose stub the run tool description lists.
     IMMEDIATE = "immediate"
     # A function that programs can call but the description does not list; the
-    # model finds it with `tool_search`.
+    # model finds it with the program search function.
     DEFERRED = "deferred"
 
 
@@ -601,7 +601,7 @@ class CodeModeFunctionName(BaseModel):
     # A group of tools, such as the MCP server of an MCP tool.
     namespace: str | None = None
     # What the namespace's tools are for, from the group's owner, such as an
-    # MCP integration's description. The `execute_code` description lists
+    # MCP integration's description. The run tool description lists
     # the first line beside each deferred namespace.
     namespace_description: str | None = None
 

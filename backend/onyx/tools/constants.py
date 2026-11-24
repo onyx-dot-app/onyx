@@ -1,5 +1,9 @@
 """Tool names, IDs, and invocation limits."""
 
+from collections.abc import Mapping
+
+from onyx.llm.model_capabilities import ToolFamily
+
 # Tool names as referenced by tool results / tool calls
 SEARCH_TOOL_NAME = "run_search"
 INTERNET_SEARCH_TOOL_NAME = "run_internet_search"
@@ -19,8 +23,17 @@ MEMORY_TOOL_ID = "MemoryTool"
 # Tool names as referenced by tool results / tool calls (read_file)
 FILE_READER_TOOL_NAME = "read_file"
 
-CODE_MODE_TOOL_NAME = "execute_code"
+# The code mode run and wait tools of each shape (code_mode/shapes.py).
+EXEC_TOOL_NAME = "exec"
+WAIT_TOOL_NAME = "wait"
+REPL_TOOL_NAME = "repl"
+POLL_TOOL_NAME = "poll"
+# Saved chats can also hold run and wait calls under these names.
+EXECUTE_CODE_TOOL_NAME = "execute_code"
 WAIT_CODE_TOOL_NAME = "wait_code"
+# The tool type that clients know the streamed code of a code mode run call
+# of every shape by (web and mobile `CODE_MODE_TOOL_TYPE`).
+CODE_MODE_STREAM_TOOL_TYPE = "execute_code"
 SPAWN_AGENT_TOOL_NAME = "spawn_agent"
 SEND_MESSAGE_TOOL_NAME = "send_message"
 WAIT_AGENTS_TOOL_NAME = "wait_agents"
@@ -28,12 +41,14 @@ SKILLS_LIST_TOOL_NAME = "skills_list"
 SKILLS_READ_TOOL_NAME = "skills_read"
 LOAD_SKILL_TOOL_NAME = "load_skill"
 SKILL_TOOL_NAMES = frozenset({SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME})
-# The question tool's name: the first for Claude models, the second for others.
 ASK_USER_QUESTION_TOOL_NAME = "ask_user_question"
 REQUEST_USER_INPUT_TOOL_NAME = "request_user_input"
-QUESTION_TOOL_NAMES = frozenset(
-    {ASK_USER_QUESTION_TOOL_NAME, REQUEST_USER_INPUT_TOOL_NAME}
-)
+# The question tool's name in each shape.
+QUESTION_TOOL_NAME: Mapping[ToolFamily, str] = {
+    ToolFamily.CLAUDE: ASK_USER_QUESTION_TOOL_NAME,
+    ToolFamily.OPENAI: REQUEST_USER_INPUT_TOOL_NAME,
+}
+QUESTION_TOOL_NAMES = frozenset(QUESTION_TOOL_NAME.values())
 
 INTERNAL_SEARCH_TOOL_NAME = "internal_search"
 WEB_SEARCH_TOOL_NAME = "web_search"
@@ -48,8 +63,10 @@ CITEABLE_TOOLS_NAMES: list[str] = [
 
 FILE_READER_MAX_CHARS = 16000
 
-# The model's cut of a tool's output (code mode cells, exec_command and
-# write_stdin, argument `max_output_chars`): the default and the most.
+# The model's cut of a tool's output in characters (code mode cells, and the
+# `max_output_chars` argument of exec_command and write_stdin): the default
+# and the most. The OpenAI code mode shape takes it in tokens
+# (code_mode/shapes.py).
 DEFAULT_MAX_OUTPUT_CHARS = 40_000
 MAX_OUTPUT_CHARS = 160_000
 MAX_OUTPUT_CHARS_DESCRIPTION = (

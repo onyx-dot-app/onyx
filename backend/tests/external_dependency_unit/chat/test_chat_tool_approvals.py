@@ -117,6 +117,7 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     CodeModeTool,
     WaitCodeTool,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.question.models import ToolQuestionAnswer
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
@@ -1162,7 +1163,7 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
 ) -> None:
     sent: list[str] = []
     tool = _gated_function(chat, sent)
-    cells = CodeCells()
+    cells = CodeCells(OPENAI_CODE_MODE)
     live: list[Packet] = []
     call_waits = threading.Event()
 
@@ -1177,11 +1178,7 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
                 f"yield_control()\nawait tools.mcp__1__acme__{ACTION}(value='team')\n"
             )
             return AssistantMessage(
-                content=[
-                    ToolCall(
-                        id="program", name="execute_code", arguments={"code": code}
-                    )
-                ]
+                content=[ToolCall(id="program", name="exec", arguments={"code": code})]
             )
         if last.tool_call_id == "program":
             assert call_waits.wait(10)
@@ -1189,7 +1186,7 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
                 content=[
                     ToolCall(
                         id="stop",
-                        name="wait_code",
+                        name="wait",
                         arguments={"cell_id": 1, "terminate": True},
                     )
                 ]
@@ -1245,9 +1242,7 @@ def _program(
             _replies(
                 AssistantMessage(
                     content=[
-                        ToolCall(
-                            id="program", name="execute_code", arguments={"code": code}
-                        )
+                        ToolCall(id="program", name="exec", arguments={"code": code})
                     ]
                 )
             )
@@ -1404,7 +1399,7 @@ def test_a_park_refused_for_its_size_ends_the_request_and_does_not_block_sends(
                 content=[
                     ToolCall(
                         id="program",
-                        name="execute_code",
+                        name="exec",
                         arguments={
                             "code": f"await tools.mcp__1__acme__{ACTION}(value='team')\n"
                         },
@@ -1413,9 +1408,9 @@ def test_a_park_refused_for_its_size_ends_the_request_and_does_not_block_sends(
             )
         ),
         tools=[
-            CodeModeTool([tool], cells=CodeCells(), limits=PARKING_LIMITS).bind(
-                ToolContext
-            )
+            CodeModeTool(
+                [tool], cells=CodeCells(OPENAI_CODE_MODE), limits=PARKING_LIMITS
+            ).bind(ToolContext)
         ],
         gated=[tool],
         on_event=ResponsePresenter(Emitter(live.append)).consume,

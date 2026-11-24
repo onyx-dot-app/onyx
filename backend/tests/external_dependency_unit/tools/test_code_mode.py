@@ -58,6 +58,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SectionEnd,
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -329,7 +330,12 @@ def test_code_mode_program_calls_mcp_tool_in_parallel(
         f"a, b = await asyncio.gather(tools.{namespace}__hello(name='alpha'), tools.{namespace}__hello(name='beta'))\n"
         "print(a['result'] + ' | ' + b['result'])\n"
     )
-    llm = ChatLLM([code_step("code", program), Delta(content="Both greetings worked.")])
+    llm = ChatLLM(
+        [
+            code_step(OPENAI_CODE_MODE, "code", program),
+            Delta(content="Both greetings worked."),
+        ]
+    )
     parts = send(chat_session.id, user, llm, "Greet alpha and beta.")
 
     assert final_answer(parts) == "Both greetings worked."
@@ -404,6 +410,7 @@ def test_stored_values_reach_a_program_in_a_later_turn(
         first = ChatLLM(
             [
                 code_step(
+                    OPENAI_CODE_MODE,
                     "store",
                     f"greeting = await tools.{namespace}__hello(name='alpha')\n"
                     "store('greeting', {'text': greeting['result']})\n"
@@ -426,6 +433,7 @@ def test_stored_values_reach_a_program_in_a_later_turn(
         second = ChatLLM(
             [
                 code_step(
+                    OPENAI_CODE_MODE,
                     "load",
                     "print(load('greeting')['text'])\n"
                     "try:\n"
@@ -474,6 +482,7 @@ def test_stop_keeps_the_calls_a_program_made(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 f"a = await tools.{namespace}__hello(name='alpha')\nb = await tools.{namespace}__slow(name='beta')\nprint(b)\n",
             )
@@ -542,6 +551,7 @@ def test_stop_during_computation_saves_the_cancelled_program(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "busy",
                 f"await tools.{namespace}__hello(name='alpha')\nprint('looping')\nwhile True:\n    pass\n",
             )
@@ -585,7 +595,9 @@ def test_stop_during_computation_saves_the_cancelled_program(
     assert final_deltas(replayed)[0].status == "cancelled"
 
     # The sandbox replaced the killed worker: the next program runs.
-    follow_up = ChatLLM([code_step("next", "print(6 * 7)\n"), Delta(content="42.")])
+    follow_up = ChatLLM(
+        [code_step(OPENAI_CODE_MODE, "next", "print(6 * 7)\n"), Delta(content="42.")]
+    )
     assert final_answer(send(chat_session.id, user, follow_up, "Compute.")) == "42."
     assert "Output:\n42" in last_tool_text(follow_up, "next")
 
@@ -640,6 +652,7 @@ def test_a_program_generates_an_image(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "draw",
                 "images = await tools.generate_image(prompt='A dog on a rocketship')\n"
                 "print(images[0]['file_id'])\n",
@@ -679,7 +692,7 @@ def test_a_program_generates_an_image(
     assert _image_final_placements(replayed) == [0]
 
 
-def test_wait_code_collects_the_result_of_a_yielded_cell(
+def test_wait_collects_the_result_of_a_yielded_cell(
     db_session: Session,
     make_test_user: MakeTestUser,
     mcp_server_url: str,
@@ -694,12 +707,13 @@ def test_wait_code_collects_the_result_of_a_yielded_cell(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "start",
                 "print('started')\nyield_control()\n"
                 f"greeting = await tools.{namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
                 "store('greeting', greeting)\n",
             ),
-            wait_step("wait", 1),
+            wait_step(OPENAI_CODE_MODE, "wait", 1),
             Delta(content="Done."),
         ]
     )
@@ -743,7 +757,7 @@ def test_wait_code_collects_the_result_of_a_yielded_cell(
 
     follow_up = ChatLLM(
         [
-            code_step("load", "print(load('greeting')['result'])\n"),
+            code_step(OPENAI_CODE_MODE, "load", "print(load('greeting')['result'])\n"),
             Delta(content="Read."),
         ]
     )
@@ -777,6 +791,7 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "start",
                 "yield_control()\n"
                 f"greeting = await tools.{namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
@@ -831,7 +846,7 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
     )
 
 
-def test_stop_during_wait_code_stops_the_cell(
+def test_stop_during_wait_stops_the_cell(
     db_session: Session,
     make_test_user: MakeTestUser,
     mcp_server_url: str,
@@ -846,15 +861,16 @@ def test_stop_during_wait_code_stops_the_cell(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "start",
                 f"import asyncio\nawait tools.{namespace}__hello(name='alpha')\nprint('a')\n"
                 "yield_control()\nprint('b')\nawait asyncio.sleep(60)\n",
             ),
-            wait_step("wait", 1),
+            wait_step(OPENAI_CODE_MODE, "wait", 1),
         ]
     )
     started = time.monotonic()
-    # wait_code streams the output printed since the last observation.
+    # wait streams the output printed since the last observation.
     parts = send(
         chat_session.id,
         user,
@@ -930,11 +946,12 @@ def test_an_unobserved_commit_after_a_later_one_keeps_the_live_store(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "first",
                 f"yield_control()\nawait tools.{namespace}__slow(name='a')\nstore('k', 'a')\n",
             ),
-            code_step("second", "store('k', 'b')\n"),
-            code_step("live", "print(load('k'))\n"),
+            code_step(OPENAI_CODE_MODE, "second", "store('k', 'b')\n"),
+            code_step(OPENAI_CODE_MODE, "live", "print(load('k'))\n"),
             Delta(content="Done."),
         ],
         gates={2: after_cell_1_completes},
@@ -961,7 +978,10 @@ def test_an_unobserved_commit_after_a_later_one_keeps_the_live_store(
     ] == ["completed"]
 
     follow_up = ChatLLM(
-        [code_step("next", "print(load('k'))\n"), Delta(content="Read.")]
+        [
+            code_step(OPENAI_CODE_MODE, "next", "print(load('k'))\n"),
+            Delta(content="Read."),
+        ]
     )
     assert final_answer(send(chat_session.id, user, follow_up, "Read k.")) == "Read."
     assert "Output:\na" in last_tool_text(follow_up, "next")
@@ -985,6 +1005,7 @@ def test_a_server_reported_tool_error_reaches_the_program_and_the_model(
     program = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 "try:\n"
                 f"    await tools.{namespace}__deny(name='onyx')\n"
@@ -1070,7 +1091,11 @@ def test_mcp_media_results_reach_the_model_as_their_text(
     )
     program = ChatLLM(
         [
-            code_step("code", f"print(await tools.{namespace}__chart(name='q2'))\n"),
+            code_step(
+                OPENAI_CODE_MODE,
+                "code",
+                f"print(await tools.{namespace}__chart(name='q2'))\n",
+            ),
             Delta(content="Charted."),
         ]
     )
@@ -1121,6 +1146,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "find",
                 "[match] = await tool_search('say hi', limit=1)\n"
                 "print(match['name'])\n"
@@ -1138,7 +1164,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "execute_code"
+        if tool["function"]["name"] == "exec"
     ]
     assert (
         f"call each by the name in its stub):\n  - {namespace}: Greets people "
@@ -1176,7 +1202,9 @@ def test_a_program_receives_the_structured_result_of_an_mcp_tool(
         f"forecast = await tools.{namespace}__forecast(name='Oslo')\n"
         "print(type(forecast).__name__, forecast['city'], forecast['high'] + 1)\n"
     )
-    llm = ChatLLM([code_step("code", program), Delta(content="Forecasted.")])
+    llm = ChatLLM(
+        [code_step(OPENAI_CODE_MODE, "code", program), Delta(content="Forecasted.")]
+    )
     assert final_answer(send(chat_session.id, user, llm, "Forecast Oslo.")) == (
         "Forecasted."
     )
@@ -1193,7 +1221,7 @@ def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
 ) -> None:
     """An input that arrives while a tool runs waits for the next step boundary.
 
-    In code mode it arrives while `wait_code` waits for a yielded program.
+    In code mode it arrives while `wait` waits for a yielded program.
     """
     user = make_test_user("code_mode_step_input_user")
     persona, namespace = _persona_with_mcp_tool(
@@ -1207,12 +1235,13 @@ def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
     if code_mode:
         steps = [
             code_step(
+                OPENAI_CODE_MODE,
                 "start",
                 "yield_control()\n"
                 f"reply = await tools.{namespace}__slow(name='alpha')\n"
                 "print(reply['result'])\n",
             ),
-            wait_step("waited", 1),
+            wait_step(OPENAI_CODE_MODE, "waited", 1),
             Delta(content="Done."),
         ]
     else:
