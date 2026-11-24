@@ -368,6 +368,23 @@ def get_external_access_from_sharepoint(
     )
 
 
+def get_securable_external_access_from_sharepoint(
+    reader: SharepointPermissionReader,
+    site_url: str,
+    securable: SharepointSecurable,
+    permission_cache: SharepointPermissionCache | None = None,
+) -> ExternalAccess:
+    """The access that the role assignments of ``securable`` give. For a file
+    with no role assignments of its own, the securable it inherits them from
+    gives the same access as a read of the file."""
+    return _get_external_access_from_securable(
+        reader,
+        site_url,
+        securable,
+        permission_cache or SharepointPermissionCache(),
+    )
+
+
 def get_hierarchy_node_external_access_from_sharepoint(
     reader: SharepointPermissionReader,
     site_url: str,

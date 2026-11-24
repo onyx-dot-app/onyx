@@ -203,6 +203,33 @@ run, as before. The checkpoint no longer holds them. The docconversion
 Postgres pool holds a connection for each file thread of the source with the
 most threads (`docconversion_pool_size`).
 
+**SharePoint inherited permissions.** A stub listing with permission sync, a
+certificate credential and `treat_sharing_link_as_public` off reads, for each
+library, which items have role assignments of their own
+(`SharepointSourceOperations.get_library_inheritance`: SharePoint REST list
+items with `HasUniqueRoleAssignments`, one read for each 5,000 items). It keeps
+the result for one library at a time, for one listing run and at most
+`CONTAINER_ACCESS_TTL_SECONDS`. `permission_inheritance.inherited_access_sources`
+gives each file with none of its own the securable it inherits from: its
+nearest folder with its own, else the library if it has its own, else the
+site. The stub carries it in `inherited_access_from`. Conversion gives the file
+the access of that securable (`SharepointConnector._listed_file_access`): one
+read for each securable in a listing run, kept in the `RunScopedCache` of the
+run for `CONTAINER_ACCESS_TTL_SECONDS` (with no cache factory, in the connector
+object). A change to permissions in that time reaches the files that conversion
+gives the kept access only on the next listing run or permission sync, as for
+a file whose own read was made early in a run. Every other file, and every
+page, gets a read of its own, as before.
+
+The self-check reads the own permissions of about 1 in `_SELF_CHECK_ONE_IN`
+inheriting files (by a hash of the document id), and of the first
+`_SELF_CHECK_FIRST_FILES` of each run in each process. The file gets its own
+access. When the two differ, the connector logs an ERROR and turns inheritance
+off for the rest of the run: in the process, and through the run cache for the
+other workers. When the run cache cannot be reached, only the process that
+found the difference turns it off. Files converted before the difference was
+found keep the inherited access until the next run.
+
 ---
 
 ## Contracts and traps
@@ -240,13 +267,20 @@ most threads (`docconversion_pool_size`).
 8. `site-urls-full` **Site URLs must be full.** The SharePoint `sites` field
    accepts only `https` URLs with a `/sites/`, `/teams/` or `/personal/` path
    (`connectors/sharepoint/config.py:is_site_url_well_formed`).
-
-9. `sdk-client-prepared` **Build an office365 client through
+9. `inheritance-fails-closed` **A file inherits only when the read of its
+   library names a source.** `inherited_access_from` is None, and the file gets
+   a permission read of its own, when the file has role assignments of its
+   own, when it is not in the read (a newer file), when a folder above it is
+   not in the read, when the read or the read of the source fails, with a
+   client-secret credential, and with `treat_sharing_link_as_public`. A
+   sharing link breaks inheritance, so SharePoint marks the file as one with
+   its own.
+10. `sdk-client-prepared` **Build an office365 client through
    `prepare_sdk_client`.** A `GraphClient` or `ClientContext` built without it
    sends requests that take no cost from the limiter and carry no User-Agent.
    The pacer is read for each request, because the factory gives a connector
    its limiter after its credentials.
-10. `call-cost-from-url` **A new Graph call gets its cost from its URL.** Add a
+11. `call-cost-from-url` **A new Graph call gets its cost from its URL.** Add a
    pattern to `graph_call_type` when a new endpoint has a cost above 1 RU.
 
 ---

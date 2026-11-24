@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from onyx.connectors.interfaces import RunScopedCache
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
+from onyx.connectors.microsoft_utils.models import SharepointSecurable
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
 from onyx.db.enums import HierarchyNodeType
@@ -50,6 +51,32 @@ class SharepointPermissionCache(BaseModel):
     ) -> None:
         self.group_expansions[key] = expansion
 
+    # The access of a folder, a library or a site, for the files that have
+    # its role assignments and none of their own.
+    container_access: dict[str, ExternalAccess] = Field(default_factory=dict)
+    # True after the self-check found a file whose own access differs from
+    # the access it inherits: each later file reads its own.
+    inheritance_off: bool = False
+
+    def get_container_access(self, key: str) -> ExternalAccess | None:
+        return self.container_access.get(key)
+
+    def set_container_access(self, key: str, access: ExternalAccess) -> None:
+        self.container_access[key] = access
+
+    def is_inheritance_off(self) -> bool:
+        return self.inheritance_off
+
+    def turn_inheritance_off(self) -> None:
+        self.inheritance_off = True
+
+
+# The access of a folder, a library or a site is used for this long in one
+# listing run. It is short, so that a change to its permissions during a long
+# run reaches the files that the run converts later.
+CONTAINER_ACCESS_TTL_SECONDS = 600
+_CONTAINER_ACCESS_KEY_PREFIX = "sharepoint_container_access"
+_INHERITANCE_OFF_KEY = "sharepoint_inheritance_off"
 
 # A shared group expansion lives this long. Each entry is for one listing
 # run, so this only bounds the memory of a run that ends early.
@@ -93,6 +120,35 @@ class SharedSharepointPermissionCache(SharepointPermissionCache):
             GROUP_EXPANSION_TTL_SECONDS,
         )
 
+    def get_container_access(self, key: str) -> ExternalAccess | None:
+        """From the run cache only, where the entry ends after
+        CONTAINER_ACCESS_TTL_SECONDS. When the run cache cannot be reached,
+        nothing is kept: each file then reads its container again."""
+        raw = self.shared.get(f"{_CONTAINER_ACCESS_KEY_PREFIX}:{key}")
+        if raw is None:
+            return None
+        try:
+            return ExternalAccess.model_validate_json(raw)
+        except ValueError:
+            return None
+
+    def set_container_access(self, key: str, access: ExternalAccess) -> None:
+        self.shared.set(
+            f"{_CONTAINER_ACCESS_KEY_PREFIX}:{key}",
+            access.model_dump_json(),
+            CONTAINER_ACCESS_TTL_SECONDS,
+        )
+
+    def is_inheritance_off(self) -> bool:
+        """Off in this process, or in any worker of the run. When the run
+        cache cannot be reached, only this process knows: the self-check of
+        the other workers then finds a difference again on its own."""
+        return self.inheritance_off or self.shared.get(_INHERITANCE_OFF_KEY) is not None
+
+    def turn_inheritance_off(self) -> None:
+        self.inheritance_off = True
+        self.shared.set(_INHERITANCE_OFF_KEY, "1", GROUP_EXPANSION_TTL_SECONDS)
+
 
 def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001
     return ExternalAccess.empty()
@@ -123,6 +179,26 @@ def get_sharepoint_external_access(
         drive_item=drive_item,
         site_page=site_page,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
+        permission_cache=permission_cache,
+    )
+
+
+def get_sharepoint_securable_external_access(
+    reader: SharepointPermissionReader,
+    site_url: str,
+    permission_cache: SharepointPermissionCache,
+    securable: SharepointSecurable,
+) -> ExternalAccess:
+    """The access that the role assignments of ``securable`` give."""
+    get_external_access_func = fetch_versioned_implementation_with_fallback(
+        "onyx.external_permissions.microsoft_utils.sharepoint_permissions",
+        "get_securable_external_access_from_sharepoint",
+        fallback=_noop_external_access,
+    )
+    return get_external_access_func(
+        reader=reader,
+        site_url=site_url,
+        securable=securable,
         permission_cache=permission_cache,
     )
 

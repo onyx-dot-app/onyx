@@ -4,6 +4,8 @@ import html
 import os
 import re
 import threading
+import time
+import zlib
 from collections import deque
 from collections.abc import Generator, Iterable
 from datetime import datetime, timezone
@@ -64,12 +66,15 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
+from onyx.connectors.microsoft_utils.models import SharepointSecurable
 from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.microsoft_utils.sharepoint_access import (
+    CONTAINER_ACCESS_TTL_SECONDS,
     SharedSharepointPermissionCache,
     SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
+    get_sharepoint_securable_external_access,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
@@ -101,6 +106,7 @@ from onyx.connectors.sharepoint.listing import (
     site_page_stub,
 )
 from onyx.connectors.sharepoint.models import DriveChildrenPage, SharepointDrive
+from onyx.connectors.sharepoint.permission_inheritance import inherited_access_sources
 from onyx.connectors.sharepoint.source_operations import (
     CONFIG_AUTHORITY_HOST,
     CONFIG_GRAPH_API_HOST,
@@ -135,6 +141,15 @@ PERSONAL_SITE_URL_MARKER = "/personal/"
 ONEDRIVE_HOST_MARKER = "-my.sharepoint"
 
 ASPX_EXTENSION = ".aspx"
+
+# Conversion reads the access of one folder, library or site at a time under
+# one of these locks, chosen by a hash of its key.
+_CONTAINER_LOCK_COUNT = 64
+# The self-check: about one in this many files that inherit, and the first
+# _SELF_CHECK_FIRST_FILES of each listing run in each process, also get a
+# permission read of their own, which is compared with the inherited access.
+_SELF_CHECK_ONE_IN = 100
+_SELF_CHECK_FIRST_FILES = 3
 
 
 def is_site_excluded(site_url: str, excluded_site_patterns: list[str]) -> bool:
@@ -415,7 +430,10 @@ def _convert_driveitem_to_document_with_permissions(
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
     permission_cache: SharepointPermissionCache | None = None,
+    inherited_access: ExternalAccess | None = None,
 ) -> Document | ConnectorFailure | None:
+    """With ``inherited_access``, the document gets that access and the
+    file's permissions are not read."""
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
@@ -433,7 +451,9 @@ def _convert_driveitem_to_document_with_permissions(
     sections = content.sections
     staged_file_id = content.staged_file_id
 
-    if include_permissions:
+    if include_permissions and inherited_access is not None:
+        external_access = inherited_access
+    elif include_permissions:
         logger.info("Getting external access for %s", driveitem.name)
         external_access = get_sharepoint_external_access(
             reader=ops,
@@ -854,6 +874,17 @@ class SharepointConnector(
         self._permission_cache = SharepointPermissionCache()
         self._run_permission_caches: dict[str, SharedSharepointPermissionCache] = {}
         self._run_permission_caches_lock = threading.Lock()
+        self._container_locks = [threading.Lock() for _ in range(_CONTAINER_LOCK_COUNT)]
+        # The inheritance of the library that the stub listing lists now:
+        # (listing run id, site URL, list id), when it was read, and the
+        # securable of each file that inherits, by list item id. One library
+        # at a time.
+        self._library_inheritance: (
+            tuple[tuple[str, str, str], float, dict[int, SharepointSecurable]] | None
+        ) = None
+        # The self-checks that this object started, by listing run.
+        self._self_checks_started: dict[str, int] = {}
+        self._self_checks_lock = threading.Lock()
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self.authority_host = resolved_env.authority_host
@@ -1742,8 +1773,11 @@ class SharepointConnector(
         is_targeted_reindex: bool,
         permission_cache: SharepointPermissionCache,
         seen_document_ids: set[str] | None = None,
+        inherited_access: ExternalAccess | None = None,
     ) -> Generator[Document | ConnectorFailure, None, None]:
-        """Downloads one file and yields its document, or a failure. A file
+        """Downloads one file and yields its document, or a failure. With
+        ``inherited_access``, the document gets that access and the file's
+        permissions are not read. A file
         with no content yields nothing, but for a PDF or an image, and for a
         targeted reindex, which gets a failure. Safe to call from many
         threads at one time."""
@@ -1762,6 +1796,7 @@ class SharepointConnector(
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                 raw_file_callback=self.raw_file_callback,
+                inherited_access=inherited_access,
             )
 
             if isinstance(doc_or_failure, Document):
@@ -1865,7 +1900,73 @@ class SharepointConnector(
                 else drive.web_url
             ),
             listing_run_id=checkpoint.listing_run_id,
+            inherited_access_from=(
+                self._inherited_access_source(
+                    checkpoint.listing_run_id, site_url, drive, driveitem
+                )
+                if self._lists_inheritance(include_permissions)
+                else None
+            ),
         )
+
+    def _lists_inheritance(self, include_permissions: bool) -> bool:
+        """True when the stub listing reads which files have role
+        assignments of their own, so that conversion reads permissions only
+        for those. It needs SharePoint REST, so a certificate credential.
+        Not with ``treat_sharing_link_as_public``: the sharing links of a
+        file are then read for each file."""
+        return (
+            include_permissions
+            and not self.treat_sharing_link_as_public
+            and self.ops.get_auth_method().supports_sharepoint_rest
+        )
+
+    def _inherited_access_source(
+        self,
+        listing_run_id: str | None,
+        site_url: str,
+        drive: SiteDrive,
+        driveitem: DriveItemData,
+    ) -> SharepointSecurable | None:
+        """The securable whose role assignments the listed file has, when
+        the read of its library says that it has none of its own. None for a
+        read of its own: the file has its own, it is not in the read (it is
+        newer than the read), or the read failed. A new listing run reads the
+        library again, and so does a run after CONTAINER_ACCESS_TTL_SECONDS."""
+        if not drive.list_id or not driveitem.list_item_id:
+            return None
+        try:
+            list_item_id = int(driveitem.list_item_id)
+        except ValueError:
+            return None
+        key = (listing_run_id or "", site_url, drive.list_id)
+        cached = self._library_inheritance
+        if (
+            cached is None
+            or cached[0] != key
+            or time.monotonic() - cached[1] > CONTAINER_ACCESS_TTL_SECONDS
+        ):
+            sources: dict[int, SharepointSecurable] = {}
+            try:
+                sources = inherited_access_sources(
+                    self.ops.get_library_inheritance(
+                        site_url=site_url, list_id=drive.list_id
+                    ),
+                    drive.list_id,
+                )
+            except ConnectorStopSignal:
+                raise
+            except Exception as e:
+                _raise_if_throttled(e)
+                logger.warning(
+                    "Could not read which files of drive '%s' inherit their "
+                    "permissions (%s); each of its files reads its own.",
+                    drive.display_name,
+                    e,
+                )
+            cached = (key, time.monotonic(), sources)
+            self._library_inheritance = cached
+        return cached[2].get(list_item_id)
 
     def _list_site_page_stubs(
         self,
@@ -2778,6 +2879,7 @@ class SharepointConnector(
             web_url="",
             list_id=payload.list_id,
         )
+        permission_cache = self._run_permission_cache(payload)
         return next(
             self._convert_drive_item(
                 driveitem,
@@ -2786,10 +2888,103 @@ class SharepointConnector(
                 include_permissions,
                 payload.parent_hierarchy_raw_node_id,
                 is_targeted_reindex=False,
-                permission_cache=self._run_permission_cache(payload),
+                permission_cache=permission_cache,
+                inherited_access=(
+                    self._listed_file_access(payload, driveitem, permission_cache)
+                    if include_permissions
+                    else None
+                ),
             ),
             None,
         )
+
+    def _container_access(
+        self,
+        site_url: str,
+        securable: SharepointSecurable,
+        permission_cache: SharepointPermissionCache,
+    ) -> ExternalAccess | None:
+        """The access of a folder, library or site that files inherit
+        from, read one time for each CONTAINER_ACCESS_TTL_SECONDS of a run.
+        None when it cannot be read."""
+        key = (
+            f"{site_url}|{securable.kind.value}|{securable.list_id or ''}"
+            f"|{securable.item_id if securable.item_id is not None else ''}"
+        )
+        lock = self._container_locks[zlib.crc32(key.encode()) % _CONTAINER_LOCK_COUNT]
+        with lock:
+            cached = permission_cache.get_container_access(key)
+            if cached is not None:
+                return cached
+            try:
+                access = get_sharepoint_securable_external_access(
+                    self.ops, site_url, permission_cache, securable
+                )
+            except ConnectorStopSignal:
+                raise
+            except Exception as e:
+                _raise_if_throttled(e)
+                logger.warning(
+                    "Could not read the access of the %s that files inherit "
+                    "from (%s); they read their own.",
+                    securable.kind.value,
+                    e,
+                )
+                return None
+            permission_cache.set_container_access(key, access)
+            return access
+
+    def _self_check_due(self, payload: SharepointListingPayload, doc_id: str) -> bool:
+        if zlib.crc32(doc_id.encode()) % _SELF_CHECK_ONE_IN == 0:
+            return True
+        run_id = payload.listing_run_id or ""
+        with self._self_checks_lock:
+            started = self._self_checks_started.get(run_id, 0)
+            if started >= _SELF_CHECK_FIRST_FILES:
+                return False
+            self._self_checks_started[run_id] = started + 1
+            return True
+
+    def _listed_file_access(
+        self,
+        payload: SharepointListingPayload,
+        driveitem: DriveItemData,
+        permission_cache: SharepointPermissionCache,
+    ) -> ExternalAccess | None:
+        """The access of a listed file from the securable it inherits from,
+        or None for a permission read of its own in conversion.
+
+        The self-check gives some files a read of their own too. When the two
+        differ, the file gets its own access, and every later file of the run
+        reads its own (the run cache shares this with the other workers)."""
+        source = payload.inherited_access_from
+        if (
+            source is None
+            or self.treat_sharing_link_as_public
+            or permission_cache.is_inheritance_off()
+        ):
+            return None
+        inherited = self._container_access(payload.site_url, source, permission_cache)
+        if inherited is None or not self._self_check_due(payload, driveitem.id):
+            return inherited
+        own = get_sharepoint_external_access(
+            reader=self.ops,
+            site_url=payload.site_url,
+            permission_cache=permission_cache,
+            drive_item=driveitem,
+            list_id=payload.list_id,
+        )
+        if own != inherited:
+            logger.error(
+                "The permissions of %s differ from those of the %s it inherits "
+                "from (list item %s). Each later file of this listing run reads "
+                "its own permissions.",
+                payload.web_url,
+                source.kind.value,
+                source.item_id,
+            )
+            permission_cache.turn_inheritance_off()
+        return own
 
     def _convert_listed_site_page(
         self, payload: SharepointListingPayload, include_permissions: bool
