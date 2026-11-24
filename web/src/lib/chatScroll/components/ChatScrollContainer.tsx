@@ -138,6 +138,20 @@ function findTopRow(
   return null;
 }
 
+// A footer inside the scroll element (a sticky composer) covers the bottom
+// of the viewport.
+function footerHeight(contentWrapper: HTMLElement | null): number {
+  let height = 0;
+  for (
+    let sibling = contentWrapper?.nextElementSibling;
+    sibling;
+    sibling = sibling.nextElementSibling
+  ) {
+    height += sibling.getBoundingClientRect().height;
+  }
+  return height;
+}
+
 // Build a CSS mask that fades content opacity at top/bottom edges
 function buildContentMask(): string {
   // Mask uses black = visible, transparent = hidden
@@ -154,6 +168,7 @@ const ChatScrollContainer = React.memo(
         anchorSelector,
         autoScroll = true,
         pauseFollowing = false,
+        isStreaming = false,
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
@@ -212,6 +227,7 @@ const ChatScrollContainer = React.memo(
       );
       const autoScrollRef = useRef(autoScroll);
       const pauseFollowingRef = useRef(pauseFollowing);
+      const isStreamingRef = useRef(isStreaming);
       const anchorSelectorRef = useRef(anchorSelector);
       // The distance from the end at the last scroll event: a move that
       // keeps it is native anchoring, not the user.
@@ -224,6 +240,7 @@ const ChatScrollContainer = React.memo(
           onScrollButtonVisibilityChange;
         autoScrollRef.current = autoScroll;
         pauseFollowingRef.current = pauseFollowing;
+        isStreamingRef.current = isStreaming;
         sessionIdRef.current = sessionId;
         anchorSelectorRef.current = anchorSelector;
       }, [
@@ -231,6 +248,7 @@ const ChatScrollContainer = React.memo(
         autoScroll,
         sessionId,
         pauseFollowing,
+        isStreaming,
         anchorSelector,
       ]);
 
@@ -292,18 +310,10 @@ const ChatScrollContainer = React.memo(
           );
         }
         const contentEnd = endDivRef.current.offsetTop - unfilled;
-        // A footer inside the scroll element (a sticky composer) covers the
-        // bottom of the viewport.
-        let footerHeight = 0;
-        for (
-          let sibling = contentWrapperRef.current?.nextElementSibling;
-          sibling;
-          sibling = sibling.nextElementSibling
-        ) {
-          footerHeight += sibling.getBoundingClientRect().height;
-        }
         const viewportBottom =
-          container.scrollTop + container.clientHeight - footerHeight;
+          container.scrollTop +
+          container.clientHeight -
+          footerHeight(contentWrapperRef.current);
         const contentBelowViewport = contentEnd - viewportBottom;
 
         return {
@@ -479,6 +489,36 @@ const ChatScrollContainer = React.memo(
       );
 
       const scrollToNewTurn = useCallback(() => glide(true), [glide]);
+
+      // Scroll a row that the user opened just enough to show its bottom
+      // above the composer, without moving its top out of view. A view that
+      // follows a streaming reply keeps to the end instead; an idle one stops
+      // following, so the click's catch-up does not jump to the end.
+      const revealContent = useCallback((row: Element) => {
+        const container = scrollContainerRef.current;
+        if (
+          !container?.isConnected ||
+          modeRef.current === "gliding" ||
+          (modeRef.current === "following" &&
+            autoScrollRef.current &&
+            isStreamingRef.current)
+        ) {
+          return;
+        }
+        modeRef.current = "reading";
+        const viewport = container.getBoundingClientRect();
+        const rect = row.getBoundingClientRect();
+        const hiddenBelow =
+          rect.bottom -
+          (viewport.bottom - footerHeight(contentWrapperRef.current));
+        const roomAbove = rect.top - viewport.top - TURN_TOP_OFFSET_PX;
+        const delta = Math.min(hiddenBelow, roomAbove);
+        if (delta <= 0) return;
+        container.scrollBy({
+          top: delta,
+          behavior: prefersReducedMotion() ? "instant" : "smooth",
+        });
+      }, []);
 
       useEffect(
         () => () => {
@@ -827,6 +867,7 @@ const ChatScrollContainer = React.memo(
                 scrollContainerRef={scrollContainerRef}
                 contentWrapperRef={contentWrapperRef}
                 sessionId={sessionId}
+                revealContent={revealContent}
               >
                 {children}
               </ScrollContainerProvider>

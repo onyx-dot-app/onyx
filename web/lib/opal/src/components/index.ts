@@ -168,7 +168,11 @@ export {
 } from "@opal/components/tag/components";
 
 /* Fold */
-export { Fold, type FoldProps } from "@opal/components/fold/components";
+export {
+  Fold,
+  FOLD_OPEN_MS,
+  type FoldProps,
+} from "@opal/components/fold/components";
 
 /* Presence */
 export {
