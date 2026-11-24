@@ -1,0 +1,32 @@
+{
+  "mixed-400-s7|first|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 3234,
+    "index_digest": "fcefbbf51dcf2a0719634b06121683f8bfae652856af8ede2f0ba394f59c1c8b",
+    "index_documents": 400,
+    "postgres_digest": "ee58de96f502fe69b7af32d4f94a854c4cb0f3f3403fc50910c78ea15995e663"
+  },
+  "mixed-400-s7|unchanged|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 3234,
+    "index_digest": "fcefbbf51dcf2a0719634b06121683f8bfae652856af8ede2f0ba394f59c1c8b",
+    "index_documents": 400,
+    "postgres_digest": "ee58de96f502fe69b7af32d4f94a854c4cb0f3f3403fc50910c78ea15995e663"
+  },
+  "mixed-400-s7|updated|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 3118,
+    "index_digest": "536e5eb96ec3098925a7c4e036b1a9514fbe9d9316f6f5a26570d84793c7bb9b",
+    "index_documents": 400,
+    "postgres_digest": "3b86003e0e48b26f96a5f64b131f3e5179fa2e8260abd1cbfff0a9f8d77c6fd2"
+  },
+  "small-96-s7-p2|first|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 145,
+    "index_digest": "cb9b70f554dfe8a1f71faeade950806763532cd3c787b79b557c6f88be0933db",
+    "index_documents": 94,
+    "postgres_digest": "e110ac52192f53798149dd6869e4174f6f3821e563cf9486846f0d04de73ca1f"
+  },
+  "small-96-s7-p2|unchanged|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 145,
+    "index_digest": "cb9b70f554dfe8a1f71faeade950806763532cd3c787b79b557c6f88be0933db",
+    "index_documents": 94,
+    "postgres_digest": "e110ac52192f53798149dd6869e4174f6f3821e563cf9486846f0d04de73ca1f"
+  }
+}

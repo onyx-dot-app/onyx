@@ -477,3 +477,7 @@ the error type on purpose in auth code.
 - External dependency tests: `backend/tests/external_dependency_unit/indexing/`
   and `backend/tests/external_dependency_unit/db/`.
 - Integration tests: `backend/tests/integration/tests/indexing/`.
+- Throughput and memory: `backend/scripts/benchmark_docprocessing.py` runs
+  `_docprocessing_task` over a synthetic corpus with a mock model server and
+  checks the index against golden digests
+  (`backend/scripts/docprocessing_bench/README.md`).
