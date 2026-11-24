@@ -13019,6 +13019,9 @@
       "copyButton": {
         "tooltip": "Copiar conteúdo"
       },
+      "sourceButton": {
+        "tooltip": "Mostrar código-fonte"
+      },
       "downloadButton": {
         "label": "Baixar arquivo",
         "tooltip": "Baixar"
@@ -13480,10 +13483,6 @@
       "toggleButton": {
         "label": "Mostrar ou ocultar o painel"
       },
-      "downloadButton": {
-        "label": "Baixar",
-        "tooltip": "Baixar arquivo"
-      },
       "reloadButton": {
         "label": "Atualizar arquivos",
         "error": "Não foi possível recarregar os arquivos. Tente novamente."
@@ -13516,6 +13515,36 @@
       },
       "menu": {
         "label": "Exportar como…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "Atividade",
+        "needsYou": "{count, plural, one {# precisa de você} other {# precisam de você}}",
+        "running": "{count, plural, one {# agente em execução} other {# agentes em execução}}"
+      },
+      "needsYou": {
+        "title": "Precisa de você",
+        "approval": "Aprovar {tool}",
+        "question": "Responder a uma pergunta"
+      },
+      "agents": {
+        "title": "Agentes",
+        "status": {
+          "starting": "Iniciando",
+          "running": "Em execução",
+          "suspended": "Aguardando",
+          "complete": "Concluído",
+          "limit": "Limite de etapas atingido",
+          "cancelled": "Cancelado",
+          "stopped": "Parado",
+          "error": "Falhou"
+        },
+        "finished": "Agentes anteriores"
+      },
+      "files": {
+        "title": "Arquivos",
+        "viewAll": "{count, plural, one {Ver # arquivo} other {Ver todos os # arquivos}}"
       }
     }
   },

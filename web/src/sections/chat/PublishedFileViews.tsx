@@ -33,7 +33,7 @@ import {
   FilePreviewScope,
 } from "@/sections/file-preview/FilePreview";
 
-const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|avif)$/i;
 // A text tile shows the start of its file, as Craft's: files up to this size
 // load for it
 const TILE_TEXT_MAX_BYTES = 256 * 1024;
@@ -50,16 +50,17 @@ const TILE_PREVIEW_SWR_OPTIONS = {
 
 interface TextTilePreviewProps {
   file: PublishedFile;
-  markdown: boolean;
+  // How the text shows: an SVG draws as its image
+  format: "text" | "markdown" | "svg";
   // Shown when the text does not load
   fallback: ReactNode;
 }
 
 /**
- * The start of a text or markdown file as its tile's preview, scaled down as
- * Craft's. It loads once the tile nears the view.
+ * The start of a text, markdown or CSV file as its tile's preview, scaled
+ * down as Craft's, or an SVG's image. It loads once the tile nears the view.
  */
-function TextTilePreview({ file, markdown, fallback }: TextTilePreviewProps) {
+function TextTilePreview({ file, format, fallback }: TextTilePreviewProps) {
   const ref = useRef<HTMLDivElement>(null);
   const near = useInView(ref, { margin: "200px", once: true });
   const { data } = useSWR(
@@ -68,9 +69,12 @@ function TextTilePreview({ file, markdown, fallback }: TextTilePreviewProps) {
       try {
         // The preview's loader, which reads at most its format's limit
         const preview = await loadChatFilePreview(file.file_id, file.name);
-        return preview.kind === "code" || preview.kind === "markdown"
-          ? preview.text.slice(0, TILE_TEXT_CHARACTERS)
-          : null;
+        if (format === "svg" && preview.kind === "code") return preview.text;
+        if (preview.kind === "code" || preview.kind === "markdown")
+          return preview.text.slice(0, TILE_TEXT_CHARACTERS);
+        if (preview.kind === "csv")
+          return preview.sheets[0].csv.slice(0, TILE_TEXT_CHARACTERS);
+        return null;
       } catch {
         return null;
       }
@@ -87,9 +91,16 @@ function TextTilePreview({ file, markdown, fallback }: TextTilePreviewProps) {
         typeof data === "string" && "bg-background-neutral-00"
       )}
     >
-      {typeof data === "string" ? (
+      {typeof data === "string" && format === "svg" ? (
+        <div className="h-full w-full p-4">
+          <OutputImageThumbnail
+            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(data)}`}
+            fallback={<Section>{fallback}</Section>}
+          />
+        </div>
+      ) : typeof data === "string" ? (
         <div className="absolute start-0 top-0 w-[222%] origin-top-left scale-45 p-5 rtl:origin-top-right">
-          {markdown ? (
+          {format === "markdown" ? (
             <MarkdownFilePreview text={data} thumbnail />
           ) : (
             <div className="whitespace-pre-wrap">
@@ -151,8 +162,15 @@ export const PublishedFilesGrid = memo(function PublishedFilesGrid({
             ? publishedFilePath(file)
             : publishedFileLabel(file);
           const FileIcon = getFileIcon(file.name);
-          const { kind } = resolveFilePreviewFormat(file.name, file.mime_type);
-          const textKind = kind === "markdown" || kind === "code" ? kind : null;
+          const format = resolveFilePreviewFormat(file.name, file.mime_type);
+          const tileFormat =
+            format.kind === "markdown"
+              ? "markdown"
+              : format.kind === "code" && format.render === "svg"
+                ? "svg"
+                : format.kind === "code" || format.kind === "csv"
+                  ? "text"
+                  : null;
           const icon = (
             <FileIcon
               size={32}
@@ -187,10 +205,11 @@ export const PublishedFilesGrid = memo(function PublishedFilesGrid({
                       fallback={icon}
                       lazy
                     />
-                  ) : textKind !== null && file.size <= TILE_TEXT_MAX_BYTES ? (
+                  ) : tileFormat !== null &&
+                    file.size <= TILE_TEXT_MAX_BYTES ? (
                     <TextTilePreview
                       file={file}
-                      markdown={textKind === "markdown"}
+                      format={tileFormat}
                       fallback={icon}
                     />
                   ) : (
@@ -227,7 +246,7 @@ function PublishedFilePreviewContent({ file }: PublishedFilePreviewProps) {
       alignItems="stretch"
       className="outline-none"
     >
-      <FilePreviewBody preview={preview} fileName={file.name} actions={false} />
+      <FilePreviewBody preview={preview} fileName={file.name} />
     </Section>
   );
 }

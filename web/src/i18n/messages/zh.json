@@ -13019,6 +13019,9 @@
       "copyButton": {
         "tooltip": "复制内容"
       },
+      "sourceButton": {
+        "tooltip": "显示源代码"
+      },
       "downloadButton": {
         "label": "下载文件",
         "tooltip": "下载"
@@ -13480,10 +13483,6 @@
       "toggleButton": {
         "label": "显示或隐藏面板"
       },
-      "downloadButton": {
-        "label": "下载",
-        "tooltip": "下载文件"
-      },
       "reloadButton": {
         "label": "刷新文件",
         "error": "无法重新加载文件。请重试。"
@@ -13516,6 +13515,36 @@
       },
       "menu": {
         "label": "导出为…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "活动",
+        "needsYou": "{count, plural, other {# 项需要你处理}}",
+        "running": "{count, plural, other {# 个智能体运行中}}"
+      },
+      "needsYou": {
+        "title": "需要你处理",
+        "approval": "批准 {tool}",
+        "question": "回答问题"
+      },
+      "agents": {
+        "title": "智能体",
+        "status": {
+          "starting": "启动中",
+          "running": "运行中",
+          "suspended": "等待中",
+          "complete": "已完成",
+          "limit": "已达步骤上限",
+          "cancelled": "已取消",
+          "stopped": "已停止",
+          "error": "失败"
+        },
+        "finished": "之前的智能体"
+      },
+      "files": {
+        "title": "文件",
+        "viewAll": "{count, plural, other {查看全部 # 个文件}}"
       }
     }
   },

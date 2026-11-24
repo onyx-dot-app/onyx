@@ -13019,6 +13019,9 @@
       "copyButton": {
         "tooltip": "Copier le contenu"
       },
+      "sourceButton": {
+        "tooltip": "Afficher la source"
+      },
       "downloadButton": {
         "label": "Télécharger le fichier",
         "tooltip": "Télécharger"
@@ -13480,10 +13483,6 @@
       "toggleButton": {
         "label": "Afficher ou masquer le panneau"
       },
-      "downloadButton": {
-        "label": "Télécharger",
-        "tooltip": "Télécharger le fichier"
-      },
       "reloadButton": {
         "label": "Actualiser les fichiers",
         "error": "Impossible de recharger les fichiers. Réessayez."
@@ -13516,6 +13515,36 @@
       },
       "menu": {
         "label": "Exporter sous…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "Activité",
+        "needsYou": "{count, plural, one {# requiert votre action} other {# requièrent votre action}}",
+        "running": "{count, plural, one {# agent en cours} other {# agents en cours}}"
+      },
+      "needsYou": {
+        "title": "Votre action requise",
+        "approval": "Approuver {tool}",
+        "question": "Répondre à une question"
+      },
+      "agents": {
+        "title": "Agents",
+        "status": {
+          "starting": "Démarrage",
+          "running": "En cours",
+          "suspended": "En attente",
+          "complete": "Terminé",
+          "limit": "Limite d'étapes atteinte",
+          "cancelled": "Annulé",
+          "stopped": "Arrêté",
+          "error": "Échec"
+        },
+        "finished": "Agents précédents"
+      },
+      "files": {
+        "title": "Fichiers",
+        "viewAll": "{count, plural, one {Voir # fichier} other {Voir les # fichiers}}"
       }
     }
   },

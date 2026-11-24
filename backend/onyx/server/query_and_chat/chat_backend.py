@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
-from onyx.agents.models import MessageDelivery, RunStatus
+from onyx.agents.models import MessageDelivery, RunFailureKind, RunStatus
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
@@ -128,6 +128,7 @@ from onyx.db.chat_response import (
     waiting_approval_reply_ids,
 )
 from onyx.db.chat_search import search_chat_sessions
+from onyx.db.chat_subagents import load_session_agent_metadata
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     ApprovalDecidedVia,
@@ -205,6 +206,7 @@ from onyx.server.query_and_chat.models import (
     ChatSessionsResponse,
     ChatSessionSummary,
     ChatSessionUpdateRequest,
+    ChatSubagent,
     CurrentStreamInfo,
     MessageOrigin,
     PendingChatMessageRequest,
@@ -237,6 +239,7 @@ from onyx.server.usage_limits import (
 )
 from onyx.server.utils import get_json_line
 from onyx.tools.models import ToolOptions
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -1516,6 +1519,40 @@ def get_chat_session_processing_status(
             get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
         )
     return status
+
+
+@router.get("/chat-session/{session_id}/agents")
+def get_chat_session_agents(
+    session_id: UUID,
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> list[ChatSubagent]:
+    """The background agents on the selected branch, newest first."""
+    with get_session_with_current_tenant() as db_session:
+        try:
+            get_chat_session_by_id(
+                chat_session_id=session_id, user_id=user.id, db_session=db_session
+            )
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
+        selected, branch = get_selected_branch(db_session, session_id)
+    if selected is None:
+        return []
+    return [
+        ChatSubagent(
+            id=UUID(agent.id),
+            path=agent.path,
+            description=agent.description,
+            status=agent.status,
+            stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
+        )
+        for agent in load_session_agent_metadata(
+            selected.id, branch=branch, include_root=False
+        )
+        # `spawn_agent` children; Deep Research workers run in the foreground
+        if isinstance(agent.restoration_config, ChatConfiguration)
+    ]
 
 
 @router.get("/chat-session/{session_id}/resume-stream", tags=PUBLIC_API_TAGS)

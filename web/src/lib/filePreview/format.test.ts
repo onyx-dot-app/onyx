@@ -3,9 +3,21 @@ import { resolveFilePreviewFormat } from "@/lib/filePreview/format";
 test.each([
   ["script.py", "text/x-python", { kind: "code", language: "python" }],
   // HTML and SVG show their source, never a rendered page or image
-  ["page.html", "text/html", { kind: "code", language: "html" }],
-  ["logo.svg", "image/svg+xml", { kind: "code", language: "xml" }],
-  ["logo.svg", "application/octet-stream", { kind: "code", language: "xml" }],
+  [
+    "page.html",
+    "text/html",
+    { kind: "code", language: "html", render: "html" },
+  ],
+  [
+    "logo.svg",
+    "image/svg+xml",
+    { kind: "code", language: "xml", render: "svg" },
+  ],
+  [
+    "logo.svg",
+    "application/octet-stream",
+    { kind: "code", language: "xml", render: "svg" },
+  ],
   ["chart.png", "image/png", { kind: "image" }],
   ["report.pdf", "application/octet-stream", { kind: "pdf" }],
   ["data.csv", "text/plain", { kind: "csv" }],

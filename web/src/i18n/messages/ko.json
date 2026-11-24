@@ -13019,6 +13019,9 @@
       "copyButton": {
         "tooltip": "내용 복사"
       },
+      "sourceButton": {
+        "tooltip": "소스 보기"
+      },
       "downloadButton": {
         "label": "파일 다운로드",
         "tooltip": "다운로드"
@@ -13480,10 +13483,6 @@
       "toggleButton": {
         "label": "패널 표시 전환"
       },
-      "downloadButton": {
-        "label": "다운로드",
-        "tooltip": "파일 다운로드"
-      },
       "reloadButton": {
         "label": "파일 새로 고침",
         "error": "파일을 다시 불러오지 못했습니다. 다시 시도하세요."
@@ -13516,6 +13515,36 @@
       },
       "menu": {
         "label": "다른 형식으로 내보내기…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "활동",
+        "needsYou": "{count, plural, other {#개 확인 필요}}",
+        "running": "{count, plural, other {에이전트 #개 실행 중}}"
+      },
+      "needsYou": {
+        "title": "확인 필요",
+        "approval": "{tool} 승인",
+        "question": "질문에 답변"
+      },
+      "agents": {
+        "title": "에이전트",
+        "status": {
+          "starting": "시작 중",
+          "running": "실행 중",
+          "suspended": "대기 중",
+          "complete": "완료",
+          "limit": "단계 한도 도달",
+          "cancelled": "취소됨",
+          "stopped": "중지됨",
+          "error": "실패"
+        },
+        "finished": "이전 에이전트"
+      },
+      "files": {
+        "title": "파일",
+        "viewAll": "{count, plural, other {파일 #개 모두 보기}}"
       }
     }
   },

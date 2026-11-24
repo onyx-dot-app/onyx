@@ -828,6 +828,19 @@ export const useSourcesShown = () =>
   });
 
 /** Whether the open chat's right panel shows the Files list or a file. */
+/** The right panel shows Files, a file, or Sources: it is open. */
+export const useRightPanelShown = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession
+      ? showsSources(currentSession.rightPanel) ||
+          showsFiles(currentSession.rightPanel)
+      : false;
+  });
+
 export const useFilesShown = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;

@@ -9,9 +9,8 @@ import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 
 interface DocxPreviewProps {
   bytes: Uint8Array<ArrayBuffer>;
-  // The footer's actions: before the document renders, and for its text.
-  // Without them, the pages show with no footer.
-  actions?: {
+  // The footer's actions: before the document renders, and for its text
+  actions: {
     download: ReactNode;
     textActions: (text: string) => ReactNode;
   };
@@ -112,20 +111,18 @@ export function DocxPreview({ bytes, actions, onError }: DocxPreviewProps) {
           <div ref={host} className="absolute top-0 left-0 origin-top-left" />
         </div>
       </div>
-      {actions && (
-        <FloatingFooter
-          left={
-            text !== null && (
-              <Text as="p" font="main-ui-body" color="text-03">
-                {t("wordCount.label", {
-                  count: text.split(/\s+/).filter(Boolean).length,
-                })}
-              </Text>
-            )
-          }
-          right={text === null ? actions.download : actions.textActions(text)}
-        />
-      )}
+      <FloatingFooter
+        left={
+          text !== null && (
+            <Text as="p" font="main-ui-body" color="text-03">
+              {t("wordCount.label", {
+                count: text.split(/\s+/).filter(Boolean).length,
+              })}
+            </Text>
+          )
+        }
+        right={text === null ? actions.download : actions.textActions(text)}
+      />
     </>
   );
 }

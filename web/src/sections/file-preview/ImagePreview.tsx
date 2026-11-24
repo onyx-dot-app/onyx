@@ -11,17 +11,13 @@ import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 interface ImagePreviewProps {
   src: string;
   fileName: string;
-  // The footer's actions, after the size toggle. Without them, the image
-  // shows fit, with no footer.
-  actions?: ReactNode;
+  // The footer's actions, after the size toggle
+  actions: ReactNode;
   // The browser cannot draw the image, as for HEIC or TIFF
   onError: () => void;
 }
 
-/**
- * An image, fit to the preview or, with a footer, at its own size in a
- * scrolling view.
- */
+/** An image, fit to the preview or at its own size in a scrolling view. */
 export function ImagePreview({
   src,
   fileName,
@@ -64,26 +60,24 @@ export function ImagePreview({
           onError={onError}
         />
       </Section>
-      {actions !== undefined && (
-        <FloatingFooter
-          left={
-            loaded && (
-              <div className="rounded-12 bg-background-tint-00 p-1 shadow-lg">
-                <Button
-                  prominence="tertiary"
-                  size="sm"
-                  icon={actualSize ? SvgZoomOut : SvgZoomIn}
-                  aria-pressed={actualSize}
-                  onClick={() => setActualSize((value) => !value)}
-                >
-                  {t("image.actualSize.label")}
-                </Button>
-              </div>
-            )
-          }
-          right={actions}
-        />
-      )}
+      <FloatingFooter
+        left={
+          loaded && (
+            <div className="rounded-12 bg-background-tint-00 p-1 shadow-lg">
+              <Button
+                prominence="tertiary"
+                size="sm"
+                icon={actualSize ? SvgZoomOut : SvgZoomIn}
+                aria-pressed={actualSize}
+                onClick={() => setActualSize((value) => !value)}
+              >
+                {t("image.actualSize.label")}
+              </Button>
+            </div>
+          )
+        }
+        right={actions}
+      />
     </>
   );
 }

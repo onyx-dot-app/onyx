@@ -137,7 +137,7 @@ function Chat({
     null
   );
   const elements = useMemo(
-    () => ({ workspace, page, panelToggleSlot }),
+    () => ({ workspace, page, panelToggleSlot, activitySlot: null }),
     [panelToggleSlot]
   );
   return (
@@ -835,7 +835,7 @@ function Chrome({
     null
   );
   const elements = useMemo(
-    () => ({ workspace, page, panelToggleSlot }),
+    () => ({ workspace, page, panelToggleSlot, activitySlot: null }),
     [panelToggleSlot]
   );
   onRender?.();
@@ -1205,22 +1205,23 @@ test("a reload that fails says so and keeps the list", async () => {
   expect(screen.getByRole("button", { name: "Open Q3 report" })).toBeVisible();
 });
 
-test("a file tab's URL bar shows its path and downloads it", async () => {
+test("a file tab's URL bar shows its path and the preview's actions", async () => {
   renderChat([[REPORT]]);
   await act(async () => {
     screen.getByRole("button", { name: "Preview report.md" }).click();
   });
-  expect(await preview("Q3 report")).toBeVisible();
+  const shown = await preview("Q3 report");
   expect(screen.getByTestId("url-bar-pill")).toHaveTextContent("report.md");
-  // The preview draws no download of its own: the URL bar has it
+  // The actions sit in the URL bar's row, not over the preview
+  const bar = screen.getByTestId("url-bar-pill").parentElement!;
   expect(
-    within(await preview("Q3 report")).queryByRole("link", {
-      name: "Download",
-    })
-  ).toBeNull();
-  const click = jest
-    .spyOn(HTMLAnchorElement.prototype, "click")
-    .mockImplementation(() => undefined);
-  act(() => screen.getByRole("button", { name: "Download file" }).click());
-  expect(click).toHaveBeenCalledTimes(1);
+    await within(bar).findByRole("link", { name: "Download" })
+  ).toBeVisible();
+  expect(
+    within(bar).getByRole("button", { name: "Copy content" })
+  ).toBeVisible();
+  expect(
+    within(bar).getByRole("button", { name: "Show source" })
+  ).toBeVisible();
+  expect(within(shown).queryByRole("link", { name: "Download" })).toBeNull();
 });

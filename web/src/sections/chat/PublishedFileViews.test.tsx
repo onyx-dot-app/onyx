@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor, within } from "@tests/setup/test-utils";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import { fileResponse } from "@tests/setup/fileResponse";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
@@ -128,25 +135,29 @@ test("a new version of a file updates its tile in place", () => {
   expect(screen.getByRole("button", { name: "Open Q4 report" })).toBe(tile);
 });
 
-test("a file's preview shows HTML as source, without a download of its own", async () => {
+test("a file's preview renders HTML in a sandboxed frame with its own actions", async () => {
   jest
     .mocked(fetchChatFile)
     .mockResolvedValue(fileResponse(HTML, "text/html", "report.html"));
-  const view = render(
+  render(
     <PublishedFilePreview file={file("file-2", "report.html", "Q3 report")} />
   );
 
   const preview = screen.getByRole("region", { name: "Preview of Q3 report" });
-  // HTML shows as source, never as a rendered page.
-  await waitFor(() => expect(preview).toHaveTextContent(HTML));
-  expect(view.container.querySelector("iframe")).toBeNull();
+  const frame = await within(preview).findByTitle("report.html");
+  expect(frame).toHaveAttribute("sandbox", "allow-scripts");
+  expect(frame.getAttribute("srcdoc")).toMatch(
+    /^<!DOCTYPE html><meta http-equiv="Content-Security-Policy"[^>]*><h1>Quarterly report<\/h1>$/
+  );
   expect(fetchChatFile).toHaveBeenCalledWith(
     "file-2",
     false,
     expect.any(AbortSignal)
   );
-  // The panel's URL bar has the download
-  expect(within(preview).queryByRole("link", { name: "Download" })).toBeNull();
+  expect(within(preview).getByRole("link", { name: "Download" })).toBeVisible();
+  expect(
+    within(preview).getByRole("button", { name: "Show source" })
+  ).toBeVisible();
 });
 
 test("a text tile shows the start of its file once it nears the view", async () => {
@@ -177,6 +188,45 @@ test("a text tile shows the start of its file once it nears the view", async () 
   // A file past the text limit keeps its icon, and loads nothing
   expect(fetchChatFile).toHaveBeenCalledTimes(1);
   expect(fetchChatFile).toHaveBeenCalledWith("file-6", false, undefined);
+});
+
+test("an SVG tile draws its image and a CSV tile shows its rows", async () => {
+  observeAllInView();
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
+  jest
+    .mocked(fetchChatFile)
+    .mockImplementation(async (fileId) =>
+      fileId === "file-12"
+        ? fileResponse(svg, "application/octet-stream", "logo.svg")
+        : fileResponse("region,owner\nNorth,Ana\n", "text/csv", "sales.csv")
+    );
+  render(
+    <PublishedFilesGrid
+      files={[
+        { ...file("file-12", "logo.svg", null), mime_type: "" },
+        { ...file("file-13", "sales.csv", null), mime_type: "text/csv" },
+      ]}
+      unseenFileIds={[]}
+      emptyLabel="No files"
+      onOpen={jest.fn()}
+    />
+  );
+
+  const logo = screen.getByRole("button", { name: "Open logo.svg" });
+  await waitFor(() =>
+    expect(logo.querySelector("img")).toHaveAttribute(
+      "src",
+      `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+    )
+  );
+  const sales = screen.getByRole("button", { name: "Open sales.csv" });
+  await waitFor(() => expect(sales).toHaveTextContent("North,Ana"));
+
+  // A drawing the browser cannot render falls back to the file's icon
+  const drawing = logo.querySelector("img");
+  if (drawing) fireEvent.error(drawing);
+  expect(logo.querySelector("img")).toBeNull();
+  expect(logo.querySelector("svg")).not.toBeNull();
 });
 
 test("a text tile reads its file through the preview's bounded loader", async () => {

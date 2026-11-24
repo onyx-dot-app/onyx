@@ -48,6 +48,7 @@ import { requestMentions } from "@/lib/chat/mentions";
 import type {
   ChatSessionQueue,
   ChatSessionStatus,
+  ChatSubagent,
   ComposedMessage,
   Mention,
   PendingChatMessage,
@@ -649,6 +650,13 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
           toast.error(fetchErrorDetail(failure) ?? t("stopSubagentsFailed"));
         } finally {
           void mutate(status);
+          // The agents list keys by its URL first (`useChatSubagents`)
+          const agents = SWR_KEYS.chatSessionAgents(sessionId);
+          void mutate(
+            (key) => Array.isArray(key) && key[0] === agents,
+            undefined,
+            { revalidate: true }
+          );
         }
       },
     };
@@ -792,7 +800,11 @@ export function useSendChatMessageFromURL({
   // The extension navigating the embedded page without a reload.
   useEffect(() => {
     function onPageChange(event: MessageEvent) {
-      if (event.data.type !== SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) return;
+      // Only the extension that embeds the page may send prompts: a frame
+      // inside it, such as an HTML file preview, must not
+      if (window.parent === window || event.source !== window.parent) return;
+      if (!/^(chrome|moz)-extension:\/\//.test(event.origin)) return;
+      if (event.data?.type !== SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) return;
       try {
         setQueuedQuery(new URL(event.data.href).searchParams.toString());
       } catch (error) {
@@ -928,6 +940,31 @@ export function publishedFilesOf(
   const files = chatPublishedFiles(loaded, messageTree);
   publishedFilesByTree.set(messageTree, { loaded, files });
   return files;
+}
+
+/**
+ * The chat's background agents, newest first. They load again when the
+ * chat's status changes whether agents are active or which response is
+ * newest, and poll while agents are active.
+ */
+export function useChatSubagents(sessionId: string): ChatSubagent[] {
+  const { data: status } = useSWR<ChatSessionStatus, Error>(
+    SWR_KEYS.chatSessionStatus(sessionId),
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+  const active = status?.has_active_subagents ?? false;
+  const url = SWR_KEYS.chatSessionAgents(sessionId);
+  const { data } = useSWR<ChatSubagent[], Error>(
+    [url, active, status?.latest_response_id],
+    () => errorHandlingFetcher<ChatSubagent[]>(url),
+    {
+      refreshInterval: active ? SERVER_WORK_POLL_MS : 0,
+      keepPreviousData: true,
+      onErrorRetry: skipRetryOnAuthError,
+    }
+  );
+  return data ?? [];
 }
 
 /**

@@ -15,16 +15,9 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import {
-  SvgDownloadCloud,
-  SvgFiles,
-  SvgSearchMenu,
-  SvgSidebar,
-} from "@opal/icons";
+import { SvgFiles, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
-import { buildImgUrl } from "@/app/app/components/files/images/utils";
-import { downloadFile } from "@/lib/download";
 import {
   useChatSessionStore,
   useCurrentRightPanelState,
@@ -53,6 +46,7 @@ import {
 } from "@/lib/outputPanel/layout";
 import { retainedFileViewers } from "@/lib/outputPanel/tabs";
 import { getFileIcon } from "@/lib/utils";
+import { PreviewActionsSlotContext } from "@/sections/file-preview/FloatingFooter";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import { OutputPanelLayout } from "@/sections/output-panel/OutputPanelLayout";
 import {
@@ -329,6 +323,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // Reload loads the file list; an open file's tab keeps showing its file.
   // As Craft's, the button is off while the reload runs.
   const [reloading, setReloading] = useState(false);
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const reload = async () => {
     setReloading(true);
     try {
@@ -450,8 +445,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
               />
             }
             toolbar={
-              // As Craft's: reload before the search or the file's path, and
-              // a file's download after it
+              // As Craft's: reload before the search or the file's path
               shown !== RIGHT_PANEL_SOURCES_TAB && (
                 <PanelUrlBar
                   displayUrl={
@@ -471,22 +465,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                     isUserRefreshing: reloading,
                   }}
                 >
-                  {shownFile && (
-                    <Button
-                      icon={SvgDownloadCloud}
-                      prominence="tertiary"
-                      size="sm"
-                      onClick={() =>
-                        downloadFile(shownFile.name, {
-                          url: buildImgUrl(shownFile.file_id),
-                        })
-                      }
-                      tooltip={t("downloadButton.tooltip")}
-                      aria-label={t("downloadButton.tooltip")}
-                    >
-                      {t("downloadButton.label")}
-                    </Button>
-                  )}
+                  {/* The shown file's preview puts its actions here */}
+                  {shownFile && <div ref={setActionsSlot} />}
                 </PanelUrlBar>
               )
             }
@@ -541,7 +521,11 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                           "invisible pointer-events-none [content-visibility:hidden]"
                       )}
                     >
-                      <PublishedFilePreview file={file} />
+                      <PreviewActionsSlotContext.Provider
+                        value={visible ? actionsSlot : null}
+                      >
+                        <PublishedFilePreview file={file} />
+                      </PreviewActionsSlotContext.Provider>
                     </div>
                   );
                 })}

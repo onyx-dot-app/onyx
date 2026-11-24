@@ -194,6 +194,7 @@
   "GET /build/sessions/{session_id}/webapp/{path:path}": "optional_user",
   "GET /build/static-preview/{token}/{path:path}": "none",
   "GET /build/user-library/tree": "basic",
+  "GET /chat/chat-session/{session_id}/agents": "read:chat +anonymous",
   "GET /chat/chat-session/{session_id}/pending-messages": "read:chat",
   "GET /chat/chat-session/{session_id}/resume-stream": "read:chat +anonymous",
   "GET /chat/chat-session/{session_id}/status": "read:chat +anonymous",

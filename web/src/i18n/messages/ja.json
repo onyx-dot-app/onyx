@@ -13019,6 +13019,9 @@
       "copyButton": {
         "tooltip": "内容をコピー"
       },
+      "sourceButton": {
+        "tooltip": "ソースを表示"
+      },
       "downloadButton": {
         "label": "ファイルをダウンロード",
         "tooltip": "ダウンロード"
@@ -13480,10 +13483,6 @@
       "toggleButton": {
         "label": "パネルの表示を切り替え"
       },
-      "downloadButton": {
-        "label": "ダウンロード",
-        "tooltip": "ファイルをダウンロード"
-      },
       "reloadButton": {
         "label": "ファイルを更新",
         "error": "ファイルを再読み込みできませんでした。もう一度お試しください。"
@@ -13516,6 +13515,36 @@
       },
       "menu": {
         "label": "形式を指定してエクスポート…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "アクティビティ",
+        "needsYou": "{count, plural, other {#件の対応が必要}}",
+        "running": "{count, plural, other {#個のエージェントが実行中}}"
+      },
+      "needsYou": {
+        "title": "対応が必要",
+        "approval": "{tool}を承認",
+        "question": "質問に回答"
+      },
+      "agents": {
+        "title": "エージェント",
+        "status": {
+          "starting": "開始中",
+          "running": "実行中",
+          "suspended": "待機中",
+          "complete": "完了",
+          "limit": "ステップ上限に到達",
+          "cancelled": "キャンセル済み",
+          "stopped": "停止済み",
+          "error": "失敗"
+        },
+        "finished": "以前のエージェント"
+      },
+      "files": {
+        "title": "ファイル",
+        "viewAll": "{count, plural, other {#件のファイルをすべて表示}}"
       }
     }
   },

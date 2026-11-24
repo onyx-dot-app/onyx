@@ -287,7 +287,7 @@ export function PanelTabStrip({
               justifyContent="start"
               height="auto"
               gap={1}
-              className="min-w-full [&>*]:min-w-16 [&>*]:shrink"
+              className="min-w-full [&>*]:min-w-28 [&>*]:shrink"
             >
               <SortableContext
                 items={sortableIds}

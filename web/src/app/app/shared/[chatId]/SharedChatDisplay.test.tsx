@@ -127,7 +127,7 @@ function SharedChatInWorkspace({
     null
   );
   const elements = useMemo(
-    () => ({ workspace, page, panelToggleSlot }),
+    () => ({ workspace, page, panelToggleSlot, activitySlot: null }),
     [panelToggleSlot]
   );
   return (

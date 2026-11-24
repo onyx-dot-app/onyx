@@ -84,7 +84,7 @@ function PreviewModalContent({
           description={description}
           onClose={onClose}
         />
-        <FilePreviewBody preview={preview} fileName={displayName} actions />
+        <FilePreviewBody preview={preview} fileName={displayName} />
       </Modal.Content>
     </Modal>
   );
