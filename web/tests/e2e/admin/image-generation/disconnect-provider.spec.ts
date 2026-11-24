@@ -1,6 +1,7 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { AdminImageGenerationPage } from "@tests/e2e/pages/AdminImageGenerationPage";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const IMAGE_GENERATION_URL = ADMIN_ROUTES.IMAGE_GENERATION.path;
@@ -142,7 +143,7 @@ test.describe("Image Generation Provider Disconnect", () => {
 
     // A non-default model disconnects at once, with no confirmation
     await disconnectButton.click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(new AdminImageGenerationPage(page).dialog).toHaveCount(0);
 
     // Legacy cards show only while connected
     await expect(card).toHaveCount(0, { timeout: 10000 });
@@ -188,7 +189,7 @@ test.describe("Image Generation Provider Disconnect", () => {
 
     // The default disconnects at once too; no replacement is asked for.
     await deleteRequest;
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(new AdminImageGenerationPage(page).dialog).toHaveCount(0);
   });
 
   test("should not show disconnect button for unconfigured providers", async ({
@@ -202,9 +203,10 @@ test.describe("Image Generation Provider Disconnect", () => {
     });
 
     // gpt-image-2 on the LLM provider is not connected — no disconnect button
-    const card = page.getByLabel("image-gen-model-5-gpt-image-2", {
-      exact: true,
-    });
+    const card = new AdminImageGenerationPage(page).availableModelCard(
+      5,
+      "gpt-image-2"
+    );
     await card.waitFor({ state: "visible", timeout: 10000 });
 
     const disconnectButton = card.getByRole("button", {

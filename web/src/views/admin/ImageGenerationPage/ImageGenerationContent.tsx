@@ -40,7 +40,7 @@ import {
 } from "@opal/layouts";
 import { SvgDisconnected, SvgEmpty } from "@opal/illustrations";
 import { SvgArrowExchange, SvgCheckCircle } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { resolveModelDisplayName } from "@/lib/languageModels/hooks";
@@ -60,8 +60,8 @@ function linkedModelTitle(
 
 interface AvailableModelCardProps {
   icon: IconFunctionComponent;
-  title: string;
-  description: string;
+  title: string | RichStr;
+  description: string | RichStr;
   ariaLabel: string;
   /** Already connected: a filled card that says so. */
   connected: boolean;

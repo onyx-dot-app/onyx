@@ -15,8 +15,12 @@ export class AdminImageGenerationPage {
     });
   }
 
+  /** A provider's header under Add Models. Model cards also show the
+   *  provider's name, as their description, so this matches titles only. */
   providerTitle(name: string): Locator {
-    return this.page.getByText(name, { exact: true });
+    return this.page
+      .locator("[data-opal-content-title]")
+      .filter({ hasText: name });
   }
 
   get recommendedTab(): Locator {
