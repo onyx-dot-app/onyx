@@ -193,14 +193,9 @@ function Preferences() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Only the latest read or change may set `prefs`: reads can finish out
+  // Only the latest read may set `prefs`: reads can finish out
   // of order.
   const generation = useRef(0);
-
-  function updatePrefs(change: (p: Prefs | null) => Prefs | null) {
-    generation.current += 1;
-    setPrefs(change);
-  }
 
   async function reload() {
     const current = ++generation.current;
@@ -246,14 +241,14 @@ function Preferences() {
   async function onLaunchAtLogin(enabled: boolean) {
     await run(async () => {
       await setLaunchAtLogin(enabled);
-      updatePrefs((p) => (p ? { ...p, launchAtLogin: enabled } : p));
+      await reload();
     });
   }
 
   async function onNotifyAnswers(enabled: boolean) {
     await run(async () => {
       await setNotifyAnswers(enabled);
-      updatePrefs((p) => (p ? { ...p, notifyAnswers: enabled } : p));
+      await reload();
     });
   }
 

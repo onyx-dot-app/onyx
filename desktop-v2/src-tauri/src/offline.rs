@@ -800,6 +800,11 @@ fn webview_failed(app: &AppHandle, uri: &str, known: Option<Unreachable>) {
         return;
     }
     let path = path_of(&url);
+    // At once, before the check below: a recovery meanwhile must not show
+    // the failed page again.
+    if let Some(p) = app.state::<Offline>().pending().as_mut() {
+        p.keep_page = false;
+    }
     let load = app.state::<Offline>().loads().current();
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
