@@ -12201,6 +12201,10 @@
         "copyButton": {
           "copiedLabel": "Copied!",
           "label": "Copy"
+        },
+        "wrapButton": {
+          "unwrapLabel": "Unwrap",
+          "wrapLabel": "Wrap"
         }
       },
       "customTool": {
