@@ -125,14 +125,14 @@ export const FilePreviewBody = memo(function FilePreviewBody({
           <Button
             icon={showSource ? SvgEye : SvgCode}
             prominence="tertiary"
-            size="xs"
+            size="sm"
             tooltip={switchLabel}
             aria-label={switchLabel}
             onClick={() => setShowSource((value) => !value)}
           />
         )}
         <CopyButton
-          size="xs"
+          size="sm"
           tooltip={t("copyButton.tooltip")}
           aria-label={t("copyButton.tooltip")}
           getCopyText={() => text}
