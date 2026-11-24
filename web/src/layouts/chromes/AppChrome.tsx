@@ -141,7 +141,7 @@ function Header() {
           <RootLayout.Header>
             {/* The header keeps out of the room for the chat's right panel
                 toggle while the toggle sits over the header's end */}
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4 pe-[max(0.5rem,var(--panel-toggle-reserve))] sm:pe-[max(1rem,var(--panel-toggle-reserve))]">
+            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4 pe-[max(0.5rem,var(--panel-toggle-reserve))] sm:pe-[max(1rem,var(--panel-toggle-reserve))] transition-[padding] ease-in-out duration-300 motion-reduce:transition-none">
               {/*
           Left:
           - (mobile) sidebar toggle
@@ -375,6 +375,7 @@ export interface AppChromeProps {
 
 // The room the page's content keeps for the chat's right panel toggle. The
 // page sets it to zero while the toggle is not in its slot over the page.
+// Its users ease the change with the panel's slide.
 const WORKSPACE_STYLE = {
   "--panel-toggle-reserve": `${PANEL_TOGGLE_RESERVE}px`,
 };

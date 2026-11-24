@@ -201,7 +201,7 @@ export default function SharedChatDisplay({
       <div className="flex flex-col h-full w-full overflow-hidden">
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
           {/* The end padding keeps the text clear of the panel toggle */}
-          <div className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 ps-8 pe-[max(2rem,var(--panel-toggle-reserve))] py-4">
+          <div className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 ps-8 pe-[max(2rem,var(--panel-toggle-reserve))] py-4 transition-[padding] ease-in-out duration-300 motion-reduce:transition-none">
             <Text as="p" font="heading-headline" color="text-04">
               {chatSession.description || t("header.untitledChat.title")}
             </Text>
