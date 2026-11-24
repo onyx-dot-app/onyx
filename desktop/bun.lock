@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "onyx-desktop-v2",
+      "name": "onyx-desktop",
       "dependencies": {
         "@tauri-apps/api": "2.12.5",
         "react": "19.2.8",

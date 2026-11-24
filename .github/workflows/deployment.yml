@@ -728,22 +728,34 @@ jobs:
             gh api -H "Accept: application/octet-stream" "repos/${GITHUB_REPOSITORY}/releases/assets/${id}"
           }
           entry() {
+            local sig
+            sig=$(signature "$1") || return 1
             jq -n --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/$1" \
-              --arg sig "$(signature "$1")" '{url: $url, signature: $sig}'
+              --arg sig "${sig}" '{url: $url, signature: $sig}'
           }
           MAC=$(entry Onyx_universal.app.tar.gz)
+          WIN=$(entry Onyx_x64.exe)
+          WIN_ARM=$(entry Onyx_arm64.exe)
+          LINUX=$(entry Onyx_amd64.AppImage)
           jq -n --arg v "${VERSION}" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg notes "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
             --argjson mac "${MAC}" \
-            --argjson win "$(entry Onyx_x64.exe)" \
-            --argjson winarm "$(entry Onyx_arm64.exe)" \
-            --argjson linux "$(entry Onyx_amd64.AppImage)" \
+            --argjson win "${WIN}" \
+            --argjson winarm "${WIN_ARM}" \
+            --argjson linux "${LINUX}" \
             '{version: $v, notes: $notes, pub_date: $date, platforms: {
                "darwin-aarch64": $mac, "darwin-x86_64": $mac,
                "windows-x86_64": $win, "windows-aarch64": $winarm,
                "linux-x86_64": $linux}}' > "${RUNNER_TEMP}/latest.json"
           cat "${RUNNER_TEMP}/latest.json"
-          gh release upload "${TAG}" "${RUNNER_TEMP}/latest.json" --clobber --repo "${GITHUB_REPOSITORY}"
+          # By release ID: the tag of a draft release does not exist yet.
+          OLD=$(jq -r '.[] | select(.name == "latest.json") | .id' <<< "${ASSETS}")
+          if [ -n "${OLD}" ]; then
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${OLD}"
+          fi
+          UPLOAD_URL=$(jq -r '.upload_url' <<< "${RELEASE}" | sed 's/{.*}$//')
+          gh api --method POST "${UPLOAD_URL}?name=latest.json" \
+            -H "Content-Type: application/json" --input "${RUNNER_TEMP}/latest.json" > /dev/null
 
   build-web-amd64:
     needs:
