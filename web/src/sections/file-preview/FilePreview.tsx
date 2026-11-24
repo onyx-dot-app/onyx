@@ -13,7 +13,7 @@ import { SWRConfig } from "swr";
 import { useTranslations } from "next-intl";
 import { Button, CopyButton, OnyxLoader, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgCode } from "@opal/icons";
+import { SvgCode, SvgEye } from "@opal/icons";
 import type { ChatFilePreviewState } from "@/lib/filePreview/hooks";
 import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 import { DownloadButton } from "@/sections/file-preview/DownloadButton";
@@ -115,15 +115,18 @@ export const FilePreviewBody = memo(function FilePreviewBody({
     const download = (
       <DownloadButton fileUrl={preview.url} fileName={data.name} />
     );
+    const switchLabel = t(
+      showSource ? "previewButton.tooltip" : "sourceButton.tooltip"
+    );
     const textActions = (text: string, rendered = false) => (
       <Section flexDirection="row" width="fit" gap={0}>
         {rendered && (
+          // Names the view it switches to: the source, or back to the preview
           <Button
-            icon={SvgCode}
+            icon={showSource ? SvgEye : SvgCode}
             prominence="tertiary"
-            tooltip={t("sourceButton.tooltip")}
-            aria-label={t("sourceButton.tooltip")}
-            aria-pressed={showSource}
+            tooltip={switchLabel}
+            aria-label={switchLabel}
             onClick={() => setShowSource((value) => !value)}
           />
         )}

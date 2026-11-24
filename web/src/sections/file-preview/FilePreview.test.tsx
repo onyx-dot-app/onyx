@@ -229,10 +229,9 @@ describe("text formats", () => {
       '<h1 class="x">Report</h1>'
     );
     expect(screen.getByText("2 lines")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Show source" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.queryByRole("button", { name: "Show source" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show preview" }));
+    expect(view.container.querySelector("iframe")).not.toBeNull();
   });
 
   test("SVG renders as an image and toggles to its source", async () => {

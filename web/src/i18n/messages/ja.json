@@ -13022,6 +13022,9 @@
       "sourceButton": {
         "tooltip": "ソースを表示"
       },
+      "previewButton": {
+        "tooltip": "プレビューを表示"
+      },
       "downloadButton": {
         "label": "ファイルをダウンロード",
         "tooltip": "ダウンロード"

@@ -13022,6 +13022,9 @@
       "sourceButton": {
         "tooltip": "소스 보기"
       },
+      "previewButton": {
+        "tooltip": "미리보기 표시"
+      },
       "downloadButton": {
         "label": "파일 다운로드",
         "tooltip": "다운로드"

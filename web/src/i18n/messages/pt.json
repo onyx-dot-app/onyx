@@ -13022,6 +13022,9 @@
       "sourceButton": {
         "tooltip": "Mostrar código-fonte"
       },
+      "previewButton": {
+        "tooltip": "Mostrar pré-visualização"
+      },
       "downloadButton": {
         "label": "Baixar arquivo",
         "tooltip": "Baixar"

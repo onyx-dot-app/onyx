@@ -13022,6 +13022,9 @@
       "sourceButton": {
         "tooltip": "显示源代码"
       },
+      "previewButton": {
+        "tooltip": "显示预览"
+      },
       "downloadButton": {
         "label": "下载文件",
         "tooltip": "下载"
