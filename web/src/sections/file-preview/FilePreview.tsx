@@ -119,20 +119,20 @@ export const FilePreviewBody = memo(function FilePreviewBody({
       showSource ? "previewButton.tooltip" : "sourceButton.tooltip"
     );
     const textActions = (text: string, rendered = false) => (
-      <Section flexDirection="row" width="fit" gap={0}>
+      <Section flexDirection="row" width="fit" gap={1}>
         {rendered && (
           // Names the view it switches to: the source, or back to the preview
           <Button
             icon={showSource ? SvgEye : SvgCode}
             prominence="tertiary"
-            size="md"
+            size="xs"
             tooltip={switchLabel}
             aria-label={switchLabel}
             onClick={() => setShowSource((value) => !value)}
           />
         )}
         <CopyButton
-          size="md"
+          size="xs"
           tooltip={t("copyButton.tooltip")}
           aria-label={t("copyButton.tooltip")}
           getCopyText={() => text}

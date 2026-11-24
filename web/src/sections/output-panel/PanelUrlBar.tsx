@@ -41,7 +41,8 @@ export function PanelUrlBar({
           <Button
             icon={refresh.isUserRefreshing ? IconLoader : SvgRevert}
             prominence="tertiary"
-            size="md"
+            // Small icons, for the bar's small text
+            size="xs"
             disabled={
               !refresh.onRefresh ||
               refresh.isRefreshing ||
@@ -53,9 +54,8 @@ export function PanelUrlBar({
             aria-busy={refresh.isRefreshing || refresh.isUserRefreshing}
           />
         )}
-        {/* As tall as the md buttons beside it (28px). A search field
-            brings its own 8px inset, the one the location text gets from the
-            pill. */}
+        {/* As tall as the panel's tabs (28px). A search field brings its
+            own 8px inset, the one the location text gets from the pill. */}
         <div
           data-testid="url-bar-pill"
           className={cn(
