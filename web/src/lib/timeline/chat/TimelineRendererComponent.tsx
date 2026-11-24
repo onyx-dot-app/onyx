@@ -23,7 +23,7 @@ export interface TimelineRendererResult extends RendererResult {
   isLastStep: boolean;
   /** Hover state from parent */
   isHover: boolean;
-  /** Whether parent should wrap with StepContainer or render raw content */
+  /** Whether parent should wrap with RunStep or render raw content */
   timelineLayout: "timeline" | "content";
 }
 

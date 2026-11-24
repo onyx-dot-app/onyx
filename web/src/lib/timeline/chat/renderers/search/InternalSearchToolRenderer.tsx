@@ -44,9 +44,9 @@ const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
  * - FULL: Shows 1 combined timeline step (queries + results together).
  *         Used when step is expanded in timeline.
  * - COMPACT: Shows only results (no queries). Header passed as `status` prop.
- *            Used when step is collapsed in timeline, still wrapped in StepContainer.
+ *            Used when step is collapsed in timeline, still wrapped in RunStep.
  * - HIGHLIGHT: Shows only results with header embedded directly in content.
- *              No StepContainer wrapper. Used for parallel streaming preview.
+ *              No RunStep wrapper. Used for parallel streaming preview.
  * - INLINE: Phase-based (queries -> results) for collapsed streaming view.
  */
 export const InternalSearchToolRenderer: MessageRenderer<
@@ -99,7 +99,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
     ]);
   }
 
-  // HIGHLIGHT mode: header embedded in content, no StepContainer
+  // HIGHLIGHT mode: header embedded in content, no RunStep
   if (isHighlight) {
     return children([
       {

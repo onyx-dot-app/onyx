@@ -161,7 +161,6 @@ export function RunCard<S extends RunCardStep>({
     <Presence show={visible} appear={arrivedLive} grow>
       <TimelineRoot>
         <Line
-          flavour="card"
           // Filled while open; otherwise only on hover, as a step card is.
           filled={isOpen}
           onClick={foldable ? toggle : undefined}

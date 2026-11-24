@@ -11,7 +11,7 @@ export interface TimelineStepComposerProps {
   isLastStep: boolean;
   /** Whether the overall step is the first in the timeline (affects connector). */
   isFirstStep: boolean;
-  /** Whether StepContainer should show collapse controls. */
+  /** Whether RunStep should show collapse controls. */
   collapsible?: boolean;
   /** The step's status; it decides the first row's icon and failed tint. */
   status?: TimelineEntryStatus;

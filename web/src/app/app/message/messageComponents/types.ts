@@ -18,7 +18,7 @@ export enum RenderType {
 
 /**
  * Controls whether a renderer expects to be wrapped by timeline UI.
- * - timeline: parent should render StepContainer around the result.
+ * - timeline: parent should render RunStep around the result.
  * - content: renderer already contains its own layout (headers/containers).
  */
 export type TimelineLayout = "timeline" | "content";

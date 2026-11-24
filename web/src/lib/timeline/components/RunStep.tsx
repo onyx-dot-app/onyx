@@ -72,7 +72,6 @@ export function RunStep({
 
   return (
     <Line
-      flavour="card"
       icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
       title={shownTitle ?? ""}
       titleKey={titleKey}

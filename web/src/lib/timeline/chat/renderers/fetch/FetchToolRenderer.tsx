@@ -47,9 +47,9 @@ const documentToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
  * - FULL: Shows all details (URLs being opened + reading). Header passed as `status` prop.
  *         Used when step is expanded in timeline.
  * - COMPACT: Shows only reading (no URL list). Header passed as `status` prop.
- *            Used when step is collapsed in timeline, still wrapped in StepContainer.
+ *            Used when step is collapsed in timeline, still wrapped in RunStep.
  * - HIGHLIGHT: Shows URL list with header embedded directly in content.
- *              No StepContainer wrapper. Used for parallel streaming preview.
+ *              No RunStep wrapper. Used for parallel streaming preview.
  */
 export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   packets,
@@ -91,7 +91,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         ]
       : urls.map(urlToSourceInfo);
 
-  // HIGHLIGHT mode: header embedded in content, no StepContainer
+  // HIGHLIGHT mode: header embedded in content, no RunStep
   if (isHighlight) {
     return children([
       {

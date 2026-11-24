@@ -21,27 +21,15 @@
   @apply ps-7 pe-1 pb-1;
 }
 
-/* `content` pads only the start, to sit under the content, flush with the
-   row: a step's row hovers without a fill, so nothing needs a gap. */
-.opal-line .opal-line-body[data-opal-line-body-inset="content"] {
-  @apply pe-0 pb-0;
-}
-
-/* A step's row (a `Collapsible.Header` with `hover="subtle"`) toggles it:
-   on hover, the title and a default icon darken, with no fill. The colours
+/* A card's title darkens while its header is hovered (below). The colours
    and timing are `Interactive`'s tertiary default: `text-03` at rest,
-   `text-04` on hover, over `--duration-interactive`, together. */
+   `text-04` on hover, over `--duration-interactive`. */
 .opal-line-title {
   @apply min-w-0 text-text-03;
 }
 .opal-line-title,
 .opal-line .opal-line-icon {
   transition: color var(--duration-interactive) ease-in-out;
-}
-.opal-line[data-opal-line-status="default"]
-  .opal-collapsible-header[data-hover="subtle"]:hover
-  :is(.opal-line-title, .opal-line-icon) {
-  @apply text-text-04;
 }
 
 /* A card's own title (`title`): the icon box and the title inline, as
@@ -112,14 +100,6 @@
 .opal-line:not([data-opal-line-status="default"]) .opal-line-icon,
 .opal-line:not([data-opal-line-status="default"]) .opal-line-title {
   color: var(--opal-line-status-fg);
-}
-
-/* On hover, an error row's red deepens to the strongest danger step. The
-   other statuses have no step above -05, so they keep their colour. */
-.opal-line[data-opal-line-status="error"]
-  .opal-collapsible-header[data-hover="subtle"]:hover
-  :is(.opal-line-title, .opal-line-icon) {
-  color: var(--action-danger-06);
 }
 
 .opal-line[data-opal-line-weight="heavy"][data-opal-line-status="info"] {
