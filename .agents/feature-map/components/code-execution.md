@@ -752,11 +752,21 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     raises otherwise. The code mode tools are `DIRECT` too. MCP functions are
     named from `mcp__<server id>__<server>__<tool>`
     (`MCPTool.code_mode_function_name`), converted to a Python identifier
-    that stays unique among the turn's functions; the description names the
-    namespaces of deferred functions (an MCP tool's is its server) as tool
-    groups in one fixed paragraph. Programs call
-    every function through the `tools` namespace, `await tools.f(...)`: a
-    module that every program imports
+    that stays unique among the turn's functions. The description lists each
+    namespace of deferred functions on one line with the first line of its
+    description (`CodeModeFunctionName.namespace_description`, set by the
+    group's owner: a fixed line for a built-in group such as `artifacts`, the
+    integration's description for an MCP server), cut to 250 characters.
+    Built-in namespaces come first, then those of integrations (tools with
+    `integration_action`), each sorted by name. The lines fit 4 KiB: names
+    take the budget first, then descriptions in that order, so an MCP
+    server's description is cut before a built-in one. When the names alone
+    do not fit, the list keeps the first ones and counts the rest in a last
+    line. Deferred functions without a namespace (OpenAPI actions) get one
+    closing line
+    (`tools/tool_implementations/code_mode/prompt.py:_deferred_note`).
+    Programs call every function through the `tools` namespace,
+    `await tools.f(...)`: a module that every program imports
     (`tools/tool_implementations/code_mode/sandbox.py:TOOLS_NAMESPACE`), which
     the program's stubs declare as `class tools`, so the type checker checks
     each call. Bare names stay free for the program's own functions, and a

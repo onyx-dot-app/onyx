@@ -894,9 +894,10 @@ class _ArtifactTool(SandboxTool):
     the user's own root chats that are not deleted
     (`db/chat.py:get_user_published_files`), this chat included. In code mode
     they are the deferred group `artifacts`, which tool_search finds; the
-    model learns of them from the publish_files description, not the system
-    prompt. Running a call again changes nothing, so a call that a lost server
-    left running runs again."""
+    model learns of them from the publish_files description and the group's
+    line in the execute_code description, not the system prompt. Running a
+    call again changes nothing, so a call that a lost server left running
+    runs again."""
 
     USE = None
     interrupted_result = None
@@ -909,7 +910,12 @@ class _ArtifactTool(SandboxTool):
 
     @property
     def code_mode_function_name(self) -> CodeModeFunctionName:
-        return CodeModeFunctionName(name=self.CODE_MODE_NAME, namespace="artifacts")
+        return CodeModeFunctionName(
+            name=self.CODE_MODE_NAME,
+            namespace="artifacts",
+            namespace_description="Find and download the files that you published "
+            "in this chat and the user's other chats.",
+        )
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:

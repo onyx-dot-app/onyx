@@ -736,7 +736,10 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
         for tool in llm.requests[0]["tools"]
         if tool["function"]["name"] == "execute_code"
     ]
-    assert "the tool group `artifacts`" in description
+    assert (
+        "\n  - artifacts: Find and download the files that you published in this "
+        "chat and the user's other chats.\n" in description
+    )
     assert "artifacts__download" not in description
     text = last_tool_text(llm, "code")
     assert "'artifacts__download'" in text

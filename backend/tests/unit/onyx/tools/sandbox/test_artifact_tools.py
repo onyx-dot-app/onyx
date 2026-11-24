@@ -50,8 +50,10 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
         [tool(turn) for tool in sandbox_tools_for_model(["gpt-5.1"])]
     )
 
-    assert stubs.deferred_namespaces == ["artifacts"]
-    assert not stubs.has_deferred_functions_without_namespace
+    assert stubs.deferred_namespaces == {
+        "artifacts": "Find and download the files that you published in this "
+        "chat and the user's other chats."
+    }
     assert {
         name for name, function in stubs.functions.items() if function.deferred
     } == {"artifacts__list", "artifacts__download"}

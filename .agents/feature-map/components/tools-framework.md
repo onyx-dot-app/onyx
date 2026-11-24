@@ -144,10 +144,11 @@ comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
 Code mode reads these `Tool` members: `code_mode_exposure` (abstract: `DIRECT`,
 `IMMEDIATE` or `DEFERRED`; a tool with `result_from_children` must be
 `DIRECT`), `code_mode_function_name` (MCP tools add their server as a
-namespace) and `code_mode_result` (the value and stub type a program
-receives); see [[code-execution]]. A tool that must not run twice sets
-`interrupted_result`: on restore, the runtime saves it as the result of a call
-that a lost execution owner left running (`agents/tools.py:AgentTool`).
+namespace and the integration's description as `namespace_description`)
+and `code_mode_result` (the value and stub type a program receives); see
+[[code-execution]]. A tool that must not run twice sets `interrupted_result`:
+on restore, the runtime saves it as the result of a call that a lost
+execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
 `inner_call_hint` answers a call of such a tool as a tool of its own: the
