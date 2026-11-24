@@ -17,7 +17,11 @@ const PRIVATE_SUFFIXES = [".local", ".internal", ".lan", ".home", ".corp"];
  * loopback, private and link-local IP addresses.
  */
 function isPrivateHost(host: string): boolean {
-  const name = host.toLowerCase().replace(/^\[|\]$/g, "");
+  // Without IPv6 brackets or a terminal DNS dot (`payroll.internal.`).
+  const name = host
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.+$/, "");
   if (name === "localhost" || name.endsWith(".localhost")) return true;
   if (PRIVATE_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
   if (name.includes(":")) {
