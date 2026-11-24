@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import type { IconFunctionComponent } from "@opal/types";
 import { Line, Presence, Text } from "@opal/components";
 import { formatDurationSeconds } from "@opal/time";
 import { useTranslations } from "next-intl";
@@ -52,6 +53,8 @@ export interface RunCardProps<S extends RunCardStep> {
   durationSeconds?: number;
   /** The finished header's text, in place of the duration. */
   doneText?: string;
+  /** An icon before the finished header's text. */
+  doneIcon?: IconFunctionComponent;
   summary?: RunCardSummary;
 }
 
@@ -71,6 +74,7 @@ export function RunCard<S extends RunCardStep>({
   streamingStartTime,
   durationSeconds,
   doneText,
+  doneIcon,
   summary,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
@@ -219,6 +223,7 @@ export function RunCard<S extends RunCardStep>({
               <CompletedHeader
                 processingDurationSeconds={finishedSeconds}
                 text={doneText}
+                icon={doneIcon}
               />
             )}
           </Presence.Swap>

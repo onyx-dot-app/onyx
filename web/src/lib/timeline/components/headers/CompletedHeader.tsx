@@ -5,7 +5,8 @@ import { SvgAddLines, SvgMaximize2 } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
-import { ContentAction, Section } from "@opal/layouts";
+import { Content, ContentAction, Section } from "@opal/layouts";
+import type { IconFunctionComponent } from "@opal/types";
 import { formatDurationSeconds } from "@opal/time";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@opal/components";
@@ -103,6 +104,8 @@ export interface CompletedHeaderProps {
   processingDurationSeconds?: number;
   /** Shown in place of the duration. */
   text?: string;
+  /** An icon before the text. */
+  icon?: IconFunctionComponent;
 }
 
 /** The finished run's title: how long it took, for every run. A saved
@@ -110,6 +113,7 @@ export interface CompletedHeaderProps {
 export function CompletedHeader({
   processingDurationSeconds = 0,
   text,
+  icon,
 }: CompletedHeaderProps) {
   const t = useTranslations("chat.messages.timeline");
 
@@ -129,9 +133,18 @@ export function CompletedHeader({
       height="fit"
       className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
     >
-      <Text as="p" font="main-ui-action" color="text-03">
-        {durationText}
-      </Text>
+      {icon ? (
+        <Content
+          font="main-ui-action"
+          icon={icon}
+          title={durationText}
+          titleColor="text-03"
+        />
+      ) : (
+        <Text as="p" font="main-ui-action" color="text-03">
+          {durationText}
+        </Text>
+      )}
     </Section>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Presence } from "@opal/components";
+import { SvgZap } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
@@ -164,6 +165,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         awaitingUser !== null ? headerText : t("header.doingWork.label")
       }
       doneText={t("header.didWork.label")}
+      doneIcon={SvgZap}
       isActive={isActive}
       isStopped={stopPacketSeen && userStopped}
       autoCollapse={hasDisplayContent}
