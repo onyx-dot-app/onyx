@@ -236,7 +236,7 @@ def _get_cached_group_expansion(
     permission_cache: SharepointPermissionCache,
 ) -> SharepointGroupExpansion:
     cache_key = _group_cache_key(site_url, group)
-    cached_expansion = permission_cache.group_expansions.get(cache_key)
+    cached_expansion = permission_cache.get_group_expansion(cache_key)
     if cached_expansion is not None:
         return cached_expansion
 
@@ -257,7 +257,7 @@ def _get_cached_group_expansion(
         nested_groups = set()
 
     expansion = SharepointGroupExpansion(nested_groups=nested_groups)
-    permission_cache.group_expansions[cache_key] = expansion
+    permission_cache.set_group_expansion(cache_key, expansion)
     return expansion
 
 

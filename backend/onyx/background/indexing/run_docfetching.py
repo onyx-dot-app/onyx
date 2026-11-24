@@ -16,6 +16,7 @@ from onyx.background.indexing.checkpointing_utils import (
     get_latest_valid_checkpoint,
     save_checkpoint,
 )
+from onyx.background.indexing.listing_backpressure import ListingBackpressure
 from onyx.background.indexing.memory_tracer import MemoryTracer
 from onyx.configs.app_configs import (
     ENABLE_CONVERSION_STAGE,
@@ -1019,6 +1020,21 @@ def connector_document_extraction(
     total_doc_batches_queued = 0
     total_failures = 0
     document_count = 0
+    # The listing pauses while conversion is far behind it.
+    backpressure = (
+        ListingBackpressure(index_attempt_id, db_connector.source)
+        if lister_mode
+        else None
+    )
+    search_settings_status = index_attempt.search_settings.status
+
+    def raise_if_stopped() -> None:
+        if callback and callback.should_stop():
+            raise ConnectorStopSignal("Connector stop signal detected")
+        with get_session_with_current_tenant() as db_session_tmp:
+            _check_connector_and_attempt_status(
+                db_session_tmp, cc_pair_id, search_settings_status, index_attempt_id
+            )
 
     try:
         # Ensure the SOURCE-type root hierarchy node exists before processing.
@@ -1273,6 +1289,9 @@ def connector_document_extraction(
                     index_attempt_id=index_attempt_id,
                     checkpoint=checkpoint,
                 )
+
+            if backpressure is not None and checkpoint.has_more:
+                backpressure.maybe_pause(raise_if_stopped)
 
         elapsed_time = time.monotonic() - start_time
 

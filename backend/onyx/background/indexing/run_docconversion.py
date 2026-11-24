@@ -43,6 +43,7 @@ from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import BaseConnector, Resolver
 from onyx.connectors.models import (
     ConnectorFailure,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     HierarchyNode,
@@ -498,6 +499,7 @@ def _convert_claimed_stub_batch(
     hierarchy_nodes: list[HierarchyNode] = []
     failures: list[ConnectorFailure] = []
     batch_error: Exception | None = None
+    stop_signal = False
     with time_stage(IndexAttemptStage.CONVERSION, index_attempt_id):
         try:
             for item in connector.resolve_targets(
@@ -515,6 +517,14 @@ def _convert_claimed_stub_batch(
                     hierarchy_nodes.append(item)
                 else:
                     failures.append(item)
+        except ConnectorStopSignal as e:
+            # A stop during a wait, such as a wait for the source budget. The
+            # check below drops the batch when the attempt stops.
+            stop_signal = True
+            batch_error = e
+            failures.extend(
+                _unconverted_stub_failures(stubs, documents, failures, batch_error)
+            )
         except Exception as e:
             # One batch's error does not end the attempt: the documents it did
             # not convert become failures. The threshold below ends an
@@ -532,11 +542,19 @@ def _convert_claimed_stub_batch(
     # The conversion can take minutes. Do not store work for a stopped attempt.
     if attempt_should_stop(index_attempt_id, cc_pair_id, tenant_id):
         logger.info(
-            "Conversion dropped: attempt=%s batch_num=%s stopped during the batch",
+            "Conversion dropped: attempt=%s batch_num=%s stopped during the batch%s",
+            index_attempt_id,
+            batch_num,
+            " (stop signal)" if stop_signal else "",
+        )
+        return
+    if stop_signal:
+        logger.warning(
+            "Conversion stopped: attempt=%s batch_num=%s got a stop signal, but "
+            "the attempt goes on; its unconverted documents are failures",
             index_attempt_id,
             batch_num,
         )
-        return
 
     if failures:
         with get_session_with_current_tenant() as db_session:

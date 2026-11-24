@@ -3,15 +3,19 @@ connector uses them, and so does Teams, whose channel files are in SharePoint.""
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
+from onyx.connectors.interfaces import RunScopedCache
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
 from onyx.db.enums import HierarchyNodeType
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
+
+logger = setup_logger()
 
 
 class SharepointGroup(BaseModel):
@@ -33,7 +37,61 @@ class SharepointGroupExpansion(BaseModel):
 
 
 class SharepointPermissionCache(BaseModel):
+    """The nested groups of each group that a permission read met, so that a
+    group is expanded one time. This one lives in one process."""
+
     group_expansions: dict[str, SharepointGroupExpansion] = Field(default_factory=dict)
+
+    def get_group_expansion(self, key: str) -> SharepointGroupExpansion | None:
+        return self.group_expansions.get(key)
+
+    def set_group_expansion(
+        self, key: str, expansion: SharepointGroupExpansion
+    ) -> None:
+        self.group_expansions[key] = expansion
+
+
+# A shared group expansion lives this long. Each entry is for one listing
+# run, so this only bounds the memory of a run that ends early.
+GROUP_EXPANSION_TTL_SECONDS = 3600
+_GROUP_EXPANSION_KEY_PREFIX = "sharepoint_group_expansion"
+
+
+class SharedSharepointPermissionCache(SharepointPermissionCache):
+    """A permission cache that also keeps each expansion in the cache of the
+    listing run, so that the conversion threads of every worker expand a
+    group one time in one run. Another run, or a connector with another
+    credential, has another run cache, so each run sees access as it is
+    when the run reads it. When the run cache cannot be reached, the cache
+    works in the process only."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    shared: RunScopedCache
+
+    def get_group_expansion(self, key: str) -> SharepointGroupExpansion | None:
+        local = self.group_expansions.get(key)
+        if local is not None:
+            return local
+        raw = self.shared.get(f"{_GROUP_EXPANSION_KEY_PREFIX}:{key}")
+        if raw is None:
+            return None
+        try:
+            expansion = SharepointGroupExpansion.model_validate_json(raw)
+        except ValueError:
+            return None
+        self.group_expansions[key] = expansion
+        return expansion
+
+    def set_group_expansion(
+        self, key: str, expansion: SharepointGroupExpansion
+    ) -> None:
+        self.group_expansions[key] = expansion
+        self.shared.set(
+            f"{_GROUP_EXPANSION_KEY_PREFIX}:{key}",
+            expansion.model_dump_json(),
+            GROUP_EXPANSION_TTL_SECONDS,
+        )
 
 
 def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001

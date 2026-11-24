@@ -177,6 +177,11 @@ class FaultSettings(_Settings):
     # that is always expired.
     download_url_ttl_seconds: int = Field(default=3_600, ge=0)
     download_url_expired_status: Literal[401, 403] = 401
+    # The next N fetches of a download URL answer throttle_status with
+    # Retry-After, as SharePoint's download host does (activityLimitReached).
+    # Each throttled fetch takes one from the count.
+    download_url_throttled_calls: int = Field(default=0, ge=0)
+    download_url_retry_after_seconds: int = Field(default=1, ge=1)
     # /content answers 302 to a download URL, as Graph does. False sends the
     # bytes.
     content_redirect: bool = True

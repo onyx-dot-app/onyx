@@ -28,6 +28,8 @@ from onyx.connectors.microsoft_utils.drive_items import (
     redact_url_for_logging,
     scrub_url_credentials,
 )
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftCall
+from onyx.connectors.models import ConnectorStopSignal
 
 CAP = 10 * 1024 * 1024  # 10 MiB cap; well above the byte payloads used in tests
 
@@ -382,20 +384,8 @@ def test_a_download_throttled_past_the_retries_raises(
     assert mock_time.sleep.call_count == 3
 
 
-@patch("onyx.connectors.microsoft_utils.drive_items.time")
-@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
-def test_a_refused_download_url_falls_back_to_graph_content_without_a_wait(
-    mock_get: MagicMock, mock_time: MagicMock
-) -> None:
-    """The downloadUrl attempt keeps its transport retries only: a 503 there
-    goes straight to the Graph /content fallback, which is the second chance,
-    so a throttled file waits once and not twice."""
-    mock_get.side_effect = [
-        _make_response(status=503, headers={"Retry-After": "9"}),
-        # Empty on purpose: the item is then returned without extraction.
-        _make_response(chunks=[]),
-    ]
-    item: DriveItemData = DriveItemData(
+def _linked_item() -> DriveItemData:
+    return DriveItemData(
         id="item-1",
         name="Plan.txt",
         web_url="https://example/Plan.txt",
@@ -407,8 +397,22 @@ def test_a_refused_download_url_falls_back_to_graph_content_without_a_wait(
         download_url="https://example/download?tempauth=x",
     )
 
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_refused_download_url_falls_back_to_graph_content_without_a_wait(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    """A refused link (here 403) goes straight to the Graph /content
+    fallback."""
+    mock_get.side_effect = [
+        _make_response(status=403),
+        # Empty on purpose: the item is then returned without extraction.
+        _make_response(chunks=[]),
+    ]
+
     content = extract_drive_item_content(
-        item,
+        _linked_item(),
         size_threshold=CAP,
         graph_api_base="https://graph.example/v1.0",
         get_access_token=lambda: "token",
@@ -418,3 +422,92 @@ def test_a_refused_download_url_falls_back_to_graph_content_without_a_wait(
     assert mock_get.call_count == 2
     assert "/drives/drive-1/items/item-1/content" in mock_get.call_args_list[1].args[0]
     mock_time.sleep.assert_not_called()
+
+
+@pytest.mark.parametrize("status", [429, 503])
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_throttled_download_url_reports_waits_and_retries_the_link(
+    mock_get: MagicMock, mock_time: MagicMock, status: int
+) -> None:
+    """/content redirects to the same download host, so a throttled link is
+    not a reason to fall back. The pacer gets the throttle, and the link is
+    tried again after Retry-After."""
+    mock_get.side_effect = [
+        _make_response(status=status, headers={"Retry-After": "9"}),
+        _make_response(chunks=[]),
+    ]
+    pacer = MagicMock()
+
+    content = extract_drive_item_content(
+        _linked_item(),
+        size_threshold=CAP,
+        graph_api_base="https://graph.example/v1.0",
+        get_access_token=lambda: "token",
+        pacer=pacer,
+    )
+
+    assert content is not None
+    assert mock_get.call_count == 2
+    assert all(
+        call.args[0] == "https://example/download?tempauth=x"
+        for call in mock_get.call_args_list
+    )
+    # The pacer's next acquire is the wait: it waits for the lane's pause
+    # and ends on a stop. The download does not sleep on its own.
+    mock_time.sleep.assert_not_called()
+    assert pacer.acquire.call_count == 2
+    assert pacer.report_response.call_args_list[0].args == (
+        status,
+        "9",
+        MicrosoftCall.LINK_DOWNLOAD,
+    )
+
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_download_url_throttled_past_the_retries_fails_the_item(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    """A link that stays throttled fails the item and makes no /content
+    call."""
+    tries = drive_items_module.STREAM_DOWNLOAD_MAX_RETRIES + 1
+    mock_get.side_effect = [
+        _make_response(status=429, headers={"Retry-After": "1"}) for _ in range(tries)
+    ]
+
+    with pytest.raises(drive_items_module.DriveItemContentError):
+        extract_drive_item_content(
+            _linked_item(),
+            size_threshold=CAP,
+            graph_api_base="https://graph.example/v1.0",
+            get_access_token=lambda: "token",
+        )
+
+    assert mock_get.call_count == tries
+    assert not any("/content" in call.args[0] for call in mock_get.call_args_list)
+    assert mock_time.sleep.call_count == tries - 1
+
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_stop_during_the_wait_for_a_throttled_link_ends_it(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    """A long Retry-After does not hold the worker: the wait is the pacer's
+    acquire, which raises the stop signal."""
+    mock_get.side_effect = [_make_response(status=429, headers={"Retry-After": "600"})]
+    pacer = MagicMock()
+    pacer.acquire.side_effect = [None, ConnectorStopSignal("stop")]
+
+    with pytest.raises(ConnectorStopSignal):
+        extract_drive_item_content(
+            _linked_item(),
+            size_threshold=CAP,
+            graph_api_base="https://graph.example/v1.0",
+            get_access_token=lambda: "token",
+            pacer=pacer,
+        )
+
+    mock_time.sleep.assert_not_called()
+    assert mock_get.call_count == 1

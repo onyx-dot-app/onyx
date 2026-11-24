@@ -45,6 +45,7 @@ from onyx.db.models import ConnectorCredentialPair, Credential, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.staging import RawFileCallback
+from onyx.redis.redis_run_scoped_cache import RedisRunScopedCache
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 
@@ -266,6 +267,8 @@ def instantiate_connector(
 
     if raw_file_callback is not None:
         connector.set_raw_file_callback(raw_file_callback)
+
+    connector.set_run_scoped_cache_factory(RedisRunScopedCache)
 
     source_api_limiter = build_source_api_limiter(
         source,
