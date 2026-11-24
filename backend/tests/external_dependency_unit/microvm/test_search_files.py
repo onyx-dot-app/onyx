@@ -46,6 +46,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolResultMessage,
 )
+from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.models import FileListing
 from onyx.prompts.sandbox_tools import SEARCH_FILE_GUIDANCE
 from onyx.server.features.build.sandbox import harness_factory
@@ -99,6 +100,7 @@ from tests.external_dependency_unit.microvm.conftest import (
 from tests.external_dependency_unit.microvm.fake_agent import (
     InsecureClientFactory,
     RunningFakeAgent,
+    WriteFailure,
 )
 from tests.external_dependency_unit.microvm.test_file_copies import (
     _FailedDeletes,
@@ -316,12 +318,22 @@ def _key(ref: HarnessSandboxRef, path: str) -> tuple[str, str, str]:
     return (str(ref.sandbox_id), str(ref.session_id), path)
 
 
+def _session_files(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
+    # The agent's handlers change `files` on their threads.
+    with node.agent.lock:
+        files = dict(node.agent.files)
+    return {
+        path: data
+        for (sandbox_id, session_id, path), data in files.items()
+        if (sandbox_id, session_id) == _key(ref, "")[:2]
+    }
+
+
 def _search_files(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
     return {
         path: data
-        for (sandbox_id, session_id, path), data in node.agent.files.items()
-        if (sandbox_id, session_id) == _key(ref, "")[:2]
-        and path.startswith("attachments/search/")
+        for path, data in _session_files(node, ref).items()
+        if path.startswith("attachments/search/")
     }
 
 
@@ -607,8 +619,7 @@ def test_the_chat_file_copy_never_deletes_search_or_artifact_files(
 
         turn(chat_session_id).start_call()
         _wait_until(idle)
-        files = {key[2] for key in node.agent.files if key[:2] == _key(ref, "")[:2]}
-        assert files == {*kept, "attachments/project/p.txt"}
+        assert set(_session_files(node, ref)) == {*kept, "attachments/project/p.txt"}
     finally:
         get_default_file_store().delete_file(file_id, error_on_missing=False)
 
@@ -700,9 +711,7 @@ def test_a_chat_delete_purges_its_search_files(
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=user, db_session=db_session
     )
-    _wait_until(
-        lambda: not [key for key in node.agent.files if key[:2] == _key(ref, "")[:2]]
-    )
+    _wait_until(lambda: not _session_files(node, ref))
 
 
 def test_a_file_without_access_at_copy_time_is_not_copied(
@@ -1046,6 +1055,37 @@ def test_a_file_refused_at_copy_time_gives_its_budget_back(
     [result] = _results(llm, "later")
     assert result.file_name is not None
     _wait_until(idle)
+    assert _search_files(node, chat.ref(db_session)) == {result.file_name: b"later"}
+
+
+def test_a_file_that_fails_to_copy_gives_its_budget_back(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    chat: SandboxChat,
+    node: RunningFakeAgent,
+    make_file: MakeFile,
+    internal: SearchPipelineController,
+    idle: Idle,
+) -> None:
+    failed, later = make_file(b"failed"), make_file(b"later")
+    node.agent.write_failures[_path(failed)] = WriteFailure(
+        SandboxDaemonErrorReason.INTERNAL
+    )
+    internal.add_search_results(QUERY, [failed.result()])
+    internal.add_search_results("later", [later.result()])
+    monkeypatch.setattr(file_copies, "MAX_TURN_SEARCH_FILES", 1)
+    llm = _searched(
+        chat,
+        db_session,
+        ("first", QUERY),
+        ("later", "later"),
+        between=lambda: _wait_until(idle),
+    )
+
+    [result] = _results(llm, "later")
+    assert result.file_name is not None
+    _wait_until(idle)
+    assert node.agent.write_paths.count(_path(failed)) == file_copies.COPY_TRIES
     assert _search_files(node, chat.ref(db_session)) == {result.file_name: b"later"}
 
 

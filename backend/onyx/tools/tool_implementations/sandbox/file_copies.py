@@ -1166,6 +1166,9 @@ class TurnSearchFiles:
         with self._lock:
             for file in files:
                 self._writing.pop(file.path, None)
+                # A file that the turn did not write gives its budget back.
+                if failure is not None:
+                    self._bytes -= self._shares.pop(file.file_id, 0)
         for file in files:
             if failure is None:
                 logger.info("sandbox_search_file_copied path=%s", file.path)
