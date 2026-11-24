@@ -25,7 +25,6 @@ import {
   hasAnyAdminPermission,
   hasPermission,
 } from "@/lib/permissions/utils";
-import { OpenSearchResourceBanner } from "@/sections/banners/OpenSearchResourceWarning";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 import { useTranslations } from "next-intl";
 import { AdminTopBarSlotContext } from "@/layouts/chromes/AdminTopBarSlot";
@@ -135,7 +134,6 @@ export default function AdminChrome({
             </Section>
           </RootLayout.Header>
         )}
-        <OpenSearchResourceBanner />
         <AdminTopBarSlotContext.Provider value={isMobile ? topBarSlot : null}>
           <RootLayout.MainContent>
             <PendingRoute base={base} loader={<PageLoader />}>

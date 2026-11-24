@@ -30,9 +30,9 @@ different shard settings on AWS-managed OpenSearch.
   model. Before Onyx saves a selectable cloud model, or a Bifrost or
   OpenAI-compatible model, it embeds a test string and rejects a failed call or
   a wrong dimension.
-- **A full admin sees resource warnings** when the OpenSearch cluster is short
-  of disk, JVM heap or vector memory: one popup per 24 hours, and a banner on
-  admin pages.
+- **The cluster resource health check** reads disk, JVM heap and vector memory
+  every 5 minutes for fleet telemetry. Admins see cluster issues on the Service
+  Status page and as notifications (below), not as a separate banner or popup.
 - **A full admin on a self-hosted Business or Enterprise deployment** reads the
   cluster status (`GET /admin/service-status/opensearch`, EE): cluster health,
   each data node's disk, heap and vector memory against its file cache, the
