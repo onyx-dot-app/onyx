@@ -93,7 +93,6 @@ SEARCH_RESULTS_CODE_MODE_RESULT = CodeModeResultSpec(
 def convert_inference_sections_to_llm_string(
     top_sections: list[InferenceSection],
     citation_start: int = 1,
-    limit: int | None = None,
     include_source_type: bool = True,
     include_link: bool = False,
     include_document_id: bool = False,
@@ -109,10 +108,6 @@ def convert_inference_sections_to_llm_string(
 
     Returns a JSON string with document results and a citation mapping.
     """
-    # Apply limit if specified
-    if limit is not None:
-        top_sections = top_sections[:limit]
-
     # Group sections by document_id to assign same citation_id to sections from same document
     document_id_to_citation_id: dict[str, int] = {}
     citation_mapping: dict[int, str] = {}
