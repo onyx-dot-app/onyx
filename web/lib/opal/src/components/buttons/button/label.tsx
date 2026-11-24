@@ -128,6 +128,8 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   return (
     <span
       ref={ref}
+      // A hook for a host that hides labels by its own container's width
+      data-button-label=""
       className={cn(
         "overflow-x-clip whitespace-nowrap transition-opacity duration-150 ease-out motion-reduce:transition-none",
         responsiveHide ? "hidden md:inline-flex" : "inline-flex",

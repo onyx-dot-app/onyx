@@ -107,6 +107,8 @@ export const SWR_KEYS = {
   chatFileTileText: (fileId: string) => `chat-file-tile-text:${fileId}`,
   chatSessionStatus: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/status`,
+  chatSessionAgents: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/agents`,
   pendingChatMessages: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/pending-messages`,
   maxSelectedDocumentTokens: (personaId: number) =>

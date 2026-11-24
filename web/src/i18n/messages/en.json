@@ -13031,6 +13031,12 @@
       "copyButton": {
         "tooltip": "Copy content"
       },
+      "sourceButton": {
+        "tooltip": "Show source"
+      },
+      "previewButton": {
+        "tooltip": "Show preview"
+      },
       "downloadButton": {
         "label": "Download File",
         "tooltip": "Download"
@@ -13492,10 +13498,6 @@
       "toggleButton": {
         "label": "Toggle panel"
       },
-      "downloadButton": {
-        "label": "Download",
-        "tooltip": "Download file"
-      },
       "reloadButton": {
         "label": "Refresh files",
         "error": "Could not reload the files. Try again."
@@ -13528,6 +13530,34 @@
       },
       "menu": {
         "label": "Export As…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "Activity"
+      },
+      "needsYou": {
+        "title": "Needs You",
+        "approval": "Approve {tool}",
+        "question": "Answer a question"
+      },
+      "agents": {
+        "title": "Agents",
+        "status": {
+          "starting": "Starting",
+          "running": "Running",
+          "suspended": "Waiting",
+          "complete": "Done",
+          "limit": "Hit step limit",
+          "cancelled": "Cancelled",
+          "stopped": "Stopped",
+          "error": "Failed"
+        },
+        "finished": "Previous agents"
+      },
+      "files": {
+        "title": "Files",
+        "viewAll": "{count, plural, one {View # file} other {View all # files}}"
       }
     }
   },

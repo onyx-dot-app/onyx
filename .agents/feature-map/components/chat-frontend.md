@@ -194,8 +194,7 @@
   a page without the panel shows every card. Every publish of one path in a chat is a version of one
   artifact (`artifact_id`, `version`). A click opens the card's version in
   its artifact's tab in the right panel; a page without the panel (NRF)
-  opens it in the preview modal. HTML shows as source, never as a rendered
-  page. Each card shows only its file; a later publish of the same path adds
+  opens it in the preview modal. Each card shows only its file; a later publish of the same path adds
   a card of its own. Cards that show one name also show their
   `display_path`, which the backend sends: relative to the chat's working
   directory, or the whole path outside it. The path shows under the title, before the type and size, in an
@@ -208,7 +207,7 @@
   files. The toggle sits over the workspace's top end, so it stays at the
   same place over the header, the panel beside the page and a panel over it.
   The panel's controls keep out of its room
-  (`lib/outputPanel/layout.ts:PANEL_TOGGLE_RESERVE`). The header keeps out of
+  (`--panel-toggle-reserve` in `app/globals.css`). The header keeps out of
   it only while the panel is closed; beside the open panel, which holds the
   toggle, the share button keeps only the header's padding. It has one label and
   `aria-expanded`, and it acts on what the user sees: on a shown panel it
@@ -228,8 +227,7 @@
   replaces the chat's list only when no load that started later gave it, so an
   older load never overwrites a newer list. The button is off while the reload
   runs, and a failure shows a toast. A file tab's URL bar shows the file's
-  path, then a Download button; the preview in the panel draws no copy,
-  download or count of its own (`FilePreviewBody`'s `actions`). It
+  path, then the preview's actions: source toggle, copy and download. It
   opens at half the page; the user drags its edge, or uses the arrow keys on
   the edge, to resize it, and the width is kept per chat through a reload. A
   button expands it over the whole page and back. A page too narrow for both
@@ -241,8 +239,9 @@
   on every branch, also by answers that are not loaded and by subagents: one
   tile per artifact, its newest version, newest artifact first (a new
   version keeps its artifact's place), with its title or else its
-  name, and a search in the URL bar. A text or markdown tile up to 256 KB
-  shows the start of its file, scaled down, once it nears the view
+  name, and a search in the URL bar. A text, markdown or CSV tile up to 256 KB
+  shows the start of its file, scaled down, and an SVG tile draws its image
+  from the same text, once it nears the view
   (`SWR_KEYS.chatFileTileText`), read through the preview's bounded
   `loadChatFilePreview`; it loads at most once per file and session,
   and a failure is kept as well, so a failed tile does not fetch its file
@@ -271,17 +270,20 @@
   or workbook as a grid with a sheet bar, a PDF one page at a time with page
   thumbnails and zoom, a PowerPoint deck one slide at a time with a slide
   list, a Word file as pages scaled to fit the width, an image fit to the
-  panel, and code, data, SVG and text as highlighted source. The PDF and
+  panel, HTML as its page in a sandboxed frame, SVG as an image, and code,
+  data and text as highlighted source with line numbers (plain text wraps
+  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF and
   slide views share Craft's toolbar and resizable thumbnail column
   (`sections/file-preview/PreviewControls.tsx`). The column is one tab stop,
   the current page or slide, and the arrow keys move it, with focus. A
   preview under 480 px wide, as on a phone, starts with the column hidden:
   `lib/filePreview/hooks.ts:useThumbnailColumn` measures the row that holds
   the column and the page when it mounts, before the first paint, then
-  follows its width until the user toggles the column. The
-  modal adds the counts,
-  copy and download over the content's bottom, and an image's actual-size
-  toggle. A loader shows only when a load takes over 300 ms. A file over its
+  follows its width until the user toggles the column. The modal shows
+  the counts, copy, download and source toggle over the content's bottom. In
+  the panel, the visible file's actions move to the URL bar's row through
+  `PreviewActionsSlotContext` (`sections/file-preview/FloatingFooter.tsx`);
+  the counts and an image's actual-size toggle stay at the bottom. A loader shows only when a load takes over 300 ms. A file over its
   format's limit (5 MB of text, 20 MB for Word or PowerPoint, 100 MB for a
   PDF), a legacy `.ppt` and other types show one card with a download
   instead. So does a failed load, with a retry, and a PDF, deck, Word file or
@@ -498,8 +500,17 @@ reports that it failed. Its loader,
 and type pick the format (`lib/filePreview/format.ts:resolveFilePreviewFormat`).
 A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
 the workbook, and an image or an unsupported file reads no body: the image
-loads from the file URL in an `<img>`. SVG shows as XML source, because the
-server serves it as `application/octet-stream`. Other bodies
+loads from the file URL in an `<img>`. SVG loads as text, because the server
+serves it as `application/octet-stream`, and renders from a `data:` URL. HTML
+renders through `srcdoc` with an empty `sandbox`: an opaque origin with no
+scripts, so it cannot reach Onyx's page, cookies or API, and the sandbox
+refuses a meta refresh. A fixed prologue (`<!DOCTYPE html>` and a CSP meta)
+that `sections/file-preview/FilePreview.tsx` puts before the file also sets
+`script-src 'none'` and stops every network load: the page shows only its
+inline styles and its `data:`/`blob:` images, fonts and media, so it cannot
+send the file's contents to another site. Scripted or CDN parts do not show. Decision: scripts
+and CDN loads come back only with a real browser surface for previews, not by
+loosening this policy; the page's CSP applies too. Other bodies
 are read up to the format's limit while they stream, because the server sends
 no length. Text over 200,000 characters shows without highlighting, and
 markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
@@ -553,7 +564,9 @@ has a session, and the header leaves room for it at its end
 (`layouts/chromes/AppChrome.tsx`, the shared view's header padding). That room
 is `--panel-toggle-reserve`, a registered property in `app/globals.css`: the
 open panel sets it to zero on the page element, and the page eases it with
-the panel's slide. In the
+the panel's slide. The size button's `end-12` in
+`sections/chat/ChatRightPanel.tsx` repeats its 48px initial value; change both
+together. In the
 DOM, the toggle follows what the user sees: a closed panel puts it in the
 workspace's `panelToggleSlot`, before the page, and an open panel puts it
 before its tabs. Closing gives focus back to it when the move or the panel
@@ -800,7 +813,32 @@ reader, with no request. Saved replay emits the same packets from each step's
 human inputs, so both paths render user bubbles between response sections.
 Status polls every 2 seconds while `has_startable_input` or
 `has_active_subagents` is true. `stopSubagents` posts
-`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status. An idle chat that sees a running or unknown
+`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status.
+The header's activity button (`sections/chat/ChatActivity.tsx`) shows once a
+chat has a waiting request, a background agent or a published file. It is
+always the icon alone, so the header never shifts, and toggles a card that
+stays open until that button closes it. The card portals into the page column's
+`activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
+at the chat region's top end, so the header keeps its width and buttons. With
+no output panel open it sets `data-activity-docked`, and in a workspace at
+least 64rem wide (`@container/workspace`) the chat's scrolled content, the
+input row (`data-activity-room` in `views/AppPage.tsx`) and the footer make
+room for it: at least its 1rem end gutter, plus what the gutter of the
+centered chat column
+(`--app-chat-column-width`, reading or wide) lacks, so on a wide screen the
+column does not move, while the scroller keeps its width so its scrollbar stays at the
+end; otherwise it floats over the chat's end. The header's left side
+shows the chat's title on one clipped line; with no center content it takes
+all the room before the buttons. A waiting row nudges its card into view; the Files row opens the right
+panel. Agents come from
+`GET /chat/chat-session/{id}/agents` (`lib/chat/hooks.ts:useChatSubagents`),
+which reads `load_session_agent_metadata` for the selected branch and keeps
+the `spawn_agent` children (`ChatConfiguration`; Deep Research workers are
+foreground): `id`, `path`, `status` and `stopped_by_user`, with no
+transcript. The list loads again when the status changes
+`has_active_subagents` or `latest_response_id`, and polls while agents are
+active. The status it reads also polls while a reply streams, so agents that
+the reply starts show. An idle chat that sees a running or unknown
 response refreshes history and attaches to the stream.
 `app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
 the latest response's last packet is a turn-level stop. `AppInputBar` then

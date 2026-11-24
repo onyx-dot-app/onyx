@@ -99,8 +99,9 @@ export class ChatPage {
     this.publishedFilesPanel = page.getByRole("complementary", {
       name: "Files",
     });
-    this.rightPanelDownload = this.publishedFilesPanel.getByRole("button", {
-      name: "Download file",
+    this.rightPanelDownload = this.publishedFilesPanel.getByRole("link", {
+      name: "Download",
+      exact: true,
     });
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(

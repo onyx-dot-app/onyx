@@ -6,7 +6,11 @@ import {
 import { Packet, type PublishedFile } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { ChatToolOptions } from "@/lib/tools/types";
-import type { ComposedMention, RecordedMention } from "@/lib/chat/types";
+import type {
+  ComposedMention,
+  RecordedMention,
+  RunStatus,
+} from "@/lib/chat/types";
 
 export type FeedbackType = "like" | "dislike";
 
@@ -152,14 +156,7 @@ export interface SearchSession {
 
 export interface Message {
   // Null means no saved SDK outcome; absent means an older API.
-  responseStatus?:
-    | "running"
-    | "suspended"
-    | "complete"
-    | "limit"
-    | "cancelled"
-    | "error"
-    | null;
+  responseStatus?: RunStatus | null;
   is_generating?: boolean;
   messageId?: number;
   nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)

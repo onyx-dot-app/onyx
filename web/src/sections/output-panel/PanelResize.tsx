@@ -214,7 +214,11 @@ export function PanelResizeHandle({
       )}
       aria-valuenow={Math.round(mediumWidth)}
       className={cn(
-        "absolute inset-y-0 z-30 w-2 cursor-col-resize touch-none hover:bg-background-tint-02 focus-visible:bg-background-tint-02 focus-visible:outline focus-visible:outline-1 focus-visible:outline-border-03",
+        // An 8px grab area; only the panel's edge line, at its start, shows
+        // the handle: blue while hovered, held or focused
+        "absolute inset-y-0 z-30 w-2 cursor-col-resize touch-none outline-none",
+        "before:absolute before:inset-y-0 before:start-0 before:w-0.5 before:transition-colors before:duration-150",
+        "hover:before:bg-action-selection-05 active:before:bg-action-selection-05 focus-visible:before:bg-action-selection-05",
         transitions &&
           "transition-[inset-inline-end] duration-180 ease-out motion-reduce:transition-none",
         !active && "invisible pointer-events-none"
@@ -243,7 +247,6 @@ export function PanelSizeButton({
     <Button
       icon={full ? SvgFold : SvgMaximize2}
       prominence="tertiary"
-      size="sm"
       aria-label={full ? restoreLabel : expandLabel}
       tooltip={full ? restoreLabel : expandLabel}
       onClick={onToggle}

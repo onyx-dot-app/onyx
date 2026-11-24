@@ -13031,6 +13031,12 @@
       "copyButton": {
         "tooltip": "Inhalt kopieren"
       },
+      "sourceButton": {
+        "tooltip": "Quelltext anzeigen"
+      },
+      "previewButton": {
+        "tooltip": "Vorschau anzeigen"
+      },
       "downloadButton": {
         "label": "Datei herunterladen",
         "tooltip": "Herunterladen"
@@ -13492,10 +13498,6 @@
       "toggleButton": {
         "label": "Bereich ein- oder ausblenden"
       },
-      "downloadButton": {
-        "label": "Herunterladen",
-        "tooltip": "Datei herunterladen"
-      },
       "reloadButton": {
         "label": "Dateien aktualisieren",
         "error": "Die Dateien konnten nicht neu geladen werden. Versuchen Sie es erneut."
@@ -13528,6 +13530,34 @@
       },
       "menu": {
         "label": "Exportieren als…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "Aktivität"
+      },
+      "needsYou": {
+        "title": "Braucht Sie",
+        "approval": "{tool} genehmigen",
+        "question": "Eine Frage beantworten"
+      },
+      "agents": {
+        "title": "Agenten",
+        "status": {
+          "starting": "Startet",
+          "running": "Läuft",
+          "suspended": "Wartet",
+          "complete": "Fertig",
+          "limit": "Schrittlimit erreicht",
+          "cancelled": "Abgebrochen",
+          "stopped": "Gestoppt",
+          "error": "Fehlgeschlagen"
+        },
+        "finished": "Frühere Agenten"
+      },
+      "files": {
+        "title": "Dateien",
+        "viewAll": "{count, plural, one {# Datei anzeigen} other {Alle # Dateien anzeigen}}"
       }
     }
   },

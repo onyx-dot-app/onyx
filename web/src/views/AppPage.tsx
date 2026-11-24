@@ -881,9 +881,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   >
                     <Section justifyContent="start" gap={0}>
                       {currentChatSessionId && (
-                        <ScheduledRunBanner
-                          chatSessionId={currentChatSessionId}
-                        />
+                        // Makes room for a docked activity card (`AppChrome`)
+                        <div
+                          data-activity-room
+                          // The composer row's inline padding, so the room
+                          // for a docked card matches
+                          className="w-full sm:px-4 [&>*]:mx-auto"
+                        >
+                          <ScheduledRunBanner
+                            chatSessionId={currentChatSessionId}
+                          />
+                        </div>
                       )}
                       {/* The store's session, not the URL's: the store takes
                           the URL's chat one effect late, and the scroll reset
@@ -1069,6 +1077,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <div
                   ref={setComposerRow}
                   data-testid="app-composer-row"
+                  // Makes room for a docked activity card (`AppChrome`)
+                  data-activity-room
                   className={cn(
                     "row-start-2 col-start-1 flex flex-col items-center px-2 sm:px-4",
                     // Over the chat's scroll area, which keeps its scrollbar

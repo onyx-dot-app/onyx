@@ -13031,6 +13031,12 @@
       "copyButton": {
         "tooltip": "نسخ المحتوى"
       },
+      "sourceButton": {
+        "tooltip": "إظهار المصدر"
+      },
+      "previewButton": {
+        "tooltip": "إظهار المعاينة"
+      },
       "downloadButton": {
         "label": "تنزيل الملف",
         "tooltip": "تنزيل"
@@ -13492,10 +13498,6 @@
       "toggleButton": {
         "label": "تبديل اللوحة"
       },
-      "downloadButton": {
-        "label": "تنزيل",
-        "tooltip": "تنزيل الملف"
-      },
       "reloadButton": {
         "label": "تحديث الملفات",
         "error": "تعذّرت إعادة تحميل الملفات. حاول مرة أخرى."
@@ -13528,6 +13530,34 @@
       },
       "menu": {
         "label": "تصدير باسم…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "النشاط"
+      },
+      "needsYou": {
+        "title": "يحتاج إليك",
+        "approval": "الموافقة على {tool}",
+        "question": "الإجابة عن سؤال"
+      },
+      "agents": {
+        "title": "الوكلاء",
+        "status": {
+          "starting": "قيد البدء",
+          "running": "قيد التشغيل",
+          "suspended": "في الانتظار",
+          "complete": "تم",
+          "limit": "بلغ حد الخطوات",
+          "cancelled": "أُلغي",
+          "stopped": "أُوقف",
+          "error": "فشل"
+        },
+        "finished": "الوكلاء السابقون"
+      },
+      "files": {
+        "title": "الملفات",
+        "viewAll": "{count, plural, one {عرض # ملف} other {عرض كل الملفات (#)}}"
       }
     }
   },

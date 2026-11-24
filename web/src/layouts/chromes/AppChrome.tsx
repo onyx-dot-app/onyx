@@ -14,6 +14,8 @@ import useChatSessions from "@/hooks/useChatSessions";
 import { showErrorNotification } from "@/lib/sidebar/utils";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import { useChatExportMenu } from "@/lib/chat/hooks";
+import ChatActivity from "@/sections/chat/ChatActivity";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
@@ -58,6 +60,8 @@ function Header() {
   const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
+  // The store's chat, whose requests, agents and files the activity card shows
+  const storeSessionId = useChatSessionStore((state) => state.currentSessionId);
   const {
     incognitoAvailable,
     incognitoEnabled,
@@ -80,8 +84,11 @@ function Header() {
     !incognitoLocked;
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
-  const pageWithHeaderContent =
-    appPosition.isChat() || appPosition.isNewSession() || appPosition.isAgent();
+  const showHeaderContent =
+    !!customHeaderContent &&
+    (appPosition.isChat() ||
+      appPosition.isNewSession() ||
+      appPosition.isAgent());
 
   const effectiveMode: AppMode =
     appPosition.isNewSession() && state.phase === "idle"
@@ -155,7 +162,7 @@ function Header() {
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-              <div className="flex-1 flex flex-row items-center gap-2">
+              <div className="flex-1 min-w-0 self-stretch flex flex-row items-center gap-2">
                 {isMobile && (
                   <Button
                     prominence="internal"
@@ -228,6 +235,21 @@ function Header() {
                       />
                     </Dropdown>
                   )}
+                {appPosition.isChat() &&
+                  currentChatSession?.id === appPosition.chat() &&
+                  currentChatSession.name && (
+                    <div className="min-w-0 px-2">
+                      <Text
+                        as="p"
+                        font="main-ui-action"
+                        color="text-04"
+                        maxLines={1}
+                        overflowTooltip
+                      >
+                        {currentChatSession.name}
+                      </Text>
+                    </div>
+                  )}
               </div>
 
               {/*
@@ -235,26 +257,25 @@ function Header() {
           - custom-header-content
           - Wraps to its own row below left/right on mobile when content is present
         */}
-              <div
-                className={cn(
-                  "flex flex-col items-center overflow-hidden",
-                  pageWithHeaderContent && customHeaderContent
-                    ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
-                    : "flex-1"
-                )}
-              >
-                {pageWithHeaderContent && customHeaderContent && (
+              {showHeaderContent && (
+                <div className="flex flex-col items-center overflow-hidden order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1">
                   <span className="text-center w-full">
                     <Text color="text-03">{customHeaderContent}</Text>
                   </span>
-                )}
-              </div>
+                </div>
+              )}
 
               {/*
           Right:
           - share menu
         */}
-              <div className="flex flex-1 justify-end items-center">
+              {/* Without center content, the left side takes the free room */}
+              <div
+                className={cn(
+                  "flex justify-end items-center",
+                  showHeaderContent ? "flex-1" : "shrink-0"
+                )}
+              >
                 {(showIncognitoStart ||
                   (incognitoEnabled &&
                     (appPosition.isChat() || appPosition.isNewSession()))) && (
@@ -279,6 +300,19 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
+                {/* Once the store holds the chat on screen, also for a chat
+                    outside the loaded Recents */}
+                {appPosition.isChat() &&
+                  storeSessionId !== null &&
+                  storeSessionId === appPosition.chat() &&
+                  !incognitoEnabled && (
+                    <FrostedDiv className="flex shrink flex-row items-center">
+                      <ChatActivity
+                        key={storeSessionId}
+                        sessionId={storeSessionId}
+                      />
+                    </FrostedDiv>
+                  )}
                 {/* Only for the chat on screen: during a navigation to another
                     chat, the URL's session is still the one these act on. */}
                 {appPosition.isChat() &&
@@ -388,9 +422,15 @@ export default function AppChrome({ children }: AppChromeProps) {
   const [panelToggleSlot, setPanelToggleSlot] = useState<HTMLElement | null>(
     null
   );
+  const [activitySlot, setActivitySlot] = useState<HTMLElement | null>(null);
   const workspaceElements = useMemo(
-    () => ({ workspace: workspaceRef, page: pageRef, panelToggleSlot }),
-    [panelToggleSlot]
+    () => ({
+      workspace: workspaceRef,
+      page: pageRef,
+      panelToggleSlot,
+      activitySlot,
+    }),
+    [panelToggleSlot, activitySlot]
   );
 
   const appPosition = useAppPosition();
@@ -450,73 +490,88 @@ export default function AppChrome({ children }: AppChromeProps) {
       >
         <div
           ref={workspaceRef}
-          className="relative flex flex-row flex-1 min-h-0"
+          className="@container/workspace relative flex flex-row flex-1 min-h-0"
         >
-          <div ref={setPanelToggleSlot} />
-          <div
-            ref={pageRef}
-            data-app-page
-            className={cn(
-              // Eases the room for the panel toggle with the panel's slide
-              "@container relative isolate flex-1 flex flex-col min-h-0 [transition-property:--panel-toggle-reserve] ease-in-out duration-300 motion-reduce:transition-none",
-              showBackground && "bg-cover bg-center bg-fixed"
-            )}
-            style={
-              showBackground
-                ? { backgroundImage: `url(${appBackgroundUrl})` }
-                : undefined
-            }
-          >
-            {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
+          <AppWorkspaceElementsContext.Provider value={workspaceElements}>
+            <div ref={setPanelToggleSlot} />
+            <div
+              ref={pageRef}
+              data-app-page
+              className={cn(
+                // Eases the room for the panel toggle with the panel's slide
+                "@container relative isolate flex-1 flex flex-col min-h-0 [transition-property:--panel-toggle-reserve] ease-in-out duration-300 motion-reduce:transition-none",
+                // A docked activity card covers the workspace's end below the
+                // header: the chat's scrolled content, its input row
+                // (`data-activity-room`) and the footer make room. The header
+                // and the scroller keep their width, so the buttons and the
+                // scrollbar stay at the end. Each keeps its 1rem end gutter
+                // (`CHAT_GUTTER`) as the least, so docking never moves the
+                // column on a wide screen; it adds only what the card
+                // (21.5rem) needs beyond the centered column's room
+                // (`--app-chat-column-width`, reading or wide): 2 * 21.5rem +
+                // 1rem start gutter + column - 100%, and never more than the
+                // card itself.
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-chat-scroll]>*]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-activity-room]]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&>footer]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
+                showBackground && "bg-cover bg-center bg-fixed"
+              )}
+              style={
+                showBackground
+                  ? { backgroundImage: `url(${appBackgroundUrl})` }
+                  : undefined
+              }
+            >
+              {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
               z-[-1] keeps overlays below the normal-flow header/content/footer. */}
-            {showBackground && !isLightMode && (
-              <div
-                className="absolute z-[-1] inset-0 pointer-events-none"
-                style={{
-                  background: `
+              {showBackground && !isLightMode && (
+                <div
+                  className="absolute z-[-1] inset-0 pointer-events-none"
+                  style={{
+                    background: `
                   linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
                   linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
                 `,
-                }}
-              />
-            )}
-            {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
-            {showBackground && appPosition.isChat() && (
-              <>
-                <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
-                {isSafari ? (
-                  <div
-                    className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
-                    style={{
-                      backgroundImage: `url(${appBackgroundUrl})`,
-                      filter: "blur(16px)",
-                      maskImage: horizontalBlurMask,
-                      WebkitMaskImage: horizontalBlurMask,
-                    }}
-                  />
-                ) : (
-                  <div
-                    className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-                    style={{
-                      maskImage: horizontalBlurMask,
-                      WebkitMaskImage: horizontalBlurMask,
-                    }}
-                  />
-                )}
-              </>
-            )}
+                  }}
+                />
+              )}
+              {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
+              {showBackground && appPosition.isChat() && (
+                <>
+                  <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
+                  {isSafari ? (
+                    <div
+                      className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+                      style={{
+                        backgroundImage: `url(${appBackgroundUrl})`,
+                        filter: "blur(16px)",
+                        maskImage: horizontalBlurMask,
+                        WebkitMaskImage: horizontalBlurMask,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+                      style={{
+                        maskImage: horizontalBlurMask,
+                        WebkitMaskImage: horizontalBlurMask,
+                      }}
+                    />
+                  )}
+                </>
+              )}
 
-            {/* Header */}
-            <Header />
-            <RootLayout.MainContent>
-              <PendingRoute base="/app" loader={<AppChromeLoader />}>
-                {children}
-              </PendingRoute>
-            </RootLayout.MainContent>
-            <Footer />
-          </div>
-          {/* The slot's panel measures the workspace and covers the page */}
-          <AppWorkspaceElementsContext.Provider value={workspaceElements}>
+              {/* Header */}
+              <Header />
+              <RootLayout.MainContent>
+                <PendingRoute base="/app" loader={<AppChromeLoader />}>
+                  {children}
+                </PendingRoute>
+              </RootLayout.MainContent>
+              <Footer />
+              <div ref={setActivitySlot} />
+            </div>
+            {/* The slot's panel measures the workspace and covers the page */}
             {rightPanel}
           </AppWorkspaceElementsContext.Provider>
         </div>

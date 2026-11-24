@@ -16,6 +16,7 @@ from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
     ChatSessionDetailResponse,
     ChatSessionProcessingStatus,
+    ChatSubagent,
     PendingChatMessageRequest,
 )
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
@@ -413,6 +414,84 @@ def test_background_agent_result_wakes_the_idle_chat(
     root_requests = mock_llm.requests_in(nonce)
     assert len(root_requests) == 4
     assert {request.body["model"] for request in root_requests} == {CHOSEN_MODEL}
+
+
+def _agents(session_id: UUID, user: DATestUser) -> list[ChatSubagent]:
+    response = client.get(
+        f"{API_SERVER_URL}/chat/chat-session/{session_id}/agents",
+        headers=user.headers,
+    )
+    response.raise_for_status()
+    return [ChatSubagent.model_validate(agent) for agent in response.json()]
+
+
+def test_the_agent_list_follows_a_background_agent(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    """The chat's agent list shows a spawned agent with its instruction, running
+    while it works and complete once it finishes."""
+    nonce = uuid4().hex
+    child_task = f"Count the stars. {uuid4().hex}"
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="spawn-counter",
+                    name="spawn_agent",
+                    arguments={"name": "counter", "instruction": child_task},
+                )
+            ]
+        ),
+        Reply(
+            text="Counting started.",
+            conditions=RequestConditions(has_results_for=["spawn-counter"]),
+        ),
+        Reply(text="Done counting."),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        child_task,
+        Reply(text="Seven stars.", pause_after_first_chunk=child_task),
+        conditions=RequestConditions(prompt_contains=[child_task]),
+    )
+    session = ChatSessionManager.create(user_performing_action=admin_user)
+    assert _agents(session.id, admin_user) == []
+    try:
+        started = ChatSessionManager.send_message(
+            session.id,
+            f"Count in the background. {nonce}",
+            admin_user,
+            accepts_follow_ups=True,
+        )
+        assert started.error is None
+        _wait_until(
+            lambda: bool(mock_llm.requests_in(child_task)), "the child is running"
+        )
+        [running] = _agents(session.id, admin_user)
+        assert running.path == "/root/counter"
+        assert running.status == RunStatus.RUNNING
+        assert not running.stopped_by_user
+    finally:
+        mock_llm.release_gate(child_task)
+
+    _wait_until(
+        lambda: (
+            [agent.status for agent in _agents(session.id, admin_user)]
+            == [RunStatus.COMPLETE]
+        ),
+        "the child completes",
+    )
+
+    # The child's result wakes the root, which uses its last scripted reply
+    def root_answered() -> bool:
+        detail = _detail(session.id, admin_user)
+        return (
+            "Done counting." in _texts(detail, MessageType.ASSISTANT)
+            and not detail.is_processing
+        )
+
+    _wait_until(root_answered, "the root answers the child's result")
 
 
 @requires_code_mode(True)

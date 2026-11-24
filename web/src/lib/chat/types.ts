@@ -85,6 +85,25 @@ export interface ChatSessionStatus {
   approvals_version: string;
 }
 
+/** A run's outcome, as the server's `RunStatus`. */
+export type RunStatus =
+  | "running"
+  | "suspended"
+  | "complete"
+  | "limit"
+  | "cancelled"
+  | "error";
+
+/** A background agent that the chat's selected branch started. */
+export interface ChatSubagent {
+  id: string;
+  /** The agent tree path, such as `/root/researcher`. */
+  path: string;
+  /** Null before its first run starts. */
+  status: RunStatus | null;
+  stopped_by_user: boolean;
+}
+
 export interface ChatSessionQueue {
   /** False for incognito and anonymous chats, which have no server queue. */
   enabled: boolean;

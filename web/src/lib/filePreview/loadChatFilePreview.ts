@@ -32,6 +32,7 @@ export type ChatFilePreviewData = ChatFileIdentity &
     | {
         kind: "code";
         language: string;
+        render?: "html" | "svg";
         text: string;
         size: number;
         lineCount: number;
@@ -174,6 +175,7 @@ export async function loadChatFilePreview(
         ...identity,
         kind: "code",
         language: format.language,
+        render: format.render,
         text,
         size,
         lineCount: text.split("\n").length,

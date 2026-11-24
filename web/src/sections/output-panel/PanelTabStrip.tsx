@@ -120,7 +120,9 @@ function SortableTab({
           register(element);
         }}
         className={cn(
-          "group relative h-5.5 w-full max-w-[180px] touch-pan-x select-none rounded-md",
+          // The height of the URL bar's md controls under the strip (28px);
+          // the icon sits 6px in, as in an md button
+          "group relative h-7 w-full max-w-[180px] touch-pan-x select-none rounded-08 px-1",
           active ? "bg-background-neutral-02" : "bg-background-neutral-01",
           isDragging && "z-10 shadow-md"
         )}
@@ -296,7 +298,7 @@ export function PanelTabStrip({
               justifyContent="start"
               height="auto"
               gap={1}
-              className="min-w-full [&>*]:min-w-16 [&>*]:shrink"
+              className="min-w-full [&>*]:min-w-28 [&>*]:shrink"
             >
               <SortableContext
                 items={sortableIds}
@@ -314,7 +316,8 @@ export function PanelTabStrip({
                       className="text-text-03"
                       aria-hidden
                     >
-                      <Icon className="size-3" />
+                      {/* A button's icon size */}
+                      <Icon className="size-4" />
                     </Section>
                   );
                   return (
@@ -375,7 +378,7 @@ export function PanelTabStrip({
                           tabIndex={
                             active || (!activeTabId && index === 0) ? 0 : -1
                           }
-                          font="secondary-body"
+                          font="main-ui-body"
                           onKeyDown={(event) => {
                             if (disabled) return;
                             if (event.key === "Enter" || event.key === " ") {
