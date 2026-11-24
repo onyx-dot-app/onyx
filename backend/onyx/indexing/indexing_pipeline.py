@@ -8,6 +8,7 @@ import sentry_sdk
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from onyx.access.utils import build_ext_group_names_for_storage
 from onyx.configs.app_configs import (
     ENABLE_CONTEXTUAL_RAG,
     MAX_CHUNKS_PER_DOC_BATCH,
@@ -416,7 +417,9 @@ def get_docs_to_update(
             and (
                 doc.external_access.external_user_emails
                 != set(db_doc.external_user_emails or [])
-                or doc.external_access.external_user_group_ids
+                or build_ext_group_names_for_storage(
+                    doc.external_access.external_user_group_ids, doc.source
+                )
                 != set(db_doc.external_user_group_ids or [])
                 or doc.external_access.is_public != db_doc.is_public
             )

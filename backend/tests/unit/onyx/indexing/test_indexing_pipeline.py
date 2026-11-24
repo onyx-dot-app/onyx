@@ -1769,3 +1769,57 @@ def test_content_hash_is_blind_to_tabular_content() -> None:
     assert (
         _tabular_doc("csv-v1").content_hash() == _tabular_doc("csv-v2").content_hash()
     )
+
+
+def _unchanged_box_doc_with_groups(
+    group_ids: set[str], stored_group_ids: list[str]
+) -> tuple[Document, MagicMock]:
+    updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.source = DocumentSource.BOX
+    doc.doc_updated_at = updated_at
+    doc.external_access = ExternalAccess(
+        external_user_emails=set(),
+        external_user_group_ids=group_ids,
+        is_public=False,
+    )
+    db_doc = _make_db_doc(
+        "doc1",
+        content_hash=doc.content_hash(),
+        doc_updated_at=updated_at,
+    )
+    db_doc.external_user_group_ids = stored_group_ids
+    return doc, db_doc
+
+
+def test_get_docs_to_update_compares_bare_group_ids_in_stored_form() -> None:
+    """Box yields bare ids and storage adds the prefix, so the stored form of
+    the same groups is no change."""
+    doc, db_doc = _unchanged_box_doc_with_groups(
+        {"Eng-Team", "box-group-1"}, ["box_eng-team", "box_box-group-1"]
+    )
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_bare_group_ids_stored_bare_are_a_change() -> None:
+    """Rows stored bare before the storage prefix are re-written once."""
+    doc, db_doc = _unchanged_box_doc_with_groups({"box-group-1"}, ["box-group-1"])
+
+    docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == [doc]
+
+
+def test_get_docs_to_update_added_bare_group_id_is_a_change() -> None:
+    doc, db_doc = _unchanged_box_doc_with_groups(
+        {"box-group-1", "box-group-2"}, ["box_box-group-1"]
+    )
+
+    docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == [doc]
