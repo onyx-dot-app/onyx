@@ -31,7 +31,13 @@ export function CodeBlockBody({
   return (
     <CodePanel>
       {language && <CodePanel.Header title={language} copyText={code} />}
-      <CodePanel.Lines lines={lines} copyText={language ? undefined : code} />
+      {/* Answer code grows with its lines, so streaming code stays in view
+          as the page follows it. */}
+      <CodePanel.Lines
+        lines={lines}
+        copyText={language ? undefined : code}
+        grow
+      />
     </CodePanel>
   );
 }

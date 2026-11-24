@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CodePanelLine } from "@opal/components";
 import { useCodeHighlighter } from "@/lib/codeHighlight/hooks";
+
+/** The least time between two highlight passes over streaming code. */
+const STREAMING_HIGHLIGHT_MS = 250;
 
 interface UseCodeLinesOptions {
   /**
@@ -43,13 +46,33 @@ export function useCodeLines(
   const head = split < 0 ? "" : code.slice(0, split);
   const tail = streaming ? code.slice(split + 1) : "";
 
-  const headHtml = useMemo(
+  // Finished code is highlighted at once. While code streams, the
+  // completed lines are highlighted again at most every
+  // STREAMING_HIGHLIGHT_MS, so a long block does not rescan its whole head
+  // on every new line; lines since the last pass show as plain text.
+  const doneHtml = useMemo(
     () =>
-      highlighter && resolvedLanguage && split >= 0
+      !streaming && highlighter && resolvedLanguage && split >= 0
         ? highlighter.highlightLines(head, resolvedLanguage)
         : null,
-    [highlighter, resolvedLanguage, head, split]
+    [streaming, highlighter, resolvedLanguage, head, split]
   );
+  const [streamedHtml, setStreamedHtml] = useState<string[] | null>(null);
+  // When the last pass ran. A new line moves the pass to this plus
+  // STREAMING_HIGHLIGHT_MS, so lines that keep arriving cannot delay it.
+  const lastPass = useRef(0);
+  useEffect(() => {
+    if (!streaming || !highlighter || !resolvedLanguage || split < 0) return;
+    const pass = setTimeout(
+      () => {
+        lastPass.current = Date.now();
+        setStreamedHtml(highlighter.highlightLines(head, resolvedLanguage));
+      },
+      Math.max(0, lastPass.current + STREAMING_HIGHLIGHT_MS - Date.now())
+    );
+    return () => clearTimeout(pass);
+  }, [streaming, highlighter, resolvedLanguage, head, split]);
+  const headHtml = streaming ? streamedHtml : doneHtml;
   const tailHtml = useMemo(
     () =>
       highlighter && resolvedLanguage && tail

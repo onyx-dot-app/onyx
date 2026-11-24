@@ -29,6 +29,10 @@
 .opal-code-panel-lines {
   @apply max-h-96 overflow-auto;
 }
+/* Growing lines show in full; only a too-wide line scrolls sideways. */
+.opal-code-panel-lines[data-grow] {
+  @apply max-h-none overflow-y-visible;
+}
 
 .opal-code-panel-lines table {
   @apply w-full border-collapse;

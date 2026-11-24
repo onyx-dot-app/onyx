@@ -14,7 +14,10 @@ import {
   FullChatState,
 } from "@/app/app/message/messageComponents/types";
 import { isFinalAnswerComplete } from "../../../services/packetUtils";
-import { stripPartialCitations, ScrollableTable } from "../markdownUtils";
+import {
+  stripPartialCitations,
+  ScrollableTable,
+} from "@/app/app/message/messageComponents/markdownUtils";
 import { BlinkingBar } from "../../BlinkingBar";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { MemoizedAnchor } from "@/app/app/message/MemoizedTextComponents";

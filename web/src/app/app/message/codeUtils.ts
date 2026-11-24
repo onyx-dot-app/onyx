@@ -189,7 +189,7 @@ export const labelBareCodeFences = (content: string): string => {
 
 // Replaces each fenced code block, including an unclosed trailing one
 // (mid-stream), with the string from `replace`.
-const replaceFencedCodeBlocks = (
+export const replaceFencedCodeBlocks = (
   content: string,
   replace: (block: string) => string
 ): string => {
