@@ -417,6 +417,19 @@ export function useAnswerWithMessage(): (
 }
 
 /**
+ * How often a chat's status reloads. Pending input and background work can
+ * start a turn this client did not send; a decided agent request counts as
+ * background work until its agent settles. Pass it in a new arrow on each
+ * render: SWR reschedules its poll only when `refreshInterval` changes, so a
+ * stable function reads only the data from before the first load.
+ */
+function statusPollInterval(current: ChatSessionStatus | undefined): number {
+  return current?.has_startable_input || current?.has_active_subagents
+    ? SERVER_WORK_POLL_MS
+    : 0;
+}
+
+/**
  * Server-owned pending messages and background activity of the current chat.
  * Mount once per chat surface; the composer only renders the result.
  */
@@ -465,13 +478,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     statusKey,
     errorHandlingFetcher,
     {
-      // Pending input and background work can start a turn this client did
-      // not send. A decided agent request counts as background work until
-      // its agent settles.
-      refreshInterval: (current) =>
-        current?.has_startable_input || current?.has_active_subagents
-          ? SERVER_WORK_POLL_MS
-          : 0,
+      refreshInterval: (current) => statusPollInterval(current),
       onErrorRetry: skipRetryOnAuthError,
     }
   );
@@ -649,14 +656,8 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
         } catch (failure) {
           toast.error(fetchErrorDetail(failure) ?? t("stopSubagentsFailed"));
         } finally {
+          // A status change also reloads the agents list (`useChatSubagents`)
           void mutate(status);
-          // The agents list keys by its URL first (`useChatSubagents`)
-          const agents = SWR_KEYS.chatSessionAgents(sessionId);
-          void mutate(
-            (key) => Array.isArray(key) && key[0] === agents,
-            undefined,
-            { revalidate: true }
-          );
         }
       },
     };
@@ -943,20 +944,24 @@ export function publishedFilesOf(
 }
 
 /**
- * The chat's background agents, newest first. They load again when the
- * chat's status changes whether agents are active or which response is
- * newest, and poll while agents are active.
+ * The chat's background agents, by the newest response that started them.
+ * They load once the chat's status does, again when it changes whether agents
+ * are active or which response is newest, and poll while agents are active.
+ * The status polls as the queue's does, also for chats without a queue.
  */
 export function useChatSubagents(sessionId: string): ChatSubagent[] {
   const { data: status } = useSWR<ChatSessionStatus, Error>(
     SWR_KEYS.chatSessionStatus(sessionId),
     errorHandlingFetcher,
-    { onErrorRetry: skipRetryOnAuthError }
+    {
+      refreshInterval: (current) => statusPollInterval(current),
+      onErrorRetry: skipRetryOnAuthError,
+    }
   );
   const active = status?.has_active_subagents ?? false;
   const url = SWR_KEYS.chatSessionAgents(sessionId);
   const { data } = useSWR<ChatSubagent[], Error>(
-    [url, active, status?.latest_response_id],
+    status ? [url, active, status.latest_response_id] : null,
     () => errorHandlingFetcher<ChatSubagent[]>(url),
     {
       refreshInterval: active ? SERVER_WORK_POLL_MS : 0,

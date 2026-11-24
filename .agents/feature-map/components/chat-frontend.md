@@ -207,7 +207,7 @@
   files. The toggle sits over the workspace's top end, so it stays at the
   same place over the header, the panel beside the page and a panel over it.
   The panel's controls keep out of its room
-  (`lib/outputPanel/layout.ts:PANEL_TOGGLE_RESERVE`). The header keeps out of
+  (`--panel-toggle-reserve` in `app/globals.css`). The header keeps out of
   it only while the panel is closed; beside the open panel, which holds the
   toggle, the share button keeps only the header's padding. It has one label and
   `aria-expanded`, and it acts on what the user sees: on a shown panel it
@@ -562,8 +562,8 @@ has a session, and the header leaves room for it at its end
 (`layouts/chromes/AppChrome.tsx`, the shared view's header padding). That room
 is `--panel-toggle-reserve`, a registered property in `app/globals.css`: the
 open panel sets it to zero on the page element, and the page eases it with
-the panel's slide. Its initial value and the size button's `end-12` in
-`sections/chat/ChatRightPanel.tsx` repeat `PANEL_TOGGLE_RESERVE` (48px); change all three
+the panel's slide. The size button's `end-12` in
+`sections/chat/ChatRightPanel.tsx` repeats its 48px initial value; change both
 together. In the
 DOM, the toggle follows what the user sees: a closed panel puts it in the
 workspace's `panelToggleSlot`, before the page, and an open panel puts it

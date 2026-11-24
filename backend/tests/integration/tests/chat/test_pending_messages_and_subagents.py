@@ -470,7 +470,6 @@ def test_the_agent_list_follows_a_background_agent(
         )
         [running] = _agents(session.id, admin_user)
         assert running.path == "/root/counter"
-        assert running.description == child_task
         assert running.status == RunStatus.RUNNING
         assert not running.stopped_by_user
     finally:

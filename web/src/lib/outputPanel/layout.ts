@@ -9,13 +9,8 @@ export const MIN_CHAT_WIDTH = 400;
 // Room at the end of the panel's header for the size and close controls
 export const OUTPUT_PANEL_HEADER_CONTROL_WIDTH = 76;
 export const MIN_OUTPUT_WIDTH = 280;
-// Room at the workspace's top end for the chat's right panel toggle: its
-// 12px inset and its 36px button; it abuts the next button, as the header's
-// buttons abut each other. The chat's header and the panel's size button keep
-// out of it.
-export const PANEL_TOGGLE_RESERVE = 48;
-// The page content's room for the toggle, registered in globals.css with
-// PANEL_TOGGLE_RESERVE as its initial value. The open panel sets it to zero.
+// The page content's room for the chat's right panel toggle, registered in
+// globals.css. The open panel sets it to zero.
 export const PANEL_TOGGLE_RESERVE_VAR = "--panel-toggle-reserve";
 export const PANEL_TOGGLE_ROOM = `var(${PANEL_TOGGLE_RESERVE_VAR})`;
 // The panel's share of the workspace before the user resizes it

@@ -17,12 +17,8 @@ const STATUS: ChatSessionStatus = {
   approvals_version: "",
 };
 
-function agent(
-  path: string,
-  status: ChatSubagent["status"],
-  description = `Task of ${path}`
-): ChatSubagent {
-  return { id: path, path, description, status, stopped_by_user: false };
+function agent(path: string, status: ChatSubagent["status"]): ChatSubagent {
+  return { id: path, path, status, stopped_by_user: false };
 }
 
 function serve(agents: ChatSubagent[], status = STATUS) {
@@ -149,7 +145,7 @@ test("a request this client already decided leaves the card at once", async () =
 test("lists running agents on one line each and folds the finished ones", async () => {
   serve(
     [
-      agent("/root/poet", "running", "Write a poem"),
+      agent("/root/poet", "running"),
       agent("/root/researcher", "complete"),
       { ...agent("/root/sleeper", "cancelled"), stopped_by_user: true },
     ],
@@ -163,8 +159,6 @@ test("lists running agents on one line each and folds the finished ones", async 
   act(() => trigger.click());
   expect(screen.getByText("poet")).toBeVisible();
   expect(screen.getByText("Running")).toBeVisible();
-  // The name is enough: no instruction under it
-  expect(screen.queryByText("Write a poem")).toBeNull();
   expect(screen.queryByText("researcher")).toBeNull();
 
   const finished = screen.getByRole("button", { name: /Previous agents/ });

@@ -1543,7 +1543,6 @@ def get_chat_session_agents(
         ChatSubagent(
             id=UUID(agent.id),
             path=agent.path,
-            description=agent.description,
             status=agent.status,
             stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
         )

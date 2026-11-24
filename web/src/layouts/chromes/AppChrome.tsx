@@ -84,8 +84,11 @@ function Header() {
     !incognitoLocked;
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
-  const pageWithHeaderContent =
-    appPosition.isChat() || appPosition.isNewSession() || appPosition.isAgent();
+  const showHeaderContent =
+    !!customHeaderContent &&
+    (appPosition.isChat() ||
+      appPosition.isNewSession() ||
+      appPosition.isAgent());
 
   const effectiveMode: AppMode =
     appPosition.isNewSession() && state.phase === "idle"
@@ -254,20 +257,13 @@ function Header() {
           - custom-header-content
           - Wraps to its own row below left/right on mobile when content is present
         */}
-              <div
-                className={cn(
-                  "flex flex-col items-center overflow-hidden",
-                  pageWithHeaderContent && customHeaderContent
-                    ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
-                    : "hidden"
-                )}
-              >
-                {pageWithHeaderContent && customHeaderContent && (
+              {showHeaderContent && (
+                <div className="flex flex-col items-center overflow-hidden order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1">
                   <span className="text-center w-full">
                     <Text color="text-03">{customHeaderContent}</Text>
                   </span>
-                )}
-              </div>
+                </div>
+              )}
 
               {/*
           Right:
@@ -277,9 +273,7 @@ function Header() {
               <div
                 className={cn(
                   "flex justify-end items-center",
-                  pageWithHeaderContent && customHeaderContent
-                    ? "flex-1"
-                    : "shrink-0"
+                  showHeaderContent ? "flex-1" : "shrink-0"
                 )}
               >
                 {(showIncognitoStart ||
@@ -496,7 +490,7 @@ export default function AppChrome({ children }: AppChromeProps) {
       >
         <div
           ref={workspaceRef}
-          className="@container/workspace group/workspace relative flex flex-row flex-1 min-h-0"
+          className="@container/workspace relative flex flex-row flex-1 min-h-0"
         >
           <AppWorkspaceElementsContext.Provider value={workspaceElements}>
             <div ref={setPanelToggleSlot} />
@@ -514,9 +508,9 @@ export default function AppChrome({ children }: AppChromeProps) {
                 // card (21.5rem) needs beyond the centered 45rem column's
                 // gutter, so the column stays put when the gutter fits it:
                 // gutter = (100% - 45rem) / 2, padding = 2 * 21.5rem + 45rem - 100%.
-                "@min-[64rem]/workspace:group-has-[[data-activity-docked]]/workspace:[&_[data-chat-scroll]>*]:pe-[max(0px,calc(88rem-100%))]",
-                "@min-[64rem]/workspace:group-has-[[data-activity-docked]]/workspace:[&_[data-activity-room]]:pe-[max(1rem,calc(88rem-100%))]",
-                "@min-[64rem]/workspace:group-has-[[data-activity-docked]]/workspace:[&>footer]:pe-[max(1rem,calc(88rem-100%))]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-chat-scroll]>*]:pe-[max(0px,calc(88rem-100%))]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-activity-room]]:pe-[max(1rem,calc(88rem-100%))]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&>footer]:pe-[max(1rem,calc(88rem-100%))]",
                 showBackground && "bg-cover bg-center bg-fixed"
               )}
               style={

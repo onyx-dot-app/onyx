@@ -42,6 +42,11 @@ const TEXT_MIME_TYPES = [
 ];
 const TEXT_EXTENSIONS = /\.(txt|log|conf|tsv)$/i;
 
+/** An SVG's text as an image URL. */
+export function svgDataUrl(text: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`;
+}
+
 /**
  * Picks a file's preview from its name, then from its MIME type: a known
  * extension always wins over the MIME type, so `config.json` shows as JSON

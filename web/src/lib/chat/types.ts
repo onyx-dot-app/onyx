@@ -85,22 +85,22 @@ export interface ChatSessionStatus {
   approvals_version: string;
 }
 
+/** A run's outcome, as the server's `RunStatus`. */
+export type RunStatus =
+  | "running"
+  | "suspended"
+  | "complete"
+  | "limit"
+  | "cancelled"
+  | "error";
+
 /** A background agent that the chat's selected branch started. */
 export interface ChatSubagent {
   id: string;
   /** The agent tree path, such as `/root/researcher`. */
   path: string;
-  /** The instruction it was started with. */
-  description: string;
   /** Null before its first run starts. */
-  status:
-    | "running"
-    | "suspended"
-    | "complete"
-    | "limit"
-    | "cancelled"
-    | "error"
-    | null;
+  status: RunStatus | null;
   stopped_by_user: boolean;
 }
 

@@ -107,11 +107,13 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
   );
   const agents = useChatSubagents(sessionId);
   const files = usePublishedFiles("current");
-  const running = agents.filter((agent) => agent.status === "running").length;
   // Finished agents fold under one row, as their own list
   const [showFinished, setShowFinished] = useState(false);
   const finishedAgents = agents.filter(isFinished);
   const liveAgents = agents.filter((agent) => !isFinished(agent));
+  const running = liveAgents.filter(
+    (agent) => agent.status === "running"
+  ).length;
   const agentRow = (agent: ChatSubagent) => {
     const state = agentState(agent);
     return (
@@ -139,23 +141,24 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
   const nudge = (requestId: string) => () =>
     useToolRequestUi.getState().nudgeRequest(requestId);
   // The trigger names what waits for the user, else the running agents
-  const label =
+  const trigger: { icon: IconFunctionComponent; label?: string } =
     waiting.length > 0
-      ? t("trigger.needsYou", { count: waiting.length })
+      ? {
+          icon: SvgAlertCircle,
+          label: t("trigger.needsYou", { count: waiting.length }),
+        }
       : running > 0
-        ? t("trigger.running", { count: running })
-        : undefined;
+        ? {
+            icon: SpinningLoader,
+            label: t("trigger.running", { count: running }),
+          }
+        : { icon: SvgActivity };
+  const { label } = trigger;
 
   return (
-    <div className="relative">
+    <>
       <Button
-        icon={
-          waiting.length > 0
-            ? SvgAlertCircle
-            : running > 0
-              ? SpinningLoader
-              : SvgActivity
-        }
+        icon={trigger.icon}
         prominence={waiting.length > 0 ? "secondary" : "tertiary"}
         size={label ? "sm" : undefined}
         tooltip={label ? undefined : t("trigger.label")}
@@ -245,6 +248,6 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
           </div>,
           activitySlot
         )}
-    </div>
+    </>
   );
 }

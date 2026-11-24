@@ -27,8 +27,8 @@ export default function FloatingFooter({
   codeBackground,
 }: FloatingFooterProps) {
   const slot = useContext(PreviewActionsSlotContext);
-  const moved = slot !== null && right ? createPortal(right, slot) : null;
-  const floating = moved ? null : right;
+  const moved = slot && right ? createPortal(right, slot) : null;
+  const floating = slot ? null : right;
   if (!left && !floating) return moved;
   return (
     <>

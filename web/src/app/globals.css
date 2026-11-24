@@ -22,9 +22,11 @@
   If we ever want to remove these styles, we need to add an explicit border
   color utility to any element that depends on these defaults.
 */
-/* The page content's room for the chat's right panel toggle
-   (PANEL_TOGGLE_RESERVE in lib/outputPanel/layout.ts). Registered so the page
-   can ease it with the panel's slide. */
+/* The page content's room for the chat's right panel toggle: its 12px inset
+   and its 36px button, which abuts the next button as the header's buttons
+   abut each other. The panel's size button sits beside it at the same 48px
+   (`end-12` in sections/chat/ChatRightPanel.tsx). Registered so the page can
+   ease it with the panel's slide. */
 @property --panel-toggle-reserve {
   syntax: "<length>";
   inherits: true;

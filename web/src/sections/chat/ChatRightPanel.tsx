@@ -532,7 +532,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           </OutputPanelLayout>
           {/* Beside the room of the toggle, which the panel places over the
               workspace's end */}
-          {/* end-12 is PANEL_TOGGLE_RESERVE */}
+          {/* end-12 is --panel-toggle-reserve's 48px (globals.css) */}
           <Section width="fit" height="auto" className="absolute end-12 top-2">
             {!layout.narrow && (
               <PanelSizeButton

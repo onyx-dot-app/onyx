@@ -15,6 +15,7 @@ import { Button, CopyButton, OnyxLoader, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgCode, SvgEye } from "@opal/icons";
 import type { ChatFilePreviewState } from "@/lib/filePreview/hooks";
+import { svgDataUrl } from "@/lib/filePreview/format";
 import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 import { DownloadButton } from "@/sections/file-preview/DownloadButton";
 import { PreviewUnavailable } from "@/sections/file-preview/PreviewUnavailable";
@@ -73,7 +74,8 @@ interface FilePreviewBodyProps {
 
 /**
  * A chat file's preview, below a header that the host draws: the content for
- * its format, with its actions over its bottom. Markdown, CSV, HTML and SVG
+ * its format, with its actions over its bottom or in a slot the host gives
+ * (`PreviewActionsSlotContext`). Markdown, CSV, HTML and SVG
  * show rendered, with a toggle to their source. The chat's right panel and
  * the preview modal both show files through it. A file that does not load or
  * render shows one card with its download instead.
@@ -146,7 +148,7 @@ export const FilePreviewBody = memo(function FilePreviewBody({
         if (data.render === "svg" && !showSource) {
           content = (
             <ImagePreview
-              src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(data.text)}`}
+              src={svgDataUrl(data.text)}
               fileName={data.name}
               actions={actions}
               // A drawing the browser cannot render still shows its source
@@ -227,7 +229,7 @@ export const FilePreviewBody = memo(function FilePreviewBody({
         content = (
           <DocxPreview
             bytes={data.bytes}
-            actions={{ download, textActions }}
+            actions={(text) => (text === null ? download : textActions(text))}
             onError={failRender}
           />
         );

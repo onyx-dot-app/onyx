@@ -518,8 +518,6 @@ class ChatSubagent(BaseModel):
     id: UUID
     # The agent tree path, such as `/root/researcher`
     path: str
-    # The instruction it was started with
-    description: str
     # None before its first run starts
     status: RunStatus | None
     stopped_by_user: bool

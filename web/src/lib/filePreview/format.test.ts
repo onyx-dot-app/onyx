@@ -2,7 +2,7 @@ import { resolveFilePreviewFormat } from "@/lib/filePreview/format";
 
 test.each([
   ["script.py", "text/x-python", { kind: "code", language: "python" }],
-  // HTML and SVG show their source, never a rendered page or image
+  // HTML and SVG render, with their source a toggle away
   [
     "page.html",
     "text/html",

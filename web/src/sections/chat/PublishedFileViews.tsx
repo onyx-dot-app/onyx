@@ -24,7 +24,7 @@ import {
   OutputTileFrame,
 } from "@/sections/output-panel/OutputTile";
 import { useChatFilePreview } from "@/lib/filePreview/hooks";
-import { resolveFilePreviewFormat } from "@/lib/filePreview/format";
+import { resolveFilePreviewFormat, svgDataUrl } from "@/lib/filePreview/format";
 import { loadChatFilePreview } from "@/lib/filePreview/loadChatFilePreview";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MarkdownFilePreview } from "@/sections/file-preview/MarkdownFilePreview";
@@ -69,7 +69,8 @@ function TextTilePreview({ file, format, fallback }: TextTilePreviewProps) {
       try {
         // The preview's loader, which reads at most its format's limit
         const preview = await loadChatFilePreview(file.file_id, file.name);
-        if (format === "svg" && preview.kind === "code") return preview.text;
+        if (preview.kind === "code" && preview.render === "svg")
+          return preview.text;
         if (preview.kind === "code" || preview.kind === "markdown")
           return preview.text.slice(0, TILE_TEXT_CHARACTERS);
         if (preview.kind === "csv")
@@ -94,7 +95,7 @@ function TextTilePreview({ file, format, fallback }: TextTilePreviewProps) {
       {typeof data === "string" && format === "svg" ? (
         <div className="h-full w-full p-4">
           <OutputImageThumbnail
-            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(data)}`}
+            src={svgDataUrl(data)}
             fallback={<Section>{fallback}</Section>}
           />
         </div>

@@ -9,11 +9,8 @@ import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 
 interface DocxPreviewProps {
   bytes: Uint8Array<ArrayBuffer>;
-  // The footer's actions: before the document renders, and for its text
-  actions: {
-    download: ReactNode;
-    textActions: (text: string) => ReactNode;
-  };
+  // The footer's actions, for the document's text once it renders
+  actions: (text: string | null) => ReactNode;
   onError: () => void;
 }
 
@@ -121,7 +118,7 @@ export function DocxPreview({ bytes, actions, onError }: DocxPreviewProps) {
             </Text>
           )
         }
-        right={text === null ? actions.download : actions.textActions(text)}
+        right={actions(text)}
       />
     </>
   );
