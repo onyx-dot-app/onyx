@@ -415,6 +415,41 @@ def test_version_accepts_only_bounded_approved_suffix_chains(version: str) -> No
 
 
 @pytest.mark.parametrize(
+    ("raw", "commit", "expected"),
+    [
+        ("v5.1.3", "f9b2636aa", "v5.1.3"),
+        ("v5.2.0-beta.1", "f9b2636aa", "v5.2.0-beta.1"),
+        ("v5.1.3-cloud.3", None, "v5.1.3-cloud.3"),
+        ("Development", None, "dev"),
+        ("dev-build-main-f9b2636", "F9B2636AA1B2", "f9b2636"),
+        ("nightly-latest-20261123", "2582a29ef5a52fff", "2582a29"),
+        ("edge", "2582a29ef5a52fff", "2582a29"),
+        ("jtahara/branch", "2582a29ef5a52fff", "2582a29"),
+        ("dev-build-main-f9b2636", None, "f9b2636"),
+        ("op-previewer-cad1d12", None, "cad1d12"),
+        ("nightly-latest-20261123", None, "nightly"),
+        ("edge", None, "unknown"),
+        ("edge", "not-a-sha", "unknown"),
+    ],
+)
+def test_reported_version_names_every_build_type(
+    monkeypatch: pytest.MonkeyPatch, raw: str, commit: str | None, expected: str
+) -> None:
+    from onyx.server.settings import build_info
+    from onyx.server.settings.models import BuildInfo
+
+    monkeypatch.setattr(
+        build_info,
+        "get_build_info",
+        lambda: BuildInfo(commit=commit, commit_date=None, ref=None),
+    )
+    reported: str = fleet.reported_version(raw)
+    assert reported == expected
+    # The fleet schema uses the same pattern, so the event is not rejected.
+    assert fleet.is_valid_version(reported)
+
+
+@pytest.mark.parametrize(
     "version",
     [
         "v4.9.0-PRIVATE",

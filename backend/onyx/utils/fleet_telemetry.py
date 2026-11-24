@@ -42,6 +42,9 @@ _OPAQUE: re.Pattern[str] = re.compile(r"[A-Za-z0-9_.:-]{1,128}\Z")
 _VERSION: re.Pattern[str] = re.compile(
     r"(?:v?\d{1,4}\.\d{1,4}(?:\.\d{1,4})?(?:[-.](?:cloud|beta|alpha|rc|dev|nightly|release)(?:[-.]?\d{1,8})?){0,3}|[a-f0-9]{7,40}|unknown|dev|nightly)\Z"
 )
+_COMMIT: re.Pattern[str] = re.compile(r"[a-f0-9]{7,40}\Z")
+# A build tag such as "dev-build-main-f9b2636" ends in its short commit.
+_TAG_COMMIT: re.Pattern[str] = re.compile(r"-([a-f0-9]{7,40})\Z")
 
 # Read from OnyxCeleryQueues, so a renamed queue needs no telemetry change.
 CELERY_QUEUES: tuple[str, ...] = tuple(
@@ -313,6 +316,24 @@ def fingerprint(value: str) -> str:
 def is_valid_version(value: str) -> bool:
     """Accept only bounded release tags, build hashes, and fixed version labels."""
     return _VERSION.fullmatch(value) is not None
+
+
+def reported_version(raw: str) -> str:
+    """The version label for the fleet. Release tags pass as they are. Other
+    builds (nightly, edge, dev-build) report their short commit."""
+    if raw == "Development":
+        return "dev"
+    if is_valid_version(raw):
+        return raw
+    from onyx.server.settings.build_info import get_build_info
+
+    commit: str = (get_build_info().commit or "").lower()
+    if _COMMIT.fullmatch(commit):
+        return commit[:7]
+    if raw.startswith("nightly"):
+        return "nightly"
+    tag_commit: re.Match[str] | None = _TAG_COMMIT.search(raw)
+    return tag_commit.group(1) if tag_commit else "unknown"
 
 
 def read_json_body(response: requests.Response, limit: int) -> Any:
@@ -710,10 +731,7 @@ class BoundedTelemetry:
         )
         from onyx import __version__
 
-        version: str = "dev" if __version__ == "Development" else __version__
-        self.emit(
-            "version", {"version": version if is_valid_version(version) else "unknown"}
-        )
+        self.emit("version", {"version": reported_version(__version__)})
 
     def _run(self) -> None:
         last_resource: float | None = None
