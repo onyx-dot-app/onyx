@@ -23,17 +23,6 @@ export interface FetchState {
   isComplete: boolean;
 }
 
-/** A URL without its query, fragment or trailing slash, as the backend
- * names a crawled page. */
-function pageKey(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.host}${parsed.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return url;
-  }
-}
-
 /** Constructs the current fetch state from fetch tool packets. The pages
  * arrive one packet at a time, as each one opens. */
 export const constructCurrentFetchState = (
@@ -46,11 +35,14 @@ export const constructCurrentFetchState = (
     (packet) => packet.obj.type === PacketType.FETCH_TOOL_URLS
   )?.obj as FetchToolUrls | undefined;
   const documentsById = new Map<string, OnyxDocument>();
+  // The requested URLs that opened pages answer, as the backend names them.
+  const openedUrls = new Set<string>();
   for (const { obj } of packets) {
     if (obj.type !== PacketType.FETCH_TOOL_DOCUMENTS) continue;
     for (const doc of obj.documents) {
       documentsById.set(doc.document_id, doc);
     }
+    for (const url of obj.urls ?? []) openedUrls.add(url);
   }
   const sectionEnd = packets.find(
     (packet) =>
@@ -63,12 +55,9 @@ export const constructCurrentFetchState = (
   const hasStarted = Boolean(startPacket);
   const isComplete = Boolean(startPacket && sectionEnd);
   const isLoading = hasStarted && !isComplete;
-  const openedKeys = new Set(
-    documents.flatMap((doc) => (doc.link ? [pageKey(doc.link)] : []))
-  );
   const pendingUrls = isComplete
     ? []
-    : urls.filter((url) => !openedKeys.has(pageKey(url)));
+    : urls.filter((url) => !openedUrls.has(url));
   const pageCount = isComplete
     ? documents.length || urls.length
     : urls.length || documents.length;

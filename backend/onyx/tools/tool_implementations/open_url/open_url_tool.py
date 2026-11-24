@@ -392,9 +392,13 @@ class OpenedPage(NamedTuple):
 
 
 def _report_opened(
-    invocation: ToolInvocation, sections: list[InferenceSection]
+    invocation: ToolInvocation,
+    sections: list[InferenceSection],
+    opened_urls: list[str] | None = None,
 ) -> None:
-    """Shows opened pages in the call's display, as soon as they open."""
+    """Shows opened pages in the call's display, as soon as they open.
+    `opened_urls` are the requested URLs these pages answer, so the display
+    marks exactly those as opened."""
     if not sections:
         return
     for section in sections:
@@ -408,6 +412,7 @@ def _report_opened(
                     sections, is_internet=False
                 ),
                 citation_mapping={},
+                opened_urls=opened_urls or [],
             )
         )
     )
@@ -524,6 +529,25 @@ class OpenURLTool(Tool):
         with get_session_with_current_tenant() as db_session:
             url_to_doc_id: dict[str, str] = {}
             timeout_occurred = [False]
+            # Each requested URL by its normalized form, as crawled pages
+            # name it.
+            requested_by_normalized: dict[str, list[str]] = {}
+            for url in urls:
+                requested_by_normalized.setdefault(
+                    normalize_web_content_url(url), []
+                ).append(url)
+            # Every page the crawl fetched, as it arrives. A timeout returns
+            # these, so the pages the display showed are also in the result.
+            fetched_pages: list[OpenedPage] = []
+
+            def _on_crawled(url: str, page: OpenedPage, report: bool) -> None:
+                fetched_pages.append(page)
+                if report:
+                    _report_opened(
+                        invocation,
+                        [page.section],
+                        requested_by_normalized.get(url, []),
+                    )
 
             def _timeout_handler(
                 index: int,  # noqa: ARG001
@@ -547,9 +571,7 @@ class OpenURLTool(Tool):
                             (
                                 urls,
                                 context.url_snippet_map,
-                                lambda _url, page: _report_opened(
-                                    invocation, [page.section]
-                                ),
+                                lambda url, page: _on_crawled(url, page, True),
                             ),
                         )
                     ],
@@ -560,7 +582,10 @@ class OpenURLTool(Tool):
                 indexed_result = IndexedRetrievalResult(
                     sections=[], missing_document_ids=[]
                 )
-                crawled_pages, failed_web_fetches = crawled_result or ([], [])
+                crawled_pages, failed_web_fetches = crawled_result or (
+                    list(fetched_pages),
+                    [],
+                )
 
                 if (
                     timeout_occurred[0]
@@ -591,12 +616,21 @@ class OpenURLTool(Tool):
                         requests, filters
                     )
                     # The merge below prefers an indexed page with content.
+                    opened_sections = [
+                        section
+                        for section in result.sections
+                        if section.combined_content
+                    ]
+                    opened_ids = {
+                        section.center_chunk.document_id for section in opened_sections
+                    }
                     _report_opened(
                         invocation,
+                        opened_sections,
                         [
-                            section
-                            for section in result.sections
-                            if section.combined_content
+                            url
+                            for url, document_id in url_to_doc_id.items()
+                            if document_id in opened_ids
                         ],
                     )
                     return result
@@ -606,8 +640,7 @@ class OpenURLTool(Tool):
                 indexed_urls = {normalize_web_content_url(url) for url in url_to_doc_id}
 
                 def _report_crawled(url: str, page: OpenedPage) -> None:
-                    if url not in indexed_urls:
-                        _report_opened(invocation, [page.section])
+                    _on_crawled(url, page, url not in indexed_urls)
 
                 if self._web_fetch_disabled:
                     # Indexed-only: never crawl. Unresolved URLs are seeded as
@@ -648,7 +681,10 @@ class OpenURLTool(Tool):
                 indexed_result = indexed_result or IndexedRetrievalResult(
                     sections=[], missing_document_ids=[]
                 )
-                crawled_pages, failed_web_fetches = crawled_result or ([], [])
+                crawled_pages, failed_web_fetches = crawled_result or (
+                    list(fetched_pages),
+                    [],
+                )
 
                 # Before link-based fallback (retries index retrieval with no timeout).
                 if (
