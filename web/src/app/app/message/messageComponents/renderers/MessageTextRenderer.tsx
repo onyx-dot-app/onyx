@@ -402,7 +402,7 @@ export const MessageTextRenderer: MessageRenderer<
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
           <span className="italic">
-            <Text font="secondary-body" color="text-04">
+            <Text as="p" font="secondary-body" color="text-04">
               {t("text.thinkingPlaceholder.text")}
             </Text>
           </span>
