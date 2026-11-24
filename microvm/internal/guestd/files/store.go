@@ -92,6 +92,9 @@ type Config struct {
 	// OnyxRoot: calls with no session ID open paths in it through an
 	// os.Root and follow no link out of it.
 	OnyxRoot string
+	// SkillsRoot: InstallSkill puts each skill in a folder here, as root.
+	// Its parents must belong to root.
+	SkillsRoot string
 	// ReadLinkRoots: a top-level link of a session (for example
 	// user_library) that points into one of these directories can be
 	// followed by Read, List and Zip.
@@ -168,6 +171,13 @@ func New(cfg Config) (*Store, error) {
 	cfg.OnyxRoot = path.Clean(cfg.OnyxRoot)
 	if !filepath.IsAbs(cfg.OnyxRoot) || cfg.OnyxRoot == "/" {
 		return nil, fmt.Errorf("onyx root %q is not an absolute directory below /", cfg.OnyxRoot)
+	}
+	if cfg.SkillsRoot == "" {
+		cfg.SkillsRoot = DefaultSkillsRoot
+	}
+	cfg.SkillsRoot = path.Clean(cfg.SkillsRoot)
+	if !filepath.IsAbs(cfg.SkillsRoot) || cfg.SkillsRoot == "/" {
+		return nil, fmt.Errorf("skills root %q is not an absolute directory below /", cfg.SkillsRoot)
 	}
 	for _, r := range cfg.ReadLinkRoots {
 		if !filepath.IsAbs(r) {
