@@ -1,5 +1,8 @@
-import { type ComponentProps, useMemo } from "react";
+import { type ComponentProps, useContext, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { Tag, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { LineLoader } from "@opal/loaders";
 import { SvgFiles } from "@opal/icons";
 import { stripBidiControls } from "@opal/utils";
 import {
@@ -7,10 +10,15 @@ import {
   PublishFilesEnd,
   PublishFilesStart,
   PublishFilesToolPacket,
+  type PublishedFile,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
-import { SandboxCallContent } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
-import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
+import {
+  SandboxCallContent,
+  SandboxCallError,
+} from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
+import { PublishedFilesPanelContext } from "@/sections/chat/PublishedFileCards";
+import { getFileIcon } from "@/lib/utils";
 import { useSandboxCallStatus } from "@/lib/sandbox/hooks";
 import { publishedFileLabel } from "@/lib/chat/publishedFiles";
 
@@ -21,6 +29,8 @@ type PublishFilesToolRendererProps = ComponentProps<
 interface FileRow {
   label: string;
   path: string;
+  /** The stored file, once published. */
+  published: PublishedFile | null;
 }
 
 /** One publish_files call: the files it asked for, then what it published. */
@@ -58,6 +68,7 @@ export function PublishFilesToolRenderer({
         ? end.files.map((file) => ({
             label: publishedFileLabel(file),
             path: file.path,
+            published: file,
           }))
         : (start?.files ?? []).map((file) => ({
             label: publishedFileLabel({
@@ -65,6 +76,7 @@ export function PublishFilesToolRenderer({
               name: file.path.split("/").pop() || file.path,
             }),
             path: file.path,
+            published: null,
           })),
     [start, end]
   );
@@ -77,26 +89,49 @@ export function PublishFilesToolRenderer({
         ? t("sandbox.publish.published.status", { count: end.files.length })
         : t("header.publishingFiles.label");
 
-  // One panel: the description (as a comment) and the files, one per line,
-  // then the output band, which waits with a loading shimmer while the
-  // files publish, or shows the error.
-  const fileLines = rows
-    .map((row) =>
-      row.path !== row.label
-        ? `${stripBidiControls(row.path)}  # ${row.label}`
-        : stripBidiControls(row.path)
-    )
-    .join("\n");
+  // A published file opens in the chat's Files panel, as its card does.
+  const panel = useContext(PublishedFilesPanelContext);
+
+  // The description, then one chip per file (as search shows what it read):
+  // named as soon as the call asks for them, and opening once published. A
+  // shimmer waits under them while the files publish.
   const content = (
     <SandboxCallContent renderType={renderType}>
-      <CommandBody
-        command={fileLines}
-        comment={start?.description ?? undefined}
-        output=""
-        error={error ?? undefined}
-        outputLoading={!isComplete}
-        emptyLabel=""
-      />
+      <Section alignItems="stretch" gap={1} height="fit">
+        {start?.description && (
+          <Text as="p" font="secondary-body" color="text-03">
+            {start.description}
+          </Text>
+        )}
+        {rows.length > 0 && (
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            height="fit"
+            gap={1}
+            wrap
+          >
+            {rows.map((row, index) => {
+              const published = row.published;
+              return (
+                <Tag
+                  key={`${row.path}-${index}`}
+                  icon={getFileIcon(row.path)}
+                  title={stripBidiControls(row.label)}
+                  truncate
+                  onClick={
+                    published && panel
+                      ? () => panel.openFile(published)
+                      : undefined
+                  }
+                />
+              );
+            })}
+          </Section>
+        )}
+        {!isComplete && <LineLoader width="2/3" />}
+        {error !== null && <SandboxCallError error={error} />}
+      </Section>
     </SandboxCallContent>
   );
 
