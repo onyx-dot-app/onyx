@@ -72,14 +72,18 @@ export function HoistedStepHeader({
           // The same inset as a collapsed run card's title, so the two line up.
           className="min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
         >
-          <Icon className={cn("shrink-0 w-4 h-4", colour)} />
+          {/* As `Content` lays out an inline title: the icon in a box one
+              line tall (20px) with 2px padding, and 2px around the title. */}
+          <Icon className={cn("shrink-0 w-5 h-5 p-0.5", colour)} />
           {/* The inline axis: the box takes the title's width, so the icon
               and the title stay together. */}
           <Presence.Swap swapKey={title} axis="inline">
             {shimmer ? (
-              <TextLoader>{title}</TextLoader>
+              <div className="px-[2px]">
+                <TextLoader>{title}</TextLoader>
+              </div>
             ) : (
-              <span className={colour}>
+              <span className={cn("px-[2px]", colour)}>
                 <Text font="main-ui-action" color="inherit">
                   {title}
                 </Text>
