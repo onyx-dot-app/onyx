@@ -1,4 +1,5 @@
 import json
+import threading
 from collections import defaultdict
 from collections.abc import Callable
 from typing import Any, NamedTuple
@@ -539,15 +540,28 @@ class OpenURLTool(Tool):
             # Every page the crawl fetched, as it arrives. A timeout returns
             # these, so the pages the display showed are also in the result.
             fetched_pages: list[OpenedPage] = []
+            # Once the result takes its snapshot (after a timeout), a crawl
+            # still running in its worker may neither add nor show a page.
+            pages_lock = threading.Lock()
+            pages_closed = [False]
 
             def _on_crawled(url: str, page: OpenedPage, report: bool) -> None:
-                fetched_pages.append(page)
-                if report:
-                    _report_opened(
-                        invocation,
-                        [page.section],
-                        requested_by_normalized.get(url, []),
-                    )
+                with pages_lock:
+                    if pages_closed[0]:
+                        return
+                    fetched_pages.append(page)
+                    if report:
+                        _report_opened(
+                            invocation,
+                            [page.section],
+                            requested_by_normalized.get(url, []),
+                        )
+
+            def _close_pages() -> list[OpenedPage]:
+                """The pages fetched so far; later ones are dropped."""
+                with pages_lock:
+                    pages_closed[0] = True
+                    return list(fetched_pages)
 
             def _timeout_handler(
                 index: int,  # noqa: ARG001
@@ -583,7 +597,7 @@ class OpenURLTool(Tool):
                     sections=[], missing_document_ids=[]
                 )
                 crawled_pages, failed_web_fetches = crawled_result or (
-                    list(fetched_pages),
+                    _close_pages(),
                     [],
                 )
 
@@ -682,7 +696,7 @@ class OpenURLTool(Tool):
                     sections=[], missing_document_ids=[]
                 )
                 crawled_pages, failed_web_fetches = crawled_result or (
-                    list(fetched_pages),
+                    _close_pages(),
                     [],
                 )
 
