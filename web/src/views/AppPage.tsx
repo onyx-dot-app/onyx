@@ -1195,7 +1195,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
+                <div
+                  className={cn(
+                    "row-start-3 min-h-0 flex flex-col items-center w-full px-2 sm:px-4",
+                    // The onboarding row has a fixed height, so the agent's
+                    // description and starters scroll when they do not fit.
+                    onboardingVisible ? "overflow-y-auto" : "overflow-hidden"
+                  )}
+                >
                   {/* Agent description below input */}
                   {(appPosition.isNewSession() || appPosition.isAgent()) &&
                     !isPlainChat && (
