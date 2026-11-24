@@ -29,6 +29,8 @@ import {
 } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
+import { usePlaygroundRestriction } from "@/lib/playground/hooks";
+import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { Tier } from "@/lib/tiers/types";
@@ -61,6 +63,7 @@ interface ToggleRowProps {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
+  disabledTooltip?: string | RichStr;
 }
 
 function ToggleRow({
@@ -69,6 +72,7 @@ function ToggleRow({
   checked,
   onCheckedChange,
   disabled,
+  disabledTooltip,
 }: ToggleRowProps) {
   return (
     <InputHorizontal
@@ -76,12 +80,9 @@ function ToggleRow({
       description={description}
       withLabel
       disabled={disabled}
+      disabledTooltip={disabledTooltip}
     >
-      <InputSwitch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
-      />
+      <InputSwitch checked={checked} onCheckedChange={onCheckedChange} />
     </InputHorizontal>
   );
 }
@@ -189,6 +190,9 @@ export default function SecurityHardeningPage() {
   // Invite-only lives in workspace settings, not SecuritySettings, so it has
   // its own save path.
   const workspaceSettings = useSettings();
+  const anonymousAccess = usePlaygroundRestriction(
+    PlaygroundRestrictedFeature.ANONYMOUS_ACCESS
+  );
   const saveWorkspaceSettings = useCallback(
     async (updates: Partial<Settings>) => {
       const newSettings: Settings = {
@@ -415,14 +419,29 @@ export default function SecurityHardeningPage() {
 
               <ToggleRow
                 title={t("authentication.anonymousUsers.title")}
-                description={markdown(
-                  t("authentication.anonymousUsers.description")
-                )}
-                checked={workspaceSettings.anonymous_user_enabled ?? false}
+                // The reason sits in the row, so a keyboard user reads it
+                // without the tooltip, which Tab skips on a disabled switch.
+                description={
+                  anonymousAccess.restricted
+                    ? anonymousAccess.description
+                    : markdown(t("authentication.anonymousUsers.description"))
+                }
+                checked={
+                  !anonymousAccess.restricted &&
+                  (workspaceSettings.anonymous_user_enabled ?? false)
+                }
                 onCheckedChange={(checked) =>
                   void saveWorkspaceSettings({
                     anonymous_user_enabled: checked,
                   })
+                }
+                // Locked until the settings arrive, so the switch is never
+                // live before the page knows it is restricted.
+                disabled={!anonymousAccess.known || anonymousAccess.restricted}
+                disabledTooltip={
+                  anonymousAccess.restricted
+                    ? anonymousAccess.tooltip
+                    : undefined
                 }
               />
 
