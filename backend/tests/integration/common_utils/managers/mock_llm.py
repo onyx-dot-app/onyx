@@ -59,16 +59,17 @@ def tool_call_reply(
     characters of its name as `_`; it can call a deferred (MCP or custom)
     function without `tool_search`. The
     program call takes the first call's id, so a later reply can wait for
-    `has_results_for=[calls[0].id]` in both modes. `conditions` adds to the
-    offered tools and the tool choice."""
+    `has_results_for=[calls[0].id]` in both modes. `conditions` holds more
+    checks; its offered tools add to the called ones, and `tool_choice`, when
+    set, replaces its tool choice."""
     base = conditions or RequestConditions()
     if not CODE_MODE_ENABLED:
         return Reply(
             tool_calls=list(calls),
             conditions=base.model_copy(
                 update={
-                    "offers": [call.name for call in calls],
-                    "tool_choice": tool_choice,
+                    "offers": [*base.offers, *(call.name for call in calls)],
+                    "tool_choice": tool_choice or base.tool_choice,
                 }
             ),
             required=required,
@@ -84,7 +85,10 @@ def tool_call_reply(
             ToolCall(id=calls[0].id, name="execute_code", arguments={"code": program})
         ],
         conditions=base.model_copy(
-            update={"offers": ["execute_code"], "tool_choice": tool_choice}
+            update={
+                "offers": [*base.offers, "execute_code"],
+                "tool_choice": tool_choice or base.tool_choice,
+            }
         ),
         required=required,
     )
