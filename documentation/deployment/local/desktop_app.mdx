@@ -164,7 +164,9 @@ The app keeps the session token in the credential store of the operating system:
 the Windows Credential Manager, or the Linux Secret Service. The app renews the session at launch and every 12 hours.
 
 To change the server or sign out, open **Preferences**.
-**Change server** and **Sign out** remove the session from the device.
+**Change server** and **Sign out** end the session in the app and delete the saved session token.
+If Onyx cannot delete the token, it shows a warning. The token can then remain in the device's credential store,
+but Onyx does not use it again and tries to delete it at the next launch.
 
 ## Where the app keeps its files
 
