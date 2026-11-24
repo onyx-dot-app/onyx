@@ -93,7 +93,7 @@ from onyx.db.federated import (
     list_federated_connector_oauth_tokens,
 )
 from onyx.db.file_record import get_filerecords_by_file_ids
-from onyx.db.models import SearchSettings, User
+from onyx.db.models import FileRecord, SearchSettings, User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces import DocumentIndex
@@ -961,15 +961,15 @@ class SearchTool(Tool):
             if context.python_stages_search_files
             else set()
         )
-        # By file that a tool of the chat can open: its recorded size. One
-        # query serves the result's names and the copy or the staging.
-        openable: dict[str, int | None] = {}
+        # By file that a tool of the chat can open: its record. One query
+        # serves the result's names and the copy or the staging.
+        openable: dict[str, FileRecord] = {}
         if file_ids:
             with get_session_with_tenant(
                 tenant_id=get_current_tenant_id()
             ) as db_session:
                 openable = {
-                    record.file_id: record.file_size
+                    record.file_id: record
                     for record in get_filerecords_by_file_ids(
                         list(file_ids), db_session
                     )
@@ -990,7 +990,8 @@ class SearchTool(Tool):
                 {
                     file_id: SearchResultFile(
                         title=chunks[0].semantic_identifier,
-                        size=openable[file_id],
+                        size=openable[file_id].file_size,
+                        updated_at=openable[file_id].updated_at,
                         document_ids=tuple(
                             dict.fromkeys(chunk.document_id for chunk in chunks)
                         ),

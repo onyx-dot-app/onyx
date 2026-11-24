@@ -10,6 +10,7 @@ import threading
 import time
 from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
@@ -135,6 +136,8 @@ def sandbox(
     monkeypatch.setattr(harness_factory, "_instance", instance)
     monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", True)
     monkeypatch.setattr(file_copies, "RETRY_PAUSE_SECONDS", 0.0)
+    # The fake VM and the database share the host's clock.
+    monkeypatch.setattr(file_copies, "SEARCH_COPY_CLOCK_SKEW", timedelta(0))
     return instance
 
 
@@ -206,6 +209,8 @@ class ConnectorFile:
     document_id: str
     title: str
     data: bytes
+    # The file record's last write.
+    updated_at: datetime
 
     def result(self) -> MockInternalSearchResult:
         return MockInternalSearchResult(
@@ -264,7 +269,10 @@ def make_file(
             )
         )
         db_session.commit()
-        made.append(ConnectorFile(file_id, document_id, f"{name}.csv", data))
+        record = db_session.get_one(FileRecord, file_id)
+        made.append(
+            ConnectorFile(file_id, document_id, f"{name}.csv", data, record.updated_at)
+        )
         return made[-1]
 
     yield make
@@ -416,6 +424,53 @@ def test_a_file_is_copied_once_for_each_chat(
     assert _search_files(node, ref) == {path: file.data}
 
 
+def test_a_file_whose_content_changed_at_the_same_size_is_copied_again(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    chat: SandboxChat,
+    node: RunningFakeAgent,
+    make_file: MakeFile,
+    internal: SearchPipelineController,
+    idle: Idle,
+) -> None:
+    file = make_file(b"west,10\n")
+    internal.add_search_results(QUERY, [file.result()])
+    tool_ids = [_search_tool_id(db_session)]
+    ref = chat.ref(db_session)
+    path = _path(file)
+    chat.send(ChatLLM([_search("first"), Delta(content="Done.")]), tool_ids=tool_ids)
+    _wait_until(lambda: _search_files(node, ref) == {path: file.data})
+    _wait_until(idle)
+
+    # A connector indexes new content under the same file ID and size.
+    edited = b"west,99\n"
+    assert len(edited) == len(file.data)
+    get_default_file_store().save_file(
+        content=io.BytesIO(edited),
+        display_name=file.title,
+        file_origin=FileOrigin.CONNECTOR,
+        file_type="text/csv",
+        file_id=file.file_id,
+    )
+    chat.send(ChatLLM([_search("edited"), Delta(content="Done.")]), tool_ids=tool_ids)
+    _wait_until(lambda: _search_files(node, ref) == {path: edited})
+    _wait_until(idle)
+    assert node.agent.write_paths.count(path) == 2
+
+    # An unchanged file stays in place.
+    chat.send(ChatLLM([_search("same"), Delta(content="Done.")]), tool_ids=tool_ids)
+    _wait_until(idle)
+    assert node.agent.write_paths.count(path) == 2
+    assert _search_files(node, ref) == {path: edited}
+
+    # A copy within the clock skew of the record's last write is copied again.
+    monkeypatch.setattr(file_copies, "SEARCH_COPY_CLOCK_SKEW", timedelta(hours=1))
+    chat.send(ChatLLM([_search("skew"), Delta(content="Done.")]), tool_ids=tool_ids)
+    _wait_until(idle)
+    assert node.agent.write_paths.count(path) == 3
+    assert _search_files(node, ref) == {path: edited}
+
+
 def test_a_file_in_place_gives_its_turn_budget_back(
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
@@ -565,11 +620,13 @@ def test_the_cap_evicts_the_oldest_search_files_but_not_this_turns(
     _wait_until(lambda: kept_path in _search_files(node, ref))
     _wait_until(idle)
 
-    # An older file of an earlier turn; the kept file is older still.
+    # An older file of an earlier turn; the kept file, still in place, is
+    # older still.
     old_path = "attachments/search/00000000-old.csv"
     node.agent.files[_key(ref, old_path)] = b"older!"
-    node.agent.file_times[_key(ref, old_path)] = time.time() - 100
-    node.agent.file_times[_key(ref, kept_path)] = time.time() - 200
+    copied_at = kept.updated_at.timestamp()
+    node.agent.file_times[_key(ref, old_path)] = copied_at + 2
+    node.agent.file_times[_key(ref, kept_path)] = copied_at + 1
     monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 12)
 
     llm = ChatLLM([_search("both", "both"), Delta(content="Done.")])
@@ -578,6 +635,7 @@ def test_the_cap_evicts_the_oldest_search_files_but_not_this_turns(
     assert new.file_name is not None
     _wait_until(idle)
     assert _search_files(node, ref) == {kept_path: b"kept", new.file_name: b"adds"}
+    assert node.agent.write_paths.count(kept_path) == 1
 
 
 def test_the_chat_file_copy_never_deletes_search_or_artifact_files(
@@ -670,6 +728,7 @@ def test_a_search_leaves_the_chat_file_copy_of_its_turn_running(
                 file.file_id: SearchResultFile(
                     title=file.title,
                     size=len(file.data),
+                    updated_at=file.updated_at,
                     document_ids=(file.document_id,),
                 )
             }
@@ -845,6 +904,7 @@ def test_an_earlier_turns_late_search_leaves_the_newer_turn_alone(
                 file.file_id: SearchResultFile(
                     title=file.title,
                     size=len(file.data),
+                    updated_at=file.updated_at,
                     document_ids=(file.document_id,),
                 )
             }
@@ -1271,6 +1331,7 @@ def test_a_file_offered_while_the_intake_runs_is_copied(
                 file.file_id: SearchResultFile(
                     title=file.title,
                     size=len(file.data),
+                    updated_at=file.updated_at,
                     document_ids=(file.document_id,),
                 )
             }
@@ -1323,6 +1384,7 @@ def test_a_write_that_ends_during_the_listing_still_counts_toward_the_cap(
                 file.file_id: SearchResultFile(
                     title=file.title,
                     size=len(file.data),
+                    updated_at=file.updated_at,
                     document_ids=(file.document_id,),
                 )
             }
