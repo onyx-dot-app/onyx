@@ -49,6 +49,7 @@ from onyx.llm.models import (
 from onyx.microvm.models import FileListing
 from onyx.prompts.sandbox_tools import SEARCH_FILE_GUIDANCE
 from onyx.server.features.build.sandbox import harness_factory
+from onyx.server.features.build.sandbox.file_copy_state import copy_generation_key
 from onyx.server.features.build.sandbox.firecracker import harness_state, purge
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
@@ -141,16 +142,26 @@ def node(add_node: AddNode) -> RunningFakeAgent:
 
 
 @pytest.fixture
+def chat_ids() -> list[UUID]:
+    """The chats of the test, whose copy generations the `user` teardown
+    deletes."""
+    return []
+
+
+@pytest.fixture
 def user(
     db_session: Session,
     tenant_cache: CacheBackend,
     make_test_user: MakeTestUser,
     idle: Idle,
+    chat_ids: list[UUID],
 ) -> Generator[User, None, None]:
     user = make_test_user("search_files")
     yield user
     assert chat_turn_work.wait_idle(timeout=30)
     _wait_until(idle)
+    for chat_id in chat_ids:
+        tenant_cache.delete(copy_generation_key(chat_id))
     db_session.rollback()
     for sandbox_id in db_session.scalars(
         select(Sandbox.id).where(Sandbox.user_id == user.id)
@@ -161,11 +172,15 @@ def user(
 
 
 def _new_chat(
-    db_session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+    db_session: Session,
+    user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    chat_ids: list[UUID],
 ) -> SandboxChat:
     chat_session = create_chat_session(
         db_session, "search files", user.id, persona_id=DEFAULT_PERSONA_ID
     )
+    chat_ids.append(chat_session.id)
     return SandboxChat(
         user=user, chat_session_id=chat_session.id, monkeypatch=monkeypatch
     )
@@ -178,8 +193,9 @@ def chat(
     user: User,
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
     node: RunningFakeAgent,  # noqa: ARG001
+    chat_ids: list[UUID],
 ) -> SandboxChat:
-    return _new_chat(db_session, user, monkeypatch)
+    return _new_chat(db_session, user, monkeypatch, chat_ids)
 
 
 @dataclass(frozen=True)
@@ -341,7 +357,6 @@ def test_a_search_names_the_vm_path_and_the_file_arrives(
 
 
 def test_a_file_is_copied_once_for_each_chat(
-    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
     user: User,
@@ -350,6 +365,7 @@ def test_a_file_is_copied_once_for_each_chat(
     make_file: MakeFile,
     internal: SearchPipelineController,
     idle: Idle,
+    chat_ids: list[UUID],
 ) -> None:
     file = make_file(b"a,b\n1,2\n")
     internal.add_search_results(QUERY, [file.result()])
@@ -368,21 +384,16 @@ def test_a_file_is_copied_once_for_each_chat(
     _wait_until(idle)
     assert node.agent.write_paths.count(path) == 1
 
-    # A later turn finds the file in place, and logs the hit.
-    caplog.clear()
+    # A later turn finds the file in place, and writes it no more.
     llm = ChatLLM([_search("again"), Delta(content="Done.")])
     chat.send(llm, tool_ids=tool_ids)
     assert [result.file_name for result in _results(llm, "again")] == [path]
     _wait_until(idle)
     assert node.agent.write_paths.count(path) == 1
-    assert "sandbox_search_files_offered new=1 again=0" in caplog.text
-    assert (
-        f"sandbox_search_files_intake session={ref.session_id} in_place=1 copying=0"
-        in caplog.text
-    )
+    assert _search_files(node, ref) == {path: file.data}
 
     # Another chat copies its own.
-    other = _new_chat(db_session, user, monkeypatch)
+    other = _new_chat(db_session, user, monkeypatch, chat_ids)
     llm = ChatLLM([_search("other"), Delta(content="Done.")])
     other.send(llm, tool_ids=tool_ids)
     assert [result.file_name for result in _results(llm, "other")] == [path]
@@ -562,6 +573,7 @@ def test_the_chat_file_copy_never_deletes_search_or_artifact_files(
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
     node: RunningFakeAgent,
     idle: Idle,
+    chat_ids: list[UUID],
 ) -> None:
     file_id = get_default_file_store().save_file(
         content=io.BytesIO(b"project"),
@@ -583,6 +595,7 @@ def test_the_chat_file_copy_never_deletes_search_or_artifact_files(
             )
 
         chat_session_id = uuid4()
+        chat_ids.append(chat_session_id)
         ref = turn(chat_session_id).start_call()
         _wait_until(idle)
         kept = (
@@ -607,6 +620,7 @@ def test_a_search_leaves_the_chat_file_copy_of_its_turn_running(
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
     node: RunningFakeAgent,
     make_file: MakeFile,
+    chat_ids: list[UUID],
 ) -> None:
     """The turn's copies of both roots share its copy generation, so the
     chat file copy writes its next file after the search's copy started."""
@@ -625,10 +639,12 @@ def test_a_search_leaves_the_chat_file_copy_of_its_turn_running(
     gate = threading.Event()
     node.agent.write_gates["attachments/a.txt"] = gate
     try:
+        chat_id = uuid4()
+        chat_ids.append(chat_id)
         turn = SandboxTurn(
             tenant_id=TENANT_ID,
             user_id=user.id,
-            chat_session_id=uuid4(),
+            chat_session_id=chat_id,
             vm_chat_files=[
                 VmChatFile(file_id=uploads[0], path="attachments/a.txt"),
                 VmChatFile(file_id=uploads[1], path="attachments/b.txt"),
@@ -647,6 +663,8 @@ def test_a_search_leaves_the_chat_file_copy_of_its_turn_running(
                 )
             }
         )
+        # The search intake ends while the chat file write still waits.
+        _wait_until(pool.intake.idle)
         gate.set()
         _wait_until(pool.idle)
         assert node.agent.files[_key(ref, "attachments/b.txt")] == b"bb"
@@ -783,6 +801,7 @@ def test_an_earlier_turns_late_search_leaves_the_newer_turn_alone(
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
     node: RunningFakeAgent,
     make_file: MakeFile,
+    chat_ids: list[UUID],
 ) -> None:
     """A background subagent of an earlier turn searches after the next turn
     started: its copy is superseded, so it neither stops the newer turn's
@@ -800,6 +819,7 @@ def test_an_earlier_turns_late_search_leaves_the_newer_turn_alone(
         for name in ("a", "bb")
     ]
     chat_session_id = uuid4()
+    chat_ids.append(chat_session_id)
 
     def turn(chat_files: list[VmChatFile]) -> SandboxTurn:
         return SandboxTurn(
@@ -839,6 +859,8 @@ def test_an_earlier_turns_late_search_leaves_the_newer_turn_alone(
         # The earlier turn's copy would evict the newer turn's file.
         monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 6)
         earlier_path = offer(earlier, make_file(b"late"))
+        # The earlier turn's intake ends while the chat file write still waits.
+        _wait_until(pool.intake.idle)
         gate.set()
         _wait_until(pool.idle)
         assert node.agent.files[_key(ref, "attachments/b.txt")] == b"bb"
@@ -1179,6 +1201,7 @@ def test_a_file_offered_while_the_intake_runs_is_copied(
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
     make_file: MakeFile,
+    chat_ids: list[UUID],
 ) -> None:
     pool = new_file_copy_pool()
     listing = threading.Event()
@@ -1192,10 +1215,12 @@ def test_a_file_offered_while_the_intake_runs_is_copied(
             return super().list_files(directory, max_entries=max_entries)
 
     _wrap(monkeypatch, sandbox, _HeldListing)
+    chat_id = uuid4()
+    chat_ids.append(chat_id)
     turn = SandboxTurn(
         tenant_id=TENANT_ID,
         user_id=user.id,
-        chat_session_id=uuid4(),
+        chat_session_id=chat_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
     )
@@ -1230,16 +1255,19 @@ def test_a_write_that_ends_during_the_listing_still_counts_toward_the_cap(
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
     make_file: MakeFile,
+    chat_ids: list[UUID],
 ) -> None:
     """The listing does not show a running write, which then ends before the
     intake reads the turn's running writes: it is counted all the same, so
     the older file makes room."""
     pool = new_file_copy_pool()
     monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 12)
+    chat_id = uuid4()
+    chat_ids.append(chat_id)
     turn = SandboxTurn(
         tenant_id=TENANT_ID,
         user_id=user.id,
-        chat_session_id=uuid4(),
+        chat_session_id=chat_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
     )
