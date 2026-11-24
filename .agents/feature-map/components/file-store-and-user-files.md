@@ -131,7 +131,13 @@ artifact: `db/models.py:ChatArtifact` is one VM path in one root chat
 session, with the chat's owner (`user_id`, set from the chat when the
 artifact is created),
 and `ChatArtifactVersion` numbers its files from 1 and holds each
-file's title. The sandbox tools `library_list` and `library_prepare_materialize`
+file's title. A delete (`library_manage_library`, after the user approves) removes
+an artifact (`db/chat.py:delete_chat_artifact`). Cleanup has one owner per
+level: `delete_chat_artifact_files` cleans up one version (its thumbnail,
+then its file, whose delete removes the version row), and whatever belongs
+to the whole artifact runs after the commit that removes the artifact row,
+in every path that removes one. Other chats' cards of a deleted artifact
+keep their saved name, and their download is not found. The sandbox tools `library_list` and `library_prepare_materialize`
 ([[code-execution]]) read these rows for the owner's chats that are not
 deleted; the default list order reads the index on `(user_id, updated_at
 DESC)`, and the other sorts read all of the owner's artifacts. The save writes the file record, upserts the artifact (its row

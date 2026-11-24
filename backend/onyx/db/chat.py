@@ -103,9 +103,6 @@ from onyx.tools.models import IntegrationEntry, ToolOptions
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
     ARTIFACT_TYPE_EXTENSIONS,
-    ARTIFACTS_CHAT_TITLE_MAX_CHARS,
-    ARTIFACTS_NAME_MAX_CHARS,
-    ARTIFACTS_PATH_MAX_CHARS,
     ArtifactAtPath,
     ArtifactCursor,
     ArtifactNotFound,
@@ -121,6 +118,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     artifact_type,
     artifact_url,
     published_display_path,
+    shown_artifact,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -1066,6 +1064,32 @@ _ARTIFACT_CHAT_NOT_DELETED = ChatArtifact.chat_session_id.in_(
 )
 
 
+def _delete_versionless_artifacts(
+    db_session: Session, *where: ColumnElement[bool]
+) -> list[UUID]:
+    """Delete the artifacts matching `where` that have no version, and return
+    their ids. The lock waits for a concurrent publish of an artifact to
+    commit, and the delete's new snapshot then sees its version."""
+    db_session.execute(
+        select(ChatArtifact.id)
+        .where(*where)
+        .order_by(ChatArtifact.id)
+        .with_for_update()
+    )
+    return list(
+        db_session.scalars(
+            delete(ChatArtifact)
+            .where(
+                *where,
+                ~select(ChatArtifactVersion.artifact_id)
+                .where(ChatArtifactVersion.artifact_id == ChatArtifact.id)
+                .exists(),
+            )
+            .returning(ChatArtifact.id)
+        )
+    )
+
+
 def save_chat_artifact(
     content: bytes,
     *,
@@ -1086,8 +1110,10 @@ def save_chat_artifact(
     deleted, raises ArtifactNotFound. KeptTitle.NEWEST takes the title of that
     newest available version. `thumbnail` is a JPEG of the file's first
     page. The file and its thumbnail get the artifact chat's access and file
-    list, and its hard delete; a new artifact gets the chat's owner. A
-    thumbnail that fails to save is left out."""
+    list, and its hard delete; a new artifact gets the chat's owner. An
+    artifact row without a version is a deleted one: a save at its path
+    replaces it with a new artifact, and a save by its ID raises
+    ArtifactNotFound. A thumbnail that fails to save is left out."""
     file_store = get_default_file_store()
     file_id = str(uuid4())
     thumbnail_file_id: str | None = None
@@ -1116,6 +1142,15 @@ def save_chat_artifact(
         # statements read the versions they committed.
         locked: Row[tuple[UUID, UUID, str]] | None
         if isinstance(target, ArtifactAtPath):
+            # A row without a version is what a delete that stopped after its
+            # files leaves (delete_chat_artifact). The publish takes a new
+            # artifact ID, so no link of the deleted artifact opens the new
+            # file.
+            _delete_versionless_artifacts(
+                db_session,
+                ChatArtifact.chat_session_id == target.chat_session_id,
+                ChatArtifact.path == target.path,
+            )
             locked = db_session.execute(
                 postgresql.insert(ChatArtifact)
                 .values(
@@ -1137,7 +1172,12 @@ def save_chat_artifact(
             locked = db_session.execute(
                 update(ChatArtifact)
                 .where(
-                    ChatArtifact.id == target.artifact_id, _ARTIFACT_CHAT_NOT_DELETED
+                    ChatArtifact.id == target.artifact_id,
+                    _ARTIFACT_CHAT_NOT_DELETED,
+                    # A row without a version is a deleted artifact (as above).
+                    select(ChatArtifactVersion.artifact_id)
+                    .where(ChatArtifactVersion.artifact_id == ChatArtifact.id)
+                    .exists(),
                 )
                 .values(updated_at=updated_at)
                 .returning(
@@ -1243,32 +1283,57 @@ def delete_unpublished_chat_artifacts(published: Sequence[PublishedFile]) -> Non
     if not artifact_ids:
         return
     with get_session_with_current_tenant() as db_session:
-        # The lock waits for a concurrent publish of the path to commit, and
-        # the delete's new snapshot then sees its version.
-        db_session.execute(
-            select(ChatArtifact.id)
-            .where(ChatArtifact.id.in_(artifact_ids))
-            .order_by(ChatArtifact.id)
-            .with_for_update()
-        )
-        db_session.execute(
-            delete(ChatArtifact).where(
-                ChatArtifact.id.in_(artifact_ids),
-                ~select(ChatArtifactVersion.artifact_id)
-                .where(ChatArtifactVersion.artifact_id == ChatArtifact.id)
-                .exists(),
-            )
-        )
+        _delete_versionless_artifacts(db_session, ChatArtifact.id.in_(artifact_ids))
         db_session.commit()
 
 
+def delete_chat_artifact(artifact_id: UUID) -> int:
+    """Hard-delete the artifact `artifact_id`: each version's thumbnail and
+    file, oldest first (delete_chat_artifact_files, the cleanup of one
+    version; a file's delete removes its version row), then the artifact
+    row, and return the number of versions deleted (0 when the artifact is
+    gone). It holds the artifact's row lock throughout, so a concurrent
+    publish of the artifact waits, and then makes a new artifact at its
+    path: no link of the deleted artifact opens other content. Raises the
+    first failed file delete and stops there, so the newest version stays
+    with the artifact and a later publish never reuses a deleted version's
+    number. Cleanup of the whole artifact, which is not a version's, runs
+    after this removes the row. The caller checks the user's access."""
+    with get_session_with_current_tenant() as db_session:
+        if (
+            db_session.scalar(
+                select(ChatArtifact.id)
+                .where(ChatArtifact.id == artifact_id)
+                .with_for_update()
+            )
+            is None
+        ):
+            return 0
+        versions = (
+            db_session.execute(
+                select(
+                    ChatArtifactVersion.file_id, ChatArtifactVersion.thumbnail_file_id
+                )
+                .where(ChatArtifactVersion.artifact_id == artifact_id)
+                .order_by(ChatArtifactVersion.version)
+            )
+            .tuples()
+            .all()
+        )
+        for version in versions:
+            delete_chat_artifact_files([version])
+        db_session.execute(delete(ChatArtifact).where(ChatArtifact.id == artifact_id))
+        db_session.commit()
+    return len(versions)
+
+
 def _newest_available_version(
-    version: int | None = None, *, file_id: str | None = None
+    version: int | None = None, *, file_id: str | None = None, alias: str = "newest"
 ) -> LateralFromClause:
     """The newest version of the ChatArtifact row in the enclosing query
     whose object is not missing and whose record is a published file, or
     the version `version` or `file_id` when it is one, with its file record,
-    as a LATERAL subquery (one row, or none)."""
+    as a LATERAL subquery named `alias` (one row, or none)."""
     return (
         select(
             ChatArtifactVersion.version,
@@ -1289,7 +1354,7 @@ def _newest_available_version(
         )
         .order_by(ChatArtifactVersion.version.desc())
         .limit(1)
-        .lateral("newest")
+        .lateral(alias)
     )
 
 
@@ -1493,12 +1558,7 @@ def get_user_published_files(
         )
     page: list[tuple[ListedArtifact, ArtifactCursor]] = []
     for row in db_session.execute(statement):
-        artifact = _listed_artifact(row)
-        artifact.file_name = artifact.file_name[:ARTIFACTS_NAME_MAX_CHARS]
-        if len(artifact.path) > ARTIFACTS_PATH_MAX_CHARS:
-            artifact.path = "…" + artifact.path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :]
-        if artifact.chat_title is not None:
-            artifact.chat_title = artifact.chat_title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]
+        artifact = shown_artifact(_listed_artifact(row))
         page.append(
             (
                 artifact,
@@ -1527,10 +1587,12 @@ def get_user_published_file(
     the artifact `artifact_id`'s `version`, by default its newest available
     one, when it is in a listable chat of the user (`_listable_chat`) and its
     object is not missing; else None. Any other file, such as a thumbnail or
-    an upload, is None. Its name, path and chat title are not cut."""
+    an upload, is None. Its name, path and chat title are not cut. It has
+    the artifact's latest_version_number, its newest available version."""
     newest = _newest_available_version(
         version, file_id=file_id if artifact_id is None else None
     )
+    latest = _newest_available_version(alias="latest")
     row = db_session.execute(
         select(
             ChatArtifact.id,
@@ -1540,9 +1602,11 @@ def get_user_published_file(
             ChatArtifact.chat_session_id,
             ChatSession.description,
             newest,
+            latest.c.version.label("latest_version"),
         )
         .join(ChatSession, ChatSession.id == ChatArtifact.chat_session_id)
         .join(newest, true())
+        .join(latest, true())
         .where(
             ChatArtifact.id
             == (
@@ -1556,7 +1620,11 @@ def get_user_published_file(
             _listable_chat(user_id),
         )
     ).one_or_none()
-    return None if row is None else _listed_artifact(row)
+    if row is None:
+        return None
+    artifact = _listed_artifact(row)
+    artifact.latest_version_number = row.latest_version
+    return artifact
 
 
 def get_or_create_root_message(

@@ -13,7 +13,11 @@ from functools import partial
 from itertools import count
 from uuid import UUID
 
+from pydantic import JsonValue
+from sqlalchemy.orm import Session
+
 from onyx.db.chat import (
+    delete_chat_artifact,
     delete_unpublished_chat_artifacts,
     get_user_published_file,
     get_user_published_files,
@@ -35,7 +39,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     session_relative_path,
 )
 from onyx.server.features.build.sandbox.models import session_workspace
-from onyx.tools.models import ToolCallException
+from onyx.tools.models import ToolApprovalDetails, ToolCallException
 from onyx.tools.tool_implementations.sandbox import file_copies
 from onyx.tools.tool_implementations.sandbox.errors import artifact_errors, tool_error
 from onyx.tools.tool_implementations.sandbox.models import (
@@ -43,18 +47,24 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_LIST_MAX_CHARS,
     ARTIFACTS_LIST_MAX_LIMIT,
     ARTIFACTS_QUERY_MAX_CHARS,
+    DELETE_OF_A_VERSION,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_TITLE_CHARS,
     ArtifactAtPath,
     ArtifactById,
     ArtifactCursor,
+    ArtifactFileReference,
     ArtifactList,
     KeptTitle,
+    LibraryFileTarget,
     LibraryListArguments,
     LibraryListFilters,
     LibraryPrepareMaterializeArguments,
     LibraryReplaceLibraryFileArguments,
     ListedArtifact,
+    ManageLibraryArguments,
+    ManageResult,
+    ManageResults,
     MaterializeDestination,
     MaterializedItem,
     MaterializedItems,
@@ -62,6 +72,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     PublishFileArgument,
     artifact_extension,
     artifact_url,
+    shown_artifact,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.utils.logger import setup_logger
@@ -93,6 +104,58 @@ def _copy_directory(session_id: UUID, directory: str) -> str:
             f"{CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/"
         )
     return relative
+
+
+def _published_file(
+    db_session: Session, user_id: UUID, reference: ArtifactFileReference
+) -> ListedArtifact:
+    """The published file version that `reference` names, in a listable
+    chat of the user (`get_user_published_file`). A tool error when there
+    is none; it names the artifact's newest version when only the version
+    is missing."""
+    file = get_user_published_file(
+        db_session,
+        user_id,
+        file_id=reference.file_id,
+        artifact_id=reference.library_file_id,
+        version=reference.version_number,
+    )
+    if file is not None:
+        return file
+    newest = (
+        None
+        if reference.version_number is None
+        else get_user_published_file(
+            db_session, user_id, artifact_id=reference.library_file_id
+        )
+    )
+    if newest is not None:
+        raise tool_error(
+            f"No version {reference.version_number} of {reference.library_file_id}; "
+            f"its newest is {newest.version_number}"
+        )
+    raise tool_error(
+        f"No published file {reference.file_id or reference.library_file_id} "
+        "in your chats"
+    )
+
+
+def _deleted_file(
+    db_session: Session, user_id: UUID, target: LibraryFileTarget
+) -> ListedArtifact:
+    """The file that a delete of `target` removes (`_published_file`). A
+    tool error when the target's version_number names a version older than
+    the newest: a delete removes every version."""
+    file = _published_file(db_session, user_id, target)
+    if (
+        target.version_number is not None
+        and file.version_number != file.latest_version_number
+    ):
+        raise tool_error(
+            f"Version {file.version_number} of {file.file_name} is not its "
+            f"newest, {file.latest_version_number}; {DELETE_OF_A_VERSION}"
+        )
+    return file
 
 
 def publish(
@@ -213,11 +276,11 @@ def replace_file(
     newest available version; each tool words it."""
     with artifact_errors("The replace"):
         with get_session_with_current_tenant() as db_session:
-            artifact = get_user_published_file(
-                db_session, turn.user_id, artifact_id=arguments.library_file_id
+            artifact = _published_file(
+                db_session,
+                turn.user_id,
+                ArtifactFileReference(library_file_id=arguments.library_file_id),
             )
-    if artifact is None:
-        raise tool_error(f"No published file {arguments.library_file_id} in your chats")
     check_same_type(artifact, arguments.file)
     [published] = publish(
         turn,
@@ -323,18 +386,6 @@ def materialize(
         session_id,
         ARTIFACT_FILES_DIR if destination.directory is None else destination.directory,
     )
-    with artifact_errors("The copy"):
-        with get_session_with_current_tenant() as db_session:
-            found = [
-                get_user_published_file(
-                    db_session,
-                    turn.user_id,
-                    file_id=item.file_id,
-                    artifact_id=item.library_file_id,
-                    version=item.version_number,
-                )
-                for item in arguments.items
-            ]
     results: list[MaterializedItem] = [
         MaterializedItem(
             library_file_id=item.library_file_id,
@@ -347,40 +398,37 @@ def materialize(
     # Each copy to make: its index, file, directory, name, and whether
     # the name is the file's chat file name.
     copies: list[tuple[int, ListedArtifact, str, str, bool]] = []
-    for index, (item, file) in enumerate(zip(arguments.items, found, strict=True)):
-        try:
-            if file is None:
-                raise tool_error(
-                    f"No published file {item.file_id} in your chats"
-                    if item.file_id is not None
-                    else f"No version {item.version_number} of published file "
-                    f"{item.library_file_id} in your chats"
-                    if item.version_number is not None
-                    else f"No published file {item.library_file_id} in your chats"
-                )
-            item_directory = (
-                directory
-                if item.relative_directory is None
-                else _copy_directory(
-                    session_id, posixpath.join(directory, item.relative_directory)
-                )
-            )
-            prefixed = item_directory == ARTIFACT_FILES_DIR and not item.file_name
-            copies.append(
-                (
-                    index,
-                    file,
-                    item_directory,
-                    chat_file_name(file.file_id, file.file_name)
-                    if prefixed
-                    else safe_file_name(
-                        (item.file_name or file.file_name, file.file_id)
-                    ),
-                    prefixed,
-                )
-            )
-        except ToolCallException as error:
-            results[index].error = error.llm_facing_message
+    with artifact_errors("The copy"):
+        with get_session_with_current_tenant() as db_session:
+            for index, item in enumerate(arguments.items):
+                try:
+                    file = _published_file(db_session, turn.user_id, item)
+                    item_directory = (
+                        directory
+                        if item.relative_directory is None
+                        else _copy_directory(
+                            session_id,
+                            posixpath.join(directory, item.relative_directory),
+                        )
+                    )
+                    prefixed = (
+                        item_directory == ARTIFACT_FILES_DIR and not item.file_name
+                    )
+                    copies.append(
+                        (
+                            index,
+                            file,
+                            item_directory,
+                            chat_file_name(file.file_id, file.file_name)
+                            if prefixed
+                            else safe_file_name(
+                                (item.file_name or file.file_name, file.file_id)
+                            ),
+                            prefixed,
+                        )
+                    )
+                except ToolCallException as error:
+                    results[index].error = error.llm_facing_message
     if copies:
         with artifact_errors("The copy"):
             ref = turn.start_call()
@@ -527,3 +575,140 @@ def materialize(
             + "\n".join(f"- {result.error}" for result in results)
         )
     return MaterializedItems(items=results)
+
+
+def _card_path(file: ListedArtifact) -> str:
+    """How an approval card names `file`, as shown_artifact cut it: its
+    display path's folder, which tells apart files of one name, with the
+    name that the artifact has now."""
+    return posixpath.join(posixpath.dirname(file.path), file.file_name)
+
+
+def _reference_text(reference: ArtifactFileReference) -> str:
+    """A file reference as the call gives it, for a card line."""
+    if reference.file_id is not None:
+        return reference.file_id
+    return f"{reference.library_file_id}" + (
+        ""
+        if reference.version_number is None
+        else f" version {reference.version_number}"
+    )
+
+
+def delete_approval_details(
+    user_id: UUID, targets: Sequence[LibraryFileTarget]
+) -> ToolApprovalDetails:
+    """The approval card of a call that deletes `targets`, which both tool
+    families show: a line for each of the user's artifacts that they name,
+    as the delete finds it (`_deleted_file`), with its display path, its
+    newest version number and its chat. A target that the delete refuses
+    or finds nothing for yet still gets a line: a version older than the
+    newest, which the delete refuses, and a version newer than the newest,
+    which another chat can still publish, by the artifact's display path;
+    any other target as given, as another chat can still publish it. It
+    never raises: a failed lookup asks with the targets as given."""
+    # Each artifact's or unresolved target's card name and line
+    entries: dict[UUID | str, tuple[str, str]] = {}
+    try:
+        with get_session_with_current_tenant() as db_session:
+            for target in targets:
+                try:
+                    file = shown_artifact(_deleted_file(db_session, user_id, target))
+                except ToolCallException:
+                    given = _reference_text(target)
+                    newest = (
+                        None
+                        if target.library_file_id is None
+                        else get_user_published_file(
+                            db_session, user_id, artifact_id=target.library_file_id
+                        )
+                    )
+                    if newest is None or target.version_number is None:
+                        entries[given] = (given, f"{given} (not found yet)")
+                        continue
+                    name = _card_path(shown_artifact(newest))
+                    # The delete of a newer version removes the whole file.
+                    entries[given] = (
+                        name,
+                        f"{name} (version {target.version_number} not published "
+                        "yet; the delete removes the file and every version)"
+                        if target.version_number > newest.version_number
+                        else f"{name} version {target.version_number} (not its "
+                        f"newest version, {newest.version_number}; the delete "
+                        "refuses it while it is not the newest)",
+                    )
+                    continue
+                name = _card_path(file)
+                # A lookup always sets the newest version.
+                versions = file.latest_version_number
+                chat = (
+                    f"chat \u201c{file.chat_title}\u201d"
+                    if file.chat_title
+                    else "an untitled chat"
+                )
+                entries[file.library_file_id] = (
+                    name,
+                    f"{name} ({versions} version{'' if versions == 1 else 's'}) "
+                    f"from {chat}",
+                )
+    except Exception:
+        logger.exception("artifacts_delete_approval_lookup_failed")
+        return ToolApprovalDetails(
+            display_name="Delete published files",
+            payload={"Delete": [_reference_text(target) for target in targets]},
+        )
+    names = [name for name, _line in entries.values()]
+    lines: list[JsonValue] = [line for _name, line in entries.values()]
+    return ToolApprovalDetails(
+        display_name=f"Delete {names[0]}"
+        if len(names) == 1
+        else f"Delete {len(names)} published files",
+        payload={"Delete": lines},
+    )
+
+
+def manage(
+    user_id: UUID,
+    cancellation: CancellationSignal,
+    arguments: ManageLibraryArguments,
+) -> ManageResults:
+    """Run the operations on the artifacts of the user's listable chats in
+    order, each in its own transaction, with one result for each; from the
+    database and the file store only, so it never starts the VM. It fails
+    only when no operation succeeds. A Stop ends the call, as in
+    materialize: a started operation ends, and the next one does not
+    start. A delete removes the artifact with every version
+    (delete_chat_artifact), also the versions published since the user
+    approved it; the tools ask first (delete_approval_details)."""
+    results: list[ManageResult] = []
+    for operation in arguments.operations:
+        cancellation.check()
+        try:
+            with artifact_errors(f"The {operation.operation}"):
+                with get_session_with_current_tenant() as db_session:
+                    file = _deleted_file(db_session, user_id, operation.target)
+                result = ManageResult(
+                    operation=operation.operation,
+                    ok=True,
+                    library_file_id=file.library_file_id,
+                    file_name=file.file_name,
+                    deleted_versions=delete_chat_artifact(file.library_file_id),
+                )
+        except ToolCallException as error:
+            result = ManageResult(
+                operation=operation.operation,
+                ok=False,
+                error=error.llm_facing_message,
+            )
+        results.append(result)
+    logger.info(
+        "library_manage_library operations=%s ok=%s",
+        [result.operation for result in results],
+        [result.ok for result in results],
+    )
+    if not any(result.ok for result in results):
+        raise tool_error(
+            "No operation succeeded:\n"
+            + "\n".join(f"- {result.error}" for result in results)
+        )
+    return ManageResults(results=results)

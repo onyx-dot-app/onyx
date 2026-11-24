@@ -60,11 +60,12 @@
   `library_prepare_materialize` the model finds, sorts and filters the files
   that it published in the user's own chats and copies them into the current
   chat's working directory (generic tool cards), and with
-  `library_replace_library_file` it adds a version to one of them. In code
+  `library_replace_library_file` it adds a version to one of them;
+  `library_manage_library` deletes them after the user approves. In code
   mode all of these are the deferred group `library`. Claude models get the
-  same operations as one `artifact` tool instead (actions publish, list and
-  read), in its own deferred group `artifact`, for compatibility with how
-  they work with artifacts. Every result links each version as
+  same operations as one `artifact` tool instead (actions publish, list, read
+  and delete), in its own deferred group `artifact`, for compatibility with
+  how they work with artifacts. Every result links each version as
   `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
   the output panel.
 
@@ -77,7 +78,8 @@ table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
 `apply_patch`, `edit`, `write`, `library_create_library_file`, `library_list`,
-`library_prepare_materialize`, `artifact`) and the artifact operations that they
+`library_prepare_materialize`, `library_replace_library_file`, `library_manage_library`,
+`artifact`) and the artifact operations that they
 share. Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
@@ -221,7 +223,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_replace_library_file | edit + write + artifact (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_replace_library_file + library_manage_library | edit + write + artifact (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -242,12 +244,18 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         WriteTool and ArtifactTool, the tools Claude models
                                         work with; else ApplyPatchTool,
                                         LibraryCreateLibraryFileTool, LibraryListTool,
-                                        LibraryPrepareMaterializeTool and
-                                        LibraryReplaceLibraryFileTool. No turn
+                                        LibraryPrepareMaterializeTool,
+                                        LibraryReplaceLibraryFileTool and
+                                        LibraryManageLibraryTool. No turn
                                         gets both sets; a model switch leaves calls of the other
                                         set in the history, which still render. The
                                         reserved-token prompt (calculate_reserved_tokens) names
-                                        the same set
+                                        the same set. LibraryManageLibraryTool and ArtifactTool
+                                        carry ARTIFACTS_DELETE_APPROVAL (no integration,
+                                        `onyx:artifacts.delete`, one key for both families, so
+                                        a chat grant survives a model switch); a turn whose
+                                        ApprovalMode is RUN_WITHOUT_ASKING (evals) builds
+                                        them with no scope
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
                                         (sandbox_tools.py:sandbox_guidance): one use per
                                         SandboxTool that the turn offers, in order, named
@@ -500,9 +508,10 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         _FileTool, with the default interrupted result
                                         (not idempotent): artifact_operations.replace_file
                                         looks the artifact up first
-                                        (get_user_published_file by library_file_id: a
-                                        listable chat of the user, any chat, the newest
-                                        available version) and refuses a file whose
+                                        (_published_file by library_file_id, the shared
+                                        lookup over get_user_published_file: a listable
+                                        chat of the user, any chat, the newest available
+                                        version) and refuses a file whose
                                         extension, in any case, is not the artifact's
                                         (check_same_type, for every new version), so a
                                         refused one never wakes the VM; then publish
@@ -527,6 +536,53 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         ArtifactPublished, the publish result model of the
                                         artifact tool. errors.py:artifact_errors lets the
                                         conflict through, and each family words it
+  LibraryManageLibraryTool (SEQUENTIAL)      library_manage_library, DEFERRED manage_library, the
+                                        generic card; _LibraryTool and _FileTool, with the
+                                        default interrupted result. `operations` (1-20) is a
+                                        list of a union on `operation` (delete); each target
+                                        is {kind: "file", library_file_id | file_id (any
+                                        version), version_number?}. artifact_operations.manage
+                                        runs them in order, each in its own transaction, from
+                                        the database and the file store only (never the VM),
+                                        one ManageResult each ({operation, ok, error?,
+                                        library_file_id, file_name, deleted_versions, ...});
+                                        the call fails only when none succeeds. It checks the
+                                        Stop before each operation, as materialize does: a
+                                        Stop ends the call, and the next operation does not
+                                        start. delete (artifact_operations._deleted_file): the
+                                        target by get_user_published_file (a listable chat of
+                                        the user, from any chat); a version_number, or the
+                                        artifact tool's /v<N>, must be the newest version,
+                                        else the delete is refused, because it removes every
+                                        version. Then db/chat.delete_chat_artifact holds the
+                                        artifact's row lock while it removes the whole
+                                        artifact, every version, also one published after the
+                                        approval, oldest version first; a failed file delete
+                                        stops it, so the newest version stays and a later
+                                        publish never reuses a deleted number. A publish
+                                        during the delete waits and then makes a new
+                                        artifact. A delete that stops after its last file
+                                        leaves a row without a version: a publish at its
+                                        path replaces the row with a new artifact, and a
+                                        save by its ID is not found
+                                        (db/chat.save_chat_artifact). Approval: approval_details (both
+                                        families call
+                                        artifact_operations.delete_approval_details) parses
+                                        the arguments and returns None, with no database work,
+                                        for a call without a delete or with bad arguments;
+                                        otherwise it resolves the targets as the delete does:
+                                        headline "Delete <path>" or "Delete N published
+                                        files", payload {"Delete": ["<path> (N versions) from
+                                        chat “<title>”"]}, where <path> is the display path's
+                                        folder with the file's name. A target that the
+                                        delete refuses or finds nothing for still asks: an
+                                        older version shows "<path> version N (not its
+                                        newest version, M; the delete refuses it while it is not the newest)", a
+                                        version newer than the newest "<path> (version N
+                                        not published yet; the delete removes the file and
+                                        every version)", and any other target shows as
+                                        given ("<id> (not found yet)"), as another chat can
+                                        still publish it. One request covers the whole call
   ArtifactTool (`artifact`, SEQUENTIAL)  one tool with an action per artifact operation,
                                         for Claude models. One flat ArtifactArguments
                                         model; each action takes only its own arguments
@@ -547,7 +603,10 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         paths, each a url or a file ID; out_dir required
                                         until a read without it
                                         exists) -> materialize, a url's /v<N> as the item's
-                                        version_number. Empty and too-long lists are
+                                        version_number; delete (url of the newest version, or
+                                        without /v<N>) ->
+                                        manage's delete, behind the same approval. Empty
+                                        and too-long lists are
                                         refused in the tool's own argument names before
                                         the VM wakes. It inherits _LibraryTool and
                                         _FileTool: execution settings are per tool, so the
@@ -576,7 +635,8 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         PREVIEW_TAIL_CHARS). Exempt
                                         from those two limits (_OWN_LIMITS): the cells,
                                         exec_command, write_stdin, read_file, skills_read,
-                                        library_list, artifact and CITEABLE_TOOLS_NAMES. A cell's closing record
+                                        library_list, library_manage_library, artifact and
+                                        CITEABLE_TOOLS_NAMES. A cell's closing record
                                         sets the recorded result and its own output uncut
                                         as the full value. Where:
                                         the full value or the content, at most

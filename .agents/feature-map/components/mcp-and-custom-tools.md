@@ -548,7 +548,10 @@ it, and its session grant matches rows with no integration and the same key
 `db/approval_request.py:record_approval_decision__no_commit`). No
 integration action key starts with `onyx:`: `IntegrationActionSpec` refuses
 an MCP tool or OpenAPI operation with that name, so a deleted integration's
-row never matches a built-in grant.
+row never matches a built-in grant. The code that builds a built-in tool must
+resolve the run's `ApprovalMode`, as
+`integrations/policy.py:decide_action_policy` does for integrations: under
+`RUN_WITHOUT_ASKING` it sets no scope.
 
 **Policy order** (`integrations/policy.py`):
 (1) the admin value: the admin row of the action, else the admin default row
