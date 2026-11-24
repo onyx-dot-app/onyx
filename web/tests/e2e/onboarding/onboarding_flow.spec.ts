@@ -149,35 +149,35 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
     });
 
-    test("the input returns to its place after leaving a chat", async ({
+    test("the input lands in one place after a slow load and after leaving a chat", async ({
       page,
     }) => {
       const client = new OnyxApiClient(page.request);
       const namePromptPage = new OnboardingNamePromptPage(page);
+      // The input's top once two readings in a row match, or NaN before that
+      let lastTop = Number.NaN;
+      const settledInputTop = async () => {
+        const top = await namePromptPage.chatInputTop();
+        const settled = top === lastTop;
+        lastTop = top;
+        return settled ? top : Number.NaN;
+      };
 
       const sessionId = await client.createChatSession("Onboarding return");
       try {
-        // Where a fresh load places the input, once the layout stops moving
-        await namePromptPage.goto();
+        // The user arrives after the first render
+        await namePromptPage.gotoBeforeUserLoads();
         await expect(namePromptPage.namePrompt).toBeVisible();
-        let freshTop = Number.NaN;
-        await expect
-          .poll(async () => {
-            const top = await namePromptPage.chatInputTop();
-            const settled = top === freshTop;
-            freshTop = top;
-            return settled;
-          })
-          .toBe(true);
+        await expect.poll(settledInputTop).not.toBeNaN();
+        const freshTop = lastTop;
 
         await namePromptPage.goto(sessionId);
         // From the chat's layout, where the bottom row is empty
         await new AppSidebarPage(page).newSession();
         await expect(namePromptPage.namePrompt).toBeVisible();
+        lastTop = Number.NaN;
         await expect
-          .poll(async () =>
-            Math.abs((await namePromptPage.chatInputTop()) - freshTop)
-          )
+          .poll(async () => Math.abs((await settledInputTop()) - freshTop))
           .toBeLessThanOrEqual(2);
       } finally {
         await client.deleteChatSession(sessionId);

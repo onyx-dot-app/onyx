@@ -37,6 +37,23 @@ export class OnboardingNamePromptPage {
     await expect(this.chatInput).toBeVisible({ timeout: 15000 });
   }
 
+  /** Open /app and hold the user's `/api/me` response until the chat input
+   *  shows, so the page renders before it knows the user. */
+  async gotoBeforeUserLoads(): Promise<void> {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await this.page.route("**/api/me", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await this.page.goto("/app");
+    await expect(this.chatInput).toBeVisible({ timeout: 15000 });
+    await expect(this.namePrompt).toBeHidden();
+    release();
+  }
+
   /** The chat input's top edge, or NaN while it has no box. */
   async chatInputTop(): Promise<number> {
     return (await this.chatInput.boundingBox())?.y ?? Number.NaN;

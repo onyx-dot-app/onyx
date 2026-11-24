@@ -758,8 +758,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (appPosition.isNewSession() || appPosition.isAgent()) &&
     (state.phase === "idle" || state.phase === "classifying");
 
+  // `user` is null while it loads, and the onboarding renders nothing until
+  // it arrives.
   const onboardingVisible =
     isWelcomeFocus &&
+    !!user &&
     (showOnboarding || !getUserAddressedName(user)) &&
     !onboardingDismissed;
 
