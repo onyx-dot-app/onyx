@@ -83,7 +83,8 @@ export function PanelUrlBar({
                     <Text
                       as="p"
                       dir="ltr"
-                      font="secondary-body"
+                      // A browser bar's 14px, as the search field's
+                      font="main-ui-body"
                       color="text-03"
                       maxLines={1}
                     >
