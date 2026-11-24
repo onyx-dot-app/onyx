@@ -40,7 +40,6 @@ export function PanelUrlBar({
           <Button
             icon={refresh.isUserRefreshing ? IconLoader : SvgRevert}
             prominence="tertiary"
-            size="sm"
             disabled={
               !refresh.onRefresh ||
               refresh.isRefreshing ||

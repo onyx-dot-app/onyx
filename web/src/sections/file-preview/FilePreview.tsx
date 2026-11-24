@@ -121,7 +121,6 @@ export const FilePreviewBody = memo(function FilePreviewBody({
           <Button
             icon={SvgCode}
             prominence="tertiary"
-            size="sm"
             tooltip={t("sourceButton.tooltip")}
             aria-label={t("sourceButton.tooltip")}
             aria-pressed={showSource}
@@ -129,7 +128,6 @@ export const FilePreviewBody = memo(function FilePreviewBody({
           />
         )}
         <CopyButton
-          size="sm"
           tooltip={t("copyButton.tooltip")}
           aria-label={t("copyButton.tooltip")}
           getCopyText={() => text}
