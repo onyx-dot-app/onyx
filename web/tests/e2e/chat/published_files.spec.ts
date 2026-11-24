@@ -716,3 +716,68 @@ test.describe("Published files", () => {
     }
   });
 });
+
+test.describe("Published file tabs on a touch screen", () => {
+  test.use({ hasTouch: true });
+
+  test.beforeEach(() => {
+    resetTurnCounter();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+
+  test("a swipe scrolls the tab strip, and a press and hold or a mouse drag moves a tab", async ({
+    page,
+    chatPage,
+  }) => {
+    const files = Array.from(
+      { length: 5 },
+      (_, index): MockPublishedFile => ({
+        ...report(`published-file-touch-${index}`, `Quarterly report ${index}`),
+        name: `report-${index}.md`,
+        path: `/home/onyx/workspaces/chat/report-${index}.md`,
+        displayPath: `report-${index}.md`,
+        artifactId: `artifact-report-touch-${index}`,
+      })
+    );
+    const titles = files.map((file) => file.title ?? file.name);
+    await chatPage.goto();
+    for (const file of files) await mockFile(page, file);
+    await mockChatEndpoint(page, buildMockPublishFilesStream(files, MESSAGE));
+    await sendMessage(page, "Write the reports");
+    for (const title of titles) {
+      await chatPage.publishedFileCard(title).click();
+      await expect(chatPage.publishedFilePreview(title)).toContainText(
+        REPORT_TEXT
+      );
+    }
+    const order = ["Files", ...titles];
+    await chatPage.expectRightPanelTabs(order);
+    // At 380 px the panel cannot fit the tabs, and the drags below stay
+    // clear of the strip's edges, where a drag scrolls it
+    await chatPage.dragRightPanelEdge(380 - (await chatPage.rightPanelWidth()));
+
+    // A swipe scrolls the strip and moves no tab
+    await chatPage.swipeRightPanelTabs(-150);
+    await expect
+      .poll(() => chatPage.rightPanelTabsScrollLeft())
+      .toBeGreaterThan(0);
+    await chatPage.expectRightPanelTabs(order);
+    await chatPage.swipeRightPanelTabs(150);
+    await expect.poll(() => chatPage.rightPanelTabsScrollLeft()).toBe(0);
+    await chatPage.expectRightPanelTabs(order);
+
+    await chatPage.holdAndDragRightPanelTab(titles[0]!, titles[1]!);
+    await chatPage.expectRightPanelTabs([
+      "Files",
+      titles[1]!,
+      titles[0]!,
+      ...titles.slice(2),
+    ]);
+
+    await chatPage.mouseDragRightPanelTab(titles[0]!, titles[1]!);
+    await chatPage.expectRightPanelTabs(order);
+  });
+});

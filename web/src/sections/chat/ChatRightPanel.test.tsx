@@ -517,21 +517,20 @@ test("only file tabs move, and the strip announces only real moves", async () =>
 
   // A drag cannot drop a file tab on a fixed tab. Every tab measures zero
   // here, so the drop lands on the first droppable tab.
-  const pointer = (type: string, target: EventTarget, clientX: number) => {
-    // jsdom has no PointerEvent; dnd-kit reads these mouse event fields
-    const event = new MouseEvent(type, { bubbles: true, button: 0, clientX });
-    Object.defineProperty(event, "isPrimary", { value: true });
+  const mouse = (type: string, target: EventTarget, clientX: number) => {
     act(() => {
-      target.dispatchEvent(event);
+      target.dispatchEvent(
+        new MouseEvent(type, { bubbles: true, button: 0, clientX })
+      );
     });
   };
   // After a drag, dnd-kit stops document clicks for 50ms. The fake clock ends
   // that here, not in the next test.
   jest.useFakeTimers();
   try {
-    pointer("pointerdown", screen.getByRole("tab", { name: "Q3 report" }), 0);
-    pointer("pointermove", document, -20);
-    pointer("pointerup", document, -20);
+    mouse("mousedown", screen.getByRole("tab", { name: "Q3 report" }), 0);
+    mouse("mousemove", document, -20);
+    mouse("mouseup", document, -20);
     act(() => jest.advanceTimersByTime(50));
   } finally {
     jest.useRealTimers();
