@@ -206,8 +206,9 @@ which can be a selected chunk rather than the entire document. There is no `limi
 Get exact counts and lists from the metadata of the documents that you can access, and from your own Onyx chat history.
 Use it for questions that a search cannot answer completely,
 such as "How many Jira tickets changed last week?" or "List every document with 'pricing' in the title".
-It reads titles, dates, owners, sources, and folders. It does not read document text.
-Use `search_indexed_documents` for questions about content.
+It reads titles, dates, owners, sources, and folders. With `content_contains`,
+it also finds every document whose text contains a word or phrase.
+Use `search_indexed_documents` for questions about what documents say.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -223,6 +224,11 @@ Each table has its own filters, such as `source_type`, `title_contains`, `owned_
 The tool description lists all of them. Filters that take a list also take one value. A list matches any of its values.
 All filters in one call apply together. Dates use ISO 8601, such as `2026-06-01`.
 A `*_before` date is not included in the range.
+
+For documents, `content_contains` matches whole words or phrases in the text, the title, and the metadata.
+Case and word forms (such as plurals) do not change the match. It is slower than the other filters, so add date, source,
+or folder filters when you can. Document lists with `content_contains` sort by date only,
+and `group_by` does not work with it.
 
 ```json
 {
