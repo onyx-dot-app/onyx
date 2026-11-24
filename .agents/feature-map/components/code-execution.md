@@ -57,9 +57,9 @@
   model also gets `publish_files`, which gives files from the VM to the user
   as download cards; owners and viewers of a shared chat can download them,
   and a hard chat delete deletes them. With `library_list` and
-  `artifacts_download` the model finds the files that it published in the
-  user's own chats and copies one into the current chat's attachments
-  folder; they show as generic tool cards.
+  `library_prepare_materialize` the model finds, sorts and filters the files that
+  it published in the user's own chats and copies them into the current
+  chat's working directory; they show as generic tool cards.
 
 ---
 
@@ -70,7 +70,7 @@ table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
 `apply_patch`, `edit`, `write`, `publish_files`, `library_list`,
-`artifacts_download`). Code mode's packets and replay belong to [[streaming-protocol]], and
+`library_prepare_materialize`). Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -213,7 +213,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch | edit + write / publish_files / library_list + artifacts_download (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch | edit + write / publish_files / library_list + library_prepare_materialize (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -232,7 +232,7 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         (model_capabilities.is_claude_model, the one rule that
                                         LLM requests and prompt caching use too), else
                                         ApplyPatchTool; never both; PublishFilesTool,
-                                        LibraryListTool and ArtifactsDownloadTool for every
+                                        LibraryListTool and LibraryPrepareMaterializeTool for every
                                         model. The reserved-token prompt
                                         (calculate_reserved_tokens) names the same set
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
@@ -343,11 +343,11 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         publish is a new file and version.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
-  LibraryListTool / ArtifactsDownloadTool  sandbox_tools._LibraryTool: code mode
+  LibraryListTool / LibraryPrepareMaterializeTool  sandbox_tools._LibraryTool: code mode
                                         DEFERRED in the group `library`
-                                        (tools.library__list / __download, found
+                                        (tools.library__list / __prepare_materialize, found
                                         with tool_search), JSON_OBJECT results
-                                        (ArtifactList, DownloadedArtifact), no saved
+                                        (ArtifactList, MaterializedItems), no saved
                                         details (the generic card shows the JSON),
                                         PARALLEL, and run again after a lost server
                                         (interrupted_result None). Errors
@@ -396,30 +396,70 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         below the spill limit of one result. The spill
                                         exempts library_list, so the step's budget
                                         does not spill a page either.
-                                        artifacts_download: get_user_published_file
-                                        (any version's file ID, a CHAT_ARTIFACT record
-                                        whose object is not missing) and the 100 MiB
-                                        cap come before start_call, so a refused ID
-                                        never wakes the VM, and every refusal has one
-                                        message. Then HarnessSandbox.session_files and
-                                        one listing of attachments/artifacts/ (a
-                                        missing directory lists empty): a regular file
-                                        of the record's size at
-                                        attachments/artifacts/<chat_file_name> is a
-                                        cache hit and writes nothing; else the file
-                                        store read and SessionFiles.write (atomic,
-                                        file_copies' COPY_BASE_SECONDS + size /
-                                        COPY_MIN_BYTES_PER_SECOND) run as one task in
-                                        the pod's FileCopyPool write slots (at most
-                                        VM_COPY_WRITES per VM, with the chat file
-                                        copies). The wait for the slot has no timeout
-                                        (a Stop ends it, and pod shutdown fails it);
-                                        from the slot, llm/cancellation.py:wait_for_future
-                                        (shared with the spill) waits twice the write
-                                        timeout: a Stop raises AgentCancelled and the
-                                        write lands on its own. The copy cleanup never deletes
-                                        these files, and session saves skip
-                                        attachments/
+                                        library_prepare_materialize (not strict: nested
+                                        items): at most 20 items, each a file_id (that
+                                        version) or a library_file_id (the newest
+                                        available version), with file_name and
+                                        relative_directory; destination.directory
+                                        (default attachments/artifacts) and
+                                        conflict_policy (dedupe, the default:
+                                        "<stem> (N)<ext>", with the stem cut so
+                                        that the name fits the 255-byte limit
+                                        (harness_base.safe_file_name), by one listing of the
+                                        directory and the names the call wrote;
+                                        overwrite; error). sandbox_tools._copy_directory:
+                                        relative or absolute, normalized by
+                                        harness_base.session_relative_path (inside the
+                                        working directory; relative_directory joins
+                                        destination.directory first, so `..` is
+                                        allowed while the normalized path stays in
+                                        the working directory), then outside attachments/
+                                        or in attachments/artifacts/; no link check,
+                                        as the daemon writes inside the session's
+                                        os.Root. get_user_published_file (the
+                                        _newest_available_version lateral: a
+                                        CHAT_ARTIFACT record whose object is not
+                                        missing, in a listable chat) and the
+                                        directories of every item come before
+                                        start_call, so a call whose items are all
+                                        refused never wakes the VM. Items then run in
+                                        order, each with its result (written, cached
+                                        or error); the call fails only when every item
+                                        fails. In attachments/artifacts without a
+                                        file_name the copy is named chat_file_name
+                                        (<8hex>-<name>), which only that file has: a
+                                        file there that is in place
+                                        (file_copies.in_place) is cached under every
+                                        policy, any other file there is written over.
+                                        Other copies take harness_base.safe_file_name
+                                        of file_name or the record's name (the rule
+                                        chat_file_name uses, without the prefix); the
+                                        listing (file_copies.MAX_LISTED, hidden
+                                        entries included) decides a conflict, and a
+                                        cut listing counts as one. Under error and
+                                        dedupe the write has no overwrite (FILE_EXISTS
+                                        is file_copies.EXISTS): a name taken after the
+                                        listing fails an error item, and dedupe tries
+                                        the next free name, at most
+                                        _MATERIALIZE_NAME_TRIES writes. Each write is a
+                                        file_copies.FileWrites of one file, as the chat
+                                        file copies write: the file store read and
+                                        SessionFiles.write in the pod's FileCopyPool
+                                        write slots (at most VM_COPY_WRITES per VM),
+                                        COPY_TRIES tries, and a listing or write past
+                                        its timeout or a gone VM
+                                        (file_copies.no_response) fails the remaining
+                                        items. Its
+                                        on_end completes a Future; the wait has no
+                                        timeout: a Stop raises AgentCancelled (later
+                                        items do not run, and a started write lands on
+                                        its own), and pod shutdown fails the item. The
+                                        copy cleanup never deletes attachments/artifacts,
+                                        and session saves skip attachments/ but keep
+                                        copies elsewhere, except in the folders that
+                                        they skip, such as node_modules, virtual
+                                        environments and caches
+                                        (firecracker/session_saves.py)
   Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose
                                         configured tools hold a SandboxTool. A result
                                         with ToolResult.full_value always spills: the tool

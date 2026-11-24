@@ -8,6 +8,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     PROJECT_FILES_DIR,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACTS_MATERIALIZE_MAX_ITEMS,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_FILES,
 )
@@ -141,7 +142,7 @@ Usage:
 - Publishing the same path again adds a new version of that file; earlier cards keep their version.
 - Do not paste the contents of a published file into your reply.
 - Do not tell the user that a file is available unless this tool succeeded.
-- Files published earlier, in this chat and in the user's other chats, can be found and downloaded with the library tools.
+- Files published earlier, in this chat and in the user's other chats, can be found and copied into the VM with the library tools.
 """
 
 LIBRARY_LIST_DESCRIPTION = """Lists the files that were published with publish_files in the user's chats, this chat included: the newest version of each file. By default, the most recently published come first.
@@ -153,10 +154,12 @@ Usage:
 - When more files exist, the result has a `next_cursor`. Send it with the same other arguments to get the next page.
 """
 
-ARTIFACTS_DOWNLOAD_DESCRIPTION = f"""Copies a published file from the user's chats into this chat's working directory, at {ARTIFACT_FILES_DIR}/<short file ID>-<name>, and returns that path. The call ends when the copy is done.
+LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION = f"""Copies published files from the user's chats into this chat's working directory. The call ends when the copies are done, and gives each item's path and status.
 
 Usage:
-- `file_id` is the file ID of a listed file, or of any version in a publish_files result.
-- A file is at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB. A second download of the same file uses the copy that is there.
-- The chat does not keep files in {CHAT_FILES_DIR}/: a sandbox restart removes the download, and you can download it again. Before you change the file, copy it to a path outside {CHAT_FILES_DIR}/, and publish it from that path.
+- Each item takes a `file_id` (that version), from library_list or a publish_files result, or a `library_file_id` (its newest version), from library_list.
+- By default, a copy goes to {ARTIFACT_FILES_DIR}/<short file ID>-<name>, and a second copy of the same file uses the one that is there. `destination.directory`, an item's `relative_directory` and `file_name` choose another place and name in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/.
+- `destination.conflict_policy` applies to every copy except one to the default {ARTIFACT_FILES_DIR}/<short file ID>-<name>. It decides what happens when a file is already there: dedupe (the default) adds " (N)" to the name, overwrite replaces it, error fails the item. Under every policy, a copy to the default {ARTIFACT_FILES_DIR}/<short file ID>-<name> uses the file that is there when its size matches, and writes it again otherwise.
+- One call copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files. A failed item does not stop the others.
+- The chat does not keep files in {CHAT_FILES_DIR}/: a sandbox restart removes them. To change a file, copy it to a directory outside {CHAT_FILES_DIR}/, change it there, and publish it from that path.
 """
