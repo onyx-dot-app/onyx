@@ -14,6 +14,7 @@ from collections.abc import Callable, Generator, Hashable, Iterator, Sequence
 from concurrent.futures import Future
 from contextlib import closing, contextmanager
 from functools import partial
+from itertools import count
 from typing import Literal
 from uuid import UUID
 
@@ -31,7 +32,6 @@ from onyx.db.chat import (
     save_chat_artifact,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.utils import chat_output_file_type
 from onyx.llm.cancellation import wait_for_future
 from onyx.llm.model_capabilities import is_claude_model
@@ -40,7 +40,6 @@ from onyx.microvm.models import FileType
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
     APPLY_PATCH_USE,
-    ARTIFACTS_DOWNLOAD_DESCRIPTION,
     ATTACHMENTS_NOT_SAVED_NOTE,
     CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
@@ -48,6 +47,7 @@ from onyx.prompts.sandbox_tools import (
     EXEC_COMMAND_DESCRIPTION,
     EXEC_COMMAND_USE,
     LIBRARY_LIST_DESCRIPTION,
+    LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION,
     PUBLISH_FILES_DESCRIPTION,
     SANDBOX_CODE_MODE_NOTE,
     SANDBOX_GUIDANCE,
@@ -66,6 +66,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     HarnessSandboxError,
     SandboxPathError,
     chat_file_name,
+    safe_file_name,
     session_relative_path,
 )
 from onyx.server.features.build.sandbox.models import (
@@ -94,10 +95,6 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.tool_implementations.sandbox import file_copies
-from onyx.tools.tool_implementations.sandbox.file_copies import (
-    COPY_BASE_SECONDS,
-    COPY_MIN_BYTES_PER_SECOND,
-)
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
     ARTIFACTS_LIST_MAX_CHARS,
@@ -110,14 +107,17 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
     ArtifactCursor,
     ArtifactList,
-    ArtifactsDownloadArguments,
-    DownloadedArtifact,
     EditArguments,
     ExecCommandArguments,
     ExecCommandOutput,
     FileToolName,
     LibraryListArguments,
     LibraryListFilters,
+    LibraryPrepareMaterializeArguments,
+    ListedArtifact,
+    MaterializeDestination,
+    MaterializedItem,
+    MaterializedItems,
     PublishedFile,
     PublishedFiles,
     PublishFilesArguments,
@@ -364,7 +364,7 @@ def _verification_failed(message: str) -> ToolCallException:
 
 def _file_path(ref: HarnessSandboxRef, path: str) -> str:
     """The session-relative path of a file that a patch names."""
-    relative = session_relative_path(ref, path)
+    relative = session_relative_path(ref.session_id, path)
     if not relative:
         raise SandboxPathError(f"{path!r} is the session directory, not a file")
     return relative
@@ -873,7 +873,7 @@ class PublishFilesTool(_FileTool):
 
 @contextmanager
 def _artifact_errors(action: str) -> Iterator[None]:
-    """The tool errors of an artifact tool's `action` ("The download"): a
+    """The tool errors of an artifact tool's `action` ("The copy"): a
     sandbox error's own message, or a fixed one; the details go to the log."""
     try:
         yield
@@ -889,11 +889,30 @@ def _artifact_errors(action: str) -> Iterator[None]:
         raise _tool_error(f"{action} failed; try again") from error
 
 
-# The most entries that a download lists in ARTIFACT_FILES_DIR: the chat's
-# downloads. A file past it is written again.
-_DOWNLOADS_MAX_LISTED = 10_000
-# How often a download that waits for a write slot checks for pod shutdown.
+# How often a copy that waits for its write checks for pod shutdown.
 _SLOT_CHECK_SECONDS = 1.0
+# The most writes of one dedupe copy: other writers can take names after
+# the listing.
+_MATERIALIZE_NAME_TRIES = 5
+
+
+def _copy_directory(session_id: UUID, directory: str) -> str:
+    """`directory`, relative to the working directory or absolute in it, as
+    a normalized path relative to it ("" is the working directory). A tool
+    error unless it is in the working directory, outside CHAT_FILES_DIR or in
+    ARTIFACT_FILES_DIR: the chat file copies own the rest of CHAT_FILES_DIR."""
+    try:
+        relative = session_relative_path(session_id, directory)
+    except SandboxPathError as error:
+        raise _tool_error(str(error)) from error
+    if f"{relative}/".startswith(
+        f"{CHAT_FILES_DIR}/"
+    ) and not f"{relative}/".startswith(f"{ARTIFACT_FILES_DIR}/"):
+        raise _tool_error(
+            f"{directory!r} is not a destination: use a directory outside "
+            f"{CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/"
+        )
+    return relative
 
 
 class _LibraryTool(SandboxTool):
@@ -920,8 +939,8 @@ class _LibraryTool(SandboxTool):
         return CodeModeFunctionName(
             name=self.CODE_MODE_NAME,
             namespace="library",
-            namespace_description="Find and download the files that you published "
-            "in this chat and the user's other chats.",
+            namespace_description="Find the files that you published in this chat "
+            "and the user's other chats, and copy them into this chat.",
         )
 
     @property
@@ -1013,109 +1032,255 @@ class LibraryListTool(_LibraryTool):
             shown, more = shown[:-1], True
 
 
-class ArtifactsDownloadTool(_LibraryTool):
-    """Copies a published file into the chat's working directory, in
-    ARTIFACT_FILES_DIR under its chat file name (`chat_file_name`). The
-    access check comes first, so a refused file never starts the VM. The copy
-    follows the chat file copies (file_copies.py): a regular file of the
-    record's size at the path is in place and is not written again, the read
-    and the write take one of the VM's write slots, the daemon writes
-    atomically, and the write's timeout grows with the size. The call waits
-    for the slot until a Stop or pod shutdown, then for the read and the
-    write; a Stop ends the wait, and the write then lands on its own."""
+class LibraryPrepareMaterializeTool(_LibraryTool):
+    """Copies published files into the chat's working directory, one item at
+    a time in order, with one result for each item. The lookups and the
+    destination checks of every item come first, so a call whose items are
+    all refused never starts the VM; it fails only when no item succeeds. In
+    ARTIFACT_FILES_DIR without a file_name, a copy has its chat file name
+    (`chat_file_name`), which only that file has: a file there that is in
+    place (`file_copies.in_place`) is cached, and any other is written over.
+    Any other copy has the safe form of its name (`safe_file_name`), and the
+    conflict policy decides when the directory's listing shows that name, or
+    is cut at file_copies.MAX_LISTED entries. Under `error` and `dedupe` the
+    write never replaces a file: a name taken after the listing fails an
+    `error` copy and moves a `dedupe` copy to the next free name, up to
+    _MATERIALIZE_NAME_TRIES writes. Each write is a FileWrites of
+    the chat file copies, with their tries, write slots and timeouts; an
+    item waits for it until a Stop or pod shutdown. A Stop ends the call: a
+    started write lands on its own, and the next one does not start. A
+    sandbox that stops responding to a listing or a write fails the
+    remaining items."""
 
-    NAME = "artifacts_download"
-    CODE_MODE_NAME = "download"
-    DESCRIPTION = ARTIFACTS_DOWNLOAD_DESCRIPTION
-    ARGUMENTS = ArtifactsDownloadArguments
-    RESULT = DownloadedArtifact
-    display_name = "Download Published File"
+    NAME = "library_prepare_materialize"
+    CODE_MODE_NAME = "prepare_materialize"
+    DESCRIPTION = LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION
+    ARGUMENTS = LibraryPrepareMaterializeArguments
+    RESULT = MaterializedItems
+    display_name = "Copy Published Files"
+
+    def tool_definition(self) -> ToolDefinition:
+        # Not strict: the items and the destination are `$defs` references.
+        return tool_definition_from_arguments(
+            self.name, self.description, LibraryPrepareMaterializeArguments
+        )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        file_id = parse_tool_arguments(
-            ArtifactsDownloadArguments, invocation.arguments
-        ).file_id
-        with _artifact_errors("The download"):
-            with get_session_with_current_tenant() as db_session:
-                found = get_user_published_file(db_session, self._turn.user_id, file_id)
-            if found is None:
-                raise _tool_error(f"No published file {file_id} in your chats")
-            if found.file_size_bytes > PUBLISH_FILES_MAX_BYTES:
-                raise _tool_error(
-                    f"{found.file_name} is larger than "
-                    f"{PUBLISH_FILES_MAX_BYTES >> 20} MiB"
-                )
-            path = (
-                f"{ARTIFACT_FILES_DIR}/{chat_file_name(found.file_id, found.file_name)}"
-            )
-            ref = self._turn.start_call()
-            files = self._turn.sandbox.session_files(ref)
-            entry = next(
-                (
-                    entry
-                    for entry in files.list_files(
-                        ARTIFACT_FILES_DIR, max_entries=_DOWNLOADS_MAX_LISTED
-                    ).entries
-                    if entry.path == path
-                ),
-                None,
-            )
-            cached = (
-                entry is not None
-                and entry.type is FileType.REGULAR
-                and entry.size == found.file_size_bytes
-            )
-            if not cached:
-                invocation.cancellation.check()
-                timeout = (
-                    COPY_BASE_SECONDS
-                    + found.file_size_bytes / COPY_MIN_BYTES_PER_SECOND
-                )
-                slot: Future[None] = Future()
-                copied: Future[None] = Future()
-
-                def copy() -> None:
-                    slot.set_result(None)
-                    try:
-                        with get_default_file_store().read_file(
-                            found.file_id, use_tempfile=True
-                        ) as content:
-                            files.write(path, content, timeout_seconds=timeout)
-                    except BaseException as error:
-                        copied.set_exception(error)
-                        return
-                    copied.set_result(None)
-
-                pool = file_copies.file_copy_pool()
-                tasks = [copy]
-                pool.writes.want(ref.sandbox_id, lambda: tasks.pop() if tasks else None)
-                # The wait for a slot has no timeout: it ends at a Stop, or
-                # when pod shutdown drops the queued task.
-                while True:
-                    try:
-                        wait_for_future(
-                            slot, _SLOT_CHECK_SECONDS, invocation.cancellation
-                        )
-                        break
-                    except TimeoutError:
-                        if pool.stopped.is_set():
-                            raise RuntimeError(
-                                "the pod's file copies stopped"
-                            ) from None
-                # The file store read, at the write's rate, then the write.
-                wait_for_future(copied, 2 * timeout, invocation.cancellation)
-        logger.info("artifacts_download file=%s cached=%s", file_id, cached)
-        return ToolResult(
-            content=DownloadedArtifact(
-                path=path,
-                file_id=found.file_id,
-                name=found.file_name,
-                size=found.file_size_bytes,
-                mime_type=found.mime_type,
-                chat_id=found.chat_id,
-                cached=cached,
-            ).model_dump_json()
+        arguments = parse_tool_arguments(
+            LibraryPrepareMaterializeArguments, invocation.arguments
         )
+        cancellation = invocation.cancellation
+        session_id = self._turn.chat_session_id
+        destination = arguments.destination or MaterializeDestination()
+        directory = _copy_directory(
+            session_id,
+            ARTIFACT_FILES_DIR
+            if destination.directory is None
+            else destination.directory,
+        )
+        with _artifact_errors("The copy"):
+            with get_session_with_current_tenant() as db_session:
+                found = [
+                    get_user_published_file(
+                        db_session,
+                        self._turn.user_id,
+                        file_id=item.file_id,
+                        artifact_id=item.library_file_id,
+                    )
+                    for item in arguments.items
+                ]
+        results: list[MaterializedItem] = [
+            MaterializedItem(
+                library_file_id=item.library_file_id,
+                file_id=item.file_id,
+                status="error",
+            )
+            for item in arguments.items
+        ]
+        # Each copy to make: its index, file, directory, name, and whether
+        # the name is the file's chat file name.
+        copies: list[tuple[int, ListedArtifact, str, str, bool]] = []
+        for index, (item, file) in enumerate(zip(arguments.items, found, strict=True)):
+            try:
+                if file is None:
+                    raise _tool_error(
+                        f"No published file {item.file_id or item.library_file_id} "
+                        "in your chats"
+                    )
+                item_directory = (
+                    directory
+                    if item.relative_directory is None
+                    else _copy_directory(
+                        session_id, posixpath.join(directory, item.relative_directory)
+                    )
+                )
+                prefixed = item_directory == ARTIFACT_FILES_DIR and not item.file_name
+                copies.append(
+                    (
+                        index,
+                        file,
+                        item_directory,
+                        chat_file_name(file.file_id, file.file_name)
+                        if prefixed
+                        else safe_file_name(
+                            (item.file_name or file.file_name, file.file_id)
+                        ),
+                        prefixed,
+                    )
+                )
+            except ToolCallException as error:
+                results[index].error = error.llm_facing_message
+        if copies:
+            with _artifact_errors("The copy"):
+                ref = self._turn.start_call()
+                files = self._turn.sandbox.session_files(ref)
+            pool = file_copies.file_copy_pool()
+            # Each listed directory: the size of each regular file by name,
+            # None for any other entry, and whether the listing is cut. The
+            # names that this call wrote or found taken join it.
+            listings: dict[str, tuple[dict[str, int | None], bool]] = {}
+            # Why the sandbox stopped responding, once it did.
+            stopped: str | None = None
+            for index, file, item_directory, name, prefixed in copies:
+                # Before each item, as a cached or refused item writes nothing.
+                cancellation.check()
+                try:
+                    if stopped is not None:
+                        raise _tool_error(f"The copy failed: {stopped}; try again")
+                    # The listing is a snapshot, and a cut one can miss a file
+                    # at the name, so these writes never replace a file.
+                    no_replace = (
+                        not prefixed and destination.conflict_policy != "overwrite"
+                    )
+                    with _artifact_errors("The copy"):
+                        if (prefixed or no_replace) and item_directory not in listings:
+                            try:
+                                listing = files.list_files(
+                                    item_directory,
+                                    max_entries=file_copies.MAX_LISTED,
+                                    include_hidden=True,
+                                )
+                            except Exception as error:
+                                stopped = (
+                                    file_copies.NO_RESPONSE.reason
+                                    if file_copies.no_response(error)
+                                    else None
+                                )
+                                raise
+                            listings[item_directory] = (
+                                {
+                                    entry.name: entry.size
+                                    if entry.type is FileType.REGULAR
+                                    else None
+                                    for entry in listing.entries
+                                },
+                                listing.truncated,
+                            )
+                    # An overwrite outside the chat file names needs no listing.
+                    names, truncated = listings.get(item_directory, ({}, False))
+                    # In place, as file_copies.in_place: a regular file of the
+                    # file's size.
+                    cached = prefixed and names.get(name) == file.file_size_bytes
+                    # Each candidate is cut to fit the name limits; partial
+                    # binds the requested name, which the loop below rebinds.
+                    numbered = partial(safe_file_name, (name,))
+                    free_names = (
+                        candidate
+                        for number in count(1)
+                        if (candidate := numbered(suffix=f" ({number})")) not in names
+                    )
+                    if no_replace and (name in names or truncated):
+                        if destination.conflict_policy == "error":
+                            raise _tool_error(
+                                f"{posixpath.join(item_directory, name)} may "
+                                "already exist"
+                                if truncated and name not in names
+                                else f"{posixpath.join(item_directory, name)} "
+                                "already exists"
+                            )
+                        name = next(free_names)
+                    path = posixpath.join(item_directory, name)
+                    tries = 0
+                    while not cached:
+                        tries += 1
+                        cancellation.check()
+                        written: Future[file_copies.CopyFailure | None] = Future()
+                        file_copies.FileWrites(
+                            ref,
+                            pool,
+                            files,
+                            [
+                                file_copies.FileWrite(
+                                    path,
+                                    file.file_id,
+                                    file.file_size_bytes,
+                                    overwrite=not no_replace,
+                                )
+                            ],
+                            lambda: cancellation.cancelled,
+                            lambda _files, failure, done=written: done.set_result(
+                                failure
+                            ),
+                        )
+                        # The wait has no timeout: the write's tries have
+                        # theirs, and pod shutdown drops a queued write.
+                        while True:
+                            try:
+                                failure = wait_for_future(
+                                    written, _SLOT_CHECK_SECONDS, cancellation
+                                )
+                                break
+                            except TimeoutError:
+                                if pool.stopped.is_set():
+                                    stopped = "the server is shutting down"
+                                    raise _tool_error(
+                                        f"The copy stopped: {stopped}; try again"
+                                    ) from None
+                        if failure is not None and failure != file_copies.EXISTS:
+                            stopped = failure.reason if failure.ends_copy else None
+                            raise _tool_error(
+                                f"The copy failed: {failure.reason}; try again"
+                            )
+                        # A written name holds the file's size, so the same
+                        # file again is cached.
+                        names[name] = file.file_size_bytes if failure is None else None
+                        if failure is None:
+                            break
+                        if (
+                            destination.conflict_policy == "error"
+                            or tries == _MATERIALIZE_NAME_TRIES
+                        ):
+                            raise _tool_error(
+                                f"{path} already exists"
+                                if destination.conflict_policy == "error"
+                                else f"{path} and the names before it are taken; "
+                                "try again"
+                            )
+                        name = next(free_names)
+                        path = posixpath.join(item_directory, name)
+                except ToolCallException as error:
+                    results[index].error = error.llm_facing_message
+                    continue
+                results[index] = MaterializedItem(
+                    library_file_id=file.library_file_id,
+                    file_id=file.file_id,
+                    version_number=file.version_number,
+                    file_name=name,
+                    path=path,
+                    file_size_bytes=file.file_size_bytes,
+                    mime_type=file.mime_type,
+                    status="cached" if cached else "written",
+                )
+        logger.info(
+            "library_prepare_materialize statuses=%s",
+            [result.status for result in results],
+        )
+        if all(result.status == "error" for result in results):
+            raise _tool_error(
+                "No file was copied:\n"
+                + "\n".join(f"- {result.error}" for result in results)
+            )
+        return ToolResult(content=MaterializedItems(items=results).model_dump_json())
 
 
 class LoadSkillArguments(BaseModel):
@@ -1177,7 +1342,7 @@ def sandbox_tools_for_model(
         *file_tools,
         PublishFilesTool,
         LibraryListTool,
-        ArtifactsDownloadTool,
+        LibraryPrepareMaterializeTool,
     )
 
 

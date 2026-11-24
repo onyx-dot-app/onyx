@@ -14,6 +14,7 @@ from pydantic import (
     Field,
     TypeAdapter,
     computed_field,
+    model_validator,
 )
 
 from onyx.server.features.build.sandbox.exec_output import (
@@ -24,6 +25,10 @@ from onyx.server.features.build.sandbox.exec_output import (
     POLL_MIN_YIELD_MS,
     WRITE_STDIN_DEFAULT_YIELD_MS,
     WRITE_STDIN_MAX_YIELD_MS,
+)
+from onyx.server.features.build.sandbox.harness_base import (
+    ARTIFACT_FILES_DIR,
+    CHAT_FILES_DIR,
 )
 from onyx.server.features.build.sandbox.models import (
     SESSION_WORKSPACE_ROOT,
@@ -433,15 +438,6 @@ class LibraryListArguments(BaseModel):
     )
 
 
-class ArtifactsDownloadArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    file_id: str = Field(
-        description="The file ID of a listed file, or of any version in a "
-        "publish_files result."
-    )
-
-
 class _CursorBase(BaseModel):
     sort_order: SortOrder
     artifact_id: UUID
@@ -472,7 +468,7 @@ ARTIFACT_CURSOR: TypeAdapter[ArtifactCursor] = TypeAdapter(ArtifactCursor)
 
 class ListedArtifact(BaseModel):
     """A published file in an library_list page, or the file that
-    artifacts_download looks up: one version of an artifact."""
+    library_prepare_materialize looks up: one version of an artifact."""
 
     # The artifact's ID, the same for every version.
     library_file_id: UUID
@@ -505,15 +501,98 @@ class ArtifactList(BaseModel):
     next_cursor: str | None
 
 
-class DownloadedArtifact(BaseModel):
-    """What artifacts_download returns."""
+# library_prepare_materialize: the most items of one call.
+ARTIFACTS_MATERIALIZE_MAX_ITEMS = 20
+_DIRECTORY_RULE = (
+    f"in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/"
+)
 
+
+class MaterializeItem(BaseModel):
+    """One file to copy: a version by its file ID, or an artifact's newest
+    available version by its library file ID."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: _EchoedText | None = Field(
+        default=None,
+        description="A version's file ID. Give this or library_file_id.",
+    )
+    library_file_id: UUID | None = Field(
+        default=None,
+        description="A library file ID, for its newest version. Give this or file_id.",
+    )
+    file_name: _EchoedText | None = Field(
+        default=None,
+        description="The name of the copy, not a path. Defaults to the file's name.",
+    )
+    relative_directory: _EchoedText | None = Field(
+        default=None,
+        description="A directory relative to the destination directory, "
+        f"{_DIRECTORY_RULE}. `..` is allowed while the path stays there.",
+    )
+
+    @model_validator(mode="after")
+    def _one_reference(self) -> "MaterializeItem":
+        if (self.file_id is None) == (self.library_file_id is None):
+            raise ValueError(
+                "each item takes exactly one of file_id and library_file_id"
+            )
+        return self
+
+
+ConflictPolicy = Literal["dedupe", "overwrite", "error"]
+
+
+class MaterializeDestination(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    directory: _EchoedText | None = Field(
+        default=None,
+        description=f"Where the copies go, {_DIRECTORY_RULE}. Defaults to "
+        f"{ARTIFACT_FILES_DIR}.",
+    )
+    conflict_policy: ConflictPolicy = Field(
+        default="dedupe",
+        description="For every copy except one to the default "
+        f"{ARTIFACT_FILES_DIR}/<short file ID>-<name>, when a file is already at "
+        "the path: dedupe names "
+        'the copy "<name> (N).<ext>", overwrite replaces the file, error fails '
+        "the item. A copy to the default ID-prefixed name uses the file there "
+        "when its size matches, and writes it again otherwise.",
+    )
+
+
+class LibraryPrepareMaterializeArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[MaterializeItem] = Field(
+        min_length=1,
+        max_length=ARTIFACTS_MATERIALIZE_MAX_ITEMS,
+        description="The files to copy, in order.",
+    )
+    destination: MaterializeDestination | None = None
+
+
+class MaterializedItem(BaseModel):
+    """The outcome of one library_prepare_materialize item, in the items' order.
+    A refused item has only the reference that it gave, the status and the
+    error."""
+
+    library_file_id: Annotated[UUID | None, OMITTED_WHEN_NONE] = None
+    file_id: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    version_number: Annotated[int | None, OMITTED_WHEN_NONE] = None
+    file_name: Annotated[str | None, OMITTED_WHEN_NONE] = None
     # Relative to the working directory.
-    path: str
-    file_id: str
-    name: str
-    size: int
-    mime_type: str
-    chat_id: UUID
-    # The file was already at the path; nothing was written.
-    cached: bool
+    path: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    file_size_bytes: Annotated[int | None, OMITTED_WHEN_NONE] = None
+    mime_type: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    # cached: the same file was already at the path; nothing was written.
+    status: Literal["written", "cached", "error"]
+    error: Annotated[str | None, OMITTED_WHEN_NONE] = None
+
+
+class MaterializedItems(BaseModel):
+    """What library_prepare_materialize returns."""
+
+    items: list[MaterializedItem]

@@ -990,8 +990,12 @@ def test_a_truncated_listing_evicts_nothing(
     monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 8)
 
     class _Truncated(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
-            listing = super().list_files(directory, max_entries=max_entries)
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            listing = super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
             if directory != "attachments/search":
                 return listing
             return FileListing(entries=listing.entries, truncated=True)
@@ -1308,11 +1312,15 @@ def test_a_file_offered_while_the_intake_runs_is_copied(
     release = threading.Event()
 
     class _HeldListing(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
             if directory == "attachments/search" and not release.is_set():
                 listing.set()
                 release.wait(15)
-            return super().list_files(directory, max_entries=max_entries)
+            return super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
 
     _wrap(monkeypatch, sandbox, _HeldListing)
     chat_id = uuid4()
@@ -1396,8 +1404,12 @@ def test_a_write_that_ends_during_the_listing_still_counts_toward_the_cap(
     running = turn.search_files._writing
 
     class _StaleListing(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
-            listing = super().list_files(directory, max_entries=max_entries)
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            listing = super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
             if directory == "attachments/search" and armed.is_set():
                 gate.set()
                 _wait_until(lambda: not running)

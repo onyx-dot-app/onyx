@@ -899,7 +899,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         onyx_path = onyx_vm_path(path)
         if onyx_path is not None:
             return sandbox_daemon(self._client_factory, self._place(ref)), "", onyx_path
-        rel = session_relative_path(ref, path)
+        rel = session_relative_path(ref.session_id, path)
         return self._session_vm(ref)[1], str(ref.session_id), rel
 
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
@@ -947,7 +947,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 "exec_command first"
             )
         daemon, session_id, target = self._file_target(ref, path)
-        _write(daemon, session_id, target, data, mode, timeout_seconds)
+        _write(daemon, session_id, target, data, mode, timeout_seconds, overwrite=True)
         tool_results = session_tool_results(ref.session_id)
         if target.startswith(tool_results + "/") and is_purged(
             get_cache_backend(tenant_id=ref.tenant_id), ref.sandbox_id, ref.session_id
@@ -985,7 +985,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     def stat_files(
         self, ref: HarnessSandboxRef, paths: Sequence[str]
     ) -> list[SandboxPathInfo]:
-        rels = [session_relative_path(ref, path) or "." for path in paths]
+        rels = [session_relative_path(ref.session_id, path) or "." for path in paths]
         _, daemon = self._session_vm(ref)
         # Batches within the daemon's caps of paths and path bytes.
         batches: list[list[str]] = [[]]
@@ -1421,6 +1421,8 @@ def _write(
     data: bytes | IO[bytes] | list[bytes],
     mode: int,
     timeout_seconds: float | None,
+    *,
+    overwrite: bool,
 ) -> None:
     """The write of write_file and SessionFiles.write."""
     if not target:
@@ -1430,6 +1432,7 @@ def _write(
         path=target,
         data=data,
         mode=mode,
+        overwrite=overwrite,
         timeout_seconds=timeout_seconds,
     )
 
@@ -1453,15 +1456,18 @@ class _SessionFiles(SessionFiles):
         self._ref = ref
         self._mark = f"copy:{uuid4().hex}"
 
-    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+    def write(
+        self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+    ) -> None:
         session_id = self._ref.session_id
         _write(
             self._daemon,
             str(session_id),
-            session_relative_path(self._ref, path),
+            session_relative_path(self._ref.session_id, path),
             data,
             0o644,
             timeout_seconds,
+            overwrite=overwrite,
         )
         if is_purged(self._cache, self._ref.sandbox_id, session_id):
             # The purge marks the session before it deletes the directory, so
@@ -1476,15 +1482,17 @@ class _SessionFiles(SessionFiles):
         return _delete(
             self._daemon,
             str(self._ref.session_id),
-            session_relative_path(self._ref, path),
+            session_relative_path(self._ref.session_id, path),
         )
 
-    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+    def list_files(
+        self, directory: str, *, max_entries: int, include_hidden: bool = False
+    ) -> FileListing:
         try:
             return self._daemon.list_files(
                 session_id=str(self._ref.session_id),
-                path=session_relative_path(self._ref, directory),
-                skip_hidden=True,
+                path=session_relative_path(self._ref.session_id, directory),
+                skip_hidden=not include_hidden,
                 max_entries=max_entries,
             )
         except SandboxDaemonError as e:

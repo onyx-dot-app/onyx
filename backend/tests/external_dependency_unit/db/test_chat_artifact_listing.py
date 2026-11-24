@@ -452,12 +452,16 @@ def test_only_the_users_own_root_chats_that_are_not_deleted_are_listed(
             is None
         )
 
-    assert get_user_published_file(db_session, owner.id, mine.file_id) is not None
+    assert (
+        get_user_published_file(db_session, owner.id, file_id=mine.file_id) is not None
+    )
     for file in (in_deleted, in_public, in_private, in_child):
-        assert get_user_published_file(db_session, owner.id, file.file_id) is None
+        assert (
+            get_user_published_file(db_session, owner.id, file_id=file.file_id) is None
+        )
 
 
-def test_the_download_lookup_takes_any_version_and_refuses_other_files(
+def test_the_copy_lookup_takes_any_version_and_refuses_other_files(
     db_session: Session, owner: User
 ) -> None:
     chat = _chat(db_session, owner, "Mine")
@@ -473,7 +477,7 @@ def test_the_download_lookup_takes_any_version_and_refuses_other_files(
     )
     # Not a published file, so the user teardown leaves it.
     try:
-        found = get_user_published_file(db_session, owner.id, first.file_id)
+        found = get_user_published_file(db_session, owner.id, file_id=first.file_id)
         assert found is not None
         assert (found.version_number, found.title, found.chat_id) == (
             1,
@@ -481,7 +485,9 @@ def test_the_download_lookup_takes_any_version_and_refuses_other_files(
             chat.id,
         )
         for file_id in (thumbnail_id, image, str(uuid4())):
-            assert get_user_published_file(db_session, owner.id, file_id) is None
+            assert (
+                get_user_published_file(db_session, owner.id, file_id=file_id) is None
+            )
 
         db_session.execute(
             update(FileRecord)
@@ -489,10 +495,48 @@ def test_the_download_lookup_takes_any_version_and_refuses_other_files(
             .values(file_size=FILE_SIZE_MISSING_SENTINEL)
         )
         db_session.commit()
-        assert get_user_published_file(db_session, owner.id, first.file_id) is None
+        assert (
+            get_user_published_file(db_session, owner.id, file_id=first.file_id) is None
+        )
     finally:
         db_session.rollback()
         get_default_file_store().delete_file(image, error_on_missing=False)
+
+
+def test_the_copy_lookup_by_artifact_takes_its_newest_available_version(
+    db_session: Session, owner: User, other: User
+) -> None:
+    chat = _chat(db_session, owner, "Mine")
+    first = _publish(db_session, chat, "/w/report.md", "First")
+    second = _publish(db_session, chat, "/w/report.md", "Second")
+    assert first.artifact_id is not None
+
+    def newest() -> str | None:
+        found = get_user_published_file(
+            db_session, owner.id, artifact_id=first.artifact_id
+        )
+        return None if found is None else found.file_id
+
+    assert newest() == second.file_id
+    db_session.execute(
+        update(FileRecord)
+        .where(FileRecord.file_id == second.file_id)
+        .values(file_size=FILE_SIZE_MISSING_SENTINEL)
+    )
+    db_session.commit()
+    assert newest() == first.file_id
+
+    assert get_user_published_file(db_session, owner.id, artifact_id=uuid4()) is None
+    theirs = _publish(db_session, _chat(db_session, other), "/w/theirs.md")
+    assert (
+        get_user_published_file(db_session, owner.id, artifact_id=theirs.artifact_id)
+        is None
+    )
+    db_session.execute(
+        update(ChatSession).where(ChatSession.id == chat.id).values(deleted=True)
+    )
+    db_session.commit()
+    assert newest() is None
 
 
 def test_a_published_file_belongs_to_its_chats_owner(
@@ -507,8 +551,8 @@ def test_a_published_file_belongs_to_its_chats_owner(
 def test_a_version_whose_file_is_not_a_published_file_is_refused(
     db_session: Session, owner: User
 ) -> None:
-    """The download lookup takes only CHAT_ARTIFACT records, also when a
-    version row names another file."""
+    """The copy lookup takes only CHAT_ARTIFACT records, also when a version
+    row names another file."""
     chat = _chat(db_session, owner)
     published = _publish(db_session, chat, "/w/report.md")
     image = save_chat_output_file(
@@ -519,11 +563,11 @@ def test_a_version_whose_file_is_not_a_published_file_is_refused(
     )
     db_session.commit()
 
-    assert get_user_published_file(db_session, owner.id, published.file_id)
-    assert get_user_published_file(db_session, owner.id, image) is None
+    assert get_user_published_file(db_session, owner.id, file_id=published.file_id)
+    assert get_user_published_file(db_session, owner.id, file_id=image) is None
 
 
-def test_a_list_entry_is_bounded_and_the_download_lookup_is_whole(
+def test_a_list_entry_is_bounded_and_the_copy_lookup_is_whole(
     db_session: Session, owner: User
 ) -> None:
     long_title = "t" * (ARTIFACTS_CHAT_TITLE_MAX_CHARS + 50)
@@ -541,9 +585,9 @@ def test_a_list_entry_is_bounded_and_the_download_lookup_is_whole(
     assert entry.path.endswith(long_name[-(ARTIFACTS_PATH_MAX_CHARS - 1) :])
     assert entry.chat_title == long_title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]
 
-    # artifacts_download names the copy from the whole name, so it keeps its
-    # extension.
-    found = get_user_published_file(db_session, owner.id, published.file_id)
+    # library_prepare_materialize names the copy from the whole name, so it keeps
+    # its extension.
+    found = get_user_published_file(db_session, owner.id, file_id=published.file_id)
     assert found is not None
     assert (found.file_name, found.chat_title) == (long_name, long_title)
     assert found.path == f"{deep}/{long_name}"

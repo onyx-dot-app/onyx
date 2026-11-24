@@ -1183,10 +1183,11 @@ def delete_unpublished_chat_artifacts(published: Sequence[PublishedFile]) -> Non
         db_session.commit()
 
 
-def _newest_available_version() -> LateralFromClause:
+def _newest_available_version(*, file_id: str | None = None) -> LateralFromClause:
     """The newest version of the ChatArtifact row in the enclosing query
-    whose object is not missing, with its file record, as a LATERAL subquery
-    (one row, or none)."""
+    whose object is not missing and whose record is a published file, or
+    the version `file_id` when it is one, with its file record, as a LATERAL
+    subquery (one row, or none)."""
     return (
         select(
             ChatArtifactVersion.version,
@@ -1200,7 +1201,9 @@ def _newest_available_version() -> LateralFromClause:
         .join(FileRecord, FileRecord.file_id == ChatArtifactVersion.file_id)
         .where(
             ChatArtifactVersion.artifact_id == ChatArtifact.id,
+            FileRecord.file_origin == FileOrigin.CHAT_ARTIFACT,
             FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
+            true() if file_id is None else ChatArtifactVersion.file_id == file_id,
         )
         .order_by(ChatArtifactVersion.version.desc())
         .limit(1)
@@ -1403,12 +1406,19 @@ def get_user_published_files(
 
 
 def get_user_published_file(
-    db_session: Session, user_id: UUID, file_id: str
+    db_session: Session,
+    user_id: UUID,
+    *,
+    file_id: str | None = None,
+    artifact_id: UUID | None = None,
 ) -> ListedArtifact | None:
-    """The published file `file_id`, any version of its artifact, when it is
-    in a listable chat of the user (`_listable_chat`) and its object is not
-    missing; else None. Any other file, such as a thumbnail or an upload, is
-    None. Its name, path and chat title are not cut."""
+    """The published file `file_id`, any version of its artifact, or else
+    the newest available version of the artifact `artifact_id`
+    (`_newest_available_version`), when it is in a listable chat of the user
+    (`_listable_chat`) and its object is not missing; else None. Any other
+    file, such as a thumbnail or an upload, is None. Its name, path and chat
+    title are not cut."""
+    newest = _newest_available_version(file_id=file_id if artifact_id is None else None)
     row = db_session.execute(
         select(
             ChatArtifact.id,
@@ -1417,22 +1427,21 @@ def get_user_published_file(
             ChatArtifact.updated_at,
             ChatArtifact.chat_session_id,
             ChatSession.description,
-            ChatArtifactVersion.version,
-            ChatArtifactVersion.file_id,
-            ChatArtifactVersion.title,
-            FileRecord.display_name,
-            FileRecord.file_type,
-            FileRecord.file_size,
+            newest,
         )
-        .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
         .join(ChatSession, ChatSession.id == ChatArtifact.chat_session_id)
-        .join(FileRecord, FileRecord.file_id == ChatArtifactVersion.file_id)
+        .join(newest, true())
         .where(
-            ChatArtifactVersion.file_id == file_id,
+            ChatArtifact.id
+            == (
+                select(ChatArtifactVersion.artifact_id)
+                .where(ChatArtifactVersion.file_id == file_id)
+                .scalar_subquery()
+                if artifact_id is None
+                else artifact_id
+            ),
             ChatArtifact.user_id == user_id,
             _listable_chat(user_id),
-            FileRecord.file_origin == FileOrigin.CHAT_ARTIFACT,
-            FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
         )
     ).one_or_none()
     return None if row is None else _listed_artifact(row)

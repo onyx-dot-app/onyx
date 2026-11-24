@@ -811,7 +811,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             )
             raise AssertionError("unreachable")
         vm = self.agent.vms.get(sandbox_id)
-        if vm is None or vm.state != hostagent_pb2.VM_STATE_RUNNING:
+        if vm is None:
+            abort_with_reason(
+                context, HostAgentErrorReason.SANDBOX_NOT_FOUND, "no VM on this node"
+            )
+            raise AssertionError("unreachable")
+        if vm.state != hostagent_pb2.VM_STATE_RUNNING:
             abort_with_reason(
                 context, HostAgentErrorReason.VM_NOT_RUNNING, "no running VM"
             )

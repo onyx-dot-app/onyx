@@ -131,7 +131,7 @@ artifact: `db/models.py:ChatArtifact` is one VM path in one root chat
 session, with the chat's owner (`user_id`, set from the chat when the
 artifact is created),
 and `ChatArtifactVersion` numbers its files from 1 and holds each
-file's title. The sandbox tools `library_list` and `artifacts_download`
+file's title. The sandbox tools `library_list` and `library_prepare_materialize`
 ([[code-execution]]) read these rows for the owner's chats that are not
 deleted; the default list order reads the index on `(user_id, updated_at
 DESC)`, and the other sorts read all of the owner's artifacts. The save writes the file record, upserts the artifact (its row

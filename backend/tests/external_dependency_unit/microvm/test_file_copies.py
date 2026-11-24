@@ -255,14 +255,22 @@ class _Wrapped(SessionFiles):
     def __init__(self, files: SessionFiles) -> None:
         self.files = files
 
-    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
-        self.files.write(path, data, timeout_seconds=timeout_seconds)
+    def write(
+        self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+    ) -> None:
+        self.files.write(
+            path, data, timeout_seconds=timeout_seconds, overwrite=overwrite
+        )
 
     def delete(self, path: str) -> bool:
         return self.files.delete(path)
 
-    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
-        return self.files.list_files(directory, max_entries=max_entries)
+    def list_files(
+        self, directory: str, *, max_entries: int, include_hidden: bool = False
+    ) -> FileListing:
+        return self.files.list_files(
+            directory, max_entries=max_entries, include_hidden=include_hidden
+        )
 
     def mark_busy(self, seconds: float | None) -> None:
         self.files.mark_busy(seconds)
@@ -760,7 +768,9 @@ class _DyingFiles(_Wrapped):
         super().__init__(files)
         self._pod = pod
 
-    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+    def write(
+        self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+    ) -> None:
         if self._pod.broke.is_set():
             raise HarnessSandboxError("the pod is gone")
         size = data.seek(0, os.SEEK_END)
@@ -770,6 +780,7 @@ class _DyingFiles(_Wrapped):
                 path,
                 io.BufferedReader(_BreaksAtHalf(data, size)),
                 timeout_seconds=timeout_seconds,
+                overwrite=overwrite,
             )
         except Exception:
             self._pod.broke.set()
@@ -1296,10 +1307,14 @@ def test_a_failed_listing_writes_only_in_verified_directories(
     node.agent.links[_key(ref, link)] = target
 
     class _FailedListing(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
             if directory == failed:
                 raise RuntimeError("the listing failed")
-            return super().list_files(directory, max_entries=max_entries)
+            return super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
 
     _wrap(monkeypatch, sandbox, _FailedListing)
     turn, _ = new_turn([_file(added, "attachments/project/added.txt")])
@@ -1342,8 +1357,12 @@ def test_a_truncated_listing_writes_only_in_verified_directories(
     node.agent.links[_key(ref, link)] = target
 
     class _TruncatedListing(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
-            listing = super().list_files(directory, max_entries=max_entries)
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            listing = super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
             if directory != truncated:
                 return listing
             return FileListing(
