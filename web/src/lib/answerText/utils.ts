@@ -8,56 +8,79 @@ import {
 const PLACEHOLDER_OPEN = "\uE000";
 const PLACEHOLDER_CLOSE = "\uE001";
 const PLACEHOLDER_REGEX = /\uE000(\d+)\uE001/g;
-const LIST_ITEM_REGEX = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]/;
-const INDENTED_REGEX = /^(?: {4}|\t)/;
+const LIST_ITEM_REGEX = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/;
+const HEADING_REGEX = /^ {0,3}#{1,6}(?:[ \t]|$)/;
+const QUOTE_PREFIX_REGEX = /^(?: {0,3}> ?)+/;
+
+/** A line's leading whitespace as columns (a tab counts as 4). */
+function indentOf(text: string): number {
+  let width = 0;
+  for (const char of text) {
+    if (char === " ") width += 1;
+    else if (char === "\t") width += 4 - (width % 4);
+    else break;
+  }
+  return width;
+}
 
 /**
- * Indented code blocks: runs of lines indented 4+ spaces (or a tab) after a
- * blank line, outside a list item, whose indented lines continue it.
+ * Indented code blocks (CommonMark): lines indented 4+ columns past their
+ * container (a list item's content, inside any block quotes) that start
+ * after a blank line or a heading, never as a paragraph's continuation.
+ * The block keeps its original lines, quote markers included.
  */
 function replaceIndentedCode(
   content: string,
   replace: (block: string) => string
 ): string {
-  const lines = content.split("\n");
   const out: string[] = [];
   let block: string[] | null = null;
-  // The last non-blank line before the current blank run, if any.
-  let lastText: string | null = null;
-  let afterBlank = true;
-  for (const line of lines) {
-    const blank = line.trim() === "";
+  let blockIndent = 0;
+  // The content column of the open list item, 0 outside a list.
+  let listColumn = 0;
+  // Whether the previous line can be continued as a paragraph.
+  let inParagraph = false;
+  const flush = () => {
+    if (block === null) return;
+    // Trailing blank lines belong after the block.
+    const trailing: string[] = [];
+    while (block.length > 0 && (block[block.length - 1] ?? "").trim() === "") {
+      trailing.unshift(block.pop() ?? "");
+    }
+    out.push(replace(block.join("\n")), ...trailing);
+    block = null;
+  };
+  for (const line of content.split("\n")) {
+    const rest = line.replace(QUOTE_PREFIX_REGEX, "");
+    const blank = rest.trim() === "";
+    const indent = indentOf(rest);
     if (block !== null) {
-      if (INDENTED_REGEX.test(line) || (blank && block.length > 0)) {
+      if (blank || indent >= blockIndent) {
         block.push(line);
         continue;
       }
-      // Trailing blank lines belong after the block.
-      const trailing: string[] = [];
-      while (
-        block.length > 0 &&
-        (block[block.length - 1] ?? "").trim() === ""
-      ) {
-        trailing.unshift(block.pop() ?? "");
-      }
-      out.push(replace(block.join("\n")), ...trailing);
-      block = null;
+      flush();
     }
-    if (
-      !blank &&
-      afterBlank &&
-      INDENTED_REGEX.test(line) &&
-      (lastText === null ||
-        (!INDENTED_REGEX.test(lastText) && !LIST_ITEM_REGEX.test(lastText)))
-    ) {
-      block = [line];
+    if (blank) {
+      out.push(line);
+      inParagraph = false;
       continue;
     }
+    if (!inParagraph && indent >= listColumn + 4) {
+      block = [line];
+      blockIndent = listColumn + 4;
+      continue;
+    }
+    const marker = LIST_ITEM_REGEX.exec(rest);
+    if (marker) {
+      listColumn = indentOf(marker[0].replace(/\S/g, " "));
+    } else if (indent < listColumn && !inParagraph) {
+      listColumn = 0;
+    }
     out.push(line);
-    if (!blank) lastText = line;
-    afterBlank = blank;
+    inParagraph = !HEADING_REGEX.test(rest);
   }
-  if (block !== null) out.push(replace(block.join("\n")));
+  flush();
   return out.join("\n");
 }
 
