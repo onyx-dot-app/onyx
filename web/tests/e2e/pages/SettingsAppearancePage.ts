@@ -17,6 +17,12 @@ import type {
 type ThemeName = "System" | "Light" | "Dark";
 type TranscriptWidth = "Standard" | "Wide";
 
+export interface MonospaceSpacing {
+  fontFamily: string;
+  letterSpacing: string;
+  wordSpacing: string;
+}
+
 export class SettingsAppearancePage {
   readonly page: Page;
   readonly themeOptions: Locator;
@@ -195,6 +201,36 @@ export class SettingsAppearancePage {
   }
 
   /** Assert the computed letter-spacing of a row title, which a typography preset styles. */
+  /**
+   * The computed spacing of monospace text inside an interface-font title: a
+   * code panel line, whose mono preset comes from component CSS, and a span
+   * with the mono preset class.
+   */
+  async monospaceSpacing(): Promise<MonospaceSpacing[]> {
+    return this.interfaceFontTitle.evaluate((title) => {
+      const table = document.createElement("table");
+      const row = table.insertRow();
+      const panelLine = row.insertCell();
+      panelLine.className = "opal-code-panel-code";
+      panelLine.textContent = "const a = 1;";
+      const presetSpan = document.createElement("span");
+      presetSpan.className = "font-secondary-mono";
+      presetSpan.textContent = "const b = 2;";
+      title.append(table, presetSpan);
+      const spacing = [panelLine, presetSpan].map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          fontFamily: style.fontFamily,
+          letterSpacing: style.letterSpacing,
+          wordSpacing: style.wordSpacing,
+        };
+      });
+      table.remove();
+      presetSpan.remove();
+      return spacing;
+    });
+  }
+
   async expectInterfaceLetterSpacing(spacing: string): Promise<void> {
     await expect(this.interfaceFontTitle).toHaveCSS("letter-spacing", spacing);
   }
