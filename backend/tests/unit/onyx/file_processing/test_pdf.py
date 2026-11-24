@@ -49,12 +49,14 @@ class TestReadPdfFile:
         assert "Page two content" in text
 
     def test_text_extraction_uses_pdfium(self) -> None:
-        """Text extraction goes through pypdfium2 (GIL-releasing), not pypdf."""
-        text = pdfium_text.extract_pdf_text_pdfium(
+        """Text extraction goes through pypdfium2 (GIL-releasing), not pypdf,
+        one text for each page."""
+        pages = pdfium_text.extract_pdf_pages_pdfium(
             (FIXTURES / "multipage.pdf").read_bytes(), None
         )
-        assert "Page one content" in text
-        assert "Page two content" in text
+        assert len(pages) == 2
+        assert "Page one content" in pages[0]
+        assert "Page two content" in pages[1]
 
     @pytest.mark.parametrize(
         "isolation_failure",

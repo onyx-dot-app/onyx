@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.compaction import count_tokens
 from onyx.agents.models import RunStatus
-from onyx.chat.files import _get_or_extract_plaintext
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.configs.constants import FileOrigin, MessageType
@@ -23,7 +22,7 @@ from onyx.db.enums import IncognitoRecordMode, UserFileStatus
 from onyx.db.models import ChatMessage, ChatResponseItem, UserFile
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
-from onyx.file_store.utils import plaintext_file_name_for_id
+from onyx.file_store.utils import get_or_extract_plaintext, plaintext_file_name_for_id
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_response import Delta
 from onyx.llm.models import AssistantMessage, ImageContentPart, TextContent
@@ -188,8 +187,8 @@ def test_usage_only_attachments_follow_the_selected_branch(
         with (
             patch("onyx.chat.process_message.get_llm_for_persona", return_value=model),
             patch(
-                "onyx.chat.files._get_or_extract_plaintext",
-                wraps=_get_or_extract_plaintext,
+                "onyx.chat.files.get_or_extract_plaintext",
+                wraps=get_or_extract_plaintext,
             ) as extract_text,
         ):
             first = list(

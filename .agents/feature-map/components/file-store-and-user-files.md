@@ -180,6 +180,16 @@ also lists it in `ChatMessage.files` ([[chat-persistence]]). The version rows
 cascade from the file record and the artifact, and the artifact from the chat
 session, so a chat delete must delete the files before the session.
 
+**Published file text.** The text of a published file version is cached once
+under `ARTIFACT_TEXT_FILE_PREFIX` + `file_id` (`FileOrigin.PLAINTEXT_CACHE`) by
+`file_store/utils.py:get_or_extract_artifact_text`, the one entry point for a
+version's text. It extracts with
+`file_processing/extract_file_text.py:extract_text_pages` (PDF pages,
+PowerPoint slides, spreadsheet sheets; any other file as one text; no image
+captions), ends each page with a form feed, and keeps at most 10 M characters
+of a file up to 50 MiB. A version's file never changes
+([[#file-id-write-once]]), so its cached text never goes stale.
+
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and
 streams the blob. It sends `Content-Disposition: attachment` unless
@@ -298,7 +308,13 @@ preview.
     instead, and the checkpoint row that saved them deletes them when it ends
     or is replaced; session hard delete removes every blob by that prefix
     ([[chat-persistence#checkpoints-for-approvals]]).
-13. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
+13. `artifact-version-cleanup` **A published version's cleanup deletes its
+    thumbnail, its cached text, then its file.**
+    `db/chat.py:delete_chat_artifact_files` is the only per-version cleanup:
+    the hard chat delete and the clean-up of a failed publish use it. The file
+    goes last, because its delete cascades to the version row that links the
+    others.
+14. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
     serves two stores.** A deployment that upgrades from the bundled MinIO
     keeps it as a second, read-fallback store. `S3BackedFileStore` writes and
     deletes in both

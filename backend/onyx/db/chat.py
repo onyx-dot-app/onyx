@@ -85,7 +85,10 @@ from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
+from onyx.file_store.constants import (
+    AGENT_CHECKPOINT_FILE_PREFIX,
+    ARTIFACT_TEXT_FILE_PREFIX,
+)
 from onyx.file_store.file_store import (
     FILE_SIZE_MISSING_SENTINEL,
     get_default_file_store,
@@ -359,11 +362,11 @@ def delete_orphaned_search_docs(db_session: Session) -> None:
 
 
 def delete_chat_artifact_files(versions: Sequence[tuple[str, str | None]]) -> None:
-    """Delete the file and the thumbnail of each artifact version, the
-    thumbnail first: the file's delete cascades to its version, which links
-    the thumbnail. A failed thumbnail delete keeps its file and version, so a
-    later hard chat delete retries both. Raises the first failure after it
-    tries every version."""
+    """Delete the thumbnail, the cached text and the file of each artifact
+    version, the file last: its delete cascades to its version, which links
+    the others. A failed delete keeps the file and version, so a later hard
+    chat delete retries all three. Raises the first failure after it tries
+    every version."""
     file_store = get_default_file_store()
     failures: list[Exception] = []
     for file_id, thumbnail_file_id in versions:
@@ -372,6 +375,9 @@ def delete_chat_artifact_files(versions: Sequence[tuple[str, str | None]]) -> No
                 file_store.delete_file(
                     file_id=thumbnail_file_id, error_on_missing=False
                 )
+            file_store.delete_file(
+                file_id=f"{ARTIFACT_TEXT_FILE_PREFIX}{file_id}", error_on_missing=False
+            )
             file_store.delete_file(file_id=file_id, error_on_missing=False)
         except Exception as e:
             logger.warning(
