@@ -189,6 +189,20 @@ export function findScrollParent(element: Element): Element | null {
   return null;
 }
 
+/**
+ * True when the OS asks for reduced motion or the app forces it with
+ * `data-motion="reduced"` on `<html>`, the attribute the `motion-reduce:` and
+ * `motion-safe:` variants (`_reference.css`) also read. False on the server.
+ */
+export function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    document.documentElement.dataset.motion === "reduced" ||
+    (typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+  );
+}
+
 /** Where `smoothScroll` goes: to a scroll offset, or by a distance from here. */
 export type SmoothScrollTarget = { top: number } | { by: number };
 
@@ -217,8 +231,7 @@ export function smoothScroll(
   const from = scroller.scrollTop;
   const delta = "by" in target ? target.by : target.top - from;
   if (Math.abs(delta) < 1) return Promise.resolve();
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce || duration <= 0) {
+  if (prefersReducedMotion() || duration <= 0) {
     scroller.scrollTop = from + delta;
     return Promise.resolve();
   }

@@ -271,7 +271,7 @@ def _get_available_tokens_for_persona(
             - default_reserved_tokens
         )
 
-    llm = get_llm_for_persona(persona=persona, user=user)
+    llm = get_llm_for_persona(persona=persona, user=user, user_defaults=None)
     token_counter = get_llm_token_counter(llm)
 
     if persona.replace_base_system_prompt and persona.system_prompt:

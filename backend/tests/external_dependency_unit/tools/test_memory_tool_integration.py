@@ -11,6 +11,10 @@ from onyx.db.memory import (
     update_memory_at_index,
 )
 from onyx.db.models import Memory, User
+from onyx.db.user_preferences import (
+    fetch_user_preferences,
+    upsert_user_preferences__no_commit,
+)
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -18,9 +22,8 @@ from tests.external_dependency_unit.conftest import create_test_user
 def test_user(db_session: Session):
     """Create a test user with use_memories enabled."""
     user = create_test_user(db_session, "memory_test")
-    user.use_memories = True
+    upsert_user_preferences__no_commit(db_session, user.id, use_memories=True)
     db_session.commit()
-    db_session.refresh(user)
     return user
 
 
@@ -28,9 +31,8 @@ def test_user(db_session: Session):
 def test_user_no_memories(db_session: Session):
     """Create a test user with use_memories disabled."""
     user = create_test_user(db_session, "memory_test_off")
-    user.use_memories = False
+    upsert_user_preferences__no_commit(db_session, user.id, use_memories=False)
     db_session.commit()
-    db_session.refresh(user)
     return user
 
 
@@ -175,7 +177,9 @@ class TestGetMemoriesWithUserId:
         self, db_session: Session, test_user: User
     ) -> None:
         """Verify that get_memories populates user_id on the returned context."""
-        context = get_memories(test_user, db_session)
+        context = get_memories(
+            test_user, fetch_user_preferences(test_user, db_session), db_session
+        )
         assert context.user_id == test_user.id
 
     def test_get_memories_disabled_still_populates_user_id(
@@ -192,7 +196,11 @@ class TestGetMemoriesWithUserId:
             db_session=db_session,
         )
 
-        context = get_memories(test_user_no_memories, db_session)
+        context = get_memories(
+            test_user_no_memories,
+            fetch_user_preferences(test_user_no_memories, db_session),
+            db_session,
+        )
         assert context.user_id == test_user_no_memories.id
         assert context.user_info.email == test_user_no_memories.email
         assert len(context.memories) == 1
@@ -228,6 +236,10 @@ class TestGetMemoriesWithUserId:
         assert fetched_updated.memory_text == "Updated memory with use_memories off"
 
         # Verify get_memories returns the updated memory
-        context = get_memories(test_user_no_memories, db_session)
+        context = get_memories(
+            test_user_no_memories,
+            fetch_user_preferences(test_user_no_memories, db_session),
+            db_session,
+        )
         assert len(context.memories) == 1
         assert context.memories[0] == "Updated memory with use_memories off"

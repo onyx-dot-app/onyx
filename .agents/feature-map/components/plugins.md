@@ -54,8 +54,9 @@ Group or user restriction needs EE.
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
-  row menu (Turn on/off, Share). An admin's list leaves out the plugins that
-  are not `member_visible`. The plugin page
+  row menu (Turn on/off, Share). The list leaves out skill-kind entries (one
+  SKILL.md at the bundle root; they are on Skills), and an admin's list
+  leaves out the plugins that are not `member_visible`. The plugin page
   (`sections/plugins/MemberPluginDetailPage.tsx`) has Share, a "..." menu
   (Upload New Version through `sections/modals/plugins/UploadPluginFlow.tsx`,
   Delete Plugin) and the switch in its header. A needed integration that is

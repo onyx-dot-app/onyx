@@ -1,5 +1,9 @@
 //! Commands for the bundled local windows. Each window's capability in capabilities/
 //! grants only the commands its page uses; the remote main window cannot call any of them.
+//!
+//! A command that can open a window must be `async`. Sync commands run on the
+//! main thread inside the WebView2 message handler, and building a window
+//! there deadlocks on Windows.
 
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeBody, Request};
@@ -30,35 +34,109 @@ pub struct Prefs {
     /// Set when the launcher shortcut may not work.
     shortcut_notice: Option<String>,
     launch_at_login: bool,
-    /// Which settings managed policy sets; Preferences shows them read-only.
+    #[serde(flatten)]
+    managed: ManagedPrefs,
+    notify_answers: bool,
+}
+
+/// Which settings managed policy sets; Preferences shows them read-only.
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ManagedPrefs {
+    /// The server in use is the managed one.
     server_managed: bool,
     server_locked: bool,
     hotkey_managed: bool,
     launcher_disabled: bool,
     launch_at_login_managed: bool,
+    /// Only where the app updates itself.
     auto_update_disabled: bool,
     notifications_disabled: bool,
-    /// The managed policy exists but is not valid.
-    policy_invalid: bool,
-    notify_answers: bool,
+    /// Set when the managed policy exists but is not valid.
+    policy_notice: Option<String>,
+}
+
+fn managed_prefs(
+    policy: &policy::Policy,
+    server_url: Option<&str>,
+    updates_supported: bool,
+) -> ManagedPrefs {
+    ManagedPrefs {
+        server_managed: server_url.is_some() && server_url == policy.server_url.as_deref(),
+        server_locked: policy.lock_server_url,
+        hotkey_managed: policy.hotkey_managed(),
+        launcher_disabled: policy.disable_launcher,
+        launch_at_login_managed: policy.launch_at_login.is_some(),
+        auto_update_disabled: updates_supported && policy.disable_auto_update,
+        notifications_disabled: policy.disable_notifications,
+        policy_notice: policy.notice(),
+    }
 }
 
 const MANAGED: &str = "This setting is managed by your organization.";
-const POLICY_INVALID: &str =
-    "Your organization's Onyx policy is invalid, so this setting is locked. Contact your IT team.";
+const SERVER_LOCKED_INVALID: &str =
+    "Your organization's Onyx policy is invalid, so the server is locked. Contact your IT team.";
 
-fn server_locked(state: &AppState) -> Result<(), String> {
-    let policy = state.policy();
+fn server_lock_reason(policy: &policy::Policy) -> Option<&'static str> {
     if !policy.lock_server_url {
-        return Ok(());
+        return None;
     }
-    Err(if policy.invalid {
-        POLICY_INVALID
+    Some(if policy.fail_closed {
+        SERVER_LOCKED_INVALID
     } else {
         MANAGED
-    }
-    .into())
+    })
 }
+
+fn server_locked(state: &AppState) -> Result<(), String> {
+    match server_lock_reason(&state.policy()) {
+        None => Ok(()),
+        Some(reason) => Err(reason.into()),
+    }
+}
+
+/// What onboarding shows when it opens.
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerSetup {
+    /// Why the server cannot be set, if so.
+    lock: Option<&'static str>,
+    /// Set when the server can be set but the managed policy is not valid.
+    policy_notice: Option<String>,
+    /// The server in use, if any: Change server starts from it.
+    current: Option<String>,
+}
+
+fn server_setup(policy: &policy::Policy, current: Option<String>) -> ServerSetup {
+    let lock = server_lock_reason(policy);
+    ServerSetup {
+        lock,
+        policy_notice: lock.is_none().then(|| policy.notice()).flatten(),
+        current,
+    }
+}
+
+/// Onboarding calls this when it opens.
+#[tauri::command]
+pub fn get_server_lock(state: State<'_, AppState>) -> ServerSetup {
+    server_setup(&state.policy(), state.server().ok())
+}
+
+/// The server onboarding chose, and whether it is the one in use. The server
+/// in use passes as it is: a managed one may use `http://` on any host. Any
+/// other server must pass the user rules.
+fn chosen_server(input: &str, current: Option<&str>) -> Result<(String, bool), String> {
+    if let (Some(current), Ok(server)) = (current, api::normalize_managed_server_url(input)) {
+        if server == current {
+            return Ok((server, true));
+        }
+    }
+    Ok((normalize_server_url(input)?, false))
+}
+
+/// Saves run one at a time, in order, so an older save that waits for a
+/// sign-out cannot overwrite a newer choice.
+static SAVING_SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Launcher commands refuse while managed policy turns the launcher off.
 fn launcher_enabled(app: &AppHandle, state: &AppState) -> Result<(), String> {
@@ -80,10 +158,27 @@ pub async fn check_server(url: String, state: State<'_, AppState>) -> Result<Ser
 }
 
 #[tauri::command]
-pub fn save_server(url: String, app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn save_server(
+    url: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let _saving = SAVING_SERVER.lock().await;
     server_locked(&state)?;
-    let server = normalize_server_url(&url)?;
+    let current = state.server().ok();
+    let (server, same) = chosen_server(&url, current.as_deref())?;
+    let logged = main_window::log_safe(&server);
+    // The same server keeps the session and its windows.
+    if same {
+        windows::close(&app, windows::ONBOARDING);
+        windows::show_primary_except(&app, windows::ONBOARDING);
+        return Ok(());
+    }
+    if current.is_some() {
+        end_session(&app).await?;
+    }
     state.config.update(|c| c.server_url = Some(server))?;
+    log::info!("saved the server {logged}");
     windows::open_login(&app)?;
     windows::close(&app, windows::ONBOARDING);
     Ok(())
@@ -126,6 +221,7 @@ pub async fn login(
     if !state.commit_sign_in(&server, &token, epoch)? {
         return Err("Sign-in was cancelled.".into());
     }
+    log::info!("signed in with a password");
     // A pending SSO sign-in (possibly another account) must not replace this one.
     crate::sso::cancel(&app);
     main_window::open(&app, &server, &token, "/app").await?;
@@ -152,14 +248,7 @@ pub fn get_prefs(app: AppHandle, state: State<'_, AppState>) -> Prefs {
         } else {
             shortcut::notice(&app, &hotkey)
         },
-        server_managed: server_url.is_some() && server_url == policy.server_url,
-        server_locked: policy.lock_server_url,
-        hotkey_managed: policy.hotkey_managed(),
-        launcher_disabled: policy.disable_launcher,
-        launch_at_login_managed: policy.launch_at_login.is_some(),
-        auto_update_disabled: policy.disable_auto_update,
-        notifications_disabled: policy.disable_notifications,
-        policy_invalid: policy.invalid,
+        managed: managed_prefs(&policy, server_url.as_deref(), crate::updater::SUPPORTED),
         hotkey,
         launch_at_login: login_item::is_enabled(&app).unwrap_or(false),
         server_url,
@@ -233,6 +322,7 @@ async fn end_session(app: &AppHandle) -> Result<(), String> {
         None => true,
     };
     cleared?;
+    log::info!("signed out of {}", main_window::log_safe(&server));
     main_window::close(app, &server);
     windows::reset_launcher(app);
     if !revoked {
@@ -254,16 +344,11 @@ pub async fn sign_out(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Opens onboarding. The session ends only when onboarding saves another
+/// server (`save_server`).
 #[tauri::command]
 pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     server_locked(&state)?;
-    end_session(&app).await?;
-    // The session has ended either way; if the server cannot be cleared, the
-    // user still gets a window (sign-in for the same server) and the error.
-    if let Err(e) = state.config.update(|c| c.server_url = None) {
-        let _ = windows::open_login(&app);
-        return Err(e);
-    }
     windows::open_onboarding(&app)?;
     windows::close(&app, windows::LOGIN);
     windows::close(&app, windows::PREFERENCES);
@@ -579,15 +664,15 @@ pub fn hide_launcher(app: AppHandle) {
 
 /// The launcher logo's easter egg: brings Aonyx onto the screen or sends it away.
 #[tauri::command]
-pub fn toggle_aonyx(app: AppHandle, state: State<'_, AppState>) {
-    if launcher_enabled(&app, &state).is_ok() {
+pub async fn toggle_aonyx(app: AppHandle) {
+    if launcher_enabled(&app, &app.state::<AppState>()).is_ok() {
         crate::aonyx::toggle(&app);
     }
 }
 
 /// A click on the pet opens (or closes) the launcher.
 #[tauri::command]
-pub fn aonyx_clicked(app: AppHandle) {
+pub async fn aonyx_clicked(app: AppHandle) {
     windows::toggle_launcher(&app);
 }
 
@@ -606,10 +691,75 @@ pub fn retry_connection(app: AppHandle) {
     crate::offline::retry_now(&app);
 }
 
+/// Windows and Linux: sizes a local window to its content's height, in
+/// logical pixels, inside the screen.
+#[tauri::command]
+pub fn fit_window(window: tauri::WebviewWindow, content_height: f64) -> Result<(), String> {
+    crate::windows::fit_to_content(&window, content_height)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{decode_component, selected_agent};
+    use super::{
+        chosen_server, decode_component, managed_prefs, selected_agent, server_lock_reason,
+        server_setup, MANAGED, SERVER_LOCKED_INVALID,
+    };
     use crate::api::Agent;
+    use crate::policy::{self, Policy, RawValue};
+
+    #[test]
+    fn onboarding_shows_why_an_unlocked_managed_server_was_ignored() {
+        for value in ["ftp://bad.example", "not a url"] {
+            let policy =
+                policy::parse(|key| (key == "ServerURL").then(|| RawValue::Str(value.to_string())));
+            let setup = server_setup(&policy, None);
+            assert_eq!(setup.lock, None, "{value}");
+            let notice = setup.policy_notice.expect("a notice");
+            assert!(notice.contains("server URL"), "{value}: {notice}");
+        }
+        // A locked server shows only the lock reason.
+        let locked = server_setup(&Policy::unreadable(), None);
+        assert_eq!(locked.lock, Some(SERVER_LOCKED_INVALID));
+        assert_eq!(locked.policy_notice, None);
+        assert_eq!(server_setup(&Policy::default(), None).policy_notice, None);
+    }
+
+    #[test]
+    fn onboarding_starts_from_the_server_in_use() {
+        let server = "https://onyx.example.com".to_string();
+        let setup = server_setup(&Policy::default(), Some(server.clone()));
+        assert_eq!(setup.current, Some(server));
+    }
+
+    #[test]
+    fn the_same_server_keeps_the_session() {
+        let current = Some("https://onyx.example.com");
+        for input in [
+            "https://onyx.example.com",
+            "onyx.example.com",
+            " HTTPS://Onyx.Example.com/app/ ",
+        ] {
+            assert_eq!(
+                chosen_server(input, current),
+                Ok(("https://onyx.example.com".to_string(), true)),
+                "{input}"
+            );
+        }
+        let other = Ok(("https://other.example.com".to_string(), false));
+        assert_eq!(chosen_server("https://other.example.com", current), other);
+        assert_eq!(chosen_server("https://other.example.com", None), other);
+    }
+
+    #[test]
+    fn a_managed_http_server_in_use_is_kept_but_no_other_http_server() {
+        let current = Some("http://onyx.corp");
+        assert_eq!(
+            chosen_server("http://onyx.corp/", current),
+            Ok(("http://onyx.corp".to_string(), true))
+        );
+        assert!(chosen_server("http://other.corp", current).is_err());
+        assert!(chosen_server("http://onyx.corp", None).is_err());
+    }
 
     fn agent(id: i64) -> Agent {
         Agent {
@@ -631,6 +781,80 @@ mod tests {
         assert_eq!(selected_agent(&[], None, true), None);
     }
 
+    /// Calls that can build a window (directly or through a main-thread hop).
+    const OPENS_WINDOWS: &[&str] = &[
+        "windows::open_",
+        "windows::route",
+        "windows::show_",
+        "windows::toggle_launcher",
+        "windows::end_rejected_session",
+        "launcher::toggle",
+        "launcher::show",
+        "launcher::preload",
+        "aonyx::toggle",
+        "aonyx::restore",
+        "sso::open",
+        "main_window::open(",
+        "main_window::open_url",
+        "offline::show",
+    ];
+
+    /// Each command in `source`: its signature line and body.
+    fn commands(source: &str) -> Vec<(&str, &str)> {
+        let marker = concat!("#[tauri::", "command]");
+        source
+            .split(marker)
+            .skip(1)
+            .map(|chunk| {
+                let end = chunk.find("\n}\n").unwrap_or(chunk.len());
+                let body = &chunk[..end];
+                let signature = body
+                    .lines()
+                    .find(|line| line.starts_with("pub "))
+                    .unwrap_or_default();
+                (signature, body)
+            })
+            .collect()
+    }
+
+    fn sync_commands_that_open_windows(source: &str) -> Vec<String> {
+        commands(source)
+            .into_iter()
+            .filter(|(signature, body)| {
+                !signature.contains("async fn")
+                    && OPENS_WINDOWS.iter().any(|call| body.contains(call))
+            })
+            .map(|(signature, _)| signature.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn commands_that_open_windows_are_async() {
+        // A Windows checkout has CRLF line endings.
+        let source = include_str!("commands.rs").replace("\r\n", "\n");
+        assert!(commands(&source).len() > 20, "commands were not found");
+        assert_eq!(
+            sync_commands_that_open_windows(&source),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn finds_a_sync_command_that_opens_a_window() {
+        let source = concat!(
+            "#[tauri::",
+            "command]\npub fn a(app: AppHandle) {\n    windows::open_login(&app);\n}\n",
+            "#[tauri::",
+            "command]\npub async fn b(app: AppHandle) {\n    windows::open_login(&app);\n}\n",
+            "#[tauri::",
+            "command]\npub fn c(app: AppHandle) {\n    windows::hide_launcher(&app);\n}\n",
+        );
+        assert_eq!(
+            sync_commands_that_open_windows(source),
+            vec!["pub fn a(app: AppHandle) {".to_string()]
+        );
+    }
+
     #[test]
     fn decodes_file_name_headers() {
         assert_eq!(
@@ -638,5 +862,46 @@ mod tests {
             Some("Q3 report & notes=final+v2 ü.pdf")
         );
         assert_eq!(decode_component(""), None);
+    }
+
+    #[test]
+    fn updates_show_as_managed_only_where_the_app_updates_itself() {
+        let policy = Policy {
+            disable_auto_update: true,
+            ..Policy::default()
+        };
+        assert!(managed_prefs(&policy, None, true).auto_update_disabled);
+        assert!(!managed_prefs(&policy, None, false).auto_update_disabled);
+    }
+
+    #[test]
+    fn a_managed_server_is_locked_only_with_the_lock() {
+        let server = "https://onyx.example.com";
+        let unlocked = Policy {
+            server_url: Some(server.into()),
+            ..Policy::default()
+        };
+        let prefs = managed_prefs(&unlocked, Some(server), true);
+        assert!(prefs.server_managed);
+        assert!(!prefs.server_locked);
+        assert_eq!(server_lock_reason(&unlocked), None);
+        assert!(!managed_prefs(&unlocked, Some("https://mine.example"), true).server_managed);
+
+        let locked = Policy {
+            lock_server_url: true,
+            ..unlocked
+        };
+        assert!(managed_prefs(&locked, Some(server), true).server_locked);
+        assert_eq!(server_lock_reason(&locked), Some(MANAGED));
+        // An ignored value elsewhere does not make a valid lock look broken.
+        let ignored = Policy {
+            ignored: vec!["LauncherShortcut"],
+            ..locked
+        };
+        assert_eq!(server_lock_reason(&ignored), Some(MANAGED));
+        assert_eq!(
+            server_lock_reason(&Policy::unreadable()),
+            Some(SERVER_LOCKED_INVALID)
+        );
     }
 }

@@ -18,7 +18,10 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.mcp_server import api as mcp_api
 from onyx.mcp_server import auth as mcp_auth
 from onyx.oauth_provider import config as oauth_config
-from onyx.oauth_provider.auth import extract_oauth_provider_bearer
+from onyx.oauth_provider.auth import (
+    _is_mcp_oauth_access_route,
+    extract_oauth_provider_bearer,
+)
 from onyx.oauth_provider.models import OAuthProviderIntrospection
 from onyx.server.oauth_provider.api import _session_hash
 from shared_configs.contextvars import UsageCredentialIdentity
@@ -77,7 +80,32 @@ async def test_oauth_verifier_preserves_validated_identity(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["resource", "scopes", "expires_at", "client_id"])
+@pytest.mark.parametrize(
+    "scopes",
+    [
+        ["read:search", "read:chat"],
+        # Grants made before read:chat was added.
+        ["read:search"],
+    ],
+)
+async def test_oauth_verifier_accepts_current_and_legacy_grants(
+    introspection_backend: AsyncMock,
+    introspection: OAuthProviderIntrospection,
+    scopes: list[str],
+) -> None:
+    introspection.scopes = scopes
+    introspection_backend.get.return_value = httpx.Response(
+        200, json=introspection.model_dump(mode="json")
+    )
+    verified = await mcp_auth.OnyxTokenVerifier().verify_token(_OAUTH_ACCESS_TOKEN)
+    assert verified is not None
+    assert verified.scopes == scopes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field", ["resource", "scopes", "chat_only", "expires_at", "client_id"]
+)
 async def test_oauth_verifier_rejects_incorrect_claims(
     introspection_backend: AsyncMock,
     introspection: OAuthProviderIntrospection,
@@ -87,6 +115,8 @@ async def test_oauth_verifier_rejects_incorrect_claims(
         introspection.resource = "https://other.example/mcp/"
     elif field == "scopes":
         introspection.scopes = ["read:search", "write:admin"]
+    elif field == "chat_only":
+        introspection.scopes = ["read:chat"]
     elif field == "expires_at":
         introspection.expires_at = 1000
     else:
@@ -154,6 +184,21 @@ def test_conflicting_or_malformed_mcp_headers_fail_closed(
     with pytest.raises(OnyxError) as caught:
         extract_oauth_provider_bearer(request)
     assert caught.value.error_code == OnyxErrorCode.UNAUTHENTICATED
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "allowed"),
+    [
+        ("POST", "/api/search/postgres-query", True),
+        ("POST", "/search/postgres-query", True),
+        ("GET", "/api/chat/get-user-chat-sessions", False),
+    ],
+)
+def test_oauth_tokens_reach_only_the_mcp_tool_routes(
+    method: str, path: str, allowed: bool
+) -> None:
+    request = Request({"type": "http", "method": method, "path": path, "headers": []})
+    assert _is_mcp_oauth_access_route(request) is allowed
 
 
 def test_non_mcp_credentials_keep_existing_auth_path() -> None:
@@ -262,7 +307,7 @@ async def test_insufficient_scope_has_discovery_challenge(
     assert {"www-authenticate", "mcp-session-id"} <= exposed
     challenge = response.headers["www-authenticate"]
     assert 'error="insufficient_scope"' in challenge
-    assert 'scope="read:search"' in challenge
+    assert 'scope="read:search read:chat"' in challenge
     assert (
         'resource_metadata="http://localhost:3000/.well-known/oauth-protected-resource/mcp/"'
         in challenge

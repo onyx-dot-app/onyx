@@ -1,5 +1,6 @@
 "use client";
 
+import { prefersReducedMotion } from "@opal/utils";
 import React, { useState, useEffect, useCallback } from "react";
 
 /* =============================================================================
@@ -196,14 +197,14 @@ export function useHorizontalScroll(
   const scrollLeft = useCallback(() => {
     containerRef.current?.scrollBy({
       left: -SCROLL_AMOUNT_PX,
-      behavior: "smooth",
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
     });
   }, [containerRef]);
 
   const scrollRight = useCallback(() => {
     containerRef.current?.scrollBy({
       left: SCROLL_AMOUNT_PX,
-      behavior: "smooth",
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
     });
   }, [containerRef]);
 

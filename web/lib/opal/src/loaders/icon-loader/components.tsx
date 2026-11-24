@@ -12,7 +12,8 @@ type IconLoaderProps = IconProps;
  * The spinner: the static `SvgLoader` ring, spun, at 16px unless told
  * otherwise. Takes the same props as any icon, so it can be invoked on its
  * own or passed as an `icon` (a Button or Content then sets its own size).
- * Colour follows `currentColor`. Holds still under `prefers-reduced-motion`.
+ * Colour follows `currentColor`. Holds still under reduced motion (the OS
+ * setting or `data-motion="reduced"`).
  */
 function IconLoader({ size = 16, className, ...props }: IconLoaderProps) {
   const strings = useOpalStrings();

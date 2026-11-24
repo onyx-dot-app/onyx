@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
+import { getUserAddressedName } from "@/lib/users/svc";
 import { Presence, type PresenceSwapDirection } from "@opal/components";
 import OnboardingHeader from "@/lib/onboarding/components/OnboardingHeader";
 import NameStep from "@/lib/onboarding/components/NameStep";
@@ -98,7 +99,7 @@ const OnboardingFlowInner = ({
       // if the admin hasn't set their name.
       <NonAdminStep />
     )
-  ) : !user.personalization?.name ? (
+  ) : !getUserAddressedName(user) ? (
     <NonAdminStep />
   ) : null;
 };

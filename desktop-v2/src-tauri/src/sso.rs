@@ -36,9 +36,35 @@ pub const FAILED_EVENT: &str = "sso-failed";
 // Google refuses sign-in from web views that do not look like a browser.
 const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
 
+/// WKWebView's default user agent names no browser, so macOS sends Safari's.
+/// WebView2 and WebKitGTK already send their own browser user agent, and
+/// WebKitGTK applies its Google sign-in quirks only to that one.
+fn user_agent_override(os: &str) -> Option<&'static str> {
+    (os == "macos").then_some(BROWSER_USER_AGENT)
+}
+
+/// Not the login window's title, so the two windows can be told apart.
+fn window_title(os: &str) -> &'static str {
+    if os == "macos" {
+        "Sign in to Onyx"
+    } else {
+        "Onyx web sign-in"
+    }
+}
+
 fn report_failure(app: &AppHandle, message: &str) {
     log::warn!("SSO sign-in failed: {message}");
+    #[cfg(not(target_os = "macos"))]
+    show_login(app);
     let _ = app.emit_to(windows::LOGIN, FAILED_EVENT, message.to_string());
+}
+
+/// Shows the login window again, which is hidden while the sign-in window is open.
+#[cfg(not(target_os = "macos"))]
+fn show_login(app: &AppHandle) {
+    if let Some(login) = app.get_webview_window(windows::LOGIN) {
+        windows::bring_forward(app, &login);
+    }
 }
 
 /// Stores the token and opens Onyx, unless the session this sign-in started in
@@ -47,7 +73,10 @@ async fn finish(app: &AppHandle, server: &str, token: &str, epoch: u64) {
     // Stale if a sign-out, server change or password sign-in came first.
     match app.state::<AppState>().commit_sign_in(server, token, epoch) {
         // The other SSO flow, if the user started both, has nothing to finish.
-        Ok(true) => cancel(app),
+        Ok(true) => {
+            log::info!("signed in with SSO");
+            cancel(app);
+        }
         Ok(false) => {
             log::warn!("dropped an SSO sign-in that finished after its session ended");
             return;
@@ -73,11 +102,14 @@ pub fn open(app: &AppHandle, server: &str) -> Result<(), String> {
     let origin = server_url.origin().ascii_serialization();
     let nav_app = app.clone();
     // The identity provider can be any HTTPS site, as in an OAuth popup.
-    let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::External(login))
-        .title("Sign in to Onyx")
+    let mut builder = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::External(login))
+        .title(window_title(std::env::consts::OS))
         .inner_size(520.0, 720.0)
-        .center()
-        .user_agent(BROWSER_USER_AGENT)
+        .center();
+    if let Some(user_agent) = user_agent_override(std::env::consts::OS) {
+        builder = builder.user_agent(user_agent);
+    }
+    let window = builder
         .on_navigation(move |url| match main_window::classify_popup(url, &origin) {
             main_window::LinkAction::Allow => true,
             main_window::LinkAction::External => {
@@ -90,6 +122,20 @@ pub fn open(app: &AppHandle, server: &str) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     let _ = window.set_focus();
+    // One sign-in window at a time: the login window comes back when the user
+    // closes this one or the sign-in fails.
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(login) = app.get_webview_window(windows::LOGIN) {
+            let _ = login.hide();
+        }
+        let close_app = app.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                show_login(&close_app);
+            }
+        });
+    }
 
     let app = app.clone();
     let server = server.to_string();
@@ -104,7 +150,10 @@ pub fn open(app: &AppHandle, server: &str) -> Result<(), String> {
                 return;
             }
             let Some(window) = app.get_webview_window(LABEL) else {
-                return; // closed by the user
+                // Closed by the user, also before the close listener was in place.
+                #[cfg(not(target_os = "macos"))]
+                show_login(&app);
+                return;
             };
             let Ok(cookie_name) = state.cookie_name(&server).await else {
                 continue; // retried on the next poll
@@ -192,7 +241,7 @@ pub async fn start_in_browser(
     let verifier = random_token();
     let app_state = random_token();
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    // Appended, not joined: a server under a path prefix keeps it.
+    // `server` is an origin (see api::normalize), so the path is appended.
     let mut authorize = Url::parse(&format!("{server}{path}")).map_err(|e| e.to_string())?;
     authorize
         .query_pairs_mut()
@@ -255,4 +304,23 @@ pub fn handle_callback(app: &AppHandle, url: &Url) {
             Err(e) => report_failure(&app, &format!("Sign-in did not finish: {e}")),
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_macos_replaces_the_user_agent() {
+        assert_eq!(user_agent_override("macos"), Some(BROWSER_USER_AGENT));
+        assert_eq!(user_agent_override("windows"), None);
+        assert_eq!(user_agent_override("linux"), None);
+    }
+
+    #[test]
+    fn the_sign_in_window_title_differs_from_the_login_window_off_macos() {
+        assert_eq!(window_title("macos"), "Sign in to Onyx");
+        assert_ne!(window_title("windows"), "Sign in to Onyx");
+        assert_ne!(window_title("linux"), "Sign in to Onyx");
+    }
 }

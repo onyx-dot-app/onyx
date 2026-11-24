@@ -70,7 +70,11 @@ the drop, reject and invalid counts.
 - Query timing: `utils/fleet_query_telemetry.py:telemetry_chat` wraps the chat
   entry points in `chat/process_message.py`. `telemetry_query` wraps the search
   API and the EE search stream. A 4xx `OnyxError`, which includes a query that
-  a query-processing hook rejects, sends no event. In a chat turn,
+  a query-processing hook rejects, sends no event, except the codes in
+  `_COUNTED_CLIENT_ERRORS` (rate, seat and subscription limits).
+  `chat/errors.py:chat_error` sets the private `StreamingError._from_llm` on
+  LLM provider failures, so `QueryObservation.error_packet` reports
+  `error_source=llm` and `llm_provider` for them. In a chat turn,
   `chat/emitter.py:Emitter.emit` passes each packet to
   `QueryObservation.packet_queued`.
   `chat/presentation.py:ResponsePresenter.consume` marks each root LLM step

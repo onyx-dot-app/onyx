@@ -180,7 +180,9 @@ export default function CustomizePluginsPage() {
 
   const userEmail = user?.email ?? null;
   const entries = memberPluginEntries(
-    (skills.data?.customs ?? []).filter((skill) => skill.member_visible),
+    (skills.data?.customs ?? []).filter(
+      (skill) => skill.member_visible && skill.kind === "plugin"
+    ),
     userEmail,
     locale
   );

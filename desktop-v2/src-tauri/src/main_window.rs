@@ -143,6 +143,43 @@ pub fn classify_popup(url: &Url, server_origin: &str) -> LinkAction {
     }
 }
 
+/// Whether a link's context menu keeps "Open Link in New Window". A server
+/// link would open in a popup without the app menu; "Open Link" opens it in
+/// the same window. Other links open in the browser, so the item stays.
+#[cfg(any(target_os = "linux", test))]
+fn keeps_new_window_item(link: &Url, server_origin: &str) -> bool {
+    classify(link, server_origin) != LinkAction::Allow
+}
+
+/// Removes "Open Link in New Window" from the context menu of server links
+/// in `window`. Popups that the page opens with `window.open` stay.
+#[cfg(target_os = "linux")]
+fn drop_new_window_item_for_server_links(window: &tauri::WebviewWindow, server_origin: &str) {
+    use webkit2gtk::{
+        ContextMenuAction, ContextMenuExt, ContextMenuItemExt, HitTestResultExt, WebViewExt,
+    };
+    let origin = server_origin.to_string();
+    let result = window.with_webview(move |webview| {
+        webview
+            .inner()
+            .connect_context_menu(move |_, menu, _, hit| {
+                let link = hit.link_uri().and_then(|uri| Url::parse(uri.as_str()).ok());
+                if link.is_some_and(|link| !keeps_new_window_item(&link, &origin)) {
+                    for item in menu.items() {
+                        if item.stock_action() == ContextMenuAction::OpenLinkInNewWindow {
+                            menu.remove(&item);
+                        }
+                    }
+                }
+                // The menu still shows.
+                false
+            });
+    });
+    if let Err(e) = result {
+        log::warn!("could not change the link context menu: {e}");
+    }
+}
+
 /// Resolves `path` against the server. Fails if the result is on another
 /// origin: `//host/x` and `/\host/x` are paths that name another host.
 pub fn server_url_join(server_url: &Url, path: &str) -> Result<Url, String> {
@@ -233,7 +270,11 @@ fn open_new_window(
                 })
                 .build()
             {
-                Ok(window) => NewWindowResponse::Create { window },
+                Ok(window) => {
+                    #[cfg(target_os = "linux")]
+                    drop_new_window_item_for_server_links(&window, origin);
+                    NewWindowResponse::Create { window }
+                }
                 Err(e) => {
                     log::warn!("could not open popup: {e}");
                     NewWindowResponse::Deny
@@ -248,15 +289,121 @@ fn open_new_window(
     }
 }
 
-/// Downloads from any app window ask where to save, like a browser.
+/// Downloads from any app window ask where to save, like a browser. On Linux
+/// they save to the Downloads folder, and a notification tells where
+/// (`watch_downloads`).
 fn handle_download(event: DownloadEvent) -> bool {
     match event {
         DownloadEvent::Requested { destination, .. } => choose_download_path(destination),
         DownloadEvent::Finished { url, success, .. } => {
-            log::info!("download of {url} finished (success: {success})");
+            log::info!(
+                "download of {} finished (success: {success})",
+                log_safe(url.as_str())
+            );
             true
         }
         _ => true,
+    }
+}
+
+/// Notifies once for each finished download. wry adds its download handler
+/// to the web context that all windows share, once for each window it
+/// builds, so `handle_download` runs several times for one download on Linux.
+#[cfg(target_os = "linux")]
+fn watch_downloads(app: &AppHandle, view: &webkit2gtk::WebView) {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    use webkit2gtk::{DownloadExt, WebContextExt, WebViewExt};
+
+    static WATCHING: std::sync::Once = std::sync::Once::new();
+    WATCHING.call_once(|| {
+        let Some(context) = view.context() else {
+            return;
+        };
+        let app = app.clone();
+        context.connect_download_started(move |_, download| {
+            let failed = Rc::new(Cell::new(false));
+            download.connect_failed({
+                let failed = failed.clone();
+                move |_, _| failed.set(true)
+            });
+            let app = app.clone();
+            download.connect_finished(move |download| {
+                let success = !failed.get();
+                let path = download.destination().map(|d| download_path(&d));
+                notify_download(&app, path.as_deref(), success);
+            });
+        });
+    });
+}
+
+/// The local path of a download's destination. WebKitGTK 4.x reports a
+/// `file://` URI; a plain path is kept as it is.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+fn download_path(destination: &str) -> std::path::PathBuf {
+    Url::parse(destination)
+        .ok()
+        .filter(|url| url.scheme() == "file")
+        .and_then(|url| url.to_file_path().ok())
+        .unwrap_or_else(|| std::path::PathBuf::from(destination))
+}
+
+/// The notification text for a finished download.
+#[cfg(any(target_os = "linux", test))]
+fn download_notice(path: Option<&std::path::Path>, success: bool) -> (String, String) {
+    let name = path
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().into_owned());
+    let folder = path
+        .and_then(|p| p.parent())
+        .map(|d| d.display().to_string());
+    match (success, name, folder) {
+        (true, Some(name), Some(folder)) => (
+            format!("Downloaded {name}"),
+            format!("Saved to {folder}. Click to show it in its folder."),
+        ),
+        (true, _, _) => (
+            "Download finished".into(),
+            "Saved to your Downloads folder.".into(),
+        ),
+        (false, Some(name), _) => ("Download failed".into(), format!("Could not save {name}.")),
+        (false, None, _) => ("Download failed".into(), "Could not save the file.".into()),
+    }
+}
+
+/// The extra key that carries a downloaded file's path in its notification.
+#[cfg(target_os = "linux")]
+const DOWNLOAD_KEY: &str = "download";
+
+#[cfg(target_os = "linux")]
+fn notify_download(app: &AppHandle, path: Option<&std::path::Path>, success: bool) {
+    use tauri_plugin_notification::NotificationExt;
+
+    if app.state::<AppState>().policy().disable_notifications {
+        return;
+    }
+    static CLICKS: std::sync::Once = std::sync::Once::new();
+    CLICKS.call_once(|| {
+        let handle = app.clone();
+        let _ = app.notification().on_action(move |performed| {
+            let path = performed
+                .notification()
+                .and_then(|n| n.extra().get(DOWNLOAD_KEY))
+                .and_then(|p| p.as_str());
+            if let (Some(path), "tap") = (path, performed.action_id()) {
+                if let Err(e) = handle.opener().reveal_item_in_dir(path) {
+                    log::warn!("could not show the download in its folder: {e}");
+                }
+            }
+        });
+    });
+    let (title, body) = download_notice(path, success);
+    let mut builder = app.notification().builder().title(title).body(body);
+    if let (true, Some(path)) = (success, path) {
+        builder = builder.extra(DOWNLOAD_KEY, path.display().to_string());
+    }
+    if let Err(e) = builder.show() {
+        log::warn!("could not show the download notification: {e}");
     }
 }
 
@@ -269,7 +416,33 @@ fn popup_title(url: &Url) -> String {
 
 pub fn open_external(app: &AppHandle, url: &str) {
     if let Err(e) = app.opener().open_url(url, None::<&str>) {
-        log::warn!("could not open {url}: {e}");
+        log::warn!("could not open {}: {}", log_safe(url), open_error_kind(&e));
+    }
+}
+
+/// The kind of an opener error. Its message can hold the whole URL (the
+/// launcher command line), so the message is not logged.
+fn open_error_kind(error: &tauri_plugin_opener::Error) -> String {
+    match error {
+        tauri_plugin_opener::Error::Io(e) => format!("{:?}", e.kind()),
+        tauri_plugin_opener::Error::ForbiddenUrl { .. }
+        | tauri_plugin_opener::Error::ForbiddenPath { .. } => "not allowed".into(),
+        _ => "opener error".into(),
+    }
+}
+
+/// A URL or server path for the log file: no user info, query or fragment,
+/// which can carry passwords, tokens or sign-in codes.
+pub fn log_safe(url: &str) -> String {
+    match Url::parse(url) {
+        Ok(mut parsed) => {
+            let _ = parsed.set_username("");
+            let _ = parsed.set_password(None);
+            parsed.set_query(None);
+            parsed.set_fragment(None);
+            parsed.to_string()
+        }
+        Err(_) => url.split(['?', '#']).next().unwrap_or_default().to_string(),
     }
 }
 
@@ -278,6 +451,8 @@ fn session_cookie(server: &Url, name: &str, token: &str) -> Result<Cookie<'stati
         .host_str()
         .ok_or_else(|| "server URL has no host".to_string())?
         .to_string();
+    // A domain with no leading dot is a host-only cookie in libsoup and
+    // WebView2, so subdomains do not get the session.
     let mut cookie = Cookie::build((name.to_string(), token.to_string()))
         .domain(host)
         .path("/")
@@ -316,6 +491,110 @@ fn choose_download_path(_destination: &mut std::path::PathBuf) -> bool {
     true
 }
 
+/// WebKitGTK refuses a clipboard write once the click's user activation has
+/// passed, which the web UI's copy after a request needs (WebView2 and
+/// WKWebView allow it). Reading the clipboard stays behind WebKit's paste
+/// rules. The context menu keeps WebKit's standard items only: its custom ones
+/// (Copy Link with Highlight) link into the embedded page.
+#[cfg(target_os = "linux")]
+fn configure_webkit(window: &tauri::WebviewWindow) {
+    use webkit2gtk::{ContextMenuExt, ContextMenuItemExt, SettingsExt, WebViewExt};
+
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
+        let view = webview.inner();
+        watch_downloads(&app, &view);
+        if let Some(settings) = WebViewExt::settings(&view) {
+            settings.set_javascript_can_access_clipboard(true);
+        }
+        view.connect_context_menu(|_, menu, _, _| {
+            for item in menu.items() {
+                if !is_standard_menu_action(item.stock_action()) {
+                    menu.remove(&item);
+                }
+            }
+            false
+        });
+    });
+    if let Err(e) = result {
+        log::warn!("could not set up the web view: {e}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn is_standard_menu_action(action: webkit2gtk::ContextMenuAction) -> bool {
+    !matches!(
+        action,
+        webkit2gtk::ContextMenuAction::Custom | webkit2gtk::ContextMenuAction::__Unknown(_)
+    )
+}
+
+/// WebView2 takes key presses while the page has focus, so the menu bar's
+/// accelerators never see them. Its accelerator event runs the menu item.
+#[cfg(windows)]
+fn forward_menu_keys(window: &tauri::WebviewWindow) {
+    use webview2_com::AcceleratorKeyPressedEventHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
+        COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
+    };
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
+    };
+
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
+        let held = |key: VIRTUAL_KEY| unsafe { GetKeyState(i32::from(key.0)) } < 0;
+        let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else {
+                return Ok(());
+            };
+            let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
+            let mut key = 0u32;
+            // SAFETY: WebView2 calls this on the UI thread with live event args.
+            unsafe {
+                args.KeyEventKind(&mut kind)?;
+                args.VirtualKey(&mut key)?;
+            }
+            if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+                && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+            {
+                return Ok(());
+            }
+            let modifiers = crate::menu::Modifiers {
+                ctrl: held(VK_CONTROL),
+                alt: held(VK_MENU),
+                shift: held(VK_SHIFT),
+            };
+            if let Some(id) = crate::menu::key_action(key, modifiers) {
+                // SAFETY: as above.
+                unsafe { args.SetHandled(true)? };
+                // After the WebView2 callback returns: an item can build or
+                // close a web view. `run_on_main_thread` runs at once when called
+                // on the main thread, so it is called from another thread.
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let handle = app.clone();
+                    let _ = app.run_on_main_thread(move || crate::menu::handle(&handle, id));
+                });
+            }
+            Ok(())
+        }));
+        let mut token = 0i64;
+        // SAFETY: the controller is live on the UI thread, where with_webview runs.
+        if let Err(e) = unsafe {
+            webview
+                .controller()
+                .add_AcceleratorKeyPressed(&handler, &mut token)
+        } {
+            log::warn!("could not watch for menu keys: {e}");
+        }
+    });
+    if let Err(e) = result {
+        log::warn!("could not watch for menu keys: {e}");
+    }
+}
+
 fn hand_over_session(
     window: &tauri::WebviewWindow,
     server_url: &Url,
@@ -333,6 +612,25 @@ fn hand_over_session(
     result.map_err(|e| format!("Could not hand the session to the window: {e}"))?;
     *window_token() = Some(token.to_string());
     Ok(())
+}
+
+/// The main window's size before the window-state plugin saved one, in logical pixels.
+const SIZE: (f64, f64) = (1280.0, 840.0);
+const MIN_SIZE: (f64, f64) = (800.0, 600.0);
+
+/// `SIZE`, made smaller to fit the primary monitor's work area at its scale.
+#[cfg(windows)]
+fn first_run_size(app: &AppHandle) -> (f64, f64) {
+    let Ok(Some(monitor)) = app.primary_monitor() else {
+        return SIZE;
+    };
+    let area = monitor.work_area().size;
+    crate::windows::fit_size(
+        (area.width, area.height),
+        monitor.scale_factor(),
+        SIZE,
+        MIN_SIZE,
+    )
 }
 
 /// Opens (or reuses) the main window logged in as `token`, at `path` on the server.
@@ -388,11 +686,15 @@ pub async fn open_url(
 
     allow_window_dragging(app, &origin);
 
+    #[cfg(windows)]
+    let size = first_run_size(app);
+    #[cfg(not(windows))]
+    let size = SIZE;
     let blank = WebviewUrl::External("about:blank".parse().map_err(|_| "bad url")?);
     let builder = WebviewWindowBuilder::new(app, LABEL, blank)
         .title("Onyx")
-        .inner_size(1280.0, 840.0)
-        .min_inner_size(800.0, 600.0)
+        .inner_size(size.0, size.1)
+        .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
         .center()
         .initialization_script(LINK_SHIM_JS)
         .initialization_script(SIGN_IN_GUARD_JS)
@@ -430,6 +732,10 @@ pub async fn open_url(
     let builder = builder.menu(crate::menu::build_window_menu(app).map_err(|e| e.to_string())?);
 
     let window = builder.build().map_err(|e| e.to_string())?;
+    #[cfg(any(target_os = "linux", windows))]
+    crate::offline::watch_webview_failures(&window);
+    #[cfg(target_os = "linux")]
+    drop_new_window_item_for_server_links(&window, &origin);
     // Entering or leaving full screen resizes the window.
     let resize_app = app.clone();
     window.on_window_event(move |event| {
@@ -441,6 +747,12 @@ pub async fn open_url(
     // WebView2 and WebKitGTK show alert(), confirm() and prompt() themselves.
     #[cfg(target_os = "macos")]
     crate::macos_dialogs::install(&window);
+    #[cfg(windows)]
+    forward_menu_keys(&window);
+    #[cfg(target_os = "linux")]
+    configure_webkit(&window);
+    #[cfg(target_os = "linux")]
+    crate::aonyx::step_aside_for_file_choosers(&window);
 
     // A window that did not get the session must not stay open: the next
     // open() would reuse it without a session and show the web login page.
@@ -677,9 +989,52 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify, classify_popup, is_web_sign_in, return_path, server_url_join, LinkAction,
+        classify, classify_popup, download_notice, is_web_sign_in, keeps_new_window_item, log_safe,
+        open_error_kind, return_path, server_url_join, LinkAction,
     };
     use url::Url;
+
+    #[test]
+    fn opener_errors_log_no_url() {
+        let error = tauri_plugin_opener::Error::Io(std::io::Error::other(
+            "Launcher \"xdg-open\" [\"https://x.example/?token=secret\"] failed",
+        ));
+        assert_eq!(open_error_kind(&error), "Other");
+        let forbidden = tauri_plugin_opener::Error::ForbiddenUrl {
+            url: "https://x.example/?token=secret".into(),
+            with: None,
+        };
+        assert!(!open_error_kind(&forbidden).contains("secret"));
+    }
+
+    // Unix paths: only Linux reports a download as a file:// URI.
+    #[cfg(unix)]
+    #[test]
+    fn download_destinations_become_local_paths() {
+        use super::download_path;
+        assert_eq!(
+            download_path("file:///home/me/Downloads/report%20(1).csv"),
+            std::path::PathBuf::from("/home/me/Downloads/report (1).csv")
+        );
+        assert_eq!(
+            download_path("/home/me/Downloads/a.csv"),
+            std::path::PathBuf::from("/home/me/Downloads/a.csv")
+        );
+    }
+
+    #[test]
+    fn a_finished_download_says_where_it_is() {
+        let path = std::path::Path::new("/home/me/Downloads/report (1).csv");
+        assert_eq!(
+            download_notice(Some(path), true),
+            (
+                "Downloaded report (1).csv".to_string(),
+                "Saved to /home/me/Downloads. Click to show it in its folder.".to_string()
+            )
+        );
+        assert_eq!(download_notice(Some(path), false).0, "Download failed");
+        assert_eq!(download_notice(None, true).0, "Download finished");
+    }
 
     const ORIGIN: &str = "http://localhost:3000";
 
@@ -688,6 +1043,19 @@ mod tests {
         server_url_join(&server, path)
             .ok()
             .map(|url| url.to_string())
+    }
+
+    #[test]
+    fn log_lines_drop_secrets_from_urls() {
+        assert_eq!(
+            log_safe("https://user:pw@files.example/doc.pdf?X-Amz-Signature=abc#p=2"),
+            "https://files.example/doc.pdf"
+        );
+        assert_eq!(
+            log_safe("/auth/oauth/callback?code=abc&state=xyz"),
+            "/auth/oauth/callback"
+        );
+        assert_eq!(log_safe("/app"), "/app");
     }
 
     #[test]
@@ -750,6 +1118,14 @@ mod tests {
         );
         assert_eq!(popup_action("http://evil.example/"), LinkAction::External);
         assert_eq!(popup_action("javascript:alert(1)"), LinkAction::Block);
+    }
+
+    #[test]
+    fn server_links_lose_the_new_window_menu_item() {
+        let keeps = |url: &str| keeps_new_window_item(&Url::parse(url).unwrap(), ORIGIN);
+        assert!(!keeps("http://localhost:3000/app?chatId=1"));
+        assert!(keeps("https://docs.example.com/page"));
+        assert!(keeps("mailto:a@example.com"));
     }
 
     #[test]

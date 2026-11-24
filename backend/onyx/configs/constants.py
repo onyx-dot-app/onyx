@@ -43,6 +43,11 @@ ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 # The backend owns this cookie: PATCH /user/language and GET /me set it from
 # the user's stored preference. Name must match web/src/i18n/config.ts.
 NEXT_LOCALE_COOKIE_NAME = "NEXT_LOCALE"
+# Appearance cookie the Next.js server layout reads to render the user's fonts
+# and motion preference on first paint. The backend owns it like NEXT_LOCALE:
+# PATCH /user/appearance and GET /me set it. Name must match
+# web/src/lib/appearance/preferences.ts.
+APPEARANCE_COOKIE_NAME = "onyx_appearance"
 
 # ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
 ANONYMOUS_USER_INFO_ID = "__anonymous_user__"
@@ -391,6 +396,8 @@ class NotificationType(str, Enum):
     SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"
     SCHEDULED_TASK_PRE_APPROVED_ACTION = "scheduled_task_pre_approved_action"
     APPROVAL_REQUESTED = "approval_requested"
+    # A critical issue on the OpenSearch cluster, for full admins.
+    OPENSEARCH_CLUSTER_ISSUE = "opensearch_cluster_issue"
 
 
 class BlobType(str, Enum):
@@ -505,6 +512,7 @@ class FileOrigin(str, Enum):
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
     SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"
+    USER_PROFILE_IMAGE = "user_profile_image"
 
 
 # Files that a chat produced for its readers: generated images and code

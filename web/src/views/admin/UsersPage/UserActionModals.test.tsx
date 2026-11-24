@@ -102,6 +102,7 @@ describe("DeleteUserModal", () => {
       is_active: true,
       password_configured: true,
       personal_name: null,
+      profile_image_file_id: null,
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
       last_active: null,

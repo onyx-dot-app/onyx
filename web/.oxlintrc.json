@@ -307,7 +307,6 @@
         "src/sections/skills/SkillFilesPicker.tsx",
         "src/views/AgentEditorPage/page.tsx",
         "src/views/AppPage.tsx",
-        "src/views/SettingsPage.tsx",
         "src/views/admin/connectors/AddConnectorPage/form/FieldRendering.tsx",
         "src/views/admin/connectors/ConnectorDetailPage/InlineFileManagement.tsx",
         "src/views/admin/connectors/OAuthFinalizePage/index.tsx"
@@ -594,7 +593,6 @@
         "src/views/AgentEditorPage/page.tsx",
         "src/views/AgentsCatalogPage/page.tsx",
         "src/views/AppPage.tsx",
-        "src/views/SettingsPage.tsx",
         "src/views/admin/AgentsPage/AgentRowActions.tsx",
         "src/views/admin/AgentsPage/AgentsTable.tsx",
         "src/views/admin/ChatPreferencesPage.tsx",
@@ -696,7 +694,6 @@
         "tests/e2e/pages/AppSidebarPage.ts",
         "tests/e2e/pages/CraftAttachmentsPage.ts",
         "tests/e2e/pages/ScheduledTasksPage.ts",
-        "tests/e2e/pages/SettingsGeneralPage.ts",
         "tests/e2e/settings/settings_pages.spec.ts",
         "tests/e2e/utils/agentUtils.ts",
         "tests/e2e/utils/auth.ts",

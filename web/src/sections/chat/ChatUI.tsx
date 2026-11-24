@@ -93,11 +93,10 @@ export interface ChatUIProps {
   selectedModels?: SelectedModel[];
 
   /**
-   * When on, the chat is in full-width mode: messages use its padding layout.
-   * Their width comes from the page's `--app-chat-column-width`, not from
-   * this prop.
+   * When on, the chat uses the wide width's padding layout. The width itself
+   * comes from the page's `--app-chat-column-width`, not from this prop.
    */
-  fullWidthChat?: boolean;
+  wideChat?: boolean;
 }
 
 const ChatUI = React.memo(
@@ -113,7 +112,7 @@ const ChatUI = React.memo(
     onResubmit,
     anchorNodeId,
     selectedModels,
-    fullWidthChat,
+    wideChat,
   }: ChatUIProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
@@ -482,7 +481,7 @@ const ChatUI = React.memo(
         <div
           className={cn(
             "flex flex-col w-full h-full pt-4 pb-8 gap-12",
-            !fullWidthChat && "md:pe-1"
+            !wideChat && "md:pe-1"
           )}
         >
           {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
@@ -512,14 +511,14 @@ const ChatUI = React.memo(
                       className={cn(
                         "w-full self-center",
                         msgWidth,
-                        !fullWidthChat && "px-3"
+                        !wideChat && "px-3"
                       )}
                     />
                     <ToolQuestionsRegion
                       className={cn(
                         "w-full self-center",
                         msgWidth,
-                        !fullWidthChat && "px-3"
+                        !wideChat && "px-3"
                       )}
                     />
                     {errorBanner}

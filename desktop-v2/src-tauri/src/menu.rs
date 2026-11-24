@@ -1,6 +1,13 @@
+use std::collections::BTreeMap;
+use std::sync::Mutex;
+
 use tauri::image::Image;
+#[cfg(any(not(target_os = "macos"), test))]
+use tauri::menu::AboutMetadata;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
+#[cfg(any(windows, test))]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::main_window;
@@ -20,10 +27,79 @@ const FORWARD: &str = "forward";
 const ZOOM_STEPS: [f64; 9] = [0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75];
 const OPEN: &str = "open";
 const QUIT: &str = "quit";
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(not(target_os = "macos"), test))]
 const CLOSE_WINDOW: &str = "close_window";
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(not(target_os = "macos"), test))]
 const FULLSCREEN: &str = "fullscreen";
+
+/// The main window's menu accelerators on Windows and Linux. WebView2 keeps
+/// key presses from the menu while the page has focus, so `key_action` maps
+/// them to the same items.
+#[cfg(any(not(target_os = "macos"), test))]
+const WINDOW_ACCELERATORS: [(&str, &str); 11] = [
+    (NEW_CHAT, "Ctrl+N"),
+    (PREFERENCES, "Ctrl+,"),
+    (CLOSE_WINDOW, "Ctrl+W"),
+    (QUIT, "Ctrl+Q"),
+    (RELOAD, "Ctrl+R"),
+    (BACK, "Alt+Left"),
+    (FORWARD, "Alt+Right"),
+    (ZOOM_RESET, "Ctrl+0"),
+    (ZOOM_IN, "Ctrl+="),
+    (ZOOM_OUT, "Ctrl+-"),
+    (FULLSCREEN, "F11"),
+];
+
+#[cfg(not(target_os = "macos"))]
+fn accelerator(id: &str) -> Option<&'static str> {
+    WINDOW_ACCELERATORS
+        .iter()
+        .find(|(item, _)| *item == id)
+        .map(|(_, accelerator)| *accelerator)
+}
+
+/// Modifier keys held with a key press.
+#[cfg(any(windows, test))]
+#[derive(Clone, Copy, Default)]
+pub struct Modifiers {
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+}
+
+/// The Windows virtual-key codes of a key in an accelerator. Digits, `=` and
+/// `-` also match the numeric keypad.
+#[cfg(any(windows, test))]
+fn virtual_keys(key: &str) -> Vec<u32> {
+    match key {
+        "," => vec![0xBC],
+        "=" => vec![0xBB, 0x6B],
+        "-" => vec![0xBD, 0x6D],
+        "Left" => vec![0x25],
+        "Right" => vec![0x27],
+        "F11" => vec![0x7A],
+        _ => match key.as_bytes() {
+            [c @ b'A'..=b'Z'] => vec![u32::from(*c)],
+            [d @ b'0'..=b'9'] => vec![u32::from(*d), 0x60 + u32::from(d - b'0')],
+            _ => Vec::new(),
+        },
+    }
+}
+
+/// The main window menu item for a key press (a Windows virtual-key code).
+#[cfg(any(windows, test))]
+pub fn key_action(virtual_key: u32, held: Modifiers) -> Option<&'static str> {
+    WINDOW_ACCELERATORS.iter().find_map(|(id, accelerator)| {
+        let mut parts: Vec<&str> = accelerator.split('+').collect();
+        let key = parts.pop()?;
+        let wants = |m: &str| parts.contains(&m);
+        let matches = wants("Ctrl") == held.ctrl
+            && wants("Alt") == held.alt
+            && wants("Shift") == held.shift
+            && virtual_keys(key).contains(&virtual_key);
+        matches.then_some(*id)
+    })
+}
 
 /// The macOS app menu bar.
 #[cfg(target_os = "macos")]
@@ -55,7 +131,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         true,
         &[
             &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, Some("CmdOrCtrl+N"))?,
-            &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
+            &launcher_item(app, "app")?,
             &separator()?,
             &PredefinedMenuItem::close_window(app, None)?,
         ],
@@ -113,13 +189,25 @@ pub fn build_window_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         "File",
         true,
         &[
-            &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, Some("Ctrl+N"))?,
-            &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
+            &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, accelerator(NEW_CHAT))?,
+            &launcher_item(app, "window")?,
             &separator()?,
-            &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, Some("Ctrl+,"))?,
+            &MenuItem::with_id(
+                app,
+                PREFERENCES,
+                "Preferences…",
+                true,
+                accelerator(PREFERENCES),
+            )?,
             &separator()?,
-            &MenuItem::with_id(app, CLOSE_WINDOW, "Close Window", true, Some("Ctrl+W"))?,
-            &MenuItem::with_id(app, QUIT, "Quit Onyx", true, Some("Ctrl+Q"))?,
+            &MenuItem::with_id(
+                app,
+                CLOSE_WINDOW,
+                "Close Window",
+                true,
+                accelerator(CLOSE_WINDOW),
+            )?,
+            &MenuItem::with_id(app, QUIT, "Quit Onyx", true, accelerator(QUIT))?,
         ],
     )?;
     let view = Submenu::with_items(
@@ -127,24 +215,88 @@ pub fn build_window_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         "View",
         true,
         &[
-            &MenuItem::with_id(app, RELOAD, "Reload", true, Some("Ctrl+R"))?,
-            &MenuItem::with_id(app, BACK, "Back", true, Some("Alt+Left"))?,
-            &MenuItem::with_id(app, FORWARD, "Forward", true, Some("Alt+Right"))?,
+            &MenuItem::with_id(app, RELOAD, "Reload", true, accelerator(RELOAD))?,
+            &MenuItem::with_id(app, BACK, "Back", true, accelerator(BACK))?,
+            &MenuItem::with_id(app, FORWARD, "Forward", true, accelerator(FORWARD))?,
             &separator()?,
-            &MenuItem::with_id(app, ZOOM_RESET, "Actual Size", true, Some("Ctrl+0"))?,
-            &MenuItem::with_id(app, ZOOM_IN, "Zoom In", true, Some("Ctrl+="))?,
-            &MenuItem::with_id(app, ZOOM_OUT, "Zoom Out", true, Some("Ctrl+-"))?,
+            &MenuItem::with_id(
+                app,
+                ZOOM_RESET,
+                "Actual Size",
+                true,
+                accelerator(ZOOM_RESET),
+            )?,
+            &MenuItem::with_id(app, ZOOM_IN, "Zoom In", true, accelerator(ZOOM_IN))?,
+            &MenuItem::with_id(app, ZOOM_OUT, "Zoom Out", true, accelerator(ZOOM_OUT))?,
             &separator()?,
-            &MenuItem::with_id(app, FULLSCREEN, "Full Screen", true, Some("F11"))?,
+            &MenuItem::with_id(
+                app,
+                FULLSCREEN,
+                "Full Screen",
+                true,
+                accelerator(FULLSCREEN),
+            )?,
         ],
     )?;
     let help = Submenu::with_items(
         app,
         "Help",
         true,
-        &[&PredefinedMenuItem::about(app, Some("About Onyx"), None)?],
+        &[&PredefinedMenuItem::about(
+            app,
+            Some("About Onyx"),
+            Some(about_metadata(
+                &app.package_info().version.to_string(),
+                app.default_window_icon().cloned(),
+            )),
+        )?],
     )?;
     Menu::with_items(app, &[&file, &view, &help])
+}
+
+/// The newest "Open Launcher" item of each menu, so policy can turn them off.
+static LAUNCHER_ITEMS: Mutex<BTreeMap<&str, MenuItem<Wry>>> = Mutex::new(BTreeMap::new());
+
+fn launcher_item(app: &AppHandle, menu: &'static str) -> tauri::Result<MenuItem<Wry>> {
+    let enabled = !app.state::<AppState>().policy().disable_launcher;
+    let item = MenuItem::with_id(app, LAUNCHER, "Open Launcher", enabled, None::<&str>)?;
+    LAUNCHER_ITEMS
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(menu, item.clone());
+    // A policy refresh during the build may have missed this item.
+    sync_launcher_items(app);
+    Ok(item)
+}
+
+/// Sets every "Open Launcher" item to the policy at the time it runs. Queued
+/// on the main thread without waiting, like `updater::set_menu_label`.
+pub fn sync_launcher_items(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let enabled = !handle.state::<AppState>().policy().disable_launcher;
+        let items: Vec<MenuItem<Wry>> = LAUNCHER_ITEMS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .values()
+            .cloned()
+            .collect();
+        for item in &items {
+            let _ = item.set_enabled(enabled);
+        }
+    });
+}
+
+/// Windows shows the About dialog only for an item with metadata.
+#[cfg(any(not(target_os = "macos"), test))]
+fn about_metadata<'a>(version: &str, icon: Option<Image<'a>>) -> AboutMetadata<'a> {
+    AboutMetadata {
+        name: Some("Onyx".into()),
+        version: Some(version.into()),
+        // Linux shows a missing image without one.
+        icon,
+        ..Default::default()
+    }
 }
 
 fn updates_item(app: &AppHandle) -> tauri::Result<MenuItem<Wry>> {
@@ -164,7 +316,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         app,
         &[
             &MenuItem::with_id(app, OPEN, "Open Onyx", true, None::<&str>)?,
-            &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
+            &launcher_item(app, "tray")?,
             &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, None::<&str>)?,
         ],
     )?;
@@ -175,17 +327,84 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
     ])?;
-    TrayIconBuilder::with_id("onyx-tray")
+    let builder = TrayIconBuilder::with_id("onyx-tray")
         .icon(Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?)
         .icon_as_template(true)
         .tooltip("Onyx")
         .menu(&menu)
-        .show_menu_on_left_click(true)
-        // No tray `on_menu_event`: Tauri delivers every menu event, tray items
-        // included, to the app-level handler in main.rs. A second listener here
-        // ran each menu action twice.
-        .build(app)?;
+        // Windows convention: a left click opens the app, a right click the menu.
+        .show_menu_on_left_click(!cfg!(windows));
+    #[cfg(windows)]
+    let builder = builder.on_tray_icon_event(|tray, event| {
+        if opens_app(&event) {
+            handle(tray.app_handle(), OPEN);
+        }
+    });
+    // Linux writes the icon to a file before the tray shows.
+    #[cfg(target_os = "linux")]
+    let builder = {
+        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR");
+        match tray_icon_dir(
+            runtime_dir.as_deref().map(std::path::Path::new),
+            app.path().app_cache_dir().ok(),
+        ) {
+            Some(dir) => builder.temp_dir_path(dir),
+            None => builder,
+        }
+    };
+    // No tray `on_menu_event`: Tauri delivers every menu event, tray items
+    // included, to the app-level handler in main.rs. A second listener here
+    // ran each menu action twice.
+    builder.build(app)?;
     Ok(())
+}
+
+/// The directory for the Linux tray icon file, or `None` for the library
+/// default (`$XDG_RUNTIME_DIR/tray-icon`). Without a usable runtime directory
+/// (unset, relative, missing or read-only) it is the per-user cache directory:
+/// the library would fall back to `/tmp/tray-icon`, which only its first user
+/// can write to, or fail.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn tray_icon_dir(
+    runtime_dir: Option<&std::path::Path>,
+    cache_dir: Option<std::path::PathBuf>,
+) -> Option<std::path::PathBuf> {
+    if runtime_dir.is_some_and(|dir| dir.is_absolute() && can_write_in(&dir.join("tray-icon"))) {
+        return None;
+    }
+    cache_dir.map(|dir| dir.join("tray-icon"))
+}
+
+/// Whether `dir` exists or can be made, and takes new files.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn can_write_in(dir: &std::path::Path) -> bool {
+    if std::fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    // `create_new` does not follow a file or link that is already there.
+    let probe = dir.join(format!(".probe-{}", std::process::id()));
+    let created = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .is_ok();
+    if created {
+        let _ = std::fs::remove_file(&probe);
+    }
+    created
+}
+
+/// A left click on the tray icon (on release, as Windows menus open).
+#[cfg(any(windows, test))]
+fn opens_app(event: &TrayIconEvent) -> bool {
+    matches!(
+        event,
+        TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        }
+    )
 }
 
 pub fn handle(app: &AppHandle, id: &str) {
@@ -278,4 +497,159 @@ fn set_zoom(app: &AppHandle, id: &str) {
         }
     }
     main_window::sync_chrome(app);
+}
+
+// Unix paths: "/run/user/1000" is not absolute on Windows.
+#[cfg(all(test, unix))]
+mod tray_dir_tests {
+    use super::{can_write_in, tray_icon_dir};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn tray_icon_dir_keeps_a_usable_runtime_dir() {
+        let runtime = temp_dir("runtime");
+        let cache = Some(PathBuf::from("/home/a/.cache/app"));
+        assert_eq!(tray_icon_dir(Some(&runtime), cache), None);
+        std::fs::remove_dir_all(&runtime).unwrap();
+    }
+
+    #[test]
+    fn tray_icon_dir_is_per_user_without_a_runtime_dir() {
+        let cache = PathBuf::from("/home/a/.cache/app");
+        let expected = Some(cache.join("tray-icon"));
+        assert_eq!(tray_icon_dir(None, Some(cache.clone())), expected);
+        // dirs::runtime_dir ignores a relative XDG_RUNTIME_DIR.
+        assert_eq!(tray_icon_dir(Some(Path::new("run")), Some(cache)), expected);
+    }
+
+    #[test]
+    fn tray_icon_dir_is_per_user_when_the_runtime_dir_is_unusable() {
+        let base = temp_dir("unusable");
+        // A file where the directory should be: no directory can be made under it.
+        let not_a_dir = base.join("runtime");
+        std::fs::write(&not_a_dir, b"").unwrap();
+        let cache = base.join("cache");
+        let expected = Some(cache.join("tray-icon"));
+        assert_eq!(
+            tray_icon_dir(Some(&not_a_dir), Some(cache.clone())),
+            expected
+        );
+        assert_eq!(
+            tray_icon_dir(Some(&not_a_dir.join("missing")), Some(cache)),
+            expected
+        );
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_write_probe_does_not_follow_a_planted_link() {
+        let dir = temp_dir("probe-link");
+        let target = dir.join("target");
+        std::fs::write(&target, b"keep").unwrap();
+        let probe = dir.join(format!(".probe-{}", std::process::id()));
+        std::os::unix::fs::symlink(&target, &probe).unwrap();
+        assert!(!can_write_in(&dir));
+        assert_eq!(std::fs::read(&target).unwrap(), b"keep");
+        assert!(probe.symlink_metadata().is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("onyx-tray-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn tray_icon_dir_falls_back_to_the_default_without_a_cache_dir() {
+        assert_eq!(tray_icon_dir(None, None), None);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+
+    use super::*;
+
+    fn ctrl() -> Modifiers {
+        Modifiers {
+            ctrl: true,
+            ..Modifiers::default()
+        }
+    }
+
+    #[test]
+    fn menu_keys_map_to_their_items() {
+        assert_eq!(key_action(0xBC, ctrl()), Some(PREFERENCES));
+        assert_eq!(key_action(u32::from(b'N'), ctrl()), Some(NEW_CHAT));
+        assert_eq!(key_action(u32::from(b'W'), ctrl()), Some(CLOSE_WINDOW));
+        assert_eq!(key_action(u32::from(b'Q'), ctrl()), Some(QUIT));
+        assert_eq!(key_action(u32::from(b'R'), ctrl()), Some(RELOAD));
+        assert_eq!(key_action(0xBB, ctrl()), Some(ZOOM_IN));
+        assert_eq!(key_action(0x6B, ctrl()), Some(ZOOM_IN));
+        assert_eq!(key_action(0xBD, ctrl()), Some(ZOOM_OUT));
+        assert_eq!(key_action(0x30, ctrl()), Some(ZOOM_RESET));
+        assert_eq!(key_action(0x60, ctrl()), Some(ZOOM_RESET));
+        assert_eq!(key_action(0x7A, Modifiers::default()), Some(FULLSCREEN));
+        let alt = Modifiers {
+            alt: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(key_action(0x25, alt), Some(BACK));
+        assert_eq!(key_action(0x27, alt), Some(FORWARD));
+    }
+
+    #[test]
+    fn other_keys_reach_the_page() {
+        // Ctrl+K and plain typing are the page's.
+        assert_eq!(key_action(u32::from(b'K'), ctrl()), None);
+        assert_eq!(key_action(u32::from(b'N'), Modifiers::default()), None);
+        assert_eq!(key_action(0x25, Modifiers::default()), None);
+        let ctrl_shift = Modifiers {
+            ctrl: true,
+            shift: true,
+            alt: false,
+        };
+        assert_eq!(key_action(u32::from(b'N'), ctrl_shift), None);
+    }
+
+    #[test]
+    fn every_menu_accelerator_has_a_key() {
+        for (id, accelerator) in WINDOW_ACCELERATORS {
+            let key = accelerator.rsplit('+').next().unwrap_or_default();
+            assert!(!virtual_keys(key).is_empty(), "{id}: {accelerator}");
+        }
+    }
+
+    #[test]
+    fn the_about_item_has_the_name_and_version() {
+        let icon = Image::new_owned(vec![0; 4], 1, 1);
+        let metadata = about_metadata("1.2.3", Some(icon));
+        assert_eq!(metadata.name.as_deref(), Some("Onyx"));
+        assert_eq!(metadata.version.as_deref(), Some("1.2.3"));
+        assert!(metadata.icon.is_some());
+    }
+
+    fn click(button: MouseButton, button_state: MouseButtonState) -> TrayIconEvent {
+        TrayIconEvent::Click {
+            id: "onyx-tray".into(),
+            position: tauri::PhysicalPosition::new(0.0, 0.0),
+            rect: tauri::Rect::default(),
+            button,
+            button_state,
+        }
+    }
+
+    #[test]
+    fn a_left_click_on_the_tray_icon_opens_the_app() {
+        assert!(opens_app(&click(MouseButton::Left, MouseButtonState::Up)));
+        assert!(!opens_app(&click(
+            MouseButton::Left,
+            MouseButtonState::Down
+        )));
+        assert!(!opens_app(&click(MouseButton::Right, MouseButtonState::Up)));
+    }
 }

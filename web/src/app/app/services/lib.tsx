@@ -464,14 +464,17 @@ export async function renameChatSession(
   return response;
 }
 
-export async function deleteChatSession(chatSessionId: string) {
+/** Throws when the server does not delete the session. */
+export async function deleteChatSession(chatSessionId: string): Promise<void> {
   const response = await fetch(
     `/api/chat/delete-chat-session/${chatSessionId}`,
     {
       method: "DELETE",
     }
   );
-  return response;
+  if (!response.ok) {
+    throw new Error(`Failed to delete chat session: ${response.status}`);
+  }
 }
 
 export async function deleteAllChatSessions() {

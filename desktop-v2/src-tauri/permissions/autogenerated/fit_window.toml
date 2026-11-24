@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fit-window"
+description = "Enables the fit_window command without any pre-configured scope."
+commands.allow = ["fit_window"]
+
+[[permission]]
+identifier = "deny-fit-window"
+description = "Denies the fit_window command without any pre-configured scope."
+commands.deny = ["fit_window"]

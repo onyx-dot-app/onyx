@@ -32,7 +32,7 @@ inside the Cloud deployment.
 | `runtime`, `version`, `resource`, `heartbeat` | Each API server, Celery worker, and Slack bot process | At start, then every 5 minutes |
 | `query` | Chat turns and search requests: channel, mode, outcome, timing, error category, chat tool usage, LLM cycles | At the end of server execution |
 | `attempt` counters | Indexing: documents fetched, chunks embedded and written, errors, durations | Summed for 30 seconds |
-| `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, permission and group sync times and cadence of permission-synced connectors, signup email domains, license presence, the number of standard user accounts | Each item when it changes, and 6 hours after its own last send |
+| `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, permission and group sync times and cadence of permission-synced connectors, signup email domains, license presence, the number of standard user accounts and how many of them are active | Each item when it changes, and 6 hours after its own last send |
 | `feedback` | A thumbs up or down on an answer: the vote, the channel, and a digest of the answer id | When a user votes |
 | `attempt`, `stage`, `job` | Collector: index attempts, stage timings, sync and migration jobs that changed | Every 5 minutes |
 | `heartbeat` deployment fields | API: Standard or Lite; collector: whether a configured connector has an indexed document | Every 5 minutes |
@@ -60,6 +60,15 @@ inside tools do not count.
 Deep research requests report the `deep_research` mode instead of `chat`. They report tool usage, but not
 `llm_cycles`, because their orchestration is not a chat loop. Deploy the receiving server's optional
 `llm_cycles` field and `deep_research` mode before this instrumentation.
+
+A failed query reports a fixed `error_code` and an `error_source`. `llm` means the error came from the
+LLM provider. `onyx` means it came from Onyx. LLM failures also report `llm_provider`, the provider type
+(for example `openai` or `bedrock`). A provider that is not a known type reports `custom`, so provider names
+never leave the deployment. LLM categories include `auth`, `rate_limit`, `quota`, `not_found` (a model or
+deployment that the provider does not know), `context_limit`, `content_policy`, `bad_request` and
+`source_unavailable`. Bad input and missing permissions do not count as failed queries. Onyx rate limits,
+seat limits and inactive subscriptions do count, as `rate_limit` and `license`. Deploy the receiving
+server's `error_source` and `llm_provider` fields and these categories before this instrumentation.
 
 Connector document counts use the same query as the connector admin page. They count indexed
 document links for each connector and credential pair, excluding pending links. Counts follow
