@@ -17,6 +17,7 @@ export function DownloadButton({ fileUrl, fileName }: DownloadButtonProps) {
       download={fileName}
       aria-label={t("downloadButton.tooltip")}
       prominence="tertiary"
+      size="md"
       icon={SvgDownload}
       tooltip={t("downloadButton.tooltip")}
     />
