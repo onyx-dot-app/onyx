@@ -1,4 +1,4 @@
-import { type ComponentProps, useMemo } from "react";
+import { type ComponentProps, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { CodePanel, Text } from "@opal/components";
 import { STEP_ICONS } from "@/lib/timeline/icons";
@@ -106,6 +106,9 @@ export function ExecToolRenderer({
       ? t("sandbox.noOutput.text")
       : "");
   const outputLoading = !isComplete && !output;
+  // Output that streamed in keeps following through the final output, which
+  // can add lines; a call that was already done when shown stays at its top.
+  const [followOutput] = useState(!isComplete);
   const exitCode =
     end !== null && end.exit_code !== null
       ? t("sandbox.exitCode.label", { exitCode: end.exit_code })
@@ -126,7 +129,7 @@ export function ExecToolRenderer({
           }
           output={panelOutput}
           outputLoading={outputLoading}
-          outputFollow={!isComplete}
+          outputFollow={followOutput}
           emptyLabel=""
           footer={exitCode}
         />
@@ -150,7 +153,7 @@ export function ExecToolRenderer({
             />
           )}
           {panelOutput ? (
-            <CodePanel.Output follow={!isComplete}>
+            <CodePanel.Output follow={followOutput}>
               {panelOutput}
             </CodePanel.Output>
           ) : (

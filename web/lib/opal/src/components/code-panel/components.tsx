@@ -165,7 +165,12 @@ function CodePanelLines({
 }: CodePanelLinesProps) {
   const columns = 1 + (lineNumbers ? 1 : 0) + (markers ? 1 : 0);
   const table = (
-    <div className="opal-code-panel-lines" data-grow={grow || undefined}>
+    // Code reads left to right, in any page direction.
+    <div
+      dir="ltr"
+      className="opal-code-panel-lines"
+      data-grow={grow || undefined}
+    >
       <table>
         <tbody>
           {lines.map((line, index) => {
@@ -244,6 +249,7 @@ function CodePanelOutput({
   return (
     <div
       ref={ref}
+      dir="ltr"
       className="opal-code-panel-output"
       data-error={error}
       onScroll={(event) => {

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { CodePanel, type CodePanelLine } from "@opal/components";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 import type { RichStr } from "@opal/types";
+import { stripBidiControls } from "@opal/utils";
 
 interface CommandBodyProps {
   /** The command or code that ran. */
@@ -59,7 +60,7 @@ function patchFiles(
 ): PatchFile[] {
   const files: PatchFile[] = [];
   let file: PatchFile | null = null;
-  let lines = patch.split("\n");
+  let lines = patch.split(/\r?\n/);
   // Strip a heredoc wrapper, so its lines do not show as a file.
   const opener = HEREDOC_OPEN.exec(lines[0]?.trim() ?? "");
   if (opener) {
@@ -156,7 +157,7 @@ export function CommandBody({
           ).map((file, index) => (
             <React.Fragment key={index}>
               <CodePanel.Header
-                title={file.path || title || ""}
+                title={stripBidiControls(file.path) || title || ""}
                 copyText={index === 0 ? command : undefined}
               />
               <CodePanel.Lines lines={file.lines} markers />
