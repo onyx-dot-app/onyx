@@ -340,7 +340,7 @@ def read_library_inheritance(
     its own. One read for each LIBRARY_ITEMS_PAGE_SIZE items, in the order of
     the item ids, and each read retries on its own, so a throttled page does
     not start the walk again. None for a library with more than
-    LIBRARY_INHERITANCE_MAX_ITEMS items."""
+    LIBRARY_INHERITANCE_MAX_ITEMS items, before or during the read."""
 
     def build_library_query() -> Any:
         return (
@@ -362,6 +362,7 @@ def read_library_inheritance(
         return None
 
     items: list[SharepointListItemInheritance] = []
+    rows_read = 0
     after_id = 0
     while True:
 
@@ -389,9 +390,15 @@ def read_library_inheritance(
             row = _list_item_inheritance(item)
             if row is not None:
                 items.append(row)
-        _check_read_size(items, f"Items of library `{list_id}`")
-        if len(page) < LIBRARY_ITEMS_PAGE_SIZE or not page_ids:
+        # SharePoint can send a short page before the end, so only an empty
+        # page ends the read.
+        if not page_ids:
             break
+        rows_read += len(page_ids)
+        # The library can grow during the read.
+        if rows_read > LIBRARY_INHERITANCE_MAX_ITEMS:
+            return None
+        _check_read_size(items, f"Items of library `{list_id}`")
         after_id = max(page_ids)
     return SharepointLibraryInheritance(
         root_folder_server_relative_url=root_folder,
