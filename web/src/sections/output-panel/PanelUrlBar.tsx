@@ -5,6 +5,7 @@ import { Button, InputTypeIn, Text, Tooltip } from "@opal/components";
 import { SvgRevert } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { Section } from "@opal/layouts";
+import { cn } from "@opal/utils";
 
 interface PanelUrlBarProps {
   // The path or URL shown, left to right, when the bar has no search
@@ -51,9 +52,14 @@ export function PanelUrlBar({
             aria-busy={refresh.isRefreshing || refresh.isUserRefreshing}
           />
         )}
+        {/* As tall as the md buttons beside it. A search field brings its
+            own inset, the 8px the location text gets from the pill. */}
         <div
           data-testid="url-bar-pill"
-          className="h-8 min-w-0 flex-1 overflow-hidden rounded-md bg-background-tint-02 px-2"
+          className={cn(
+            "h-7 min-w-0 flex-1 overflow-hidden rounded-08 bg-background-tint-02",
+            !onSearchChange && "px-2"
+          )}
         >
           <Section flexDirection="row" justifyContent="start" gap={0}>
             {onSearchChange ? (

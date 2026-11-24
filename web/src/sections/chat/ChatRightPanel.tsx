@@ -351,13 +351,13 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     };
   }, [open, workspace.page]);
   const toggle = sessionId !== null && (
-    // At Craft's place: centered in the 52px header row, 12px from the end
+    // Centered in the 52px header row, 12px from the end, as the header's
+    // own md buttons
     <div className="absolute end-3 top-3 z-30">
       <Button
         ref={toggleRef}
         icon={SvgSidebar}
         prominence="tertiary"
-        size="sm"
         aria-expanded={open}
         // Decides from what the user sees: the host can hide a panel
         // whose state is open, such as Sources without retrieval
