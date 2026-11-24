@@ -69,31 +69,38 @@ export default function IntegrationConnectPrompt({
 
   return (
     <>
-      {pending.length > 0 && toolConfiguration.ready && (
-        <Section width="auto" height="auto" className="ms-1">
-          <Button
-            ref={triggerRef}
-            icon={needsReconnect ? WarningKey : InfoKey}
-            prominence="tertiary"
-            responsiveHideText
-            tooltip={openedIds ? undefined : t("tooltip")}
-            aria-label={t("trigger.label", { count: pending.length })}
-            aria-haspopup="dialog"
-            disabled={disabled}
-            onClick={() => {
-              void refresh();
-              // Let open popovers close on this click first.
-              window.setTimeout(
-                () =>
-                  setOpenedIds(pending.map((integration) => integration.id)),
-                0
-              );
-            }}
+      {pending.length > 0 &&
+        toolConfiguration.ready && (
+          // In a narrow composer the trigger is its icon, so the send button
+          // keeps its place
+          <Section
+            width="auto"
+            height="auto"
+            className="ms-1 @max-[30rem]/composer-controls:[&_[data-button-label]]:hidden"
           >
-            {t("trigger.label", { count: pending.length })}
-          </Button>
-        </Section>
-      )}
+            <Button
+              ref={triggerRef}
+              icon={needsReconnect ? WarningKey : InfoKey}
+              prominence="tertiary"
+              responsiveHideText
+              tooltip={openedIds ? undefined : t("tooltip")}
+              aria-label={t("trigger.label", { count: pending.length })}
+              aria-haspopup="dialog"
+              disabled={disabled}
+              onClick={() => {
+                void refresh();
+                // Let open popovers close on this click first.
+                window.setTimeout(
+                  () =>
+                    setOpenedIds(pending.map((integration) => integration.id)),
+                  0
+                );
+              }}
+            >
+              {t("trigger.label", { count: pending.length })}
+            </Button>
+          </Section>
+        )}
       {openedIds && (
         <IntegrationConnectModal
           integrations={integrations.filter((integration) =>
