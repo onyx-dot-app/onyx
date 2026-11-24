@@ -254,7 +254,8 @@
   Craft's new-file marker until the panel shows it, also as a new version
   in its open tab. Several files can be open at once; tabs switch
   with a click or the arrow keys, reorder by drag or Alt+arrow among the
-  file tabs, and closing
+  file tabs (on a touch screen, a swipe scrolls the strip and a press and
+  hold starts the drag), and closing
   the active tab returns to the tab used before it, else to Files. Files and
   Sources cannot close or move, and a file tab cannot move before them. File
   tabs of one shown name show their paths. An artifact has one tab, which
