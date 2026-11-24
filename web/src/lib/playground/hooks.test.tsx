@@ -115,6 +115,35 @@ test("a feature the server does not list is not restricted", () => {
   expect(result.current.restricted).toBe(false);
 });
 
+test("the answer is not known while the settings load or fail", () => {
+  mockUseSettings.mockReturnValue({
+    isLoading: true,
+  } as ReturnType<typeof useSettings>);
+  const loading = renderHook(
+    () => usePlaygroundRestriction(PlaygroundRestrictedFeature.SSO),
+    { wrapper }
+  );
+  expect(loading.result.current.known).toBe(false);
+  expect(loading.result.current.restricted).toBe(false);
+
+  mockUseSettings.mockReturnValue({
+    isLoading: false,
+    error: new Error("settings unavailable"),
+  } as ReturnType<typeof useSettings>);
+  const failed = renderHook(
+    () => usePlaygroundRestriction(PlaygroundRestrictedFeature.SSO),
+    { wrapper }
+  );
+  expect(failed.result.current.known).toBe(false);
+
+  stubRestrictions([]);
+  const loaded = renderHook(
+    () => usePlaygroundRestriction(PlaygroundRestrictedFeature.SSO),
+    { wrapper }
+  );
+  expect(loaded.result.current.known).toBe(true);
+});
+
 test("a surface without a feature key is never restricted", () => {
   stubRestrictions([
     PlaygroundRestrictedFeature.SSO,

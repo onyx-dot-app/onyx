@@ -18,10 +18,12 @@ const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
 function stubRestrictions(
   restrictions: PlaygroundRestrictedFeature[],
-  isLoading = false
+  isLoading = false,
+  error: Error | undefined = undefined
 ) {
   mockUseSettings.mockReturnValue({
     isLoading,
+    error,
     playground_restrictions: restrictions,
   } as ReturnType<typeof useSettings>);
 }
@@ -99,6 +101,17 @@ test("a page with a feature key waits for the settings before it is live", () =>
 
   expect(screen.queryByRole("button", { name: "Add provider" })).toBeNull();
   expect(screen.queryByText("Playground Limit")).not.toBeInTheDocument();
+});
+
+test("a page with a feature key stays held while the settings request fails", () => {
+  stubRestrictions([], false, new Error("settings unavailable"));
+  render(
+    <PlaygroundRestrictedPage featureKey={PlaygroundRestrictedFeature.SSO}>
+      <Page />
+    </PlaygroundRestrictedPage>
+  );
+
+  expect(screen.queryByRole("button", { name: "Add provider" })).toBeNull();
 });
 
 test("a page without a feature key renders while the settings load", () => {

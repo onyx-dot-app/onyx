@@ -27,11 +27,12 @@ export default function PlaygroundRestrictedPage({
   featureKey,
   children,
 }: PlaygroundRestrictedPageProps) {
-  const { loading, restricted, title, description } =
+  const { known, restricted, title, description } =
     usePlaygroundRestriction(featureKey);
   // A page with a feature key waits for the settings: it must not be live
-  // for a moment before the page knows it is restricted.
-  if (featureKey !== undefined && loading) {
+  // before the page knows it is restricted, and not after a failed request
+  // either. The settings request retries on its own.
+  if (featureKey !== undefined && !known) {
     return (
       <Section padding={8}>
         <IconLoader className="h-6 w-6" />
