@@ -8,6 +8,7 @@ import {
 import type { BackendChatSession, Message } from "@/app/app/types";
 import {
   addLoadedPublishedFiles,
+  type ChatLoad,
   chatPublishedFiles,
   filesSharingALabel,
   type LoadedPublishedFiles,
@@ -15,9 +16,16 @@ import {
   newestVersion,
   parseArtifactLink,
   publishedFileLabel,
+  startChatLoad,
 } from "@/lib/chat/publishedFiles";
 
 const CHAT_ID = "chat-b";
+
+/** A load of sequence `sequence` that started with no packet files. */
+const chatLoad = (sequence: number): ChatLoad => ({
+  sequence,
+  heldFileIds: new Set(),
+});
 
 /** A publish of `path`: a version of the path's artifact in chat CHAT_ID. */
 function published(
@@ -83,7 +91,7 @@ function load(
     published_files: listed,
     packets: messages.map((message) => message.packets),
   };
-  return addLoadedPublishedFiles(NO_LOADED_PUBLISHED_FILES, page, 1);
+  return addLoadedPublishedFiles(NO_LOADED_PUBLISHED_FILES, page, chatLoad(1));
 }
 
 const fileIds = (files: PublishedFile[]): string[] =>
@@ -249,7 +257,7 @@ describe("chatPublishedFiles", () => {
     const withOlder = addLoadedPublishedFiles(
       loaded,
       { published_files: null, packets: [older.packets] },
-      2
+      chatLoad(2)
     );
     expect(
       fileIds(chatPublishedFiles(withOlder, tree([older, saved]), CHAT_ID))
@@ -280,6 +288,29 @@ describe("chatPublishedFiles", () => {
     expect(
       fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
     ).toEqual(["chart", "after"]);
+  });
+
+  test("a live publish during a load shows when the load's list leaves it out", () => {
+    const saved = response(2, 2, [
+      publishEnd([published("saved", "/w/report.md")]),
+    ]);
+    const live = response(-1, undefined, []);
+    const started = startChatLoad(tree([saved, live]));
+
+    // The live answer publishes after the load's fetch read the list.
+    live.packets.push(publishEnd([published("live", "/w/chart.png")]));
+    const loaded = addLoadedPublishedFiles(
+      NO_LOADED_PUBLISHED_FILES,
+      {
+        published_files: [published("saved", "/w/report.md")],
+        packets: [saved.packets],
+      },
+      started
+    );
+
+    expect(
+      fileIds(chatPublishedFiles(loaded, tree([saved, live]), CHAT_ID))
+    ).toEqual(["live", "saved"]);
   });
 
   test("a packet file that no load replayed shows only when newer than the listed version", () => {
@@ -341,7 +372,7 @@ describe("chatPublishedFiles", () => {
           addLoadedPublishedFiles(
             NO_LOADED_PUBLISHED_FILES,
             { packets: [answer.packets], ...session },
-            1
+            chatLoad(1)
           ),
           tree([answer]),
           CHAT_ID
@@ -365,9 +396,9 @@ describe("addLoadedPublishedFiles", () => {
     const first = addLoadedPublishedFiles(
       NO_LOADED_PUBLISHED_FILES,
       list("v1"),
-      1
+      chatLoad(1)
     );
-    const second = addLoadedPublishedFiles(first, list("v2"), 2);
+    const second = addLoadedPublishedFiles(first, list("v2"), chatLoad(2));
     expect(second.listed?.map((file) => file.file_id)).toEqual(["v2"]);
   });
 
@@ -375,9 +406,9 @@ describe("addLoadedPublishedFiles", () => {
     const newer = addLoadedPublishedFiles(
       NO_LOADED_PUBLISHED_FILES,
       list("v2"),
-      2
+      chatLoad(2)
     );
-    const stale = addLoadedPublishedFiles(newer, list("v1"), 1);
+    const stale = addLoadedPublishedFiles(newer, list("v1"), chatLoad(1));
     expect(stale.listed?.map((file) => file.file_id)).toEqual(["v2"]);
     expect(stale.listedBy).toBe(2);
   });

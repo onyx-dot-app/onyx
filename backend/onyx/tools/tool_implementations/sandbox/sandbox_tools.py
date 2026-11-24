@@ -4,7 +4,8 @@ private sandbox (`server/features/build/sandbox/harness_base.py:HarnessSandbox`)
 
 They have no tool row: a chat turn builds them when it offers the sandbox
 (`chat/execution.py:create_chat_agent`), and they share a `SandboxTurn`. The
-sandbox is the isolation, so calls need no approval.
+sandbox is the isolation, so calls need no approval; only a delete of a
+published file asks (ARTIFACTS_DELETE_APPROVAL).
 """
 
 import posixpath
@@ -13,7 +14,7 @@ from contextlib import closing
 from functools import partial
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from onyx.agents.tools import (
     ToolExecutionMode,
@@ -35,6 +36,7 @@ from onyx.prompts.sandbox_tools import (
     EXEC_COMMAND_USE,
     LIBRARY_CREATE_LIBRARY_FILE_DESCRIPTION,
     LIBRARY_LIST_DESCRIPTION,
+    LIBRARY_MANAGE_LIBRARY_DESCRIPTION,
     LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION,
     LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION,
     SANDBOX_CODE_MODE_NOTE,
@@ -71,6 +73,8 @@ from onyx.tools.models import (
     CodeModeResultKind,
     CodeModeResultSpec,
     CustomToolCallSummary,
+    ToolApprovalDetails,
+    ToolApprovalScope,
     ToolCallException,
     ToolContext,
 )
@@ -80,7 +84,6 @@ from onyx.tools.tool_implementations.sandbox.errors import (
     tool_error,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
-    ARTIFACT_ACTION_ARGUMENTS,
     ARTIFACTS_MATERIALIZE_MAX_ITEMS,
     PUBLISH_FILES_MAX_FILES,
     ApplyPatchArguments,
@@ -90,14 +93,18 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactList,
     ArtifactPublished,
     ArtifactVersionConflict,
+    DeleteOperation,
     EditArguments,
     ExecCommandArguments,
     ExecCommandOutput,
     FileToolName,
     LibraryCreateLibraryFileArguments,
+    LibraryFileTarget,
     LibraryListArguments,
     LibraryPrepareMaterializeArguments,
     LibraryReplaceLibraryFileArguments,
+    ManageLibraryArguments,
+    ManageResults,
     MaterializeDestination,
     MaterializedItems,
     MaterializeItem,
@@ -143,6 +150,14 @@ _CHANGES: dict[type[PatchHunk], Literal["add", "update", "delete"]] = {
     UpdateFile: "update",
     DeleteFile: "delete",
 }
+
+# The built-in action whose calls wait for the user's approval: a delete of a
+# published file, by either artifact tool family, so one chat grant covers
+# both. A turn that runs without asking builds the tools without it
+# (chat/execution.py).
+ARTIFACTS_DELETE_APPROVAL = ToolApprovalScope(
+    integration_id=None, action_id="onyx:artifacts.delete"
+)
 
 _EXEC_RESULT = CodeModeResultSpec(
     kind=CodeModeResultKind.DETAILS, model=ExecCommandOutput
@@ -748,8 +763,9 @@ class _LibraryTool(SandboxTool):
     CODE_MODE_NAMESPACE = "library"
     # The group's line in the execute_code description.
     CODE_MODE_NAMESPACE_DESCRIPTION = (
-        "Find the user's published files, copy them into this chat and add "
-        "versions to them; create a file here to give it to the user."
+        "Find the user's published files, copy them into this chat, add "
+        "versions to them, and change or delete them; create a file here to "
+        "give it to the user."
     )
     CODE_MODE_NAME: str
     RESULT: type[BaseModel]
@@ -881,6 +897,51 @@ class LibraryReplaceLibraryFileTool(_LibraryTool, _FileTool):
         )
 
 
+class LibraryManageLibraryTool(_LibraryTool, _FileTool):
+    """Changes artifacts of any of the user's chats
+    (artifact_operations.manage): a list of operations, each a member of a
+    union on `operation`. It shows
+    the generic card. A call with a delete waits for the user's approval of
+    the whole call. Its operations are not all idempotent, so a call that a
+    lost server left running is not run again."""
+
+    NAME = "library_manage_library"
+    CODE_MODE_NAME = "manage_library"
+    DESCRIPTION = LIBRARY_MANAGE_LIBRARY_DESCRIPTION
+    ARGUMENTS = ManageLibraryArguments
+    RESULT = ManageResults
+    display_name = "Manage Published Files"
+    interrupted_result = INTERRUPTED_SANDBOX_RESULT
+    approval = ARTIFACTS_DELETE_APPROVAL
+
+    def approval_details(
+        self, arguments: dict[str, JsonValue]
+    ) -> ToolApprovalDetails | None:
+        try:
+            parsed = parse_tool_arguments(ManageLibraryArguments, arguments)
+        except ToolCallException:
+            return None
+        deletes = [
+            operation.target
+            for operation in parsed.operations
+            if operation.operation == "delete"
+        ]
+        return (
+            artifact_operations.delete_approval_details(self._turn.user_id, deletes)
+            if deletes
+            else None
+        )
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        return ToolResult(
+            content=artifact_operations.manage(
+                self._turn.user_id,
+                invocation.cancellation,
+                parse_tool_arguments(ManageLibraryArguments, invocation.arguments),
+            ).model_dump_json()
+        )
+
+
 class ArtifactTool(_LibraryTool, _FileTool):
     """One tool with an action for each artifact operation
     (artifact_operations.py), which Claude models get instead of the
@@ -896,8 +957,8 @@ class ArtifactTool(_LibraryTool, _FileTool):
     NAME = "artifact"
     CODE_MODE_NAMESPACE = "artifact"
     CODE_MODE_NAMESPACE_DESCRIPTION = (
-        "Give files from the VM to the user, and find and copy the files "
-        "published in this chat and the user's other chats."
+        "Give files from the VM to the user, and find, copy, change and "
+        "delete the files published in this chat and the user's other chats."
     )
     CODE_MODE_NAME = "artifact"
     DESCRIPTION = ARTIFACT_DESCRIPTION
@@ -905,6 +966,26 @@ class ArtifactTool(_LibraryTool, _FileTool):
     # The generic card of list and read; publish has the publish card.
     display_name = "Published Files"
     interrupted_result = INTERRUPTED_SANDBOX_RESULT
+
+    approval = ARTIFACTS_DELETE_APPROVAL
+
+    def approval_details(
+        self, arguments: dict[str, JsonValue]
+    ) -> ToolApprovalDetails | None:
+        try:
+            parsed = parse_tool_arguments(ArtifactArguments, arguments)
+        except ToolCallException:
+            return None
+        if parsed.action != "delete" or parsed.url is None:
+            return None
+        try:
+            artifact_id, version = parse_artifact_url(parsed.url)
+        except ValueError:
+            return None
+        return artifact_operations.delete_approval_details(
+            self._turn.user_id,
+            [LibraryFileTarget(library_file_id=artifact_id, version_number=version)],
+        )
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:
@@ -915,18 +996,12 @@ class ArtifactTool(_LibraryTool, _FileTool):
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         arguments = parse_tool_arguments(ArtifactArguments, invocation.arguments)
         action = arguments.action
-        extra = sorted(
-            name
-            for name, value in arguments
-            if value is not None
-            and name != "action"
-            and name not in ARTIFACT_ACTION_ARGUMENTS[action]
-        )
-        if extra:
-            raise tool_error(
-                f"Action {action} does not take {', '.join(extra)}; it takes "
-                f"{', '.join(sorted(ARTIFACT_ACTION_ARGUMENTS[action]))}"
+        try:
+            reference = (
+                None if arguments.url is None else parse_artifact_url(arguments.url)
             )
+        except ValueError as error:
+            raise tool_error(str(error)) from error
         if action == "publish":
             paths = (
                 [arguments.file_path]
@@ -942,12 +1017,12 @@ class ArtifactTool(_LibraryTool, _FileTool):
                     f"publish takes at most {PUBLISH_FILES_MAX_FILES} file_paths"
                 )
             if arguments.file_path is None and (
-                arguments.title is not None or arguments.url is not None
+                arguments.title is not None or reference is not None
             ):
                 raise tool_error("title and url go with file_path")
-            if arguments.force is not None and arguments.url is None:
+            if arguments.force is not None and reference is None:
                 raise tool_error("force goes with url")
-            if arguments.url is None:
+            if reference is None:
                 published = artifact_operations.publish(
                     self._turn,
                     invocation.cancellation,
@@ -957,10 +1032,7 @@ class ArtifactTool(_LibraryTool, _FileTool):
                     ],
                 )
             else:
-                try:
-                    artifact_id, version = parse_artifact_url(arguments.url)
-                except ValueError as error:
-                    raise tool_error(str(error)) from error
+                artifact_id, version = reference
                 if version is None and not arguments.force:
                     raise tool_error(
                         "Pass the url from your last result, which names the "
@@ -990,6 +1062,26 @@ class ArtifactTool(_LibraryTool, _FileTool):
             return ToolResult(
                 content=ArtifactPublished.of(published).model_dump_json(),
                 details=PublishedFiles(files=published),
+            )
+        if action == "delete":
+            if reference is None:
+                raise tool_error("delete takes url")
+            artifact_id, version = reference
+            return ToolResult(
+                content=artifact_operations.manage(
+                    self._turn.user_id,
+                    invocation.cancellation,
+                    ManageLibraryArguments(
+                        operations=[
+                            DeleteOperation(
+                                operation="delete",
+                                target=LibraryFileTarget(
+                                    library_file_id=artifact_id, version_number=version
+                                ),
+                            )
+                        ]
+                    ),
+                ).model_dump_json()
             )
         if action == "list":
             return ToolResult(
@@ -1027,9 +1119,8 @@ class ArtifactTool(_LibraryTool, _FileTool):
         for target in targets:
             try:
                 artifact_id, version = parse_artifact_url(target)
-            except ValueError as error:
-                if target == arguments.url:
-                    raise tool_error(str(error)) from error
+            except ValueError:
+                # The url parsed above, so this is a file ID.
                 items.append(MaterializeItem(file_id=target))
             else:
                 items.append(
@@ -1108,6 +1199,7 @@ def sandbox_tools_for_model(
         LibraryListTool,
         LibraryPrepareMaterializeTool,
         LibraryReplaceLibraryFileTool,
+        LibraryManageLibraryTool,
     )
 
 

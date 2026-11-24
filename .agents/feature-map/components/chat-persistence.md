@@ -434,8 +434,10 @@ published file's delete cascades to its version, which links the thumbnail),
 and keeps the file when the thumbnail delete fails, so the next hard delete
 retries both. It raises after a failure, which stops the hard delete before
 the message files. The failed-publish clean-up
-(`delete_unpublished_chat_artifacts`) uses it too, and keeps the artifact of
-a kept file. The EE task
+(`delete_unpublished_chat_artifacts`) and the model's delete of one artifact
+(`delete_chat_artifact`, which holds the artifact's row lock throughout, so a
+publish during it waits and then makes a new artifact) use it too, and keep the
+artifact of a kept file. The EE task
 `ee/onyx/background/celery/tasks/ttl_management/tasks.py:perform_ttl_management_task`
 hard-deletes in batches the sessions whose last activity, child sessions
 included, is older than the window (`db/chat.py:get_chat_sessions_older_than`).

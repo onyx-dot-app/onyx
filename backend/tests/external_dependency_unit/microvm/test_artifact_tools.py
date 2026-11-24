@@ -14,16 +14,19 @@ from typing import IO
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
 from pydantic import BaseModel, JsonValue
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.orm import Session
 
+from onyx.agents.models import RunStatus
 from onyx.agents.tools import ToolInvocation
 from onyx.cache.interface import CacheBackend
 from onyx.chat import process_message
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.db import chat as chat_db
 from onyx.db.chat import (
     create_chat_session,
     get_chat_published_files,
@@ -31,7 +34,9 @@ from onyx.db.chat import (
     save_chat_artifact,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ApprovalDecision
 from onyx.db.models import (
+    ApprovalRequest,
     ChatArtifact,
     ChatArtifactVersion,
     ChatMessage,
@@ -40,7 +45,9 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.sandbox import get_or_create_sandbox
-from onyx.file_store.file_store import get_default_file_store
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_response import Delta
@@ -53,6 +60,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.microvm.models import FileListing
+from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
@@ -66,18 +74,33 @@ from onyx.server.features.build.sandbox.models import (
     session_workspace,
 )
 from onyx.server.query_and_chat import streaming_models as packets
-from onyx.server.query_and_chat.chat_backend import delete_chat_session_by_id
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.chat_backend import (
+    decide_approval,
+    delete_chat_session_by_id,
+    fetch_chat_file,
+)
+from onyx.server.query_and_chat.models import (
+    ChatApprovalDecisionRequest,
+    SendMessageRequest,
+)
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolContext, ToolOptions
 from onyx.tools.tool_implementations.sandbox import artifact_operations, file_copies
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
+    ARTIFACTS_CHAT_TITLE_MAX_CHARS,
+    ARTIFACTS_PATH_MAX_CHARS,
+    DELETE_OF_A_VERSION,
     ArtifactAtPath,
+    ArtifactById,
     ArtifactList,
+    ArtifactNotFound,
+    LibraryFileTarget,
     LibraryListFilters,
+    ManageResults,
     MaterializedItems,
+    PublishedFile,
     PublishFileArgument,
     VmChatFile,
     artifact_url,
@@ -86,6 +109,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     LibraryCreateLibraryFileTool,
     LibraryListTool,
+    LibraryManageLibraryTool,
     LibraryPrepareMaterializeTool,
     LibraryReplaceLibraryFileTool,
     SandboxTool,
@@ -115,6 +139,7 @@ from tests.external_dependency_unit.microvm.test_file_copies import _wrap, _Wrap
 from tests.external_dependency_unit.microvm.test_sandbox_tools import (
     SandboxChat,
     _forget_sandboxes,
+    _stops,
     _wait_until,
 )
 
@@ -1418,9 +1443,8 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
         if tool["function"]["name"] == "execute_code"
     ]
     assert (
-        "\n  - library: Find the user's published files, copy them into this "
-        "chat and add versions to them; create a file here to give it to the "
-        "user.\n" in description
+        f"\n  - library: {LibraryListTool.CODE_MODE_NAMESPACE_DESCRIPTION}\n"
+        in description
     )
     assert "library__prepare_materialize" not in description
     text = last_tool_text(llm, "code")
@@ -1534,6 +1558,13 @@ class _Family:
         saw version `seen`; `force` adds it whatever the newest version."""
         raise NotImplementedError
 
+    def delete(
+        self, call_id: str, artifact_id: UUID, version: int | None = None
+    ) -> Delta:
+        """A delete of the artifact, by the url or the target of its
+        version `version` when there is one."""
+        raise NotImplementedError
+
 
 class _Library(_Family):
     def llm(self, steps: list[Delta]) -> ChatLLM:
@@ -1586,6 +1617,18 @@ class _Library(_Family):
                 "file": file,
                 "expected_current_version": None if force else seen,
             },
+        )
+
+    def delete(
+        self, call_id: str, artifact_id: UUID, version: int | None = None
+    ) -> Delta:
+        target: dict[str, JsonValue] = {"library_file_id": str(artifact_id)}
+        if version is not None:
+            target["version_number"] = version
+        return tool_step(
+            LibraryManageLibraryTool.NAME,
+            call_id,
+            {"operations": [{"operation": "delete", "target": target}]},
         )
 
 
@@ -1641,6 +1684,20 @@ class _Artifact(_Family):
                 "file_path": file,
                 "url": artifact_url(artifact_id, seen),
                 "force": force or None,
+            },
+        )
+
+    def delete(
+        self, call_id: str, artifact_id: UUID, version: int | None = None
+    ) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {
+                "action": "delete",
+                "url": f"/app/artifacts/{artifact_id}"
+                if version is None
+                else artifact_url(artifact_id, version),
             },
         )
 
@@ -1883,8 +1940,7 @@ def test_a_read_of_a_missing_version_names_the_version_in_both_families(
     chat.send(llm)
 
     assert last_tool_text(llm, "missing") == (
-        "No file was copied:\n"
-        f"- No version 9 of published file {artifact_id} in your chats"
+        f"No file was copied:\n- No version 9 of {artifact_id}; its newest is 1"
     )
 
 
@@ -2174,3 +2230,563 @@ def test_a_replace_of_a_file_that_is_not_yours_never_starts_the_vm(
     )
     assert other_type.content == refusal
     assert node.agent.create_calls == 0
+
+
+def _requests(db_session: Session, chat_session_id: UUID) -> list[ApprovalRequest]:
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(ApprovalRequest)
+            .where(ApprovalRequest.chat_session_id == chat_session_id)
+            .order_by(ApprovalRequest.created_at)
+        )
+    )
+
+
+def _decide(
+    db_session: Session, chat: SandboxChat, choice: ApprovalChoice
+) -> ApprovalRequest:
+    """Decide the chat's open request, and wait until its resumed response
+    completes."""
+    [request] = [
+        request
+        for request in _requests(db_session, chat.chat_session_id)
+        if request.decision is None
+    ]
+    with get_session_with_current_tenant() as session:
+        decide_approval(
+            approval_id=request.id,
+            body=ChatApprovalDecisionRequest(decision=choice),
+            request=Request({"type": "http", "headers": []}),
+            user=chat.user,
+            db_session=session,
+        )
+
+    def completed() -> bool:
+        with get_session_with_current_tenant() as session:
+            status = session.get_one(ChatMessage, request.chat_message_id)
+        return status.response_status == RunStatus.COMPLETE
+
+    _wait_until(completed)
+    assert chat_turn_work.wait_idle(timeout=30)
+    return request
+
+
+def _report(chat_session_id: UUID, data: bytes) -> PublishedFile:
+    return save_chat_artifact(
+        data,
+        name="report.pdf",
+        mime_type="application/pdf",
+        title=None,
+        thumbnail=b"thumb-" + data,
+        target=ArtifactAtPath(
+            chat_session_id=chat_session_id,
+            path=f"{session_workspace(chat_session_id)}/report.pdf",
+        ),
+    )
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_delete_from_another_chat_asks_then_removes_every_version(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    family: _Family,
+) -> None:
+    """The card names the file, its version count and its chat; after the
+    approval, the versions, thumbnails and rows are gone, the owning chat's
+    panel and the list leave the file out, and its download is not found."""
+    chat_a = _chat(db_session, user, "Q3 planning")
+    first = _report(chat_a, b"v1")
+    second = _report(chat_a, b"v2")
+    assert first.artifact_id is not None
+    artifact_id = first.artifact_id
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm([family.delete("delete", artifact_id), Delta(content="Done.")])
+    # The resumed response runs after the send returns.
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    assert _stops(chat.send(llm)) == [packets.AWAITING_USER]
+
+    [request] = _requests(db_session, chat.chat_session_id)
+    assert (request.display_name, request.arguments) == (
+        "Delete report.pdf",
+        {"Delete": ["report.pdf (2 versions) from chat \u201cQ3 planning\u201d"]},
+    )
+    assert (request.integration_id, request.action_id) == (
+        None,
+        "onyx:artifacts.delete",
+    )
+    assert db_session.get(ChatArtifact, artifact_id) is not None
+
+    _decide(db_session, chat, ApprovalChoice.APPROVE_ONCE)
+    [result] = ManageResults.model_validate_json(last_tool_text(llm, "delete")).results
+    assert (result.ok, result.file_name, result.deleted_versions) == (
+        True,
+        "report.pdf",
+        2,
+    )
+    db_session.expire_all()
+    file_ids = [
+        first.file_id,
+        second.file_id,
+        first.thumbnail_file_id,
+        second.thumbnail_file_id,
+    ]
+    assert not db_session.scalars(
+        select(FileRecord.file_id).where(FileRecord.file_id.in_(file_ids))
+    ).all()
+    assert db_session.get(ChatArtifact, artifact_id) is None
+    assert get_chat_published_files(chat_a, db_session) == []
+    with pytest.raises(OnyxError):
+        fetch_chat_file(
+            second.file_id,
+            Request({"type": "http", "headers": []}),
+            parsed=False,
+            user=user,
+            db_session=db_session,
+        )
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_delete_of_a_file_that_is_not_yours_asks_with_only_its_id(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    make_test_user: MakeTestUser,
+    family: _Family,
+) -> None:
+    """The card shows the target as given and nothing of the other user's
+    file; the approved call finds no file and deletes nothing."""
+    stranger = make_test_user("artifact_tools_delete_stranger")
+    theirs = _artifact_id(_publish(_chat(db_session, stranger), "a.md", b"a"))
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm([family.delete("theirs", theirs), Delta(content="Done.")])
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    assert _stops(chat.send(llm)) == [packets.AWAITING_USER]
+
+    [request] = _requests(db_session, chat.chat_session_id)
+    assert (request.display_name, request.arguments) == (
+        f"Delete {theirs}",
+        {"Delete": [f"{theirs} (not found yet)"]},
+    )
+    _decide(db_session, chat, ApprovalChoice.APPROVE_ONCE)
+    assert f"No published file {theirs} in your chats" in last_tool_text(llm, "theirs")
+    assert db_session.get(ChatArtifact, theirs) is not None
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_chat_grant_from_one_family_covers_a_delete_of_the_other(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+) -> None:
+    """Both families ask under one action key, so "Approve for this chat"
+    survives a switch of model."""
+    source = _chat(db_session, user, "Reports")
+    first = _artifact_id(_publish(source, "a.md", b"a"))
+    second = _artifact_id(_publish(source, "b.md", b"b"))
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    library_llm = _Library().llm(
+        [_Library().delete("one", first), Delta(content="Done.")]
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: library_llm
+    )
+    assert _stops(chat.send(library_llm)) == [packets.AWAITING_USER]
+    _decide(db_session, chat, ApprovalChoice.APPROVE_SESSION)
+
+    artifact_llm = _Artifact().llm(
+        [_Artifact().delete("two", second), Delta(content="Done.")]
+    )
+    assert _stops(chat.send(artifact_llm)) != [packets.AWAITING_USER]
+
+    assert '"ok":true' in last_tool_text(artifact_llm, "two")
+    db_session.expire_all()
+    assert db_session.get(ChatArtifact, first) is None
+    assert db_session.get(ChatArtifact, second) is None
+    [request] = _requests(db_session, chat.chat_session_id)
+    assert request.decision is ApprovalDecision.APPROVED
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_turn_that_runs_without_asking_deletes_without_a_card(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    family: _Family,
+) -> None:
+    artifact_id = _artifact_id(_publish(_chat(db_session, user), "a.md", b"a"))
+    chat_session_id = _chat(db_session, user, "Eval")
+    llm = family.llm([family.delete("delete", artifact_id), Delta(content="Done.")])
+    monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", False)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    parts = list(
+        handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(
+                message="Clean up.", chat_session_id=chat_session_id, stream=True
+            ),
+            user=user,
+            approval_mode=ApprovalMode.RUN_WITHOUT_ASKING,
+        )
+    )
+
+    assert _stops(parts) != [packets.AWAITING_USER]
+    assert '"ok":true' in last_tool_text(llm, "delete")
+    assert _requests(db_session, chat_session_id) == []
+    db_session.expire_all()
+    assert db_session.get(ChatArtifact, artifact_id) is None
+
+
+def _waits_on_a_lock() -> bool:
+    with get_session_with_current_tenant() as session:
+        return bool(
+            session.scalar(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE wait_event_type = 'Lock' AND query ILIKE '%chat_artifact%'"
+                )
+            )
+        )
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_publish_during_a_delete_makes_a_new_file(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, user: User
+) -> None:
+    """The delete holds the artifact's row lock, so a publish of its path
+    waits and then makes a new artifact: no link of the deleted file opens
+    the new content."""
+    source = _chat(db_session, user, "Reports")
+    artifact_id = _artifact_id(_publish(source, "a.md", b"v1"))
+    published: list[str] = []
+    publishes: list[threading.Thread] = []
+    published_before_the_delete: list[bool] = []
+    real_delete_files = chat_db.delete_chat_artifact_files
+
+    def publish_meanwhile(versions: Sequence[tuple[str, str | None]]) -> None:
+        # The publish starts while the versions still exist, so only the
+        # delete's row lock can keep it from adding a version to the artifact.
+        if not publishes:
+            publish = threading.Thread(
+                target=lambda: published.append(_publish(source, "a.md", b"v2"))
+            )
+            publish.start()
+            publishes.append(publish)
+            _wait_until(lambda: bool(published) or _waits_on_a_lock())
+            published_before_the_delete.append(bool(published))
+        real_delete_files(versions)
+
+    monkeypatch.setattr(chat_db, "delete_chat_artifact_files", publish_meanwhile)
+    try:
+        result = _call(
+            LibraryManageLibraryTool(_turn(user, _chat(db_session, user))),
+            {
+                "operations": [
+                    {
+                        "operation": "delete",
+                        "target": {"library_file_id": str(artifact_id)},
+                    }
+                ]
+            },
+        )
+    finally:
+        for publish in publishes:
+            publish.join(timeout=30)
+
+    assert published_before_the_delete == [False], "the publish did not wait"
+    assert not result.is_error, result.content
+    db_session.expire_all()
+    assert db_session.get(ChatArtifact, artifact_id) is None
+    [file_id] = published
+    version = db_session.scalars(
+        select(ChatArtifactVersion).where(ChatArtifactVersion.file_id == file_id)
+    ).one()
+    assert version.artifact_id != artifact_id
+    assert version.version == 1
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_stop_after_the_first_delete_keeps_the_next_file(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, user: User
+) -> None:
+    """A Stop ends the call between operations, as in materialize: the
+    started delete ends, and the next one does not start."""
+    source = _chat(db_session, user, "Reports")
+    first = _artifact_id(_publish(source, "a.md", b"a"))
+    second = _artifact_id(_publish(source, "b.md", b"b"))
+    signal = CancellationSignal()
+    real_delete = artifact_operations.delete_chat_artifact
+
+    def delete_then_stop(artifact_id: UUID) -> int:
+        deleted = real_delete(artifact_id)
+        signal.cancel("user")
+        return deleted
+
+    monkeypatch.setattr(artifact_operations, "delete_chat_artifact", delete_then_stop)
+    with pytest.raises(AgentCancelled):
+        _call(
+            LibraryManageLibraryTool(_turn(user, _chat(db_session, user))),
+            {
+                "operations": [
+                    {"operation": "delete", "target": {"library_file_id": str(first)}},
+                    {"operation": "delete", "target": {"library_file_id": str(second)}},
+                ]
+            },
+            signal,
+        )
+
+    db_session.expire_all()
+    assert db_session.get(ChatArtifact, first) is None
+    assert db_session.get(ChatArtifact, second) is not None
+
+
+def test_the_delete_card_tells_apart_same_name_files_by_their_folders(
+    db_session: Session, user: User
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    artifact_ids = [
+        save_chat_artifact(
+            b"report",
+            name="report.md",
+            mime_type="text/plain",
+            target=ArtifactAtPath(
+                chat_session_id=source,
+                path=f"{session_workspace(source)}/{folder}/report.md",
+            ),
+            title=None,
+            thumbnail=None,
+        ).artifact_id
+        for folder in ("q3", "q4")
+    ]
+
+    targets = [
+        LibraryFileTarget(library_file_id=artifact_id)
+        for artifact_id in artifact_ids
+        if artifact_id is not None
+    ]
+
+    both = artifact_operations.delete_approval_details(user.id, targets)
+    one = artifact_operations.delete_approval_details(user.id, targets[:1])
+
+    assert both is not None and one is not None
+    assert both.payload == {
+        "Delete": [
+            "q3/report.md (1 version) from chat \u201cReports\u201d",
+            "q4/report.md (1 version) from chat \u201cReports\u201d",
+        ]
+    }
+    assert one.display_name == "Delete q3/report.md"
+
+
+def test_a_delete_of_a_file_that_is_not_found_yet_still_asks(
+    db_session: Session, user: User
+) -> None:
+    """Another chat can still publish the version or the file, so the card
+    names the artifact of a missing version and shows a target that finds
+    nothing as given."""
+    artifact_id = _artifact_id(_publish(_chat(db_session, user), "a.md", b"v1"))
+    missing = uuid4()
+
+    card = artifact_operations.delete_approval_details(
+        user.id,
+        [
+            LibraryFileTarget(library_file_id=artifact_id, version_number=2),
+            LibraryFileTarget(library_file_id=missing),
+        ],
+    )
+
+    assert card is not None
+    assert card.display_name == "Delete 2 published files"
+    assert card.payload == {
+        "Delete": [
+            "a.md (version 2 not published yet; the delete removes the file and every version)",
+            f"{missing} (not found yet)",
+        ]
+    }
+
+
+def test_the_delete_card_cuts_a_long_path_and_chat_title_as_the_list_does(
+    db_session: Session, user: User
+) -> None:
+    title = "T" * (ARTIFACTS_CHAT_TITLE_MAX_CHARS + 50)
+    source = _chat(db_session, user, title)
+    folder = "/".join(f"folder{index:02d}" for index in range(40))
+    artifact_id = save_chat_artifact(
+        b"report",
+        name="report.md",
+        mime_type="text/plain",
+        target=ArtifactAtPath(
+            chat_session_id=source,
+            path=f"{session_workspace(source)}/{folder}/report.md",
+        ),
+        title=None,
+        thumbnail=None,
+    ).artifact_id
+    assert artifact_id is not None
+    path = f"{folder}/report.md"
+    assert len(path) > ARTIFACTS_PATH_MAX_CHARS
+    shown = "\u2026" + path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :]
+
+    card = artifact_operations.delete_approval_details(
+        user.id, [LibraryFileTarget(library_file_id=artifact_id)]
+    )
+
+    assert card is not None
+    assert card.display_name == f"Delete {shown}"
+    assert card.payload == {
+        "Delete": [
+            f"{shown} (1 version) from chat "
+            f"\u201c{title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]}\u201d"
+        ]
+    }
+
+
+def test_a_failed_delete_keeps_the_newest_version_and_its_number(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, user: User
+) -> None:
+    """The versions go oldest first and the first failure stops the
+    delete, so the newest version stays, and a later publish never takes
+    the number of a deleted version."""
+    source = _chat(db_session, user, "Reports")
+    first = _publish(source, "a.md", b"v1")
+    artifact_id = _artifact_id(first)
+    _publish(source, "a.md", b"v2")
+    store_type = type(get_default_file_store())
+    real_delete_file = store_type.delete_file
+
+    def fail_on_the_first_version(
+        store: FileStore, file_id: str, error_on_missing: bool = True
+    ) -> None:
+        if file_id == first:
+            raise RuntimeError("The store is down")
+        real_delete_file(store, file_id, error_on_missing)
+
+    monkeypatch.setattr(store_type, "delete_file", fail_on_the_first_version)
+    with pytest.raises(RuntimeError):
+        chat_db.delete_chat_artifact(artifact_id)
+    monkeypatch.undo()
+
+    third = _publish(source, "a.md", b"v3")
+    assert _artifact_id(third) == artifact_id
+    assert sorted(
+        db_session.scalars(
+            select(ChatArtifactVersion.version).where(
+                ChatArtifactVersion.artifact_id == artifact_id
+            )
+        )
+    ) == [1, 2, 3]
+
+
+def test_a_delete_that_stopped_after_its_files_never_lends_its_id_to_a_publish(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, user: User
+) -> None:
+    """A delete that removed every file but not the artifact row leaves a
+    row without a version. A publish at its path makes a new artifact, so
+    the deleted artifact's links never open the new file, and a save by
+    its ID finds nothing."""
+    source = _chat(db_session, user, "Reports")
+    artifact_id = _artifact_id(_publish(source, "a.md", b"v1"))
+    real_delete_files = chat_db.delete_chat_artifact_files
+
+    def delete_then_stop(versions: Sequence[tuple[str, str | None]]) -> None:
+        real_delete_files(versions)
+        raise RuntimeError("The pod stopped")
+
+    monkeypatch.setattr(chat_db, "delete_chat_artifact_files", delete_then_stop)
+    with pytest.raises(RuntimeError):
+        chat_db.delete_chat_artifact(artifact_id)
+    monkeypatch.undo()
+    db_session.expire_all()
+    assert db_session.get(ChatArtifact, artifact_id) is not None
+
+    with pytest.raises(ArtifactNotFound):
+        save_chat_artifact(
+            b"by id",
+            name="a.md",
+            mime_type="text/plain",
+            title=None,
+            thumbnail=None,
+            target=ArtifactById(artifact_id=artifact_id),
+        )
+    republished = _publish(source, "a.md", b"new")
+    new_id = _artifact_id(republished)
+    assert new_id != artifact_id
+    db_session.expire_all()
+    assert db_session.get(ChatArtifact, artifact_id) is None
+    assert db_session.scalars(
+        select(ChatArtifactVersion.version).where(
+            ChatArtifactVersion.artifact_id == new_id
+        )
+    ).all() == [1]
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_delete_by_the_newest_version_asks_then_removes_the_file(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    family: _Family,
+) -> None:
+    """Every url that the tools return names a version; the newest one's
+    deletes the whole file."""
+    source = _chat(db_session, user, "Reports")
+    artifact_id = _artifact_id(_publish(source, "a.md", b"v1"))
+    _publish(source, "a.md", b"v2")
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [family.delete("delete", artifact_id, version=2), Delta(content="Done.")]
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    assert _stops(chat.send(llm)) == [packets.AWAITING_USER]
+
+    _decide(db_session, chat, ApprovalChoice.APPROVE_ONCE)
+    [result] = ManageResults.model_validate_json(last_tool_text(llm, "delete")).results
+    assert (result.ok, result.deleted_versions) == (True, 2)
+    db_session.expire_all()
+    assert db_session.get(ChatArtifact, artifact_id) is None
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_delete_by_an_older_version_asks_and_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    family: _Family,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    artifact_id = _artifact_id(_publish(source, "a.md", b"v1"))
+    _publish(source, "a.md", b"v2")
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [family.delete("delete", artifact_id, version=1), Delta(content="Done.")]
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    assert _stops(chat.send(llm)) == [packets.AWAITING_USER]
+
+    [request] = _requests(db_session, chat.chat_session_id)
+    assert (request.display_name, request.arguments) == (
+        "Delete a.md",
+        {
+            "Delete": [
+                "a.md version 1 (not its newest version, 2; the delete refuses it "
+                "while it is not the newest)"
+            ]
+        },
+    )
+    _decide(db_session, chat, ApprovalChoice.APPROVE_ONCE)
+    assert (
+        f"Version 1 of a.md is not its newest, 2; {DELETE_OF_A_VERSION}"
+        in last_tool_text(llm, "delete")
+    )
+    db_session.expire_all()
+    assert db_session.get(ChatArtifact, artifact_id) is not None

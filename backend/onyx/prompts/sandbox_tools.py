@@ -9,6 +9,7 @@ from onyx.server.features.build.sandbox.harness_base import (
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_MATERIALIZE_MAX_ITEMS,
+    MANAGE_LIBRARY_MAX_OPERATIONS,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_FILES,
 )
@@ -172,15 +173,24 @@ Usage:
 - The user sees a download card for the new version. `title` defaults to the current version's title.
 """
 
+LIBRARY_MANAGE_LIBRARY_DESCRIPTION = f"""Deletes published files of the user's chats, this chat included.
+
+Usage:
+- `operations` runs up to {MANAGE_LIBRARY_MAX_OPERATIONS} operations in order. Each gives one result; a failed operation does not stop the others.
+- delete: `{{"operation": "delete", "target": {{"library_file_id": ...}}}}` deletes the file with all its versions; its download cards stop working. `target` takes a `library_file_id` or the `file_id` of any version; a `version_number` must be the newest.
+- Deleting asks the user, and the whole call waits for the answer. Put deletes in their own call.
+"""
+
 # The artifact tool (sandbox_tools.ArtifactTool). tool_search matches its
 # first sentence.
-ARTIFACT_DESCRIPTION = f"""Publish, replace, list and read the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
+ARTIFACT_DESCRIPTION = f"""Publish, replace, list, read and delete the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
 
 Actions:
 - publish (the default): gives `file_path`, or up to {PUBLISH_FILES_MAX_FILES} `file_paths`, from the VM to the user; all are published, or none. Each file is at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Publishing the same path again adds a new version. Publish only finished deliverables, and do not paste their contents into your reply.
 - publish with `url` and `file_path`: adds a version to that published file, also one of another chat; it keeps its name and type, so `file_path` needs its extension. Use the url from your last result: if the file has a newer version than the url names, the call fails and changes nothing. `force` adds the version anyway; older versions stay.
 - list: the user's published files from all their chats, newest first. `type` keeps one type (image, sheet, slides, report, other); `query` finds text in the name, the title or the chat's title; `after` takes the `next_cursor` of the previous page.
 - read: copies up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} published files into `out_dir`, in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/. Name them with `url` (a url from an earlier result; one that ends in /v<N> names that version), or with `path` or `paths`, each a url or a file ID. To change a file, read it into a directory outside {CHAT_FILES_DIR}/, change it there, and publish it with its url.
+- delete: deletes the file at `url` (the url of its newest version, or one without /v<N>) with all its versions, after the user approves; its download cards stop working.
 - A url is a link the user can open; give it to the user to point at a file.
 """
 ARTIFACT_RESULTS = (
@@ -189,5 +199,6 @@ ARTIFACT_RESULTS = (
     "version_number, file_name, title, artifact_type, mime_type, "
     "file_size_bytes, created_at, modified_at, chat_id, chat_title, path, url}], "
     "next_cursor}. read: {items: [{library_file_id, file_id, version_number, "
-    "file_name, path, file_size_bytes, mime_type, url, status, error}]}."
+    "file_name, path, file_size_bytes, mime_type, url, status, error}]}. delete: "
+    "{results: [{operation, ok, library_file_id, file_name, deleted_versions}]}."
 )
