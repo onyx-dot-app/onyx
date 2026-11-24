@@ -350,9 +350,9 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     };
   }, [open, workspace.page]);
   const toggle = sessionId !== null && (
-    // On the chat header's button line: its md buttons, 10px from the top
+    // On the chat header's button line: 8px from the top, as its padding
     // (a flex box, so no line box shifts it), 12px from the end
-    <Section width="fit" height="auto" className="absolute end-3 top-2.5 z-30">
+    <Section width="fit" height="auto" className="absolute end-3 top-2 z-30">
       <Button
         ref={toggleRef}
         icon={SvgSidebar}
@@ -533,11 +533,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           {/* Beside the room of the toggle, which the panel places over the
               workspace's end */}
           {/* end-12 is PANEL_TOGGLE_RESERVE */}
-          <Section
-            width="fit"
-            height="auto"
-            className="absolute end-12 top-2.5"
-          >
+          <Section width="fit" height="auto" className="absolute end-12 top-2">
             {!layout.narrow && (
               <PanelSizeButton
                 full={full}

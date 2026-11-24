@@ -52,12 +52,13 @@ export function PanelUrlBar({
             aria-busy={refresh.isRefreshing || refresh.isUserRefreshing}
           />
         )}
-        {/* As tall as the md buttons beside it. A search field brings its
-            own inset, the 8px the location text gets from the pill. */}
+        {/* As tall as the buttons beside it and a search field (36px). The
+            field brings its own inset, the 8px the location text gets from
+            the pill. */}
         <div
           data-testid="url-bar-pill"
           className={cn(
-            "h-7 min-w-0 flex-1 overflow-hidden rounded-08 bg-background-tint-02",
+            "h-9 min-w-0 flex-1 overflow-hidden rounded-08 bg-background-tint-02",
             !onSearchChange && "px-2"
           )}
         >

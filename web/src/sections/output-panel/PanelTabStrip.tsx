@@ -120,9 +120,9 @@ function SortableTab({
           register(element);
         }}
         className={cn(
-          // The height of the md buttons beside the strip; the icon tile sits
-          // 4px in, as a button's icon
-          "group relative h-7 w-full max-w-[180px] touch-pan-x select-none rounded-08 px-1",
+          // The height of the buttons beside the strip (36px); the icon tile
+          // sits 8px in, as a button's icon
+          "group relative h-9 w-full max-w-[180px] touch-pan-x select-none rounded-08 px-2",
           active ? "bg-background-neutral-02" : "bg-background-neutral-01",
           isDragging && "z-10 shadow-md"
         )}
