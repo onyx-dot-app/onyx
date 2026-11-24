@@ -143,7 +143,8 @@ VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS: frozenset[str] = frozenset(
         "pending_cc_pair_deletions",
         "vector_quantization",
         # Multipass adds mini/large chunk embeddings, which OpenSearch does not
-        # store; the full chunk vector is the same either way.
+        # store. Large chunks also raise the embed trim limit, so
+        # _stored_vectors_reusable compares large_chunks_enabled.
         "multipass_indexing",
         "enable_contextual_rag",
         "contextual_rag_model_configuration_id",
@@ -159,10 +160,14 @@ def _stored_vectors_reusable(
     what re-embedding under FUTURE would produce."""
     present_state = inspect(present_ss)
     future_state = inspect(future_ss)
-    return all(
-        present_state.attrs[column.key].value == future_state.attrs[column.key].value
-        for column in inspect(SearchSettings).column_attrs
-        if column.key not in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS
+    return (
+        all(
+            present_state.attrs[column.key].value
+            == future_state.attrs[column.key].value
+            for column in inspect(SearchSettings).column_attrs
+            if column.key not in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS
+        )
+        and present_ss.large_chunks_enabled == future_ss.large_chunks_enabled
     )
 
 
