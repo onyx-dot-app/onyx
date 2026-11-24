@@ -47,6 +47,9 @@ struct Pending {
     id: u64,
     /// The main-window path to load when the server is back.
     path: String,
+    /// When `path` was chosen (`Offline::next_choice`). A report that
+    /// finishes late does not replace a path chosen after it.
+    path_choice: u64,
     status: OfflineStatus,
     /// The web view failed while the server answers the app's own checks
     /// (for example, a certificate only the web view rejects). Automatic
@@ -59,10 +62,32 @@ struct Pending {
 }
 
 impl Pending {
+    /// Uses `path` if it was chosen after the current one.
+    fn choose_path(&mut self, path: &str, choice: u64) {
+        if choice > self.path_choice {
+            self.path = path.to_string();
+            self.path_choice = choice;
+        }
+    }
+
+    /// A main-window load failed, or a page must open: recovery loads
+    /// `path`, not the hidden page.
+    fn page_replaced(&mut self, path: &str, choice: u64) {
+        self.keep_page = false;
+        self.choose_path(path, choice);
+    }
+
     /// Another outage report while the window shows. A failed load or a
     /// new page to open means the hidden page is not kept.
-    fn merge(&mut self, path: &str, reason: Unreachable, retry_by_hand: bool, keep_page: bool) {
-        self.path = path.to_string();
+    fn merge(
+        &mut self,
+        path: &str,
+        choice: u64,
+        reason: Unreachable,
+        retry_by_hand: bool,
+        keep_page: bool,
+    ) {
+        self.choose_path(path, choice);
         self.status.reason = reason;
         self.retry_by_hand |= retry_by_hand;
         self.keep_page &= keep_page;
@@ -112,6 +137,7 @@ impl Loads {
 pub struct Offline {
     pending: Mutex<Option<Pending>>,
     next_id: AtomicU64,
+    choices: AtomicU64,
     wake: Notify,
     loads: Mutex<Loads>,
 }
@@ -124,18 +150,26 @@ impl Offline {
     fn loads(&self) -> MutexGuard<'_, Loads> {
         self.loads.lock().unwrap_or_else(|p| p.into_inner())
     }
+
+    /// Orders the moments a recovery path is chosen.
+    fn next_choice(&self) -> u64 {
+        self.choices.fetch_add(1, Ordering::SeqCst) + 1
+    }
 }
 
 /// Shows the offline window for `reason`; `path` loads in the main window on
 /// recovery. Does nothing if the session `epoch` ended meanwhile (sign-out,
 /// server change). On error the main window is shown again.
 pub fn show(app: &AppHandle, path: &str, reason: Unreachable, epoch: u64) -> Result<(), String> {
-    show_with(app, path, reason, epoch, false, false)
+    let choice = app.state::<Offline>().next_choice();
+    show_with(app, path, choice, reason, epoch, false, false)
 }
 
+/// `choice`: when `path` was chosen (`Offline::next_choice`).
 fn show_with(
     app: &AppHandle,
     path: &str,
+    choice: u64,
     reason: Unreachable,
     epoch: u64,
     retry_by_hand: bool,
@@ -155,7 +189,7 @@ fn show_with(
         }
         match pending.as_mut() {
             Some(p) => {
-                p.merge(path, reason, retry_by_hand, keep_page);
+                p.merge(path, choice, reason, retry_by_hand, keep_page);
                 None
             }
             None => {
@@ -163,6 +197,7 @@ fn show_with(
                 *pending = Some(Pending {
                     id,
                     path: path.to_string(),
+                    path_choice: choice,
                     status: OfflineStatus {
                         host: display_host(&server),
                         reason,
@@ -238,8 +273,7 @@ pub fn defer_open(app: &AppHandle, path: &str) -> bool {
         let Some(p) = pending.as_mut() else {
             return false;
         };
-        p.path = path.to_string();
-        p.keep_page = false;
+        p.page_replaced(path, offline.next_choice());
     }
     if let Some(window) = app.get_webview_window(windows::OFFLINE) {
         windows::bring_forward(app, &window);
@@ -504,7 +538,8 @@ async fn check_idle(app: &AppHandle) {
         return;
     };
     log::warn!("the server stopped answering while the main window was open");
-    if let Err(e) = show_with(app, &path, reason, epoch, false, true) {
+    let choice = app.state::<Offline>().next_choice();
+    if let Err(e) = show_with(app, &path, choice, reason, epoch, false, true) {
         log::warn!("the main window keeps its page: {e}");
     }
 }
@@ -800,10 +835,11 @@ fn webview_failed(app: &AppHandle, uri: &str, known: Option<Unreachable>) {
         return;
     }
     let path = path_of(&url);
-    // At once, before the check below: a recovery meanwhile must not show
-    // the failed page again.
+    // At once, before the check below: a recovery meanwhile loads this
+    // path, not the failed page.
+    let choice = app.state::<Offline>().next_choice();
     if let Some(p) = app.state::<Offline>().pending().as_mut() {
-        p.keep_page = false;
+        p.page_replaced(&path, choice);
     }
     let load = app.state::<Offline>().loads().current();
     let app = app.clone();
@@ -818,7 +854,7 @@ fn webview_failed(app: &AppHandle, uri: &str, known: Option<Unreachable>) {
         {
             return;
         }
-        if let Err(e) = show_with(&app, &path, reason, epoch, by_hand, false) {
+        if let Err(e) = show_with(&app, &path, choice, reason, epoch, by_hand, false) {
             log::warn!("the main window keeps the failed page: {e}");
         }
     });
@@ -845,6 +881,7 @@ mod tests {
         let pending = |keep_page: bool| Pending {
             id: 1,
             path: "/app".into(),
+            path_choice: 1,
             status: OfflineStatus {
                 host: "onyx.example".into(),
                 reason: Unreachable::Refused,
@@ -858,18 +895,30 @@ mod tests {
         };
         // A second idle report keeps the page.
         let mut idle = pending(true);
-        idle.merge("/app", Unreachable::Timeout, false, true);
+        idle.merge("/app", 2, Unreachable::Timeout, false, true);
         assert!(idle.keep_page);
         // A failed load while the window shows does not.
         let mut failed = pending(true);
-        failed.merge("/chat", Unreachable::Refused, true, false);
+        failed.merge("/chat", 2, Unreachable::Refused, true, false);
         assert!(!failed.keep_page);
         assert!(failed.retry_by_hand);
         assert_eq!(failed.path, "/chat");
         // A load failure never becomes a kept page.
         let mut load = pending(false);
-        load.merge("/app", Unreachable::Refused, false, true);
+        load.merge("/app", 2, Unreachable::Refused, false, true);
         assert!(!load.keep_page);
+
+        // A load fails while the window shows: recovery loads it at once,
+        // before its own report arrives.
+        let mut raced = pending(true);
+        raced.page_replaced("/chat", 2);
+        assert_eq!(raced.path, "/chat");
+        assert!(!raced.keep_page);
+        // The user then opens another page; the late report of the failed
+        // load does not replace it.
+        raced.page_replaced("/search", 3);
+        raced.merge("/chat", 2, Unreachable::Refused, false, false);
+        assert_eq!(raced.path, "/search");
     }
 
     #[test]
