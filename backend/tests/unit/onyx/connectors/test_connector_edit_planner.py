@@ -161,6 +161,37 @@ def test_cosmetic_change_has_no_steps() -> None:
     ]
 
 
+def test_gmail_group_added_needs_no_step() -> None:
+    """New group mail is split out as it is indexed. The default rule for a
+    behavior field would propose a full re-index of every mailbox."""
+    current = _current(
+        DocumentSource.GMAIL, {"collaborative_inbox_groups": ["a@example.com"]}
+    )
+    plan = _plan(
+        current,
+        connector_specific_config={
+            "collaborative_inbox_groups": ["a@example.com", "b@example.com"]
+        },
+    )
+
+    assert plan.steps == []
+
+
+def test_gmail_group_removed_reindexes() -> None:
+    """Only a full re-index puts a removed group's mail back into the thread
+    documents."""
+    current = _current(
+        DocumentSource.GMAIL,
+        {"collaborative_inbox_groups": ["a@example.com", "b@example.com"]},
+    )
+    plan = _plan(
+        current,
+        connector_specific_config={"collaborative_inbox_groups": ["b@example.com"]},
+    )
+
+    assert _kinds(plan) == [EditStepKind.FULL_REINDEX]
+
+
 # Scope directions
 
 

@@ -26,11 +26,16 @@ class GmailService(Resource):
     pass
 
 
+class GroupsSettingsService(Resource):
+    pass
+
+
 class GoogleService(Enum):
     DOCS = ("docs", "v1")
     DRIVE = ("drive", "v3")
     ADMIN = ("admin", "directory_v1")
     GMAIL = ("gmail", "v1")
+    GROUPS_SETTINGS = ("groupssettings", "v1")
 
 
 @overload
@@ -65,17 +70,37 @@ def get_google_service(
 ) -> GmailService: ...
 
 
+@overload
+def get_google_service(
+    service: Literal[GoogleService.GROUPS_SETTINGS],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GroupsSettingsService: ...
+
+
 def get_google_service(
     service: GoogleService,
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
-) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
+) -> (
+    GoogleDriveService
+    | GoogleDocsService
+    | AdminService
+    | GmailService
+    | GroupsSettingsService
+):
     return build_google_service(service, get_impersonated_creds(creds, user_email))
 
 
 def build_google_service(
     service: GoogleService, creds: ServiceAccountCredentials | OAuthCredentials
-) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
+) -> (
+    GoogleDriveService
+    | GoogleDocsService
+    | AdminService
+    | GmailService
+    | GroupsSettingsService
+):
     """A client that uses `creds` as given: impersonate before calling this."""
     service_name, service_version = service.value
     resource: Resource = build(service_name, service_version, credentials=creds)
