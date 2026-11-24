@@ -947,14 +947,19 @@ export function publishedFilesOf(
  * The chat's background agents, by the newest response that started them.
  * They load once the chat's status does, again when it changes whether agents
  * are active or which response is newest, and poll while agents are active.
- * The status polls as the queue's does, also for chats without a queue.
+ * The status polls as the queue's does, also for chats without a queue, and
+ * while a reply streams (`streaming`), which can start agents.
  */
-export function useChatSubagents(sessionId: string): ChatSubagent[] {
+export function useChatSubagents(
+  sessionId: string,
+  streaming: boolean
+): ChatSubagent[] {
   const { data: status } = useSWR<ChatSessionStatus, Error>(
     SWR_KEYS.chatSessionStatus(sessionId),
     errorHandlingFetcher,
     {
-      refreshInterval: (current) => statusPollInterval(current),
+      refreshInterval: (current) =>
+        streaming ? SERVER_WORK_POLL_MS : statusPollInterval(current),
       onErrorRetry: skipRetryOnAuthError,
     }
   );

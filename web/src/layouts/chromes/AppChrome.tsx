@@ -505,12 +505,14 @@ export default function AppChrome({ children }: AppChromeProps) {
                 // (`data-activity-room`) and the footer make room. The header
                 // and the scroller keep their width, so the buttons and the
                 // scrollbar stay at the end. The padding is only what the
-                // card (21.5rem) needs beyond the centered 45rem column's
-                // gutter, so the column stays put when the gutter fits it:
-                // gutter = (100% - 45rem) / 2, padding = 2 * 21.5rem + 45rem - 100%.
-                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-chat-scroll]>*]:pe-[max(0px,calc(88rem-100%))]",
-                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-activity-room]]:pe-[max(1rem,calc(88rem-100%))]",
-                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&>footer]:pe-[max(1rem,calc(88rem-100%))]",
+                // card (21.5rem) needs beyond the centered chat column's
+                // gutter (`--app-chat-column-width`, reading or wide; 45rem
+                // outside the chat grid), so the column stays put when the
+                // gutter fits it: gutter = (100% - column) / 2, padding =
+                // 2 * 21.5rem + column - 100%.
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-chat-scroll]>*]:pe-[max(0px,calc(43rem_+_var(--app-chat-column-width,45rem)_-_100%))]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-activity-room]]:pe-[max(1rem,calc(43rem_+_var(--app-chat-column-width,45rem)_-_100%))]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&>footer]:pe-[max(1rem,calc(43rem_+_var(--app-chat-column-width,45rem)_-_100%))]",
                 showBackground && "bg-cover bg-center bg-fixed"
               )}
               style={

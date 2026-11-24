@@ -142,6 +142,33 @@ test("a request this client already decided leaves the card at once", async () =
   expect(screen.queryByText("Approve run_command")).toBeNull();
 });
 
+test("an agent that a streaming reply starts shows while the reply streams", async () => {
+  jest.useFakeTimers();
+  try {
+    let agents: ChatSubagent[] = [];
+    let status = STATUS;
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const body = String(input).endsWith("/agents") ? agents : status;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    useChatSessionStore.getState().updateChatState("s", "streaming");
+    renderActivity();
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(
+      screen.queryByRole("button", { name: "1 agent running" })
+    ).toBeNull();
+
+    agents = [agent("/root/poet", "running")];
+    status = { ...STATUS, has_active_subagents: true };
+    await act(async () => jest.advanceTimersByTimeAsync(5000));
+    expect(
+      screen.getByRole("button", { name: "1 agent running" })
+    ).toBeVisible();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 test("lists running agents on one line each and folds the finished ones", async () => {
   serve(
     [

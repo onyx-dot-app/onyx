@@ -22,6 +22,7 @@ import {
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
 import {
+  useCurrentChatState,
   useCurrentMessageTree,
   useRightPanelShown,
 } from "@/app/app/stores/useChatSessionStore";
@@ -105,7 +106,7 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
       ),
     [tree, localStatuses, localAnswers]
   );
-  const agents = useChatSubagents(sessionId);
+  const agents = useChatSubagents(sessionId, useCurrentChatState() !== "input");
   const files = usePublishedFiles("current");
   // Finished agents fold under one row, as their own list
   const [showFinished, setShowFinished] = useState(false);
