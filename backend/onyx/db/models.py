@@ -3737,7 +3737,8 @@ class ApprovalRequest(Base):
         ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=True
     )
     # The integration of the action. Keys session grants and the policy
-    # re-check. NULL after the integration is deleted.
+    # re-check. NULL for a built-in Onyx action, and after the integration is
+    # deleted.
     integration_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
@@ -3747,8 +3748,8 @@ class ApprovalRequest(Base):
         ),
         nullable=True,
     )
-    # The action key that the request asks to run, such as an MCP tool name
-    # or an OpenAPI operationId.
+    # The action key that the request asks to run, such as an MCP tool name,
+    # an OpenAPI operationId, or `onyx:<operation>` for a built-in action.
     action_id: Mapped[str] = mapped_column(String, nullable=False)
     # The call of the response's step whose card shows the request: the call
     # that waits, or the call whose tool, such as a program, made it. Places
@@ -3758,7 +3759,8 @@ class ApprovalRequest(Base):
     # request's record and the result the model sees.
     tool_name: Mapped[str] = mapped_column(String, nullable=False)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
-    # The arguments of the call that waits, as its card shows them.
+    # What the card shows of the call that waits: its arguments, or what its
+    # tool's approval_details gives.
     arguments: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

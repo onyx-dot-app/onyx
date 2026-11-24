@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, InstanceOf
+from pydantic import BaseModel, ConfigDict, InstanceOf, field_validator
 
 from onyx.db.enums import (
     ExternalAppType,
@@ -14,6 +14,9 @@ from onyx.db.enums import (
 )
 from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.skills.models import PluginNeed
+
+# The action key prefix of built-in Onyx actions, such as `onyx:artifacts.delete`.
+BUILTIN_ACTION_PREFIX = "onyx:"
 
 
 class IntegrationActionSpec(BaseModel):
@@ -32,6 +35,18 @@ class IntegrationActionSpec(BaseModel):
     output_schema: dict[str, Any] | None = None
     http_method: str | None = None
     path_template: str | None = None
+
+    @field_validator("key")
+    @classmethod
+    def key_is_not_builtin(cls, key: str) -> str:
+        # A deleted integration's approval rows keep their action key, so an
+        # integration key with the built-in prefix could match built-in grants.
+        if key.startswith(BUILTIN_ACTION_PREFIX):
+            raise ValueError(
+                f"The action name {key!r} starts with {BUILTIN_ACTION_PREFIX!r}, "
+                "which is reserved for Onyx's built-in actions. Rename it."
+            )
+        return key
 
 
 class MatchedIntegrationAction(BaseModel):

@@ -63,6 +63,8 @@ class PendingToolInput(BaseModel):
     approval: bool = False
     # How the requester names the action, for display.
     display_name: str | None = None
+    # What the requester shows of the call; None shows the call's arguments.
+    display_arguments: dict[str, JsonValue] | None = None
 
 
 class HumanToolAnswer(BaseModel):

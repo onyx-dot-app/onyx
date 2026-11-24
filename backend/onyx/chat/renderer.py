@@ -777,7 +777,9 @@ class ToolRenderer:
                 tool_call_id=call.id,
                 tool_name=call.name,
                 display_name=event.request.display_name or call.name,
-                arguments=tool_arguments_for_display(call),
+                arguments=event.request.display_arguments
+                if event.request.display_arguments is not None
+                else tool_arguments_for_display(call),
             )
         else:
             obj = packets.ToolApprovalResolved(
