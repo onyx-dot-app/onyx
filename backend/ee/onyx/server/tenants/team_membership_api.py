@@ -92,11 +92,9 @@ async def leave_organization(
             remove_user_from_invited_users(user_email.user_email)
             remove_all_users_from_tenant(tenant_id)
         finally:
-            # Together, so a slow purge cannot delay or skip the cleanup.
-            await asyncio.gather(
-                asyncio.to_thread(finish_user_delete, cleanup, db_session),
-                asyncio.to_thread(purge_harness_sandboxes, purge_targets),
-            )
+            # Before any await, so a cancelled request cannot skip it.
+            finish_user_delete(cleanup, db_session)
+            await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         return
 
     db_session.expunge(user_to_delete)
