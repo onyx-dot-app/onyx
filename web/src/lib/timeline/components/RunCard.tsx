@@ -218,9 +218,10 @@ export function RunCard<S extends RunCardStep>({
           expandable
           expanded={isOpen}
           expandedContent={
-            // The steps, with no gap. A step card inside has no padding of
-            // its own, so its title lines up with the card's own title.
-            <Section alignItems="stretch" gap={0} height="auto">
+            // The steps, 4px apart, as hoisted run cards are. A step card
+            // inside has no padding of its own, so its title lines up with
+            // the card's own title.
+            <Section alignItems="stretch" gap={1} height="auto">
               {steps.map((step, index) => (
                 // A step that streams in rises in, after the card opens room
                 // for it. Steps already there when the card mounts (a saved

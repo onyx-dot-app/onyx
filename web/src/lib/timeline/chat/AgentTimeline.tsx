@@ -137,7 +137,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   if (steps.length > 0 && steps.length <= MAX_HOISTED_STEPS) {
     return (
       <TimelineRoot>
-        <Section alignItems="stretch" gap={3} height="auto">
+        <Section alignItems="stretch" gap={1} height="auto">
           {steps.map((runStep) => (
             // A step that arrives while the run works rises in; a saved
             // run's steps appear at once.

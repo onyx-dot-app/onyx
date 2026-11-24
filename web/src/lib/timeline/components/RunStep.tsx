@@ -63,9 +63,9 @@ export function RunStep({
           expandable: true as const,
           expanded: open,
           expandedContent: (
-            <div className="px-(--timeline-header-text-padding-x) pb-(--timeline-header-text-padding-y)">
-              {body}
-            </div>
+            // Starts under the header's title text: its inset (0.25rem), the
+            // icon (1.25rem), the gap (0.25rem) and the text's own 2px.
+            <div className="ps-[calc(1.75rem+2px)]">{body}</div>
           ),
         }
       : { expandable: false as const };
