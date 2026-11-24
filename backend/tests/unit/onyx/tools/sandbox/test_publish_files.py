@@ -9,7 +9,7 @@ from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.build.sandbox.harness_base import HarnessSandboxError
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.tools.models import ToolCallException
-from onyx.tools.tool_implementations.sandbox import sandbox_tools
+from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_TITLE_CHARS,
     PublishedFile,
@@ -45,7 +45,7 @@ def test_a_title_is_stored_trimmed_without_nul_and_within_its_limit(
             mime_type=mime_type,
         )
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save)
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
     turn = MagicMock(spec=SandboxTurn)
     turn.start_call.return_value = HarnessSandboxRef(
         tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
@@ -105,8 +105,8 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
             thumbnail_file_id=None if thumbnail is None else f"{name}-thumbnail",
         )
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save)
-    monkeypatch.setattr(sandbox_tools, "RENDER_FIRST_PAGE_MAX_INPUT_BYTES", 4)
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
+    monkeypatch.setattr(artifact_operations, "RENDER_FIRST_PAGE_MAX_INPUT_BYTES", 4)
     turn = MagicMock(spec=SandboxTurn)
     turn.start_call.return_value = HarnessSandboxRef(
         tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
@@ -170,9 +170,9 @@ def test_the_renders_of_a_call_share_one_budget(
     sandbox, and the files after it publish without a render."""
     now = [100.0]
     monkeypatch.setattr(
-        sandbox_tools, "time", SimpleNamespace(monotonic=lambda: now[0])
+        artifact_operations, "time", SimpleNamespace(monotonic=lambda: now[0])
     )
-    monkeypatch.setattr(sandbox_tools, "RENDER_FIRST_PAGE_BUDGET_SECONDS", 10.0)
+    monkeypatch.setattr(artifact_operations, "RENDER_FIRST_PAGE_BUDGET_SECONDS", 10.0)
 
     def save(
         content: bytes, *, name: str, mime_type: str, path: str, **_: object
@@ -185,7 +185,7 @@ def test_the_renders_of_a_call_share_one_budget(
         now[0] += 6.0
         return b"jpeg"
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save)
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
     ref = HarnessSandboxRef(tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4())
 
     def start_call() -> HarnessSandboxRef:
@@ -245,8 +245,10 @@ def test_a_failed_clean_up_keeps_the_stop_or_the_error_of_the_call(
             raise HarnessSandboxError("b.md is not a regular file")
         return b"data"
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save)
-    monkeypatch.setattr(sandbox_tools, "delete_unpublished_chat_artifacts", clean_up)
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
+    monkeypatch.setattr(
+        artifact_operations, "delete_unpublished_chat_artifacts", clean_up
+    )
     turn = MagicMock(spec=SandboxTurn)
     turn.start_call.return_value = HarnessSandboxRef(
         tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
@@ -264,4 +266,46 @@ def test_a_failed_clean_up_keeps_the_stop_or_the_error_of_the_call(
             MagicMock(),
         )
 
+    assert cleaned == [["a.md"]]
+
+
+def test_an_unexpected_save_failure_is_a_tool_error_and_cleans_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A publish maps errors as every artifact operation does: the details go
+    to the log, and the model gets a fixed message. The file saved before the
+    failure is cleaned up."""
+    cleaned: list[list[str]] = []
+
+    def save(
+        content: bytes, *, name: str, mime_type: str, path: str, **_: object
+    ) -> PublishedFile:
+        if name == "b.md":
+            raise RuntimeError("the database is gone")
+        return PublishedFile(
+            file_id=name, name=name, path=path, size=len(content), mime_type=mime_type
+        )
+
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
+    monkeypatch.setattr(
+        artifact_operations,
+        "delete_unpublished_chat_artifacts",
+        lambda published: cleaned.append([file.file_id for file in published]),
+    )
+    turn = MagicMock(spec=SandboxTurn)
+    turn.start_call.return_value = HarnessSandboxRef(
+        tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
+    )
+    turn.sandbox.read_file.return_value = b"data"
+
+    with pytest.raises(ToolCallException, match="The publish failed; try again"):
+        PublishFilesTool(turn)._run(
+            ToolInvocation(
+                call_id="publish",
+                arguments={"files": [{"path": "a.md"}, {"path": "b.md"}]},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            MagicMock(),
+        )
     assert cleaned == [["a.md"]]

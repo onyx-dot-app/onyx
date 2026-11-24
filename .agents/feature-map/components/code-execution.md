@@ -53,13 +53,17 @@
   turns. The user sees each command and its output as it streams, and the
   files that each patch, edit or write changed, on the same patch card. While
   the model writes a `write` or `edit` call, the card names the file; an
-  `apply_patch` card names the files and counts them. Every
-  model also gets `publish_files`, which gives files from the VM to the user
-  as download cards; owners and viewers of a shared chat can download them,
-  and a hard chat delete deletes them. With `library_list` and
-  `library_prepare_materialize` the model finds, sorts and filters the files that
-  it published in the user's own chats and copies them into the current
-  chat's working directory; they show as generic tool cards.
+  `apply_patch` card names the files and counts them. Models
+  other than Claude models also get `publish_files`, which gives files from
+  the VM to the user as download cards; owners and viewers of a shared chat
+  can download them, and a hard chat delete deletes them. With `library_list` and
+  `library_prepare_materialize` these models find, sort and filter the files
+  that they published in the user's own chats and copy them into the current
+  chat's working directory; they show as generic tool cards. Claude models
+  get the same operations instead, as one `artifact` tool (actions publish,
+  list and read), for compatibility with how they work with artifacts. Every result
+  links each version as `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`,
+  which opens the file in the output panel.
 
 ---
 
@@ -70,7 +74,8 @@ table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
 `apply_patch`, `edit`, `write`, `publish_files`, `library_list`,
-`library_prepare_materialize`). Code mode's packets and replay belong to [[streaming-protocol]], and
+`library_prepare_materialize`, `artifact`) and the artifact operations that they
+share. Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -213,7 +218,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch | edit + write / publish_files / library_list + library_prepare_materialize (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch + publish_files + library_list + library_prepare_materialize | edit + write + artifact (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -227,21 +232,24 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         agent, as it adds the skill tools; a durable resume
                                         prepares the turn again and builds them the same way.
                                         sandbox_tools_for_model(model names) owns the set and
-                                        its order: EditTool and WriteTool when any of the turn
-                                        LLM's names (model_identity_names) contains "claude"
+                                        its order: when any of the turn LLM's names
+                                        (model_identity_names) contains "claude"
                                         (model_capabilities.is_claude_model, the one rule that
-                                        LLM requests and prompt caching use too), else
-                                        ApplyPatchTool; never both; PublishFilesTool,
-                                        LibraryListTool and LibraryPrepareMaterializeTool for every
-                                        model. The reserved-token prompt
-                                        (calculate_reserved_tokens) names the same set
+                                        LLM requests and prompt caching use too), EditTool,
+                                        WriteTool and ArtifactTool, the tools Claude models
+                                        work with; else ApplyPatchTool, PublishFilesTool,
+                                        LibraryListTool and LibraryPrepareMaterializeTool. No turn
+                                        gets both sets; a model switch leaves calls of the other
+                                        set in the history, which still render. The
+                                        reserved-token prompt (calculate_reserved_tokens) names
+                                        the same set
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
                                         (sandbox_tools.py:sandbox_guidance): one use per
                                         SandboxTool that the turn offers, in order, named
                                         as the model calls it (CodeModeTool.called_name in
                                         code mode), except tools whose USE is None
-                                        (publish_files, the artifact tools); the tool
-                                        descriptions describe only the tools, and
+                                        (publish_files, the artifact tools, artifact); the
+                                        tool descriptions describe only the tools, and
                                         publish_files's names the artifact tools
   SandboxTurn.start_call                first call: the user's Sandbox row
                                         (build/db/sandbox.py:get_or_create_sandbox); before
@@ -314,7 +322,9 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         The file tools and publish_files share one
                                         sequence_group: their calls of one step run one at
                                         a time, so a publish sees the step's earlier edits
-  PublishFilesTool (SEQUENTIAL)         at most PUBLISH_FILES_MAX_FILES (20) files a call;
+  PublishFilesTool (SEQUENTIAL)         artifact_operations.create_files (the
+                                        artifact tool's publish runs it too): at most
+                                        PUBLISH_FILES_MAX_FILES (20) files a call;
                                         for each file in order: HarnessSandbox.read_file
                                         (a working-directory path, or an absolute path
                                         under ONYX_VM_FILES_ROOT; other paths are refused
@@ -343,7 +353,9 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         publish is a new file and version.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
-  LibraryListTool / LibraryPrepareMaterializeTool  sandbox_tools._LibraryTool: code mode
+  LibraryListTool / LibraryPrepareMaterializeTool  sandbox_tools._LibraryTool, thin
+                                        translators over artifact_operations
+                                        (list_artifacts, materialize): code mode
                                         DEFERRED in the group `library`
                                         (tools.library__list / __prepare_materialize, found
                                         with tool_search), JSON_OBJECT results
@@ -351,7 +363,9 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         details (the generic card shows the JSON),
                                         PARALLEL, and run again after a lost server
                                         (interrupted_result None). Errors
-                                        (_artifact_errors): a HarnessSandboxError's
+                                        (errors.py:artifact_errors, which every
+                                        artifact operation uses, publish included): a
+                                        tool error as it is, a HarnessSandboxError's
                                         message, "timed out" for a TimeoutError, else
                                         a fixed "failed; try again"; details only in
                                         the log. Scope: the user's own root chats
@@ -389,8 +403,9 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         (ArtifactList.files) carry library_file_id
                                         (the artifact ID), file_id, version_number, file_name, title,
                                         artifact_type, mime_type, file_size_bytes,
-                                        created_at, modified_at, chat_id, chat_title and
-                                        path (the published display path); names and
+                                        created_at, modified_at, chat_id, chat_title,
+                                        path (the published display path) and url
+                                        (models.py:artifact_url); names and
                                         paths are cut, and a page drops its last
                                         entries to stay within ARTIFACTS_LIST_MAX_CHARS,
                                         below the spill limit of one result. The spill
@@ -407,7 +422,7 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         that the name fits the 255-byte limit
                                         (harness_base.safe_file_name), by one listing of the
                                         directory and the names the call wrote;
-                                        overwrite; error). sandbox_tools._copy_directory:
+                                        overwrite; error). artifact_operations._copy_directory:
                                         relative or absolute, normalized by
                                         harness_base.session_relative_path (inside the
                                         working directory; relative_directory joins
@@ -460,6 +475,39 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         they skip, such as node_modules, virtual
                                         environments and caches
                                         (firecracker/session_saves.py)
+  ArtifactTool (`artifact`, SEQUENTIAL)  one tool with an action per artifact operation,
+                                        for Claude models. One flat ArtifactArguments
+                                        model; each action takes only its own arguments
+                                        (models.py:ARTIFACT_ACTION_ARGUMENTS, whose publish
+                                        paths, ARTIFACT_PUBLISH_PATHS, the renderer reads
+                                        too), and the tool builds the library tools'
+                                        arguments of its operation: publish (default;
+                                        file_path with title, or file_paths, all or none)
+                                        -> create_files and PublishedFiles details, so the
+                                        same publish card, message files and access; list
+                                        (scope "mine", type = category, query, limit,
+                                        after = cursor; newest first) -> list_artifacts;
+                                        read (url, or path and paths, each a url or a file
+                                        ID; out_dir required until a read without it
+                                        exists) -> materialize, a url's /v<N> as the item's
+                                        version_number. Empty and too-long lists are
+                                        refused in the tool's own argument names before
+                                        the VM wakes. It inherits _LibraryTool and
+                                        _FileTool: execution settings are per tool, so the
+                                        whole tool takes turns in sandbox_file_changes and
+                                        keeps INTERRUPTED_SANDBOX_RESULT, as publish needs.
+                                        Code mode: DEFERRED function artifact.artifact
+                                        (tools.artifact__artifact) in its own group, a
+                                        JSON_OBJECT result typed Any with a returns note
+                                        per action. Results add url:
+                                        models.py:artifact_url
+                                        ({WEB_DOMAIN}/app/artifacts/<id>/v<N>), which
+                                        parse_artifact_url reads back from the path of any
+                                        link (also without /v<N>; the query and fragment
+                                        are dropped; the web's parseArtifactLink takes the
+                                        same paths); the library tools' results
+                                        (ListedArtifact, MaterializedItem, the
+                                        publish_files text) carry it too
   Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose
                                         configured tools hold a SandboxTool. A result
                                         with ToolResult.full_value always spills: the tool
@@ -471,7 +519,7 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / librar
                                         PREVIEW_TAIL_CHARS). Exempt
                                         from those two limits (_OWN_LIMITS): the cells,
                                         exec_command, write_stdin, read_file, skills_read,
-                                        library_list and CITEABLE_TOOLS_NAMES. A cell's closing record
+                                        library_list, artifact and CITEABLE_TOOLS_NAMES. A cell's closing record
                                         sets the recorded result and its own output uncut
                                         as the full value. Where:
                                         the full value or the content, at most

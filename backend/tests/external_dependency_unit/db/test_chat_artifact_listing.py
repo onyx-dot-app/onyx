@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
     get_or_create_root_message,
     get_user_published_file,
@@ -23,10 +23,13 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import (
     ChatArtifact,
     ChatArtifactVersion,
+    ChatMessage,
     ChatSession,
     FileRecord,
     User,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import (
     FILE_SIZE_MISSING_SENTINEL,
     get_default_file_store,
@@ -34,6 +37,8 @@ from onyx.file_store.file_store import (
 from onyx.file_store.utils import save_chat_output_file
 from onyx.server.features.build.sandbox.harness_base import chat_file_name
 from onyx.server.features.build.sandbox.models import session_workspace
+from onyx.server.query_and_chat.chat_backend import get_chat_artifact
+from onyx.server.query_and_chat.models import ChatArtifactFile
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_CHAT_TITLE_MAX_CHARS,
     ARTIFACTS_NAME_MAX_CHARS,
@@ -44,6 +49,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ListedArtifact,
     PublishedFile,
     SortOrder,
+    artifact_url,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 
@@ -186,6 +192,7 @@ def test_the_list_has_the_newest_available_version_of_each_artifact_newest_first
             chat_id=first.id,
             chat_title="First chat",
             path="out/report.csv",
+            url=artifact_url(report_artifact.id, 2),
         ),
         ListedArtifact(
             library_file_id=notes_artifact.id,
@@ -201,6 +208,7 @@ def test_the_list_has_the_newest_available_version_of_each_artifact_newest_first
             chat_id=second.id,
             chat_title="Second chat",
             path="/tmp/onyx/notes.md",
+            url=artifact_url(notes_artifact.id, 1),
         ),
     ]
     assert entries[0].modified_at > entries[1].modified_at
@@ -621,3 +629,86 @@ def test_a_later_publish_never_moves_the_latest_publish_back(
     )
     db_session.expire_all()
     assert db_session.get_one(ChatArtifact, first.artifact_id).updated_at == ahead
+
+
+def test_the_artifact_route_says_how_each_user_may_open_a_version(
+    db_session: Session, owner: User, other: User
+) -> None:
+    chat = _chat(db_session, owner, "Mine")
+    first = _publish(db_session, chat, "/w/report.md", "First")
+    second = _publish(db_session, chat, "/w/report.md", "Second")
+    artifact_id = first.artifact_id
+    assert artifact_id is not None
+
+    def opened(user: User, version: int | None = None) -> ChatArtifactFile | None:
+        try:
+            return get_chat_artifact(
+                artifact_id, version, user=user, db_session=db_session
+            )
+        except OnyxError as error:
+            assert error.error_code is OnyxErrorCode.NOT_FOUND
+            return None
+
+    newest = opened(owner)
+    assert newest is not None
+    assert (
+        newest.file_id,
+        newest.version,
+        newest.title,
+        newest.chat_id,
+        newest.access,
+    ) == (second.file_id, 2, "Second", chat.id, "owner")
+    assert newest.display_path == "/w/report.md"
+    older = opened(owner, 1)
+    assert older is not None and older.file_id == first.file_id
+    assert opened(owner, 3) is None
+
+    # A chat of another user that holds the first version, as a replace from
+    # it would: its owner may open that version alone, by its number.
+    holder = _chat(db_session, other, "Theirs")
+    root = get_or_create_root_message(holder.id, db_session)
+    db_session.add(
+        ChatMessage(
+            chat_session_id=holder.id,
+            parent_message_id=root.id,
+            message="Here.",
+            token_count=1,
+            message_type=MessageType.ASSISTANT,
+            files=[{"id": first.file_id, "type": "document", "name": "report.md"}],
+        )
+    )
+    db_session.commit()
+    assert opened(other) is None
+    assert opened(other, 2) is None
+    only_file = opened(other, 1)
+    assert only_file is not None
+    assert (only_file.file_id, only_file.access) == (first.file_id, "file_only")
+
+    # Every user reads it once the chat is shared.
+    db_session.execute(
+        update(ChatSession)
+        .where(ChatSession.id == chat.id)
+        .values(shared_status=ChatSessionSharedStatus.PUBLIC)
+    )
+    db_session.commit()
+    shared = opened(other)
+    assert shared is not None
+    assert (shared.file_id, shared.access) == (second.file_id, "chat_reader")
+    # A version whose object is gone gives way to the version before it.
+    db_session.execute(
+        update(FileRecord)
+        .where(FileRecord.file_id == second.file_id)
+        .values(file_size=FILE_SIZE_MISSING_SENTINEL)
+    )
+    db_session.commit()
+    fallback = opened(owner)
+    assert fallback is not None and fallback.file_id == first.file_id
+    assert opened(owner, 2) is None
+
+    # A deleted chat's files open for no one.
+    db_session.execute(
+        update(ChatSession).where(ChatSession.id == chat.id).values(deleted=True)
+    )
+    db_session.commit()
+    assert opened(owner) is None
+    assert opened(other, 1) is None

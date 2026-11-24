@@ -143,7 +143,16 @@ record that `ChatArtifactVersion.thumbnail_file_id` links (`ON DELETE SET
 NULL`: a version stays valid without it). A render or thumbnail save that
 fails leaves the link null; it never fails the publish. They get a
 `FileRecord` but no `UserFile`. The chat shows them
-through `/chat/file/{file_id}`. A chat delete deletes a published file and its
+through `/chat/file/{file_id}`. `GET /chat/artifacts/{artifact_id}?version=N`
+(`server/query_and_chat/chat_backend.py:get_chat_artifact`) gives a version,
+by default the newest available, with its chat and how the user may open
+it (`access`): `owner` of the chat, `chat_reader` of it
+(`db/access.py:user_can_read_chat_session`, a public share), or, only for an
+explicit version, `file_only` for anyone who can download that version
+(`backend/onyx/access/access.py:user_can_access_chat_file`, such as a reader of another
+chat whose replace added it). Otherwise, and for a deleted chat, 404; the
+web opens an artifact link (`{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`)
+with it. A chat delete deletes a published file and its
 thumbnail through its artifact's versions, also when its response never saved; a saved response
 also lists it in `ChatMessage.files` ([[chat-persistence]]). The version rows
 cascade from the file record and the artifact, and the artifact from the chat

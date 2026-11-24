@@ -41,6 +41,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     SpilledOutput,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ArtifactTool,
     ExecCommandTool,
     LibraryListTool,
     _exec_result,
@@ -582,7 +583,10 @@ def test_spilled_pages_list_each_page_with_a_bounded_title_inside_the_tag(
     assert len(listed) < 400
 
 
-def test_a_library_list_page_stays_whole_in_a_full_step(turn: _FakeVMTurn) -> None:
+@pytest.mark.parametrize("name", [LibraryListTool.NAME, ArtifactTool.NAME])
+def test_a_library_list_page_stays_whole_in_a_full_step(
+    turn: _FakeVMTurn, name: str
+) -> None:
     page = "e" * ARTIFACTS_LIST_MAX_CHARS
     earlier = ToolResultMessage(
         tool_call_id="earlier", tool_name="fetch", content="s" * spill.STEP_MAX_CHARS
@@ -592,7 +596,7 @@ def test_a_library_list_page_stays_whole_in_a_full_step(turn: _FakeVMTurn) -> No
         turn,
         ToolResultContext(
             message_id="run:0",
-            calls=(ToolCall(id="call", name=LibraryListTool.NAME, arguments={}),),
+            calls=(ToolCall(id="call", name=name, arguments={}),),
             result=ToolResult(content=page),
             step_results=(earlier,),
         ),
