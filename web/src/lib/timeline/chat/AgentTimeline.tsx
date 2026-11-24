@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Presence } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { prefersReducedMotion } from "@opal/utils";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import {
@@ -25,6 +26,12 @@ import type { AwaitingUser } from "@/lib/chat/toolApprovals";
  * (one step each); a run with more is one collapsed run card. Change it here.
  */
 export const MAX_HOISTED_STEPS = 5;
+
+/** How long the hoisted step cards take to fold into the run card, in ms. */
+const HANDOVER_MS = 300;
+
+/** hoisted → handover → collapsed; a run never goes back. */
+type RunLayout = "hoisted" | "handover" | "collapsed";
 
 export interface AgentTimelineProps {
   /** Turn groups from usePacketProcessor */
@@ -133,72 +140,150 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Hoisted: each step of a short run is its own run card, with the step's
   // title as its header. Once the run has more steps, they collapse into one
-  // run card: the step cards leave first, then the run card enters.
+  // run card: the step cards fold together into its place as it fades in,
+  // folded.
   const hoisted = steps.length > 0 && steps.length <= MAX_HOISTED_STEPS;
-  const [shownHoisted, setShownHoisted] = useState(hoisted);
-  if (hoisted && !shownHoisted) setShownHoisted(true);
-
-  if (shownHoisted) {
-    return (
-      <TimelineRoot>
-        <Section alignItems="stretch" gap={1} height="auto">
-          {steps.slice(0, MAX_HOISTED_STEPS).map((runStep, index) => (
-            // A step that arrives while the run works rises in; a saved
-            // run's steps appear at once.
-            <Presence
-              key={runStep.id}
-              show={hoisted}
-              appear={isActive}
-              grow
-              // The steps leave together; the first to finish hands over.
-              onExited={index === 0 ? () => setShownHoisted(false) : undefined}
-            >
-              <ChatStep
-                step={runStep.step}
-                status={runStep.status}
-                position={{ isFirst: true, isLast: true }}
-                chatState={chatState}
-                stopPacketSeen={stopPacketSeen}
-                stopReason={stopReason}
-              />
-            </Presence>
-          ))}
-        </Section>
-      </TimelineRoot>
-    );
+  const [layout, setLayout] = useState<RunLayout>(
+    hoisted ? "hoisted" : "collapsed"
+  );
+  // Whether the run card took the step cards' place here: it then fades in,
+  // folded.
+  const [cardHandedOver, setCardHandedOver] = useState(false);
+  if (hoisted && layout === "collapsed") setLayout("hoisted");
+  if (!hoisted && layout === "hoisted") {
+    setLayout(prefersReducedMotion() ? "collapsed" : "handover");
+    setCardHandedOver(true);
   }
 
+  const boxRef = useRef<HTMLDivElement>(null);
+  const stepsRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (layout !== "handover") return;
+    const box = boxRef.current;
+    const stepList = stepsRef.current;
+    const card = cardRef.current;
+    if (!box || !stepList || !card) {
+      setLayout("collapsed");
+      return;
+    }
+    // The box closes from the step cards' height to the run card's, while
+    // each step card slides up into the first one's place and fades.
+    const ease = `${HANDOVER_MS}ms ease-in-out`;
+    box.style.height = `${stepList.offsetHeight}px`;
+    const items = Array.from(
+      stepList.querySelectorAll<HTMLElement>("[data-run-handover-step]")
+    );
+    const top = items[0]?.offsetTop ?? 0;
+    const offsets = items.map((item) => item.offsetTop - top);
+    void box.offsetHeight;
+    box.style.transition = `height ${ease}`;
+    box.style.height = `${card.offsetHeight}px`;
+    // Shrink toward the top inline-start corner, so the icons keep their
+    // column.
+    const origin =
+      getComputedStyle(box).direction === "rtl" ? "top right" : "top left";
+    items.forEach((item, index) => {
+      item.style.transformOrigin = origin;
+      item.style.transition = `transform ${ease}, opacity ${ease}`;
+      item.style.transform = `translateY(${-(offsets[index] ?? 0)}px) scale(0.96)`;
+      item.style.opacity = "0";
+    });
+    const done = window.setTimeout(() => {
+      box.style.height = "";
+      box.style.transition = "";
+      setLayout("collapsed");
+    }, HANDOVER_MS);
+    return () => window.clearTimeout(done);
+  }, [layout]);
+
+  const stepCards = (
+    <TimelineRoot>
+      <Section alignItems="stretch" gap={1} height="auto">
+        {steps.slice(0, MAX_HOISTED_STEPS).map((runStep) => (
+          // A step that arrives while the run works rises in; a saved run's
+          // steps appear at once.
+          <Presence
+            key={runStep.id}
+            appear={isActive}
+            grow
+            data-run-handover-step=""
+          >
+            <ChatStep
+              step={runStep.step}
+              status={runStep.status}
+              position={{ isFirst: true, isLast: true }}
+              chatState={chatState}
+              stopPacketSeen={stopPacketSeen}
+              stopReason={stopReason}
+            />
+          </Presence>
+        ))}
+      </Section>
+    </TimelineRoot>
+  );
+
   return (
-    // Collapsed: the run's steps in one run card, summed up rather than titled
-    // by its current step. A wait for the user still says so.
-    <RunCard
-      steps={steps}
-      workingText={
-        awaitingUser !== null ? headerText : t("header.doingWork.label")
-      }
-      doneText={t("header.didWork.label")}
-      isActive={isActive}
-      isStopped={stopPacketSeen && userStopped}
-      autoCollapse={hasDisplayContent}
-      streamingStartTime={streamingStartTime}
-      durationSeconds={toolProcessingDuration ?? processingDurationSeconds}
-      summary={{
-        memoryText,
-        memoryOperation,
-        memoryId,
-        memoryIndex,
-      }}
-      renderStep={(runStep, position) => (
-        <ChatStep
-          step={runStep.step}
-          status={runStep.status}
-          position={position}
-          chatState={chatState}
-          stopPacketSeen={stopPacketSeen}
-          stopReason={stopReason}
-        />
+    // The step cards and the run card share one box, so the step cards keep
+    // their state into the handover and the run card stays mounted after it.
+    <div ref={boxRef} className="relative">
+      {layout !== "hoisted" && (
+        <div key="card" ref={cardRef}>
+          <Presence appear={cardHandedOver}>
+            {/* Collapsed: the run's steps in one run card, summed up rather
+                than titled by its current step. A wait for the user still
+                says so. */}
+            <RunCard
+              steps={steps}
+              workingText={
+                awaitingUser !== null ? headerText : t("header.doingWork.label")
+              }
+              doneText={t("header.didWork.label")}
+              appear={!cardHandedOver}
+              startFolded={cardHandedOver}
+              isActive={isActive}
+              isStopped={stopPacketSeen && userStopped}
+              autoCollapse={hasDisplayContent}
+              streamingStartTime={streamingStartTime}
+              durationSeconds={
+                toolProcessingDuration ?? processingDurationSeconds
+              }
+              summary={{
+                memoryText,
+                memoryOperation,
+                memoryId,
+                memoryIndex,
+              }}
+              renderStep={(runStep, position) => (
+                <ChatStep
+                  step={runStep.step}
+                  status={runStep.status}
+                  position={position}
+                  chatState={chatState}
+                  stopPacketSeen={stopPacketSeen}
+                  stopReason={stopReason}
+                />
+              )}
+            />
+          </Presence>
+        </div>
       )}
-    />
+      {layout !== "collapsed" && (
+        <div
+          key="steps"
+          ref={stepsRef}
+          // During the handover the step cards lie over the run card.
+          className={
+            layout === "handover"
+              ? "absolute inset-x-0 top-0 pointer-events-none"
+              : undefined
+          }
+          aria-hidden={layout === "handover" || undefined}
+        >
+          {stepCards}
+        </div>
+      )}
+    </div>
   );
 }, areAgentTimelinePropsEqual);
 

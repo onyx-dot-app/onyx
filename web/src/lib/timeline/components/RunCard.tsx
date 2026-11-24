@@ -52,6 +52,13 @@ export interface RunCardProps<S extends RunCardStep> {
   doneText?: string;
   /** The header's icon while the run works and once it is done. */
   icon?: IconFunctionComponent;
+  /**
+   * Play the card's entry when it mounts while its run works. Off for a card
+   * that takes the place of a run's own step cards (see AgentTimeline).
+   */
+  appear?: boolean;
+  /** Mount folded, even while the run works. */
+  startFolded?: boolean;
   summary?: RunCardSummary;
 }
 
@@ -72,6 +79,8 @@ export function RunCard<S extends RunCardStep>({
   durationSeconds,
   doneText,
   icon = SvgSparkle,
+  appear = true,
+  startFolded = false,
   summary,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
@@ -80,10 +89,10 @@ export function RunCard<S extends RunCardStep>({
   const stopped =
     !isRunning &&
     (isStopped ?? steps.some((step) => step.status === "stopped"));
-  const [isOpen, setIsOpen] = useState(isRunning);
+  const [isOpen, setIsOpen] = useState(isRunning && !startFolded);
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
-  const [arrivedLive] = useState(isRunning);
+  const [arrivedLive] = useState(appear && isRunning);
   // Steps already there when the card mounts show at once; later ones rise
   // in.
   const [initialStepIds] = useState(
@@ -153,7 +162,8 @@ export function RunCard<S extends RunCardStep>({
       <TimelineRoot>
         <Line
           flavour="card"
-          filled={isRunning || isOpen}
+          // Filled while open; otherwise only on hover, as a step card is.
+          filled={isOpen}
           onClick={foldable ? toggle : undefined}
           // The header's own fold button, in every state, so its step count
           // animates as it changes and it lights up with the header.
