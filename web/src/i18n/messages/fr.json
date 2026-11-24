@@ -11393,6 +11393,7 @@
         "playgroundAskAdmin": "Demandez à votre administrateur de vous inviter.",
         "playgroundCheckFailed": "Nous n'avons pas pu vérifier votre inscription. Réessayez plus tard.",
         "playgroundEmailUsed": "Vous avez déjà utilisé votre accès au playground.",
+        "playgroundFreeMail": "Utilisez votre adresse e-mail professionnelle.",
         "playgroundLimitReached": "Votre entreprise a déjà utilisé son accès au playground.",
         "serverError": "Votre fournisseur d'identité a rencontré une erreur. Veuillez réessayer.",
         "staleSignIn": "Ce lien de connexion a expiré ou n'est plus valide. Veuillez vous reconnecter.",

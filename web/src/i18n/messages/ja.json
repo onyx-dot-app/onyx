@@ -11393,6 +11393,7 @@
         "playgroundAskAdmin": "管理者に招待を依頼してください。",
         "playgroundCheckFailed": "サインアップを確認できませんでした。しばらくしてからもう一度お試しください。",
         "playgroundEmailUsed": "プレイグラウンドへのアクセスはすでに使用済みです。",
+        "playgroundFreeMail": "勤務先のメールアドレスを使用してください。",
         "playgroundLimitReached": "貴社はプレイグラウンドへのアクセスをすでに使用済みです。",
         "serverError": "ID プロバイダーでエラーが発生しました。もう一度お試しください。",
         "staleSignIn": "このログインリンクは期限切れか、無効になっています。もう一度ログインしてください。",

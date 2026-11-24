@@ -67,6 +67,15 @@ mod delete_user_data {
         std::fs::symlink_metadata(path).is_ok_and(|m| m.file_attributes() & 0x400 != 0)
     }
 
+    /// The `cmdkey.exe` arguments of each delete, from the test harness.
+    fn deleted_credentials(root: &Path) -> Vec<String> {
+        std::fs::read_to_string(root.join("deleted-credentials.txt"))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+
     #[test]
     fn deletes_files_and_keeps_links_and_their_targets() {
         let root = run("dud-user", USER_SID, false);
@@ -78,6 +87,19 @@ mod delete_user_data {
         // A top-level link goes, as a link only.
         assert!(!exists(&root.join("Local").join(APP)));
         assert!(exists(&root.join("target-top").join("keep.txt")));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn deletes_only_the_onyx_credentials() {
+        let root = run("dud-creds", USER_SID, true);
+        assert_eq!(
+            deleted_credentials(&root),
+            [
+                "/delete:LegacyGeneric:target=https://onyx.example.com.app.onyx.desktop.v2",
+                "/delete:LegacyGeneric:target=http://localhost:8899.app.onyx.desktop.v2",
+            ]
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -98,6 +120,7 @@ mod delete_user_data {
             &root.join("Roaming").join(APP).join("sub").join("deep")
         ));
         assert!(is_link(&root.join("Local").join(APP)));
+        assert!(deleted_credentials(&root).is_empty());
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

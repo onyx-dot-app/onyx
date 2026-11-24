@@ -248,10 +248,69 @@ mod platform {
         let handle = window.clone();
         window.on_window_event(move |event| {
             if let WindowEvent::Focused(false) = event {
+                // Windows can move the foreground once more right after a
+                // notification click shows the launcher.
+                #[cfg(windows)]
+                if super::take_blur_grace(std::time::Instant::now()) {
+                    return;
+                }
                 let _ = handle.hide();
             }
         });
         Ok(())
+    }
+
+    /// Brings the launcher to the foreground after a notification click.
+    /// Windows gives the foreground only to the process that got the last
+    /// input, here the notification host. If the first try fails, a
+    /// synthetic Alt press makes this process the one with the last input;
+    /// no other thread's input queue is joined.
+    #[cfg(windows)]
+    pub fn take_foreground(app: &AppHandle) {
+        use ::windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+            KEYEVENTF_KEYUP, VK_MENU,
+        };
+        use ::windows::Win32::UI::WindowsAndMessaging::{
+            BringWindowToTop, GetForegroundWindow, SetForegroundWindow,
+        };
+
+        let Some(window) = app.get_webview_window(LAUNCHER) else {
+            return;
+        };
+        let Ok(hwnd) = window.hwnd() else {
+            return;
+        };
+        let alt = |flags: KEYBD_EVENT_FLAGS| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_MENU,
+                    dwFlags: flags,
+                    ..Default::default()
+                },
+            },
+        };
+        let size = std::mem::size_of::<INPUT>() as i32;
+        // SAFETY: plain Win32 calls on the main thread with a live window
+        // handle; SendInput reads only the local array.
+        let raised = unsafe {
+            if GetForegroundWindow() == hwnd {
+                return;
+            }
+            let _ = BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd).as_bool() || {
+                SendInput(&[alt(KEYBD_EVENT_FLAGS(0))], size);
+                let raised = SetForegroundWindow(hwnd).as_bool();
+                SendInput(&[alt(KEYEVENTF_KEYUP)], size);
+                raised
+            }
+        };
+        if !raised {
+            log::warn!("Windows did not bring the launcher to the foreground");
+        }
+        // Keyboard focus into the web view.
+        let _ = window.set_focus();
     }
 
     pub fn show(app: &AppHandle) -> Result<(), String> {
@@ -418,9 +477,10 @@ pub fn toggle(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send +
     });
 }
 
-/// Shows the launcher with what it last showed if `wanted` still holds on the
-/// main thread. Does nothing if the launcher is showing.
-pub fn show(
+/// Shows the launcher with what it last showed, for a click on a
+/// notification, if `wanted` still holds on the main thread. A launcher that
+/// is showing stays; on Windows it also takes the foreground.
+pub fn show_for_notification(
     app: &AppHandle,
     wanted: impl FnOnce(&AppHandle) -> bool + Send + 'static,
     when_signed_out: impl FnOnce(&AppHandle) + Send + 'static,
@@ -429,10 +489,48 @@ pub fn show(
     let _ = app.run_on_main_thread(move || {
         // `wanted` runs for a visible launcher too: it can route the page
         // (a notification click switches to the answer).
-        if wanted(&handle) && !platform::is_visible(&handle) {
+        if !wanted(&handle) {
+            return;
+        }
+        #[cfg(windows)]
+        start_blur_grace(std::time::Instant::now());
+        if !platform::is_visible(&handle) {
             show_now(&handle, when_signed_out);
         }
+        #[cfg(windows)]
+        if platform::is_visible(&handle) {
+            platform::take_foreground(&handle);
+        }
     });
+}
+
+/// How long after a notification click the launcher ignores losing focus.
+#[cfg(any(windows, test))]
+const BLUR_GRACE: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// When a notification click last showed the launcher.
+#[cfg(windows)]
+static BLUR_GRACE_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+#[cfg(windows)]
+fn start_blur_grace(now: std::time::Instant) {
+    *BLUR_GRACE_START.lock().unwrap_or_else(|p| p.into_inner()) = Some(now);
+}
+
+/// Whether the launcher ignores this loss of focus. Only the first one after
+/// a notification click is ignored.
+#[cfg(windows)]
+fn take_blur_grace(now: std::time::Instant) -> bool {
+    let started = BLUR_GRACE_START
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
+    in_blur_grace(started, now)
+}
+
+#[cfg(any(windows, test))]
+fn in_blur_grace(started: Option<std::time::Instant>, now: std::time::Instant) -> bool {
+    started.is_some_and(|started| now.saturating_duration_since(started) < BLUR_GRACE)
 }
 
 fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
@@ -460,7 +558,19 @@ pub fn is_visible(app: &AppHandle) -> bool {
 mod tests {
     use tauri::{PhysicalPosition, PhysicalRect, PhysicalSize};
 
-    use super::{centered, placement};
+    use super::{centered, in_blur_grace, placement, BLUR_GRACE};
+
+    #[test]
+    fn only_a_loss_of_focus_soon_after_a_notification_click_is_ignored() {
+        let start = std::time::Instant::now();
+        let soon = start + std::time::Duration::from_millis(300);
+        assert!(in_blur_grace(Some(start), start));
+        assert!(in_blur_grace(Some(start), soon));
+        assert!(!in_blur_grace(Some(start), start + BLUR_GRACE));
+        assert!(!in_blur_grace(None, soon));
+        // A clock read before the click does not count as later.
+        assert!(in_blur_grace(Some(soon), start));
+    }
 
     fn area(x: i32, y: i32, width: u32, height: u32) -> PhysicalRect<i32, u32> {
         PhysicalRect {

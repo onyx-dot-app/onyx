@@ -11393,6 +11393,7 @@
         "playgroundAskAdmin": "اطلب من مسؤولك دعوتك.",
         "playgroundCheckFailed": "لم نتمكن من التحقق من تسجيلك. حاول مرة أخرى لاحقًا.",
         "playgroundEmailUsed": "لقد استخدمت وصولك إلى الـ playground.",
+        "playgroundFreeMail": "استخدم بريدك الإلكتروني الخاص بالعمل.",
         "playgroundLimitReached": "لقد استخدمت شركتك وصولها إلى الـ playground.",
         "serverError": "واجه موفر الهوية خطأً. يرجى المحاولة مرة أخرى.",
         "staleSignIn": "انتهت صلاحية رابط تسجيل الدخول هذا أو لم يعد صالحًا. يرجى تسجيل الدخول مرة أخرى.",

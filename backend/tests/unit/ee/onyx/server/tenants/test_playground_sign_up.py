@@ -5,7 +5,7 @@ choice. A control plane that cannot answer refuses: no tenant without the rules.
 """
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,6 +15,7 @@ import pytest
 from ee.onyx.server.tenants.models import SignUpDomainState
 from ee.onyx.server.tenants.provisioning import (
     PLAYGROUND_CHECK_FAILED_CODE,
+    PLAYGROUND_FREE_MAIL_CODE,
     PLAYGROUND_REFUSAL_CODES,
     check_playground_sign_up,
     fetch_sign_up_domain_state,
@@ -97,6 +98,28 @@ class TestFetchSignUpDomainState:
 
 
 class TestCheckPlaygroundSignUp:
+    @pytest.fixture(autouse=True)
+    def work_address(self) -> Iterator[MagicMock]:
+        """EMAIL is a work address unless a test says otherwise. Patched so no
+        test downloads the free-mail list."""
+        with patch(f"{_MODULE}.is_free_mail_email", return_value=False) as check:
+            yield check
+
+    @pytest.mark.asyncio
+    async def test_a_free_mail_address_is_refused_before_the_control_plane(
+        self, work_address: MagicMock
+    ) -> None:
+        work_address.return_value = True
+        control_plane = AsyncMock(return_value=SignUpDomainState.NEW)
+        with patch(f"{_MODULE}.fetch_sign_up_domain_state", control_plane):
+            with pytest.raises(OnyxError) as exc_info:
+                await check_playground_sign_up("someone@gmail.com", start_new_team=True)
+
+        assert exc_info.value.error_code is OnyxErrorCode.REGISTRATION_DISABLED
+        assert exc_info.value.detail == PLAYGROUND_FREE_MAIL_CODE
+        work_address.assert_called_once_with("someone@gmail.com")
+        control_plane.assert_not_awaited()
+
     @pytest.mark.asyncio
     async def test_new_passes(self) -> None:
         with patch(

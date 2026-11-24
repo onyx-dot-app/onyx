@@ -11393,6 +11393,7 @@
         "playgroundAskAdmin": "관리자에게 초대를 요청하세요.",
         "playgroundCheckFailed": "가입을 확인할 수 없습니다. 나중에 다시 시도하세요.",
         "playgroundEmailUsed": "플레이그라운드 액세스를 이미 사용했습니다.",
+        "playgroundFreeMail": "회사 이메일을 사용하세요.",
         "playgroundLimitReached": "귀사는 플레이그라운드 액세스를 이미 사용했습니다.",
         "serverError": "ID 공급자에서 오류가 발생했습니다. 다시 시도하세요.",
         "staleSignIn": "이 로그인 링크가 만료되었거나 더 이상 유효하지 않습니다. 다시 로그인하세요.",
