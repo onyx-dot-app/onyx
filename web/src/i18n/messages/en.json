@@ -12739,15 +12739,15 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {Running command} started {Started command} failed {Command failed} canceled {Canceled} done {Ran command} other {Ran command}}",
+            "status": "{phase, select, running {Running command...} started {Started command} failed {Command failed} canceled {Canceled} done {Ran command} other {Ran command}}",
             "workdir": {
               "label": "In {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Sending input to session {sessionId}} failed {Could not send input to session {sessionId}} canceled {Canceled} done {Sent input to session {sessionId}} other {Sent input to session {sessionId}}}} check {{phase, select, running {Checking session {sessionId}} failed {Could not check session {sessionId}} canceled {Canceled} done {Checked session {sessionId}} other {Checked session {sessionId}}}} other {Session {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {Sending input to session {sessionId}...} failed {Could not send input to session {sessionId}} canceled {Canceled} done {Sent input to session {sessionId}} other {Sent input to session {sessionId}}}} check {{phase, select, running {Checking session {sessionId}...} failed {Could not check session {sessionId}} canceled {Canceled} done {Checked session {sessionId}} other {Checked session {sessionId}}}} other {Session {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {Sending input to the session} failed {Could not send input to the session} canceled {Canceled} done {Sent input to the session} other {Sent input to the session}}} check {{phase, select, running {Checking the session} failed {Could not check the session} canceled {Canceled} done {Checked the session} other {Checked the session}}} other {Session}}"
+              "status": "{kind, select, send {{phase, select, running {Sending input to the session...} failed {Could not send input to the session} canceled {Canceled} done {Sent input to the session} other {Sent input to the session}}} check {{phase, select, running {Checking the session...} failed {Could not check the session} canceled {Canceled} done {Checked the session} other {Checked the session}}} other {Session}}"
             }
           },
           "output": {

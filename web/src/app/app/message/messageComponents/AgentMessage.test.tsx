@@ -583,6 +583,14 @@ test("code mode reads as the tool calls it makes", async () => {
   }
 });
 
+/** Matches the element whose text is `text`, across its spans (e.g. a code
+ * span for a tool's name). */
+function wholeText(text: string) {
+  return (_content: string, element: Element | null) =>
+    element?.textContent === text &&
+    Array.from(element.children).every((child) => child.textContent !== text);
+}
+
 test("a later report of a code mode call replaces what the step shows", async () => {
   seedSessionAwaitingAnswer();
   const cell = { turn_index: 0, tab_index: 0 };
@@ -654,7 +662,7 @@ test("a later report of a code mode call replaces what the step shows", async ()
 
     view.rerender(renderMessage(completed));
     expect(
-      await screen.findByText("Executed lookup_orders")
+      await screen.findByText(wholeText("Executed lookup_orders"))
     ).toBeInTheDocument();
     expect(screen.getByText("3 orders")).toBeInTheDocument();
     expect(screen.queryByText("checking more")).not.toBeInTheDocument();

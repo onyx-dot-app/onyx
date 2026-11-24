@@ -12739,15 +12739,15 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {명령 실행 중} started {명령 시작됨} failed {명령 실패} canceled {취소됨} done {명령 실행됨} other {명령 실행됨}}",
+            "status": "{phase, select, running {명령 실행 중...} started {명령 시작됨} failed {명령 실패} canceled {취소됨} done {명령 실행됨} other {명령 실행됨}}",
             "workdir": {
               "label": "위치: {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중...} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중...} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {세션에 입력을 보내는 중} failed {세션에 입력을 보내지 못함} canceled {취소됨} done {세션에 입력을 보냄} other {세션에 입력을 보냄}}} check {{phase, select, running {세션 확인 중} failed {세션을 확인하지 못함} canceled {취소됨} done {세션 확인함} other {세션 확인함}}} other {세션}}"
+              "status": "{kind, select, send {{phase, select, running {세션에 입력을 보내는 중...} failed {세션에 입력을 보내지 못함} canceled {취소됨} done {세션에 입력을 보냄} other {세션에 입력을 보냄}}} check {{phase, select, running {세션 확인 중...} failed {세션을 확인하지 못함} canceled {취소됨} done {세션 확인함} other {세션 확인함}}} other {세션}}"
             }
           },
           "output": {
