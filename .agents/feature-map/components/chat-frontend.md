@@ -272,7 +272,7 @@
   list, a Word file as pages scaled to fit the width, an image fit to the
   panel, HTML as its page in a sandboxed frame, SVG as an image, and code,
   data and text as highlighted source with line numbers (plain text wraps
-  instead). Markdown, CSV, HTML and SVG have a "Show source" toggle. The PDF and
+  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF and
   slide views share Craft's toolbar and resizable thumbnail column
   (`sections/file-preview/PreviewControls.tsx`). The column is one tab stop,
   the current page or slide, and the arrow keys move it, with focus. A
