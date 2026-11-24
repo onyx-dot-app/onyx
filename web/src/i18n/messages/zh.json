@@ -12367,6 +12367,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "问题"
+        },
+        "artifactError": {
+          "message": "此文件不可用。"
         }
       },
       "messageEditing": {

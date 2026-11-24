@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { SWRConfig } from "swr";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import {
   Packet,
@@ -9,6 +10,7 @@ import {
 import {
   useChatSessionQueue,
   useJumpToLatestReason,
+  useOpenArtifactFromUrl,
   usePublishedFiles,
   useSendChatMessageFromURL,
   useToolRequests,
@@ -20,17 +22,20 @@ import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { endedRunStatus } from "@/lib/chat/runStatus";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
+import type { ChatArtifactFile } from "@/lib/chat/publishedFiles";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 
 jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 jest.mock("@/lib/chat/settleChatSession", () => ({
   ...jest.requireActual("@/lib/chat/settleChatSession"),
   refreshChatSession: jest.fn(async () => {}),
 }));
-let mockSearchParams = new URLSearchParams({
+const SEND_ON_LOAD_PARAMS = new URLSearchParams({
   "user-prompt": "hello",
   "send-on-load": "true",
   tags: "eng",
 });
+let mockSearchParams = SEND_ON_LOAD_PARAMS;
 jest.mock("@opal/navigation", () => ({
   ...jest.requireActual("@opal/navigation"),
   useNavigation: () => ({ go: jest.fn() }),
@@ -595,4 +600,118 @@ describe("useJumpToLatestReason", () => {
     rerender();
     expect(result.current).toBeNull();
   });
+});
+
+describe("useOpenArtifactFromUrl", () => {
+  const ARTIFACT_ID = "5b1d2c3e-0000-4000-8000-000000000000";
+  const FILE: ChatArtifactFile = {
+    file_id: "report-v1",
+    name: "report.md",
+    title: null,
+    path: "/outputs/report.md",
+    display_path: "report.md",
+    size: 1,
+    mime_type: "text/markdown",
+    artifact_id: ARTIFACT_ID,
+    version: 1,
+    thumbnail_file_id: null,
+    chat_id: "chat",
+    access: "owner",
+  };
+
+  beforeEach(() => {
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(
+        async () => new Response(JSON.stringify(FILE), { status: 200 })
+      );
+  });
+
+  afterEach(() => {
+    mockSearchParams = SEND_ON_LOAD_PARAMS;
+    jest.restoreAllMocks();
+  });
+
+  test.each([
+    ["names a version opens it pinned", "1", true],
+    ["names no version follows the newest", null, false],
+  ])("a URL that %s", async (_, version, pinned) => {
+    mockSearchParams = new URLSearchParams({
+      [SEARCH_PARAM_NAMES.ARTIFACT_ID]: ARTIFACT_ID,
+      ...(version ? { [SEARCH_PARAM_NAMES.ARTIFACT_VERSION]: version } : {}),
+    });
+    const openFile = jest.fn();
+    renderHook(() => useOpenArtifactFromUrl("chat", openFile));
+    await waitFor(() => expect(openFile).toHaveBeenCalledWith(FILE, pinned));
+  });
+
+  test("a cached response of an earlier visit waits for the newest version", async () => {
+    mockSearchParams = new URLSearchParams({
+      [SEARCH_PARAM_NAMES.ARTIFACT_ID]: ARTIFACT_ID,
+    });
+    const newer = { ...FILE, file_id: "report-v2", version: 2 };
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(
+        async () => new Response(JSON.stringify(newer), { status: 200 })
+      );
+    const cache = new Map([
+      [SWR_KEYS.chatArtifact(ARTIFACT_ID, null), { data: FILE }],
+    ]);
+    const openFile = jest.fn();
+    renderHook(() => useOpenArtifactFromUrl("chat", openFile), {
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => cache }}>{children}</SWRConfig>
+      ),
+    });
+    await waitFor(() => expect(openFile).toHaveBeenCalledWith(newer, false));
+    expect(openFile).toHaveBeenCalledTimes(1);
+  });
+
+  test("a cached response of an earlier visit stays shut when the reload fails", async () => {
+    mockSearchParams = new URLSearchParams({
+      [SEARCH_PARAM_NAMES.ARTIFACT_ID]: ARTIFACT_ID,
+    });
+    jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ detail: "Not found" }), {
+          status: 404,
+        })
+    );
+    const cache = new Map([
+      [SWR_KEYS.chatArtifact(ARTIFACT_ID, null), { data: FILE }],
+    ]);
+    const openFile = jest.fn();
+    renderHook(() => useOpenArtifactFromUrl("chat", openFile), {
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => cache, shouldRetryOnError: false }}>
+          {children}
+        </SWRConfig>
+      ),
+    });
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(openFile).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["../x", null],
+    [ARTIFACT_ID, "x"],
+    [ARTIFACT_ID, "1.5"],
+  ])(
+    "an artifact %s at version %s that no link names makes no request",
+    async (artifactId, version) => {
+      mockSearchParams = new URLSearchParams({
+        [SEARCH_PARAM_NAMES.ARTIFACT_ID]: artifactId,
+        ...(version ? { [SEARCH_PARAM_NAMES.ARTIFACT_VERSION]: version } : {}),
+      });
+      const openFile = jest.fn();
+      renderHook(() => useOpenArtifactFromUrl("chat", openFile));
+      await act(async () => {});
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(openFile).not.toHaveBeenCalled();
+    }
+  );
 });

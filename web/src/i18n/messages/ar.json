@@ -12367,6 +12367,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "سؤال"
+        },
+        "artifactError": {
+          "message": "هذا الملف غير متاح."
         }
       },
       "messageEditing": {

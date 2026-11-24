@@ -28,7 +28,7 @@ import {
   NO_LOADED_PUBLISHED_FILES,
   startChatLoad,
 } from "@/lib/chat/publishedFiles";
-import { usePublishedFiles } from "@/lib/chat/hooks";
+import { useOpenArtifactFromUrl, usePublishedFiles } from "@/lib/chat/hooks";
 import { fetchSettledChatSession } from "@/lib/chat/sessionReadiness";
 import { PANEL_TOGGLE_ROOM } from "@/lib/outputPanel/layout";
 import { ChatRightPanel } from "@/sections/chat/ChatRightPanel";
@@ -117,6 +117,14 @@ export default function SharedChatDisplay({
     );
   }, [sessionId]);
 
+  const openFile = useCallback(
+    (file: PublishedFile, pinVersion = false) =>
+      dispatchRightPanel(openCardFileAction(file, publishedFiles, pinVersion)),
+    [publishedFiles]
+  );
+  // The server loaded the chat with the page
+  useOpenArtifactFromUrl(sessionId, openFile);
+
   const isMounted = useOnMount();
   const appPosition = useAppPosition();
 
@@ -150,8 +158,7 @@ export default function SharedChatDisplay({
 
   const firstMessage = messages[0];
   const filesPanel: PublishedFilesPanel = {
-    openFile: (file: PublishedFile) =>
-      dispatchRightPanel(openCardFileAction(file, publishedFiles)),
+    openFile,
     showFiles: () =>
       dispatchRightPanel({ type: "showTab", tabId: RIGHT_PANEL_FILES_TAB }),
   };

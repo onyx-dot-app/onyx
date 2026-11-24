@@ -25,8 +25,9 @@ import { useFormatBytes } from "@/hooks/useFormatBytes";
 import { getFileIcon } from "@/lib/utils";
 
 export interface PublishedFilesPanel {
-  // Opens a file's preview in the panel
-  openFile: (file: PublishedFile) => void;
+  // Opens a file's preview in the panel, pinned to its version when
+  // `pinVersion` is set, else following the newest version
+  openFile: (file: PublishedFile, pinVersion?: boolean) => void;
   // Shows the panel's Files list
   showFiles: () => void;
 }

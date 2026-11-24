@@ -12367,6 +12367,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "Pergunta"
+        },
+        "artifactError": {
+          "message": "Este arquivo não está disponível."
         }
       },
       "messageEditing": {

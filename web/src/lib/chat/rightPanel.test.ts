@@ -111,6 +111,13 @@ describe("rightPanelReducer", () => {
     );
   });
 
+  test("a link that names a version pins its tab to that version", () => {
+    const files = [file("a", 2), file("b")];
+    expect(openCardFileAction(file("a", 2), files, true)).toEqual(
+      openFile("a", 2, true)
+    );
+  });
+
   test("a card saved without an artifact opens the tab of its listed file", () => {
     const files = [file("a"), file("b")];
     const card = { ...file("a"), artifact_id: null, version: null };

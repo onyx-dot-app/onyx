@@ -16,6 +16,7 @@ import { useLlmManager } from "@/lib/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import {
   useJumpToLatestReason,
+  useOpenArtifactFromUrl,
   useSendChatMessageFromURL,
 } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
@@ -545,6 +546,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   });
 
   useSendMessageToParent();
+  const loadedChatId = useChatSessionStore((state) =>
+    state.currentSessionId !== null &&
+    state.sessions.get(state.currentSessionId)?.isLoaded
+      ? state.currentSessionId
+      : null
+  );
+  useOpenArtifactFromUrl(loadedChatId, CHAT_FILES_PANEL.openFile);
 
   const retrievalEnabled = useChatSessionSupportsRetrieval();
 

@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import {
   type Packet,
   PacketType,
@@ -11,6 +13,7 @@ import {
   type LoadedPublishedFiles,
   NO_LOADED_PUBLISHED_FILES,
   newestVersion,
+  parseArtifactLink,
   publishedFileLabel,
 } from "@/lib/chat/publishedFiles";
 
@@ -371,5 +374,31 @@ describe("names", () => {
       published("d", "/w/other.md", 1, "summary.csv"),
     ];
     expect([...filesSharingALabel(files)]).toEqual(["a", "b", "d"]);
+  });
+});
+
+// The links that both the backend parser (artifact_url's reader) and
+// parseArtifactLink read: each with its artifact and version, or null for one
+// that they refuse.
+interface ArtifactLinkExample {
+  link: string;
+  artifact_id: string | null;
+  version: number | null;
+}
+const ARTIFACT_LINKS: ArtifactLinkExample[] = JSON.parse(
+  fs.readFileSync(
+    path.resolve(
+      __dirname,
+      "../../../../backend/tests/unit/onyx/tools/sandbox/artifact_links.json"
+    ),
+    "utf8"
+  )
+);
+
+describe("parseArtifactLink", () => {
+  test.each(ARTIFACT_LINKS)("reads $link", ({ link, artifact_id, version }) => {
+    expect(parseArtifactLink(link)).toEqual(
+      artifact_id === null ? null : { artifactId: artifact_id, version }
+    );
   });
 });
