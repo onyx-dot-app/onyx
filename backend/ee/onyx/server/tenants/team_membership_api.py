@@ -10,7 +10,7 @@ from ee.onyx.db.user_tenant_mapping import (
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import User
+from onyx.auth.users import User, finish_user_delete_in_own_session
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -18,7 +18,6 @@ from onyx.db.sandbox import get_sandbox_purge_targets
 from onyx.db.users import (
     delete_user_from_db,
     delete_user_from_db__no_commit,
-    finish_user_delete,
     get_user_by_email,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -92,9 +91,10 @@ async def leave_organization(
             remove_user_from_invited_users(user_email.user_email)
             remove_all_users_from_tenant(tenant_id)
         finally:
-            # Before any await, so a cancelled request cannot skip it.
-            finish_user_delete(cleanup, db_session)
-            await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
+            try:
+                await asyncio.to_thread(finish_user_delete_in_own_session, cleanup)
+            finally:
+                await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         return
 
     db_session.expunge(user_to_delete)

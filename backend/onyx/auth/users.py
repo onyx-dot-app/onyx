@@ -618,7 +618,7 @@ async def resolve_tenant_for_user(email: str, request: Request | None = None) ->
     )(email=email, request=request)
 
 
-def _finish_user_delete_in_own_session(cleanup: UserDeleteCleanup) -> None:
+def finish_user_delete_in_own_session(cleanup: UserDeleteCleanup) -> None:
     """File store and sandbox calls block, so they run off the event loop."""
     with get_session_with_current_tenant() as db_session:
         finish_user_delete(cleanup, db_session)
@@ -646,7 +646,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             partial(delete_user_from_db__no_commit, user)
         )
         await self.user_db.session.commit()
-        await asyncio.to_thread(_finish_user_delete_in_own_session, cleanup)
+        await asyncio.to_thread(finish_user_delete_in_own_session, cleanup)
         await asyncio.to_thread(delete_sandbox_blobs_best_effort, sandbox_blob_paths)
         await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         await self.on_after_delete(user, request)
