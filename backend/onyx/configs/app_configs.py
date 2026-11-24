@@ -227,6 +227,15 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
     "https://disposable.github.io/disposable-email-domains/domains.json",
 )
 
+# Free-mail domains (gmail, proton and the like) the playground refuses at
+# sign-up, on top of the curated list in onyx/auth/free_mail_email_validator.py.
+# Plain text, one domain per line. Set to empty string to use the curated list
+# alone. Only the playground downloads it.
+FREE_MAIL_DOMAINS_URL = os.environ.get(
+    "FREE_MAIL_DOMAINS_URL",
+    "https://f.hubspotusercontent40.net/hubfs/2832391/Marketing/Lead-Capture/free-domains-2.csv",
+)
+
 # Captcha cookie TTL — how long a verified captcha token remains valid in
 # the browser cookie before the user has to solve another challenge. Sized
 # to comfortably cover one Google OAuth round-trip (typically <10s) while
