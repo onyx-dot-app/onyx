@@ -77,6 +77,8 @@ from onyx.server.features.suggested_questions.store import (
 )
 from onyx.server.features.suggested_questions.verification import run_search_test
 from onyx.server.settings.store import load_settings
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.traces import TraceContentMode
 
 task_logger = get_task_logger(__name__)
 
@@ -332,15 +334,22 @@ def _write_and_test(
     rank = {c.document_id: i for i, c in enumerate(candidates)}
     chunks.sort(key=lambda chunk: rank.get(chunk.document_id, len(rank)))
     clock.check()
-    drafts = write_questions(
-        chunks,
-        build_writing_llms(),
-        load_settings().company_name,
-        roles,
-        timeout_s=max(0.0, clock.remaining() - SQ_SEARCH_TEST_RESERVE_S),
-    )
-    clock.check()
-    return run_search_test(drafts, user=user, timeout_s=clock.remaining())
+    # Usage tracking only sees model calls inside a trace. Metadata only: the
+    # passages come from people's documents.
+    with ensure_trace(
+        "suggested_questions",
+        metadata={"run": "pool" if user is None else "top-up"},
+        content_mode=TraceContentMode.METADATA_ONLY,
+    ):
+        drafts = write_questions(
+            chunks,
+            build_writing_llms(),
+            load_settings().company_name,
+            roles,
+            timeout_s=max(0.0, clock.remaining() - SQ_SEARCH_TEST_RESERVE_S),
+        )
+        clock.check()
+        return run_search_test(drafts, user=user, timeout_s=clock.remaining())
 
 
 def _save(

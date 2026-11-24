@@ -19,6 +19,10 @@ from onyx.server.features.suggested_questions.models import (
     RunDecision,
     UserRecord,
 )
+from onyx.tracing.framework.create import get_current_trace
+from onyx.tracing.framework.provider import DefaultTraceProvider
+from onyx.tracing.framework.setup import get_trace_provider, set_trace_provider
+from onyx.tracing.framework.traces import Trace, TraceContentMode
 
 
 def _question(document_id: str) -> PoolQuestion:
@@ -633,3 +637,27 @@ def test_a_failed_topup_retries_as_recorded(
 
     assert run["topups"] == [person.id]
     assert retry.call_args.kwargs["kwargs"]["recorded"] is True
+
+
+def test_model_calls_run_in_a_metadata_only_trace(run: dict[str, Any]) -> None:
+    """Usage tracking records a model call only inside a trace; without one
+    a run's model spend is never recorded."""
+    run["candidates"] = [
+        CandidateDocument(document_id="doc", kind=QuestionKind.DOCUMENT)
+    ]
+    traces: list[Trace | None] = []
+
+    def write(*_args: Any, **_kwargs: Any) -> list[Any]:
+        traces.append(get_current_trace())
+        return []
+
+    run["write"].side_effect = write
+    original = get_trace_provider()
+    set_trace_provider(DefaultTraceProvider())
+    try:
+        _pool_task()
+    finally:
+        set_trace_provider(original)
+
+    assert len(traces) == 1 and traces[0] is not None
+    assert traces[0].content_mode == TraceContentMode.METADATA_ONLY
