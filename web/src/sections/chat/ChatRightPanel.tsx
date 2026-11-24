@@ -605,13 +605,17 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   );
 }
 
-/** Opens a reply card's published file in the open chat's right panel. */
-export function openPublishedFileInChat(file: PublishedFile): void {
+/** Opens a published file in the open chat's right panel. */
+export function openPublishedFileInChat(
+  file: PublishedFile,
+  pinVersion = false
+): void {
   const store = useChatSessionStore.getState();
   store.updateCurrentRightPanel(
     openCardFileAction(
       file,
-      publishedFilesOf(store.sessions.get(store.currentSessionId ?? ""))
+      publishedFilesOf(store.sessions.get(store.currentSessionId ?? "")),
+      pinVersion
     )
   );
 }

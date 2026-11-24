@@ -27,9 +27,10 @@ jobs:
         with:
           persist-credentials: false
 
-      # Jest Tests is a required check, so it must still report when nothing in
-      # web/ changed; skip the work instead of the job. Every Jest input lives
-      # under web/, including the vendored packages in web/lib/.
+      # Jest Tests is a required check, so it must still report when no Jest
+      # input changed; skip the work instead of the job. The Jest inputs are
+      # web/ (with the vendored packages in web/lib/) and the backend fixtures
+      # that Jest tests read.
       - name: Detect web changes
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -38,6 +39,7 @@ jobs:
           filters: |
             code:
               - 'web/**'
+              - 'backend/tests/unit/onyx/tools/sandbox/artifact_links.json'
               - '.github/workflows/pr-jest-tests.yml'
 
       - name: Setup bun

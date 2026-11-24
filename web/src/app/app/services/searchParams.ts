@@ -2,6 +2,10 @@
 export const SEARCH_PARAM_NAMES = {
   CHAT_ID: "chatId",
   SEARCH_ID: "searchId",
+  // An artifact link opened from outside the chat: the chat opens the file's
+  // version in its panel, then drops them
+  ARTIFACT_ID: "artifactId",
+  ARTIFACT_VERSION: "artifactVersion",
   AGENT_ID: "agentId",
   PROJECT_ID: "projectId",
   ALL_MY_DOCUMENTS: "allMyDocuments",

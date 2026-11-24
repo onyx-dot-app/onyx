@@ -177,3 +177,47 @@ export function filesSharingALabel(
       .map((file) => file.file_id)
   );
 }
+
+/**
+ * How the user may open an artifact link: `owner` in the owning chat,
+ * `chat_reader` in that chat's shared view, `file_only` as the file alone
+ * (a version that a chat the user can read holds).
+ */
+export type ChatArtifactAccess = "owner" | "chat_reader" | "file_only";
+
+/** A version of a published file, with the chat that owns it. */
+export interface ChatArtifactFile extends PublishedFile {
+  chat_id: string;
+  access: ChatArtifactAccess;
+}
+
+/** An artifact link's artifact and version (null: the newest). */
+export interface ArtifactLink {
+  artifactId: string;
+  version: number | null;
+}
+
+// The path of an artifact link, `/app/artifacts/<artifact_id>[/v<N>]`, which
+// the artifact tools give the model (backend `artifact_url`).
+const ARTIFACT_LINK_PATH =
+  /^\/app\/artifacts\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/v(\d+))?\/?$/i;
+
+/**
+ * The artifact that `href` links to, on any origin, or null for any other
+ * link. The backend's WEB_DOMAIN can differ from the page's origin, and the
+ * metadata request checks access either way.
+ */
+export function parseArtifactLink(href: string): ArtifactLink | null {
+  let pathname: string;
+  try {
+    pathname = new URL(href, "http://localhost").pathname;
+  } catch {
+    return null;
+  }
+  const match = ARTIFACT_LINK_PATH.exec(pathname);
+  if (!match?.[1]) return null;
+  return {
+    artifactId: match[1],
+    version: match[2] === undefined ? null : Number(match[2]),
+  };
+}

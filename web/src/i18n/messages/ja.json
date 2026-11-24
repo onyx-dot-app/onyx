@@ -12348,6 +12348,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "質問"
+        },
+        "artifactError": {
+          "message": "このファイルは利用できません。"
         }
       },
       "messageEditing": {

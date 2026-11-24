@@ -259,8 +259,8 @@
   Sources cannot close or move, and a file tab cannot move before them. File
   tabs of one shown name show their paths. An artifact has one tab, which
   follows its newest version: a reload's list or a live publish of a newer
-  version updates an open tab. A card of an older version pins the tab to
-  that version, labelled "v{version} of {latest}"; the newest version has no
+  version updates an open tab. A card of an older version, or an artifact
+  link that names a version, pins the tab to that version, labelled "v{version} of {latest}"; the newest version has no
   label. The five most recent file viewers stay
   mounted, so switching back does not load the file again; a hidden one
   leaves layout (`content-visibility: hidden`). During a drag of the panel's
@@ -481,7 +481,29 @@ section began (`buildSectionSegments` owns the placement)
 `/api/chat/file/{file_id}`; a click calls `PublishedFilesPanelContext`'s
 `openFile` and the view-all button its `showFiles`, which the chat page
 (`CHAT_FILES_PANEL`) and the shared view provide; without one, the card opens
-`PreviewModal` and every card shows). The right panel (`sections/chat/ChatRightPanel.tsx`)
+`PreviewModal` and every card shows). An artifact link in an answer
+(`{WEB_DOMAIN}/app/artifacts/<artifact_id>[/v<N>]`, which the artifact tools
+give the model; `lib/chat/publishedFiles.ts:parseArtifactLink`, any origin)
+calls the same `openFile` with the file that `GET
+/api/chat/artifacts/{artifact_id}?version=N` gives
+(`lib/timeline/chat/message/MemoizedTextComponents.tsx:MemoizedLink`), also a file of
+another chat, pinned to the version that the link names. A response that
+arrives after the user switched chats, or after a later artifact link click, opens nothing. A modified or middle click, or a page without the panel, keeps
+the link's new tab. The route `app/app/artifacts/[...link]`
+(`sections/chat/ArtifactLinkPage.tsx`) resolves a link outside a chat by the
+metadata route's `access`: the `owner` goes with `artifactId` and
+`artifactVersion` to the owning chat, a `chat_reader` (a public share) to
+the chat's shared view (`app/app/shared/[chatId]`), and `file_only` (a
+version that a chat the user can read holds, such as a reader of another
+chat whose replace added it; only a link with `/v<N>`) shows the file alone
+with `PublishedFilePreview` and `DownloadButton`, with no chat. A response
+that arrives after the user left the link's URL sends the user nowhere.
+`lib/chat/hooks.ts:useOpenArtifactFromUrl` (on the chat page and the shared
+view) opens the version once the chat has loaded, pinned when the URL names
+a version, then drops the parameters. Any other user gets not-found. `parseArtifactLink` and the
+backend's `parse_artifact_url` read the same example links
+(`backend/tests/unit/onyx/tools/sandbox/artifact_links.json`).
+The right panel (`sections/chat/ChatRightPanel.tsx`)
 is built from the output-panel parts that it shares with Craft's panel
 (`sections/output-panel/` and `lib/outputPanel/`): the presentational parts,
 the tab rules, and `sections/output-panel/PanelResize.tsx:useOutputPanelWorkspace`, which measures
@@ -543,9 +565,10 @@ files.
 A shared chat has no live publishes, so its load's list alone gives its
 files, until the panel's reload adds a newer page's list. A file tab (`ChatRightPanelState.fileTabs`, keyed by
 `rightPanelFileTab`, the artifact) keeps the file that it opened with and
-whether it is pinned: both card openers (`openPublishedFileInChat`, the
+whether it is pinned: both panel openers (`openPublishedFileInChat`, the
 shared view's opener) build the action with `openCardFileAction`, which
-pins it when the chat's files hold a newer version (`newestVersion`). A card
+pins it when an artifact link names the version (`pinVersion`) or the chat's
+files hold a newer version (`newestVersion`). A card
 saved without `artifact_id` whose file the list holds opens the listed
 file, so the card and its tile share one tab. The panel shows a pinned tab's file, else the newest
 version of its artifact, so a card always opens its own file, also one that

@@ -12348,6 +12348,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"
+        },
+        "artifactError": {
+          "message": "This file is not available."
         }
       },
       "messageEditing": {

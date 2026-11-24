@@ -228,14 +228,16 @@ export function rightPanelReducer(
 }
 
 /**
- * Opens a reply card's file. The card opens its artifact's tab, pinned to
- * its version when the chat's `files` hold a newer one. A card saved without
- * an artifact whose file `files` list opens the listed file, so the card and
- * the file's tile share one tab.
+ * Opens a reply card's or an artifact link's file in its artifact's tab. The
+ * tab is pinned to the file's version when `pinVersion` is set (a link that
+ * names a version) or the chat's `files` hold a newer one; else it follows
+ * the newest version. A card saved without an artifact whose file `files`
+ * list opens the listed file, so the card and the file's tile share one tab.
  */
 export function openCardFileAction(
   file: PublishedFile,
-  files: readonly PublishedFile[]
+  files: readonly PublishedFile[],
+  pinVersion = false
 ): ChatRightPanelAction {
   const opened =
     (file.artifact_id === null &&
@@ -244,7 +246,7 @@ export function openCardFileAction(
   return {
     type: "openFile",
     file: opened,
-    pinned: newestVersion(opened, files) !== opened,
+    pinned: pinVersion || newestVersion(opened, files) !== opened,
   };
 }
 
