@@ -16720,6 +16720,11 @@
           "label": "Tout afficher"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Maj"
+      },
       "list": {
         "empty": {
           "text": "Aucune discussion ni aucun projet pour l'instant"

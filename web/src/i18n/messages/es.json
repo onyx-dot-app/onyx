@@ -16720,6 +16720,11 @@
           "label": "Mostrar todo"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Mayús"
+      },
       "list": {
         "empty": {
           "text": "Todavía no hay chats ni proyectos"

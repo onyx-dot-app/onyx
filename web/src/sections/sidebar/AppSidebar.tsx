@@ -99,6 +99,10 @@ import { NotificationType } from "@/lib/notifications/types";
 import { dismissNotification } from "@/lib/notifications/api";
 import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
+import ChatShortcuts, {
+  useChatJumpHintModifier,
+} from "@/sections/sidebar/ChatShortcuts";
+import { JUMP_TO_CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
@@ -139,6 +143,7 @@ function RecentsSection({
   onLoadMore,
 }: RecentsSectionProps) {
   const t = useTranslations("sidebar");
+  const jumpHintModifier = useChatJumpHintModifier();
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -194,11 +199,16 @@ function RecentsSection({
           </div>
         ) : (
           <>
-            {chatSessions.map((chatSession) => (
+            {chatSessions.map((chatSession, index) => (
               <ChatButton
                 key={chatSession.id}
                 chatSession={chatSession}
                 draggable
+                jumpShortcut={
+                  jumpHintModifier && index < JUMP_TO_CHAT_SHORTCUTS.length
+                    ? `${jumpHintModifier}+${index + 1}`
+                    : undefined
+                }
               />
             ))}
             {hasMore && (
@@ -559,6 +569,7 @@ export default function AppSidebar() {
 
   return (
     <>
+      <ChatShortcuts />
       <createProjectModal.Provider>
         <CreateProjectModal />
       </createProjectModal.Provider>

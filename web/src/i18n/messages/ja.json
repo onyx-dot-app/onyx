@@ -16720,6 +16720,11 @@
           "label": "すべて表示"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
           "text": "チャットやプロジェクトはまだありません"

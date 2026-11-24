@@ -16720,6 +16720,11 @@
           "label": "显示全部"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
           "text": "暂无对话或项目"

@@ -44,6 +44,15 @@
   Pending submission takes no attached files and is unavailable in incognito
   and for anonymous users. Craft keeps its own queue; only the queue display and
   keyboard navigation are shared.
+- **A user drives the chat from the keyboard.** Cmd/Ctrl+Shift+O starts a
+  new session, Cmd/Ctrl+E folds the sidebar, Cmd/Ctrl+/ opens or closes the
+  model picker, Alt+Up and Alt+Down open the previous or next Recents chat,
+  and Cmd+Option on Mac or Ctrl+Alt with 1–9 opens the Nth Recents chat.
+  Holding those modifiers shows the shortcut at the end of each chat row. All but
+  Alt+Up and Alt+Down work from the chat input too, since those keys move
+  the caret by paragraph on macOS. None runs while a modal is open.
+  `web/src/lib/shortcuts/constants.ts` lists them;
+  `sections/sidebar/ChatShortcuts.tsx` binds them with Opal's `useHotkey`.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button stops every active

@@ -23,7 +23,7 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { Button, SidebarTab, useCreateModal } from "@opal/components";
+import { Button, SidebarTab, Text, useCreateModal } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
@@ -52,6 +52,8 @@ import { useChatExportMenu, useChatRunStatus } from "@/lib/chat/hooks";
 import type { ChatRunStatus } from "@/lib/chat/runStatus";
 import type { IconFunctionComponent } from "@opal/types";
 import UnseenMarker from "@/refresh-components/UnseenMarker";
+import useBrowserInfo from "@/hooks/useBrowserInfo";
+import { formatHotkey } from "@/lib/shortcuts/utils";
 
 const RUN_STATUS_ICONS = {
   approval: { icon: SvgAlertTriangle, className: "stroke-status-warning-05" },
@@ -86,11 +88,18 @@ export interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;
+  jumpShortcut?: string;
 }
 
 const ChatButton = memo(
-  ({ chatSession, project, draggable = false }: ChatButtonProps) => {
+  ({
+    chatSession,
+    project,
+    draggable = false,
+    jumpShortcut,
+  }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
+    const { isMac } = useBrowserInfo();
     const appPosition = useAppPosition();
     const active = useMemo(
       () => appPosition.isChat() && appPosition.chat() === chatSession.id,
@@ -446,6 +455,23 @@ const ChatButton = memo(
       </>
     );
 
+    const jumpHint =
+      jumpShortcut && !renaming && !menuOpen ? (
+        <span dir="ltr" aria-hidden="true" className="pointer-events-none!">
+          <Text
+            font="figure-keystroke"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
+            {formatHotkey(jumpShortcut, isMac, {
+              ctrl: t("chatSearch.keys.ctrl"),
+              alt: t("chatSearch.keys.alt"),
+              shift: t("chatSearch.keys.shift"),
+            })}
+          </Text>
+        </span>
+      ) : null;
+
     const popover = (
       <Dropdown width={60} side="right" onOpenChange={setMenuOpen}>
         <Hoverable.Root
@@ -467,8 +493,14 @@ const ChatButton = memo(
                     status: runStatusLabel,
                   })
             }
-            rightChildren={rightMenu}
-            rightChildrenAtRest={!!runStatusMarker && !renaming}
+            rightChildren={jumpHint ?? rightMenu}
+            rightChildrenAtRest={
+              jumpHint
+                ? isMac
+                  ? "2.5rem"
+                  : "4.5rem"
+                : !!runStatusMarker && !renaming
+            }
             nested={!!project}
           >
             {renaming ? (

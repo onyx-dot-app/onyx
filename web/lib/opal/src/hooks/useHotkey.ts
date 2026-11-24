@@ -42,8 +42,22 @@ function isMac(): boolean {
   return /mac|iphone|ipad/i.test(navigator.userAgent);
 }
 
+function eventKey(event: KeyboardEvent): string {
+  // Option can change the character. Use the physical digit for
+  // Ctrl+Option and physical letters and digits for Cmd+Option.
+  if (event.metaKey && event.altKey) {
+    const physical = /^(?:Digit|Key)(.)$/.exec(event.code)?.[1];
+    if (physical) return physical;
+  }
+  if (event.ctrlKey && event.altKey && isMac()) {
+    const digit = /^Digit([0-9])$/.exec(event.code)?.[1];
+    if (digit) return digit;
+  }
+  return event.key;
+}
+
 function matches(event: KeyboardEvent, hotkey: ParsedHotkey): boolean {
-  if (event.key.toLowerCase() !== hotkey.key.toLowerCase()) return false;
+  if (eventKey(event).toLowerCase() !== hotkey.key.toLowerCase()) return false;
   const mac = isMac();
   const wantMeta = hotkey.meta || (hotkey.mod && mac);
   const wantCtrl = hotkey.ctrl || (hotkey.mod && !mac);
