@@ -1533,18 +1533,8 @@ export default function useChatController({
         controller,
         errorMessage: tReadiness("checkFailed"),
         refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
+        sendError: rejectedSendError,
       });
-      // Set after settlement, which clears session errors once history loads.
-      const settled = useChatSessionStore
-        .getState()
-        .sessions.get(frozenSessionId);
-      if (
-        rejectedSendError &&
-        settled?.abortController === controller &&
-        !settled.uncaughtError
-      ) {
-        setUncaughtError(frozenSessionId, rejectedSendError);
-      }
 
       // The server names a new chat while it answers. If its name did not
       // arrive on the stream, ask for it; the server returns a saved name

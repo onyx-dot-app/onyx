@@ -9,7 +9,10 @@ import {
   sendMessage,
   setPreferredResponse,
   ApprovalPendingError,
+  ChatSendRejectedError,
+  type PacketType,
 } from "@/app/app/services/lib";
+import { endedRunStatus, isWorking } from "@/lib/chat/runStatus";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { toast } from "@opal/layouts";
 import {
@@ -1480,4 +1483,145 @@ test("a failed preference write drops the send and the next send retries it", as
   expect(sendMessage).toHaveBeenLastCalledWith(
     expect.objectContaining({ message: "Follow-up", parentMessageId: 13 })
   );
+});
+
+const sentTurn = { user_message_id: 11, reserved_assistant_message_id: 12 };
+
+/** How each run of the session ended, as the sidebar watcher sees it. */
+function recordRunEndings(): { endings: string[]; stop: () => void } {
+  const endings: string[] = [];
+  const stop = useChatSessionStore.subscribe((state, prev) => {
+    const session = state.sessions.get("session");
+    const before = prev.sessions.get("session");
+    if (session && before && isWorking(before) && !isWorking(session))
+      endings.push(endedRunStatus(session));
+  });
+  return { endings, stop };
+}
+
+test.each<{
+  name: string;
+  send: () => AsyncGenerator<PacketType>;
+  ended: "failed" | "done";
+}>([
+  {
+    name: "an INIT_FAILED body",
+    send: async function* () {
+      yield {
+        error: "Failed to initialize the chat",
+        error_code: "INIT_FAILED",
+        is_retryable: true,
+        stack_trace: "",
+        details: {},
+      };
+    },
+    ended: "failed",
+  },
+  {
+    name: "an HTTP rejection",
+    send: async function* () {
+      yield* [];
+      throw new ChatSendRejectedError("Bad request");
+    },
+    ended: "failed",
+  },
+  {
+    name: "an HTTP server error",
+    send: async function* () {
+      yield* [];
+      throw new Error("HTTP error! status: 502");
+    },
+    ended: "failed",
+  },
+  {
+    name: "a stream error packet",
+    send: async function* () {
+      yield sentTurn;
+      yield {
+        error: "Provider failed",
+        error_code: "API_ERROR",
+        is_retryable: true,
+        stack_trace: "",
+        details: {},
+      };
+    },
+    ended: "failed",
+  },
+  {
+    name: "a dropped stream",
+    send: async function* () {
+      yield sentTurn;
+      throw new Error("network error");
+    },
+    ended: "failed",
+  },
+  {
+    name: "a complete answer",
+    send: async function* () {
+      yield sentTurn;
+      yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+    },
+    ended: "done",
+  },
+])("a run that ends with $name shows $ended", async ({ send, ended }) => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  jest.spyOn(console, "error").mockImplementation(() => {});
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  jest.mocked(sendMessage).mockImplementationOnce(send);
+  const runs = recordRunEndings();
+  const { result } = renderChatController();
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Question",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    })
+  );
+  runs.stop();
+  expect(runs.endings).toEqual([ended]);
+});
+
+test("a run the user stops does not show Failed", async () => {
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const stopped = Promise.withResolvers<void>();
+  global.fetch = jest.fn(async () => {
+    stopped.resolve();
+    return new Response(null, { status: 200 });
+  });
+  jest.mocked(sendMessage).mockImplementationOnce(async function* () {
+    yield sentTurn;
+    await stopped.promise;
+    yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+  });
+  const runs = recordRunEndings();
+  const { result } = renderChatController();
+  let sent: Promise<void> | undefined;
+  act(() => {
+    sent = result.current.onSubmit({
+      message: "Question",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("streaming")
+  );
+  await act(async () => {
+    await result.current.stopGenerating();
+    await sent;
+  });
+  runs.stop();
+  expect(runs.endings).toEqual(["done"]);
 });

@@ -10,7 +10,10 @@ import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
 import { startChatLoad } from "@/lib/chat/publishedFiles";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
-import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import {
+  useChatSessionStore,
+  type SessionError,
+} from "@/app/app/stores/useChatSessionStore";
 import { asksUser, readWaitingToolRequests } from "@/lib/chat/toolApprovals";
 import {
   CHAT_STATUS_POLL_MS,
@@ -29,6 +32,8 @@ interface SettleChatSessionOptions {
   streamUnavailable?: boolean;
   /** The reader failed before its first batch, so its answers are unread. */
   streamUnread?: boolean;
+  /** The server refused the send; shown when the input is released. */
+  sendError?: SessionError | null;
 }
 
 /** The rows a stream writes, in model-index order; null when one is missing. */
@@ -344,6 +349,7 @@ export async function settleChatSession({
   refreshHistory = true,
   streamUnavailable = false,
   streamUnread = false,
+  sendError = null,
 }: SettleChatSessionOptions): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   const sendAcknowledged = session?.sendAcknowledged;
@@ -546,10 +552,11 @@ export async function settleChatSession({
       }
     }
     const store = useChatSessionStore.getState();
-    if (store.sessions.get(sessionId)?.uncaughtError?.error === errorMessage) {
-      store.setUncaughtError(sessionId, null);
-    }
+    const uncaughtError = store.sessions.get(sessionId)?.uncaughtError ?? null;
     store.updateSessionData(sessionId, {
+      uncaughtError:
+        sendError ??
+        (uncaughtError?.error === errorMessage ? null : uncaughtError),
       chatState: "input",
       regenerationState: null,
       streamingStartTime: undefined,
