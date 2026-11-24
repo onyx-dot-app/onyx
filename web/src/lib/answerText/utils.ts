@@ -8,7 +8,9 @@ import {
 const PLACEHOLDER_OPEN = "\uE000";
 const PLACEHOLDER_CLOSE = "\uE001";
 const PLACEHOLDER_REGEX = /\uE000(\d+)\uE001/g;
-const LIST_ITEM_REGEX = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/;
+const LIST_ITEM_REGEX = /^[ \t]*([-*+]|\d{1,9}[.)])[ \t]+\S/;
+// A whole line that a kept span (e.g. a fenced block) replaced.
+const KEPT_LINE_REGEX = /^\uE000\d+\uE001$/;
 const HEADING_REGEX = /^ {0,3}#{1,6}(?:[ \t]|$)/;
 const QUOTE_PREFIX_REGEX = /^(?: {0,3}> ?)+/;
 
@@ -71,9 +73,22 @@ function replaceIndentedCode(
       blockIndent = listColumn + 4;
       continue;
     }
+    // A kept block (a fence's placeholder) is a block of its own.
+    if (KEPT_LINE_REGEX.test(rest.trim())) {
+      out.push(line);
+      inParagraph = false;
+      continue;
+    }
+    // A list item can interrupt a paragraph only as a bullet or an ordered
+    // list starting at 1.
     const marker = LIST_ITEM_REGEX.exec(rest);
-    if (marker) {
-      listColumn = indentOf(marker[0].replace(/\S/g, " "));
+    const opensList =
+      marker !== null &&
+      (!inParagraph ||
+        !/^\d/.test(marker[1] ?? "") ||
+        /^0*1[.)]$/.test(marker[1] ?? ""));
+    if (marker && opensList) {
+      listColumn = indentOf(marker[0].slice(0, -1).replace(/\S/g, " "));
     } else if (indent < listColumn && !inParagraph) {
       listColumn = 0;
     }
