@@ -2,6 +2,7 @@ import json
 import re
 import threading
 import time
+from collections.abc import Mapping
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -15,7 +16,7 @@ from onyx.agents.tools import (
     ToolProgress,
 )
 from onyx.chat.tool_results import ResultSources, tool_result_sources
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
@@ -905,9 +906,11 @@ def test_the_tool_gets_whole_arguments_and_the_saved_call_a_bounded_copy() -> No
     )
 
 
+@pytest.mark.parametrize("chat_stages_files", [True, False])
 def test_files_that_a_search_finds_reach_a_later_python_call(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, chat_stages_files: bool
 ) -> None:
+    """A program stages the files of its searches when the chat does."""
     seen: list[list[str]] = []
 
     def python(_invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
@@ -924,17 +927,21 @@ def test_files_that_a_search_finds_reach_a_later_python_call(
             document.model_copy(update={"file_id": f"file-{document.document_id}"})
             for document in result.details.search_docs
         ]
-        result.details = result.details.model_copy(update={"search_docs": documents})
+        result.details = result.details.model_copy(
+            update={
+                "search_docs": documents,
+                "openable_file_names": {
+                    f"file-{document.document_id}": f"{document.document_id}.csv"
+                    for document in documents
+                },
+            }
+        )
         return result
 
-    def read_files(documents: list[SearchDoc]) -> list[ChatFile]:
+    def read_files(file_names: Mapping[str, str]) -> list[ChatFile]:
         return [
-            ChatFile(
-                filename=f"{document.document_id}.csv",
-                content=b"",
-                file_id=document.file_id,
-            )
-            for document in documents
+            ChatFile(filename=filename, content=b"", file_id=file_id)
+            for file_id, filename in file_names.items()
         ]
 
     monkeypatch.setattr(cells, "build_python_chat_files_from_search_docs", read_files)
@@ -948,10 +955,14 @@ def test_files_that_a_search_finds_reach_a_later_python_call(
         "await tools.run_python(value='before')\n"
         "await tools.web_search(queries=['q'])\n"
         "await tools.run_python(value='after')\n",
-        ToolContext(chat_files=[ChatFile(filename="upload.txt", content=b"")]),
+        ToolContext(
+            chat_files=[ChatFile(filename="upload.txt", content=b"")],
+            python_stages_search_files=chat_stages_files,
+        ),
     )
     assert details.status == "completed", details
-    assert seen == [["upload.txt"], ["upload.txt", "q-0.csv", "q-1.csv"]]
+    found = ["q-0.csv", "q-1.csv"] if chat_stages_files else []
+    assert seen == [["upload.txt"], ["upload.txt", *found]]
 
 
 class _StagedSearch(SearchDocsResponse):

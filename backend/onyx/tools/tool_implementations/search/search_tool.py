@@ -50,7 +50,12 @@ from onyx.configs.chat_configs import (
     MAX_CHUNKS_FED_TO_CHAT,
     NUM_RETURNED_HITS,
 )
-from onyx.configs.constants import DocumentSource, FederatedConnectorSource, MessageType
+from onyx.configs.constants import (
+    DocumentSource,
+    FederatedConnectorSource,
+    FileOrigin,
+    MessageType,
+)
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
     BaseFilters,
@@ -79,11 +84,15 @@ from onyx.db.connector import (
     fetch_unique_document_sources,
 )
 from onyx.db.document_set import require_document_set_access
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+)
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
     list_federated_connector_oauth_tokens,
 )
+from onyx.db.file_record import get_filerecords_by_file_ids
 from onyx.db.models import SearchSettings, User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
@@ -96,6 +105,7 @@ from onyx.federated_connectors.federated_retrieval import (
     FederatedRetrievalInfo,
     get_federated_retrieval_functions,
 )
+from onyx.file_store.file_store import FILE_SIZE_MISSING_SENTINEL
 from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.factory import get_decision_client, get_llm_token_counter
 from onyx.llm.interfaces import LLM
@@ -117,6 +127,7 @@ from onyx.secondary_llm_flows.query_expansion import (
 )
 from onyx.secondary_llm_flows.source_filter import decide_search_scope
 from onyx.secondary_llm_flows.time_filter import decide_time_filter
+from onyx.server.features.build.sandbox.harness_base import search_file_name
 from onyx.server.metrics.internal_search import (
     QueryAdmission,
     SearchLane,
@@ -924,14 +935,67 @@ class SearchTool(Tool):
         planning_result: SearchPlanningResult,
         citation_start: int,
         scope_note: str,
+        context: ToolContext,
     ) -> ToolResult:
+        shown = sections_for_model[:MAX_CHUNKS_FED_TO_CHAT]
+        # The connector files that the file store still has, which the chat
+        # stages for the Python tool.
+        file_ids = (
+            {doc.file_id for doc in search_docs if doc.file_id}
+            | {
+                section.center_chunk.file_id
+                for section in shown
+                if section.center_chunk.file_id
+            }
+            if context.python_stages_search_files
+            else set()
+        )
+        openable: set[str] = set()
+        if file_ids:
+            with get_session_with_tenant(
+                tenant_id=get_current_tenant_id()
+            ) as db_session:
+                openable = {
+                    record.file_id
+                    for record in get_filerecords_by_file_ids(
+                        list(file_ids), db_session
+                    )
+                    if record.file_origin
+                    in (FileOrigin.CONNECTOR, FileOrigin.CONNECTOR_FILE_UPLOAD)
+                    and record.file_size != FILE_SIZE_MISSING_SENTINEL
+                }
+        # By openable file: its name in the sandbox, which the result and the
+        # staging share (`SearchDocsResponse.openable_file_names`). A file that
+        # the chat staged before keeps that name; another takes the title of
+        # the first shown section with it, else of the first document.
+        staged_names = {
+            file.file_id: file.filename
+            for file in context.chat_files
+            if file.file_id in openable
+        }
+        file_names: dict[str, str] = {}
+        for file_id, title in [
+            *(
+                (section.center_chunk.file_id, section.center_chunk.semantic_identifier)
+                for section in shown
+            ),
+            *((doc.file_id, doc.semantic_identifier) for doc in search_docs),
+        ]:
+            if (
+                file_id is not None
+                and file_id in openable
+                and file_id not in file_names
+            ):
+                file_names[file_id] = staged_names.get(file_id) or search_file_name(
+                    file_id, title
+                )
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
-            top_sections=sections_for_model,
+            top_sections=shown,
             citation_start=citation_start,
-            limit=MAX_CHUNKS_FED_TO_CHAT,
             include_document_id=False,
             include_link=self.include_link,
             note=scope_note or None,
+            file_names=file_names,
         )
         return ToolResult(
             # Displayed documents can exceed the subset sent to the model.
@@ -943,6 +1007,7 @@ class SearchTool(Tool):
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
                 displayed_docs=displayed_docs,
+                openable_file_names=file_names,
             ),
             content=docs_str,
             metadata=planning_result,
@@ -1427,6 +1492,7 @@ class SearchTool(Tool):
                 planning_result=planning_result,
                 citation_start=citation_start,
                 scope_note=scope_note,
+                context=context,
             )
 
         if self.retrieval_only:
@@ -1444,6 +1510,7 @@ class SearchTool(Tool):
                 planning_result=planning_result,
                 citation_start=citation_start,
                 scope_note=scope_note,
+                context=context,
             )
 
         selection_llm = self.llm
@@ -1673,6 +1740,7 @@ class SearchTool(Tool):
             planning_result=planning_result,
             citation_start=citation_start,
             scope_note=scope_note,
+            context=context,
         )
 
         # End overall timing

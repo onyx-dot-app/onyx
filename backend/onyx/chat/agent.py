@@ -397,6 +397,7 @@ class ChatAgent(Agent, RestorableFeature):
             chat_files=list(self.chat_files),
             url_snippet_map=extract_url_snippet_map(self.gathered_documents),
             inject_memories_in_prompt=self.inject_memories,
+            python_stages_search_files=self.stages_files,
         )
 
     def _prepare_step(self, state: StepInput) -> PreparedStep:

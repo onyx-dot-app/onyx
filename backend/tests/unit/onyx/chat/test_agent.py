@@ -3,6 +3,7 @@
 import json
 import queue
 import threading
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from functools import partial
 from unittest.mock import Mock
@@ -21,6 +22,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Run, RunFailed
 from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
+from onyx.agents.tools import ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -75,7 +77,7 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import CapabilityEntry, ChatFile
+from onyx.tools.models import CapabilityEntry, ChatFile, ToolContext
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -495,24 +497,31 @@ def test_search_stages_files_only_when_python_needs_them(
         file_id="source-file",
     )
     search = SearchDocsResponse(
-        search_docs=[document], citation_mapping={1: "reference"}
+        search_docs=[document],
+        citation_mapping={1: "reference"},
+        openable_file_names={"source-file": "reference.txt"},
     )
     staged = ChatFile(
         filename="reference.txt", content=b"Evidence", file_id="source-file"
     )
-    loaded: list[SearchDoc] = []
+    loaded: dict[str, str] = {}
 
-    def stage(docs: list[SearchDoc]) -> list[ChatFile]:
-        loaded.extend(docs)
-        return [staged] if docs else []
+    def stage(file_names: Mapping[str, str]) -> list[ChatFile]:
+        loaded.update(file_names)
+        return [staged] if file_names else []
 
     monkeypatch.setattr(
         "onyx.chat.agent.build_python_chat_files_from_search_docs", stage
     )
-    monkeypatch.setattr(
-        "tests.unit.onyx.agents.fakes.EchoTool.run",
-        lambda *_args, **_kwargs: ToolResult(details=search, content="Evidence [1]"),
-    )
+    contexts: list[ToolContext] = []
+
+    def run(
+        _tool: EchoTool, _invocation: ToolInvocation, context: ToolContext
+    ) -> ToolResult:
+        contexts.append(context)
+        return ToolResult(details=search, content="Evidence [1]")
+
+    monkeypatch.setattr("tests.unit.onyx.agents.fakes.EchoTool.run", run)
     llm = ScriptedLLM(
         [
             *(
@@ -551,7 +560,15 @@ def test_search_stages_files_only_when_python_needs_them(
         chat_files=[staged] if already_available else [],
     )
     run_agent(agent, messages=[UserMessage(content="Find evidence twice")], max_steps=3)
-    assert loaded == ([document] if python_enabled and not already_available else [])
+    # The search tool names staged files only when the chat stages them.
+    assert [context.python_stages_search_files for context in contexts] == [
+        python_enabled
+    ] * 2
+    assert loaded == (
+        {"source-file": "reference.txt"}
+        if python_enabled and not already_available
+        else {}
+    )
     assert agent.chat_files == ([staged] if python_enabled or already_available else [])
     results = [
         item for item in agent.state.messages if isinstance(item, ToolResultMessage)
@@ -641,7 +658,7 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
     stage_calls = 0
 
-    def stage(_docs: list[SearchDoc]) -> list[ChatFile]:
+    def stage(_file_names: Mapping[str, str]) -> list[ChatFile]:
         nonlocal stage_calls
         stage_calls += 1
         entered.set()
