@@ -821,7 +821,8 @@ at the chat region's top end, so the header keeps its width and buttons. With
 no output panel open it sets `data-activity-docked`, and in a workspace at
 least 64rem wide (`@container/workspace`) the chat's scrolled content, the
 input row (`data-activity-room` in `views/AppPage.tsx`) and the footer make
-room for it: only what the gutter of the centered chat column
+room for it: at least its 1rem end gutter, plus what the gutter of the
+centered chat column
 (`--app-chat-column-width`, reading or wide) lacks, so on a wide screen the
 column does not move, while the scroller keeps its width so its scrollbar stays at the
 end; otherwise it floats over the chat's end. The header's left side

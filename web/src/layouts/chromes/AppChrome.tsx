@@ -504,15 +504,16 @@ export default function AppChrome({ children }: AppChromeProps) {
                 // header: the chat's scrolled content, its input row
                 // (`data-activity-room`) and the footer make room. The header
                 // and the scroller keep their width, so the buttons and the
-                // scrollbar stay at the end. The padding is only what the
-                // card (21.5rem) needs beyond the centered chat column's
-                // gutter (`--app-chat-column-width`, reading or wide; 45rem
-                // outside the chat grid), so the column stays put when the
-                // gutter fits it: gutter = (100% - column) / 2, padding =
-                // 2 * 21.5rem + column - 100%.
-                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-chat-scroll]>*]:pe-[max(0px,calc(43rem_+_var(--app-chat-column-width,45rem)_-_100%))]",
-                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-activity-room]]:pe-[max(1rem,calc(43rem_+_var(--app-chat-column-width,45rem)_-_100%))]",
-                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&>footer]:pe-[max(1rem,calc(43rem_+_var(--app-chat-column-width,45rem)_-_100%))]",
+                // scrollbar stay at the end. Each keeps its 1rem end gutter
+                // (`CHAT_GUTTER`) as the least, so docking never moves the
+                // column on a wide screen; it adds only what the card
+                // (21.5rem) needs beyond the centered column's room
+                // (`--app-chat-column-width`, reading or wide): 2 * 21.5rem +
+                // 1rem start gutter + column - 100%, and never more than the
+                // card itself.
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-chat-scroll]>*]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-activity-room]]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&>footer]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
                 showBackground && "bg-cover bg-center bg-fixed"
               )}
               style={

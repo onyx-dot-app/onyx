@@ -958,8 +958,11 @@ export function useChatSubagents(
     SWR_KEYS.chatSessionStatus(sessionId),
     errorHandlingFetcher,
     {
-      refreshInterval: (current) =>
-        streaming ? SERVER_WORK_POLL_MS : statusPollInterval(current),
+      // A number while a reply streams: each streamed packet renders the
+      // caller again, and a new function would restart SWR's timer
+      refreshInterval: streaming
+        ? SERVER_WORK_POLL_MS
+        : (current) => statusPollInterval(current),
       onErrorRetry: skipRetryOnAuthError,
     }
   );
