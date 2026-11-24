@@ -1,0 +1,29 @@
+---
+title: "Shortcut"
+description: "Access epics, stories, tasks, and comments from Shortcut"
+---
+
+## How it works
+
+The Shortcut connector indexes epics, stories, tasks, and comments from your Shortcut workspace. Story documents carry project, epic, type, completion status, and labels as metadata, while epic documents carry epic state and URL metadata.
+
+Onyx checks Shortcut for new and updated stories and epics on the connector's refresh schedule.
+
+| Content     | Notes                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| Stories     | Title, description, tasks, and comments.                                                                |
+| Epics       | Title, state, and description.                                                                          |
+| Scope       | Optional. Limit indexing to specific project IDs, epic IDs, or both.                                    |
+
+## Setup
+
+<Steps>
+  <Step title="Generate Shortcut API Token">
+    Navigate to your Shortcut account settings under **API Tokens** and generate a personal API token.
+  </Step>
+
+  <Step title="Configure in Onyx">
+    In Onyx Admin, navigate to **Add Connector** -> **Shortcut**.
+    Enter your Shortcut API Token and optional project or epic ID filters.
+  </Step>
+</Steps>
