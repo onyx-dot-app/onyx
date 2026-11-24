@@ -3,7 +3,6 @@
 import React, { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Presence } from "@opal/components";
-import { SvgZap } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
@@ -21,8 +20,8 @@ import type { TimelineEntryStatus } from "@/lib/timeline/types";
 import type { AwaitingUser } from "@/lib/chat/toolApprovals";
 
 /**
- * Hoisted vs collapsed: a run with at most this many steps shows each step as
- * its own card; a run with more collapses into one run card. Change it here.
+ * A run with at most this many steps shows each step as a hoisted run card
+ * (one step each); a run with more is one collapsed run card. Change it here.
  */
 export const MAX_HOISTED_STEPS = 5;
 
@@ -131,9 +130,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const isActive =
     !stopPacketSeen && (!hasDisplayContent || awaitingUser !== null);
 
-  // Hoisted: a short run has no run card; each of its steps is its own card,
-  // with the step's title as its header. Once a run has more steps, they all
-  // collapse into one run card.
+  // Hoisted: each step of a short run is its own run card, with the step's
+  // title as its header. Once the run has more steps, they collapse into one
+  // run card.
   if (steps.length > 0 && steps.length <= MAX_HOISTED_STEPS) {
     return (
       <Section alignItems="stretch" gap={3} height="auto">
@@ -157,7 +156,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   }
 
   return (
-    // Collapsed: the run's steps in one card, summed up rather than titled
+    // Collapsed: the run's steps in one run card, summed up rather than titled
     // by its current step. A wait for the user still says so.
     <RunCard
       steps={steps}
@@ -165,7 +164,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         awaitingUser !== null ? headerText : t("header.doingWork.label")
       }
       doneText={t("header.didWork.label")}
-      doneIcon={SvgZap}
+      // A run that just passed the limit swaps its step cards for this
+      // card at once, with no entry.
+      appear={steps.length <= MAX_HOISTED_STEPS}
       isActive={isActive}
       isStopped={stopPacketSeen && userStopped}
       autoCollapse={hasDisplayContent}

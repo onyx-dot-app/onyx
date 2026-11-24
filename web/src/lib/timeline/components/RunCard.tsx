@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import { Line, Presence, Text } from "@opal/components";
+import { SvgSparkle } from "@opal/icons";
 import { formatDurationSeconds } from "@opal/time";
 import { useTranslations } from "next-intl";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
@@ -53,8 +54,13 @@ export interface RunCardProps<S extends RunCardStep> {
   durationSeconds?: number;
   /** The finished header's text, in place of the duration. */
   doneText?: string;
-  /** An icon before the finished header's text. */
-  doneIcon?: IconFunctionComponent;
+  /** The header's icon while the run works and once it is done. */
+  icon?: IconFunctionComponent;
+  /**
+   * Play the card's entry when it mounts while its run works. Off for a card
+   * that takes the place of a run's own step cards (see AgentTimeline).
+   */
+  appear?: boolean;
   summary?: RunCardSummary;
 }
 
@@ -74,7 +80,8 @@ export function RunCard<S extends RunCardStep>({
   streamingStartTime,
   durationSeconds,
   doneText,
-  doneIcon,
+  icon = SvgSparkle,
+  appear = true,
   summary,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
@@ -86,7 +93,12 @@ export function RunCard<S extends RunCardStep>({
   const [isOpen, setIsOpen] = useState(isRunning);
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
-  const [arrivedLive] = useState(isRunning);
+  const [arrivedLive] = useState(appear && isRunning);
+  // Steps already there when the card mounts show at once; later ones rise
+  // in.
+  const [initialStepIds] = useState(
+    () => new Set(steps.map((step) => step.id))
+  );
   // A card the user folded or opened keeps their choice.
   const userToggled = useRef(false);
   const toggle = () => {
@@ -198,7 +210,11 @@ export function RunCard<S extends RunCardStep>({
                 // A step that streams in rises in, after the card opens room
                 // for it. Steps already there when the card mounts (a saved
                 // run) appear at once.
-                <Presence key={step.id} appear={isRunning} grow>
+                <Presence
+                  key={step.id}
+                  appear={isRunning && !initialStepIds.has(step.id)}
+                  grow
+                >
                   {renderStep(step, {
                     isFirst: index === 0,
                     isLast: index === steps.length - 1,
@@ -216,14 +232,14 @@ export function RunCard<S extends RunCardStep>({
             swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
           >
             {isRunning ? (
-              <StreamingHeader headerText={workingText} />
+              <StreamingHeader headerText={workingText} icon={icon} />
             ) : stopped ? (
               <StoppedHeader />
             ) : (
               <CompletedHeader
                 processingDurationSeconds={finishedSeconds}
                 text={doneText}
-                icon={doneIcon}
+                icon={icon}
               />
             )}
           </Presence.Swap>

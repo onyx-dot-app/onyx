@@ -24,7 +24,7 @@ export interface ChatStepProps {
   chatState: FullChatState;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
-  /** Draw the step as its own run card, outside a run card. */
+  /** Draw the step as a hoisted run card. */
   asCard?: boolean;
 }
 

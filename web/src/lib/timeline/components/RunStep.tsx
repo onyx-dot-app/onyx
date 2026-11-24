@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Line, type LineVariant } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
+import { Line, Presence, type LineVariant } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
+import { CompletedHeader } from "@/lib/timeline/components/headers/CompletedHeader";
 import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
@@ -39,8 +39,8 @@ export interface RunStepProps {
   /** The surface when the step has not failed. */
   surfaceBackground?: TimelineSurfaceBackground;
   /**
-   * Draw the step as its own run card, outside any run: the card's header
-   * is the step's title, and opening the card shows the step's body.
+   * Draw the step as a hoisted run card (one step): its header is the
+   * step's title, and opening it shows the step's body.
    */
   asCard?: boolean;
 }
@@ -89,6 +89,8 @@ export function RunStep({
 
   if (asCard) {
     const running = status === "streaming";
+    const plainTitle =
+      typeof shownTitle === "string" ? shownTitle : (shownTitle?.raw ?? "");
     const foldable = body !== null;
     const cardBody = foldable
       ? {
@@ -105,36 +107,27 @@ export function RunStep({
       <TimelineRoot>
         <Line
           flavour="card"
-          filled={running || ownExpanded}
+          // Filled while open; otherwise only on hover, running or not.
+          filled={ownExpanded}
           onClick={foldable ? () => setOwnExpanded((prev) => !prev) : undefined}
           rightChildren={headerAccessory}
           {...cardBody}
         >
-          {running ? (
-            // A running step's title shimmers, as a run's working header does.
-            <StreamingHeader
-              headerText={
-                typeof shownTitle === "string"
-                  ? shownTitle
-                  : (shownTitle?.raw ?? "")
-              }
-            />
-          ) : (
-            <Section
-              flexDirection="row"
-              justifyContent="start"
-              gap={0}
-              height="fit"
-              className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
-            >
-              <Content
-                font="main-ui-action"
+          {/* The title swaps when the step's state changes, as a run card's
+              header does; a running title that changes updates in place. */}
+          <Presence.Swap swapKey={running ? "working" : status}>
+            {running ? (
+              <StreamingHeader
                 icon={statusIcon(status) ?? icon}
-                title={shownTitle ?? ""}
-                titleColor="text-03"
+                headerText={plainTitle}
               />
-            </Section>
-          )}
+            ) : (
+              <CompletedHeader
+                icon={statusIcon(status) ?? icon}
+                text={plainTitle}
+              />
+            )}
+          </Presence.Swap>
         </Line>
       </TimelineRoot>
     );

@@ -5,7 +5,7 @@ import { SvgAddLines, SvgMaximize2 } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
-import { Content, ContentAction, Section } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import type { IconFunctionComponent } from "@opal/types";
 import { formatDurationSeconds } from "@opal/time";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
@@ -125,26 +125,21 @@ export function CompletedHeader({
         })
       : t("thoughtUnknownDuration.label"));
 
+  const Icon = icon;
   return (
+    // The same layout as `StreamingHeader`; `opal-line-title` darkens the
+    // text and the icon together while the card's header is hovered.
     <Section
       flexDirection="row"
       justifyContent="start"
-      gap={0}
+      gap={1}
       height="fit"
-      className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
+      className="opal-line-title font-main-ui-action flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
     >
-      {icon ? (
-        <Content
-          font="main-ui-action"
-          icon={icon}
-          title={durationText}
-          titleColor="text-03"
-        />
-      ) : (
-        <Text as="p" font="main-ui-action" color="text-03">
-          {durationText}
-        </Text>
-      )}
+      {Icon && <Icon className="shrink-0 w-4 h-4" />}
+      <Text as="p" font="main-ui-action" color="inherit">
+        {durationText}
+      </Text>
     </Section>
   );
 }

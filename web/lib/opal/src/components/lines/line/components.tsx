@@ -44,7 +44,8 @@ type LineCardProps = LineExpandableProps & {
   filled: boolean;
   /**
    * The fold button's label, e.g. "3 steps": the header's own button, which
-   * lights up while the header is hovered. Needs `onClick`.
+   * lights up while the header is hovered. Without one, a card with
+   * `onClick` shows a chevron, as a step does.
    */
   foldLabel?: string;
   /**
@@ -187,7 +188,9 @@ function LineCard({
         <Collapsible.Header
           rightChildren={rightChildren}
           size="md"
-          foldButton={onClick && foldLabel !== undefined ? "icon" : "none"}
+          foldButton={
+            !onClick ? "none" : foldLabel !== undefined ? "icon" : "chevron"
+          }
           foldLabel={foldLabel}
         >
           {children}

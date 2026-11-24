@@ -15,7 +15,7 @@ export interface TimelineStepComposerProps {
   collapsible?: boolean;
   /** The step's status; it decides the first row's icon and failed tint. */
   status?: TimelineEntryStatus;
-  /** Draw each step as its own run card (see `RunStep`'s `asCard`). */
+  /** Draw each step as a hoisted run card (see `RunStep`'s `asCard`). */
   asCard?: boolean;
 }
 

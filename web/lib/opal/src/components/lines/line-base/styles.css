@@ -44,6 +44,15 @@
   @apply text-text-04;
 }
 
+/* A card's header that toggles it darkens its title the same way. A title
+   of your own takes `.opal-line-title` (an icon in it with `currentColor`
+   follows). */
+.opal-line[data-opal-line-flavour="card"][data-opal-line-status="default"]
+  .opal-collapsible-header:not([data-disabled]):hover
+  .opal-line-title {
+  @apply text-text-04;
+}
+
 /* Inside an interactive line, the body keeps its text selection and an
    ordinary cursor: only the row toggles the line. */
 .opal-line .interactive .opal-line-body {

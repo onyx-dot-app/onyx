@@ -1,14 +1,14 @@
 import { useTranslations } from "next-intl";
-import { Text } from "@opal/components";
+import { CompletedHeader } from "@/lib/timeline/components/headers/CompletedHeader";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 
-/** The stopped run's title. */
+/** The stopped run's title, with the stopped step's icon. */
 export function StoppedHeader() {
   const t = useTranslations("chat.messages.timeline");
   return (
-    <div className="flex-1 min-w-0 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-      <Text as="p" font="main-ui-action" color="text-03">
-        {t("interruptedThinking.label")}
-      </Text>
-    </div>
+    <CompletedHeader
+      text={t("interruptedThinking.label")}
+      icon={STEP_ICONS.stopped}
+    />
   );
 }

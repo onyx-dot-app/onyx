@@ -14,18 +14,18 @@ layout.
 
 ## Props
 
-| Prop              | Type                    | Default     | Description                                                                                                         |
-| ----------------- | ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------- |
-| `variant`         | `LineVariant`           | `"default"` | Status and weight: colours the icon; heavy also tints the line and its body                                         |
-| `padding`         | `0 \| 1`                | `1`         | The outer padding, as a spacing step (`N / 4` rem). `0` for a line inside a container that pads it already          |
-| `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                                                                 |
-| `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`. Fills the row, on one line, cut with an ellipsis and shown in full in a tooltip     |
-| `titleKey`        | `React.Key`             | title text  | The title's identity. A new key swaps the title; a new title with the same key updates in place                     |
-| `rightChildren`   | `ReactNode`             | —           | Trailing content at the very end (a tag, actions, a fold chevron), outside the line's inner padding; not padded     |
-| `onClick`         | `() => void`            | —           | Makes the row a `Collapsible.Header` with a chevron; a click on the row calls it                         |
-| `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                                                            |
-| `expanded`        | `boolean`               | —           | Whether the body is open; controlled, the caller owns the state                                                     |
-| `expandedContent` | `ReactNode`             | —           | The body, opened in a `Fold` and aligned under the content                                                          |
+| Prop              | Type                    | Default     | Description                                                                                                      |
+| ----------------- | ----------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| `variant`         | `LineVariant`           | `"default"` | Status and weight: colours the icon; heavy also tints the line and its body                                      |
+| `padding`         | `0 \| 1`                | `1`         | The outer padding, as a spacing step (`N / 4` rem). `0` for a line inside a container that pads it already       |
+| `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                                                              |
+| `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`. Fills the row, on one line, cut with an ellipsis and shown in full in a tooltip |
+| `titleKey`        | `React.Key`             | title text  | The title's identity. A new key swaps the title; a new title with the same key updates in place                  |
+| `rightChildren`   | `ReactNode`             | —           | Trailing content at the very end (a tag, actions, a fold chevron), outside the line's inner padding; not padded  |
+| `onClick`         | `() => void`            | —           | Makes the row a `Collapsible.Header` with a chevron; a click on the row calls it                                 |
+| `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                                                         |
+| `expanded`        | `boolean`               | —           | Whether the body is open; controlled, the caller owns the state                                                  |
+| `expandedContent` | `ReactNode`             | —           | The body, opened in a `Fold` and aligned under the content                                                       |
 
 ## Variants
 
@@ -64,15 +64,15 @@ controls, and the steps in its body. It has 0.25rem of padding, 0.75rem
 corners, and a `background-tint-00` fill while `filled`. Its body starts
 right under the header.
 
-| Prop              | Type         | Default | Description                                                                                           |
-| ----------------- | ------------ | ------- | ----------------------------------------------------------------------------------------------------- |
-| `flavour`         | `"card"`     | —       | Selects the card flavour; `"step"` (the default) is the line above                                    |
-| `children`        | `ReactNode`  | —       | The header, e.g. a title that animates                                                                |
-| `rightChildren`   | `ReactNode`  | —       | Trailing content at the end of the header, e.g. the fold button                                       |
-| `filled`          | `boolean`    | —       | Fills the card, e.g. while its run works or it is open                                                |
-| `onClick`         | `() => void` | —       | The header (a `Collapsible.Header`) toggles the card, and a folded card fills on hover |
-| `foldLabel`       | `string`     | —       | The header's fold button label, e.g. "3 steps", with `SvgExpand` / `SvgFold`; it lights up while the header is hovered |
-| `expandable`, `expanded`, `expandedContent` | | | As above                                                                                             |
+| Prop                                        | Type         | Default | Description                                                                                                                                                                               |
+| ------------------------------------------- | ------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flavour`                                   | `"card"`     | —       | Selects the card flavour; `"step"` (the default) is the line above                                                                                                                        |
+| `children`                                  | `ReactNode`  | —       | The header, e.g. a title that animates                                                                                                                                                    |
+| `rightChildren`                             | `ReactNode`  | —       | Trailing content at the end of the header, e.g. the fold button                                                                                                                           |
+| `filled`                                    | `boolean`    | —       | Fills the card, e.g. while its run works or it is open                                                                                                                                    |
+| `onClick`                                   | `() => void` | —       | The header (a `Collapsible.Header`) toggles the card, and a folded card fills on hover                                                                                                    |
+| `foldLabel`                                 | `string`     | —       | The header's fold button label, e.g. "3 steps", with `SvgExpand` / `SvgFold`; it lights up while the header is hovered. Without it, a card with `onClick` shows a chevron, as a step does |
+| `expandable`, `expanded`, `expandedContent` |              |         | As above                                                                                                                                                                                  |
 
 ```tsx
 <Line
