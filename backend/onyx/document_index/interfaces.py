@@ -1,6 +1,7 @@
 import abc
 from collections.abc import Iterable
 from datetime import datetime
+from enum import Enum
 from typing import Self
 
 from pydantic import BaseModel, model_validator
@@ -36,6 +37,7 @@ __all__ = [
     "IdRetrievalCapable",
     "HybridCapable",
     "RandomCapable",
+    "ContentMatchCapable",
 ]
 
 
@@ -68,6 +70,45 @@ class KeywordTermCounts(BaseModel):
 
     total: int
     distinct: int
+
+
+class ContentMatchDateField(str, Enum):
+    """The document date that orders a content listing."""
+
+    UPDATED = "updated"
+    CREATED = "created"
+
+
+class ContentMatchRequest(BaseModel):
+    """Documents with a chunk whose content contains any of the phrases."""
+
+    phrases: list[str]
+    filters: IndexFilters
+    # When set, only these documents can match. Unlike
+    # `filters.attached_document_ids`, which widens the knowledge scope, this
+    # narrows the result.
+    document_ids: list[str] | None = None
+    # A strict window on the updated date: undated documents never match.
+    # `filters.updated_at_range` instead follows search's looser rules
+    # (FILTER_SEMANTICS.md).
+    updated_after: datetime | None = None
+    updated_before: datetime | None = None
+
+
+class ContentMatchKey(BaseModel):
+    """A matching document and its place in a content listing."""
+
+    model_config = {"frozen": True}
+
+    document_id: str
+    # The ordering date, to the second. None sorts last in either direction.
+    date: datetime | None
+
+
+class ContentMatchCount(BaseModel):
+    count: int
+    # False when counting stopped at its limit: `count` is then a lower bound.
+    is_complete: bool
 
 
 class DocumentInsertionRecord(BaseModel):
@@ -496,6 +537,48 @@ class RandomCapable(abc.ABC):
         raise NotImplementedError
 
 
+class ContentMatchCapable(abc.ABC):
+    """
+    Class must implement exhaustive, paged matching of documents by content.
+    """
+
+    @abc.abstractmethod
+    def match_documents_by_content(
+        self,
+        request: ContentMatchRequest,
+        date_field: ContentMatchDateField,
+        descending: bool,
+        after: ContentMatchKey | None,
+        limit: int,
+    ) -> list[ContentMatchKey]:
+        """Returns one page of the documents that match, each once.
+
+        Documents come in `date_field` order, then document ID in the same
+        direction. Documents without the date come last.
+
+        Args:
+            request: The phrases, filters and optional document IDs.
+            date_field: The date that orders the documents.
+            descending: Whether the newest documents come first.
+            after: The last document of the previous page, or None for the
+                first page.
+            limit: The most documents to return.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def count_documents_by_content(
+        self, request: ContentMatchRequest, max_count: int
+    ) -> ContentMatchCount:
+        """Counts the distinct documents that match, up to about `max_count`.
+
+        Args:
+            request: The phrases, filters and optional document IDs.
+            max_count: Counting stops once it reaches this many documents.
+        """
+        raise NotImplementedError
+
+
 class DocumentIndex(
     SchemaVerifiable,
     Indexable,
@@ -504,6 +587,7 @@ class DocumentIndex(
     HybridCapable,
     IdRetrievalCapable,
     RandomCapable,
+    ContentMatchCapable,
     abc.ABC,
 ):
     """
@@ -518,4 +602,5 @@ class DocumentIndex(
     - Run hybrid search
     - Retrieve document or sections of documents based on document id
     - Retrieve sets of random documents
+    - Match documents by content, exhaustively
     """

@@ -17,11 +17,18 @@ from onyx.context.search.models import (
     TimeRange,
 )
 from onyx.db.enums import VectorQuantization
-from onyx.document_index.interfaces import TenantState
+from onyx.document_index.interfaces import (
+    ContentMatchDateField,
+    ContentMatchKey,
+    ContentMatchRequest,
+    TenantState,
+)
 from onyx.document_index.opensearch.constants import (
     ASSUMED_DOCUMENT_AGE_DAYS,
     DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
+    DOCUMENT_ID_AGGREGATION_NAME,
+    DOCUMENT_ID_AGGREGATION_SOURCE,
     HYBRID_SEARCH_NORMALIZATION_PIPELINE,
     LUCENE_SCALAR_QUANTIZATION,
     HybridSearchNormalizationPipeline,
@@ -70,6 +77,39 @@ def _get_enforced_cc_pair_access(
     if cc_pair_access is None or cc_pair_access.mode != CCPairAccessMode.ENFORCE:
         return None
     return cc_pair_access
+
+
+CONTENT_MATCH_DATE_FIELD_NAMES = {
+    ContentMatchDateField.UPDATED: LAST_UPDATED_FIELD_NAME,
+    ContentMatchDateField.CREATED: CREATED_AT_FIELD_NAME,
+}
+
+
+def _get_after_content_match_key_filter(
+    date_field_name: str, descending: bool, after: ContentMatchKey
+) -> dict[str, Any]:
+    """Matches the documents after `after` in a content listing's order: the
+    date with missing dates last, then the document ID in the same
+    direction."""
+    after_id = {
+        "range": {
+            DOCUMENT_ID_FIELD_NAME: {"lt" if descending else "gt": after.document_id}
+        }
+    }
+    no_date = {"bool": {"must_not": [{"exists": {"field": date_field_name}}]}}
+    if after.date is None:
+        return {"bool": {"filter": [no_date, after_id]}}
+    seconds = int(after.date.timestamp())
+    return {
+        "bool": {
+            "should": [
+                {"range": {date_field_name: {"lt" if descending else "gt": seconds}}},
+                {"bool": {"filter": [{"term": {date_field_name: seconds}}, after_id]}},
+                no_date,
+            ],
+            "minimum_should_match": 1,
+        }
+    }
 
 
 # Normalization pipelines combine document scores from multiple query clauses.
@@ -451,6 +491,141 @@ class DocumentQuery:
             "size": num_hits,
             "_source": False,
             "timeout": f"{timeout_s}s",
+        }
+
+    @staticmethod
+    def _get_content_match_filters(
+        request: ContentMatchRequest, tenant_state: TenantState
+    ) -> list[dict[str, Any]]:
+        """The search filters, the content phrases and the document IDs of a
+        content match, as filter clauses: matching needs no scores."""
+        if not request.phrases:
+            raise ValueError("A content match needs at least one phrase.")
+        index_filters = request.filters
+        filters = DocumentQuery._get_search_filters(
+            tenant_state=tenant_state,
+            include_hidden=False,
+            access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
+            source_types=index_filters.source_type or [],
+            tags=index_filters.tags or [],
+            document_sets=index_filters.document_set or [],
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
+            created_at_range=index_filters.created_at_range,
+            updated_at_range=index_filters.updated_at_range,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
+        )
+        filters.append(
+            {
+                "bool": {
+                    "should": [
+                        {"match_phrase": {CONTENT_FIELD_NAME: phrase}}
+                        for phrase in request.phrases
+                    ],
+                    "minimum_should_match": 1,
+                }
+            }
+        )
+        if request.document_ids is not None:
+            if len(request.document_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Bug: {len(request.document_ids)} document IDs is more than a "
+                    f"terms query allows ({MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY})."
+                )
+            filters.append({"terms": {DOCUMENT_ID_FIELD_NAME: request.document_ids}})
+        updated_range: dict[str, int] = {}
+        if request.updated_after is not None:
+            updated_range["gte"] = int(request.updated_after.timestamp())
+        if request.updated_before is not None:
+            updated_range["lt"] = int(request.updated_before.timestamp())
+        if updated_range:
+            filters.append({"range": {LAST_UPDATED_FIELD_NAME: updated_range}})
+        return filters
+
+    @staticmethod
+    def get_content_match_query(
+        request: ContentMatchRequest,
+        tenant_state: TenantState,
+        date_field: ContentMatchDateField,
+        descending: bool,
+        after: ContentMatchKey | None,
+        limit: int,
+    ) -> dict[str, Any]:
+        """Returns a query for one page of the documents that match by content.
+
+        The matching chunks collapse to one hit per document, and each hit
+        returns only the document ID and date, as doc values. The query starts
+        after `after` in the sort order, so no result window limits how deep a
+        listing can page.
+        """
+        if limit > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
+            raise ValueError(
+                f"Bug: limit ({limit}) is greater than the current maximum allowed "
+                f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
+            )
+        date_field_name = CONTENT_MATCH_DATE_FIELD_NAMES[date_field]
+        filters = DocumentQuery._get_content_match_filters(request, tenant_state)
+        if after is not None:
+            filters.append(
+                _get_after_content_match_key_filter(date_field_name, descending, after)
+            )
+        order = "desc" if descending else "asc"
+        return {
+            "query": {"bool": {"filter": filters}},
+            "size": limit,
+            "collapse": {"field": DOCUMENT_ID_FIELD_NAME},
+            "sort": [
+                {date_field_name: {"order": order, "missing": "_last"}},
+                {DOCUMENT_ID_FIELD_NAME: {"order": order}},
+            ],
+            "_source": False,
+            "docvalue_fields": [
+                DOCUMENT_ID_FIELD_NAME,
+                {"field": date_field_name, "format": "epoch_second"},
+            ],
+            "track_total_hits": False,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+        }
+
+    @staticmethod
+    def get_content_count_query(
+        request: ContentMatchRequest,
+        tenant_state: TenantState,
+        after_document_id: str | None,
+        page_size: int,
+    ) -> dict[str, Any]:
+        """Returns a query for one page of the distinct IDs of the documents
+        that match by content, in ID order, from a composite aggregation."""
+        composite: dict[str, Any] = {
+            "size": page_size,
+            "sources": [
+                {
+                    DOCUMENT_ID_AGGREGATION_SOURCE: {
+                        "terms": {"field": DOCUMENT_ID_FIELD_NAME}
+                    }
+                }
+            ],
+        }
+        if after_document_id is not None:
+            composite["after"] = {DOCUMENT_ID_AGGREGATION_SOURCE: after_document_id}
+        return {
+            "query": {
+                "bool": {
+                    "filter": DocumentQuery._get_content_match_filters(
+                        request, tenant_state
+                    )
+                }
+            },
+            "size": 0,
+            "track_total_hits": False,
+            "aggs": {DOCUMENT_ID_AGGREGATION_NAME: {"composite": composite}},
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
 
     @staticmethod
