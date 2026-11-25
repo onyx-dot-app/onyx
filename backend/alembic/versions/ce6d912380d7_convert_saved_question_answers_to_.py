@@ -23,6 +23,8 @@ Limits, accepted because no release has the question tool:
 - After a downgrade, a question that a Claude model asked after the upgrade
   keeps its question text as its ID and can have a fourth option, which the
   earlier code does not load.
+- An old API pod that answers a waiting question after this revision reads
+  its rows saves `option_label`, which the new code does not load.
 """
 
 import json
