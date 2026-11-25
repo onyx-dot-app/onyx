@@ -13,7 +13,6 @@ from onyx.db.image_generation import (
     fetch_default_image_model_configuration_id,
     get_all_image_generation_configs,
     get_image_generation_config,
-    is_usable_for_image_generation,
     link_image_generation_model__no_commit,
     set_default_image_generation_config,
     unlink_image_generation_model__no_commit,
@@ -319,7 +318,8 @@ def list_llm_provider_image_models(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ImageGenerationLLMProvider]:
-    """Connected unrestricted LLM providers with every model they can serve. Catalog image
+    """Connected LLM providers with every model they can serve. A provider's
+    groups and agents also limit who can use its image models. Catalog image
     models are listed even when the provider's model list omits them, and are
     marked recommended."""
     connected_by_model_id = {
@@ -331,8 +331,6 @@ def list_llm_provider_image_models(
     for llm_provider in fetch_existing_llm_providers(
         db_session=db_session, flow_type_filter=[]
     ):
-        if not is_usable_for_image_generation(llm_provider):
-            continue
         catalog_models = set(
             iter_image_generation_models(llm_provider.provider, recommended_only=False)
         )
@@ -386,12 +384,6 @@ def link_config(
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"LLM provider {config_link.llm_provider_id} not found",
-        )
-    if not is_usable_for_image_generation(llm_provider):
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Only public LLM providers without agent restrictions can be used "
-            "for image generation",
         )
 
     image_provider_id = _linked_image_provider_id(llm_provider.id, model_name)

@@ -3,7 +3,6 @@ provider's credentials and never own or delete it."""
 
 from typing import Any
 
-import httpx
 import pytest
 
 from onyx.server.manage.llm.models import (
@@ -122,17 +121,24 @@ def test_link_reuses_provider_and_survives_provider_edit(
     assert CHAT_MODEL in _chat_model_names(admin_user, llm_provider.id)
 
 
-def test_link_rejects_private_provider(admin_user: DATestUser) -> None:
+def test_link_accepts_private_provider(admin_user: DATestUser) -> None:
+    # A private provider's groups limit who can use its image models.
     private_provider = LLMProviderManager.create(
         user_performing_action=admin_user,
         api_key="sk-private-test",
         is_public=False,
         set_as_default=False,
     )
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        ImageGenerationConfigManager.link(
-            llm_provider_id=private_provider.id,
-            model_name=IMAGE_MODEL,
-            user_performing_action=admin_user,
-        )
-    assert exc_info.value.response.status_code == 400
+    assert _provider_entry(admin_user, private_provider.id)["is_public"] is False
+    config = ImageGenerationConfigManager.link(
+        llm_provider_id=private_provider.id,
+        model_name=IMAGE_MODEL,
+        user_performing_action=admin_user,
+    )
+    ImageGenerationConfigManager.delete(
+        image_provider_id=config.image_provider_id,
+        user_performing_action=admin_user,
+    )
+    ImageGenerationConfigManager.verify(
+        config=config, verify_deleted=True, user_performing_action=admin_user
+    )

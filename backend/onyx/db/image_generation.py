@@ -2,7 +2,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.enums import LLMModelFlowType, ModelRole
+from onyx.auth.permissions import has_global_permission
+from onyx.db.enums import LLMModelFlowType, ModelRole, Permission
+from onyx.db.llm import can_user_access_llm_provider, fetch_user_group_ids
 from onyx.db.model_configuration import (
     fetch_model_configuration_by_provider_id_and_name,
 )
@@ -12,6 +14,8 @@ from onyx.db.models import (
     LLMProvider,
     ModelConfiguration,
     ModelRoleAssignment,
+    Persona,
+    User,
 )
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.utils.logger import setup_logger
@@ -339,23 +343,19 @@ def unlink_image_generation_model__no_commit(
     db_session.flush()
 
 
-def is_usable_for_image_generation(llm_provider: LLMProvider) -> bool:
-    """Image generation is available to every user and agent, so only
-    unrestricted providers can back it."""
-    return llm_provider.is_public and not llm_provider.personas
-
-
-def unlink_image_generation_models_for_provider__no_commit(
+def can_user_generate_images(
     db_session: Session,
-    llm_provider_id: int,
-) -> None:
-    configs = db_session.scalars(
-        select(ImageGenerationConfig)
-        .join(ModelConfiguration)
-        .where(
-            ModelConfiguration.llm_provider_id == llm_provider_id,
-            ImageGenerationConfig.llm_provider_owned.is_(False),
-        )
-    ).all()
-    for config in configs:
-        unlink_image_generation_model__no_commit(db_session, config)
+    user: User,
+    persona_id: int | None,
+) -> bool:
+    """Whether the user, in this agent (none outside one), may use the default
+    image model: its LLM provider's groups and agents apply, as for chat."""
+    config = get_default_image_generation_config(db_session)
+    if config is None or config.model_configuration is None:
+        return False
+    return can_user_access_llm_provider(
+        config.model_configuration.llm_provider,
+        fetch_user_group_ids(db_session, user),
+        db_session.get(Persona, persona_id) if persona_id is not None else None,
+        has_global_permission(user, Permission.MANAGE_LLMS),
+    )
