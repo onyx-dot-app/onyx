@@ -225,10 +225,18 @@ The tool description lists all of them. Filters that take a list also take one v
 All filters in one call apply together. Dates use ISO 8601, such as `2026-06-01`.
 A `*_before` date is not included in the range.
 
-For documents, `content_contains` matches whole words or phrases in the text, the title, and the metadata.
-Case and word forms (such as plurals) do not change the match. It is slower than the other filters, so add date, source,
-or folder filters when you can. Document lists with `content_contains` sort by date only,
-and `group_by` does not work with it.
+For documents, `content_contains` matches whole words or phrases in the text, the title, and the metadata values.
+With the default settings, case and word forms (such as plurals) do not change the match. It does not search Salesforce.
+It is slower than the other filters, so add date, source, or folder filters when you can.
+Document lists with `content_contains` sort by date only, and `group_by` does not work with it.
+
+- Each value can have at most 200 characters, and a filter can have at most 20 values. A value of only common words,
+  such as `the and`, returns an error.
+- A broad count can return "At least N matching documents" instead of an exact number.
+- A slow list can return fewer rows than `limit`, or none, together with a `next_cursor`. Continue to page while the
+  result has a `next_cursor`.
+- The filter needs the document index. The server refuses it if the deployment turns off the document index
+  (`DISABLE_VECTOR_DB=true`) or the filter (`DISABLE_POSTGRES_QUERY_CONTENT_FILTER=true`).
 
 ```json
 {

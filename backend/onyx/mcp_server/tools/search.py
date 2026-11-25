@@ -518,9 +518,15 @@ async def query_metadata(
       when more match: pass it back as `cursor` with the same filters for the
       next page. `group_by`: `source` or `owner` (with `count`).
       `content_contains` matches whole words or phrases in the text, title and
-      metadata, in any case and word form. It is slow: use it only for an
-      exhaustive list or count by content, add date, source or folder filters
-      when you can, and order by date. It does not work with `group_by`.
+      metadata values; with the default settings, case and word form do not
+      matter. It does not search Salesforce. Each value takes at most 200
+      characters, and a value of only common words (such as "the and") is an
+      error. It is slow: use it only for an exhaustive list or count by
+      content, add date, source or folder filters when you can, and order by
+      date. It does not work with `group_by`. A broad count can return "At
+      least N"; a slow page can hold fewer rows, or none, and still return
+      `next_cursor`, so keep paging while it is set. Deployments without the
+      document index refuse it.
     - `hierarchy_node` (folders, spaces, channels): `source_type`,
       `name_contains`, `parent_id`, `node_type`.
     - `chat_session`: `description_contains`, `created_after`,
