@@ -166,6 +166,9 @@ jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => mockProjectsContext,
 }));
 jest.mock("@/lib/projects/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/projects/hooks")>(
+    "@/lib/projects/hooks"
+  ),
   useProjects: () => ({ isLoading: false }),
   useActiveProject: () => null,
 }));

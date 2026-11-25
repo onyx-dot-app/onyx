@@ -11,7 +11,8 @@ import { cn } from "@opal/utils";
 import { SvgFileText, SvgX } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
 import { AttachmentItemButton, ProgressRing } from "@opal/components";
-import { useUploadProgress } from "@/lib/projects/uploadProgress";
+import { Section } from "@opal/layouts";
+import { useUploadProgress } from "@/lib/projects/hooks";
 
 interface RemovableProps {
   onRemove?: () => void;
@@ -132,9 +133,9 @@ function ImageFileCard({
         }
       >
         {uploadProgress !== undefined ? (
-          <div className="h-full w-full flex items-center justify-center">
+          <Section>
             <ProgressRing value={uploadProgress} max={1} />
-          </div>
+          </Section>
         ) : isProcessing || !imageUrl ? (
           <div className="h-full w-full flex items-center justify-center">
             <IconLoader className={loaderSize} />
