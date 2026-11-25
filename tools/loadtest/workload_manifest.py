@@ -11,6 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from mock_llm.profiles import profile_kind, turn_profile
+from mock_llm.response_plan import Knobs
 from onyx_client.messages import load_messages
 
 
@@ -24,7 +25,8 @@ def main() -> None:
     args = parser.parse_args()
     if not re.fullmatch(
         r"mock-profile-(chat|search|research|held)-v1(?:-agents[1-9][0-9]*)?"
-        r"|mock-profile-search-v1-codebatched",
+        r"|mock-profile-search-v1-codebatched"
+        r"|mock-profile-code-v1(?:-claude)?(?:-tail(?:100|[1-9]?[0-9]))?",
         args.model,
     ):
         parser.error(
@@ -33,8 +35,19 @@ def main() -> None:
     kind = profile_kind(args.model)
     if kind is None:
         parser.error("Select a representative profile model")
+    knobs = Knobs(args.model)
     questions = load_messages()
-    plans = [turn_profile(kind, question, args.seed) for question in questions]
+    plans = [
+        turn_profile(
+            kind,
+            question,
+            args.seed,
+            code_pool=knobs.code_pool,
+            tail_percent=knobs.tail_percent,
+        )
+        for question in questions
+    ]
+    programs = [program for plan in plans for program in plan.programs]
     result = {
         "model": args.model,
         "seed": args.seed,
@@ -47,6 +60,11 @@ def main() -> None:
         "search_round_counts": dict(Counter(plan.search_rounds for plan in plans)),
         "mean_answer_words": sum(plan.answer_words for plan in plans) / len(plans),
         "reasoning_turns": sum(plan.reasoning_words > 0 for plan in plans),
+        "program_count_counts": dict(Counter(len(plan.programs) for plan in plans)),
+        "programs": len(programs),
+        "planned_output_chars": sum(program.output_chars for program in programs),
+        "planned_program_searches": sum(program.searches for program in programs),
+        "planned_failed_programs": sum(program.failed for program in programs),
         "plans": [asdict(plan) for plan in plans],
         "scope": "One pass through input questions; actual completed mix depends on load. No question text included.",
     }
