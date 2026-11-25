@@ -33,6 +33,11 @@ class CustomBuildHook(BuildHookInterface):
         # Get config and environment
         binary_name = self.config["binary_name"]
         tag_prefix = self.config.get("tag_prefix", binary_name)
+        # Hatch places shared scripts in the wheel under their given filenames.
+        # Cross-compiled Windows executables therefore need the .exe suffix;
+        # merely tagging the wheel win_amd64 does not make pip add it.
+        if goos == "windows" or (not goos and os.name == "nt"):
+            binary_name += ".exe"
         tag = os.getenv("GITHUB_REF_NAME", "dev").removeprefix(f"{tag_prefix}/")
         commit = os.getenv("GITHUB_SHA", "none")
 
