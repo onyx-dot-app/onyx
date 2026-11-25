@@ -114,6 +114,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     PublishedFileView,
     SortOrder,
     artifact_type,
+    artifact_url,
     published_display_path,
 )
 from onyx.utils.logger import setup_logger
@@ -1183,11 +1184,13 @@ def delete_unpublished_chat_artifacts(published: Sequence[PublishedFile]) -> Non
         db_session.commit()
 
 
-def _newest_available_version(*, file_id: str | None = None) -> LateralFromClause:
+def _newest_available_version(
+    version: int | None = None, *, file_id: str | None = None
+) -> LateralFromClause:
     """The newest version of the ChatArtifact row in the enclosing query
     whose object is not missing and whose record is a published file, or
-    the version `file_id` when it is one, with its file record, as a LATERAL
-    subquery (one row, or none)."""
+    the version `version` or `file_id` when it is one, with its file record,
+    as a LATERAL subquery (one row, or none)."""
     return (
         select(
             ChatArtifactVersion.version,
@@ -1203,6 +1206,7 @@ def _newest_available_version(*, file_id: str | None = None) -> LateralFromClaus
             ChatArtifactVersion.artifact_id == ChatArtifact.id,
             FileRecord.file_origin == FileOrigin.CHAT_ARTIFACT,
             FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
+            true() if version is None else ChatArtifactVersion.version == version,
             true() if file_id is None else ChatArtifactVersion.file_id == file_id,
         )
         .order_by(ChatArtifactVersion.version.desc())
@@ -1224,21 +1228,39 @@ def get_chat_published_files(
         .where(ChatArtifact.chat_session_id == chat_session_id)
         .order_by(ChatArtifact.created_at, ChatArtifact.id)
     ).all()
-    return [
-        PublishedFileView(
-            file_id=row.file_id,
-            artifact_id=row.id,
-            version=row.version,
-            name=row.display_name or row.file_id,
-            title=row.title,
-            path=row.path,
-            # A file without a recorded size shows as 0.
-            size=row.file_size or 0,
-            mime_type=row.file_type,
-            thumbnail_file_id=row.thumbnail_file_id,
-        )
-        for row in rows
-    ]
+    return [_published_file_view(row) for row in rows]
+
+
+def _published_file_view(row: Row) -> PublishedFileView:
+    return PublishedFileView(
+        file_id=row.file_id,
+        artifact_id=row.id,
+        version=row.version,
+        name=row.display_name or row.file_id,
+        title=row.title,
+        path=row.path,
+        # A file without a recorded size shows as 0.
+        size=row.file_size or 0,
+        mime_type=row.file_type,
+        thumbnail_file_id=row.thumbnail_file_id,
+    )
+
+
+def get_chat_artifact_file(
+    db_session: Session, artifact_id: UUID, version: int | None
+) -> tuple[ChatSession, PublishedFileView] | None:
+    """The chat that owns the artifact `artifact_id`, and the artifact's
+    `version`, by default its newest available one, when the chat is not
+    deleted and the version's object is not missing; else None. The caller
+    checks that the user may open it."""
+    newest = _newest_available_version(version)
+    row = db_session.execute(
+        select(ChatSession, ChatArtifact.id, ChatArtifact.path, newest)
+        .join(ChatArtifact, ChatArtifact.chat_session_id == ChatSession.id)
+        .join(newest, true())
+        .where(ChatArtifact.id == artifact_id, ChatSession.deleted.is_(False))
+    ).one_or_none()
+    return None if row is None else (row.ChatSession, _published_file_view(row))
 
 
 def _listable_chat(user_id: UUID) -> ColumnElement[bool]:
@@ -1269,6 +1291,7 @@ def _listed_artifact(row: Row) -> ListedArtifact:
         chat_id=row.chat_session_id,
         chat_title=row.description,
         path=published_display_path(row.path),
+        url=artifact_url(row.id, row.version),
     )
 
 
@@ -1411,14 +1434,16 @@ def get_user_published_file(
     *,
     file_id: str | None = None,
     artifact_id: UUID | None = None,
+    version: int | None = None,
 ) -> ListedArtifact | None:
     """The published file `file_id`, any version of its artifact, or else
-    the newest available version of the artifact `artifact_id`
-    (`_newest_available_version`), when it is in a listable chat of the user
-    (`_listable_chat`) and its object is not missing; else None. Any other
-    file, such as a thumbnail or an upload, is None. Its name, path and chat
-    title are not cut."""
-    newest = _newest_available_version(file_id=file_id if artifact_id is None else None)
+    the artifact `artifact_id`'s `version`, by default its newest available
+    one, when it is in a listable chat of the user (`_listable_chat`) and its
+    object is not missing; else None. Any other file, such as a thumbnail or
+    an upload, is None. Its name, path and chat title are not cut."""
+    newest = _newest_available_version(
+        version, file_id=file_id if artifact_id is None else None
+    )
     row = db_session.execute(
         select(
             ChatArtifact.id,

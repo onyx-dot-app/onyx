@@ -2,9 +2,11 @@
 the chat file copies (file_copies.py). The saved-details unions import it,
 so it imports only models and constants."""
 
+import re
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import (
@@ -17,6 +19,7 @@ from pydantic import (
     model_validator,
 )
 
+from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.server.features.build.sandbox.exec_output import (
     EXEC_DEFAULT_YIELD_MS,
     EXEC_MAX_YIELD_MS,
@@ -288,6 +291,8 @@ ARTIFACTS_LIST_MAX_LIMIT = 50
 ARTIFACTS_LIST_DEFAULT_LIMIT = 25
 # The longest query, and the longest name, path and chat title that a page
 # keeps; a version's title is at most PUBLISH_FILES_MAX_TITLE_CHARS.
+# ARTIFACTS_PATH_MAX_CHARS also bounds each path, url, file ID or name that
+# the artifact tool takes: its results echo them and are never spilled.
 ARTIFACTS_QUERY_MAX_CHARS = 200
 ARTIFACTS_NAME_MAX_CHARS = 200
 ARTIFACTS_PATH_MAX_CHARS = 300
@@ -345,6 +350,31 @@ def artifact_type(file_name: str) -> ArtifactType:
         ),
         "other",
     )
+
+
+# The path of a link to an artifact, or to one of its versions: the web app
+# opens it in the output panel (web/src/app/app/artifacts), on any origin.
+# The web's parseArtifactLink takes the same paths.
+_ARTIFACT_URL_PATH = re.compile(
+    r"/app/artifacts/(?P<id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-"
+    r"[0-9a-f]{12})(?:/v(?P<version>[0-9]+))?/?",
+    re.IGNORECASE,
+)
+
+
+def artifact_url(artifact_id: UUID, version: int) -> str:
+    return f"{WEB_DOMAIN.rstrip('/')}/app/artifacts/{artifact_id}/v{version}"
+
+
+def parse_artifact_url(url: str) -> tuple[UUID, int | None]:
+    """The artifact and the version (None: the newest) of a link to an
+    artifact, on any origin or without one, with any query or fragment.
+    Raises ValueError for anything else."""
+    match = _ARTIFACT_URL_PATH.fullmatch(urlsplit(url.strip()).path)
+    if match is None:
+        raise ValueError(f"{url!r} is not an artifact url")
+    version = match["version"]
+    return UUID(match["id"]), None if version is None else int(version)
 
 
 ArtifactSort = Literal["created_at", "modified_at", "name", "size"]
@@ -491,6 +521,8 @@ class ListedArtifact(BaseModel):
     # published_display_path of the artifact's path; in a page, a longer one
     # keeps its last ARTIFACTS_PATH_MAX_CHARS.
     path: str
+    # artifact_url of this version.
+    url: str
 
 
 class ArtifactList(BaseModel):
@@ -522,6 +554,10 @@ class MaterializeItem(BaseModel):
         default=None,
         description="A library file ID, for its newest version. Give this or file_id.",
     )
+    version_number: int | None = Field(
+        default=None,
+        description="With library_file_id: that version instead of the newest.",
+    )
     file_name: _EchoedText | None = Field(
         default=None,
         description="The name of the copy, not a path. Defaults to the file's name.",
@@ -538,6 +574,8 @@ class MaterializeItem(BaseModel):
             raise ValueError(
                 "each item takes exactly one of file_id and library_file_id"
             )
+        if self.version_number is not None and self.library_file_id is None:
+            raise ValueError("version_number goes with library_file_id")
         return self
 
 
@@ -581,12 +619,14 @@ class MaterializedItem(BaseModel):
 
     library_file_id: Annotated[UUID | None, OMITTED_WHEN_NONE] = None
     file_id: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    # The version copied; for a refused item, the version that it asked for.
     version_number: Annotated[int | None, OMITTED_WHEN_NONE] = None
     file_name: Annotated[str | None, OMITTED_WHEN_NONE] = None
     # Relative to the working directory.
     path: Annotated[str | None, OMITTED_WHEN_NONE] = None
     file_size_bytes: Annotated[int | None, OMITTED_WHEN_NONE] = None
     mime_type: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    url: Annotated[str | None, OMITTED_WHEN_NONE] = None
     # cached: the same file was already at the path; nothing was written.
     status: Literal["written", "cached", "error"]
     error: Annotated[str | None, OMITTED_WHEN_NONE] = None
@@ -596,3 +636,115 @@ class MaterializedItems(BaseModel):
     """What library_prepare_materialize returns."""
 
     items: list[MaterializedItem]
+
+
+# The arguments of the artifact tool's publish that name its file, or its
+# files; the renderer reads them for the publish card.
+ARTIFACT_PUBLISH_PATHS = ("file_path", "file_paths")
+# The arguments that each action of the artifact tool takes.
+ArtifactAction = Literal["publish", "list", "read"]
+ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
+    "publish": frozenset({*ARTIFACT_PUBLISH_PATHS, "title"}),
+    "list": frozenset({"scope", "type", "query", "limit", "after"}),
+    "read": frozenset({"url", "path", "paths", "out_dir"}),
+}
+
+
+class ArtifactArguments(BaseModel):
+    """The arguments of the artifact tool: an action and the arguments of
+    each action. Each action takes only its own arguments
+    (ARTIFACT_ACTION_ARGUMENTS)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: ArtifactAction = Field(
+        default="publish",
+        description="publish (the default) gives files from the VM to the user; "
+        "list finds published files; read copies published files into the VM.",
+    )
+    file_path: _EchoedText | None = Field(
+        default=None,
+        description="publish: a file in the VM, relative to the working "
+        "directory or absolute.",
+    )
+    file_paths: list[_EchoedText] | None = Field(
+        default=None,
+        description=f"publish: up to {PUBLISH_FILES_MAX_FILES} files instead of "
+        "file_path; all are published, or none.",
+    )
+    title: str | None = Field(
+        default=None, description="publish with file_path: a short title."
+    )
+    url: _EchoedText | None = Field(
+        default=None,
+        description="read: the url of a published file from an earlier result. "
+        "A url that ends in /v<N> names that version.",
+    )
+    path: _EchoedText | None = Field(
+        default=None, description="read: a file ID, or the url of a published file."
+    )
+    paths: list[_EchoedText] | None = Field(
+        default=None,
+        description=f"read: up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} file IDs or urls.",
+    )
+    out_dir: _EchoedText | None = Field(
+        default=None,
+        description="read: the directory for the copies, relative to the "
+        "working directory.",
+    )
+    scope: Literal["mine"] | None = Field(
+        default=None, description="list: only mine, the user's own files."
+    )
+    type: ArtifactType | None = Field(
+        default=None, description="list: only files of this type."
+    )
+    query: str | None = Field(
+        default=None,
+        description="list: text to find in the file name, the file's title or "
+        "the chat's title.",
+    )
+    limit: int | None = Field(
+        default=None,
+        description=f"list: the most files, from 1 to {ARTIFACTS_LIST_MAX_LIMIT}.",
+    )
+    after: str | None = Field(
+        default=None, description="list: the next_cursor of the previous page."
+    )
+
+
+class PublishedArtifact(BaseModel):
+    """A file that a publish gave the user."""
+
+    library_file_id: UUID
+    file_id: str
+    version_number: int
+    file_name: str
+    title: str | None
+    # published_display_path of the artifact's path.
+    path: str
+    url: str
+
+
+class ArtifactPublished(BaseModel):
+    """What the artifact tool's publish returns."""
+
+    files: list[PublishedArtifact]
+
+    @classmethod
+    def of(cls, published: list[PublishedFile]) -> "ArtifactPublished":
+        return cls(
+            files=[
+                PublishedArtifact(
+                    library_file_id=file.artifact_id,
+                    file_id=file.file_id,
+                    version_number=file.version,
+                    file_name=file.name,
+                    title=file.title,
+                    path=published_display_path(file.path),
+                    url=artifact_url(file.artifact_id, file.version),
+                )
+                for file in published
+                # A new publish always has both.
+                if file.artifact_id is not None and file.version is not None
+            ]
+        )

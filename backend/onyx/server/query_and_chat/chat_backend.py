@@ -81,6 +81,7 @@ from onyx.configs.constants import (
 )
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
+from onyx.db.access import user_can_read_chat_session
 from onyx.db.approval_request import (
     approvals_version,
     close_pending_approval_requests__no_commit,
@@ -93,6 +94,7 @@ from onyx.db.chat import (
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
+    get_chat_artifact_file,
     get_chat_message,
     get_chat_message_page_ids,
     get_chat_messages_by_session,
@@ -193,6 +195,8 @@ from onyx.server.query_and_chat.chat_utils import (
 from onyx.server.query_and_chat.models import (
     ApprovalDecisionResponse,
     ChatApprovalDecisionRequest,
+    ChatArtifactAccess,
+    ChatArtifactFile,
     ChatFeedbackRequest,
     ChatMessageIdentifier,
     ChatQuestionAnswersRequest,
@@ -1295,6 +1299,40 @@ def seed_chat_from_slack(
 
     return SeedChatFromSlackResponse(
         redirect_url=f"{WEB_DOMAIN}/chat?chatId={new_chat_session.id}"
+    )
+
+
+@router.get("/artifacts/{artifact_id}")
+def get_chat_artifact(
+    artifact_id: UUID,
+    version: int | None = Query(None),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ChatArtifactFile:
+    """A published file's version, by default its newest, and how the user
+    may open it: the owner of its chat, a reader of that chat (a public
+    share), or, for an explicit version, anyone who can download that
+    version (`user_can_access_chat_file`), such as a reader of another chat
+    that added it. 404 otherwise, and for a deleted chat; the web opens an
+    artifact link with it."""
+    found = get_chat_artifact_file(db_session, artifact_id, version)
+    if found is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
+    chat, file = found
+    access: ChatArtifactAccess
+    if chat.user_id == user.id:
+        access = "owner"
+    elif user_can_read_chat_session(db_session, chat.id, user.id):
+        access = "chat_reader"
+    elif version is not None and user_can_access_chat_file(
+        file.file_id, user, db_session
+    ):
+        access = "file_only"
+    else:
+        # The same 404, so callers cannot probe for artifacts of others.
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
+    return ChatArtifactFile(
+        **file.model_dump(exclude={"display_path"}), chat_id=chat.id, access=access
     )
 
 

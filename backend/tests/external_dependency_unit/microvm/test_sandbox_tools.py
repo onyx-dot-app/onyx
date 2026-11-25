@@ -203,7 +203,12 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OpenedPage,
     OpenURLTool,
 )
-from onyx.tools.tool_implementations.sandbox import file_copies, sandbox_tools, spill
+from onyx.tools.tool_implementations.sandbox import (
+    artifact_operations,
+    file_copies,
+    sandbox_tools,
+    spill,
+)
 from onyx.tools.tool_implementations.sandbox.file_copies import CopyStatus
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_FILES,
@@ -2796,7 +2801,7 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
     error: str,
     user: User,
 ) -> None:
-    monkeypatch.setattr(sandbox_tools, "PUBLISH_FILES_MAX_BYTES", 16)
+    monkeypatch.setattr(artifact_operations, "PUBLISH_FILES_MAX_BYTES", 16)
     tools = make_tools(
         create_chat_session(
             db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
@@ -3126,14 +3131,14 @@ def test_a_stop_during_the_last_copy_publishes_nothing(
     )
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
     cancellation = CancellationSignal()
-    save_chat_artifact = sandbox_tools.save_chat_artifact
+    save_chat_artifact = artifact_operations.save_chat_artifact
 
     def save_then_stop(*args: Any, **kwargs: Any) -> PublishedFile:
         file = save_chat_artifact(*args, **kwargs)
         cancellation.cancel()
         return file
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save_then_stop)
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save_then_stop)
 
     with pytest.raises(AgentCancelled):
         tools.publish_files.run(

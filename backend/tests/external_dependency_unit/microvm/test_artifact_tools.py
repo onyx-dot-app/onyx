@@ -23,17 +23,24 @@ from onyx.cache.interface import CacheBackend
 from onyx.chat import process_message
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import handle_stream_message_objects
-from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
     create_chat_session,
     get_user_published_files,
     save_chat_artifact,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ChatArtifactVersion, ChatSession, User
+from onyx.db.models import (
+    ChatArtifact,
+    ChatArtifactVersion,
+    ChatMessage,
+    ChatSession,
+    User,
+)
 from onyx.db.sandbox import get_or_create_sandbox
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -60,14 +67,19 @@ from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolContext, ToolOptions
-from onyx.tools.tool_implementations.sandbox import file_copies, sandbox_tools
+from onyx.tools.tool_implementations.sandbox import artifact_operations, file_copies
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
+    ArtifactList,
     LibraryListFilters,
+    MaterializedItems,
+    PublishFileArgument,
     VmChatFile,
+    artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ArtifactTool,
     LibraryListTool,
     LibraryPrepareMaterializeTool,
     PublishFilesTool,
@@ -263,6 +275,7 @@ def test_a_copy_lands_in_the_calling_chats_attachments_and_is_then_cached(
             "path": path,
             "file_size_bytes": len(data),
             "mime_type": "text/plain",
+            "url": artifact_url(artifact_id, 1),
             "status": "written",
         }
     ]
@@ -495,7 +508,7 @@ def test_a_copy_never_replaces_a_file_that_its_listing_missed(
     assert _vm_file(node, ref, "work/report (1).csv") == b"old 1"
     assert _vm_file(node, ref, "work/report (2).csv") == b"new"
 
-    monkeypatch.setattr(sandbox_tools, "_MATERIALIZE_NAME_TRIES", 3)
+    monkeypatch.setattr(artifact_operations, "_MATERIALIZE_NAME_TRIES", 3)
     exhausted = _copy(tool, [{"file_id": file_id}], {"directory": "work"})
     assert exhausted.content == (
         "No file was copied:\n- work/report (2).csv and the names before it are "
@@ -706,6 +719,7 @@ def test_a_failed_item_does_not_stop_the_others(
             "path": "out/two.txt",
             "file_size_bytes": 3,
             "mime_type": "text/plain",
+            "url": artifact_url(_artifact_id(second), 1),
             "status": "written",
         },
     ]
@@ -1432,3 +1446,458 @@ def test_only_the_chats_owner_gets_the_sandbox_tools(
         db_session.rollback()
         db_session.execute(delete(ChatSession).where(ChatSession.id == ownerless))
         db_session.commit()
+
+
+# Both tool families, the library tools and the artifact tool of Claude
+# models, run the same operations, so each case runs through both.
+
+
+class _ClaudeLLM(ChatLLM):
+    """A scripted Claude model: its turns get the artifact tool."""
+
+    @property
+    def config(self) -> LLMConfig:
+        return super().config.model_copy(
+            update={"model_provider": "anthropic", "model_name": "claude-sonnet-4-5"}
+        )
+
+
+class _Family:
+    """How one tool family calls each operation."""
+
+    def llm(self, steps: list[Delta]) -> ChatLLM:
+        raise NotImplementedError
+
+    def publish(
+        self, call_id: str, paths: list[str], title: str | None = None
+    ) -> Delta:
+        raise NotImplementedError
+
+    def list(
+        self, call_id: str, category: str | None, limit: int, cursor: str | None
+    ) -> Delta:
+        raise NotImplementedError
+
+    def read(
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        version: int | None,
+        out_dir: str,
+    ) -> Delta:
+        raise NotImplementedError
+
+
+class _Library(_Family):
+    def llm(self, steps: list[Delta]) -> ChatLLM:
+        return ChatLLM(steps)
+
+    def publish(
+        self, call_id: str, paths: list[str], title: str | None = None
+    ) -> Delta:
+        return tool_step(
+            PublishFilesTool.NAME,
+            call_id,
+            {"files": [{"path": path, "title": title} for path in paths]},
+        )
+
+    def list(
+        self, call_id: str, category: str | None, limit: int, cursor: str | None
+    ) -> Delta:
+        return tool_step(
+            LibraryListTool.NAME,
+            call_id,
+            {"filters": {"category": category}, "limit": limit, "cursor": cursor},
+        )
+
+    def read(
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        version: int | None,
+        out_dir: str,
+    ) -> Delta:
+        return tool_step(
+            LibraryPrepareMaterializeTool.NAME,
+            call_id,
+            {
+                "items": [
+                    {"library_file_id": str(artifact_id), "version_number": version}
+                ],
+                "destination": {"directory": out_dir},
+            },
+        )
+
+
+class _Artifact(_Family):
+    def llm(self, steps: list[Delta]) -> ChatLLM:
+        return _ClaudeLLM(steps)
+
+    def publish(
+        self, call_id: str, paths: list[str], title: str | None = None
+    ) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {"file_path": paths[0], "title": title}
+            if len(paths) == 1
+            else {"file_paths": paths},
+        )
+
+    def list(
+        self, call_id: str, category: str | None, limit: int, cursor: str | None
+    ) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {"action": "list", "type": category, "limit": limit, "after": cursor},
+        )
+
+    def read(
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        version: int | None,
+        out_dir: str,
+    ) -> Delta:
+        url = (
+            f"/app/artifacts/{artifact_id}"
+            if version is None
+            else artifact_url(artifact_id, version)
+        )
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {"action": "read", "url": url, "out_dir": out_dir},
+        )
+
+
+@pytest.fixture(params=[_Library(), _Artifact()], ids=["library", "artifact"])
+def family(request: pytest.FixtureRequest) -> _Family:
+    return request.param
+
+
+def _publish_packets(parts: Sequence[object]) -> list[packets.PacketObj]:
+    """The publish cards of streamed parts or replayed packets, and their
+    section ends."""
+    objects = [
+        part.obj if isinstance(part, packets.Packet) else part
+        for part in parts
+        if isinstance(part, (packets.Packet, BaseModel))
+    ]
+    card = (packets.PublishFilesStart, packets.PublishFilesEnd)
+    return [
+        obj
+        for index, obj in enumerate(objects)
+        if isinstance(obj, card)
+        or (
+            isinstance(obj, packets.SectionEnd)
+            and index > 0
+            and isinstance(objects[index - 1], card)
+        )
+    ]
+
+
+@pytest.mark.usefixtures("node")
+def test_a_publish_gives_the_same_card_rows_and_message_files_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    family: _Family,
+) -> None:
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Report")
+    ref = chat.ref(db_session)
+    for path, data in (("out/report.csv", b"a,b\n"), ("a.md", b"a"), ("b.md", b"b")):
+        sandbox.write_file(ref, path, data)
+    llm = family.llm(
+        [
+            family.publish("one", ["out/report.csv"], "Report"),
+            family.publish("two", ["a.md", "b.md"]),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    live = _publish_packets(parts)
+    (
+        first_start,
+        first_end,
+        first_section_end,
+        second_start,
+        second_end,
+        second_section_end,
+    ) = live
+    assert first_start == packets.PublishFilesStart(
+        files=[PublishFileArgument(path="out/report.csv", title="Report")]
+    )
+    assert second_start == packets.PublishFilesStart(
+        files=[PublishFileArgument(path="a.md"), PublishFileArgument(path="b.md")]
+    )
+    assert first_section_end == second_section_end == packets.SectionEnd()
+    assert isinstance(first_end, packets.PublishFilesEnd)
+    assert isinstance(second_end, packets.PublishFilesEnd)
+    assert first_end.error is None and second_end.error is None
+    # Each card lists only the files that its own call published.
+    assert [(file.name, file.title, file.version) for file in first_end.files] == [
+        ("report.csv", "Report", 1)
+    ]
+    assert [(file.name, file.title, file.version) for file in second_end.files] == [
+        ("a.md", None, 1),
+        ("b.md", None, 1),
+    ]
+    published = [*first_end.files, *second_end.files]
+    [replayed] = chat.replayed(db_session)
+    assert _publish_packets(replayed) == live
+    db_session.expire_all()
+    for call_id, file in zip(("one", "two", "two"), published, strict=True):
+        assert file.artifact_id is not None and file.version is not None
+        artifact = db_session.get_one(ChatArtifact, file.artifact_id)
+        assert artifact.chat_session_id == chat.chat_session_id
+        # Each result links the version that it published.
+        assert artifact_url(file.artifact_id, file.version) in last_tool_text(
+            llm, call_id
+        )
+    [answer] = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat.chat_session_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    )
+    assert [descriptor["id"] for descriptor in answer.files or []] == [
+        file.file_id for file in published
+    ]
+
+
+@pytest.mark.usefixtures("node")
+def test_a_failed_publish_publishes_nothing_and_ends_its_card_with_the_error(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    family: _Family,
+) -> None:
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Report")
+    sandbox.write_file(chat.ref(db_session), "a.md", b"a")
+    parts = chat.send(
+        family.llm(
+            [family.publish("publish", ["a.md", "missing.md"]), Delta(content="Done.")]
+        )
+    )
+
+    start, end, section_end = _publish_packets(parts)
+    assert start == packets.PublishFilesStart(
+        files=[PublishFileArgument(path="a.md"), PublishFileArgument(path="missing.md")]
+    )
+    assert isinstance(end, packets.PublishFilesEnd)
+    assert end.files == [] and end.error is not None and "missing.md" in end.error
+    assert section_end == packets.SectionEnd()
+    assert not db_session.scalars(
+        select(ChatArtifact).where(ChatArtifact.chat_session_id == chat.chat_session_id)
+    ).all()
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_list_filters_pages_and_links_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    family: _Family,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    for name in ("report.pdf", "data.csv", "deck.pptx"):
+        _publish(source, name, name.encode())
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [
+            family.list("sheets", "sheet", 10, None),
+            family.list("first", None, 2, None),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    sheets = ArtifactList.model_validate_json(last_tool_text(llm, "sheets"))
+    assert [entry.file_name for entry in sheets.files] == ["data.csv"]
+    [entry] = sheets.files
+    assert entry.url == artifact_url(entry.library_file_id, 1)
+    first = ArtifactList.model_validate_json(last_tool_text(llm, "first"))
+    assert [entry.file_name for entry in first.files] == ["deck.pptx", "data.csv"]
+    assert first.next_cursor is not None
+
+    llm = family.llm(
+        [
+            family.list("rest", None, 2, first.next_cursor),
+            family.list("bad", None, 2, "junk"),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+    rest = ArtifactList.model_validate_json(last_tool_text(llm, "rest"))
+    assert [entry.file_name for entry in rest.files] == ["report.pdf"]
+    assert rest.next_cursor is None
+    assert last_tool_text(llm, "bad").startswith("The cursor is not a next_cursor")
+    # A failed list ends on the generic card, never a publish card.
+    assert _publish_packets(parts) == []
+    calls: dict[tuple[int, int], list[packets.PacketObj]] = {}
+    for part in parts:
+        if isinstance(part, packets.Packet):
+            calls.setdefault(
+                (part.placement.turn_index, part.placement.tab_index), []
+            ).append(part.obj)
+    [bad] = [
+        objects
+        for objects in calls.values()
+        if any(
+            isinstance(obj, packets.CustomToolArgs) and "junk" in str(obj.tool_args)
+            for obj in objects
+        )
+    ]
+    assert isinstance(bad[0], packets.CustomToolStart)
+    assert bad[-1] == packets.SectionEnd()
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_read_copies_the_newest_or_a_named_version_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    user: User,
+    family: _Family,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    _publish(source, "report.md", b"first")
+    newest = _publish(source, "report.md", b"second")
+    artifact_id = _artifact_id(newest)
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [
+            family.read("newest", artifact_id, None, "work"),
+            family.read("old", artifact_id, 1, "work"),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    [copied] = MaterializedItems.model_validate_json(
+        last_tool_text(llm, "newest")
+    ).items
+    assert (copied.path, copied.version_number, copied.url) == (
+        "work/report.md",
+        2,
+        artifact_url(artifact_id, 2),
+    )
+    [old] = MaterializedItems.model_validate_json(last_tool_text(llm, "old")).items
+    assert (old.path, old.version_number) == ("work/report (1).md", 1)
+    ref = chat.ref(db_session)
+    assert _vm_file(node, ref, "work/report.md") == b"second"
+    assert _vm_file(node, ref, "work/report (1).md") == b"first"
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_read_of_a_missing_version_names_the_version_in_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    family: _Family,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    artifact_id = _artifact_id(_publish(source, "report.md", b"first"))
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = family.llm(
+        [family.read("missing", artifact_id, 9, "work"), Delta(content="Done.")]
+    )
+    chat.send(llm)
+
+    assert last_tool_text(llm, "missing") == (
+        "No file was copied:\n"
+        f"- No version 9 of published file {artifact_id} in your chats"
+    )
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_an_artifact_read_takes_urls_and_file_ids_in_path_and_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    user: User,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    first = _publish(source, "report.md", b"first")
+    _publish(source, "report.md", b"second")
+    notes = _publish(source, "notes.md", b"notes")
+    artifact_id = _artifact_id(first)
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = _ClaudeLLM(
+        [
+            tool_step(
+                ArtifactTool.NAME,
+                "read",
+                {
+                    "action": "read",
+                    "path": artifact_url(artifact_id, 1),
+                    "paths": [f"/app/artifacts/{artifact_id}", notes],
+                    "out_dir": "work",
+                },
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    items = MaterializedItems.model_validate_json(last_tool_text(llm, "read")).items
+    assert [(item.path, item.version_number) for item in items] == [
+        ("work/report.md", 1),
+        ("work/report (1).md", 2),
+        ("work/notes.md", 1),
+    ]
+    ref = chat.ref(db_session)
+    assert _vm_file(node, ref, "work/report.md") == b"first"
+    assert _vm_file(node, ref, "work/report (1).md") == b"second"
+    assert _vm_file(node, ref, "work/notes.md") == b"notes"
+
+
+@pytest.mark.usefixtures("node")
+def test_a_claude_program_finds_the_artifact_tool_and_publishes_with_it(
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    sandbox.write_file(chat.ref(db_session), "out/a.md", b"# A\n")
+    llm = _ClaudeLLM(
+        [
+            code_step(
+                "code",
+                "matches = await tool_search('publish a file')\n"
+                "print([match['name'] for match in matches])\n"
+                "r = await tools.artifact__artifact(file_path='out/a.md')\n"
+                "print(r['files'][0]['url'])\n",
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm, code_mode=True)
+
+    [description] = [
+        tool["function"]["description"]
+        for tool in llm.requests[0]["tools"]
+        if tool["function"]["name"] == "execute_code"
+    ]
+    assert "\n  - artifact: Give files from the VM to the user" in description
+    assert "artifact__artifact" not in description
+    db_session.expire_all()
+    [artifact] = db_session.scalars(
+        select(ChatArtifact).where(ChatArtifact.chat_session_id == chat.chat_session_id)
+    ).all()
+    text = last_tool_text(llm, "code")
+    assert "'artifact__artifact'" in text
+    assert artifact_url(artifact.id, 1) in text
+    # The program's publish shows the publish card.
+    assert any(
+        isinstance(part, packets.Packet)
+        and isinstance(part.obj, packets.PublishFilesEnd)
+        and [file.artifact_id for file in part.obj.files] == [artifact.id]
+        for part in parts
+    )

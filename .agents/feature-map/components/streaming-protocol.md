@@ -271,8 +271,13 @@ follows the observation's packets and section end in a new tab. The sandbox
 tools ([[code-execution]]) start with `exec_command_start`, `write_stdin_start`
 or `apply_patch_start`, stream the command output in `exec_output_delta`, and
 end with `exec_end` or `apply_patch_end`. A tool with its own end packet
-(`chat/renderer.py:OWN_END_PACKETS`: the sandbox tools and `publish_files`,
-each with its end packet type) always sends its own start packet. When its arguments are not valid, for
+(`chat/renderer.py:OWN_END_PACKETS`: the sandbox tools, each with its end
+packet type; and every call that shows the publish card,
+`publish_card_files`) always sends its own start packet. The renderer
+picks the end packet with the start packet, so an `artifact` call
+gets the publish card only for a publish (a missing or null `action`, as
+`parse_tool_arguments` reads it), and a failed list or read ends
+on the generic card. When its arguments are not valid, for
 example cut off or of a wrong type, the start packet has empty values (a file
 tool's patch is empty, with no file header), so the end packet never lands on a
 generic card (`ToolRenderer.start`). A failed call ends with that end packet's
@@ -287,7 +292,8 @@ preview. When the output went to a file in the sandbox VM, it is the head and
 tail of the output with a plain note instead ([[code-execution]]); `session_id` is set while the command runs, and `error` (with no
 output) when the call failed. A replayed call sends the start and `exec_end`
 only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `publish_files`
-call starts with `publish_files_start`: `files`, the `{path, title}` entries
+call, or an `artifact` publish (its `file_path` and `title`, or each of its
+`file_paths`, as the entries), starts with `publish_files_start`: `files`, the `{path, title}` entries
 as the model wrote them, and `description`. It ends with
 `publish_files_end`:
 `files`, one `PublishedFile` per entry in the same order, or `error` and no
