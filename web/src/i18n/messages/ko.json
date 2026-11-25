@@ -17944,6 +17944,20 @@
         "rateLimited": "GitHub API 사용 한도에 도달했습니다. 몇 분 후에 다시 시도하세요. 한도를 늘리려면 GitHub를 연결하세요.",
         "rateLimitedUntil": "GitHub API 사용 한도에 도달했습니다. {time}에 재설정됩니다. 한도를 늘리려면 GitHub를 연결하세요."
       }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {플러그인 #개 업데이트됨} other {플러그인 #개 업데이트됨}}",
+      "failed": "플러그인을 업데이트하지 못했습니다. 다시 시도하세요.",
+      "partialFailure": "{count, plural, one {플러그인 #개를 업데이트하지 못했습니다} other {플러그인 #개를 업데이트하지 못했습니다}}",
+      "deleteTitle": "{count, plural, one {플러그인 #개를 삭제할까요?} other {플러그인 #개를 삭제할까요?}}",
+      "deleteDescription": "{count, plural, one {액세스 권한이 있는 모든 사용자에 대해 선택한 플러그인을 삭제합니다. 이 작업은 취소할 수 없습니다.} other {액세스 권한이 있는 모든 사용자에 대해 선택한 플러그인 #개를 모두 삭제합니다. 이 작업은 취소할 수 없습니다.}}",
+      "shareTitle": "{count, plural, one {플러그인 #개의 액세스 업데이트} other {플러그인 #개의 액세스 업데이트}}",
+      "shareDescription": "선택한 모든 플러그인에 변경 사항을 적용합니다. 변경하지 않은 설정은 현재 값을 유지합니다.",
+      "addAccessDescription": "선택한 모든 플러그인에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
+      "apply": "{count, plural, one {플러그인 #개에 적용} other {플러그인 #개에 적용}}",
+      "publishWarning": {
+        "description": "적용하면 조직의 모든 사용자가 선택한 플러그인을 사용할 수 있습니다. 게시된 플러그인은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
+      }
     }
   },
   "integrations": {

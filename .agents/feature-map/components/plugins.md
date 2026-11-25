@@ -70,12 +70,21 @@ Group or user restriction needs EE.
   not added links an organization-wide manager to `/admin/integrations/new`
   with the owner set to the organization and `return_to` the plugin page.
   Admin Panel → Plugins (`/admin/plugins`, full admin panel access) renders the
-  same list (`CustomizePluginsPage`): settings chrome with
+  same page (`CustomizePluginsPage`): settings chrome with
   Add in the header, every plugin, also the ones that are
   not `member_visible`, except the plugins of another user's personal GitHub
   marketplace (`db/skill.py:_not_others_personal_marketplace`), and the
-  Marketplaces section below them, as on the tab. A failed `GET /skills` shows
-  an error in place of the list; the Marketplaces section stays.
+  Marketplaces section below them, as on the tab. The admin panel shows the
+  plugins in `sections/skills/AdminSkillsTable.tsx`, not in groups: the
+  Source column carries the group (marketplace, owner, Organization library).
+  Rows the admin owns or edits (`lib/skills/sharing.ts:canManageSkill`) can be
+  selected; the others show a disabled checkbox. The selection gets the Admin
+  Skills bulk actions (`sections/skills/useSkillBulkActions.tsx`: Share,
+  Enable for me, Disable for me, Delete with a confirm that lists the
+  plugins, all through `POST /skills/bulk`), with plugin copy
+  (`plugins.bulk`). A row's Delete opens the same confirm for that plugin.
+  Search and the status filter clear the selection. A failed `GET /skills`
+  shows an error in place of the list; the Marketplaces section stays.
   `/admin/plugins/[pluginId]` renders `MemberPluginDetailPage`. These pages read their panel from the path
   (`lib/customize/hooks.ts:usePanel`), so the links, back links, the
   upload redirect and the delete redirect stay in the admin panel

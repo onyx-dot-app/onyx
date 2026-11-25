@@ -238,6 +238,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
     values,
     initialViewSelected,
     getRowId,
+    enableRowSelection: qualifierColumn?.getCanSelect ?? true,
     onSelectionChange,
     query,
     serverSide: serverSide
@@ -594,6 +595,9 @@ export function Table<TData>(props: DataTableProps<TData>) {
                               background={qDef.background}
                               avatar={qDef.avatar}
                               selectable={showQualifierCheckbox}
+                              disabled={
+                                showQualifierCheckbox && !row.getCanSelect()
+                              }
                               selected={
                                 showQualifierCheckbox && row.getIsSelected()
                               }

@@ -17944,6 +17944,20 @@
         "rateLimited": "Se alcanzó el límite de la API de GitHub. Inténtalo de nuevo en unos minutos. Conecta GitHub para aumentar el límite.",
         "rateLimitedUntil": "Se alcanzó el límite de la API de GitHub. Se restablece a las {time}. Conecta GitHub para aumentar el límite."
       }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {# plugin actualizado} other {# plugins actualizados}}",
+      "failed": "No se pudieron actualizar los plugins. Inténtalo de nuevo.",
+      "partialFailure": "{count, plural, one {No se pudo actualizar # plugin} other {No se pudieron actualizar # plugins}}",
+      "deleteTitle": "{count, plural, one {¿Eliminar # plugin?} other {¿Eliminar # plugins?}}",
+      "deleteDescription": "{count, plural, one {Esto elimina el plugin seleccionado para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina los # plugins seleccionados para todas las personas con acceso. Esta acción no se puede deshacer.}}",
+      "shareTitle": "{count, plural, one {Actualizar acceso para # plugin} other {Actualizar acceso para # plugins}}",
+      "shareDescription": "Aplica estos cambios a cada plugin seleccionado. Los ajustes que no cambies conservan sus valores actuales.",
+      "addAccessDescription": "Añade estas personas y grupos a cada plugin seleccionado. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
+      "apply": "{count, plural, one {Aplicar a # plugin} other {Aplicar a # plugins}}",
+      "publishWarning": {
+        "description": "Después de aplicar, todos en la organización pueden usar los plugins seleccionados. Los plugins publicados no se pueden volver a hacer privados. Solo un administrador puede eliminarlos."
+      }
     }
   },
   "integrations": {

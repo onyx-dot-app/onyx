@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
-import { mockFetch } from "@tests/setup/integrationTestUtils";
+import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
 import CustomizePluginsPage from "@/sections/customize/CustomizePluginsPage";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import {
@@ -272,13 +272,84 @@ describe("admin page", () => {
       screen.getByRole("button", { name: "Add marketplace" })
     ).toBeInTheDocument();
 
-    await setupUser().click(
-      screen.getByRole("button", { name: "Open my-kit" })
-    );
+    await setupUser().click(screen.getByRole("row", { name: "Open my-kit" }));
     await waitFor(() =>
       expect(window.location.pathname).toBe(
         "/admin/plugins/11111111-1111-4111-8111-111111111111"
       )
     );
+  });
+
+  test("deletes the selected plugins in one bulk request after the confirm", async () => {
+    window.history.replaceState(null, "", "/admin/plugins");
+    const fetchMock = mockFetch({
+      "/api/skills": {
+        builtins: [],
+        customs: [
+          plugin("a", "alpha-kit", { user_permission: "OWNER" }),
+          plugin("b", "beta-kit", { user_permission: "EDITOR" }),
+          plugin("c", "gamma-kit", { user_permission: "OWNER" }),
+        ],
+      },
+      "/api/marketplaces": { marketplaces: [] },
+      "POST /api/skills/bulk": { succeeded: ["a", "b"], failed: [] },
+    });
+    render(<CustomizePluginsPage />);
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Select alpha-kit" })
+    );
+    await user.click(screen.getByRole("checkbox", { name: "Select beta-kit" }));
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Delete/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Delete 2 plugins?")).toBeVisible();
+    const list = within(dialog).getByRole("list");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(requestBody(fetchMock, "POST", "/api/skills/bulk")).toEqual({
+        action: "delete",
+        skill_ids: ["a", "b"],
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("2 selected")).not.toBeInTheDocument()
+    );
+  });
+
+  test("a plugin the admin cannot manage cannot be selected", async () => {
+    window.history.replaceState(null, "", "/admin/plugins");
+    mockFetch({
+      "/api/skills": {
+        builtins: [],
+        customs: [
+          plugin("mine", "my-kit", { user_permission: "OWNER" }),
+          plugin("viewed", "viewed-kit", { user_permission: "VIEWER" }),
+        ],
+      },
+      "/api/marketplaces": { marketplaces: [] },
+    });
+    render(<CustomizePluginsPage />);
+
+    expect(
+      await screen.findByRole("checkbox", { name: "Select viewed-kit" })
+    ).toHaveAttribute("aria-disabled", "true");
+    await setupUser().click(
+      screen.getByRole("checkbox", { name: "Select all" })
+    );
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Select my-kit" })
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select viewed-kit" })
+    ).not.toBeChecked();
   });
 });

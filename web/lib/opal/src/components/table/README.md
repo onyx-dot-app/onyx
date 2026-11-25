@@ -83,7 +83,7 @@ function UsersTable({ users }: { users: User[] }) {
 
 | `kind`        | Fields                                                                                                                                                                     |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"qualifier"` | `content?` (`"checkbox" \| "icon" \| "image"`), `icon?(row)`, `imageSrc?(row)`, `imageAlt?(row)`, `selectLabel?(row)`, `background?`, `avatar?`                                                 |
+| `"qualifier"` | `content?` (`"checkbox" \| "icon" \| "image"`), `icon?(row)`, `imageSrc?(row)`, `imageAlt?(row)`, `selectLabel?(row)`, `canSelect?(row)`, `background?`, `avatar?`                              |
 | `"data"`      | `field` (a key of the row) or `id` + `value(row)`; `title`, `cell?(value, row)`, `sortable?`, `resizable?`, `hideable?`, `sortIcon?`, `weight?`, `alignment?`, `truncate?` |
 | `"display"`   | `id`, `title?`, `cell(row)`, `width` (`{ weight, minWidth? }` or `{ fixed }`), `hideable?`, `alignment?`                                                                   |
 | `"actions"`   | `cell?(row)`, `showColumnVisibility?`, `showSorting?`, `sortingFooterText?`                                                                                                |

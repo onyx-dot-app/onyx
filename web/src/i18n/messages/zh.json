@@ -17944,6 +17944,20 @@
         "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
         "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
       }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {已更新 # 个插件} other {已更新 # 个插件}}",
+      "failed": "无法更新插件。请重试。",
+      "partialFailure": "{count, plural, one {# 个插件未能更新} other {# 个插件未能更新}}",
+      "deleteTitle": "{count, plural, one {删除 # 个插件？} other {删除 # 个插件？}}",
+      "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选插件。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选插件。此操作无法撤销。}}",
+      "shareTitle": "{count, plural, one {更新 # 个插件的访问权限} other {更新 # 个插件的访问权限}}",
+      "shareDescription": "将这些更改应用于每个所选插件。未更改的设置将保留当前值。",
+      "addAccessDescription": "将这些人员和群组添加到每个所选插件。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
+      "apply": "{count, plural, one {应用于 # 个插件} other {应用于 # 个插件}}",
+      "publishWarning": {
+        "description": "应用后，组织中的所有人都可以使用所选插件。已发布的插件无法再设为私有。只有管理员可以删除它们。"
+      }
     }
   },
   "integrations": {

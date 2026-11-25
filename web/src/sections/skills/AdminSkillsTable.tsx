@@ -27,6 +27,12 @@ interface AdminSkillsTableProps {
   onOpen: (skill: CustomSkill) => void;
   onShare: (skill: CustomSkill) => void;
   onDelete: (skill: CustomSkill) => void;
+  /** The table's name. @default "Custom skills" */
+  label?: string;
+  /** The Source cell. @default the Organization library or the owner */
+  source?: (skill: CustomSkill) => string;
+  /** Whether a row can be selected. @default every row */
+  canSelect?: (skill: CustomSkill) => boolean;
 }
 
 export default function AdminSkillsTable({
@@ -40,6 +46,9 @@ export default function AdminSkillsTable({
   onOpen,
   onShare,
   onDelete,
+  label,
+  source,
+  canSelect,
 }: AdminSkillsTableProps) {
   const t = useTranslations("skills.adminTable");
   const skillCopy = useTranslations("skills");
@@ -52,6 +61,7 @@ export default function AdminSkillsTable({
     {
       kind: "qualifier",
       selectLabel: (skill) => t("select", { name: skill.name }),
+      canSelect,
     },
     {
       kind: "data",
@@ -90,9 +100,11 @@ export default function AdminSkillsTable({
       width: { weight: 18 },
       cell: (skill) => (
         <Text font="main-ui-body" color="text-03" maxLines={1}>
-          {skill.published_version_number !== null
-            ? t("organizationLibrary")
-            : (skill.owner?.email ?? t("noOwner"))}
+          {source
+            ? source(skill)
+            : skill.published_version_number !== null
+              ? t("organizationLibrary")
+              : (skill.owner?.email ?? t("noOwner"))}
         </Text>
       ),
     },
@@ -230,7 +242,7 @@ export default function AdminSkillsTable({
 
   return (
     <Table
-      label={t("label")}
+      label={label ?? t("label")}
       items={skills}
       columns={columns}
       getRowId={(skill) => skill.id}

@@ -35,7 +35,12 @@ import { SharePermissionMenu } from "@/lib/permissions/components";
 
 const KEEP = "KEEP";
 
+/** What the selected rows are: the copy names them. */
+export type BulkSkillNoun = "skill" | "plugin";
+
 interface BulkSkillSharingModalProps {
+  /** @default "skill" */
+  noun?: BulkSkillNoun;
   count: number;
   // False when a selected skill's organization access is not the caller's to
   // change (owner or admin only); the API would reject that skill's update.
@@ -47,6 +52,7 @@ interface BulkSkillSharingModalProps {
 }
 
 export default function BulkSkillSharingModal({
+  noun = "skill",
   count,
   canChangeOrgAccess,
   open,
@@ -54,7 +60,10 @@ export default function BulkSkillSharingModal({
   onClose,
   onSave,
 }: BulkSkillSharingModalProps) {
-  const t = useTranslations("skills.bulk");
+  const bulkCopy = useTranslations("skills.bulk");
+  const pluginCopy = useTranslations("plugins.bulk");
+  // Strings that name the rows; the plugin catalog has only those.
+  const nounCopy = noun === "plugin" ? pluginCopy : bulkCopy;
   const shareCopy = useTranslations("skills.modals.share");
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -117,8 +126,8 @@ export default function BulkSkillSharingModal({
       <Modal.Content width="md" height="fit">
         <Modal.Header
           icon={SvgBlocks}
-          title={t("shareTitle", { count })}
-          description={t("shareDescription")}
+          title={nounCopy("shareTitle", { count })}
+          description={nounCopy("shareDescription")}
           onClose={() => {
             if (!saving) onClose();
           }}
@@ -133,10 +142,14 @@ export default function BulkSkillSharingModal({
                 ariaLabel={shareCopy("accessTitle")}
                 disabled={saving || !canChangeOrgAccess}
                 options={[
-                  { value: "KEEP", label: t("unchanged"), icon: SvgUsers },
+                  {
+                    value: "KEEP",
+                    label: bulkCopy("unchanged"),
+                    icon: SvgUsers,
+                  },
                   {
                     value: "PUBLIC",
-                    label: t("everyone"),
+                    label: bulkCopy("everyone"),
                     icon: SvgOrganization,
                   },
                 ]}
@@ -146,8 +159,8 @@ export default function BulkSkillSharingModal({
                   variant="warning"
                   outerPadding={1}
                   innerPadding={1}
-                  title={t("publishWarning.title")}
-                  description={t("publishWarning.description")}
+                  title={bulkCopy("publishWarning.title")}
+                  description={nounCopy("publishWarning.description")}
                 />
               )}
             </Section>
@@ -164,7 +177,7 @@ export default function BulkSkillSharingModal({
                     defaultOption={KEEP}
                     disabled={saving}
                     options={[
-                      { value: KEEP, title: t("unchanged") },
+                      { value: KEEP, title: bulkCopy("unchanged") },
                       ...companyOptions,
                     ]}
                     onValueChange={(value) => {
@@ -178,7 +191,7 @@ export default function BulkSkillSharingModal({
             <Section gap={2} height="auto" alignItems="stretch">
               <Content font="main-ui-action" title={shareCopy("peopleTitle")} />
               <Text font="secondary-body" color="text-03">
-                {t("addAccessDescription")}
+                {nounCopy("addAccessDescription")}
               </Text>
               {!sharingAllowed && <SharingOffNotice />}
               <AddPeoplePicker
@@ -223,7 +236,7 @@ export default function BulkSkillSharingModal({
             {shareCopy("cancelButton.label")}
           </Button>
           <Button disabled={!changed || saving} onClick={() => void save()}>
-            {t("apply", { count })}
+            {nounCopy("apply", { count })}
           </Button>
         </Modal.Footer>
       </Modal.Content>

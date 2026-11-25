@@ -56,6 +56,11 @@ export interface TableQualifierColumn<TData> {
   imageAlt?: (row: TData) => string;
   /** The row's selection checkbox label. @default "Select row" */
   selectLabel?: (row: TData) => string;
+  /**
+   * Whether the row can be selected. A row that cannot shows a disabled
+   * checkbox, and select-all skips it. @default every row
+   */
+  canSelect?: (row: TData) => boolean;
   /** A tinted tile behind the icon or image. @default false */
   background?: boolean;
   /**
@@ -180,6 +185,8 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   getImageAlt?: (row: TData) => string;
   /** Return the selection checkbox label for a row. */
   getSelectLabel?: (row: TData) => string;
+  /** Return whether a row can be selected. @default every row */
+  getCanSelect?: (row: TData) => boolean;
   /** Show a tinted background container behind the content. @default false */
   background?: boolean;
   /** The icon is an avatar, drawn larger. @default false */

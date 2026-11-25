@@ -105,7 +105,8 @@
   library default for published skills with no own setting: Available,
   Installed by default or Not available; never Required) and **Sharing** (off:
   only organization-wide managers add user or group shares).
-- **Bulk management.** **Admin Panel → Skills** supports selection of custom skills, bulk access and installation changes,
+- **Bulk management.** **Admin Panel → Skills** and **Admin Panel → Plugins**
+  ([[plugins]]) support selection of custom skills (`sections/skills/useSkillBulkActions.tsx`), bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items

@@ -48,8 +48,8 @@ import {
 } from "@/lib/skills/hooks";
 import { useMarketplaceAdded, useMarketplaces } from "@/lib/marketplaces/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
-import { canShareSkill } from "@/lib/skills/sharing";
-import type { Skill } from "@/lib/skills/types";
+import { canManageSkill, canShareSkill } from "@/lib/skills/sharing";
+import type { CustomSkill, Skill } from "@/lib/skills/types";
 import { useUser } from "@/providers/UserProvider";
 import CustomizeLayout from "@/sections/customize/CustomizeLayout";
 import AddSkillMenu from "@/sections/customize/AddSkillMenu";
@@ -66,32 +66,16 @@ import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import PluginTurnOnModal from "@/sections/modals/plugins/PluginTurnOnModal";
 import UploadPluginFlow from "@/sections/modals/plugins/UploadPluginFlow";
+import AdminSkillsTable from "@/sections/skills/AdminSkillsTable";
+import { useSkillBulkActions } from "@/sections/skills/useSkillBulkActions";
 
-interface PluginRowProps {
-  entry: MemberPluginEntry;
-  group: PluginGroup;
-  enablement: SkillEnablement;
-  onSwitch: (entry: MemberPluginEntry, enabled: boolean) => void;
-  onShare: (entry: MemberPluginEntry) => void;
-}
-
-function PluginRow({
-  entry,
-  group,
-  enablement,
-  onSwitch,
-  onShare,
-}: PluginRowProps) {
+/** Where a plugin comes from, as its row or the admin Source column says. */
+function usePluginSource(): (
+  entry: MemberPluginEntry,
+  group: PluginGroup
+) => string {
   const t = useTranslations("customize");
-  const navigation = useNavigation();
-  const panel = usePanel();
-  const [skill] = entry.skills;
-  const { blocked } = pluginSwitch(entry);
-  const enabled = skill ? enablement.enabledOf(skill) : false;
-  const busy = skill ? enablement.isPending(skill.id) : false;
-  const canToggle = blocked === null;
-  const canShare = skill !== undefined && canShareSkill(skill);
-  const source =
+  return (entry, group) =>
     entry.marketplace !== null
       ? t("skills.source.marketplace", {
           name: entry.marketplace.name,
@@ -106,6 +90,33 @@ function PluginRow({
             : entry.ownerEmail
               ? t("skills.source.sharedBy", { email: entry.ownerEmail })
               : t("skills.source.shared");
+}
+
+interface PluginRowProps {
+  entry: MemberPluginEntry;
+  group: PluginGroup;
+  enablement: SkillEnablement;
+  onSwitch: (entry: MemberPluginEntry, enabled: boolean) => void;
+  onShare: (skill: CustomSkill) => void;
+}
+
+function PluginRow({
+  entry,
+  group,
+  enablement,
+  onSwitch,
+  onShare,
+}: PluginRowProps) {
+  const t = useTranslations("customize");
+  const navigation = useNavigation();
+  const panel = usePanel();
+  const sourceOf = usePluginSource();
+  const [skill] = entry.skills;
+  const { blocked } = pluginSwitch(entry);
+  const enabled = skill ? enablement.enabledOf(skill) : false;
+  const busy = skill ? enablement.isPending(skill.id) : false;
+  const canToggle = blocked === null;
+  const source = sourceOf(entry, group);
   const heldBy = skill?.name_held_by ?? [];
   const contents =
     !enabled && heldBy.length > 0
@@ -129,14 +140,14 @@ function PluginRow({
           },
         ]
       : []),
-    ...(canShare
+    ...(skill && canShareSkill(skill)
       ? [
           {
             kind: "action" as const,
             id: "share",
             icon: SvgShare,
             title: t("skills.menu.share"),
-            onSelect: () => onShare(entry),
+            onSelect: () => onShare(skill),
           },
         ]
       : []),
@@ -191,6 +202,7 @@ function scrollWhenLinked(element: HTMLDivElement | null) {
  * Both panels list marketplaces below the plugins once one exists. */
 export default function CustomizePluginsPage() {
   const t = useTranslations("customize");
+  const navigation = useNavigation();
   const panel = usePanel();
   const adminCopy = useTranslations("admin.plugins");
   const marketplaceCopy = useTranslations("plugins.marketplaces");
@@ -205,7 +217,7 @@ export default function CustomizePluginsPage() {
   const skills = useUserSkills();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
-  const [sharing, setSharing] = useState<MemberPluginEntry | null>(null);
+  const [sharing, setSharing] = useState<CustomSkill | null>(null);
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
   const [uploading, setUploading] = useState(false);
   const [addingMarketplace, setAddingMarketplace] = useState(false);
@@ -232,10 +244,32 @@ export default function CustomizePluginsPage() {
     0
   );
 
+  // The admin panel lists the shown plugins in one table, by name, and
+  // keeps each plugin's group in the Source column.
+  const sourceOf = usePluginSource();
+  const shownGroups = new Map(
+    PLUGIN_GROUPS.flatMap((group) =>
+      groups[group].map((entry) => [entry.id, { entry, group }] as const)
+    )
+  );
+  const adminRows = entries
+    .filter((entry) => shownGroups.has(entry.id))
+    .flatMap((entry) => entry.skills)
+    .map((skill) => ({ ...skill, enabled: enablement.enabledOf(skill) }));
+  const bulk = useSkillBulkActions({
+    items: adminRows,
+    enablement,
+    noun: "plugin",
+  });
+
   const statusFilter = (
     <StatusFilter
+      key="status"
       value={status}
-      onChange={setStatus}
+      onChange={(next) => {
+        setStatus(next);
+        bulk.reset();
+      }}
       allLabel={t("plugins.filter.all")}
     />
   );
@@ -342,6 +376,31 @@ export default function CustomizePluginsPage() {
             )
           }
         />
+      ) : panel === "admin" ? (
+        <Section height="auto" alignItems="stretch">
+          <AdminSkillsTable
+            label={adminCopy("title")}
+            skills={adminRows}
+            selectedIds={bulk.selectedIds}
+            onSelectionChange={bulk.select}
+            busy={bulk.busy}
+            isPending={enablement.isPending}
+            enabledOf={enablement.enabledOf}
+            onEnabledChange={(skill, enabled) =>
+              void enablement.setEnabled(skill, enabled)
+            }
+            onOpen={(skill) =>
+              navigation.go(pluginHref(skill.id, undefined, panel))
+            }
+            onShare={setSharing}
+            onDelete={(skill) => bulk.confirmDelete([skill])}
+            source={(skill) => {
+              const shown = shownGroups.get(skill.id);
+              return shown ? sourceOf(shown.entry, shown.group) : "";
+            }}
+            canSelect={canManageSkill}
+          />
+        </Section>
       ) : (
         PLUGIN_GROUPS.map((group) => (
           <CustomizeGroup key={group} title={t(`skills.groups.${group}`)}>
@@ -370,10 +429,11 @@ export default function CustomizePluginsPage() {
           onClose={() => setTurnedOn(null)}
         />
       )}
-      {sharing && sharing.skills[0] && (
+      {panel === "admin" && bulk.modals}
+      {sharing && (
         <ShareSkillModal
           mode="edit"
-          skillId={sharing.skills[0].id}
+          skillId={sharing.id}
           fallbackTitle={sharing.name}
           open
           onClose={() => setSharing(null)}
@@ -394,6 +454,7 @@ export default function CustomizePluginsPage() {
           actions={[addMenu]}
         />
         <SettingsLayouts.Body>
+          {bulk.failures}
           <Toolbar
             search={
               <InputTypeIn
@@ -401,10 +462,15 @@ export default function CustomizePluginsPage() {
                 value={query}
                 placeholder={t("search")}
                 aria-label={t("search")}
-                onChange={(event) => setQuery(event.target.value)}
+                readOnly={bulk.busy}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  bulk.reset();
+                }}
               />
             }
-            actions={statusFilter}
+            filters={[statusFilter]}
+            actions={bulk.toolbarActions}
           />
           {list}
           {marketplaces}
