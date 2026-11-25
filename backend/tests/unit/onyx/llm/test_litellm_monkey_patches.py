@@ -1,5 +1,7 @@
+import json
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, cast
+from typing import Annotated, Any, Union, cast
 from unittest import mock
 
 import pytest
@@ -11,6 +13,15 @@ from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
 from litellm.types.utils import ChatCompletionDeltaToolCall, ModelResponse
+from openai import omit
+from openai._utils import PropertyInfo
+from openai._utils import maybe_transform as openai_maybe_transform
+from openai.resources.chat.completions import completions as openai_chat_completions
+from openai.types.chat import ChatCompletionMessage, ChatCompletionMessageParam
+from openai.types.chat.completion_create_params import (
+    CompletionCreateParamsNonStreaming,
+    CompletionCreateParamsStreaming,
+)
 from openai.types.responses.response import IncompleteDetails
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import ResponseOutputText
@@ -18,7 +29,9 @@ from openai.types.responses.response_reasoning_item import (
     ResponseReasoningItem,
     Summary,
 )
+from typing_extensions import Required, TypedDict
 
+from onyx.llm.litellm_singleton import monkey_patches
 from onyx.llm.litellm_singleton.monkey_patches import apply_monkey_patches
 
 _UNSET = object()
@@ -643,3 +656,145 @@ def test_gemini_candidate_without_content_does_not_inherit_prior_candidate() -> 
     assert (second.index, second.finish_reason) == (1, "length")
     assert second.message.content is None
     assert not second.message.tool_calls
+
+
+def _chat_request_body(messages: list[Any]) -> dict[str, Any]:
+    return {
+        "messages": messages,
+        "model": "gpt-test",
+        "max_tokens": omit,
+        "stream": True,
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search",
+                    "description": "Search",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ],
+    }
+
+
+def _json_chat_messages() -> list[dict[str, Any]]:
+    return [
+        {"role": "system", "content": "Be brief."},
+        {"role": "user", "content": "What is the status?"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": '{"queries": ["a"]}'},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": "result"},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Look",
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "data:image/png;base64,AAAA",
+                        "detail": "auto",
+                    },
+                },
+            ],
+            # A key that the SDK types do not know, such as a cache breakpoint flag.
+            "provider_extra": {"numbers": [1, 2.5, True, None]},
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "expected_type",
+    [CompletionCreateParamsStreaming, CompletionCreateParamsNonStreaming],
+)
+def test_openai_chat_transform_passes_json_messages_through_unchanged(
+    expected_type: object,
+) -> None:
+    apply_monkey_patches()
+    patched = openai_chat_completions.maybe_transform
+    assert patched is not openai_maybe_transform
+    body = _chat_request_body(_json_chat_messages())
+
+    with mock.patch.object(
+        monkey_patches,
+        "_original_openai_chat_maybe_transform",
+        wraps=openai_maybe_transform,
+    ) as sdk_transform:
+        result = patched(body, expected_type)
+    expected = openai_maybe_transform(body, expected_type)
+
+    # The SDK did not walk the messages.
+    assert sdk_transform.call_args.args[0]["messages"] == []
+    assert result is not None
+    assert result == expected
+    assert json.dumps(result) == json.dumps(expected)
+    # The request owns its list, and the caller's body is as it was.
+    assert result["messages"] is not body["messages"]
+    assert body == _chat_request_body(_json_chat_messages())
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        ChatCompletionMessage(role="assistant", content="From a model"),
+        {"role": "user", "content": ({"type": "text", "text": "A tuple"},)},
+        {"role": "user", "content": "Hello", "name": omit},
+    ],
+)
+def test_openai_chat_transform_keeps_the_sdk_path_for_other_values(
+    message: object,
+) -> None:
+    apply_monkey_patches()
+    body = _chat_request_body([_json_chat_messages()[0], message])
+
+    with mock.patch.object(
+        monkey_patches,
+        "_original_openai_chat_maybe_transform",
+        wraps=openai_maybe_transform,
+    ) as sdk_transform:
+        result = openai_chat_completions.maybe_transform(
+            body, CompletionCreateParamsStreaming
+        )
+
+    assert len(sdk_transform.call_args.args[0]["messages"]) == 2
+    assert result is not None
+    assert result == openai_maybe_transform(body, CompletionCreateParamsStreaming)
+    assert all(isinstance(item, dict) for item in result["messages"])
+
+
+class _AliasedParam(TypedDict, total=False):
+    card_id: Required[Annotated[str, PropertyInfo(alias="cardID")]]
+
+
+class _FormattedParam(TypedDict, total=False):
+    created: Annotated[datetime, PropertyInfo(format="iso8601")]
+
+
+class _PlainParam(TypedDict, total=False):
+    name: Required[str]
+    parts: Iterable[Union[str, "_PlainParam"]]
+
+
+class _HolderParam(TypedDict, total=False):
+    items: Iterable[Union[_PlainParam, _AliasedParam]]
+
+
+def test_openai_chat_transform_patch_detects_types_that_change_values() -> None:
+    assert monkey_patches._transform_changes_json(_AliasedParam, set())
+    assert monkey_patches._transform_changes_json(_FormattedParam, set())
+    assert monkey_patches._transform_changes_json(_HolderParam, set())
+    assert not monkey_patches._transform_changes_json(_PlainParam, set())
+    # The patch is on only while the installed SDK leaves chat messages as they are.
+    assert not monkey_patches._transform_changes_json(ChatCompletionMessageParam, set())

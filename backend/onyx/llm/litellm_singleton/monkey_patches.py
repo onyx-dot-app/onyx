@@ -132,13 +132,34 @@ Status checked against LiteLLM v1.100.4 (2026-10-27):
    STATUS: STILL NEEDED - v1.100.4 keeps markers only on parts that are already
            `input_text`, and LiteLLM rejects that type in a user message.
 
+12. OpenAI SDK Walk Over Chat Messages (_patch_openai_chat_messages_transform):
+   - chat.completions.create passes the request through the SDK's
+     maybe_transform, which checks every message against each member of the
+     message union to rename aliased keys and to format dates and files
+   - The chat message types have no alias and no format, so for JSON messages the
+     walk returns an equal copy. It costs about 60 microseconds of CPU per message
+     on every request, so a long conversation pays milliseconds on each step
+   - Our patch passes messages that hold only JSON values through unchanged. Any
+     other value, such as a Pydantic model, takes the SDK path. The patch turns
+     itself off when a message type of the installed SDK has an alias or a format
+   STATUS: STILL NEEDED - Checked against openai v2.38.0.
+
 """
 
 import re
 import time
 import uuid
-from collections.abc import Mapping
-from typing import Any, List, Optional, cast
+from collections.abc import Callable, Mapping
+from typing import (
+    Annotated,
+    Any,
+    List,
+    Optional,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
@@ -155,6 +176,11 @@ from litellm.types.utils import (
     ModelResponse,
     ModelResponseStream,
 )
+from typing_extensions import is_typeddict
+
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # Original upstream chunk_parser, saved before any patching for fallback use
 _original_responses_chunk_parser = (
@@ -1031,6 +1057,96 @@ def _patch_responses_bridge_keeps_breakpoints() -> None:
     )
 
 
+# The SDK's own transform, set when the patch goes on.
+_original_openai_chat_maybe_transform: Callable[[object, object], Any | None] | None = (
+    None
+)
+_JSON_SCALAR_TYPES = frozenset({str, int, float, bool, type(None)})
+
+
+def _is_json_value(value: object) -> bool:
+    """Whether `value` holds only dict, list and JSON scalar objects of those
+    exact types, with str keys."""
+    pending: list[object] = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, dict):
+            if type(item) is not dict or any(type(key) is not str for key in item):
+                return False
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            if type(item) is not list:
+                return False
+            pending.extend(item)
+        elif type(item) not in _JSON_SCALAR_TYPES:
+            return False
+    return True
+
+
+def _transform_changes_json(annotation: object, seen: set[type]) -> bool:
+    """Whether the SDK transform can change a JSON value of this type: an alias
+    renames a key and a format rewrites a value."""
+    from openai._utils import PropertyInfo
+
+    if isinstance(annotation, type) and is_typeddict(annotation):
+        if annotation in seen:
+            return False
+        seen.add(annotation)
+        hints = get_type_hints(annotation, include_extras=True)
+        return any(_transform_changes_json(hint, seen) for hint in hints.values())
+    arguments = get_args(annotation)
+    if get_origin(annotation) is Annotated and any(
+        isinstance(metadata, PropertyInfo)
+        and (metadata.alias is not None or metadata.format is not None)
+        for metadata in arguments[1:]
+    ):
+        return True
+    return any(_transform_changes_json(argument, seen) for argument in arguments)
+
+
+def _patch_openai_chat_messages_transform() -> None:
+    from openai.resources.chat.completions import completions
+    from openai.types.chat import ChatCompletionMessageParam
+    from openai.types.chat.completion_create_params import (
+        CompletionCreateParamsNonStreaming,
+        CompletionCreateParamsStreaming,
+    )
+
+    global _original_openai_chat_maybe_transform
+    if _original_openai_chat_maybe_transform is not None:
+        return
+    try:
+        changes_json = _transform_changes_json(ChatCompletionMessageParam, set())
+    except Exception:
+        logger.warning("Could not read the OpenAI chat message types", exc_info=True)
+        changes_json = True
+    if changes_json:
+        logger.warning(
+            "The OpenAI SDK transforms chat messages; its message walk stays on"
+        )
+        return
+    _original_openai_chat_maybe_transform = completions.maybe_transform
+
+    def _patched_maybe_transform(data: object, expected_type: object) -> Any | None:
+        sdk_transform = _original_openai_chat_maybe_transform
+        if sdk_transform is None:
+            raise RuntimeError("Bug: the SDK transform is set before the patch")
+        if isinstance(data, dict) and (
+            expected_type is CompletionCreateParamsStreaming
+            or expected_type is CompletionCreateParamsNonStreaming
+        ):
+            messages = data.get("messages")
+            if isinstance(messages, list) and messages and _is_json_value(messages):
+                # The empty list keeps the position of the key in the body.
+                transformed = sdk_transform({**data, "messages": []}, expected_type)
+                if isinstance(transformed, dict):
+                    transformed["messages"] = list(messages)
+                    return transformed
+        return sdk_transform(data, expected_type)
+
+    completions.maybe_transform = _patched_maybe_transform  # ty: ignore[invalid-assignment]
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -1048,6 +1164,7 @@ def apply_monkey_patches() -> None:
     - Patching OpenRouterChatCompletionStreamingHandler.chunk_parser to keep the served model
     - Patching VertexGeminiConfig for Gemini 4+ thinking and content-less candidates
     - Patching the responses bridge to keep cache breakpoints on user text parts
+    - Patching the OpenAI SDK chat request transform to pass JSON messages through
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -1060,3 +1177,4 @@ def apply_monkey_patches() -> None:
     _patch_openrouter_routed_model()
     _patch_vertex_gemini_newer_models()
     _patch_responses_bridge_keeps_breakpoints()
+    _patch_openai_chat_messages_transform()
