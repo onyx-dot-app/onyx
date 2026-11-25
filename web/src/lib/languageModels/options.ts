@@ -11,6 +11,7 @@ import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import type {
   DefaultModel,
   FilterModelConfigurationsOptions,
+  ModelKind,
   LLMOption,
   LLMOptionGroup,
   LLMProviderDescriptor,
@@ -68,6 +69,22 @@ export function llmOptionKey(option: {
  * selectable model options. Hidden models require an existing selection or
  * an explicit admin opt-in.
  */
+/** Whether a model is one of `kinds`. Decision-only models count as chat
+ *  models only with `includeDecisionOnly`. */
+function isModelOfKinds(
+  mc: ModelOptionProvider["model_configurations"][number],
+  kinds: readonly ModelKind[],
+  includeDecisionOnly: boolean
+): boolean {
+  const isChat =
+    mc.supports_chat !== false ||
+    (includeDecisionOnly && mc.supports_decisions === true);
+  return (
+    (kinds.includes("chat") && isChat) ||
+    (kinds.includes("image") && mc.supports_image_generation === true)
+  );
+}
+
 /** `useProviderNames()`: a provider entry's names as the UI shows them. */
 export type ProviderNamesResolver = (entry: ProviderEntry) => ProviderNames;
 
@@ -81,7 +98,8 @@ export function buildLlmOptions(
   currentModelName?: string,
   includeHiddenModels = false,
   providerNames?: ProviderNamesResolver,
-  includeDecisionOnly = false
+  includeDecisionOnly = false,
+  modelKinds: readonly ModelKind[] = ["chat"]
 ): LLMOption[] {
   if (!llmProviders) return [];
 
@@ -100,7 +118,7 @@ export function buildLlmOptions(
     llmProvider.model_configurations
       .filter(
         (mc) =>
-          (includeDecisionOnly || mc.supports_chat !== false) &&
+          isModelOfKinds(mc, modelKinds, includeDecisionOnly) &&
           (includeHiddenModels || mc.is_visible || mc.name === currentModelName)
       )
       .forEach((mc) => {
@@ -248,9 +266,11 @@ export function findLlmOptionById(
 ): LLMOption | null {
   if (modelConfigurationId === null) return null;
   return (
-    buildLlmOptions(llmProviders, undefined, true, undefined, true).find(
-      (option) => option.modelConfigurationId === modelConfigurationId
-    ) ?? null
+    buildLlmOptions(llmProviders, undefined, true, undefined, true, [
+      "chat",
+      "image",
+    ]).find((option) => option.modelConfigurationId === modelConfigurationId) ??
+    null
   );
 }
 
@@ -287,6 +307,7 @@ export function filterModelConfigurations<T extends ModelOptionProvider>(
     imageInput = false,
     keep = null,
     includeDecisionOnly = false,
+    modelKinds = ["chat"],
   }: FilterModelConfigurationsOptions = {}
 ): T[] {
   return providers
@@ -294,7 +315,7 @@ export function filterModelConfigurations<T extends ModelOptionProvider>(
       ...provider,
       model_configurations: provider.model_configurations.filter(
         (mc) =>
-          (includeDecisionOnly || mc.supports_chat !== false) &&
+          isModelOfKinds(mc, modelKinds, includeDecisionOnly) &&
           ((keep !== null && mc.id === keep) ||
             (mc.is_visible && (!imageInput || mc.supports_image_input)))
       ),
@@ -320,6 +341,8 @@ export function fromSelectValue(value: string): number | null {
 
 export interface BuildModelSelectOptionsOptions {
   includeDecisionOnly?: boolean;
+  /** The kinds of model to offer. Defaults to chat models. */
+  modelKinds?: readonly ModelKind[];
   /**
    * Group models under a foldable divider per provider (aggregators split
    * per vendor, as the chat picker does). Off, or with a single group,
@@ -349,6 +372,7 @@ export function buildModelSelectOptions(
     providerNames,
     includeDecisionOnly = false,
     labelSingleGroup = false,
+    modelKinds = ["chat"],
   }: BuildModelSelectOptionsOptions = {}
 ): SelectOptions {
   const dividers: SelectDivider[] = groupLlmOptions(
@@ -357,7 +381,8 @@ export function buildModelSelectOptions(
       undefined,
       true,
       providerNames,
-      includeDecisionOnly
+      includeDecisionOnly,
+      modelKinds
     )
   )
     .map((group) => ({

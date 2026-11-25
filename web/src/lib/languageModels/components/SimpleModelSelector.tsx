@@ -19,6 +19,7 @@ import {
 } from "@/lib/languageModels/options";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import type {
+  ModelKind,
   ModelOptionProvider,
   ModelPaging,
 } from "@/lib/languageModels/types";
@@ -29,6 +30,9 @@ const GLOBAL_DEFAULT_SELECT_VALUE = "global-default";
 /** Prefixes a decision-section row's select value, so a model listed among
  *  both decision and language models has two distinct rows. */
 const DECISION_SELECT_PREFIX = "decision:";
+
+/** Stable, so the default does not rebuild the options on every render. */
+const DEFAULT_MODEL_KINDS: readonly ModelKind[] = ["chat"];
 
 /** A keystroke storm settles before a search leaves for the server. */
 export const SERVER_SEARCH_DEBOUNCE_MS = 300;
@@ -78,6 +82,13 @@ type EmittedModelConfigurationId<Nullable extends boolean> =
 
 export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
   includeDecisionOnly?: boolean;
+  /**
+   * The kinds of model to offer: `["chat"]` (the default) for a setting that
+   * needs a model to chat with, `["image"]` for one that generates images,
+   * or both. An image model is listed only when `providers` carries it, i.e.
+   * a listing fetched with `include_image_gen`.
+   */
+  modelKinds?: readonly ModelKind[];
   providers: ModelOptionProvider[];
   /** The chosen model configuration id; null shows the placeholder. */
   value: number | null;
@@ -147,6 +158,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   nullable,
   grouped = true,
   includeDecisionOnly = false,
+  modelKinds = DEFAULT_MODEL_KINDS,
   globalDefault,
   disabled,
   isError,
@@ -187,8 +199,16 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         providerNames,
         includeDecisionOnly,
         labelSingleGroup: hasDecisionRows,
+        modelKinds,
       }),
-    [providers, grouped, providerNames, includeDecisionOnly, hasDecisionRows]
+    [
+      providers,
+      grouped,
+      providerNames,
+      includeDecisionOnly,
+      hasDecisionRows,
+      modelKinds,
+    ]
   );
   const fallbackRow =
     selectedFallback?.value === toSelectValue(value) &&

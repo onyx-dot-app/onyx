@@ -11,6 +11,7 @@ export async function refreshLlmProviderCaches(
 ): Promise<void> {
   await Promise.all([
     mutate(SWR_KEYS.adminLlmProvidersPaged),
+    mutate(SWR_KEYS.adminLlmProvidersWithImageModels),
     mutate(SWR_KEYS.llmProviders),
     mutate(SWR_KEYS.llmRouterModels),
     mutate(SWR_KEYS.decisionModel),

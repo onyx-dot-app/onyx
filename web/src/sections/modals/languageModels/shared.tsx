@@ -58,6 +58,7 @@ import {
 } from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -841,6 +842,7 @@ function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
   const { defaultConfig, refetch: refetchConfigs } =
     useImageGenerationConfigs();
   const [isPending, setIsPending] = useState(false);
+  const { mutate } = useSWRConfig();
 
   const provider = providers?.find((p) => p.llm_provider_id === llmProviderId);
   const models =
@@ -864,7 +866,11 @@ function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
       } else if (model.image_provider_id) {
         await deleteImageGenerationConfig(model.image_provider_id);
       }
-      await Promise.all([refetchProviders(), refetchConfigs()]);
+      await Promise.all([
+        refetchProviders(),
+        refetchConfigs(),
+        mutate(SWR_KEYS.adminLlmProvidersWithImageModels),
+      ]);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("imageModels.error")
@@ -1021,167 +1027,171 @@ export function ModelSelectionField({
   }
 
   return (
-    <Card color="background-tint-00" border="none" padding={2}>
-      <Section gap={2}>
-        <InputHorizontal
-          title={t("models.field.title")}
-          description={t("models.field.description")}
-          center
-        >
-          <Section flexDirection="row" gap={0}>
-            <Button
-              disabled={models.length === 0}
-              prominence="tertiary"
-              size="md"
-              onClick={handleToggleSelectAll}
-            >
-              {allSelected
-                ? t("models.deselectAllButton.label")
-                : t("models.selectAllButton.label")}
-            </Button>
-            {onRefetch && <RefetchButton onRefetch={onRefetch} />}
-          </Section>
-        </InputHorizontal>
+    <>
+      <Card color="background-tint-00" border="none" padding={2}>
+        <Section gap={2}>
+          <InputHorizontal
+            title={t("models.field.title")}
+            description={t("models.field.description")}
+            center
+          >
+            <Section flexDirection="row" gap={0}>
+              <Button
+                disabled={models.length === 0}
+                prominence="tertiary"
+                size="md"
+                onClick={handleToggleSelectAll}
+              >
+                {allSelected
+                  ? t("models.deselectAllButton.label")
+                  : t("models.selectAllButton.label")}
+              </Button>
+              {onRefetch && <RefetchButton onRefetch={onRefetch} />}
+            </Section>
+          </InputHorizontal>
 
-        {models.length === 0 ? (
-          <EmptyMessageCard
-            title={emptyMessage ?? t("models.empty.title")}
-            padding={2}
-          />
-        ) : (
-          <Section gap={1} alignItems="stretch">
-            {(() => {
-              const { order, foldedCount } = layout ?? foldedLayout(models);
-              const byName = new Map(models.map((m) => [m.name, m]));
-              const ordered = order.flatMap((name) => byName.get(name) ?? []);
-              // Models added since the last re-sort, e.g. a custom model.
-              const known = new Set(order);
-              const added = models.filter((m) => !known.has(m.name));
-              const isFoldable = ordered.length > foldedCount;
-              const shownModels = [
-                ...(isFoldable && !isExpanded
-                  ? ordered.slice(0, foldedCount)
-                  : ordered),
-                ...added,
-              ];
-              const defaultModelName =
-                providerId != null && defaultText?.provider_id === providerId
-                  ? defaultText.model_name
-                  : undefined;
+          {models.length === 0 ? (
+            <EmptyMessageCard
+              title={emptyMessage ?? t("models.empty.title")}
+              padding={2}
+            />
+          ) : (
+            <Section gap={1} alignItems="stretch">
+              {(() => {
+                const { order, foldedCount } = layout ?? foldedLayout(models);
+                const byName = new Map(models.map((m) => [m.name, m]));
+                const ordered = order.flatMap((name) => byName.get(name) ?? []);
+                // Models added since the last re-sort, e.g. a custom model.
+                const known = new Set(order);
+                const added = models.filter((m) => !known.has(m.name));
+                const isFoldable = ordered.length > foldedCount;
+                const shownModels = [
+                  ...(isFoldable && !isExpanded
+                    ? ordered.slice(0, foldedCount)
+                    : ordered),
+                  ...added,
+                ];
+                const defaultModelName =
+                  providerId != null && defaultText?.provider_id === providerId
+                    ? defaultText.model_name
+                    : undefined;
 
-              return (
-                <>
-                  {shownModels.map((model) => (
-                    <ModelRow
-                      key={model.name}
-                      model={model}
-                      onToggleVisibility={(visible) =>
-                        setVisibility(model.name, visible)
-                      }
-                      onRename={(value) =>
-                        setCustomDisplayName(model.name, value)
-                      }
-                      onSettingsChange={(patch) =>
-                        setModelSettings(model.name, patch)
-                      }
-                      isDefaultModel={model.name === defaultModelName}
-                      onSetDefaultModel={
-                        providerId != null &&
-                        model.is_visible &&
-                        model.supports_chat !== false
-                          ? () => void setDefaultModel(model.name)
-                          : undefined
-                      }
-                    />
-                  ))}
-                  {isFoldable && (
-                    <Interactive.Stateless
-                      prominence="tertiary"
-                      onClick={toggleExpanded}
-                    >
-                      <Interactive.Container type="button" width="full">
-                        <Content
-                          font="secondary-body"
-                          title={
-                            isExpanded
-                              ? t("models.foldButton.label")
-                              : t("models.moreButton.label")
-                          }
-                          icon={() => (
-                            <SvgChevronDown
-                              className={cn(
-                                "transition-transform",
-                                isExpanded && "-rotate-180"
-                              )}
-                              size={14}
-                            />
-                          )}
-                        />
-                      </Interactive.Container>
-                    </Interactive.Stateless>
-                  )}
-                </>
-              );
-            })()}
-          </Section>
-        )}
+                return (
+                  <>
+                    {shownModels.map((model) => (
+                      <ModelRow
+                        key={model.name}
+                        model={model}
+                        onToggleVisibility={(visible) =>
+                          setVisibility(model.name, visible)
+                        }
+                        onRename={(value) =>
+                          setCustomDisplayName(model.name, value)
+                        }
+                        onSettingsChange={(patch) =>
+                          setModelSettings(model.name, patch)
+                        }
+                        isDefaultModel={model.name === defaultModelName}
+                        onSetDefaultModel={
+                          providerId != null &&
+                          model.is_visible &&
+                          model.supports_chat !== false
+                            ? () => void setDefaultModel(model.name)
+                            : undefined
+                        }
+                      />
+                    ))}
+                    {isFoldable && (
+                      <Interactive.Stateless
+                        prominence="tertiary"
+                        onClick={toggleExpanded}
+                      >
+                        <Interactive.Container type="button" width="full">
+                          <Content
+                            font="secondary-body"
+                            title={
+                              isExpanded
+                                ? t("models.foldButton.label")
+                                : t("models.moreButton.label")
+                            }
+                            icon={() => (
+                              <SvgChevronDown
+                                className={cn(
+                                  "transition-transform",
+                                  isExpanded && "-rotate-180"
+                                )}
+                                size={14}
+                              />
+                            )}
+                          />
+                        </Interactive.Container>
+                      </Interactive.Stateless>
+                    )}
+                  </>
+                );
+              })()}
+            </Section>
+          )}
 
-        {onAddModel && (
-          <Section flexDirection="row" gap={2}>
-            <div className="flex-1">
-              <InputTypeIn
-                placeholder={t("models.addModelInput.placeholder")}
-                value={newModelName}
-                onChange={(e) => setNewModelName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newModelName.trim()) {
-                    e.preventDefault();
-                    const trimmed = newModelName.trim();
-                    if (!models.some((m) => m.name === trimmed)) {
-                      addModel?.(trimmed);
-                      setNewModelName("");
+          {onAddModel && (
+            <Section flexDirection="row" gap={2}>
+              <div className="flex-1">
+                <InputTypeIn
+                  placeholder={t("models.addModelInput.placeholder")}
+                  value={newModelName}
+                  onChange={(e) => setNewModelName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newModelName.trim()) {
+                      e.preventDefault();
+                      const trimmed = newModelName.trim();
+                      if (!models.some((m) => m.name === trimmed)) {
+                        addModel?.(trimmed);
+                        setNewModelName("");
+                      }
                     }
+                  }}
+                />
+              </div>
+              <Button
+                prominence="secondary"
+                icon={SvgPlusCircle}
+                type="button"
+                disabled={
+                  !newModelName.trim() ||
+                  models.some((m) => m.name === newModelName.trim())
+                }
+                onClick={() => {
+                  const trimmed = newModelName.trim();
+                  if (trimmed && !models.some((m) => m.name === trimmed)) {
+                    addModel?.(trimmed);
+                    setNewModelName("");
                   }
                 }}
-              />
-            </div>
-            <Button
-              prominence="secondary"
-              icon={SvgPlusCircle}
-              type="button"
-              disabled={
-                !newModelName.trim() ||
-                models.some((m) => m.name === newModelName.trim())
-              }
-              onClick={() => {
-                const trimmed = newModelName.trim();
-                if (trimmed && !models.some((m) => m.name === trimmed)) {
-                  addModel?.(trimmed);
-                  setNewModelName("");
-                }
-              }}
-            >
-              {t("models.addModelButton.label")}
-            </Button>
-          </Section>
-        )}
+              >
+                {t("models.addModelButton.label")}
+              </Button>
+            </Section>
+          )}
 
-        {shouldShowAutoUpdateToggle && (
-          <InputHorizontal
-            title={t("models.autoUpdate.title")}
-            description={t("models.autoUpdate.description")}
-            withLabel
-          >
-            <InputSwitch
-              checked={formikProps.values.is_auto_mode}
-              onCheckedChange={(checked) =>
-                formikProps.setFieldValue("is_auto_mode", checked)
-              }
-            />
-          </InputHorizontal>
-        )}
-      </Section>
-    </Card>
+          {shouldShowAutoUpdateToggle && (
+            <InputHorizontal
+              title={t("models.autoUpdate.title")}
+              description={t("models.autoUpdate.description")}
+              withLabel
+            >
+              <InputSwitch
+                checked={formikProps.values.is_auto_mode}
+                onCheckedChange={(checked) =>
+                  formikProps.setFieldValue("is_auto_mode", checked)
+                }
+              />
+            </InputHorizontal>
+          )}
+        </Section>
+      </Card>
+      {/* An existing provider's image models sit right under its chat models. */}
+      {providerId != null && <ImageModelsField llmProviderId={providerId} />}
+    </>
   );
 }
 
@@ -1320,7 +1330,6 @@ function ModalWrapperInner({
           />
           <Modal.Body padding={2} gap={0}>
             {children}
-            {llmProvider && <ImageModelsField llmProviderId={llmProvider.id} />}
           </Modal.Body>
           <Modal.Footer>
             {saveIsSlow && (

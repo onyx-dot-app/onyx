@@ -26,6 +26,9 @@ export interface ModelConfiguration {
   supports_reasoning: boolean;
   supports_chat?: boolean;
   supports_decisions?: boolean;
+  /** Connected for image generation. Only listings that ask for image
+   *  models (`include_image_gen`) carry image-only rows. */
+  supports_image_generation?: boolean;
   /**
    * Effort levels this model tells apart, ascending, as resolved by the
    * backend that builds the request. Absent from an older backend, in which
@@ -418,8 +421,14 @@ export interface LLMOptionGroup {
   Icon: FunctionComponent<IconProps>;
 }
 
+/** A kind of model a list can offer: one that can chat, or one connected
+ *  for image generation. */
+export type ModelKind = "chat" | "image";
+
 export interface FilterModelConfigurationsOptions {
   includeDecisionOnly?: boolean;
+  /** The kinds of model to keep. Defaults to chat models. */
+  modelKinds?: readonly ModelKind[];
   /** Keep only models that accept image input. */
   imageInput?: boolean;
   /** A configuration id kept regardless: the current value stays listed. */

@@ -523,6 +523,21 @@ export function useAdminLanguageModels({
   };
 }
 
+/** Every provider with every model, image models included, for a setting
+ *  that picks an image model (`modelKinds={["image"]}`). */
+export function useAdminLanguageModelsWithImageModels() {
+  const { data, error, mutate } = useSWR<
+    LLMProviderResponse<RawLLMProviderView>
+  >(SWR_KEYS.adminLlmProvidersWithImageModels, errorHandlingFetcher, {
+    revalidateOnFocus: false,
+  });
+  const llmProviders = useMemo(
+    () => (data ? enrichViews(data.providers) : undefined),
+    [data]
+  );
+  return { llmProviders, error, refetch: mutate };
+}
+
 /** One provider with every model, for the edit modals whose PUT replaces
  *  the model list. */
 export function useAdminLanguageModel(providerId: number | null) {
