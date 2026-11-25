@@ -13,7 +13,7 @@ from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from itertools import groupby
-from typing import Any, TypedDict, TypeIs
+from typing import Any, NotRequired, TypedDict, TypeIs
 
 from sqlalchemy.orm import Session
 
@@ -130,6 +130,9 @@ _HISTORY_KEY: str = "fleet_telemetry_usage_history"
 _HISTORY_WEEKS_PER_READ: int = 4
 _HISTORY_GAP_SECONDS: tuple[float, float] = (600, 1800)
 _HISTORY_REFRESH: timedelta = timedelta(days=30)
+# A caught-up history saves its state only when a week completes, so the state
+# must outlive a whole cycle, or it is lost and the history goes out again early.
+_HISTORY_CACHE_SECONDS: int = 2 * int(_HISTORY_REFRESH.total_seconds())
 # Onyx chat history cannot start earlier. Bounds the weeks a wrong clock can add.
 _EARLIEST_WEEK: date = date(2023, 1, 2)
 _LLM_PROVIDER_TYPES: frozenset[str] = frozenset(name.value for name in LlmProviderNames)
@@ -614,6 +617,9 @@ class _HistoryState(TypedDict):
     next_week: str | None
     cycle_started_at: float
     due_at: float
+    # The earliest week ever sent. Each cycle starts there, so a week whose chats
+    # were deleted after it was sent goes out again, as zero.
+    first_week: NotRequired[str | None]
 
 
 def _send_usage_history(
@@ -632,11 +638,17 @@ def _send_usage_history(
         first: Any = _read_or_none(db_session, lambda: (first_question_at(db_session),))
         if first is None:
             ok = False
-        elif first[0] is None:
-            # No question yet: the first one is in this week or later.
-            state["next_week"] = current_week.isoformat()
         else:
-            state["next_week"] = max(_week_of(first[0]), _EARLIEST_WEEK).isoformat()
+            # Without a question, the first one is in this week or later.
+            found: date = (
+                current_week
+                if first[0] is None
+                else max(_week_of(first[0]), _EARLIEST_WEEK)
+            )
+            sent: str | None = state.get("first_week")
+            state["next_week"] = min(
+                found, date.fromisoformat(sent) if sent else found
+            ).isoformat()
     if state["next_week"] is not None:
         start: date = date.fromisoformat(state["next_week"])
         end: date = min(start + timedelta(weeks=_HISTORY_WEEKS_PER_READ), current_week)
@@ -659,10 +671,13 @@ def _send_usage_history(
                     }
                     if not _queue(sender, "usage_week", data, tenant_id):
                         break
+                    sent_first: str | None = state.get("first_week")
+                    if sent_first is None or week.isoformat() < sent_first:
+                        state["first_week"] = week.isoformat()
                     week += timedelta(weeks=1)
                 # A full queue stops here; the next read resumes at this week.
                 state["next_week"] = week.isoformat()
-    cache.set(_HISTORY_KEY, json.dumps(state), ex=_CACHE_SECONDS)
+    cache.set(_HISTORY_KEY, json.dumps(state), ex=_HISTORY_CACHE_SECONDS)
     return ok
 
 
@@ -685,7 +700,7 @@ def collect_usage(
             "cycle_started_at": now.timestamp(),
             "due_at": now.timestamp() + _jitter(0, _USAGE_SECONDS),
         }
-        cache.set(_HISTORY_KEY, json.dumps(state), ex=_CACHE_SECONDS)
+        cache.set(_HISTORY_KEY, json.dumps(state), ex=_HISTORY_CACHE_SECONDS)
     else:
         state = json.loads(history)
         if (

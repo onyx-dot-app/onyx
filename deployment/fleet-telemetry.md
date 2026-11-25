@@ -112,7 +112,8 @@ one question in the window.
 Each tenant reads usage and setup first after a random part of an hour, then about once an hour. The
 weekly history goes out 4 weeks per read, with 10 to 30 minutes between reads, until it reaches the last
 completed week. Then a new week goes out when it completes. About every 30 days the history starts again
-from the first week, so the fleet service corrects a week that it lost or that changed. The service
+from the earliest week it has sent, so the fleet service corrects a week that it lost or that changed,
+and a week whose chats were deleted goes out again as zero. The service
 replaces a week each time it gets it, so a repeated week never adds up. These reads use aggregate SQL
 only. `chat_message` has no index on its send time, so each time window starts at a message ID that a
 binary search over the primary key finds. Each read runs in its own savepoint: a read that stops at the

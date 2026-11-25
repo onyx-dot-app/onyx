@@ -980,3 +980,43 @@ def test_google_login_by_environment_counts_as_sso_outside_cloud(
     monkeypatch.setattr(collector, "MULTI_TENANT", multi_tenant)
     data: dict[str, Any] = collector.setup_data({"sso_providers": 0}, [])
     assert data["sso_configured"] is configured
+
+
+def test_history_state_outlives_a_caught_up_cycle(
+    usage_source: _UsageSource,
+) -> None:
+    sender: fleet.BoundedTelemetry = make_sender(capacity=64)
+    usage_source.due(_NOW)
+    collector.collect_usage(sender, usage_source.cache, "public", _NOW)
+    # Caught up: the state is saved again only when the next week completes,
+    # so it must not expire before the 30-day refresh.
+    expiry: int = usage_source.cache.expiries[collector._HISTORY_KEY]
+    assert expiry > collector._HISTORY_REFRESH.total_seconds()
+
+
+def test_a_refresh_starts_at_the_earliest_week_ever_sent(
+    usage_source: _UsageSource,
+) -> None:
+    sender: fleet.BoundedTelemetry = make_sender(capacity=64)
+    usage_source.due(_NOW)
+    collector.collect_usage(sender, usage_source.cache, "public", _NOW)
+    assert usage_source.week_reads[0][0] == date(2025, 12, 1)
+    # Retention deleted the early chats: the first question left is weeks later.
+    usage_source.first_question = datetime(2025, 12, 24, 9, tzinfo=timezone.utc)
+    refresh: datetime = _NOW + timedelta(days=31)
+    stored: dict[str, Any] = json.loads(
+        usage_source.cache.store[collector._HISTORY_KEY]
+    )
+    stored["due_at"] = refresh.timestamp() - 1
+    usage_source.cache.set(collector._HISTORY_KEY, json.dumps(stored))
+    collector.collect_usage(sender, usage_source.cache, "public", refresh)
+    # The emptied weeks go out again, so the service replaces them with zero.
+    assert usage_source.week_reads[-1][0] == date(2025, 12, 1)
+    # Even with no question left at all.
+    usage_source.first_question = None
+    later: datetime = refresh + timedelta(days=31)
+    stored = json.loads(usage_source.cache.store[collector._HISTORY_KEY])
+    stored["due_at"] = later.timestamp() - 1
+    usage_source.cache.set(collector._HISTORY_KEY, json.dumps(stored))
+    collector.collect_usage(sender, usage_source.cache, "public", later)
+    assert usage_source.week_reads[-1][0] == date(2025, 12, 1)
