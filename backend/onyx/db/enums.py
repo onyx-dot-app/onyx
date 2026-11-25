@@ -1099,6 +1099,11 @@ class IntegrationKind(str, PyEnum):
     API = "api"
 
 
+class ApiAppType(str, PyEnum):
+    REST = "rest"
+    GRAPHQL = "graphql"
+
+
 class IntegrationAuthMode(str, PyEnum):
     NONE = "none"
     # One connection for the organization.
@@ -1123,6 +1128,8 @@ class IntegrationActionSource(str, PyEnum):
     MCP = "mcp"
     # An operation of an OpenAPI spec.
     OPENAPI = "openapi"
+    # A query or mutation root field of a GraphQL schema.
+    GRAPHQL = "graphql"
     # The action catalog of a built-in external app, in code.
     EXTERNAL_APP = "external_app"
 
