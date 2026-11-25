@@ -2305,7 +2305,8 @@ async def test_a_command_grant_covers_the_same_action_only(
     assert not spy.persisted and not spy.awaited
     assert len(spy.dispatched) == 1
     assert inserted[0]["decided_via"] == ApprovalDecidedVia.COMMAND_GRANT
-    assert inserted[0]["chat_command"] == (UUID(_TAG_UUID), _COMMAND)
+    assert inserted[0]["chat_session_id"] == UUID(_TAG_UUID)
+    assert inserted[0]["command_id"] == _COMMAND
     assert inserted[0]["session_id"] is None
 
     other, _ = _command_gate(
@@ -2462,7 +2463,8 @@ def test_a_command_row_names_the_request_and_is_announced_to_the_call(
         ctx, _MATCH, gate._approval_payload(flow, ctx, _MATCH)
     )
 
-    assert inserted[0]["chat_command"] == (UUID(_TAG_UUID), _COMMAND)
+    assert inserted[0]["chat_session_id"] == UUID(_TAG_UUID)
+    assert inserted[0]["command_id"] == _COMMAND
     assert inserted[0]["payload"] == {
         "method": "POST",
         "path": "/api/chat.postMessage?x=1",

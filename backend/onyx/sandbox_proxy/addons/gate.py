@@ -892,10 +892,11 @@ class GateAddon:
     ) -> UUID | None:
         """Apply an existing session grant (or, for a chat request, command
         grant) in the caller's worker thread."""
+        from_chat = ctx.chat_command_id is not None
         grant = (
-            ApprovalDecidedVia.SESSION_GRANT
-            if ctx.chat_command_id is None
-            else ApprovalDecidedVia.COMMAND_GRANT
+            ApprovalDecidedVia.COMMAND_GRANT
+            if from_chat
+            else ApprovalDecidedVia.SESSION_GRANT
         )
         try:
             with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
@@ -904,7 +905,9 @@ class GateAddon:
                 if approval_id is None:
                     row = action_approval.insert_action_approval(
                         db,
-                        **_approval_owner(ctx),
+                        session_id=None if from_chat else ctx.session_id,
+                        chat_session_id=ctx.session_id if from_chat else None,
+                        command_id=ctx.chat_command_id,
                         actions=[
                             a.model_dump(mode="json") for a in matched_actions.actions
                         ],
@@ -968,10 +971,13 @@ class GateAddon:
         command's row is announced to the call that waits on the command.
         """
         actions_payload = [a.model_dump(mode="json") for a in matched_actions.actions]
+        from_chat = ctx.chat_command_id is not None
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             row = action_approval.insert_action_approval(
                 db,
-                **_approval_owner(ctx),
+                session_id=None if from_chat else ctx.session_id,
+                chat_session_id=ctx.session_id if from_chat else None,
+                command_id=ctx.chat_command_id,
                 actions=actions_payload,
                 app_name=matched_actions.app_name,
                 payload=payload,
@@ -1507,13 +1513,6 @@ def parse_session_tag(tag: str) -> tuple[UUID, UUID | None]:
     alone. Raises ValueError for a malformed tag."""
     session, separator, command = tag.partition(".")
     return UUID(session), UUID(command) if separator else None
-
-
-def _approval_owner(ctx: SessionContext) -> dict[str, Any]:
-    """The `insert_action_approval` arguments that own a request's row."""
-    if ctx.chat_command_id is None:
-        return {"session_id": ctx.session_id}
-    return {"session_id": None, "chat_command": (ctx.session_id, ctx.chat_command_id)}
 
 
 def _approval_payload(

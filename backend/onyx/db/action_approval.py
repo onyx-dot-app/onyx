@@ -32,7 +32,8 @@ def insert_action_approval(
     integration_id: int | None = None,
     decision: ApprovalDecision | None = None,
     decided_via: ApprovalDecidedVia | None = None,
-    chat_command: tuple[UUID, UUID] | None = None,
+    chat_session_id: UUID | None = None,
+    command_id: UUID | None = None,
 ) -> ActionApproval:
     """Commit an approval row. ``actions`` is the JSONB list of
     ``MatchedAction``-shaped dicts; must be non-empty. Re-sorted
@@ -41,7 +42,7 @@ def insert_action_approval(
     integration (e.g. a bash gate) leaves it NULL.
 
     The row belongs to the Craft session ``session_id``, or to the chat VM
-    command ``chat_command`` (chat session ID, command ID); exactly one is set.
+    command ``command_id`` of ``chat_session_id``.
 
     Defaults to a pending row (``decision IS NULL``). Passing ``decision``
     inserts it pre-decided — safe to bypass ``try_record_decision``'s
@@ -49,8 +50,10 @@ def insert_action_approval(
     """
     if not actions:
         raise ValueError("actions must be non-empty")
-    if (session_id is None) == (chat_command is None):
-        raise ValueError("set exactly one of session_id and chat_command")
+    if (session_id is None) == (chat_session_id is None) or (
+        chat_session_id is None
+    ) != (command_id is None):
+        raise ValueError("set session_id, or chat_session_id and command_id")
     sorted_actions = sorted(
         actions,
         key=lambda a: POLICY_SEVERITY[ActionPolicy(a["policy"])],
@@ -58,8 +61,8 @@ def insert_action_approval(
     )
     row = ActionApproval(
         session_id=session_id,
-        chat_session_id=chat_command[0] if chat_command is not None else None,
-        command_id=chat_command[1] if chat_command is not None else None,
+        chat_session_id=chat_session_id,
+        command_id=command_id,
         actions=sorted_actions,
         app_name=app_name,
         payload=payload,
