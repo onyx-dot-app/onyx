@@ -35,30 +35,37 @@ def test_sandbox_only_extensions_remain_disjoint_from_default_plain_text() -> No
 def test_env_var_plain_text_file_extensions_configuration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("PLAIN_TEXT_FILE_EXTENSIONS", "zig, .sol, PROTO")
-    monkeypatch.setenv("EXTRA_PLAIN_TEXT_FILE_EXTENSIONS", ".v, Nim ")
-
-    loaded = load_configured_plain_text_extensions()
-    assert ".zig" in loaded
-    assert ".sol" in loaded
-    assert ".proto" in loaded
-    assert ".v" in loaded
-    assert ".nim" in loaded
+    orig_plain = OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
+    orig_text_and_doc = OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
+    orig_all_allowed = OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
 
     try:
+        monkeypatch.setenv("PLAIN_TEXT_FILE_EXTENSIONS", "zig, .sol, PROTO")
+        monkeypatch.setenv("EXTRA_PLAIN_TEXT_FILE_EXTENSIONS", ".v, Nim ")
+
+        loaded = load_configured_plain_text_extensions()
+        assert ".zig" in loaded
+        assert ".sol" in loaded
+        assert ".proto" in loaded
+        assert ".v" in loaded
+        assert ".nim" in loaded
+
         OnyxFileExtensions.reload_configured_extensions()
         assert ".zig" in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
         assert ".zig" in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
         assert is_indexable_file_type("main.zig", None, allow_images=True) is True
         assert ".sol" in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
         assert ".v" in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
-    finally:
+
         monkeypatch.delenv("PLAIN_TEXT_FILE_EXTENSIONS", raising=False)
         monkeypatch.delenv("EXTRA_PLAIN_TEXT_FILE_EXTENSIONS", raising=False)
         OnyxFileExtensions.reload_configured_extensions()
-
-    assert ".zig" not in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
-    assert is_indexable_file_type("main.zig", None, allow_images=True) is False
+        assert ".zig" not in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
+        assert is_indexable_file_type("main.zig", None, allow_images=True) is False
+    finally:
+        OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS = orig_plain
+        OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS = orig_text_and_doc
+        OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS = orig_all_allowed
 
 
 def test_extract_text_and_images_code_files() -> None:
