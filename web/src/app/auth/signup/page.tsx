@@ -5,6 +5,7 @@ import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
 import { START_NEW_TEAM_PARAM } from "@/lib/auth/paths";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
+import MagicLinkSignIn from "@/app/auth/login/MagicLinkSignIn";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
@@ -117,12 +118,21 @@ const Page = async (props: {
             </>
           )}
 
-          <EmailPasswordForm
-            label="create"
-            shouldVerify={authTypeMetadata?.requiresVerification}
-            nextUrl={nextUrl}
-            defaultEmail={defaultEmail}
-          />
+          {/* The playground signs up with a link, not a password, and the link
+              carries the "start a new team" choice. */}
+          {cloud && authTypeMetadata?.magicLinkEnabled ? (
+            <MagicLinkSignIn
+              nextUrl={nextUrl ?? null}
+              startNewTeam={startNewTeam}
+            />
+          ) : (
+            <EmailPasswordForm
+              label="create"
+              shouldVerify={authTypeMetadata?.requiresVerification}
+              nextUrl={nextUrl}
+              defaultEmail={defaultEmail}
+            />
+          )}
         </div>
       </>
     </AuthFlowContainer>

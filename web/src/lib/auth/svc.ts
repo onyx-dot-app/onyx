@@ -1,6 +1,10 @@
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
-import type { ErrorResponseBody } from "@/lib/fetcher";
+import {
+  type ErrorResponseBody,
+  FetchError,
+  parseErrorDetail,
+} from "@/lib/fetcher";
 
 interface AuthTypeAPIResponse {
   multi_tenant: boolean;
@@ -15,6 +19,7 @@ interface AuthTypeAPIResponse {
   has_users: boolean;
   oauth_enabled: boolean;
   password_auth_enabled?: boolean;
+  magic_link_enabled?: boolean;
   sso_providers?: {
     name: string;
     display_name: string;
@@ -46,6 +51,7 @@ export async function fetchAuthTypeMetadata(
     hasUsers: data.has_users,
     oauthEnabled: data.oauth_enabled,
     passwordAuthEnabled: data.password_auth_enabled ?? true,
+    magicLinkEnabled: data.magic_link_enabled ?? false,
     ssoProviders: (data.sso_providers ?? []).map((provider) => ({
       name: provider.name,
       displayName: provider.display_name,
@@ -173,5 +179,36 @@ export async function impersonateUser(
       return {};
     });
     throw new Error(error?.detail || "Failed to impersonate user");
+  }
+}
+
+export interface MagicLinkRequestOptions {
+  /** Where to land after the link is redeemed. The backend keeps only same-site paths. */
+  nextUrl?: string | null;
+  /** Playground: the person chose "start a new team". */
+  startNewTeam?: boolean;
+}
+
+/**
+ * Ask the backend to email a one-time sign-in link to `email`. Throws a
+ * `FetchError` whose message is the backend's `detail`: a `MagicLinkRefusal`
+ * code or a sentence.
+ */
+export async function requestMagicLink(
+  email: string,
+  { nextUrl = null, startNewTeam = false }: MagicLinkRequestOptions = {}
+): Promise<void> {
+  const response = await fetch("/api/auth/magic-link/request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      next_url: nextUrl,
+      start_new_team: startNewTeam,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, "Request failed");
+    throw new FetchError(detail, response.status, { detail });
   }
 }

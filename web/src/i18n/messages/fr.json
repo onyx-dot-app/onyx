@@ -11603,6 +11603,27 @@
         "label": "E-mail professionnel"
       }
     },
+    "magicLink": {
+      "differentEmailButton": {
+        "label": "Utiliser une autre adresse e-mail"
+      },
+      "requestButton": {
+        "label": "Recevoir un lien par e-mail"
+      },
+      "resendWait": {
+        "error": "Un lien de connexion vient d'être envoyé à cette adresse. Consultez votre boîte de réception, ou attendez une minute et demandez-en un nouveau."
+      },
+      "sendFailed": {
+        "error": "Impossible d'envoyer l'e-mail de connexion. Réessayez dans un instant."
+      },
+      "sent": {
+        "description": "Nous avons envoyé un lien de connexion à {email}. Il fonctionne une seule fois et expire dans 15 minutes.",
+        "title": "Consultez vos e-mails"
+      },
+      "useSso": {
+        "error": "Connectez-vous avec votre fournisseur SSO. Les liens par e-mail sont désactivés pour cet espace de travail."
+      }
+    },
     "passwordRequirements": {
       "digit": {
         "label": "Contient un chiffre."

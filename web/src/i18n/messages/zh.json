@@ -11603,6 +11603,27 @@
         "label": "工作邮箱"
       }
     },
+    "magicLink": {
+      "differentEmailButton": {
+        "label": "使用其他邮箱"
+      },
+      "requestButton": {
+        "label": "通过邮件获取链接"
+      },
+      "resendWait": {
+        "error": "刚刚已向此地址发送登录链接。请查看收件箱，或等待一分钟后再次请求。"
+      },
+      "sendFailed": {
+        "error": "无法发送登录邮件。请稍后再试。"
+      },
+      "sent": {
+        "description": "我们已向 {email} 发送登录链接。该链接只能使用一次，15 分钟后失效。",
+        "title": "请查看您的邮箱"
+      },
+      "useSso": {
+        "error": "请通过您的 SSO 提供商登录。此工作区已关闭邮件链接登录。"
+      }
+    },
     "passwordRequirements": {
       "digit": {
         "label": "包含数字。"

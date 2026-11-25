@@ -11603,6 +11603,27 @@
         "label": "Correo de trabajo"
       }
     },
+    "magicLink": {
+      "differentEmailButton": {
+        "label": "Usar otro correo"
+      },
+      "requestButton": {
+        "label": "Recibir un enlace por correo"
+      },
+      "resendWait": {
+        "error": "Hace un momento se envió un enlace de inicio de sesión a esta dirección. Revisa tu bandeja de entrada o espera un minuto y vuelve a pedirlo."
+      },
+      "sendFailed": {
+        "error": "No se pudo enviar el correo de inicio de sesión. Inténtalo de nuevo en un momento."
+      },
+      "sent": {
+        "description": "Enviamos un enlace de inicio de sesión a {email}. Funciona una vez y caduca en 15 minutos.",
+        "title": "Revisa tu correo"
+      },
+      "useSso": {
+        "error": "Inicia sesión con tu proveedor de SSO. Los enlaces por correo están desactivados en este espacio de trabajo."
+      }
+    },
     "passwordRequirements": {
       "digit": {
         "label": "Contiene un número."

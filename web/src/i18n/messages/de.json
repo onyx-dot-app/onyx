@@ -11603,6 +11603,27 @@
         "label": "Geschäftliche E-Mail"
       }
     },
+    "magicLink": {
+      "differentEmailButton": {
+        "label": "Andere E-Mail-Adresse verwenden"
+      },
+      "requestButton": {
+        "label": "Link per E-Mail erhalten"
+      },
+      "resendWait": {
+        "error": "An diese Adresse wurde gerade ein Anmeldelink gesendet. Prüfen Sie Ihren Posteingang oder warten Sie eine Minute und fordern Sie ihn erneut an."
+      },
+      "sendFailed": {
+        "error": "Die Anmelde-E-Mail konnte nicht gesendet werden. Versuchen Sie es gleich noch einmal."
+      },
+      "sent": {
+        "description": "Wir haben einen Anmeldelink an {email} gesendet. Er funktioniert einmal und läuft nach 15 Minuten ab.",
+        "title": "Prüfen Sie Ihre E-Mails"
+      },
+      "useSso": {
+        "error": "Melden Sie sich über Ihren SSO-Anbieter an. E-Mail-Links sind für diesen Workspace deaktiviert."
+      }
+    },
     "passwordRequirements": {
       "digit": {
         "label": "Enthält eine Zahl."
