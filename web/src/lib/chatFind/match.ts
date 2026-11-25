@@ -244,7 +244,10 @@ function agentMessageParts(message: Message): MessagePart[] {
     message.packets
   ).entries) {
     const text = resolution?.outcome === "answered" ? resolution.message : null;
+    // Like `AgentMessage`: one typed message answers every question of its
+    // turn, and only the first answered question's copy shows.
     if (!text || userTurns.has(turnIndex)) continue;
+    userTurns.add(turnIndex);
     parts.push({
       turn: turnIndex,
       scopeKey: chatFindInlineKey(

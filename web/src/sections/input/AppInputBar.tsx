@@ -652,7 +652,7 @@ const AppInputBar = React.memo(
         pasteClipboard(data);
       },
       editMessage: (edit: MessageEdit) => {
-        if (disabled || chatState !== "input") return;
+        if (disabled || chatState !== "input" || withdrawingForEdit) return;
         beginEdit(
           edit.messageId,
           edit,
@@ -961,6 +961,9 @@ const AppInputBar = React.memo(
     const controlsLoading =
       sourcesLoading || !activeAgent || llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
+    const promptMenuOpen = Boolean(
+      user?.preferences?.shortcut_enabled && showPrompts && !mentionPicker.open
+    );
 
     const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
@@ -1575,14 +1578,7 @@ const AppInputBar = React.memo(
             </div>
 
             <div className="flex flex-row items-center w-full">
-              <Popover
-                open={
-                  user?.preferences?.shortcut_enabled &&
-                  showPrompts &&
-                  !mentionPicker.open
-                }
-                onOpenChange={setShowPrompts}
-              >
+              <Popover open={promptMenuOpen} onOpenChange={setShowPrompts}>
                 <Popover.Anchor asChild>
                   <div
                     ref={inputWrapperRef}
@@ -1634,7 +1630,7 @@ const AppInputBar = React.memo(
                         if (
                           event.key === "Escape" &&
                           editing &&
-                          !showPrompts &&
+                          !promptMenuOpen &&
                           !mentionPicker.open &&
                           !event.nativeEvent.isComposing
                         ) {

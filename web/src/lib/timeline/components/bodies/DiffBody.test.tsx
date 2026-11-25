@@ -44,3 +44,14 @@ test("a note-only panel has no view toggle", () => {
   );
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
+
+test("line counts are compact in the active locale", () => {
+  render(
+    <DiffBody
+      title="a.py"
+      lines={[{ type: "added", content: "x" }]}
+      counts={{ added: 1200, removed: 0 }}
+    />
+  );
+  expect(screen.getByText("+1.2K")).toBeInTheDocument();
+});
