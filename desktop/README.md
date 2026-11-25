@@ -613,7 +613,8 @@ How the app differs from macOS:
     shows only when the earlier app's uninstall entry, or a folder that the retire step still has
     to clean up, is there. Otherwise the main window shows its usual error with **Try Again**, and
     onboarding, sign-in, Preferences or the launcher show "Could not open Onyx" with the error,
-    **Try Again** (opens the same window again; for onboarding and sign-in, routes again) and
+    **Try Again** (opens the same window again: Change server runs its command again; first-run
+    onboarding and sign-in route again) and
     **Quit**. While that dialog is open, other failures are only logged. The hidden launcher that
     the app creates at startup is only logged; a launcher opened with the shortcut shows the
     dialog.

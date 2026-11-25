@@ -127,15 +127,13 @@ fn open_local(
 ) -> Result<WebviewWindow, String> {
     let size = initial_size(label).ok_or("not a local window")?;
     let window = local_window(app, label, page, title, size);
-    // The offline window has its own fallback dialog (`show_offline`).
-    let failed = match label {
-        ONBOARDING => Some(FailedWindow::Onboarding),
-        LOGIN => Some(FailedWindow::Login),
-        PREFERENCES => Some(FailedWindow::Preferences),
-        _ => None,
-    };
-    if let (Err(e), Some(failed)) = (&window, failed) {
-        window_failed(app, failed, e);
+    if let Err(e) = &window {
+        let server_set = app
+            .try_state::<AppState>()
+            .is_some_and(|state| state.server().is_ok());
+        if let Some(failed) = failed_window_for(label, server_set) {
+            window_failed(app, failed, e);
+        }
     }
     window
 }
@@ -144,6 +142,8 @@ fn open_local(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FailedWindow {
     Onboarding,
+    /// Onboarding opened by Change server, with a server already set.
+    ChangeServer,
     Login,
     Preferences,
     /// The launcher the user asked for (shortcut, menu, tray).
@@ -152,11 +152,28 @@ pub(crate) enum FailedWindow {
     LauncherPreload,
 }
 
+/// The window a failed local window stands for. Onboarding with a server
+/// set is Change server: routing would open chat or sign-in, not it. Sign-in
+/// opens only when the user is signed out, where routing opens it again.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn failed_window_for(label: &str, server_set: bool) -> Option<FailedWindow> {
+    match label {
+        ONBOARDING if server_set => Some(FailedWindow::ChangeServer),
+        ONBOARDING => Some(FailedWindow::Onboarding),
+        LOGIN => Some(FailedWindow::Login),
+        PREFERENCES => Some(FailedWindow::Preferences),
+        // The offline window has its own fallback dialog (`show_offline`).
+        _ => None,
+    }
+}
+
 /// What Try Again does: open the same window again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Retry {
     /// Onboarding and sign-in: routing is what opens them.
     Route,
+    /// The Change server command again, with its checks and window cleanup.
+    ChangeServer,
     Preferences,
     Launcher,
 }
@@ -185,6 +202,7 @@ pub(crate) fn window_failure(
     }
     let retry = match window {
         FailedWindow::Onboarding | FailedWindow::Login => Retry::Route,
+        FailedWindow::ChangeServer => Retry::ChangeServer,
         FailedWindow::Preferences => Retry::Preferences,
         FailedWindow::Launcher => Retry::Launcher,
         FailedWindow::LauncherPreload => return WindowFailure::LogOnly,
@@ -236,6 +254,11 @@ pub(crate) fn window_failed(app: &AppHandle, window: FailedWindow, error: &str) 
                     }
                     match retry {
                         Retry::Route => route(app),
+                        Retry::ChangeServer => {
+                            if let Err(e) = crate::commands::open_change_server(app) {
+                                log::warn!("could not open Change server: {e}");
+                            }
+                        }
                         Retry::Preferences => {
                             let _ = open_preferences(app);
                         }
@@ -657,6 +680,10 @@ mod tests {
             window_failure(W::Launcher, true, false, false),
             F::CouldNotOpen(Retry::Launcher)
         );
+        assert_eq!(
+            window_failure(W::ChangeServer, true, false, false),
+            F::CouldNotOpen(Retry::ChangeServer)
+        );
         // Only while a dialog is open are other failures logged only.
         assert_eq!(window_failure(W::Onboarding, true, false, true), F::LogOnly);
         // The hidden launcher at startup is never a dialog.
@@ -664,6 +691,18 @@ mod tests {
             window_failure(W::LauncherPreload, true, false, false),
             F::LogOnly
         );
+    }
+
+    #[test]
+    fn a_signed_in_users_onboarding_is_change_server() {
+        use super::{
+            failed_window_for, FailedWindow as W, LOGIN, OFFLINE, ONBOARDING, PREFERENCES,
+        };
+        assert_eq!(failed_window_for(ONBOARDING, true), Some(W::ChangeServer));
+        assert_eq!(failed_window_for(ONBOARDING, false), Some(W::Onboarding));
+        assert_eq!(failed_window_for(LOGIN, true), Some(W::Login));
+        assert_eq!(failed_window_for(PREFERENCES, true), Some(W::Preferences));
+        assert_eq!(failed_window_for(OFFLINE, true), None);
     }
 
     #[test]

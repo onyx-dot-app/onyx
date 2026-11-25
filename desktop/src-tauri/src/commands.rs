@@ -403,11 +403,16 @@ pub async fn sign_out(app: AppHandle) -> Result<(), String> {
 /// Opens onboarding. The session ends only when onboarding saves another
 /// server (`save_server`).
 #[tauri::command]
-pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    server_locked(&state)?;
-    windows::open_onboarding(&app)?;
-    windows::close(&app, windows::LOGIN);
-    windows::close(&app, windows::PREFERENCES);
+pub async fn change_server(app: AppHandle) -> Result<(), String> {
+    open_change_server(&app)
+}
+
+/// The Change server path, also for Try Again after onboarding did not open.
+pub(crate) fn open_change_server(app: &AppHandle) -> Result<(), String> {
+    server_locked(&app.state::<AppState>())?;
+    windows::open_onboarding(app)?;
+    windows::close(app, windows::LOGIN);
+    windows::close(app, windows::PREFERENCES);
     Ok(())
 }
 
