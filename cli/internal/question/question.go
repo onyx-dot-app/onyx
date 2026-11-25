@@ -43,7 +43,7 @@ func Parse(q models.ToolQuestion, line string) models.ToolQuestionAnswer {
 	line = strings.TrimSpace(line)
 	answer := models.ToolQuestionAnswer{QuestionID: q.ID}
 	if n, err := strconv.Atoi(line); err == nil && n >= 1 && n <= len(q.Options) {
-		answer.OptionLabel = q.Options[n-1].Label
+		answer.OptionLabels = []string{q.Options[n-1].Label}
 		return answer
 	}
 	if line == "" {
@@ -76,7 +76,7 @@ func Answered(req models.ToolQuestionRequestEvent, answers []models.ToolQuestion
 			continue
 		}
 		var text []string
-		for _, value := range []string{answer.OptionLabel, answer.UserNote} {
+		for _, value := range append(append([]string{}, answer.OptionLabels...), answer.UserNote) {
 			if value = sanitize.Line(value); value != "" {
 				text = append(text, value)
 			}

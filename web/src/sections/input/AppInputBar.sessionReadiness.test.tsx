@@ -739,6 +739,7 @@ function awaitQuestion() {
                 { label: "All", description: "Every file." },
                 { label: "Docs", description: "Only the docs." },
               ],
+              multi_select: false,
             },
           ],
         },
@@ -818,7 +819,7 @@ describe("while a question waits", () => {
   test("a question answered here no longer takes typed text", async () => {
     useToolRequestUi.getState().recordAnswer("question-1", {
       kind: "answered",
-      answers: [{ question_id: "scope", option_label: "Docs" }],
+      answers: [{ question_id: "scope", option_labels: ["Docs"] }],
       message: null,
     });
     const answered = answerWith(() => new Response("{}"));

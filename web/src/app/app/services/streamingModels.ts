@@ -751,12 +751,17 @@ export interface ToolQuestion {
   question: string;
   /** In the model's order; a recommended option comes first. */
   options: ToolQuestionOption[];
+  /** The user can choose several options; otherwise at most one. */
+  multi_select: boolean;
 }
 
-/** The user's answer to one question: a listed option, a note, or both. */
+/**
+ * The user's answer to one question: its chosen options, in the question's
+ * order, a note, or both.
+ */
 export interface ToolQuestionAnswer {
   question_id: string;
-  option_label?: string | null;
+  option_labels: string[];
   user_note?: string | null;
 }
 

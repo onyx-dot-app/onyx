@@ -12801,6 +12801,9 @@
           "placeholder": "Sonstiges: eigene Antwort eingeben",
           "ariaLabel": "Andere Antwort auf {header}"
         },
+        "multiSelect": {
+          "hint": "Wählen Sie alle zutreffenden Optionen."
+        },
         "submit": "Senden",
         "page": {
           "progress": "Frage {current} von {total}",

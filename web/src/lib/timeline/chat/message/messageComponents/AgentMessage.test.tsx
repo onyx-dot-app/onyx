@@ -800,6 +800,7 @@ test("a question waits with a header, then a typed answer shows as the user's me
               { label: "All files", description: "Change every file." },
               { label: "Docs", description: "Only the docs." },
             ],
+            multi_select: false,
           },
         ],
       },

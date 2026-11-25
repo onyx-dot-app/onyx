@@ -76,6 +76,7 @@ from onyx.file_store.gcs_file_store import GCSBackedFileStore
 from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -105,7 +106,6 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolApprovalResolved,
     ToolQuestionResolved,
 )
-from onyx.tools.constants import REQUEST_USER_INPUT_TOOL_NAME
 from onyx.tools.interface import Tool as ChatTool
 from onyx.tools.models import ToolApprovalDetails, ToolApprovalScope, ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
@@ -121,6 +121,7 @@ from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.question.models import ToolQuestionAnswer
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.question.shapes import QUESTION_SHAPES
 from onyx.tracing.flows import LLMFlow
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_run_store import (
@@ -238,7 +239,7 @@ class ApprovalChat(BaseModel):
     def asking(self) -> QuestionTool:
         """The response's question tool, as a turn that offers it builds it."""
         return QuestionTool(
-            REQUEST_USER_INPUT_TOOL_NAME,
+            QUESTION_SHAPES[ToolFamily.OPENAI],
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chat_session_id=self.chat_session_id,
             response_id=self.response_id,
@@ -686,7 +687,7 @@ def test_a_decision_and_a_stop_of_the_live_turn_keep_the_first(
 
 
 _CARD = ChatQuestionAnswersRequest(
-    answers=[ToolQuestionAnswer(question_id="scope", option_label="Company")]
+    answers=[ToolQuestionAnswer(question_id="scope", option_labels=["Company"])]
 )
 
 

@@ -139,7 +139,7 @@ from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolApprovalScope, ToolOptions
-from onyx.tools.tool_implementations.question.models import QUESTION_TOOL_NAMES
+from onyx.tools.tool_implementations.question.shapes import QUESTION_TOOL_NAMES
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

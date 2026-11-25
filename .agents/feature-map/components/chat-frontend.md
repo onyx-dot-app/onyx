@@ -127,13 +127,16 @@
   refreshes. A subagent's card blocks no send.
   What each decision does is in [[mcp-and-custom-tools]].
 - **The agent asks the user questions.** A question card
-  (`ToolQuestionCard`) shows 1-3 questions, one per page; each offers its
+  (`ToolQuestionCard`) shows 1-4 questions, one per page; each offers its
   options in the model's order, recommended first, and an "Other" field
   for the user's own answer. A card with more than one question shows "Question N of M"
   and Back and Next buttons; the choices stay when the page changes, and
-  picking an option does not change the page. For every question the user
-  picks one option or writes in Other; typing in Other clears the option
-  and picking an option clears Other. The user submits on the last page,
+  picking an option does not change the page. For a single-select question
+  the user picks one option (a radio group) or writes in Other; typing in
+  Other clears the option and picking an option clears Other. A question
+  with `multi_select` reads "Choose all that apply." and shows its options
+  as checkboxes; the user toggles any of them and can also write in Other.
+  The record joins several chosen options as a list. The user submits on the last page,
   where Submit replaces Next. Submit stays disabled, with a hint that
   names the unanswered questions, until each question has an answer.
   Waiting cards show in their own region after the approval

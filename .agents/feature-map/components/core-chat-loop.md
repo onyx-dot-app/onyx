@@ -46,7 +46,7 @@
   ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A Stop of a live turn
   rejects its waiting requests.
 - **The agent asks the user a question.** The root agent's question tool
-  shows 1-3 multiple-choice questions and waits like an approval request. The
+  shows 1-4 multiple-choice questions and waits like an approval request. The
   user answers on the card, or types a message, which the agent reads as the
   answer to every waiting question of the response; a Stop of a live turn
   cancels the questions ([[tools-framework]]).

@@ -12801,6 +12801,9 @@
           "placeholder": "其他：输入您自己的答案",
           "ariaLabel": "{header} 的其他答案"
         },
+        "multiSelect": {
+          "hint": "选择所有适用的选项。"
+        },
         "submit": "提交",
         "page": {
           "progress": "第 {current} 个问题，共 {total} 个",

@@ -53,9 +53,9 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.constants import REQUEST_USER_INPUT_TOOL_NAME
 from onyx.tools.tool_implementations.question.models import (
     MAX_QUESTIONS_BYTES,
-    QUESTION_TOOL_NAMES,
     ToolQuestionAnswer,
 )
+from onyx.tools.tool_implementations.question.shapes import QUESTION_TOOL_NAMES
 from tests.external_dependency_unit.chat.test_wait_agents import (
     ScriptedLLM,
 )
@@ -219,7 +219,9 @@ def _card(
     return ChatQuestionAnswersRequest(
         answers=[
             ToolQuestionAnswer(
-                question_id="scope", option_label=option_label, user_note=user_note
+                question_id="scope",
+                option_labels=[option_label] if option_label else [],
+                user_note=user_note,
             )
         ]
     )
@@ -324,7 +326,7 @@ def test_the_query_hook_processes_typed_answers(
         assert saved.answers == [
             {
                 "question_id": "scope",
-                "option_label": "Company",
+                "option_labels": ["Company"],
                 "user_note": "[redacted] Ana's phone is 555",
             }
         ]

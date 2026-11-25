@@ -888,8 +888,8 @@ def bind_run_store(
             tools=tools,
             user_identity=setup.user_identity,
             on_root_drained=on_root_drained,
-            question_tool=lambda response_id, name: QuestionTool(
-                name,
+            question_tool=lambda response_id, shape: QuestionTool(
+                shape,
                 tenant_id=tenant_id,
                 chat_session_id=setup.chat_session_id,
                 response_id=response_id,

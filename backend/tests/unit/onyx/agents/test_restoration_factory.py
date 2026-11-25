@@ -57,8 +57,11 @@ from onyx.tools.constants import EXEC_TOOL_NAME, WAIT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import CapabilityEntry, ToolContext
 from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
-from onyx.tools.tool_implementations.question.models import QUESTION_TOOL_NAME
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_SHAPES,
+    QuestionShape,
+)
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
     SkillsReadTool,
@@ -480,9 +483,9 @@ def test_a_program_parked_under_one_family_ends_truthfully_under_the_other(
         )
         return AssistantMessage(content=[TextContent(text="done")])
 
-    def question(response_id: int, name: str) -> QuestionTool:
+    def question(response_id: int, shape: QuestionShape) -> QuestionTool:
         return QuestionTool(
-            name, tenant_id="tenant", chat_session_id=uuid4(), response_id=response_id
+            shape, tenant_id="tenant", chat_session_id=uuid4(), response_id=response_id
         )
 
     def ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
@@ -536,7 +539,7 @@ def test_a_program_parked_under_one_family_ends_truthfully_under_the_other(
     assert {tool.name for tool in rebuilt.application_tools} == {
         active_shape.run_name,
         active_shape.wait_name,
-        QUESTION_TOOL_NAME[active],
+        QUESTION_SHAPES[active].name,
     }
     resumed = rebuilt.resume(
         checkpoint.run_state,
