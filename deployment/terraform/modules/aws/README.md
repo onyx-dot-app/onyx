@@ -549,7 +549,15 @@ that cannot run it. Set `"pod"` to keep a pod sandbox group. Set
 
 The `craft_sandbox_runtime` output gives the runtime that the module picked.
 The `sandbox_helm_values` output gives the Onyx chart values that match it, so
-you set the runtime in Terraform only:
+you set the runtime in Terraform only. Expose it in your root module:
+
+```hcl
+output "sandbox_helm_values" {
+  value = module.onyx.sandbox_helm_values
+}
+```
+
+Then pass it to Helm:
 
 ```bash
 terraform output -raw sandbox_helm_values > sandbox-values.yaml

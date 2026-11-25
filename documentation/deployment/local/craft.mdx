@@ -6,7 +6,8 @@ icon: "hammer"
 
 Craft runs generated code in isolated sandboxes and sends sandbox network traffic through an egress proxy.
 Self-hosted deployments can run these sandboxes in Kubernetes or Docker. On Kubernetes nodes with KVM,
-Craft can also run sandboxes as Firecracker microVMs.
+Onyx v6 and later also run sandboxes as Firecracker microVMs by default. To find the setup for your platform,
+see [Choose Your Setup](/deployment/getting_started/choose_your_setup).
 
 <CardGroup cols={2}>
   <Card title="Kubernetes" icon="dharmachakra" href="/deployment/local/craft_kubernetes">
@@ -18,7 +19,7 @@ Craft can also run sandboxes as Firecracker microVMs.
   </Card>
 
   <Card title="Firecracker" icon="microchip" href="/deployment/kubernetes/craft-firecracker">
-    Add Firecracker microVM sandboxes to a Kubernetes deployment on Intel KVM nodes.
+    Run Firecracker microVM sandboxes on Intel KVM nodes. On by default in Onyx v6.
   </Card>
 </CardGroup>
 

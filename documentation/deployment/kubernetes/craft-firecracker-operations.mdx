@@ -57,8 +57,8 @@ The host agent, the root drive, and the template name follow the Onyx version. A
 <Steps>
   <Step title="Upgrade with Helm">
     ```bash
-    helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml --values craft-fc-values.yaml \
-      --values craft-fc-secrets.yaml --version <chart version>
+    helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
+      --version <chart version>
     ```
 
     The host agent DaemonSet replaces one pod at a time.
@@ -153,7 +153,7 @@ and the clients restart by themselves:
 kubectl $K -n $NS delete secret onyx-craft-fc-host-agent-tls
 kubectl $K -n $REL delete secret onyx-craft-fc-host-agent-client-tls
 helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
-  --values craft-fc-values.yaml --values craft-fc-secrets.yaml --version <chart version>
+  --version <chart version>
 ```
 
 The Secret names start with the release name (`onyx` here). New calls to the host agents fail until the upgrade ends.
@@ -167,7 +167,7 @@ or when the sandbox proxy host or `craft.hostAgent.relayTls.serverName` changes:
 kubectl $K -n $NS delete secret onyx-craft-fc-host-agent-relay-tls
 kubectl $K -n $REL delete secret onyx-sandbox-proxy-relay-tls
 helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
-  --values craft-fc-values.yaml --values craft-fc-secrets.yaml --version <chart version>
+  --version <chart version>
 ```
 
 For your own certificates (`existingSecret`):
@@ -219,9 +219,9 @@ The registration value lets host agents register their node signing keys. Change
     | Namespace | You set | Change |
     | --- | --- | --- |
     | Release | `auth.sandboxNodeRegistration.existingSecret` | Your Secret |
-    | Release | No `existingSecret` | `auth.sandboxNodeRegistration.values` in your private values file |
+    | Release | No `existingSecret` | `auth.sandboxNodeRegistration.values` in your private values file. If the chart made the value, set a new value there of 32 characters or more. |
     | Host agent | `craft.hostAgent.registrationExistingSecret` | Your Secret |
-    | Host agent | No `registrationExistingSecret` | Nothing. The chart copies `auth.sandboxNodeRegistration.values`. |
+    | Host agent | No `registrationExistingSecret` | Nothing. The chart copies the release value. |
 
     Do not edit the Secrets that the chart makes. Then run `helm upgrade`.
   </Step>

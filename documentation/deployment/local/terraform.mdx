@@ -164,6 +164,10 @@ output "redis_connection_url" {
   value     = module.onyx.redis_connection_url
   sensitive = true
 }
+
+output "sandbox_helm_values" {
+  value = module.onyx.sandbox_helm_values
+}
 ```
 
 Apply it:
@@ -252,24 +256,34 @@ The composed `onyx` module exposes the inputs you'll most often want to tune.
 
 ### Craft sandboxes
 
-<ParamField path="enable_craft" type="bool" default="false">
-  Create a dedicated node group for [Craft](/deployment/local/craft_kubernetes) sandbox pods.
-  The nodes carry the `onyx.app/workload=sandbox` label and the `workload=sandbox:NoSchedule` taint that the Helm
-  chart's sandbox pods select by default, and limit the instance metadata hop count to 1.
-  Tune the group with the `craft_sandbox_node_*` variables.
+<ParamField path="enable_craft" type="bool" default="true">
+  Create the sandbox node group for chat sandbox tools and [Craft](/deployment/local/craft_kubernetes).
+  The nodes carry the `onyx.app/workload=sandbox` label and the `workload=sandbox:NoSchedule` taint that the Helm chart
+  selects by default, and limit the instance metadata hop count to 1.
+  Tune the group with the `craft_sandbox_node_*` variables. Set `false` for no sandbox nodes.
+  The group adds at least one `m8i.2xlarge` on-demand node to your bill.
 </ParamField>
 
-<ParamField path="craft_sandbox_runtime" type="string" default="pod">
-  `"firecracker"` prepares the sandbox node group for [Craft on
-  Firecracker](/deployment/kubernetes/craft-firecracker-eks): nested virtualization,
-  the `onyx.app/kvm=true` label and `NoSchedule` taint, `vm.max_map_count` `1048576`, and on-demand capacity.
-  It needs Intel `c8i`, `m8i`, or `r8i` types or Intel `.metal` types. A change replaces the sandbox nodes.
+<ParamField path="craft_sandbox_runtime" type="string" default="auto">
+  `"firecracker"` prepares the sandbox node group for [Firecracker](/deployment/kubernetes/craft-firecracker-eks):
+  nested virtualization, the `onyx.app/kvm=true` label and `NoSchedule` taint, `vm.max_map_count` `1048576`,
+  on-demand capacity, and gp3 disks with 6000 IOPS and 500 MiB/s. It needs Intel `c8i`, `m8i`,
+  or `r8i` types or Intel `.metal` types. `"pod"` keeps a pod sandbox group.
+  `"auto"` picks `"firecracker"` when every type in `craft_sandbox_node_instance_types` supports it,
+  and `"pod"` when one does not. A change of the picked runtime replaces the sandbox nodes.
 </ParamField>
 
 <ParamField path="enable_craft_pod_sandbox_node_group" type="bool" default="false">
-  With `craft_sandbox_runtime = "firecracker"`, also create a small node group for pod sandboxes,
+  With the Firecracker runtime, also create a small node group for Craft pod sandboxes,
   without the `onyx.app/kvm` taint. Size it with the `craft_pod_sandbox_node_*` variables.
 </ParamField>
+
+<Warning>
+  Onyx v6 changed the defaults of `enable_craft` (now `true`) and `craft_sandbox_runtime` (now `"auto"`).
+  On an existing deployment, the next `terraform apply` adds a Firecracker sandbox node group,
+  or changes an existing pod sandbox group to Firecracker and replaces its nodes. For no sandbox nodes,
+  set `enable_craft = false`. To keep a pod sandbox group, set `craft_sandbox_runtime = "pod"`.
+</Warning>
 
 ### OpenSearch (optional)
 
@@ -408,6 +422,8 @@ Once `terraform apply` finishes, the `onyx` module exposes the values you'll nee
 | `redis_connection_url`          | Redis primary endpoint (sensitive)                           |
 | `opensearch_endpoint`           | OpenSearch domain endpoint, when `enable_opensearch = true`  |
 | `opensearch_dashboard_endpoint` | OpenSearch Dashboards endpoint, when enabled                 |
+| `craft_sandbox_runtime`         | Runtime of the sandbox node group: `firecracker` or `pod`    |
+| `sandbox_helm_values`           | Onyx chart values (YAML) that match the sandbox node group   |
 
 Read them with `terraform output`:
 
@@ -415,6 +431,7 @@ Read them with `terraform output`:
 terraform output cluster_name
 terraform output -raw postgres_endpoint
 terraform output -raw redis_connection_url
+terraform output -raw sandbox_helm_values > sandbox-values.yaml
 ```
 
 ## Install Onyx with Helm
@@ -445,6 +462,7 @@ terraform output -raw redis_connection_url
 
     helm upgrade --install onyx onyx/onyx \
       --namespace onyx \
+      --values sandbox-values.yaml \
       --set objectStore.enabled=false \
       --set minio.enabled=false \
       --set serviceAccount.create=false \

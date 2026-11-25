@@ -23,7 +23,7 @@ so you do not need a data disk.
 
 ## Option 1: Onyx Terraform modules
 
-The `aws/onyx` module makes the Firecracker node group and an optional pod sandbox node group.
+The `aws/onyx` module makes the Firecracker node group by default, and an optional pod sandbox node group.
 See [Terraform](/deployment/local/terraform) for the full module.
 
 <Steps>
@@ -35,20 +35,20 @@ See [Terraform](/deployment/local/terraform) for the full module.
       source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/aws/onyx?ref=<tag>"
       # ... your existing settings
 
-      manage_core_addons                 = true # new clusters; also turns on NetworkPolicy enforcement
-      enable_craft                       = true
-      craft_sandbox_runtime              = "firecracker"
-      craft_sandbox_node_instance_types  = ["m8i.4xlarge"]
-      craft_sandbox_node_disk_size_gb    = 200
-      craft_sandbox_node_disk_iops       = 6000
-      craft_sandbox_node_disk_throughput = 500
+      manage_core_addons = true # new clusters; also turns on NetworkPolicy enforcement
 
-      enable_craft_pod_sandbox_node_group   = true
-      craft_pod_sandbox_node_instance_types = ["m8i.xlarge"]
-      craft_pod_sandbox_node_min_size       = 1
-      craft_pod_sandbox_node_max_size       = 2
+      # Defaults: a Firecracker node group of m8i.2xlarge with 6000 IOPS and 500 MiB/s.
+      # enable_craft                      = true
+      # craft_sandbox_runtime             = "auto"
+      # craft_sandbox_node_instance_types = ["m8i.2xlarge"]
+
+      # Only if you use Craft pod sandboxes
+      enable_craft_pod_sandbox_node_group = true
     }
     ```
+
+    `craft_sandbox_runtime = "auto"` picks Firecracker when every type in `craft_sandbox_node_instance_types` can run
+    it, and the pod runtime when one cannot. Set `"firecracker"` to make the plan fail on a type that cannot run it.
 
     {/* depends: #17838 (manage_core_addons) */} This block is for a new cluster. Set `manage_core_addons = true`:
     the EKS module v21 makes a cluster without vpc-cni, kube-proxy, and CoreDNS,
@@ -58,14 +58,15 @@ See [Terraform](/deployment/local/terraform) for the full module.
     Terraform refuses the combination, because it would replace the running CNI. On an existing cluster,
     keep `manage_core_addons = false` and follow [Existing EKS clusters](#existing-eks-clusters).
 
-    With `craft_sandbox_runtime = "firecracker"`, the module:
+    With the Firecracker runtime, the module:
 
     - turns on nested virtualization in the launch template (non-metal types only);
     - adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
     - sets `vm.max_map_count` to `1048576` with a cloud-init script before nodeadm;
     - keeps the group on-demand and keeps IMDSv2 with hop limit 1.
 
-    The module refuses a blocked instance type, and a group that mixes `.metal` and nested virtualization types.
+    With `"firecracker"`, the module refuses a blocked instance type,
+    and a group that mixes `.metal` and nested virtualization types.
 
     Check the add-on settings after the apply:
 
@@ -82,12 +83,24 @@ See [Terraform](/deployment/local/terraform) for the full module.
     terraform apply
     ```
 
-    On an existing cluster, a change to `craft_sandbox_runtime` makes a new launch template version.
+    On an existing cluster, a change of the runtime makes a new launch template version.
     EKS then replaces the sandbox nodes, and every sandbox on them stops.
     See [Existing EKS clusters](#existing-eks-clusters) for the safe order.
   </Step>
 
   <Step title="Configure Helm">
+    Add the module output to your root module, apply, and save the Helm values that match the node group:
+
+    ```hcl
+    output "sandbox_helm_values" {
+      value = module.onyx.sandbox_helm_values
+    }
+    ```
+
+    ```bash
+    terraform output -raw sandbox_helm_values > sandbox-values.yaml
+    ```
+
     For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
     Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
     and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
@@ -152,8 +165,8 @@ On a cluster that already runs pod sandboxes, do the steps in this order:
   </Step>
 
   <Step title="Set the Terraform variables">
-    Set `craft_sandbox_runtime = "firecracker"` and `enable_craft_pod_sandbox_node_group = true`,
-    with the instance types from [Option 1](#option-1-onyx-terraform-modules).
+    Remove `craft_sandbox_runtime = "pod"` if you set it, and set `enable_craft_pod_sandbox_node_group = true`.
+    Use instance types from [Node requirements on AWS](#node-requirements-on-aws).
     The module accepts the pod sandbox node group only with the Firecracker runtime, so set both in the same change.
 
     Keep `manage_core_addons = false`. If NetworkPolicy enforcement is off, set `enable_network_policy = true`,
