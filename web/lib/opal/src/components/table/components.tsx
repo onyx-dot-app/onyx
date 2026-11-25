@@ -238,7 +238,11 @@ export function Table<TData>(props: DataTableProps<TData>) {
     values,
     initialViewSelected,
     getRowId,
-    enableRowSelection: qualifierColumn?.getCanSelect ?? true,
+    // From the column definition: a hidden qualifier still limits selection.
+    enableRowSelection:
+      qualifierColDef?.kind === "qualifier"
+        ? (qualifierColDef.canSelect ?? true)
+        : true,
     onSelectionChange,
     query,
     serverSide: serverSide

@@ -1,4 +1,4 @@
-import { render, screen } from "@tests/setup/test-utils";
+import { fireEvent, render, screen } from "@tests/setup/test-utils";
 import { Table, type TableColumn } from "@opal/components";
 
 interface Row {
@@ -54,5 +54,27 @@ describe("Table header, footer and paging", () => {
     expect(
       renderTable({ header: false }).header?.querySelector("tr") ?? null
     ).toBeNull();
+  });
+});
+
+describe("Table selection", () => {
+  it("keeps canSelect for single-select, where the qualifier is hidden", () => {
+    const onSelectionChange = jest.fn();
+    render(
+      <Table
+        items={ROWS}
+        columns={[
+          { kind: "qualifier", canSelect: (row) => row.id !== "b" },
+          ...COLUMNS,
+        ]}
+        getRowId={(row) => row.id}
+        selectionBehavior="single-select"
+        onSelectionChange={onSelectionChange}
+      />
+    );
+    fireEvent.click(screen.getByText("Row b"));
+    expect(onSelectionChange).not.toHaveBeenCalledWith(new Set(["b"]));
+    fireEvent.click(screen.getByText("Row a"));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["a"]));
   });
 });
