@@ -1,6 +1,6 @@
 // Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
 
-import { useEffect } from "react";
+import { type ComponentProps, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import {
   PacketType,
@@ -40,11 +40,11 @@ export function isSkillToolPacket(packet: Packet): boolean {
  * A skill read or load as its own step: the skill icon and a title that
  * names the skill, as T3 Code titles a Claude skill call.
  */
-export const SkillToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
+export function SkillToolRenderer({
   packets,
   onComplete,
   children,
-}) => {
+}: ComponentProps<MessageRenderer<CustomToolPacket, {}>>) {
   const t = useTranslations("chat.messages.timeline.skill");
   const tool = skillTool(packets);
   let name = "";
@@ -82,6 +82,6 @@ export const SkillToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       content: null,
     },
   ]);
-};
+}
 
 export default SkillToolRenderer;
