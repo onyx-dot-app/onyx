@@ -620,6 +620,9 @@ class ContentMatchCapable(abc.ABC):
             max_count: Counting stops once it reaches this many documents.
             deadline: A `time.monotonic()` value. Counting stops after the
                 first page that ends past it.
+
+        A search timeout after the first page ends the count early with the
+        pages already counted.
         """
         raise NotImplementedError
 

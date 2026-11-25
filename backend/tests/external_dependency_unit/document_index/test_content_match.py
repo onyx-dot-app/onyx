@@ -7,6 +7,7 @@ hidden filters as search.
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,6 +25,10 @@ from onyx.document_index.interfaces import (
 )
 from onyx.document_index.opensearch import client as client_module
 from onyx.document_index.opensearch import opensearch_document_index
+from onyx.document_index.opensearch.client import (
+    DocumentIdPage,
+    OpenSearchServerSideTimeout,
+)
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
@@ -286,6 +291,33 @@ def test_count_stops_at_the_deadline(
         assert content_index.count_documents_by_content(
             request, max_count=100, deadline=0.0
         ) == ContentMatchCount(count=2, is_complete=False)
+
+
+def test_count_timeout_keeps_the_counted_pages(
+    content_index: OpenSearchDocumentIndex,
+) -> None:
+    request = _request(["quick brown", "tie breaker", "zebra"])
+    client = content_index._client
+    real_page = client.search_for_document_id_page
+    calls = 0
+
+    def page_then_time_out(*args: Any, **kwargs: Any) -> DocumentIdPage:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise OpenSearchServerSideTimeout("timed out")
+        return real_page(*args, **kwargs)
+
+    with (
+        patch.object(opensearch_document_index, "_CONTENT_COUNT_PAGE_SIZE", 2),
+        patch.object(client, "search_for_document_id_page", page_then_time_out),
+    ):
+        assert content_index.count_documents_by_content(
+            request, max_count=100
+        ) == ContentMatchCount(count=2, is_complete=False)
+        calls = 1
+        with pytest.raises(OpenSearchServerSideTimeout):
+            content_index.count_documents_by_content(request, max_count=100)
 
 
 def test_shard_failures_are_errors(content_index: OpenSearchDocumentIndex) -> None:

@@ -53,6 +53,7 @@ from onyx.document_index.opensearch.client import (
     OpenSearchDocumentMissingError,
     OpenSearchIndexClient,
     OpenSearchIndexWriteBlockedError,
+    OpenSearchServerSideTimeout,
     SearchHit,
     is_cluster_block_error,
 )
@@ -1361,15 +1362,21 @@ class OpenSearchDocumentIndex(DocumentIndex):
         count = 0
         after_document_id: str | None = None
         while True:
-            page = self._client.search_for_document_id_page(
-                body=DocumentQuery.get_content_count_query(
-                    request=request,
-                    tenant_state=self._tenant_state,
-                    after_document_id=after_document_id,
-                    page_size=_CONTENT_COUNT_PAGE_SIZE,
-                ),
-                search_type=OpenSearchSearchType.CONTENT_COUNT,
-            )
+            try:
+                page = self._client.search_for_document_id_page(
+                    body=DocumentQuery.get_content_count_query(
+                        request=request,
+                        tenant_state=self._tenant_state,
+                        after_document_id=after_document_id,
+                        page_size=_CONTENT_COUNT_PAGE_SIZE,
+                    ),
+                    search_type=OpenSearchSearchType.CONTENT_COUNT,
+                )
+            except OpenSearchServerSideTimeout:
+                # Keep the pages already counted; with none, the call fails.
+                if after_document_id is None:
+                    raise
+                return ContentMatchCount(count=count, is_complete=False)
             count += len(page.document_ids)
             if len(page.document_ids) < _CONTENT_COUNT_PAGE_SIZE:
                 return ContentMatchCount(count=count, is_complete=True)
