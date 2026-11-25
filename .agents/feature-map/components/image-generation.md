@@ -20,19 +20,20 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   or generate another image before answering. Each generated image appears
   once, inline right after the step that made it, in stream order. With code mode on, a program can generate
   images too, and they show the same way.
-- **An admin** opens the image generation admin page. It lists the image
-  models of each connected LLM provider. The recommended view, the default,
-  shows the non-deprecated catalog image models; the full view shows every
-  model on the provider. One click links a model to its LLM provider with no
-  credentials, and the first linked model becomes the default. Any provider
-  can serve image models. The default image model follows its provider's
-  access: the tool and `POST /image-generation/generate` check it with
+- **An admin** opens the Chat & Image Models page (`/admin/language-models`).
+  A provider's edit modal lists its recommended catalog image models and any
+  connected ones, each with a switch. A switch links or unlinks the model at
+  once, with the provider's credentials; the first linked model becomes the
+  default. The page's "Default Image Generation Model" select picks the
+  default, and "No Default" turns image generation off. Provider cards tag the
+  default text and image providers. Any provider can serve image models. The
+  default image model follows its provider's access: the tool and
+  `POST /image-generation/generate` check it with
   `db/image_generation.py:can_user_generate_images`, the rule a chat model
   uses, so a user outside a private provider's groups, or an agent outside its
-  agent list, cannot generate images. Configs made with their own credentials before this change
-  (legacy) show only while connected, and keep their edit form. A legacy model
-  that the vendor withdrew shows a warning to switch. Onyx does not switch a
-  saved config by itself.
+  agent list, cannot generate images. Configs made with their own credentials
+  before linking (legacy) keep working and can be the default, but have no
+  edit form. Onyx does not switch a saved config by itself.
 - **With no default config**, the model is not offered the tool. The user sees
   no error. A complete config with a rejected key passes this check and fails
   when the tool runs, with an error that the user can see.
@@ -100,9 +101,12 @@ snapshots that have an undated alias.
 `GET /admin/image-generation/llm-providers` adds the dated snapshots and every
 stored model of the provider for the unfiltered view. A linked config has the ID
 `llm-<llm_provider_id>-<model slug>`. Linked image models get the
-`IMAGE_GENERATION` model flow, so chat model lists skip them.
-`web/src/views/admin/ImageGenerationPage/constants.ts` now only names the
-legacy configs.
+`IMAGE_GENERATION` model flow, so chat model lists skip them. The admin
+settings live on the Chat & Image Models page (`/admin/language-models`):
+`web/src/lib/imageGeneration/components.tsx` holds the default image model
+select and the "Image Models" switches in each provider's edit modal
+(`ModalWrapper`). Legacy own-key configs have no edit form; they stay hidden
+from the provider list and can only be chosen as the default.
 
 **Ownership.** `ImageGenerationConfig.llm_provider_owned` is true for legacy
 configs, which own a hidden LLM provider copy. Deleting a linked config removes
@@ -228,10 +232,8 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
 - `image-provider` **A provider.** Copy `image_gen/providers/azure_img_gen.py`. List the current
   providers in `PROVIDERS`. Subclass `image_gen/interfaces.py:ImageGenerationProvider`,
   add it to `ImageGenerationProviderName` and `PROVIDERS`, and set its
-  reference-image properties. Add a form under
-  `web/src/views/admin/ImageGenerationPage/forms/` and a case in
-  `web/src/views/admin/ImageGenerationPage/forms/getImageGenForm.tsx`. Check
-  both config readers ([[#two-default-config-readers]]).
+  reference-image properties. Its image models then show in the provider's
+  edit modal. Check both config readers ([[#two-default-config-readers]]).
 - `investigate-image-tool-missing` **Investigate "the image tool is not offered" or a standalone 404.** Check
   that the IMAGE_GENERATION row of `model_role` names a config's model and
   that its `LLMProvider` row exists.
@@ -252,6 +254,7 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
 - External dependency unit tests: `backend/tests/external_dependency_unit/tools/`.
 - Integration: `backend/tests/integration/tests/image_generation/` and
   `backend/tests/integration/tests/tools/`.
-- Playwright: `web/tests/e2e/admin/image-generation/`.
+- Playwright: none for the admin settings; `web/tests/e2e/admin/default-agent.spec.ts`
+  covers the Image Generation tool toggle.
 - By hand, set a default config and ask for an image. Then remove the default:
   the next message must have no image tool call and no error.

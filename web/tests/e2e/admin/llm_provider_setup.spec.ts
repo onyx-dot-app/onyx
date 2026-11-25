@@ -149,7 +149,7 @@ async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
   await page.goto(LLM_SETUP_URL);
   await page.waitForURL(`**${ADMIN_ROUTES.LLM_MODELS.path}**`);
   await expect(page.getByLabel("admin-page-title")).toHaveText(
-    /^Language Models/
+    /^Chat & Image Models/
   );
 }
 
@@ -276,7 +276,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await page.goto(LLM_SETUP_URL);
     await page.waitForLoadState("networkidle");
     await expect(page.getByLabel("admin-page-title")).toHaveText(
-      /^Language Models/
+      /^Chat & Image Models/
     );
   });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
+import { ImageModelsField } from "@/lib/imageGeneration/components";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
@@ -1165,6 +1166,7 @@ function ModalWrapperInner({
           />
           <Modal.Body padding={2} gap={0}>
             {children}
+            {llmProvider && <ImageModelsField llmProviderId={llmProvider.id} />}
           </Modal.Body>
           <Modal.Footer>
             {saveIsSlow && (

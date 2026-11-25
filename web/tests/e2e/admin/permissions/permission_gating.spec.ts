@@ -213,7 +213,7 @@ test.describe("Permission gating: MANAGE_LLMS", () => {
 
       expect(page.url()).toContain(ADMIN_ROUTES.LLM_MODELS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Language Models")
+        page.getByLabel("admin-page-title").getByText("Chat & Image Models")
       ).toBeVisible({
         timeout: 10000,
       });

@@ -72,17 +72,19 @@ export function LifecycleBadge({ lifecycle, tooltip }: LifecycleBadgeProps) {
 // ---------------------------------------------------------------------------
 
 /** A short fact about an item in a list, such as the default provider. */
-export type Label = "default";
+export type Label = "default" | "defaultText" | "defaultImage";
 
 const LABEL_BADGES: Record<
   Label,
   {
     color: StatusColor;
     // The label's key under `common.badges.labels`.
-    copyKey: "default";
+    copyKey: "default" | "defaultText" | "defaultImage";
   }
 > = {
   default: { color: "info", copyKey: "default" },
+  defaultText: { color: "info", copyKey: "defaultText" },
+  defaultImage: { color: "info", copyKey: "defaultImage" },
 };
 
 /** A label badge's props, for a `tag` or `badge` slot. */

@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "Administrar los ajustes de chat en Modelos de lenguaje",
+      "sharedModelSettings": "Administrar los ajustes de chat en Modelos de chat e imagen",
       "decisionModel": {
         "title": "Modelo de decisiones",
         "openAiDecisionsModelName": "Decisiones de OpenAI (GPT-6 Luna)",
@@ -5760,222 +5760,6 @@
         "endpointUrl": "https://tu-endpoint-api.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "Modelos de imagen de tus proveedores de LLM conectados. Conecta uno para usarlo en el chat.",
-        "title": "Modelos disponibles"
-      },
-      "configureSuccess": {
-        "message": "Proveedor configurado correctamente"
-      },
-      "connectButton": {
-        "label": "Conectar"
-      },
-      "connectedModels": {
-        "title": "Modelos conectados"
-      },
-      "deselectError": {
-        "message": "No se pudo anular la selección"
-      },
-      "disconnectButton": {
-        "ariaLabel": "Desconectar {title}"
-      },
-      "disconnectError": {
-        "message": "No se pudo desconectar"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "Conecta otro proveedor para seguir usando la generación de imágenes."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** es ahora mismo el modelo predeterminado de generación de imágenes."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** es ahora mismo el modelo predeterminado de generación de imágenes. Se conservará el historial de sesiones."
-        },
-        "header": {
-          "description": "Esto eliminará las credenciales guardadas de este proveedor.",
-          "title": "Desconectar *{title}*"
-        },
-        "linkedHeader": {
-          "description": "El proveedor de LLM y sus credenciales siguen conectados."
-        },
-        "noDefaultOption": {
-          "description": "(Desactivar la generación de imágenes)",
-          "label": "Sin predeterminado"
-        },
-        "nonDefault": {
-          "description": "Los modelos de **{title}** ya no se usarán para generar imágenes."
-        },
-        "replacement": {
-          "label": "Definir el nuevo predeterminado",
-          "placeholder": "Selecciona un modelo de reemplazo"
-        },
-        "sessionHistory": {
-          "description": "Se conservará el historial de sesiones."
-        },
-        "submitButton": {
-          "label": "Desconectar"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "{title} desconectado"
-      },
-      "editButton": {
-        "ariaLabel": "Editar {title}"
-      },
-      "emptyState": {
-        "title": "Conecta un modelo de generación de imágenes para usarlo en el chat."
-      },
-      "form": {
-        "apiKey": {
-          "idle": "Introduce tu clave de API.",
-          "label": "Clave de API",
-          "placeholder": "Introduce tu clave de API",
-          "required": "La clave de API es obligatoria"
-        },
-        "apiKeyTest": {
-          "error": "Clave de API no válida",
-          "loading": "Probando la clave de API con {title}...",
-          "success": "La clave de API es válida. Configuración guardada."
-        },
-        "apiKeyValidationFailed": {
-          "message": "No se pudo validar la clave de API"
-        },
-        "authMethod": {
-          "idle": "Elige cómo debe autenticarse {appName} con Google Vertex AI.",
-          "label": "Método de autenticación",
-          "required": "El método de autenticación es obligatorio",
-          "serviceAccount": {
-            "description": "Sube un archivo JSON con la clave de una cuenta de servicio de GCP",
-            "label": "JSON de la cuenta de servicio"
-          },
-          "workloadIdentity": {
-            "description": "Usa las credenciales de GCP del entorno del pod (GKE Workload Identity)",
-            "label": "Workload Identity (GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "Pega tu <link>clave de API</link> de Azure OpenAI para acceder a tus modelos."
-        },
-        "connectHeader": {
-          "title": "Conectar {title}"
-        },
-        "credentials": {
-          "idle": "Sube o pega tus <link>credenciales de cuenta de servicio</link> de Google Cloud.",
-          "label": "Archivo de credenciales",
-          "placeholder": "Sube o pega tus credenciales",
-          "required": "El archivo de credenciales es obligatorio"
-        },
-        "credentialsTest": {
-          "error": "Credenciales no válidas",
-          "loading": "Probando las credenciales con {title}...",
-          "success": "Credenciales válidas. Configuración guardada."
-        },
-        "editHeader": {
-          "title": "Editar {title}"
-        },
-        "loading": {
-          "placeholder": "Cargando..."
-        },
-        "location": {
-          "idle": "La región de Google Cloud de tus modelos de Vertex AI. Consulta <link>la documentación de Google</link> para ver las regiones disponibles.",
-          "label": "Ubicación",
-          "required": "La ubicación es obligatoria"
-        },
-        "projectId": {
-          "idle": "El proyecto de GCP donde Vertex AI está activado. {appName} se autentica con la cuenta de servicio asociada al pod (GKE Workload Identity).",
-          "label": "ID del proyecto de GCP",
-          "required": "El ID del proyecto es obligatorio"
-        },
-        "targetUri": {
-          "idle": "Pega el URI de destino de tu endpoint de <link>Azure OpenAI</link> (incluidos la base del endpoint de la API, el nombre de la implementación y la versión de la API).",
-          "invalid": "El URI de destino debe ser una URL válida con api-version y nombre de implementación",
-          "label": "URI de destino",
-          "required": "El URI de destino es obligatorio"
-        },
-        "unknownError": {
-          "message": "Ocurrió un error desconocido"
-        }
-      },
-      "header": {
-        "description": "Configuración de la generación de imágenes en el chat.",
-        "title": "Generación de imágenes"
-      },
-      "linkError": {
-        "message": "No se pudo conectar el modelo"
-      },
-      "linkSuccess": {
-        "message": "{title} conectado"
-      },
-      "linkedModel": {
-        "description": "De {provider}"
-      },
-      "loadError": {
-        "message": "No se pudo cargar la configuración. Actualiza la página."
-      },
-      "model": {
-        "description": "Selecciona un modelo para generar imágenes en el chat.",
-        "placeholder": "Selecciona un modelo predeterminado",
-        "title": "Modelo de generación de imágenes"
-      },
-      "modelFilter": {
-        "all": "Todos",
-        "recommended": "Recomendados"
-      },
-      "noImageModels": {
-        "description": "Conecta en la página Modelos de lenguaje un proveedor de LLM que ofrezca modelos de imagen. Para ver todos los modelos de tus proveedores conectados, abre la pestaña Todos.",
-        "title": "No hay modelos de imagen disponibles"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "Modelo de generación de imágenes GPT Image 1 alojado en Microsoft Azure."
-        },
-        "azureGptImage15": {
-          "description": "Modelo de generación de imágenes GPT Image 1.5 alojado en Microsoft Azure."
-        },
-        "azureGptImage2": {
-          "description": "Modelo de generación de imágenes GPT Image 2 alojado en Microsoft Azure."
-        },
-        "azureGptImage25Flare": {
-          "description": "Modelo de generación de imágenes GPT Image 2.5 Flare alojado en Microsoft Azure."
-        },
-        "azureGptImage25Sunburst": {
-          "description": "Modelo de generación de imágenes GPT Image 2.5 Sunburst alojado en Microsoft Azure."
-        },
-        "gemini25FlashImage": {
-          "description": "El modelo Gemini 2.5 Flash Image (Nano Banana) está diseñado para la velocidad y la eficiencia."
-        },
-        "gemini3ProImage": {
-          "description": "Gemini 3 Pro Image (Nano Banana Pro) está diseñado para la producción de recursos profesionales."
-        },
-        "gemini3ProImagePreview": {
-          "description": "Google Cloud lo retiró el 17 de julio de 2026. Cambia a Gemini 3 Pro Image."
-        },
-        "openaiGptImage1": {
-          "description": "Un potente modelo de generación de imágenes de OpenAI que sigue muy bien el prompt."
-        },
-        "openaiGptImage15": {
-          "description": "El anterior modelo insignia de generación de imágenes de OpenAI."
-        },
-        "openaiGptImage2": {
-          "description": "El modelo de generación de imágenes de la generación anterior de OpenAI, con alta fidelidad al prompt."
-        },
-        "openaiGptImage25Flare": {
-          "description": "El último modelo de generación de imágenes de OpenAI, con alta calidad y generación rápida."
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "El modelo premium de generación de imágenes de OpenAI, para las ediciones más precisas."
-        }
-      },
-      "retiredModelWarning": {
-        "description": "Conecta otro modelo, establécelo como predeterminado y luego desconecta {title}.",
-        "title": "{title} ya no está disponible"
-      },
-      "setDefaultError": {
-        "message": "No se pudo establecer como predeterminado"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "Opciones avanzadas",
@@ -7202,6 +6986,24 @@
       "temperature": {
         "description": "Permite a los usuarios anular la temperatura predeterminada del modelo en cada sesión.",
         "title": "Control de la temperatura"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "Modelo predeterminado de generación de imágenes",
+          "description": "El modelo que usa la acción Generación de imágenes.",
+          "emptyDescription": "Activa un modelo de imagen en la configuración de un proveedor para generar imágenes.",
+          "placeholder": "Selecciona un modelo",
+          "error": "No se pudo cambiar el modelo de imagen predeterminado",
+          "noDefault": {
+            "label": "Sin predeterminado",
+            "description": "(Desactivar la generación de imágenes)"
+          }
+        },
+        "imageModels": {
+          "title": "Modelos de imagen",
+          "description": "Activa los modelos que este proveedor puede usar para generar imágenes. Un cambio se aplica al instante.",
+          "error": "No se pudo cambiar el modelo de imagen"
+        }
       }
     },
     "mcpActions": {
@@ -14219,7 +14021,9 @@
         "legacy": "heredado"
       },
       "labels": {
-        "default": "Predeterminado"
+        "default": "Predeterminado",
+        "defaultText": "Modelo de texto predeterminado",
+        "defaultImage": "Modelo predeterminado de generación de imágenes"
       },
       "modelTypes": {
         "decision": "Decisión",
@@ -16528,14 +16332,11 @@
         "hookExtensions": {
           "label": "Extensiones de hooks"
         },
-        "imageGeneration": {
-          "label": "Generación de imágenes"
-        },
         "indexSettings": {
           "label": "Configuración del índice"
         },
         "languageModels": {
-          "label": "Modelos de lenguaje"
+          "label": "Modelos de chat e imagen"
         },
         "decisionModels": {
           "label": "Modelos de decisión"

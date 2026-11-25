@@ -268,9 +268,15 @@ const nextConfig = {
         destination: "/admin/document-processing",
         permanent: true,
       },
+      // Image generation moved into the Chat & Image Models page.
       {
         source: "/admin/configuration/image-generation",
-        destination: "/admin/image-generation",
+        destination: "/admin/language-models",
+        permanent: true,
+      },
+      {
+        source: "/admin/image-generation",
+        destination: "/admin/language-models",
         permanent: true,
       },
       {

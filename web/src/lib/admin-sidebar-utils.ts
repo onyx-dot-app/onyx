@@ -21,7 +21,6 @@ export type { FeatureFlags } from "@/lib/admin-routes";
 export type AdminNavItemId =
   | "languageModels"
   | "webSearch"
-  | "imageGeneration"
   | "voice"
   | "decisionModels"
   | "codeInterpreter"
@@ -82,7 +81,6 @@ export const NAV_ITEM_IDS: Record<
   LLM_MODELS: "languageModels",
   DECISION_MODELS: "decisionModels",
   WEB_SEARCH: "webSearch",
-  IMAGE_GENERATION: "imageGeneration",
   VOICE: "voice",
   CODE_INTERPRETER: "codeInterpreter",
   CHAT_PREFERENCES: "chatPreferences",

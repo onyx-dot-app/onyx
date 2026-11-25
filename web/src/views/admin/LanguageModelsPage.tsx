@@ -59,6 +59,8 @@ import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
+import { DefaultImageModelSetting } from "@/lib/imageGeneration/components";
+import { useImageGenerationConfigs } from "@/lib/imageGeneration/hooks";
 
 // Settings toggles that gate per-chat model controls in the model picker.
 type ChatControlKey =
@@ -92,17 +94,24 @@ interface ProviderGroup {
 
 interface ExistingProviderCardProps {
   provider: LLMProviderView;
-  isDefault: boolean;
+  isDefaultText: boolean;
+  isDefaultImage: boolean;
   isLastProvider: boolean;
 }
 
 function ExistingProviderCard({
   provider,
-  isDefault,
+  isDefaultText,
+  isDefaultImage,
   isLastProvider,
 }: ExistingProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const defaultBadge = useLabelBadge("default");
+  const defaultTextBadge = useLabelBadge("defaultText");
+  const defaultImageBadge = useLabelBadge("defaultImage");
+  const badges = [
+    ...(isDefaultText ? [defaultTextBadge] : []),
+    ...(isDefaultImage ? [defaultImageBadge] : []),
+  ];
   const { mutate } = useSWRConfig();
   const providerModal = useCreateModal();
   const setIsOpen = providerModal.toggle;
@@ -167,14 +176,14 @@ function ExistingProviderCard({
             <Button
               variant="danger"
               onClick={handleDelete}
-              disabled={isDefault && !isLastProvider}
+              disabled={isDefaultText && !isLastProvider}
             >
               {t("deleteModal.submit.label")}
             </Button>
           }
         >
           <Section alignItems="start" gap={2}>
-            {isDefault && !isLastProvider ? (
+            {isDefaultText && !isLastProvider ? (
               <Text font="main-ui-body" color="text-03">
                 {t("deleteModal.defaultProviderWarning")}
               </Text>
@@ -220,7 +229,7 @@ function ExistingProviderCard({
             titleMaxLines={1}
             descriptionMaxLines={1}
             padding={2}
-            badge={isDefault ? defaultBadge : undefined}
+            badge={badges.length > 0 ? badges : undefined}
             rightChildren={
               <div className="flex flex-row">
                 <Hoverable.Item
@@ -410,6 +419,7 @@ export default function LanguageModelsPage() {
     defaultText,
     modelPaging,
   } = useAdminLanguageModels();
+  const { defaultConfig: defaultImageConfig } = useImageGenerationConfigs();
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
@@ -834,6 +844,13 @@ export default function LanguageModelsPage() {
           <MessageCard variant="info" title={t("noProviders.title")} />
         )}
 
+        {/* ── Image Generation: the default image model ── */}
+        {hasProviders && (
+          <Card border="solid" rounding={4}>
+            <DefaultImageModelSetting />
+          </Card>
+        )}
+
         {/* ── Available Providers (only when providers exist) ── */}
         {hasProviders && (
           <>
@@ -853,7 +870,10 @@ export default function LanguageModelsPage() {
                   <ExistingProviderCard
                     key={provider.id}
                     provider={provider}
-                    isDefault={defaultText?.provider_id === provider.id}
+                    isDefaultText={defaultText?.provider_id === provider.id}
+                    isDefaultImage={
+                      defaultImageConfig?.llm_provider_id === provider.id
+                    }
                     isLastProvider={chatProviderCount === 1}
                   />
                 ))}

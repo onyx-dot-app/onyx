@@ -92,7 +92,7 @@ it.each(["openai", "vercel_ai_gateway"])(
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", {
-        name: "Manage chat settings in Language Models",
+        name: "Manage chat settings in Chat & Image Models",
       })
     ).toHaveAttribute("href", "/admin/language-models");
     await user.clear(screen.getByLabelText(/display name/i));

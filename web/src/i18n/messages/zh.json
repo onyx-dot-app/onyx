@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "在语言模型中管理聊天设置",
+      "sharedModelSettings": "在聊天和图像模型中管理聊天设置",
       "decisionModel": {
         "title": "决策模型",
         "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
@@ -5760,222 +5760,6 @@
         "endpointUrl": "https://api-duandian.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "已连接的 LLM 提供商上的图像模型。连接一个即可在聊天中使用。",
-        "title": "可用模型"
-      },
-      "configureSuccess": {
-        "message": "提供商配置成功"
-      },
-      "connectButton": {
-        "label": "连接"
-      },
-      "connectedModels": {
-        "title": "已连接的模型"
-      },
-      "deselectError": {
-        "message": "取消选择失败"
-      },
-      "disconnectButton": {
-        "ariaLabel": "断开 {title}"
-      },
-      "disconnectError": {
-        "message": "断开连接失败"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "连接另一个提供商以继续使用图像生成。"
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** 当前是默认的图像生成模型。"
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** 当前是默认的图像生成模型。会话历史将会保留。"
-        },
-        "header": {
-          "description": "此操作会移除为此提供商存储的凭证。",
-          "title": "断开 *{title}* 的连接"
-        },
-        "linkedHeader": {
-          "description": "LLM 提供商及其凭据将保持连接。"
-        },
-        "noDefaultOption": {
-          "description": "（禁用图像生成）",
-          "label": "无默认"
-        },
-        "nonDefault": {
-          "description": "将不再使用 **{title}** 模型生成图像。"
-        },
-        "replacement": {
-          "label": "设置新的默认模型",
-          "placeholder": "选择替代模型"
-        },
-        "sessionHistory": {
-          "description": "会话历史将会保留。"
-        },
-        "submitButton": {
-          "label": "断开连接"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "已断开 {title} 的连接"
-      },
-      "editButton": {
-        "ariaLabel": "编辑 {title}"
-      },
-      "emptyState": {
-        "title": "连接一个图像生成模型，以便在对话中使用。"
-      },
-      "form": {
-        "apiKey": {
-          "idle": "输入您的 API 密钥。",
-          "label": "API 密钥",
-          "placeholder": "输入您的 API 密钥",
-          "required": "API 密钥为必填项"
-        },
-        "apiKeyTest": {
-          "error": "API 密钥无效",
-          "loading": "正在通过 {title} 测试 API 密钥...",
-          "success": "API 密钥有效。配置已保存。"
-        },
-        "apiKeyValidationFailed": {
-          "message": "API 密钥验证失败"
-        },
-        "authMethod": {
-          "idle": "选择 {appName} 与 Google Vertex AI 进行身份验证的方式。",
-          "label": "身份验证方式",
-          "required": "身份验证方式为必填项",
-          "serviceAccount": {
-            "description": "上传 GCP 服务账号密钥 JSON 文件",
-            "label": "服务账号 JSON"
-          },
-          "workloadIdentity": {
-            "description": "使用 pod 的环境 GCP 凭证（GKE Workload Identity）",
-            "label": "Workload Identity (GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "粘贴来自 Azure OpenAI 的 <link>API 密钥</link>，以访问您的模型。"
-        },
-        "connectHeader": {
-          "title": "连接 {title}"
-        },
-        "credentials": {
-          "idle": "上传或粘贴来自 Google Cloud 的 <link>服务账号凭证</link>。",
-          "label": "凭证文件",
-          "placeholder": "上传或粘贴您的凭证",
-          "required": "凭证文件为必填项"
-        },
-        "credentialsTest": {
-          "error": "凭证无效",
-          "loading": "正在通过 {title} 测试凭证...",
-          "success": "凭证有效。配置已保存。"
-        },
-        "editHeader": {
-          "title": "编辑 {title}"
-        },
-        "loading": {
-          "placeholder": "正在加载..."
-        },
-        "location": {
-          "idle": "用于 Vertex AI 模型的 Google Cloud 区域。可用区域请参见 <link>Google 文档</link>。",
-          "label": "位置",
-          "required": "位置为必填项"
-        },
-        "projectId": {
-          "idle": "已启用 Vertex AI 的 GCP 项目。{appName} 使用 pod 绑定的服务账号进行身份验证（GKE Workload Identity）。",
-          "label": "GCP 项目 ID",
-          "required": "项目 ID 为必填项"
-        },
-        "targetUri": {
-          "idle": "粘贴来自 <link>Azure OpenAI</link> 的端点目标 URI（包括 API 端点基址、部署名称和 API 版本）。",
-          "invalid": "目标 URI 必须是有效的 URL，并包含 api-version 和部署名称",
-          "label": "目标 URI",
-          "required": "目标 URI 为必填项"
-        },
-        "unknownError": {
-          "message": "发生未知错误"
-        }
-      },
-      "header": {
-        "description": "对话内图像生成的设置。",
-        "title": "图像生成"
-      },
-      "linkError": {
-        "message": "无法连接模型"
-      },
-      "linkSuccess": {
-        "message": "已连接 {title}"
-      },
-      "linkedModel": {
-        "description": "来自 {provider}"
-      },
-      "loadError": {
-        "message": "加载配置失败。请刷新页面。"
-      },
-      "model": {
-        "description": "选择用于在对话中生成图像的模型。",
-        "placeholder": "选择默认模型",
-        "title": "图像生成模型"
-      },
-      "modelFilter": {
-        "all": "全部",
-        "recommended": "推荐"
-      },
-      "noImageModels": {
-        "description": "请在语言模型页面连接提供图像模型的 LLM 提供商。要查看已连接提供商的所有模型，请打开“全部”标签页。",
-        "title": "没有可用的图像模型"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "托管在 Microsoft Azure 上的 GPT Image 1 图像生成模型。"
-        },
-        "azureGptImage15": {
-          "description": "托管在 Microsoft Azure 上的 GPT Image 1.5 图像生成模型。"
-        },
-        "azureGptImage2": {
-          "description": "托管在 Microsoft Azure 上的 GPT Image 2 图像生成模型。"
-        },
-        "azureGptImage25Flare": {
-          "description": "托管在 Microsoft Azure 上的 GPT Image 2.5 Flare 图像生成模型。"
-        },
-        "azureGptImage25Sunburst": {
-          "description": "托管在 Microsoft Azure 上的 GPT Image 2.5 Sunburst 图像生成模型。"
-        },
-        "gemini25FlashImage": {
-          "description": "Gemini 2.5 Flash Image (Nano Banana) 模型专为速度和效率而设计。"
-        },
-        "gemini3ProImage": {
-          "description": "Gemini 3 Pro Image (Nano Banana Pro) 专为专业素材生产而设计。"
-        },
-        "gemini3ProImagePreview": {
-          "description": "Google Cloud 已于 2026 年 7 月 17 日停止提供。请切换到 Gemini 3 Pro Image。"
-        },
-        "openaiGptImage1": {
-          "description": "来自 OpenAI 的高性能图像生成模型，对提示词的遵循度很高。"
-        },
-        "openaiGptImage15": {
-          "description": "OpenAI 上一代旗舰图像生成模型。"
-        },
-        "openaiGptImage2": {
-          "description": "OpenAI 上一代图像生成模型，提示词还原度高。"
-        },
-        "openaiGptImage25Flare": {
-          "description": "OpenAI 最新的图像生成模型，兼顾高质量与快速生成。"
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
-        }
-      },
-      "retiredModelWarning": {
-        "description": "请连接其他模型并将其设为默认，然后断开 {title} 的连接。",
-        "title": "{title} 已不再可用"
-      },
-      "setDefaultError": {
-        "message": "设置默认项失败"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "高级选项",
@@ -7202,6 +6986,24 @@
       "temperature": {
         "description": "允许用户按会话覆盖模型的默认温度。",
         "title": "温度控制"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "默认图像生成模型",
+          "description": "图像生成操作使用的模型。",
+          "emptyDescription": "在提供商设置中开启一个图像模型即可生成图像。",
+          "placeholder": "选择模型",
+          "error": "无法更改默认图像模型",
+          "noDefault": {
+            "label": "无默认",
+            "description": "（禁用图像生成）"
+          }
+        },
+        "imageModels": {
+          "title": "图像模型",
+          "description": "开启此提供商可用于生成图像的模型。更改会立即生效。",
+          "error": "无法更改图像模型"
+        }
       }
     },
     "mcpActions": {
@@ -14219,7 +14021,9 @@
         "legacy": "旧版"
       },
       "labels": {
-        "default": "默认"
+        "default": "默认",
+        "defaultText": "默认文本模型",
+        "defaultImage": "默认图像生成模型"
       },
       "modelTypes": {
         "decision": "决策",
@@ -16528,14 +16332,11 @@
         "hookExtensions": {
           "label": "Hook 扩展"
         },
-        "imageGeneration": {
-          "label": "图像生成"
-        },
         "indexSettings": {
           "label": "索引设置"
         },
         "languageModels": {
-          "label": "语言模型"
+          "label": "聊天和图像模型"
         },
         "decisionModels": {
           "label": "决策模型"

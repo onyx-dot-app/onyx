@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "言語モデルでチャット設定を管理",
+      "sharedModelSettings": "チャット・画像モデルでチャット設定を管理",
       "decisionModel": {
         "title": "判断モデル",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
@@ -5760,222 +5760,6 @@
         "endpointUrl": "https://api-endopointo.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "接続済みの LLM プロバイダーの画像モデルです。チャットで使うには接続してください。",
-        "title": "利用可能なモデル"
-      },
-      "configureSuccess": {
-        "message": "プロバイダーを設定しました"
-      },
-      "connectButton": {
-        "label": "接続"
-      },
-      "connectedModels": {
-        "title": "接続済みモデル"
-      },
-      "deselectError": {
-        "message": "選択を解除できませんでした"
-      },
-      "disconnectButton": {
-        "ariaLabel": "{title} を切断"
-      },
-      "disconnectError": {
-        "message": "接続を解除できませんでした"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "画像生成を続けて使用するには、別のプロバイダーを接続してください。"
-        },
-        "defaultNoReplacement": {
-          "description": "現在、**{title}** がデフォルトの画像生成モデルです。"
-        },
-        "defaultWithReplacement": {
-          "description": "現在、**{title}** がデフォルトの画像生成モデルです。セッション履歴は保持されます。"
-        },
-        "header": {
-          "description": "このプロバイダーに保存されている認証情報を削除します。",
-          "title": "*{title}* の接続を解除"
-        },
-        "linkedHeader": {
-          "description": "LLMプロバイダーとその認証情報は接続されたままです。"
-        },
-        "noDefaultOption": {
-          "description": "(画像生成を無効にする)",
-          "label": "デフォルトなし"
-        },
-        "nonDefault": {
-          "description": "**{title}** のモデルは画像生成に使用されなくなります。"
-        },
-        "replacement": {
-          "label": "新しいデフォルトを設定",
-          "placeholder": "代わりのモデルを選択"
-        },
-        "sessionHistory": {
-          "description": "セッション履歴は保持されます。"
-        },
-        "submitButton": {
-          "label": "接続を解除"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "{title} の接続を解除しました"
-      },
-      "editButton": {
-        "ariaLabel": "{title} を編集"
-      },
-      "emptyState": {
-        "title": "チャットで使用する画像生成モデルを接続してください。"
-      },
-      "form": {
-        "apiKey": {
-          "idle": "API キーを入力してください。",
-          "label": "API キー",
-          "placeholder": "API キーを入力",
-          "required": "API キーは必須です"
-        },
-        "apiKeyTest": {
-          "error": "API キーが無効です",
-          "loading": "{title} で API キーをテストしています...",
-          "success": "API キーは有効です。設定を保存しました。"
-        },
-        "apiKeyValidationFailed": {
-          "message": "API キーの検証に失敗しました"
-        },
-        "authMethod": {
-          "idle": "{appName} が Google Vertex AI に認証する方法を選択してください。",
-          "label": "認証方法",
-          "required": "認証方法は必須です",
-          "serviceAccount": {
-            "description": "GCP サービスアカウントキーの JSON ファイルをアップロード",
-            "label": "サービスアカウント JSON"
-          },
-          "workloadIdentity": {
-            "description": "Pod に付与された GCP 認証情報を使用 (GKE Workload Identity)",
-            "label": "Workload Identity (GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "モデルにアクセスするには、Azure OpenAI の <link>API キー</link> を貼り付けてください。"
-        },
-        "connectHeader": {
-          "title": "{title} を接続"
-        },
-        "credentials": {
-          "idle": "Google Cloud の <link>サービスアカウント認証情報</link> をアップロードするか貼り付けてください。",
-          "label": "認証情報ファイル",
-          "placeholder": "認証情報をアップロードまたは貼り付け",
-          "required": "認証情報ファイルは必須です"
-        },
-        "credentialsTest": {
-          "error": "認証情報が無効です",
-          "loading": "{title} で認証情報をテストしています...",
-          "success": "認証情報は有効です。設定を保存しました。"
-        },
-        "editHeader": {
-          "title": "{title} を編集"
-        },
-        "loading": {
-          "placeholder": "読み込んでいます..."
-        },
-        "location": {
-          "idle": "Vertex AI モデルを使用する Google Cloud リージョンです。利用できるリージョンは <link>Google のドキュメント</link> を参照してください。",
-          "label": "リージョン",
-          "required": "リージョンは必須です"
-        },
-        "projectId": {
-          "idle": "Vertex AI を有効にした GCP プロジェクトです。{appName} は Pod にバインドされたサービスアカウント (GKE Workload Identity) で認証します。",
-          "label": "GCP プロジェクト ID",
-          "required": "プロジェクト ID は必須です"
-        },
-        "targetUri": {
-          "idle": "<link>Azure OpenAI</link> のエンドポイントターゲット URI を貼り付けてください (API エンドポイントのベース、デプロイ名、API バージョンを含む)。",
-          "invalid": "ターゲット URI は api-version とデプロイ名を含む有効な URL である必要があります",
-          "label": "ターゲット URI",
-          "required": "ターゲット URI は必須です"
-        },
-        "unknownError": {
-          "message": "不明なエラーが発生しました"
-        }
-      },
-      "header": {
-        "description": "チャット内の画像生成に関する設定です。",
-        "title": "画像生成"
-      },
-      "linkError": {
-        "message": "モデルを接続できませんでした"
-      },
-      "linkSuccess": {
-        "message": "{title} を接続しました"
-      },
-      "linkedModel": {
-        "description": "{provider} から"
-      },
-      "loadError": {
-        "message": "設定を読み込めませんでした。ページを再読み込みしてください。"
-      },
-      "model": {
-        "description": "チャットで画像を生成するモデルを選択してください。",
-        "placeholder": "デフォルトのモデルを選択",
-        "title": "画像生成モデル"
-      },
-      "modelFilter": {
-        "all": "すべて",
-        "recommended": "おすすめ"
-      },
-      "noImageModels": {
-        "description": "言語モデルページで、画像モデルを提供する LLM プロバイダーを接続してください。接続済みプロバイダーのすべてのモデルを表示するには、[すべて] タブを開いてください。",
-        "title": "利用できる画像モデルがありません"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "Microsoft Azure でホストされる GPT Image 1 画像生成モデルです。"
-        },
-        "azureGptImage15": {
-          "description": "Microsoft Azure でホストされる GPT Image 1.5 画像生成モデルです。"
-        },
-        "azureGptImage2": {
-          "description": "Microsoft Azure でホストされる GPT Image 2 画像生成モデルです。"
-        },
-        "azureGptImage25Flare": {
-          "description": "Microsoft Azure でホストされる GPT Image 2.5 Flare 画像生成モデルです。"
-        },
-        "azureGptImage25Sunburst": {
-          "description": "Microsoft Azure でホストされる GPT Image 2.5 Sunburst 画像生成モデルです。"
-        },
-        "gemini25FlashImage": {
-          "description": "Gemini 2.5 Flash Image (Nano Banana) は速度と効率を重視して設計されたモデルです。"
-        },
-        "gemini3ProImage": {
-          "description": "Gemini 3 Pro Image (Nano Banana Pro) はプロ向けのアセット制作を想定して設計されています。"
-        },
-        "gemini3ProImagePreview": {
-          "description": "Google Cloud により 2026 年 7 月 17 日に提供終了となります。Gemini 3 Pro Image に切り替えてください。"
-        },
-        "openaiGptImage1": {
-          "description": "プロンプトへの忠実度が高い、OpenAI の高性能な画像生成モデルです。"
-        },
-        "openaiGptImage15": {
-          "description": "OpenAI の従来のフラッグシップ画像生成モデルです。"
-        },
-        "openaiGptImage2": {
-          "description": "プロンプト忠実度が高い、OpenAI の前世代の画像生成モデルです。"
-        },
-        "openaiGptImage25Flare": {
-          "description": "高品質かつ高速な、OpenAI の最新の画像生成モデルです。"
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
-        }
-      },
-      "retiredModelWarning": {
-        "description": "別のモデルを接続してデフォルトに設定してから、{title} の接続を解除してください。",
-        "title": "{title} は利用できなくなりました"
-      },
-      "setDefaultError": {
-        "message": "デフォルトに設定できませんでした"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "詳細オプション",
@@ -7202,6 +6986,24 @@
       "temperature": {
         "description": "ユーザーがセッションごとにモデルの既定の温度を上書きできるようにします。",
         "title": "Temperature の制御"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "デフォルトの画像生成モデル",
+          "description": "画像生成アクションが使用するモデルです。",
+          "emptyDescription": "画像を生成するには、プロバイダーの設定で画像モデルを有効にしてください。",
+          "placeholder": "モデルを選択",
+          "error": "デフォルトの画像モデルを変更できませんでした",
+          "noDefault": {
+            "label": "デフォルトなし",
+            "description": "（画像生成を無効にする）"
+          }
+        },
+        "imageModels": {
+          "title": "画像モデル",
+          "description": "このプロバイダーが画像の生成に使用できるモデルを有効にします。変更はすぐに反映されます。",
+          "error": "画像モデルを変更できませんでした"
+        }
       }
     },
     "mcpActions": {
@@ -14219,7 +14021,9 @@
         "legacy": "レガシー"
       },
       "labels": {
-        "default": "デフォルト"
+        "default": "デフォルト",
+        "defaultText": "デフォルトのテキストモデル",
+        "defaultImage": "デフォルトの画像生成モデル"
       },
       "modelTypes": {
         "decision": "判断",
@@ -16528,14 +16332,11 @@
         "hookExtensions": {
           "label": "フック拡張"
         },
-        "imageGeneration": {
-          "label": "画像生成"
-        },
         "indexSettings": {
           "label": "インデックス設定"
         },
         "languageModels": {
-          "label": "言語モデル"
+          "label": "チャット・画像モデル"
         },
         "decisionModels": {
           "label": "判断モデル"

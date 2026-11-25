@@ -43,7 +43,7 @@ export const ADMIN_CONFIG_LINKS: Record<
   { href: string; tooltip: string }
 > = {
   [IMAGE_GENERATION_TOOL_ID]: {
-    href: ADMIN_ROUTES.IMAGE_GENERATION.path,
+    href: ADMIN_ROUTES.LLM_MODELS.path,
     tooltip: "Configure Image Generation",
   },
   [WEB_SEARCH_TOOL_ID]: {

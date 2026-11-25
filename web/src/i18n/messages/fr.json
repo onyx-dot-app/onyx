@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "Gérer les paramètres de discussion dans Modèles de langage",
+      "sharedModelSettings": "Gérer les paramètres de discussion dans Modèles de chat et d'image",
       "decisionModel": {
         "title": "Modèle de décision",
         "openAiDecisionsModelName": "Décisions OpenAI (GPT-6 Luna)",
@@ -5760,222 +5760,6 @@
         "endpointUrl": "https://votre-endpoint-api.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "Modèles d'image de vos fournisseurs LLM connectés. Connectez-en un pour l'utiliser dans le chat.",
-        "title": "Modèles disponibles"
-      },
-      "configureSuccess": {
-        "message": "Fournisseur configuré avec succès"
-      },
-      "connectButton": {
-        "label": "Connecter"
-      },
-      "connectedModels": {
-        "title": "Modèles connectés"
-      },
-      "deselectError": {
-        "message": "Échec de la désélection"
-      },
-      "disconnectButton": {
-        "ariaLabel": "Déconnecter {title}"
-      },
-      "disconnectError": {
-        "message": "Échec de la déconnexion"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "Connectez un autre fournisseur pour continuer à utiliser la génération d'images."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** est actuellement le modèle de génération d'images par défaut."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** est actuellement le modèle de génération d'images par défaut. L'historique des sessions sera conservé."
-        },
-        "header": {
-          "description": "Cette action supprimera les identifiants enregistrés de ce fournisseur.",
-          "title": "Déconnecter *{title}*"
-        },
-        "linkedHeader": {
-          "description": "Le fournisseur LLM et ses identifiants restent connectés."
-        },
-        "noDefaultOption": {
-          "description": "(Désactiver la génération d'images)",
-          "label": "Aucun modèle par défaut"
-        },
-        "nonDefault": {
-          "description": "Les modèles **{title}** ne seront plus utilisés pour générer des images."
-        },
-        "replacement": {
-          "label": "Définir un nouveau modèle par défaut",
-          "placeholder": "Sélectionnez un modèle de remplacement"
-        },
-        "sessionHistory": {
-          "description": "L'historique des sessions sera conservé."
-        },
-        "submitButton": {
-          "label": "Déconnecter"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "{title} déconnecté"
-      },
-      "editButton": {
-        "ariaLabel": "Modifier {title}"
-      },
-      "emptyState": {
-        "title": "Connectez un modèle de génération d'images à utiliser dans la discussion."
-      },
-      "form": {
-        "apiKey": {
-          "idle": "Saisissez votre clé d'API.",
-          "label": "Clé d'API",
-          "placeholder": "Saisissez votre clé d'API",
-          "required": "La clé d'API est obligatoire"
-        },
-        "apiKeyTest": {
-          "error": "Clé d'API non valide",
-          "loading": "Test de la clé d'API avec {title}...",
-          "success": "La clé d'API est valide. Configuration enregistrée."
-        },
-        "apiKeyValidationFailed": {
-          "message": "Échec de la validation de la clé d'API"
-        },
-        "authMethod": {
-          "idle": "Choisissez comment {appName} doit s'authentifier auprès de Google Vertex AI.",
-          "label": "Méthode d'authentification",
-          "required": "La méthode d'authentification est obligatoire",
-          "serviceAccount": {
-            "description": "Téléversez un fichier JSON de clé de compte de service GCP",
-            "label": "JSON du compte de service"
-          },
-          "workloadIdentity": {
-            "description": "Utilisez les identifiants GCP ambiants du pod (GKE Workload Identity)",
-            "label": "Workload Identity (GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "Collez votre <link>clé d'API</link> Azure OpenAI pour accéder à vos modèles."
-        },
-        "connectHeader": {
-          "title": "Connecter {title}"
-        },
-        "credentials": {
-          "idle": "Téléversez ou collez vos <link>identifiants de compte de service</link> Google Cloud.",
-          "label": "Fichier d'identifiants",
-          "placeholder": "Téléversez ou collez vos identifiants",
-          "required": "Le fichier d'identifiants est obligatoire"
-        },
-        "credentialsTest": {
-          "error": "Identifiants non valides",
-          "loading": "Test des identifiants avec {title}...",
-          "success": "Identifiants valides. Configuration enregistrée."
-        },
-        "editHeader": {
-          "title": "Modifier {title}"
-        },
-        "loading": {
-          "placeholder": "Chargement..."
-        },
-        "location": {
-          "idle": "La région Google Cloud de vos modèles Vertex AI. Consultez la <link>documentation Google</link> pour connaître les régions disponibles.",
-          "label": "Emplacement",
-          "required": "L'emplacement est obligatoire"
-        },
-        "projectId": {
-          "idle": "Le projet GCP où Vertex AI est activé. {appName} s'authentifie avec le compte de service lié au pod (GKE Workload Identity).",
-          "label": "ID du projet GCP",
-          "required": "L'ID du projet est obligatoire"
-        },
-        "targetUri": {
-          "idle": "Collez l'URI cible de votre point de terminaison <link>Azure OpenAI</link> (avec la base du point de terminaison de l'API, le nom du déploiement et la version de l'API).",
-          "invalid": "L'URI cible doit être une URL valide comprenant api-version et le nom du déploiement",
-          "label": "URI cible",
-          "required": "L'URI cible est obligatoire"
-        },
-        "unknownError": {
-          "message": "Une erreur inconnue est survenue"
-        }
-      },
-      "header": {
-        "description": "Paramètres de la génération d'images dans la discussion.",
-        "title": "Génération d'images"
-      },
-      "linkError": {
-        "message": "Échec de la connexion du modèle"
-      },
-      "linkSuccess": {
-        "message": "{title} connecté"
-      },
-      "linkedModel": {
-        "description": "Depuis {provider}"
-      },
-      "loadError": {
-        "message": "Échec du chargement de la configuration. Actualisez la page."
-      },
-      "model": {
-        "description": "Sélectionnez un modèle pour générer des images dans la discussion.",
-        "placeholder": "Sélectionnez un modèle par défaut",
-        "title": "Modèle de génération d'images"
-      },
-      "modelFilter": {
-        "all": "Tous",
-        "recommended": "Recommandés"
-      },
-      "noImageModels": {
-        "description": "Connectez sur la page Modèles de langage un fournisseur LLM qui propose des modèles d'image. Pour voir tous les modèles de vos fournisseurs connectés, ouvrez l'onglet Tous.",
-        "title": "Aucun modèle d'image disponible"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "Modèle de génération d'images GPT Image 1 hébergé sur Microsoft Azure."
-        },
-        "azureGptImage15": {
-          "description": "Modèle de génération d'images GPT Image 1.5 hébergé sur Microsoft Azure."
-        },
-        "azureGptImage2": {
-          "description": "Modèle de génération d'images GPT Image 2 hébergé sur Microsoft Azure."
-        },
-        "azureGptImage25Flare": {
-          "description": "Modèle de génération d'images GPT Image 2.5 Flare hébergé sur Microsoft Azure."
-        },
-        "azureGptImage25Sunburst": {
-          "description": "Modèle de génération d'images GPT Image 2.5 Sunburst hébergé sur Microsoft Azure."
-        },
-        "gemini25FlashImage": {
-          "description": "Le modèle Gemini 2.5 Flash Image (Nano Banana) est conçu pour la rapidité et l'efficacité."
-        },
-        "gemini3ProImage": {
-          "description": "Gemini 3 Pro Image (Nano Banana Pro) est conçu pour la production professionnelle de contenus."
-        },
-        "gemini3ProImagePreview": {
-          "description": "Arrêté par Google Cloud le 17 juillet 2026. Passez à Gemini 3 Pro Image."
-        },
-        "openaiGptImage1": {
-          "description": "Un modèle de génération d'images performant d'OpenAI, avec un bon respect des prompts."
-        },
-        "openaiGptImage15": {
-          "description": "Ancien modèle phare de génération d'images d'OpenAI."
-        },
-        "openaiGptImage2": {
-          "description": "Modèle de génération d'images de génération précédente d'OpenAI, avec une haute fidélité aux prompts."
-        },
-        "openaiGptImage25Flare": {
-          "description": "Dernier modèle de génération d'images d'OpenAI, alliant haute qualité et génération rapide."
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "Modèle premium de génération d'images d'OpenAI, pour les retouches les plus précises."
-        }
-      },
-      "retiredModelWarning": {
-        "description": "Connectez un autre modèle, définissez-le par défaut, puis déconnectez {title}.",
-        "title": "{title} n'est plus disponible"
-      },
-      "setDefaultError": {
-        "message": "Échec de la définition du modèle par défaut"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "Options avancées",
@@ -7202,6 +6986,24 @@
       "temperature": {
         "description": "Permettre aux utilisateurs de remplacer la température par défaut du modèle pour chaque session.",
         "title": "Contrôle de la température"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "Modèle de génération d'images par défaut",
+          "description": "Le modèle qu'utilise l'action Génération d'images.",
+          "emptyDescription": "Activez un modèle d'image dans les paramètres d'un fournisseur pour générer des images.",
+          "placeholder": "Sélectionnez un modèle",
+          "error": "Impossible de modifier le modèle d'image par défaut",
+          "noDefault": {
+            "label": "Aucun par défaut",
+            "description": "(Désactiver la génération d'images)"
+          }
+        },
+        "imageModels": {
+          "title": "Modèles d'image",
+          "description": "Activez les modèles que ce fournisseur peut utiliser pour générer des images. Un changement s'applique immédiatement.",
+          "error": "Impossible de modifier le modèle d'image"
+        }
       }
     },
     "mcpActions": {
@@ -14219,7 +14021,9 @@
         "legacy": "ancien"
       },
       "labels": {
-        "default": "Par défaut"
+        "default": "Par défaut",
+        "defaultText": "Modèle de texte par défaut",
+        "defaultImage": "Modèle de génération d'images par défaut"
       },
       "modelTypes": {
         "decision": "Décision",
@@ -16528,14 +16332,11 @@
         "hookExtensions": {
           "label": "Extensions de hooks"
         },
-        "imageGeneration": {
-          "label": "Génération d'images"
-        },
         "indexSettings": {
           "label": "Paramètres d'indexation"
         },
         "languageModels": {
-          "label": "Modèles de langage"
+          "label": "Modèles de chat et d'image"
         },
         "decisionModels": {
           "label": "Modèles de décision"
