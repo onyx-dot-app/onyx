@@ -1,6 +1,7 @@
 """Code mode results render live and on replay, save, and change the offered tools."""
 
 import json
+import re
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -23,6 +24,7 @@ from onyx.chat.renderer import tool_renderer
 from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import StoredToolResult
+from onyx.db.postgres_tool_models import DocumentScope
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import (
@@ -38,12 +40,25 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.prompts.sandbox_tools import (
+    EXEC_CD_RULE,
+    EXEC_WORKDIR_RULE,
+    SANDBOX_GUIDANCE,
+    SANDBOX_SHELL_LINE,
+)
 from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
-    INTERNAL_SEARCH_GUIDANCE,
-    MEMORY_GUIDANCE,
+    GENERATE_IMAGE_DESCRIPTION,
+    INTERNAL_SEARCH_DESCRIPTION,
+    MEMORY_DESCRIPTION,
+    OPEN_URL_AFTER_WEB_SEARCH_GUIDANCE,
+    OPEN_URLS_GUIDANCE,
+    POSTGRES_QUERY_DESCRIPTION,
+    PYTHON_TOOL_DESCRIPTION,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
     TOOL_SECTION_HEADER,
+    WEB_SEARCH_DESCRIPTION,
+    WEB_SEARCH_SITE_DISABLED_GUIDANCE,
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
@@ -82,14 +97,21 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     SANDBOX_TOOLS,
     ApplyPatchTool,
+    EditTool,
     ExecCommandTool,
+    SandboxTool,
     WriteStdinTool,
+    WriteTool,
 )
 from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -97,7 +119,11 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.postgres_sanitization import sanitize_json_like
 from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM, run_agent
-from tests.unit.onyx.tools.code_mode.fakes import search_doc
+from tests.unit.onyx.tools.code_mode.fakes import (
+    FakeImageGenerationTool,
+    FakeWebSearchTool,
+    search_doc,
+)
 
 PLACEMENT = Placement(turn_index=1, tab_index=0)
 CODE = "r = await tools.internal_search(queries=['q'])\nprint(r)"
@@ -351,7 +377,6 @@ def test_direct_search_prompt_has_no_code_mode_guidance() -> None:
     direct = build_system_prompt("base", tools=[search], include_user_info=False)
     for shape in CODE_MODE_SHAPES.values():
         assert CODE_MODE_GUIDANCE.format(name=shape.run_name) not in direct
-    assert INTERNAL_SEARCH_GUIDANCE.format(name=SearchTool.NAME) in direct
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in direct
 
 
@@ -380,45 +405,248 @@ def test_code_mode_guidance_names_the_shape_s_run_tool(family: ToolFamily) -> No
         )
 
 
-@pytest.mark.parametrize("code_mode", [False, True])
-def test_tool_sections_name_a_tool_as_the_model_calls_it(code_mode: bool) -> None:
-    memory: list[Tool] = [MemoryTool(tool_id=1, llm=MagicMock())]
-    offered = with_code_mode(memory, OPENAI_CODE_MODE)[0] if code_mode else memory
-    prompt = _code_mode_prompt(offered)
-    name = "tools.add_memory" if code_mode else "add_memory"
-    assert MEMORY_GUIDANCE.format(name=name) in prompt
+def _unused(*_: object) -> ToolResult:
+    return ToolResult(content="")
+
+
+def _guided_tools(family: ToolFamily) -> list[tuple[Tool, list[str]]]:
+    """The built-in tools whose descriptions carry usage guidance, each with
+    its guidance texts, in the family's shapes."""
+    return [
+        (
+            SearchTool(
+                tool_id=1,
+                user=MagicMock(is_anonymous=False),
+                persona_search_info=MagicMock(document_set_names=[]),
+                llm=MagicMock(),
+                document_index=MagicMock(),
+                user_selected_filters=None,
+                project_id_filter=None,
+                enable_slack_search=False,
+            ),
+            [INTERNAL_SEARCH_DESCRIPTION],
+        ),
+        (
+            FakeWebSearchTool(_unused, supports_site_filter=False),
+            [WEB_SEARCH_DESCRIPTION, WEB_SEARCH_SITE_DISABLED_GUIDANCE],
+        ),
+        (
+            OpenURLTool(
+                tool_id=4,
+                document_index=MagicMock(),
+                user=MagicMock(),
+                content_provider=MagicMock(),
+                shape=OPEN_URL_SHAPES[family],
+            ),
+            [OPEN_URLS_GUIDANCE],
+        ),
+        (
+            PostgresTool(
+                user=MagicMock(), current_chat_session_id=None, scope=DocumentScope()
+            ),
+            [POSTGRES_QUERY_DESCRIPTION],
+        ),
+        (PythonTool(tool_id=6, chat_session_id=uuid4()), [PYTHON_TOOL_DESCRIPTION]),
+        (FakeImageGenerationTool(), [GENERATE_IMAGE_DESCRIPTION]),
+        (MemoryTool(tool_id=8, llm=MagicMock()), [MEMORY_DESCRIPTION]),
+    ]
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+def test_each_tool_s_guidance_is_in_its_description_not_the_system_prompt(
+    family: ToolFamily,
+) -> None:
+    guided = _guided_tools(family)
+    tools = [tool for tool, _ in guided]
+    code_offered = with_code_mode(tools, CODE_MODE_SHAPES[family])[0]
+    [code_tool] = [tool for tool in code_offered if isinstance(tool, CodeModeTool)]
+    stubs = code_tool.tool_definition().description
+    prompts = [_code_mode_prompt(tools), _code_mode_prompt(code_offered)]
+    for tool, texts in guided:
+        for text in texts:
+            assert text in tool.tool_definition().description
+            # The program function's docstring indents each line.
+            assert text.replace("\n", "\n        ") in stubs
+            for line in text.splitlines():
+                assert [prompt for prompt in prompts if line in prompt] == []
+    assert WEB_SEARCH_SITE_DISABLED_GUIDANCE not in (
+        FakeWebSearchTool(_unused).tool_definition().description
+    )
 
 
 @pytest.mark.parametrize("code_mode", [False, True])
-def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> None:
-    def prompt(tools: list[Tool]) -> str:
-        offered = with_code_mode(tools, OPENAI_CODE_MODE)[0] if code_mode else tools
+def test_url_reading_after_web_search_names_the_tool_as_the_model_calls_it(
+    code_mode: bool,
+) -> None:
+    tools: list[Tool] = [
+        FakeWebSearchTool(_unused),
+        OpenURLTool(
+            tool_id=4,
+            document_index=MagicMock(),
+            user=MagicMock(),
+            content_provider=MagicMock(),
+            shape=OPEN_URL_SHAPES[ToolFamily.OPENAI],
+        ),
+    ]
+    offered = with_code_mode(tools, OPENAI_CODE_MODE)[0] if code_mode else tools
+    name = "tools.open_url" if code_mode else "open_url"
+    assert OPEN_URL_AFTER_WEB_SEARCH_GUIDANCE.format(name=name) in _code_mode_prompt(
+        offered
+    )
+    # Without web search, the prompt has no such guidance.
+    assert "after a web search" not in _code_mode_prompt(tools[1:])
+
+
+def _sandbox_section(prompt: str) -> str:
+    """The sandbox section of `prompt`, up to the next section."""
+    section = prompt.split("## Sandbox\n", 1)[1]
+    return "## Sandbox\n" + section.split("\n## ", 1)[0].rstrip("\n") + "\n"
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_the_sandbox_section_has_the_vm_facts_and_the_offered_tools_lines(
+    family: ToolFamily, code_mode: bool
+) -> None:
+    sandbox = SANDBOX_TOOLS[family]
+    chat_session_id = uuid4()
+    turn = SandboxTurn(
+        tenant_id="t",
+        user_id=uuid4(),
+        chat_session_id=chat_session_id,
+        vm_chat_files=[],
+        copy_vm_chat_files=False,
+        shell=sandbox.shell,
+    )
+    shape = CODE_MODE_SHAPES[family]
+
+    def prompt(tool_types: list[type[SandboxTool]]) -> str:
+        tools: list[Tool] = [tool(turn) for tool in tool_types]
+        offered = with_code_mode(tools, shape)[0] if code_mode else tools
         return _code_mode_prompt(offered)
 
+    facts = SANDBOX_GUIDANCE.format(
+        workdir=f"/home/onyx/workspaces/{chat_session_id}", shell_line=""
+    )
+
+    assert "## Sandbox" not in _code_mode_prompt([EchoTool()])
+    # The VM facts, and the shell's line when the turn offers the shell.
+    assert _sandbox_section(prompt(list(sandbox.tools))) == (
+        f"{facts.rstrip()}{SANDBOX_SHELL_LINE}\n"
+    )
+    assert _sandbox_section(
+        prompt([tool for tool in sandbox.tools if tool is not ExecCommandTool])
+    ) == (facts)
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+def test_each_sandbox_tool_s_guidance_is_in_its_description_and_stub(
+    family: ToolFamily,
+) -> None:
+    sandbox = SANDBOX_TOOLS[family]
     turn = SandboxTurn(
         tenant_id="t",
         user_id=uuid4(),
         chat_session_id=uuid4(),
         vm_chat_files=[],
         copy_vm_chat_files=False,
-        shell=SHELL_SHAPES[ToolFamily.OPENAI],
+        shell=sandbox.shell,
     )
-    prefix = "tools." if code_mode else ""
-    assert "## Sandbox" not in prompt([EchoTool()])
-    assert (
-        f"Run commands with `{prefix}exec_command`, use `{prefix}write_stdin` for "
-        f"commands that are still running and edit files with `{prefix}apply_patch`."
-    ) in prompt(
-        [
-            ExecCommandTool(turn),
-            WriteStdinTool(turn),
-            ApplyPatchTool(turn),
-        ]
+    tools: list[Tool] = [tool(turn) for tool in sandbox.tools]
+    code_offered = with_code_mode(tools, CODE_MODE_SHAPES[family])[0]
+    [code_tool] = [tool for tool in code_offered if isinstance(tool, CodeModeTool)]
+    stubs = code_tool.tool_definition().description
+    prompts = [_code_mode_prompt(tools), _code_mode_prompt(code_offered)]
+    start_rule = (
+        EXEC_CD_RULE if sandbox.shell.workdir_argument is None else EXEC_WORKDIR_RULE
     )
-    only_exec = prompt([ExecCommandTool(turn)])
-    assert f"Run commands with `{prefix}exec_command`." in only_exec
-    assert "apply_patch" not in only_exec
-    assert ("Call them from `exec` programs." in only_exec) is code_mode
+    applied = (
+        "The user sees the change as a diff. A successful call means the change "
+        "is applied; a failed one returns an error."
+    )
+    moved: dict[type[SandboxTool], list[str]] = {
+        ExecCommandTool: [
+            "Each call starts in your working directory; `cd` and environment changes "
+            f"do not carry over to the next call. {start_rule}",
+            "Output over the limit is cut in the middle.",
+        ],
+        WriteStdinTool: [
+            "Poll a running command with empty chars and a long wait.",
+            "Interrupt commands that you no longer need with",
+        ],
+        ApplyPatchTool: [applied],
+        EditTool: [applied],
+        WriteTool: [applied],
+    }
+    for tool in tools:
+        for text in moved.get(type(tool), []):
+            assert text in tool.tool_definition().description
+            assert text in stubs
+            assert [prompt for prompt in prompts if text in prompt] == []
+    # The section's line is in no description.
+    assert [
+        tool for tool in tools if SANDBOX_SHELL_LINE.strip() in tool.description
+    ] == []
+
+
+def _sandbox_turn(family: ToolFamily, *, chat_files: bool = False) -> SandboxTurn:
+    return SandboxTurn(
+        tenant_id="t",
+        user_id=uuid4(),
+        chat_session_id=uuid4(),
+        vm_chat_files=[VmChatFile(file_id="f", path="attachments/f-a.txt")]
+        if chat_files
+        else [],
+        copy_vm_chat_files=False,
+        shell=SANDBOX_TOOLS[family].shell,
+    )
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_sandbox_tool_definitions_are_the_same_in_every_chat(
+    family: ToolFamily, code_mode: bool
+) -> None:
+    """Tool definitions open the cached prefix, so they hold nothing of one
+    chat; only the sandbox section names the chat's working directory."""
+
+    def definitions(turn: SandboxTurn) -> list[str]:
+        tools: list[Tool] = [tool(turn) for tool in SANDBOX_TOOLS[family].tools]
+        offered = (
+            with_code_mode(tools, CODE_MODE_SHAPES[family])[0] if code_mode else tools
+        )
+        return [tool.tool_definition().model_dump_json() for tool in offered]
+
+    first, second = _sandbox_turn(family), _sandbox_turn(family)
+    assert first.workdir != second.workdir
+    assert definitions(first) == definitions(second)
+    assert [text for text in definitions(first) if first.workdir in text] == []
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+def test_the_token_estimate_covers_a_sandbox_turn(family: ToolFamily) -> None:
+    turn = _sandbox_turn(family, chat_files=True)
+    tools: list[Tool] = [
+        *(tool for tool, _ in _guided_tools(family)),
+        *(tool(turn) for tool in SANDBOX_TOOLS[family].tools),
+    ]
+    actual = len(
+        build_system_prompt(
+            "base",
+            datetime_aware=True,
+            tools=tools,
+            should_cite_documents=True,
+        )
+    ) + sum(len(tool.description) for tool in tools)
+    estimate = calculate_reserved_tokens(
+        db_session=MagicMock(),
+        persona_system_prompt="",
+        base_system_prompt="base",
+        token_counter=len,
+        tool_family=family,
+        sandbox_tools=True,
+    )
+    assert estimate >= actual
 
 
 @pytest.mark.parametrize("include_sandbox", [False, True])
@@ -443,10 +671,16 @@ def _guided(tool_type: type[Tool], name: str) -> MagicMock:
 
 
 def _guidance_headings(prompt: str) -> list[str]:
-    """The headings of the tool section, with `search` where the search
-    guidance, which has no heading, starts."""
+    """The headings of the tool section, with `search` and `open url` where
+    the search guidance and the URL reading guidance, which have no heading,
+    start."""
     tools_section = prompt.split(TOOL_SECTION_HEADER, 1)[1].replace(
         TOOL_DESCRIPTION_SEARCH_GUIDANCE, "## search\n"
+    )
+    tools_section = re.sub(
+        OPEN_URL_AFTER_WEB_SEARCH_GUIDANCE.format(name=r"\S+"),
+        "## open url\n",
+        tools_section,
     )
     return [line[3:] for line in tools_section.splitlines() if line.startswith("## ")]
 
@@ -473,18 +707,9 @@ def test_tool_guidance_follows_the_tool_order_in_both_prompt_variants() -> None:
         _guided(SearchTool, SearchTool.NAME),
         *with_code_mode([MemoryTool(tool_id=1, llm=MagicMock())], OPENAI_CODE_MODE)[0],
     ]
-    expected = [
-        "search",
-        EXEC_TOOL_NAME,
-        SearchTool.NAME,
-        "Sandbox",
-        WebSearchTool.NAME,
-        OPEN_URL_TOOL_NAME,
-        PostgresTool.NAME,
-        PythonTool.NAME,
-        ImageGenerationTool.NAME,
-        MemoryTool.NAME,
-    ]
+    # The search guidance opens the section, followed by URL reading after
+    # a web search; the other sections follow the tool order.
+    expected = ["search", "open url", EXEC_TOOL_NAME, "Sandbox"]
 
     offered_prompt = _code_mode_prompt(offered)
     estimate_prompt = build_system_prompt(
@@ -494,17 +719,8 @@ def test_tool_guidance_follows_the_tool_order_in_both_prompt_variants() -> None:
         all_guidance_sandbox=True,
     )
 
-    # The memory tool runs inside programs, so the prompt names its function.
-    assert _guidance_headings(offered_prompt) == [
-        *expected[:-1],
-        f"tools.{MemoryTool.NAME}",
-    ]
+    assert _guidance_headings(offered_prompt) == expected
     assert _guidance_headings(estimate_prompt) == expected
-    # The sandbox section names its tools in tool order too.
-    assert (
-        "Run commands with `exec_command`, use `write_stdin` for commands that "
-        "are still running and edit files with `apply_patch`."
-    ) in offered_prompt
 
 
 @pytest.mark.parametrize("family", list(ToolFamily))
@@ -855,13 +1071,13 @@ def test_live_stdout_cut_at_the_limit_is_replaced_by_the_saved_stdout() -> None:
     [
         (
             ToolFamily.CLAUDE,
-            ["`bash`", "`edit`", "`write`", "## repl\n", "## web_fetch\n"],
-            ["`apply_patch`", "## exec\n", "## open_url\n"],
+            ["use bash.", "Prefer edit for", "## repl\n", "use web_fetch after"],
+            ["use exec_command.", "## exec\n", "use open_url after"],
         ),
         (
             ToolFamily.OPENAI,
-            ["`exec_command`", "`apply_patch`", "## exec\n", "## open_url\n"],
-            ["`edit`", "## repl\n", "## web_fetch\n"],
+            ["use exec_command.", "*** Begin Patch", "## exec\n", "use open_url after"],
+            ["use bash.", "Prefer edit for", "## repl\n", "use web_fetch after"],
         ),
     ],
 )
@@ -885,6 +1101,14 @@ def test_the_token_estimate_names_the_model_s_tools(
     [estimate] = prompts
     assert [name for name in named if name not in estimate] == []
     assert [name for name in unnamed if name in estimate] == []
+    # The tools' own guidance is in their descriptions, which the estimate
+    # counts too.
+    assert [
+        text
+        for _, texts in _guided_tools(family)
+        for text in texts
+        if text not in estimate
+    ] == []
 
 
 class _DeferredTool(_LookupTool):

@@ -26,15 +26,14 @@ from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
-    APPLY_PATCH_USE,
     ARTIFACT_DESCRIPTION,
     ARTIFACT_RESULTS,
     ATTACHMENTS_NOT_SAVED_NOTE,
     CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
-    EDIT_USE,
+    EXEC_CD_RULE,
     EXEC_COMMAND_DESCRIPTION,
-    EXEC_COMMAND_USE,
+    EXEC_WORKDIR_RULE,
     LIBRARY_CREATE_LIBRARY_FILE_DESCRIPTION,
     LIBRARY_FIND_DESCRIPTION,
     LIBRARY_LIST_DESCRIPTION,
@@ -43,12 +42,8 @@ from onyx.prompts.sandbox_tools import (
     LIBRARY_READ_DESCRIPTION,
     LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION,
     LIBRARY_SEARCH_DESCRIPTION,
-    SANDBOX_CODE_MODE_NOTE,
-    SANDBOX_GUIDANCE,
     WRITE_DESCRIPTION,
     WRITE_STDIN_DESCRIPTION,
-    WRITE_STDIN_USE,
-    WRITE_USE,
 )
 from onyx.server.features.build.sandbox.harness_base import (
     CHAT_FILES_DIR,
@@ -266,9 +261,6 @@ class SandboxTool(Tool):
     id = None
     NAME: str
     DESCRIPTION: str
-    # The tool's use in the system prompt's sandbox section; `{name}` is the
-    # name that the model calls. None: only the tool description names it.
-    USE: str | None
     # True: a call that a lost server left running runs again, because it
     # changes nothing.
     RUNS_AGAIN = False
@@ -308,8 +300,28 @@ class SandboxTool(Tool):
         return self.describe(str)
 
     def describe(self, called_name: Callable[[str], str]) -> str:
-        return self.DESCRIPTION.format(
-            shell=called_name(self._turn.shell.name),
+        return self.describe_in(
+            self._turn.shell, called_name, chat_files=bool(self._turn.vm_chat_files)
+        )
+
+    @classmethod
+    def describe_in(
+        cls,
+        shell: ShellShape,
+        called_name: Callable[[str], str],
+        *,
+        chat_files: bool,  # noqa: ARG003
+    ) -> str:
+        """The description in a turn of the `shell` shape, naming each tool
+        as `called_name` gives its name; `chat_files`: the turn has chat
+        files in the VM. It holds nothing of one chat, so every chat's tool
+        definitions are the same."""
+        return cls.DESCRIPTION.format(
+            shell=called_name(shell.name),
+            write_stdin=called_name(WriteStdinTool.NAME),
+            start_rule=EXEC_CD_RULE
+            if shell.workdir_argument is None
+            else EXEC_WORKDIR_RULE,
             edit=called_name(EditTool.NAME),
             create=called_name(LibraryCreateLibraryFileTool.NAME),
             list=called_name(LibraryListTool.NAME),
@@ -332,7 +344,6 @@ class ExecCommandTool(SandboxTool):
     arguments."""
 
     rank = ToolRank.SHELL
-    USE = EXEC_COMMAND_USE
     DESCRIPTION = EXEC_COMMAND_DESCRIPTION
     # Matches the web card title.
     display_name = "Terminal"
@@ -341,10 +352,17 @@ class ExecCommandTool(SandboxTool):
     def tool_name(cls, shell: ShellShape) -> str:
         return shell.name
 
-    def describe(self, called_name: Callable[[str], str]) -> str:
-        description = super().describe(called_name)
-        if self._turn.vm_chat_files:
-            return f"{description} {CHAT_FILES_LAYOUT}"
+    @classmethod
+    def describe_in(
+        cls,
+        shell: ShellShape,
+        called_name: Callable[[str], str],
+        *,
+        chat_files: bool,
+    ) -> str:
+        description = super().describe_in(shell, called_name, chat_files=chat_files)
+        if chat_files:
+            return f"{description}\n\n{CHAT_FILES_LAYOUT}"
         return description
 
     @property
@@ -374,7 +392,6 @@ class ExecCommandTool(SandboxTool):
 class WriteStdinTool(SandboxTool):
     rank = ToolRank.SHELL_INPUT
     NAME = WRITE_STDIN_TOOL_NAME
-    USE = WRITE_STDIN_USE
     DESCRIPTION = WRITE_STDIN_DESCRIPTION
     # Matches the web card title.
     display_name = "Terminal"
@@ -541,7 +558,6 @@ def _noted(content: str, changes: Sequence[ApplyPatchFileChange]) -> str:
 class ApplyPatchTool(_FileTool):
     rank = ToolRank.FILE_EDIT
     NAME: FileToolName = "apply_patch"
-    USE = APPLY_PATCH_USE
     DESCRIPTION = APPLY_PATCH_DESCRIPTION
     arguments = ApplyPatchArguments
     # Matches the web card title.
@@ -736,7 +752,6 @@ class EditTool(_FileTool):
     rank = ToolRank.FILE_EDIT
 
     NAME: FileToolName = "edit"
-    USE = EDIT_USE
     DESCRIPTION = EDIT_DESCRIPTION
     arguments = EditArguments
     # Matches the web card title.
@@ -780,7 +795,6 @@ class WriteTool(_FileTool):
     rank = ToolRank.FILE_EDIT
 
     NAME: FileToolName = "write"
-    USE = WRITE_USE
     DESCRIPTION = WRITE_DESCRIPTION
     arguments = WriteArguments
     # Matches the web card title.
@@ -823,7 +837,6 @@ class _LibraryTool(SandboxTool):
 
     rank = ToolRank.PUBLISHED_FILES
 
-    USE = None
     RUNS_AGAIN = True
     CODE_MODE_NAMESPACE = "library"
     # The group's line in the run tool's description.
@@ -1040,7 +1053,6 @@ class LoadSkillTool(SandboxTool):
 
     rank = ToolRank.SKILLS_LOAD
     NAME = LOAD_SKILL_TOOL_NAME
-    USE = None
     DESCRIPTION = (
         "Copy a skill's files into the sandbox, read-only, at "
         f"{CHAT_SKILLS_PATH}/<name>/. Call it before you run the skill's "
@@ -1113,32 +1125,3 @@ SANDBOX_TOOLS: Mapping[ToolFamily, SandboxToolset] = {
         ),
     ),
 }
-
-
-def sandbox_guidance(
-    tools: Sequence[type[SandboxTool]],
-    shell: ShellShape,
-    called_name: Callable[[str], str],
-    *,
-    code_mode_run_name: str | None,
-) -> str | None:
-    """The system prompt's sandbox section: the use of each of `tools`, in
-    order, by the name that `called_name` gives for its name in a turn of
-    the `shell` shape; None without any. `code_mode_run_name` is the code
-    mode run tool's name, when code mode applies."""
-    uses = [
-        tool.USE.format(name=f"`{called_name(tool.tool_name(shell))}`")
-        for tool in tools
-        if tool.USE is not None
-    ]
-    if not uses:
-        return None
-    listed = uses[0] if len(uses) == 1 else f"{', '.join(uses[:-1])} and {uses[-1]}"
-    return SANDBOX_GUIDANCE.format(
-        uses=f"{listed[0].upper()}{listed[1:]}."
-        + (
-            ""
-            if code_mode_run_name is None
-            else SANDBOX_CODE_MODE_NOTE.format(name=code_mode_run_name)
-        )
-    )
