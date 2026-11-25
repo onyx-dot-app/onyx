@@ -19,13 +19,12 @@ function plain(text: string): string {
   return text.replace(/[\\`*_~[\]<>#|]/g, "\\$&");
 }
 
-/** A plain verb, then the command, pattern, skill or path as a code span,
- *  then `suffix` (a running title's ellipsis). */
-function verbWithCode(verb: string, chip: string, suffix: string): RichStr {
+/** A plain verb, then the command, pattern, skill or path as a code span. */
+function verbWithCode(verb: string, chip: string): RichStr {
   // A code span cannot cross a line break, so a multi-line command (a heredoc,
   // say) reads as one line in the title; the body keeps the original.
   const oneLine = chip.replace(/\s*\n\s*/g, " ").trim();
-  return markdown(`${plain(verb)} ${codeSpan(oneLine)}${suffix}`);
+  return markdown(`${plain(verb)} ${codeSpan(oneLine)}`);
 }
 
 /** The finished form of each running verb and tool title. */
@@ -56,8 +55,7 @@ const PAST_TENSE: Record<string, string> = {
 /**
  * The step's title. Bash/execute, search, skills and read/edit lead with a
  * verb, then the actual command, pattern, skill or file path in a code span;
- * everything else is plain text. `done` puts the verb in the past tense; a
- * running title ends with an ellipsis.
+ * everything else is plain text. `done` puts the verb in the past tense.
  */
 export function renderToolCallHeader(
   toolCall: ToolCallState,
@@ -65,26 +63,25 @@ export function renderToolCallHeader(
 ): string | RichStr {
   const verb = (text: string): string =>
     done ? (PAST_TENSE[text] ?? text) : text;
-  const ellipsis = done ? "" : "...";
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
-      return toolCall.description + ellipsis;
+      return toolCall.description;
     }
-    return verbWithCode(verb("Running"), toolCall.command, ellipsis);
+    return verbWithCode(verb("Running"), toolCall.command);
   }
   if (toolCall.kind === "search" && toolCall.description) {
-    return verbWithCode(verb("Searching for"), toolCall.description, ellipsis);
+    return verbWithCode(verb("Searching for"), toolCall.description);
   }
   if (toolCall.toolName === "skill" && toolCall.skillName) {
-    return verbWithCode(verb("Using skill"), toolCall.skillName, ellipsis);
+    return verbWithCode(verb("Using skill"), toolCall.skillName);
   }
   if (
     (toolCall.kind === "read" || toolCall.kind === "edit") &&
     toolCall.description
   ) {
-    return verbWithCode(verb(toolCall.title), toolCall.description, ellipsis);
+    return verbWithCode(verb(toolCall.title), toolCall.description);
   }
-  return (toolCall.description || verb(toolCall.title)) + ellipsis;
+  return toolCall.description || verb(toolCall.title);
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {
