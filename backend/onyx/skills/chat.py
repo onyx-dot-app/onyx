@@ -14,6 +14,9 @@ from onyx.chat.mention_models import (
     PickedSkillMessage,
     RecordedSkillMention,
 )
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.skill import list_chat_skills
+from onyx.db.users import fetch_user_by_id
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.skill_prompts import (
     MENTIONED_SKILL_PROMPT,
@@ -22,8 +25,12 @@ from onyx.prompts.skill_prompts import (
     SKILLS_OMITTED_LINE,
 )
 from onyx.skills.content import read_chat_skills_md
-from onyx.skills.models import ChatSkill
-from onyx.tools.constants import SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME
+from onyx.skills.models import ChatSkill, ChatSkillFiles
+from onyx.tools.constants import (
+    LOAD_SKILL_TOOL_NAME,
+    SKILLS_LIST_TOOL_NAME,
+    SKILLS_READ_TOOL_NAME,
+)
 
 # Codex limits: the catalog's skill lines use at most 2% of the context
 # window, at four UTF-8 bytes a token counted for each line with its newline;
@@ -92,6 +99,7 @@ def render_skills_catalog(
             skills="\n".join(lines),
             read_tool=called_name(SKILLS_READ_TOOL_NAME),
             list_tool=called_name(SKILLS_LIST_TOOL_NAME),
+            load_tool=called_name(LOAD_SKILL_TOOL_NAME),
         )
 
     def line(index: int, chars: int) -> str:
@@ -147,6 +155,8 @@ def accept_picked_skills(
     skills: Sequence[ChatSkill],
     user_id: UUID,
     db_session: Session,
+    *,
+    with_sandbox: bool,
 ) -> list[AcceptedPicks]:
     """Resolve the skills that each message picked, from one read with the
     user's current access.
@@ -168,6 +178,7 @@ def accept_picked_skills(
         },
         user_id,
         db_session,
+        with_sandbox=with_sandbox,
     )
     # Stored counts use one tokenizer, as question counts do.
     tokenizer = get_tokenizer(None, None)
@@ -205,3 +216,35 @@ def accept_picked_skills(
             )
         accepted.append(message)
     return accepted
+
+
+class SkillLoadError(Exception):
+    """A chat skill whose files cannot be loaded: the user has no skill of
+    that name, or its files cannot be read."""
+
+
+def load_chat_skill_files(user_id: UUID, name: str) -> ChatSkillFiles:
+    """The files of the user's chat skill `name`, at the version the user
+    runs now. Raises SkillLoadError for an unknown or unreadable skill."""
+    from onyx.skills.push import build_chat_skill_files
+
+    with get_session_with_current_tenant() as db_session:
+        user = fetch_user_by_id(db_session, user_id)
+        skill = next(
+            (
+                skill
+                for skill in (
+                    list_chat_skills(db_session, user, with_sandbox=True)
+                    if user
+                    else []
+                )
+                if skill.name == name
+            ),
+            None,
+        )
+        if user is None or skill is None:
+            raise SkillLoadError(f"No skill is named '{name}'.")
+        files = build_chat_skill_files(skill, user, db_session)
+    if files is None:
+        raise SkillLoadError(f"The files of skill '{name}' cannot be read now.")
+    return files

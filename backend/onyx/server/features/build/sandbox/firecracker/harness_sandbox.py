@@ -9,9 +9,11 @@ durable cache records (`harness_state`), so any API pod can serve
 a user's sandbox keeps (Onyx delete hooks call them through `purge`).
 """
 
+import io
 import posixpath
 import random
 import secrets
+import tarfile
 import time
 from collections.abc import Callable, Generator, Iterable, Sequence
 from contextlib import nullcontext
@@ -105,7 +107,6 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     get_exec_session,
     get_ids,
     get_session_save,
-    get_skills_image,
     has_marks,
     has_session_records,
     is_purged,
@@ -118,13 +119,11 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     remove_exec_session,
     sessions_on_instance,
     set_mark,
-    set_skills_image,
 )
 from onyx.server.features.build.sandbox.firecracker.models import (
     ExecSessionRecord,
     ExecSessionTable,
     SessionInstanceTable,
-    SkillsImage,
 )
 from onyx.server.features.build.sandbox.firecracker.session_saves import (
     BackgroundIdleStop,
@@ -164,12 +163,12 @@ from onyx.server.features.build.sandbox.models import (
     ExecCompletionName,
     ExecEvent,
     ExecOutputDelta,
+    FileSet,
     HarnessSandboxRef,
     SandboxFileType,
     SandboxPathFault,
     SandboxPathInfo,
     SandboxProvisionContentionError,
-    SkillsBundle,
     session_workspace,
 )
 from onyx.utils.logger import setup_logger
@@ -194,8 +193,6 @@ _INIT_LOCK_SECONDS = 30.0
 # covers a restore at the agent's 15 min transfer deadline.
 _SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
 _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
-_SKILLS_SYNC_LOCK_PREFIX = "sandbox_fc:skills_sync:"
-_SKILLS_SYNC_LOCK_SECONDS = 5 * 60.0
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
 # The daemon refuses Start and Run with these while it keeps its most commands.
@@ -266,40 +263,38 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     def ensure_running(self, ref: HarnessSandboxRef) -> None:
         self._place(ref)
 
-    def sync_skills(self, ref: HarnessSandboxRef, bundle: SkillsBundle) -> None:
-        placed = self._place(ref)
-        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
-        image = SkillsImage(
-            instance=(placed.vm.attempt, placed.vm.generation),
-            image_id=bundle.image_id,
+    def install_skill(
+        self,
+        ref: HarnessSandboxRef,
+        name: str,
+        version: str,
+        files: FileSet,
+    ) -> bool:
+        if posixpath.basename(name) != name or name.startswith("."):
+            raise HarnessSandboxError(f"bad skill name {name!r}")
+        if any(not path.startswith(f"{name}/") for path in files):
+            raise HarnessSandboxError(f"skill {name!r} has files outside its folder")
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w", format=tarfile.PAX_FORMAT) as tar:
+            for path in sorted(files):
+                data = files[path]
+                info = tarfile.TarInfo(path)
+                info.size = len(data)
+                # FileSet keeps no modes: a script or a binary runs directly.
+                info.mode = 0o755 if data.startswith((b"#!", b"\x7fELF")) else 0o644
+                tar.addfile(info, io.BytesIO(data))
+        daemon = sandbox_daemon(self._client_factory, self._place(ref))
+        installed = daemon.install_skill(
+            name=name, version=version, tar=buffer.getvalue()
         )
-        if get_skills_image(tenant_cache, ref.sandbox_id) == image:
-            return
-        # One swap and its record at a time, so the record names the drive.
-        with tenant_cache.lock(
-            f"{_SKILLS_SYNC_LOCK_PREFIX}{ref.sandbox_id}",
-            timeout=_SKILLS_SYNC_LOCK_SECONDS,
-        ):
-            if get_skills_image(tenant_cache, ref.sandbox_id) == image:
-                return
-            agent = self._client_factory.client(placed.node.address)
-            put = agent.put_managed_image(bundle.zip_bytes)
-            swap = agent.swap_managed(
-                image_id=put.image.image_id,
-                targets=[
-                    VmInstance(
-                        sandbox_id=placed.vm.sandbox_id,
-                        attempt=placed.vm.attempt,
-                        generation=placed.vm.generation,
-                        sandboxd_key=placed.sandboxd_key,
-                    )
-                ],
-            )[0]
-            if not swap.ok:
-                raise HarnessSandboxError(
-                    f"The skills drive did not change: {swap.reason}: {swap.message}"
-                )
-            set_skills_image(tenant_cache, ref.sandbox_id, image)
+        logger.info(
+            "Skill %s (version %s) %s sandbox %s",
+            name,
+            version,
+            "copied into" if installed else "already in",
+            ref.sandbox_id,
+        )
+        return installed
 
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not

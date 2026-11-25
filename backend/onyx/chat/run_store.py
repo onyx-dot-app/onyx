@@ -697,10 +697,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 accept_picked_skills(
                     picks,
                     list_chat_skills(
-                        session, self._user, built_ins=self._sandbox_tools
+                        session, self._user, with_sandbox=self._sandbox_tools
                     ),
                     self._user.id,
                     session,
+                    with_sandbox=self._sandbox_tools,
                 )
                 if any(picks)
                 else [AcceptedPicks() for _ in received]

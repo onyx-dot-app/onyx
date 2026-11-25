@@ -6,7 +6,7 @@ Read and **surgically edit spreadsheets** via
 structure, target A1 ranges, and write cells. `<spreadsheet_id>` is the Drive
 file id of the Sheet.
 
-    python /mnt/skills/google-drive/gsheets_api.py <command> [args]
+    python /var/lib/onyx/skills/google-drive/gsheets_api.py <command> [args]
 
 ## Read structure and values
 

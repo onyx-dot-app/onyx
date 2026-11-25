@@ -5,7 +5,7 @@ Read and **edit presentations** via `https://slides.googleapis.com/v1/`.
 text; the commands here expose slide/element `objectId`s, which edits target.
 `<presentation_id>` is the Drive file id of the deck.
 
-    python /mnt/skills/google-drive/gslides_api.py <command> [args]
+    python /var/lib/onyx/skills/google-drive/gslides_api.py <command> [args]
 
 ## Read a deck
 
