@@ -353,13 +353,15 @@ const AppInputBar = React.memo(
       ? draftKey("chat", `${draftOwner}:${chatSessionId ?? "new"}`)
       : null;
     const composerScope =
-      incognitoEnabled || isSearchMode ? null : chatDraftStorageKey;
-    const submitScope = JSON.stringify([
+      incognitoEnabled || isSearchMode || initialMessage
+        ? null
+        : chatDraftStorageKey;
+    const editorScope = JSON.stringify([
       chatSessionId,
-      composerScope,
+      draftOwner,
       incognitoEnabled,
-      isSearchMode,
     ]);
+    const submitScope = JSON.stringify([editorScope, isSearchMode]);
     const {
       draft: chatDraft,
       loaded: chatDraftLoaded,
@@ -375,7 +377,7 @@ const AppInputBar = React.memo(
       useProjectsContext();
     const draftSeededRef = useRef(false);
     const skipNextDraftSaveRef = useRef(false);
-    const previousScopeRef = useRef(composerScope);
+    const previousScopeRef = useRef(editorScope);
     // Snapshot of the input, read non-reactively in the restore effect so
     // seeding doesn't re-run on every keystroke, and after awaits.
     const composedRef = useRef(composed);
@@ -398,16 +400,16 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       draftSeededRef.current = false;
-      const previousScope = previousScopeRef.current;
-      if (previousScope !== composerScope) {
-        previousScopeRef.current = composerScope;
-        setHeldSendKey(null);
-        clearMessage();
-        if (previousScope === null || composerScope === null) {
-          setCurrentMessageFiles([]);
-        }
-      }
-    }, [composerScope, clearMessage, setCurrentMessageFiles]);
+      skipNextDraftSaveRef.current = false;
+    }, [composerScope]);
+
+    useEffect(() => {
+      if (previousScopeRef.current === editorScope) return;
+      previousScopeRef.current = editorScope;
+      setHeldSendKey(null);
+      clearMessage();
+      setCurrentMessageFiles([]);
+    }, [editorScope, clearMessage, setCurrentMessageFiles]);
 
     // Restore once read: a URL prompt wins and a non-empty input is never
     // clobbered.
@@ -418,7 +420,7 @@ const AppInputBar = React.memo(
       skipNextDraftSaveRef.current = true;
       setCurrentMessageFiles(draft?.files ?? []);
       if (draft && !initialMessage && !composedRef.current.message) {
-        setMessage(draft.message, draft.mentions);
+        setMessage(draft.message, draft.mentions, { focus: false });
       }
     }, [
       chatDraftLoaded,
@@ -591,7 +593,7 @@ const AppInputBar = React.memo(
     function returnText(sessionId: string, returned: ComposedMessage) {
       const isOpen =
         mountedRef.current &&
-        previousScopeRef.current === composerScope &&
+        previousScopeRef.current === editorScope &&
         useChatSessionStore.getState().currentSessionId === sessionId;
       const key =
         draftOwner && !incognitoEnabled

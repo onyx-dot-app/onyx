@@ -514,7 +514,7 @@ function CommandMenuHeader({
 function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
   const t = useTranslations("common.commandMenu");
   const { isKeyboardNav, onListMouseLeave } = useCommandMenuContext();
-  const childCount = React.Children.count(children);
+  const childCount = React.Children.toArray(children).length;
 
   if (childCount === 0 && emptyMessage) {
     return (

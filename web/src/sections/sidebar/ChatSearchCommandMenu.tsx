@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useHotkey } from "@opal/hooks";
-import { useSidebarState } from "@opal/layouts";
+import { Section, useSidebarState } from "@opal/layouts";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import { CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
 import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
@@ -303,9 +303,15 @@ export default function ChatSearchCommandMenu({
                   <div ref={sentinelRef} className="h-1" aria-hidden="true" />
                 )}
                 {activeFilter === "chats" && (isLoadingMore || isSearching) && (
-                  <div className="flex justify-center items-center py-3">
+                  <Section
+                    flexDirection="row"
+                    justifyContent="center"
+                    alignItems="center"
+                    height="fit"
+                    className="py-3"
+                  >
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-solid border-text-04 border-t-text-02" />
-                  </div>
+                  </Section>
                 )}
               </>
             )}

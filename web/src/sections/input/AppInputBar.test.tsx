@@ -91,8 +91,14 @@ let mockIncognitoEnabled = false;
 jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({ incognitoEnabled: mockIncognitoEnabled }),
 }));
+let mockSearchResults = false;
 jest.mock("@/providers/QueryControllerProvider", () => ({
-  useQueryController: () => ({ state: { phase: "idle", appMode: "chat" } }),
+  useQueryController: () => ({
+    state: {
+      phase: mockSearchResults ? "search-results" : "idle",
+      appMode: "chat",
+    },
+  }),
 }));
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({ stopTTS: jest.fn() }),
@@ -245,6 +251,7 @@ beforeEach(() => {
   mockUser = { id: "test-user", preferences: { shortcut_enabled: false } };
   mockChatSkills = NO_SKILLS;
   mockIncognitoEnabled = false;
+  mockSearchResults = false;
   mockSttEnabled = false;
   mockMicrophone = null;
   mockProjectsContext.currentMessageFiles = [];
@@ -310,6 +317,14 @@ test("an immediate reload restores draft text and completed uploads", async () =
     projectFile("draft-file"),
     processing,
   ]);
+});
+
+test("keeps the query in the editor when an auto-routed search returns", async () => {
+  const { rerender } = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "query to refine");
+  mockSearchResults = true;
+  rerender(<Composer />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("query to refine");
 });
 
 test("a different account cannot restore the previous account's draft", async () => {

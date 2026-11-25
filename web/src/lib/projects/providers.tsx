@@ -621,22 +621,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       try {
         const statuses = await svcGetUserFileStatuses(ids);
         if (!statuses) return;
-        if (statuses.length === 0) {
-          // The server reports none of the REQUESTED files: they were deleted
-          // (e.g. incognito teardown). Drop only those, not ids registered
-          // while this request was in flight.
-          const requested = new Set(ids);
-          setTrackedUploadIds((prev) => {
-            const remaining = new Set<string>();
-            prev.forEach((id) => {
-              if (!requested.has(id)) remaining.add(id);
-            });
-            return remaining;
-          });
-          return;
-        }
-
-        // Build maps for quick lookup
+        const requestedIds = new Set(ids);
         const statusById = new Map(statuses.map((f) => [f.id, f]));
 
         // Newly-failed detection uses the last committed snapshot.
@@ -662,6 +647,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           const next: ProjectFile[] = [];
           for (const f of prev) {
             const latest = statusById.get(f.id);
+            if (!latest && requestedIds.has(f.id)) {
+              changed = true;
+              continue;
+            }
             if (latest) {
               const latestStatus = String(latest.status).toLowerCase();
               if (latestStatus === "failed") {

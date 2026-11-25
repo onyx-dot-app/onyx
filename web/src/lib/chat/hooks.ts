@@ -16,7 +16,6 @@ import { PacketType } from "@/app/app/services/streamingModels";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
 import {
@@ -792,7 +791,6 @@ export function useSendChatMessageFromURL({
   const navigation = useNavigation();
   const searchParams = useSearchParams();
 
-  const { currentMessageFiles } = useProjectsContext();
   const {
     availableSources,
     isLoading: sourcesLoading,
@@ -976,10 +974,10 @@ export function useSendChatMessageFromURL({
     setPendingMessage(null);
     onSubmit({
       ...pendingMessage,
-      currentMessageFiles,
+      currentMessageFiles: [],
       deepResearch,
     });
-  }, [pendingMessage, onSubmit, currentMessageFiles, deepResearch]);
+  }, [pendingMessage, onSubmit, deepResearch]);
 }
 
 // A chat's loads of its file list and its message tree
