@@ -83,6 +83,7 @@ from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
+    ApiAppType,
     ApprovalDecidedVia,
     ApprovalDecision,
     ArtifactType,
@@ -6237,6 +6238,11 @@ class Integration(Base):
     tool_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("tool.id", ondelete="CASCADE"), nullable=True, unique=True
     )
+    # The definition of a custom REST or GraphQL app. For one release an
+    # OpenAPI integration also keeps its tool_id, and both rows are written.
+    api_app_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("api_app.id", name="fk_integration_api_app"), nullable=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -6266,9 +6272,11 @@ class Integration(Base):
         # these columns as plain strings, past the enum type. A value outside
         # the enum makes each ORM read of the row raise.
         # Old code still writes the kind tables, so the database keeps each
-        # integration tied to exactly one row of its kind.
+        # integration tied to exactly one row of its kind. For one release a
+        # REST app has both tool_id and api_app_id.
         CheckConstraint(
-            "num_nonnulls(mcp_server_id, external_app_id, tool_id) = 1",
+            "num_nonnulls(mcp_server_id, external_app_id, "
+            "coalesce(tool_id, api_app_id)) = 1",
             name="ck_integration_single_kind_row",
         ),
         CheckConstraint(
@@ -6283,6 +6291,43 @@ class Integration(Base):
         CheckConstraint(
             "auth_method IN ('oauth2', 'api_key', 'onyx_login', 'managed')",
             name="ck_integration_auth_method",
+        ),
+        Index("ix_integration_api_app_id", "api_app_id", unique=True),
+    )
+
+
+class ApiApp(Base):
+    """The definition of a custom app that Onyx calls for the user: a REST API
+    from an OpenAPI document, or a GraphQL API from a schema. Its integration
+    points at it through ``Integration.api_app_id``."""
+
+    __tablename__ = "api_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    api_type: Mapped[ApiAppType] = mapped_column(
+        Enum(
+            ApiAppType,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    base_url: Mapped[str] = mapped_column(Text, nullable=False)
+    # The spec as text.
+    openapi_document: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The schema as SDL.
+    graphql_schema: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        # Two writers fill these columns outside the app's validation: the SQL
+        # copy in revision c2caf6a8285c, and for one release the dual write
+        # beside the OpenAPI tool row.
+        CheckConstraint(
+            "(api_type = 'rest' AND openapi_document IS NOT NULL "
+            "AND graphql_schema IS NULL) "
+            "OR (api_type = 'graphql' AND graphql_schema IS NOT NULL "
+            "AND openapi_document IS NULL)",
+            name="ck_api_app_definition",
         ),
     )
 
@@ -6349,7 +6394,7 @@ class IntegrationAction(Base):
             "integration_id", "key", name="uq_integration_action_integration_key"
         ),
         CheckConstraint(
-            "source IN ('mcp', 'openapi', 'external_app')",
+            "source IN ('mcp', 'openapi', 'external_app', 'graphql')",
             name="ck_integration_action_source",
         ),
         CheckConstraint(
