@@ -43,6 +43,7 @@ import {
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
 } from "@/lib/projects/svc";
+import { isFilePending } from "@/lib/projects/utils";
 import { trackUpload } from "@/lib/projects/uploadProgress";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppPosition } from "@/lib/navigation/hooks";
@@ -607,10 +608,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     autoTrackedIdsRef.current.forEach((id) => {
       if (!attachedIds.has(id)) autoTrackedIdsRef.current.delete(id);
     });
+    // A completed file has no status left to poll, and a sent message's file
+    // may have no user file id to poll with.
     const toTrack = currentMessageFiles
       .filter(
         (f) =>
           f.status !== UserFileStatus.UPLOADING &&
+          isFilePending(f.status) &&
           !autoTrackedIdsRef.current.has(f.id)
       )
       .map((f) => f.id);

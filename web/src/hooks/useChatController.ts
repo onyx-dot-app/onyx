@@ -389,7 +389,15 @@ export default function useChatController({
       const incognito = incognitoEnabledRef.current ?? false;
       const restoreSubmittedInput = () => {
         if ((incognitoEnabledRef.current ?? false) !== incognito) return;
-        restoreInputBar({ message, mentions, files: currentMessageFiles });
+        const unsent: UnsentMessage = {
+          message,
+          mentions,
+          files: currentMessageFiles,
+        };
+        // A rejected edit comes back as the same edit.
+        if (messageIdToResend !== undefined && !regenerationRequest)
+          unsent.messageIdToResend = messageIdToResend;
+        restoreInputBar(unsent);
       };
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;

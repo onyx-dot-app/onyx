@@ -348,6 +348,19 @@ describe("ProjectsContext attached file status polling", () => {
     expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"]);
   });
 
+  it("does not poll a completed file, such as one from a sent message", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([
+        { ...makePendingFile("store-id"), status: UserFileStatus.COMPLETED },
+      ]);
+    });
+
+    expect(mockGetUserFileStatuses).not.toHaveBeenCalled();
+    expect(result.current.currentMessageFiles).toHaveLength(1);
+  });
+
   it("polls a pending file again when it is attached again after it finished", async () => {
     const pendingFile = makePendingFile("file-1");
     mockGetUserFileStatuses.mockResolvedValue(completedStatuses(["file-1"]));

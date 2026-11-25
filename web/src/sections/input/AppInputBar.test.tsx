@@ -558,6 +558,58 @@ describe("edit a sent message in the composer", () => {
       screen.queryByText("Editing in the composer")
     ).not.toBeInTheDocument();
   });
+
+  test("a rejected edit comes back as the same edit", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+    await user.keyboard("{Enter}");
+
+    act(() =>
+      inputBarRef.current?.restore({
+        message: "sent question",
+        mentions: [],
+        files: [],
+        messageIdToResend: 5,
+      })
+    );
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+  });
+
+  test("a reset for a new chat ends the edit", async () => {
+    const { inputBarRef, onSubmit } = startEdit();
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    act(() => inputBarRef.current?.reset());
+    await setupUser().type(screen.getByRole("textbox"), "new question{Enter}");
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "new question",
+      mentions: [],
+    });
+  });
+
+  test("the edit is saved with the draft and comes back after the composer remounts", () => {
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    first.unmount();
+
+    render(<Composer />);
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+  });
 });
 
 describe("restore after a failed send", () => {
