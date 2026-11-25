@@ -42,13 +42,13 @@ from onyx.db.build_session import (
 )
 from onyx.db.enums import (
     BuildSessionStatus,
-    LLMModelFlowType,
+    ModelRole,
     SandboxStatus,
     SessionOrigin,
 )
 from onyx.db.llm import (
     fetch_all_accessible_llm_providers,
-    fetch_default_model,
+    fetch_role_model,
 )
 from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.sandbox import (
@@ -232,8 +232,8 @@ class SessionManager:
         # Craft outranks chat: an admin can point Craft at a coding model while
         # chat stays on something else.
         configured_default_models = [
-            fetch_default_model(self._db_session, LLMModelFlowType.CRAFT),
-            fetch_default_model(self._db_session, LLMModelFlowType.CHAT),
+            fetch_role_model(self._db_session, ModelRole.CRAFT),
+            fetch_role_model(self._db_session, ModelRole.CHAT),
         ]
         configured_defaults = [
             GatewaySelection(provider_id=model.llm_provider_id, model_name=model.name)

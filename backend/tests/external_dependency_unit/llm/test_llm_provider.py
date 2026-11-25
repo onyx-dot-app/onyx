@@ -12,11 +12,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.db.llm import (
     fetch_existing_llm_provider,
     remove_llm_provider,
-    update_default_model,
+    set_role_model,
     upsert_llm_provider,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -424,11 +424,11 @@ class TestDefaultProviderEndpoint:
             )
 
             # Set provider 1 as the default provider explicitly
-            update_default_model(
-                provider_id=provider_1.id,
-                model=provider_1_initial_model,
+            set_role_model(
                 db_session=db_session,
-                flow_type=LLMModelFlowType.CHAT,
+                role=ModelRole.CHAT,
+                provider_id=provider_1.id,
+                model_name=provider_1_initial_model,
             )
 
             # Step 2: Call run_test_default_provider - should use provider 1's default model
@@ -491,11 +491,11 @@ class TestDefaultProviderEndpoint:
             )
 
             # Set provider 1's default model to the updated model
-            update_default_model(
-                provider_id=provider_1.id,
-                model=provider_1_updated_model,
+            set_role_model(
                 db_session=db_session,
-                flow_type=LLMModelFlowType.CHAT,
+                role=ModelRole.CHAT,
+                provider_id=provider_1.id,
+                model_name=provider_1_updated_model,
             )
 
             # Step 6: Call run_test_default_provider - should use new model on provider 1
@@ -510,11 +510,11 @@ class TestDefaultProviderEndpoint:
             captured_llms.clear()
 
             # Step 7: Change the default provider to provider 2
-            update_default_model(
-                provider_id=provider_2.id,
-                model=provider_2_default_model,
+            set_role_model(
                 db_session=db_session,
-                flow_type=LLMModelFlowType.CHAT,
+                role=ModelRole.CHAT,
+                provider_id=provider_2.id,
+                model_name=provider_2_default_model,
             )
 
             # Step 8: Call run_test_default_provider - should use provider 2
@@ -592,11 +592,11 @@ class TestDefaultProviderEndpoint:
                 ),
                 db_session=db_session,
             )
-            update_default_model(
-                provider_id=provider.id,
-                model="gpt-6-luna",
+            set_role_model(
                 db_session=db_session,
-                flow_type=LLMModelFlowType.CHAT,
+                role=ModelRole.CHAT,
+                provider_id=provider.id,
+                model_name="gpt-6-luna",
             )
 
             # Test should fail

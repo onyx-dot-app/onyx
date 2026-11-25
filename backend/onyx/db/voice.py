@@ -15,6 +15,7 @@ from onyx.db.models import (
     LLMModelFlow,
     LLMProvider,
     ModelConfiguration,
+    ModelRoleAssignment,
     VoiceProvider,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -198,7 +199,6 @@ def ensure_zoom_decision_provider(
                 LLMModelFlow(
                     model_configuration_id=model.id,
                     llm_model_flow_type=LLMModelFlowType.DECISION,
-                    is_default=False,
                 )
             )
     db_session.flush()
@@ -214,12 +214,12 @@ def delete_voice_provider(db_session: Session, provider_id: int) -> None:
         ).all()
         for decision in linked:
             selected = db_session.scalar(
-                select(LLMModelFlow.id)
-                .join(ModelConfiguration)
-                .where(
-                    ModelConfiguration.llm_provider_id == decision.id,
-                    LLMModelFlow.is_default.is_(True),
+                select(ModelRoleAssignment.role)
+                .join(
+                    ModelConfiguration,
+                    ModelConfiguration.id == ModelRoleAssignment.model_configuration_id,
                 )
+                .where(ModelConfiguration.llm_provider_id == decision.id)
                 .limit(1)
             )
             if selected is not None:

@@ -352,7 +352,7 @@ opencode instance, so the next instance reads the new files ([[skills]]).
   the attach endpoint the browser uses.
 - [[craft-external-apps]]: approvals and action policy.
 - [[craft-admin]]: the access gate and the Craft default model.
-- [[llm-providers]]: provider access and the `CRAFT` and `CHAT` default flows.
+- [[llm-providers]]: provider access and the `CRAFT` and `CHAT` model roles.
 - [[rate-and-usage-limits]]: `send_message` calls `check_token_rate_limits`.
 - [[cc-pairs-and-creds]]: the library's connector and credential rows.
 

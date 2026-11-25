@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
 
-from onyx.db.llm import update_default_model, upsert_llm_provider
+from onyx.db.llm import set_role_model, upsert_llm_provider
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.federated.slack_search import fetch_and_cache_channel_metadata
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import ModelRole
 from onyx.db.models import (
     DocumentSet,
     FederatedConnector,
@@ -464,11 +464,11 @@ class TestSlackBotFederatedSearch:
             db_session=db_session,
         )
 
-        update_default_model(
-            provider_id=provider_view.id,
-            model="gpt-6-luna",
+        set_role_model(
             db_session=db_session,
-            flow_type=LLMModelFlowType.CHAT,
+            role=ModelRole.CHAT,
+            provider_id=provider_view.id,
+            model_name="gpt-6-luna",
         )
 
     def _teardown_common_mocks(self, patches: list) -> None:

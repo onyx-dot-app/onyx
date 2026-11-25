@@ -4,15 +4,14 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import fetch_default_model, update_default_model
+from onyx.db.enums import ModelRole
+from onyx.db.llm import clear_role, fetch_role_model, set_role_model
 from onyx.db.models import (
     ChatSession,
     DocumentSet,
-    LLMModelFlow,
     LLMProvider,
     MCPServer,
     MCPServer__UserGroup,
@@ -80,28 +79,23 @@ def test_temporary_provider_restores_default_after_failure(
 ) -> None:
     # The outer scope also restores whatever default existed before this test.
     with temporary_default_llm_provider(db_session):
-        original = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        original = fetch_role_model(db_session, ModelRole.CHAT)
         assert original is not None
         original_id = original.id
         provider_id = original.llm_provider_id
         provider_name = original.llm_provider.name
         if not has_default:
-            db_session.execute(
-                update(LLMModelFlow)
-                .where(LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT)
-                .values(is_default=False)
-            )
-            db_session.commit()
+            clear_role(db_session, ModelRole.CHAT)
         try:
             with pytest.raises(RuntimeError, match="test failed"):
                 with temporary_default_llm_provider(db_session):
-                    current = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+                    current = fetch_role_model(db_session, ModelRole.CHAT)
                     assert current is not None
                     temporary_id = current.llm_provider_id
                     assert temporary_id != provider_id
                     raise RuntimeError("test failed")
 
-            restored = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+            restored = fetch_role_model(db_session, ModelRole.CHAT)
             assert (restored.id if restored is not None else None) == (
                 original_id if has_default else None
             )
@@ -109,9 +103,7 @@ def test_temporary_provider_restores_default_after_failure(
             kept = db_session.get(LLMProvider, provider_id)
             assert kept is not None and kept.name == provider_name
         finally:
-            update_default_model(
-                db_session, provider_id, original.name, LLMModelFlowType.CHAT
-            )
+            set_role_model(db_session, ModelRole.CHAT, provider_id, original.name)
 
 
 def test_user_cleanup_removes_persona_links(
@@ -157,7 +149,7 @@ def test_user_cleanup_removes_persona_links(
 def test_temporary_provider_cleans_up_failed_setup(db_session: Session) -> None:
     original_setup = conftest.ensure_default_llm_provider
     with temporary_default_llm_provider(db_session):
-        original = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        original = fetch_role_model(db_session, ModelRole.CHAT)
         assert original is not None
         original_id = original.id
         created_names: list[str] = []
@@ -172,7 +164,7 @@ def test_temporary_provider_cleans_up_failed_setup(db_session: Session) -> None:
                 with temporary_default_llm_provider(db_session):
                     pytest.fail("setup must fail before yielding")
 
-        restored = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        restored = fetch_role_model(db_session, ModelRole.CHAT)
         assert restored is not None and restored.id == original_id
         assert (
             db_session.scalar(

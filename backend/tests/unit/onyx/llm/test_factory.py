@@ -12,7 +12,7 @@ from onyx.chat.incognito import (
     incognito_llm_extra_headers,
     incognito_llm_request_policy,
 )
-from onyx.db.enums import IncognitoRecordMode, LLMModelFlowType
+from onyx.db.enums import IncognitoRecordMode, LLMModelFlowType, ModelRole
 from onyx.db.models import LLMModelFlow, ModelConfiguration
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -111,7 +111,7 @@ def test_search_selection_unset_preserves_fallback_instance() -> None:
     fallback = MagicMock(spec=LLM)
     with (
         patch("onyx.llm.factory.get_session_with_current_tenant"),
-        patch("onyx.llm.factory.fetch_default_model", return_value=None),
+        patch("onyx.llm.factory.fetch_role_model", return_value=None),
         patch("onyx.llm.factory.llm_from_provider") as build_llm,
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as check_cost,
     ):
@@ -121,17 +121,17 @@ def test_search_selection_unset_preserves_fallback_instance() -> None:
 
 
 @pytest.mark.parametrize(
-    ("resolve", "flow_type"),
+    ("resolve", "role"),
     [
         (
-            partial(get_default_utility_llm, LLMModelFlowType.CHAT_NAMING),
-            LLMModelFlowType.CHAT_NAMING,
+            partial(get_default_utility_llm, ModelRole.CHAT_NAMING),
+            ModelRole.CHAT_NAMING,
         ),
-        (get_search_selection_llm, LLMModelFlowType.SEARCH_SELECTION),
+        (get_search_selection_llm, ModelRole.SEARCH_SELECTION),
     ],
 )
 def test_utility_llm_uses_designated_provider_policy_headers_and_cost_key(
-    resolve: Callable[..., LLM | None], flow_type: LLMModelFlowType
+    resolve: Callable[..., LLM | None], role: ModelRole
 ) -> None:
     utility_llm = MagicMock(spec=LLM)
     model = MagicMock()
@@ -142,14 +142,14 @@ def test_utility_llm_uses_designated_provider_policy_headers_and_cost_key(
     policy_fn = partial(incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY)
     with (
         patch("onyx.llm.factory.get_session_with_current_tenant") as session_factory,
-        patch("onyx.llm.factory.fetch_default_model", return_value=model) as fetch,
+        patch("onyx.llm.factory.fetch_role_model", return_value=model) as fetch,
         patch("onyx.llm.factory.LLMProviderView.from_model", return_value=provider),
         patch("onyx.llm.factory.llm_from_provider", return_value=utility_llm) as build,
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as check_cost,
         patch("onyx.llm.factory.get_current_tenant_id", return_value="utility-tenant"),
         patch("onyx.llm.factory.can_user_access_llm_provider") as check_visibility,
     ):
-        if flow_type == LLMModelFlowType.SEARCH_SELECTION:
+        if role == ModelRole.SEARCH_SELECTION:
             result = resolve(
                 fallback=MagicMock(spec=LLM),
                 additional_headers=headers,
@@ -159,7 +159,7 @@ def test_utility_llm_uses_designated_provider_policy_headers_and_cost_key(
             result = resolve(additional_headers=headers, policy_fn=policy_fn)
         assert result is utility_llm
         session = session_factory.return_value.__enter__.return_value
-        fetch.assert_called_once_with(session, flow_type)
+        fetch.assert_called_once_with(session, role)
         check_cost.assert_called_once_with(
             db_session=session,
             tenant_id="utility-tenant",
@@ -179,9 +179,9 @@ def test_search_selection_unset_does_not_use_naming_designation() -> None:
     with (
         patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
         patch(
-            "onyx.llm.factory.fetch_default_model",
-            side_effect=lambda _, flow: (
-                MagicMock() if flow == LLMModelFlowType.CHAT_NAMING else None
+            "onyx.llm.factory.fetch_role_model",
+            side_effect=lambda _, role: (
+                MagicMock() if role == ModelRole.CHAT_NAMING else None
             ),
         ) as fetch,
         patch("onyx.llm.factory.llm_from_provider") as build,
@@ -189,7 +189,7 @@ def test_search_selection_unset_does_not_use_naming_designation() -> None:
     ):
         assert get_search_selection_llm(fallback=fallback) is fallback
     fetch.assert_called_once_with(
-        sessions.return_value.__enter__.return_value, LLMModelFlowType.SEARCH_SELECTION
+        sessions.return_value.__enter__.return_value, ModelRole.SEARCH_SELECTION
     )
     build.assert_not_called()
     cost.assert_not_called()
@@ -198,13 +198,13 @@ def test_search_selection_unset_does_not_use_naming_designation() -> None:
 def test_decision_client_unset_has_no_fallback() -> None:
     with (
         patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
-        patch("onyx.llm.factory.fetch_default_model", return_value=None) as fetch,
+        patch("onyx.llm.factory.fetch_role_model", return_value=None) as fetch,
         patch("onyx.llm.factory.get_default_llm") as fallback,
         patch("onyx.llm.factory.DecisionClient") as client,
     ):
         assert get_decision_client() is None
     fetch.assert_called_once_with(
-        sessions.return_value.__enter__.return_value, LLMModelFlowType.DECISION
+        sessions.return_value.__enter__.return_value, ModelRole.DECISION
     )
     fallback.assert_not_called()
     client.assert_not_called()
@@ -223,7 +223,7 @@ def test_decision_client_uses_selected_provider_and_model() -> None:
     )
     with (
         patch("onyx.llm.factory.get_session_with_current_tenant"),
-        patch("onyx.llm.factory.fetch_default_model", return_value=model),
+        patch("onyx.llm.factory.fetch_role_model", return_value=model),
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as cost,
         patch(
             "onyx.llm.decisions.factory.DecisionClient", wraps=DecisionClient
@@ -242,7 +242,7 @@ def test_decision_client_uses_selected_provider_and_model() -> None:
 @pytest.mark.parametrize(
     "resolve",
     [
-        partial(get_default_utility_llm, LLMModelFlowType.CHAT_NAMING),
+        partial(get_default_utility_llm, ModelRole.CHAT_NAMING),
         get_search_selection_llm,
     ],
 )
@@ -282,7 +282,7 @@ def test_utility_llm_preserves_selected_dated_model_configuration(
     )
     with (
         patch("onyx.llm.factory.get_session_with_current_tenant"),
-        patch("onyx.llm.factory.fetch_default_model", return_value=model),
+        patch("onyx.llm.factory.fetch_role_model", return_value=model),
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider"),
         patch("onyx.llm.factory.get_current_tenant_id", return_value="utility-tenant"),
         patch("onyx.llm.factory.get_llm") as build,
@@ -558,7 +558,7 @@ class TestPolicyFnForwarding:
     def test_get_default_llm_forwards(self) -> None:
         with (
             patch("onyx.llm.factory.get_session_with_current_tenant"),
-            patch("onyx.llm.factory.fetch_default_model", return_value=MagicMock()),
+            patch("onyx.llm.factory.fetch_role_model", return_value=MagicMock()),
             patch("onyx.llm.factory.LLMProviderView"),
             patch("onyx.llm.factory.llm_from_provider") as mock_from_provider,
         ):

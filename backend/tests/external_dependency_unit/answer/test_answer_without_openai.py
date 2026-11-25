@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 from onyx.chat.models import AnswerStreamPart
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.db.llm import (
     fetch_existing_llm_providers,
     remove_llm_provider,
-    update_default_model,
+    set_role_model,
     upsert_llm_provider,
 )
 from onyx.llm.constants import LlmProviderNames
@@ -62,11 +62,11 @@ def test_answer_with_only_anthropic_provider(
     )
 
     try:
-        update_default_model(
-            provider_id=anthropic_provider.id,
-            model=anthropic_model,
+        set_role_model(
             db_session=db_session,
-            flow_type=LLMModelFlowType.CHAT,
+            role=ModelRole.CHAT,
+            provider_id=anthropic_provider.id,
+            model_name=anthropic_model,
         )
 
         test_user = create_test_user(db_session, email_prefix="anthropic_only")

@@ -1,33 +1,26 @@
 from collections.abc import Generator
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from alembic.config import Config
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
-from alembic.script import ScriptDirectory
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.db.llm import (
-    fetch_default_flows_by_model_id,
-    fetch_default_model,
+    clear_role,
     fetch_existing_llm_provider_by_id,
+    fetch_role_model,
+    fetch_roles_by_model_id,
     remove_llm_provider,
+    set_role_model,
     sync_auto_mode_models,
     sync_model_configurations,
-    update_default_model,
-    update_default_pointer_model,
-    update_no_default_chat_naming_provider,
-    update_no_default_search_selection_provider,
     upsert_llm_provider,
 )
-from onyx.db.models import Base, LLMModelFlow, ModelConfiguration
+from onyx.db.models import Base
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     LLMProviderView,
@@ -61,6 +54,7 @@ def test_schema_engine() -> Generator[Engine, None, None]:
                     "llm_provider",
                     "model_configuration",
                     "llm_model_flow",
+                    "model_role",
                     "image_generation_config",
                     "llm_provider__persona",
                     "llm_provider__user_group",
@@ -118,9 +112,9 @@ def test_typesafe_credentials_persist_without_chat_models(db_session: Session) -
         assert stored.api_key.get_value(apply_mask=False) == "typesafe-test-key"
         assert stored.model_configurations == []
         assert stored.is_auto_mode is False
-        for flow in (LLMModelFlowType.CHAT, LLMModelFlowType.CRAFT):
+        for role in (ModelRole.CHAT, ModelRole.CRAFT):
             with pytest.raises(ValueError, match="not a valid model"):
-                update_default_model(db_session, saved.id, "jev-latest", flow)
+                set_role_model(db_session, role, saved.id, "jev-latest")
             db_session.rollback()
         with pytest.raises(ValueError, match="chat model discovery"):
             sync_model_configurations(
@@ -161,103 +155,86 @@ def _update_provider(
 @pytest.mark.parametrize(
     "model_name,is_visible", [("gpt-6-luna", True), ("gpt-6-sol", False)]
 )
-def test_setting_chat_naming_creates_one_mapping_and_preserves_visibility(
+def test_setting_chat_naming_is_idempotent_and_preserves_visibility(
     db_session: Session,
     provider: LLMProviderView,
     model_name: str,
     is_visible: bool,
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name=model_name,
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name=model_name,
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
 
-    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+    default = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
         model_name,
         is_visible,
     )
-    mappings = db_session.scalars(
-        select(LLMModelFlow).where(
-            LLMModelFlow.model_configuration_id == default.id,
-            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING,
-        )
-    ).all()
-    assert len(mappings) == 1
     assert LLMModelFlowType.CHAT in default.llm_model_flow_types
 
 
-def test_search_selection_persists_hidden_mapping_and_resets_independently(
+def test_search_selection_persists_hidden_model_and_resets_independently(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-luna",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.SEARCH_SELECTION,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.SEARCH_SELECTION,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
     db_session.expire_all()
 
-    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
+    selection = fetch_role_model(db_session, ModelRole.SEARCH_SELECTION)
     assert selection is not None
     assert (selection.name, selection.is_visible) == ("gpt-6-sol", False)
-    mappings = db_session.scalars(
-        select(LLMModelFlow).where(
-            LLMModelFlow.model_configuration_id == selection.id,
-            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.SEARCH_SELECTION,
-        )
-    ).all()
-    assert len(mappings) == 1
-    assert mappings[0].is_default
 
-    update_no_default_chat_naming_provider(db_session)
-    assert fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING) is None
-    assert (
-        fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION) is selection
-    )
-    update_default_pointer_model(
+    clear_role(db_session, ModelRole.CHAT_NAMING)
+    assert fetch_role_model(db_session, ModelRole.CHAT_NAMING) is None
+    assert fetch_role_model(db_session, ModelRole.SEARCH_SELECTION) is selection
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-luna",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
-    update_no_default_search_selection_provider(db_session)
-    update_no_default_search_selection_provider(db_session)
-    assert fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION) is None
-    naming = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+    clear_role(db_session, ModelRole.SEARCH_SELECTION)
+    clear_role(db_session, ModelRole.SEARCH_SELECTION)
+    assert fetch_role_model(db_session, ModelRole.SEARCH_SELECTION) is None
+    naming = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
     assert naming is not None and naming.name == "gpt-6-luna"
 
 
 def test_search_selection_survives_edit_discovery_and_auto_sync(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.SEARCH_SELECTION,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
     _update_provider(db_session, provider)
     sync_model_configurations(
@@ -277,7 +254,7 @@ def test_search_selection_survives_edit_discovery_and_auto_sync(
         released_model_names=["gpt-6-luna"],
         retired_model_names={"gpt-6-sol"},
     )
-    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
+    selection = fetch_role_model(db_session, ModelRole.SEARCH_SELECTION)
     assert selection is not None
     assert (selection.name, selection.is_visible) == ("gpt-6-sol", False)
     assert LLMModelFlowType.REASONING in selection.llm_model_flow_types
@@ -286,14 +263,14 @@ def test_search_selection_survives_edit_discovery_and_auto_sync(
 def test_search_selection_can_be_hidden_but_not_removed(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.SEARCH_SELECTION,
         provider_id=provider.id,
         model_name="gpt-6-luna",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
     _update_provider(db_session, provider, mini_visible=False)
-    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
+    selection = fetch_role_model(db_session, ModelRole.SEARCH_SELECTION)
     assert selection is not None and not selection.is_visible
     with pytest.raises(ValueError, match="Cannot remove the default model"):
         upsert_llm_provider(
@@ -307,27 +284,27 @@ def test_search_selection_can_be_hidden_but_not_removed(
 def test_invalid_search_selection_preserves_existing_defaults(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-luna",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.SEARCH_SELECTION,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
     with pytest.raises(ValueError, match="is not a valid model"):
-        update_default_pointer_model(
+        set_role_model(
+            db_session=db_session,
+            role=ModelRole.SEARCH_SELECTION,
             provider_id=provider.id,
             model_name="missing-model",
-            db_session=db_session,
-            flow_type=LLMModelFlowType.SEARCH_SELECTION,
         )
-    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
-    naming = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+    selection = fetch_role_model(db_session, ModelRole.SEARCH_SELECTION)
+    naming = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
     assert selection is not None and selection.name == "gpt-6-sol"
     assert naming is not None and naming.name == "gpt-6-luna"
 
@@ -335,17 +312,17 @@ def test_invalid_search_selection_preserves_existing_defaults(
 def test_search_selection_shared_with_chat_cannot_be_hidden(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.SEARCH_SELECTION,
         provider_id=provider.id,
         model_name="gpt-6-luna",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
-    update_default_model(
-        provider_id=provider.id,
-        model="gpt-6-luna",
+    set_role_model(
         db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT,
+        role=ModelRole.CHAT,
+        provider_id=provider.id,
+        model_name="gpt-6-luna",
     )
     with pytest.raises(ValueError, match="Cannot hide the default model"):
         _update_provider(db_session, provider, mini_visible=False)
@@ -354,49 +331,49 @@ def test_search_selection_shared_with_chat_cannot_be_hidden(
 def test_replacing_and_clearing_chat_naming_preserves_chat_and_search_selection(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_model(
-        provider_id=provider.id,
-        model="gpt-6-luna",
+    set_role_model(
         db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT,
-    )
-    update_default_pointer_model(
+        role=ModelRole.CHAT,
         provider_id=provider.id,
         model_name="gpt-6-luna",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.SEARCH_SELECTION,
         provider_id=provider.id,
         model_name="gpt-6-luna",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
+        provider_id=provider.id,
+        model_name="gpt-6-luna",
+    )
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
 
-    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+    default = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
     assert default is not None
     assert (default.name, default.is_visible) == ("gpt-6-sol", False)
     assert (
         sum(
-            LLMModelFlowType.CHAT_NAMING in flows
-            for flows in fetch_default_flows_by_model_id(db_session).values()
+            ModelRole.CHAT_NAMING in roles
+            for roles in fetch_roles_by_model_id(db_session).values()
         )
         == 1
     )
 
-    update_no_default_chat_naming_provider(db_session)
-    update_no_default_chat_naming_provider(db_session)
+    clear_role(db_session, ModelRole.CHAT_NAMING)
+    clear_role(db_session, ModelRole.CHAT_NAMING)
 
-    assert fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING) is None
+    assert fetch_role_model(db_session, ModelRole.CHAT_NAMING) is None
     for model in [
-        fetch_default_model(db_session, LLMModelFlowType.CHAT),
-        fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION),
+        fetch_role_model(db_session, ModelRole.CHAT),
+        fetch_role_model(db_session, ModelRole.SEARCH_SELECTION),
     ]:
         assert model is not None
         assert (model.llm_provider_id, model.name, model.is_visible) == (
@@ -409,11 +386,11 @@ def test_replacing_and_clearing_chat_naming_preserves_chat_and_search_selection(
 def test_hidden_chat_naming_default_survives_provider_edit_and_discovery(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
 
     _update_provider(db_session, provider)
@@ -427,35 +404,33 @@ def test_hidden_chat_naming_default_survives_provider_edit_and_discovery(
         ],
     )
 
-    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+    default = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
     assert default is not None
     assert (default.name, default.is_visible) == ("gpt-6-sol", False)
-    assert {
-        LLMModelFlowType.CHAT,
-        LLMModelFlowType.REASONING,
-        LLMModelFlowType.CHAT_NAMING,
-    } <= set(default.llm_model_flow_types)
+    assert {LLMModelFlowType.CHAT, LLMModelFlowType.REASONING} <= set(
+        default.llm_model_flow_types
+    )
 
 
 def test_chat_naming_only_default_can_be_hidden_but_shared_chat_default_cannot(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-luna",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
     _update_provider(db_session, provider, mini_visible=False)
-    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+    default = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
     assert default is not None
     assert (default.name, default.is_visible) == ("gpt-6-luna", False)
 
-    update_default_model(
-        provider_id=provider.id,
-        model="gpt-6-luna",
+    set_role_model(
         db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT,
+        role=ModelRole.CHAT,
+        provider_id=provider.id,
+        model_name="gpt-6-luna",
     )
     with pytest.raises(ValueError, match="Cannot hide the default model"):
         _update_provider(db_session, provider, mini_visible=False)
@@ -464,11 +439,11 @@ def test_chat_naming_only_default_can_be_hidden_but_shared_chat_default_cannot(
 def test_chat_naming_default_cannot_be_removed_during_provider_edit(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
     with pytest.raises(ValueError, match="Cannot remove the default model"):
         upsert_llm_provider(
@@ -486,11 +461,11 @@ def test_chat_naming_default_cannot_be_removed_during_provider_edit(
 def test_auto_sync_does_not_restore_hidden_chat_naming_only_default(
     db_session: Session, provider: LLMProviderView
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
     stored_provider = fetch_existing_llm_provider_by_id(provider.id, db_session)
     assert stored_provider is not None
@@ -502,7 +477,7 @@ def test_auto_sync_does_not_restore_hidden_chat_naming_only_default(
         retired_model_names={"gpt-6-sol"},
     )
 
-    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+    default = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
     assert default is not None
     assert (default.name, default.is_visible) == ("gpt-6-sol", False)
 
@@ -511,21 +486,21 @@ def test_auto_sync_does_not_restore_hidden_chat_naming_only_default(
 def test_invalid_selection_preserves_existing_chat_naming_default(
     db_session: Session, provider: LLMProviderView, model_name: str
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CHAT_NAMING,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
     )
     with pytest.raises(ValueError, match="is not a valid model"):
-        update_default_pointer_model(
+        set_role_model(
+            db_session=db_session,
+            role=ModelRole.CHAT_NAMING,
             provider_id=provider.id,
             model_name=model_name,
-            db_session=db_session,
-            flow_type=LLMModelFlowType.CHAT_NAMING,
         )
 
-    default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+    default = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
@@ -535,48 +510,32 @@ def test_invalid_selection_preserves_existing_chat_naming_default(
 
 
 @pytest.mark.parametrize("model_name", ["gpt-6-luna", "gpt-6-sol"])
-def test_setting_craft_creates_one_mapping_and_makes_model_visible(
+def test_setting_craft_is_idempotent_and_makes_model_visible(
     db_session: Session, provider: LLMProviderView, model_name: str
 ) -> None:
-    assert fetch_default_model(db_session, LLMModelFlowType.CRAFT) is None
-    assert (
-        db_session.scalars(
-            select(LLMModelFlow).where(
-                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CRAFT
-            )
-        ).all()
-        == []
-    )
+    assert fetch_role_model(db_session, ModelRole.CRAFT) is None
 
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CRAFT,
         provider_id=provider.id,
         model_name=model_name,
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CRAFT,
     )
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CRAFT,
         provider_id=provider.id,
         model_name=model_name,
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CRAFT,
     )
     db_session.rollback()
 
-    default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+    default = fetch_role_model(db_session, ModelRole.CRAFT)
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
         model_name,
         True,
     )
-    mappings = db_session.scalars(
-        select(LLMModelFlow).where(
-            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CRAFT
-        )
-    ).all()
-    assert [(flow.model_configuration_id, flow.is_default) for flow in mappings] == [
-        (default.id, True)
-    ]
     assert LLMModelFlowType.CHAT in default.llm_model_flow_types
 
 
@@ -584,113 +543,27 @@ def test_setting_craft_creates_one_mapping_and_makes_model_visible(
 def test_invalid_selection_preserves_existing_craft_default(
     db_session: Session, provider: LLMProviderView, model_name: str
 ) -> None:
-    update_default_pointer_model(
+    set_role_model(
+        db_session=db_session,
+        role=ModelRole.CRAFT,
         provider_id=provider.id,
         model_name="gpt-6-sol",
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CRAFT,
     )
     with pytest.raises(ValueError) as exc_info:
-        update_default_pointer_model(
+        set_role_model(
+            db_session=db_session,
+            role=ModelRole.CRAFT,
             provider_id=provider.id,
             model_name=model_name,
-            db_session=db_session,
-            flow_type=LLMModelFlowType.CRAFT,
         )
 
     assert str(exc_info.value) == (
         f"Model '{model_name}' is not a valid model for provider_id={provider.id}"
     )
-    default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+    default = fetch_role_model(db_session, ModelRole.CRAFT)
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
         "gpt-6-sol",
         True,
     )
-
-
-@pytest.mark.parametrize(
-    ("rows", "expected"),
-    [
-        (
-            [("gpt-6-luna", "FAST", False), ("gpt-6-sol", "FAST", True)],
-            {("gpt-6-luna", False), ("gpt-6-sol", True)},
-        ),
-        (
-            [
-                ("gpt-6-luna", "CHAT_NAMING", True),
-                ("gpt-6-luna", "FAST", False),
-                ("gpt-6-sol", "FAST", True),
-            ],
-            {("gpt-6-luna", True), ("gpt-6-sol", False)},
-        ),
-        (
-            [
-                ("gpt-6-luna", "CHAT_NAMING", False),
-                ("gpt-6-sol", "CHAT_NAMING", False),
-                ("gpt-6-sol", "FAST", True),
-            ],
-            {("gpt-6-luna", False), ("gpt-6-sol", True)},
-        ),
-        ([], set()),
-        ([("gpt-6-luna", "CHAT_NAMING", True)], {("gpt-6-luna", True)}),
-        (
-            [("gpt-6-luna", "CHAT_NAMING", True), ("gpt-6-luna", "FAST", True)],
-            {("gpt-6-luna", True)},
-        ),
-    ],
-)
-def test_migrate_draft_fast_preserves_naming_and_search_defaults(
-    db_session: Session,
-    provider: LLMProviderView,
-    rows: list[tuple[str, str, bool]],
-    expected: set[tuple[str, bool]],
-) -> None:
-    schema = CURRENT_TENANT_ID_CONTEXTVAR.get()
-    db_session.execute(text(f'SET LOCAL search_path TO "{schema}", public'))
-    models = db_session.scalars(
-        select(ModelConfiguration).where(
-            ModelConfiguration.llm_provider_id == provider.id
-        )
-    ).all()
-    model_ids = {model.name: model.id for model in models}
-    visibility_before = {model.name: model.is_visible for model in models}
-    for name, flow, is_default in [*rows, ("gpt-6-sol", "SEARCH_SELECTION", True)]:
-        db_session.execute(
-            text(
-                "INSERT INTO llm_model_flow (model_configuration_id, llm_model_flow_type, is_default) "
-                "VALUES (:model_id, :flow, :is_default)"
-            ),
-            {"model_id": model_ids[name], "flow": flow, "is_default": is_default},
-        )
-
-    config = Config()
-    config.set_main_option(
-        "script_location", str(Path(__file__).parents[3] / "alembic")
-    )
-    revision = ScriptDirectory.from_config(config).get_revision("c92b67e56ec4")
-    assert revision is not None
-    with Operations.context(MigrationContext.configure(db_session.connection())):
-        revision.module.upgrade()
-        revision.module.upgrade()
-        revision.module.downgrade()
-
-    db_session.expire_all()
-    assert (
-        db_session.scalar(
-            text(
-                "SELECT COUNT(*) FROM llm_model_flow WHERE llm_model_flow_type = 'FAST'"
-            )
-        )
-        == 0
-    )
-    naming_rows = db_session.execute(
-        select(ModelConfiguration.name, LLMModelFlow.is_default)
-        .join(LLMModelFlow)
-        .where(LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING)
-    ).tuples()
-    assert set(naming_rows) == expected
-    selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
-    assert selection is not None and selection.name == "gpt-6-sol"
-    assert {model.name: model.is_visible for model in models} == visibility_before

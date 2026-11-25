@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.db.llm import _model_protocol_flows, sync_model_configurations
 from onyx.server.manage.llm.models import SyncModelEntry
 
@@ -78,7 +78,6 @@ class TestSyncModelConfigurations:
         assert session.execute.call_args.args[0].compile().params == {
             "model_configuration_id": 42,
             "llm_model_flow_type": LLMModelFlowType.CHAT,
-            "is_default": False,
         }
         session.commit.assert_called_once()
 
@@ -96,8 +95,8 @@ class TestSyncModelConfigurations:
                 return_value=provider,
             ),
             patch(
-                "onyx.db.llm.fetch_default_flows_by_model_id",
-                return_value={42: {LLMModelFlowType.CHAT}},
+                "onyx.db.llm.fetch_roles_by_model_id",
+                return_value={42: {ModelRole.CHAT}},
             ),
         ):
             result = sync_model_configurations(

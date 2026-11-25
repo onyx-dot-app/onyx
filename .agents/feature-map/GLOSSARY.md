@@ -64,9 +64,9 @@ the shared runtime, such as `ChatAgent`, `DeepResearchAgent` or `ResearchAgent`
 
 **"Flow"** means two things.
 - `LLMModelFlowType` (`backend/onyx/db/enums.py`) and the `LLMModelFlow`
-  table (`backend/onyx/db/models.py:LLMModelFlow`): a model capability or a
-  per-task model designation, such as CHAT, VISION or CHAT_NAMING. See
-  [[llm-providers]].
+  table (`backend/onyx/db/models.py:LLMModelFlow`): a model capability, such
+  as CHAT or VISION. The model that does a job is a role (`ModelRole`, the
+  `model_role` table), such as CHAT or CHAT_NAMING. See [[llm-providers]].
 - `LLMFlow` (`backend/onyx/tracing/flows.py`): the tag on a tracing span that says
   what an LLM call was for. See [[observability]].
 

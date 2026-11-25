@@ -7,11 +7,11 @@ from uuid import uuid4
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import AccountType, LLMModelFlowType
+from onyx.db.enums import AccountType, ModelRole
 from onyx.db.llm import (
     fetch_existing_llm_provider,
     remove_llm_provider,
-    update_default_model,
+    set_role_model,
     upsert_llm_provider,
 )
 from onyx.db.models import User
@@ -158,11 +158,11 @@ def test_user_sends_message_to_private_provider(
     )
     _create_provider(db_session, LlmProviderNames.GOOGLE, "private-provider", False)
 
-    update_default_model(
-        provider_id=public_provider_id,
-        model="claude-3-5-sonnet-20240620",
+    set_role_model(
         db_session=db_session,
-        flow_type=LLMModelFlowType.CHAT,
+        role=ModelRole.CHAT,
+        provider_id=public_provider_id,
+        model_name="claude-3-5-sonnet-20240620",
     )
 
     try:

@@ -7,7 +7,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.db.enums import LLMModelFlowType, Permission, PermissionAuthority
+from onyx.db.enums import (
+    LLMModelFlowType,
+    ModelRole,
+    Permission,
+    PermissionAuthority,
+)
 from onyx.db.llm import ModelConfigurationWindow
 from onyx.db.models import LLMModelFlow, LLMProvider, ModelConfiguration, Persona, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
@@ -40,8 +45,8 @@ def test_manage_llms_permission_can_set_and_clear_chat_naming(
 
     with (
         patch("onyx.auth.permissions.has_permission", side_effect=permission_for_user),
-        patch.object(api, "update_default_pointer_model") as set_default,
-        patch.object(api, "update_no_default_chat_naming_provider") as clear_default,
+        patch.object(api, "set_role_model") as set_default,
+        patch.object(api, "clear_role") as clear_default,
         patch.object(api, "invalidate_provider_listing_cache") as invalidate,
     ):
         response = client.post(
@@ -49,14 +54,17 @@ def test_manage_llms_permission_can_set_and_clear_chat_naming(
             json={"provider_id": 7, "model_name": "gpt-6-luna"},
         )
         assert (response.status_code, response.json()) == (200, None)
-        assert set_default.call_args.kwargs["provider_id"] == 7
-        assert set_default.call_args.kwargs["model_name"] == "gpt-6-luna"
-        assert set_default.call_args.kwargs["flow_type"] == LLMModelFlowType.CHAT_NAMING
-        assert isinstance(set_default.call_args.kwargs["db_session"], MagicMock)
+        session, role, provider_id, model_name = set_default.call_args.args
+        assert isinstance(session, MagicMock)
+        assert role == ModelRole.CHAT_NAMING
+        assert provider_id == 7
+        assert model_name == "gpt-6-luna"
 
         response = client.delete("/admin/llm/default-chat-naming")
         assert (response.status_code, response.json()) == (200, None)
-        assert isinstance(clear_default.call_args.kwargs["db_session"], MagicMock)
+        session, role = clear_default.call_args.args
+        assert isinstance(session, MagicMock)
+        assert role == ModelRole.CHAT_NAMING
         assert invalidate.call_count == 2
 
 
@@ -81,8 +89,8 @@ def test_chat_naming_mutation_rejects_users_without_manage_llms(
             "onyx.auth.permissions.has_permission",
             return_value=PermissionAuthority.NONE,
         ),
-        patch.object(api, "update_default_pointer_model") as set_default,
-        patch.object(api, "update_no_default_chat_naming_provider") as clear_default,
+        patch.object(api, "set_role_model") as set_default,
+        patch.object(api, "clear_role") as clear_default,
     ):
         response = client.request(
             method,
@@ -105,7 +113,7 @@ def test_invalid_chat_naming_selection_returns_a_validation_error(
         ),
         patch.object(
             api,
-            "update_default_pointer_model",
+            "set_role_model",
             side_effect=ValueError("Unknown model"),
         ),
         patch.object(api, "invalidate_provider_listing_cache") as invalidate,
@@ -156,12 +164,7 @@ def _provider_with_chat_naming() -> tuple[
         is_visible=False,
         is_router=False,
         max_input_tokens=8000,
-        llm_model_flows=[
-            LLMModelFlow(llm_model_flow_type=LLMModelFlowType.CHAT),
-            LLMModelFlow(
-                llm_model_flow_type=LLMModelFlowType.CHAT_NAMING, is_default=True
-            ),
-        ],
+        llm_model_flows=[LLMModelFlow(llm_model_flow_type=LLMModelFlowType.CHAT)],
     )
     return provider, visible, hidden_chat_naming
 
@@ -171,7 +174,7 @@ def listing_defaults() -> Generator[None, None, None]:
     with (
         patch.object(
             api,
-            "fetch_default_model",
+            "fetch_role_model",
             return_value=None,
         ),
         patch.object(api, "has_global_permission", return_value=False),
@@ -193,10 +196,8 @@ def test_admin_listing_pins_hidden_chat_naming_and_masks_credentials() -> None:
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
         patch.object(
             api,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {LLMModelFlowType.CHAT_NAMING: naming}.get(
-                flow
-            ),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {ModelRole.CHAT_NAMING: naming}.get(role),
         ),
         patch.object(
             api,
@@ -241,10 +242,8 @@ def test_user_listings_do_not_publish_or_pin_chat_naming(
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
         patch.object(
             api,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {LLMModelFlowType.CHAT_NAMING: naming}.get(
-                flow
-            ),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {ModelRole.CHAT_NAMING: naming}.get(role),
         ),
         patch.object(
             api,

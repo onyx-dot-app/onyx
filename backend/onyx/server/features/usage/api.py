@@ -21,11 +21,15 @@ from onyx.db.cost_override import (
     update_cost_override,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import LLMModelFlowType, Permission, SystemUsageAttribution
+from onyx.db.enums import (
+    ModelRole,
+    Permission,
+    SystemUsageAttribution,
+)
 from onyx.db.llm import (
     fetch_all_llm_providers_accessible_in_any_context,
-    fetch_default_model,
     fetch_model_configuration_by_id,
+    fetch_role_model,
 )
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.system_usage import (
@@ -327,7 +331,7 @@ def get_my_usage(
                 available_model_prices.append(price)
     available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
 
-    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    default_model = fetch_role_model(db_session, ModelRole.CHAT)
     selected_model_price: ModelPrice | None = None
     if (
         default_model is not None

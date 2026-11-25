@@ -10,6 +10,7 @@ from onyx.db.enums import Permission
 from onyx.db.image_generation import (
     create_image_generation_config__no_commit,
     delete_image_generation_config__no_commit,
+    fetch_default_image_model_configuration_id,
     get_all_image_generation_configs,
     get_image_generation_config,
     is_usable_for_image_generation,
@@ -298,7 +299,9 @@ def create_config(
         db_session.commit()
         invalidate_provider_listing_cache()
         db_session.refresh(config)
-        return ImageGenerationConfigView.from_model(config)
+        return ImageGenerationConfigView.from_model(
+            config, fetch_default_image_model_configuration_id(db_session)
+        )
     except (HTTPException, OnyxError):
         raise
     except Exception as e:
@@ -408,7 +411,9 @@ def link_config(
     db_session.commit()
     invalidate_provider_listing_cache()
     db_session.refresh(config)
-    return ImageGenerationConfigView.from_model(config)
+    return ImageGenerationConfigView.from_model(
+        config, fetch_default_image_model_configuration_id(db_session)
+    )
 
 
 @admin_router.get("/config")
@@ -418,7 +423,13 @@ def get_all_configs(
 ) -> list[ImageGenerationConfigView]:
     """Get all image generation configurations."""
     configs = get_all_image_generation_configs(db_session)
-    return [ImageGenerationConfigView.from_model(config) for config in configs]
+    default_model_configuration_id = fetch_default_image_model_configuration_id(
+        db_session
+    )
+    return [
+        ImageGenerationConfigView.from_model(config, default_model_configuration_id)
+        for config in configs
+    ]
 
 
 @admin_router.get("/config/{image_provider_id}/credentials")
@@ -539,7 +550,9 @@ def update_config(
         db_session.commit()
         invalidate_provider_listing_cache()
         db_session.refresh(existing_config)
-        return ImageGenerationConfigView.from_model(existing_config)
+        return ImageGenerationConfigView.from_model(
+            existing_config, fetch_default_image_model_configuration_id(db_session)
+        )
 
     except (HTTPException, OnyxError):
         raise

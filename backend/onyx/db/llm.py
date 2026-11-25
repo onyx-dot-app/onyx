@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
 
 from onyx.auth.permissions import Permission, has_global_permission
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.db.image_generation import (
     unlink_image_generation_models_for_provider__no_commit,
 )
@@ -21,6 +21,7 @@ from onyx.db.models import (
     LLMProvider__Persona,
     LLMProvider__UserGroup,
     ModelConfiguration,
+    ModelRoleAssignment,
     Persona,
     SearchSettings,
     User,
@@ -62,13 +63,31 @@ from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
 
-_HIDDEN_DEFAULT_FLOW_TYPES = frozenset(
-    {
-        LLMModelFlowType.CHAT_NAMING,
-        LLMModelFlowType.SEARCH_SELECTION,
-        LLMModelFlowType.DECISION,
-    }
+# The capabilities a role's model needs: any one of the sets.
+ROLE_REQUIREMENTS: dict[ModelRole, tuple[frozenset[LLMModelFlowType], ...]] = {
+    ModelRole.CHAT: (frozenset({LLMModelFlowType.CHAT}),),
+    ModelRole.IMAGE_PROCESSING: (
+        frozenset({LLMModelFlowType.CHAT, LLMModelFlowType.VISION}),
+    ),
+    ModelRole.CHAT_NAMING: (frozenset({LLMModelFlowType.CHAT}),),
+    ModelRole.SEARCH_SELECTION: (frozenset({LLMModelFlowType.CHAT}),),
+    ModelRole.DECISION: (frozenset({LLMModelFlowType.DECISION}),),
+    ModelRole.CRAFT: (frozenset({LLMModelFlowType.CHAT}),),
+    ModelRole.IMAGE_GENERATION: (frozenset({LLMModelFlowType.IMAGE_GENERATION}),),
+}
+
+# Roles whose model users pick from chat model lists, so holding one makes the
+# model visible. The others run in the background or are image models.
+_VISIBLE_ROLES = frozenset(
+    {ModelRole.CHAT, ModelRole.IMAGE_PROCESSING, ModelRole.CRAFT}
 )
+
+
+def model_can_hold_role(
+    flows: set[LLMModelFlowType] | frozenset[LLMModelFlowType], role: ModelRole
+) -> bool:
+    """Whether a model with these capabilities can service `role`."""
+    return any(required <= flows for required in ROLE_REQUIREMENTS[role])
 
 
 def update_group_llm_provider_relationships__no_commit(
@@ -436,23 +455,23 @@ def _model_protocol_flows(
 def _validate_provider_model_defaults(
     *,
     existing_by_name: dict[str, ModelConfiguration],
-    defaults_by_model_id: dict[int, set[LLMModelFlowType]],
+    roles_by_model_id: dict[int, set[ModelRole]],
     removed_ids: list[int],
     requested_visibility: dict[str, bool],
     merged_capabilities: dict[str, set[LLMModelFlowType]],
 ) -> None:
     for name, mc in existing_by_name.items():
-        held_flows = defaults_by_model_id.get(mc.id)
-        if not held_flows:
+        held_roles = roles_by_model_id.get(mc.id)
+        if not held_roles:
             continue
-        held = ", ".join(sorted(flow.value for flow in held_flows))
+        held = ", ".join(sorted(role.value for role in held_roles))
         if mc.id in removed_ids:
             raise ValueError(
                 f"Cannot remove the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before removing."
             )
         if (
-            held_flows - _HIDDEN_DEFAULT_FLOW_TYPES
+            held_roles & _VISIBLE_ROLES
             and mc.is_visible
             and not requested_visibility.get(name, True)
         ):
@@ -460,21 +479,13 @@ def _validate_provider_model_defaults(
                 f"Cannot hide the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before hiding."
             )
-        for capability_flow in (
-            LLMModelFlowType.CHAT,
-            LLMModelFlowType.VISION,
-            LLMModelFlowType.REASONING,
-            LLMModelFlowType.DECISION,
-        ):
-            if (
-                capability_flow in held_flows
-                and name in merged_capabilities
-                and capability_flow not in merged_capabilities[name]
-            ):
+        if name not in merged_capabilities:
+            continue
+        for role in held_roles:
+            if not model_can_hold_role(merged_capabilities[name], role):
                 raise ValueError(
-                    f"Cannot disable {capability_flow.value} support on '{name}'. "
-                    f"It is the deployment's {capability_flow.value} default "
-                    "model. Please change that default first."
+                    f"Cannot remove the capabilities that the {role.value} "
+                    f"role needs from '{name}'. Please change that default first."
                 )
 
 
@@ -531,9 +542,9 @@ def upsert_decision_provider(
         db_session.add(provider)
         db_session.flush()
     existing = {model.name: model for model in provider.model_configurations}
-    defaults = fetch_default_flows_by_model_id(db_session)
+    roles = fetch_roles_by_model_id(db_session)
     for name, model in existing.items():
-        if name not in selected_names and LLMModelFlowType.DECISION in defaults.get(
+        if name not in selected_names and ModelRole.DECISION in roles.get(
             model.id, set()
         ):
             raise ValueError(
@@ -704,11 +715,9 @@ def upsert_llm_provider(
         ]
     )
 
-    defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
-
     _validate_provider_model_defaults(
         existing_by_name=existing_by_name,
-        defaults_by_model_id=defaults_by_model_id,
+        roles_by_model_id=fetch_roles_by_model_id(db_session),
         removed_ids=removed_ids + [mc.id for mc in image_only_models],
         requested_visibility=requested_visibility,
         merged_capabilities=merged_capabilities,
@@ -868,7 +877,7 @@ def sync_model_configurations(
         raise ValueError("TypeSafe AI does not support chat model discovery")
 
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
-    defaults_by_model_id: dict[int, set[LLMModelFlowType]] | None = None
+    roles_by_model_id: dict[int, set[ModelRole]] | None = None
 
     new_models: list[NewModelConfiguration] = []
     upgraded_count: int = 0
@@ -910,14 +919,17 @@ def sync_model_configurations(
             and not model.supports_chat
             and LLMModelFlowType.CHAT in existing_flows
         ):
-            if defaults_by_model_id is None:
-                defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
-            held_defaults = defaults_by_model_id.get(existing.id, set())
-            if held_defaults - {LLMModelFlowType.DECISION}:
+            if roles_by_model_id is None:
+                roles_by_model_id = fetch_roles_by_model_id(db_session)
+            held_roles = roles_by_model_id.get(existing.id, set())
+            flows_without_chat = existing_flows - {LLMModelFlowType.CHAT}
+            if any(
+                not model_can_hold_role(flows_without_chat, role) for role in held_roles
+            ):
                 logger.warning(
-                    "Keeping chat support on %s because it holds defaults: %s",
+                    "Keeping chat support on %s because it holds roles: %s",
                     existing.name,
-                    ", ".join(sorted(flow.value for flow in held_defaults)),
+                    ", ".join(sorted(role.value for role in held_roles)),
                 )
             else:
                 db_session.execute(
@@ -1409,42 +1421,35 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_flows_by_model_id(
-    db_session: Session,
-) -> dict[int, set[LLMModelFlowType]]:
-    """Which deployment defaults each model configuration currently holds.
-
-    One model commonly holds several — the chat default is very often the vision
-    default too — so the value is a set rather than a single flow.
-    """
+def fetch_roles_by_model_id(db_session: Session) -> dict[int, set[ModelRole]]:
+    """Which roles each model configuration holds. One model commonly holds
+    several (the chat model often processes images too)."""
     rows = db_session.execute(
         select(
-            LLMModelFlow.model_configuration_id,
-            LLMModelFlow.llm_model_flow_type,
-        ).where(LLMModelFlow.is_default == True)  # noqa: E712
+            ModelRoleAssignment.model_configuration_id, ModelRoleAssignment.role
+        ).where(ModelRoleAssignment.model_configuration_id.is_not(None))
     ).all()
 
-    defaults: dict[int, set[LLMModelFlowType]] = {}
-    for model_configuration_id, flow_type in rows:
-        defaults.setdefault(model_configuration_id, set()).add(flow_type)
-    return defaults
+    roles: dict[int, set[ModelRole]] = {}
+    for model_configuration_id, role in rows:
+        roles.setdefault(model_configuration_id, set()).add(role)
+    return roles
 
 
-def fetch_default_model(
+def fetch_role_model(
     db_session: Session,
-    flow_type: LLMModelFlowType,
+    role: ModelRole,
 ) -> ModelConfiguration | None:
-    model_config = db_session.scalar(
+    """The model that holds `role`, or None when the role is empty."""
+    return db_session.scalar(
         select(ModelConfiguration)
         .options(selectinload(ModelConfiguration.llm_provider))
-        .join(LLMModelFlow)
-        .where(
-            LLMModelFlow.llm_model_flow_type == flow_type,
-            LLMModelFlow.is_default == True,  # noqa: E712
+        .join(
+            ModelRoleAssignment,
+            ModelRoleAssignment.model_configuration_id == ModelConfiguration.id,
         )
+        .where(ModelRoleAssignment.role == role)
     )
-
-    return model_config
 
 
 def fetch_model_configuration_by_id(
@@ -1606,135 +1611,7 @@ def update_default_vision_provider(
             f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
         )
 
-    update_default_model(
-        db_session=db_session,
-        provider_id=provider_id,
-        model=vision_model,
-        flow_type=LLMModelFlowType.VISION,
-    )
-
-
-def update_default_pointer_model(
-    provider_id: int,
-    model_name: str,
-    db_session: Session,
-    flow_type: LLMModelFlowType,
-) -> None:
-    model_config = fetch_model_configuration_by_provider_id_and_name(
-        db_session, provider_id, model_name
-    )
-    if model_config is None:
-        raise ValueError(
-            f"Model '{model_name}' is not a valid model for provider_id={provider_id}"
-        )
-
-    if LLMModelFlowType.CHAT not in model_config.llm_model_flow_types:
-        raise ValueError("This task requires a chat-capable model")
-
-    create_new_flow_mapping__no_commit(
-        db_session=db_session,
-        model_configuration_id=model_config.id,
-        flow_type=flow_type,
-    )
-    db_session.flush()
-    update_default_model(db_session, provider_id, model_name, flow_type)
-
-
-def update_no_default_chat_naming_provider(
-    db_session: Session,
-) -> None:
-    db_session.execute(
-        update(LLMModelFlow)
-        .where(
-            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING,
-            LLMModelFlow.is_default == True,  # noqa: E712
-        )
-        .values(is_default=False)
-    )
-    db_session.commit()
-
-
-def update_no_default_craft_provider(db_session: Session) -> None:
-    db_session.execute(
-        update(LLMModelFlow)
-        .where(
-            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CRAFT,
-            LLMModelFlow.is_default == True,  # noqa: E712
-        )
-        .values(is_default=False)
-    )
-    db_session.commit()
-
-
-def update_no_default_contextual_rag_provider(
-    db_session: Session,
-) -> None:
-    db_session.execute(
-        update(LLMModelFlow)
-        .where(
-            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CONTEXTUAL_RAG,
-            LLMModelFlow.is_default == True,  # noqa: E712
-        )
-        .values(is_default=False)
-    )
-    db_session.commit()
-
-
-def update_no_default_search_selection_provider(db_session: Session) -> None:
-    db_session.execute(
-        update(LLMModelFlow)
-        .where(
-            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.SEARCH_SELECTION,
-            LLMModelFlow.is_default == True,  # noqa: E712
-        )
-        .values(is_default=False)
-    )
-    db_session.commit()
-
-
-def clear_decision_model(db_session: Session) -> None:
-    db_session.execute(
-        update(LLMModelFlow)
-        .where(LLMModelFlow.llm_model_flow_type == LLMModelFlowType.DECISION)
-        .values(is_default=False)
-    )
-    db_session.commit()
-
-
-def update_default_contextual_model(
-    db_session: Session,
-    enable_contextual_rag: bool,
-    model_configuration_id: int | None,
-) -> None:
-    """Sets or clears the default contextual RAG model.
-
-    Should be called whenever the PRESENT search settings change
-    (e.g. inline update or FUTURE → PRESENT swap).
-    """
-    if not enable_contextual_rag or model_configuration_id is None:
-        update_no_default_contextual_rag_provider(db_session=db_session)
-        return
-
-    model_config = db_session.get(ModelConfiguration, model_configuration_id)
-    if not model_config:
-        raise ValueError(f"model_configuration id={model_configuration_id} not found")
-
-    if LLMModelFlowType.CHAT not in model_config.llm_model_flow_types:
-        raise ValueError("Contextual Retrieval requires a chat model")
-
-    add_model_to_flow(
-        db_session=db_session,
-        model_configuration_id=model_config.id,
-        flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
-    )
-    update_default_model(
-        db_session=db_session,
-        provider_id=model_config.llm_provider_id,
-        model=model_config.name,
-        flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
-    )
-
-    return
+    set_role_model(db_session, ModelRole.IMAGE_PROCESSING, provider_id, vision_model)
 
 
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
@@ -1792,12 +1669,9 @@ def sync_auto_mode_models(
 
     retired_names = existing_names & retired_model_names
     if retired_names:
-        holds_a_default = (
-            select(LLMModelFlow.id)
-            .where(
-                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
-                LLMModelFlow.is_default == True,  # noqa: E712
-            )
+        holds_a_role = (
+            select(ModelRoleAssignment.role)
+            .where(ModelRoleAssignment.model_configuration_id == ModelConfiguration.id)
             .exists()
         )
         backs_image_generation = (
@@ -1821,7 +1695,7 @@ def sync_auto_mode_models(
         retired = (
             ModelConfiguration.llm_provider_id == provider.id,
             ModelConfiguration.name.in_(retired_names),
-            ~holds_a_default,
+            ~holds_a_role,
             ~backs_image_generation,
         )
         # A model an agent or contextual RAG still uses is hidden, not removed.
@@ -1859,7 +1733,6 @@ def create_new_flow_mapping__no_commit(
         .values(
             model_configuration_id=model_configuration_id,
             llm_model_flow_type=flow_type,
-            is_default=False,
         )
         .on_conflict_do_nothing()
         .returning(LLMModelFlow)
@@ -1944,7 +1817,6 @@ def insert_new_model_configurations__no_commit(
         {
             "model_configuration_id": inserted[model.name],
             "llm_model_flow_type": flow_type,
-            "is_default": False,
         }
         for model in models
         if model.name in inserted
@@ -2063,72 +1935,55 @@ def update_model_configuration__no_commit(
     db_session.flush()
 
 
-def _update_default_model__no_commit(
+def set_role_model__no_commit(
     db_session: Session,
+    role: ModelRole,
     provider_id: int,
-    model: str,
-    flow_type: LLMModelFlowType,
+    model_name: str,
 ) -> None:
-    result = db_session.execute(
-        select(ModelConfiguration, LLMModelFlow)
-        .join(
-            LLMModelFlow, LLMModelFlow.model_configuration_id == ModelConfiguration.id
-        )
-        .where(
-            ModelConfiguration.llm_provider_id == provider_id,
-            ModelConfiguration.name == model,
-            LLMModelFlow.llm_model_flow_type == flow_type,
-        )
-    ).first()
-
-    if not result:
-        raise ValueError(
-            f"Model '{model}' is not a valid model for provider_id={provider_id}"
-        )
-
-    model_config, new_default = result
-
-    if (
-        flow_type != LLMModelFlowType.DECISION
-        and LLMModelFlowType.CHAT not in model_config.llm_model_flow_types
-    ):
-        raise ValueError("Chat task defaults require a chat model")
-
-    # Clear existing default and set in an atomic operation
-    db_session.execute(
-        update(LLMModelFlow)
-        .where(
-            LLMModelFlow.llm_model_flow_type == flow_type,
-            LLMModelFlow.is_default == True,  # noqa: E712
-        )
-        .values(is_default=False)
+    """Gives `role` to a provider's model, after checking that the model's
+    capabilities can service it."""
+    model_config = fetch_model_configuration_by_provider_id_and_name(
+        db_session, provider_id, model_name
     )
-
-    new_default.is_default = True
-    if flow_type not in _HIDDEN_DEFAULT_FLOW_TYPES:
+    if model_config is None:
+        raise ValueError(
+            f"Model '{model_name}' is not a valid model for provider_id={provider_id}"
+        )
+    if not model_can_hold_role(set(model_config.llm_model_flow_types), role):
+        raise ValueError(
+            f"Model '{model_name}' cannot be the {role.value} model: it lacks "
+            "the capabilities that role needs"
+        )
+    db_session.execute(
+        insert(ModelRoleAssignment)
+        .values(role=role, model_configuration_id=model_config.id)
+        .on_conflict_do_update(
+            index_elements=[ModelRoleAssignment.role],
+            set_={"model_configuration_id": model_config.id},
+        )
+    )
+    if role in _VISIBLE_ROLES:
         model_config.is_visible = True
 
 
-def update_default_model(
+def set_role_model(
     db_session: Session,
+    role: ModelRole,
     provider_id: int,
-    model: str,
-    flow_type: LLMModelFlowType,
+    model_name: str,
 ) -> None:
-    _update_default_model__no_commit(db_session, provider_id, model, flow_type)
+    set_role_model__no_commit(db_session, role, provider_id, model_name)
     db_session.commit()
 
 
-def add_model_to_flow(
-    db_session: Session,
-    model_configuration_id: int,
-    flow_type: LLMModelFlowType,
-) -> None:
-    # Function does nothing on conflict
-    create_new_flow_mapping__no_commit(
-        db_session=db_session,
-        model_configuration_id=model_configuration_id,
-        flow_type=flow_type,
+def clear_role__no_commit(db_session: Session, role: ModelRole) -> None:
+    """Leaves `role` empty, which turns its feature off."""
+    db_session.execute(
+        delete(ModelRoleAssignment).where(ModelRoleAssignment.role == role)
     )
 
+
+def clear_role(db_session: Session, role: ModelRole) -> None:
+    clear_role__no_commit(db_session, role)
     db_session.commit()

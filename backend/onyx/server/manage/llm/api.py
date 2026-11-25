@@ -15,12 +15,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.auth.users import current_chat_accessible_user, scope_exempt
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import LLMModelFlowType, Permission
+from onyx.db.enums import LLMModelFlowType, ModelRole, Permission
 from onyx.db.llm import (
     ModelConfigurationWindow,
     can_user_access_llm_provider,
-    clear_decision_model,
-    fetch_default_model,
+    clear_role,
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
     fetch_existing_models,
@@ -29,17 +28,14 @@ from onyx.db.llm import (
     fetch_model_configuration_by_id,
     fetch_model_configurations_page,
     fetch_persona_with_groups,
+    fetch_role_model,
     fetch_user_group_ids,
     mark_model_configuration_visible,
     remove_llm_provider,
     require_router_model_configuration,
+    set_role_model,
     sync_model_configurations,
-    update_default_model,
-    update_default_pointer_model,
     update_default_vision_provider,
-    update_no_default_chat_naming_provider,
-    update_no_default_craft_provider,
-    update_no_default_search_selection_provider,
     upsert_decision_provider,
     upsert_llm_provider,
     validate_persona_ids_exist,
@@ -738,15 +734,13 @@ def list_llm_providers(
         exclude_image_generation_providers=not include_image_gen,
         include_model_configurations=not page_models,
     )
-    default_text_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-    default_vision_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
-    default_chat_naming_model = fetch_default_model(
-        db_session, LLMModelFlowType.CHAT_NAMING
+    default_text_model = fetch_role_model(db_session, ModelRole.CHAT)
+    default_vision_model = fetch_role_model(db_session, ModelRole.IMAGE_PROCESSING)
+    default_chat_naming_model = fetch_role_model(db_session, ModelRole.CHAT_NAMING)
+    default_search_selection_model = fetch_role_model(
+        db_session, ModelRole.SEARCH_SELECTION
     )
-    default_search_selection_model = fetch_default_model(
-        db_session, LLMModelFlowType.SEARCH_SELECTION
-    )
-    default_craft_model = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+    default_craft_model = fetch_role_model(db_session, ModelRole.CRAFT)
     # page_models is opt-in: the admin UI takes one page per provider plus the
     # defaults, callers that omit it still get every model.
     windows = (
@@ -759,7 +753,7 @@ def list_llm_providers(
                 default_chat_naming_model,
                 default_search_selection_model,
                 default_craft_model,
-                fetch_default_model(db_session, LLMModelFlowType.DECISION),
+                fetch_role_model(db_session, ModelRole.DECISION),
             ],
         )
         if page_models
@@ -1248,7 +1242,7 @@ def delete_llm_provider(
     user: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    decision_model = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+    decision_model = fetch_role_model(db_session, ModelRole.DECISION)
     if decision_model and decision_model.llm_provider_id == provider_id:
         raise OnyxError(
             OnyxErrorCode.RESOURCE_IN_USE,
@@ -1258,7 +1252,7 @@ def delete_llm_provider(
         # Only the chat default blocks a provider delete. Deleting a provider
         # that holds another flow's default clears that default deliberately —
         # see test_delete_default_vision_provider_clears_vision_default.
-        model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        model = fetch_role_model(db_session, ModelRole.CHAT)
 
         if model and model.llm_provider_id == provider_id:
             raise OnyxError(
@@ -1289,11 +1283,11 @@ def set_provider_as_default(
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
-        update_default_model(
-            provider_id=default_model_request.provider_id,
-            model=default_model_request.model_name,
-            db_session=db_session,
-            flow_type=LLMModelFlowType.CHAT,
+        set_role_model(
+            db_session,
+            ModelRole.CHAT,
+            default_model_request.provider_id,
+            default_model_request.model_name,
         )
     except ValueError as exc:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
@@ -1321,11 +1315,11 @@ def set_provider_as_default_chat_naming(
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
-        update_default_pointer_model(
-            provider_id=default_model.provider_id,
-            model_name=default_model.model_name,
-            db_session=db_session,
-            flow_type=LLMModelFlowType.CHAT_NAMING,
+        set_role_model(
+            db_session,
+            ModelRole.CHAT_NAMING,
+            default_model.provider_id,
+            default_model.model_name,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
@@ -1338,7 +1332,7 @@ def clear_default_chat_naming(
     db_session: Session = Depends(get_session),
 ) -> None:
     """Clear the naming override; use the session model instead."""
-    update_no_default_chat_naming_provider(db_session=db_session)
+    clear_role(db_session, ModelRole.CHAT_NAMING)
     invalidate_provider_listing_cache()
 
 
@@ -1348,11 +1342,11 @@ def set_provider_as_default_craft(
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_pointer_model(
-        provider_id=default_model.provider_id,
-        model_name=default_model.model_name,
-        db_session=db_session,
-        flow_type=LLMModelFlowType.CRAFT,
+    set_role_model(
+        db_session,
+        ModelRole.CRAFT,
+        default_model.provider_id,
+        default_model.model_name,
     )
     invalidate_provider_listing_cache()
 
@@ -1363,7 +1357,7 @@ def clear_default_craft(
     db_session: Session = Depends(get_session),
 ) -> None:
     """Clear the Craft default; Craft sessions fall back to the chat default."""
-    update_no_default_craft_provider(db_session=db_session)
+    clear_role(db_session, ModelRole.CRAFT)
     invalidate_provider_listing_cache()
 
 
@@ -1374,11 +1368,11 @@ def set_provider_as_default_search_selection(
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
-        update_default_pointer_model(
-            provider_id=default_model.provider_id,
-            model_name=default_model.model_name,
-            db_session=db_session,
-            flow_type=LLMModelFlowType.SEARCH_SELECTION,
+        set_role_model(
+            db_session,
+            ModelRole.SEARCH_SELECTION,
+            default_model.provider_id,
+            default_model.model_name,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
@@ -1390,7 +1384,7 @@ def clear_default_search_selection(
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_no_default_search_selection_provider(db_session=db_session)
+    clear_role(db_session, ModelRole.SEARCH_SELECTION)
     invalidate_provider_listing_cache()
 
 
@@ -1416,7 +1410,7 @@ def get_decision_model_configuration(
         providers.append(view)
     return DecisionModelResponse(
         model=DefaultModel.from_model_config(
-            fetch_default_model(db_session, LLMModelFlowType.DECISION)
+            fetch_role_model(db_session, ModelRole.DECISION)
         ),
         providers=providers,
         supported_providers=[provider.value for provider in DecisionProvider],
@@ -1436,8 +1430,8 @@ def set_decision_model(
             "Provider does not support decision requests",
         )
     try:
-        update_default_model(
-            db_session, model.provider_id, model.model_name, LLMModelFlowType.DECISION
+        set_role_model(
+            db_session, ModelRole.DECISION, model.provider_id, model.model_name
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
@@ -1449,7 +1443,7 @@ def delete_decision_model(
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    clear_decision_model(db_session)
+    clear_role(db_session, ModelRole.DECISION)
     invalidate_provider_listing_cache()
 
 
@@ -1510,7 +1504,7 @@ def get_vision_capable_providers(
     return LLMProviderResponse[VisionProviderResponse].from_models(
         providers=vision_provider_response,
         default_vision=DefaultModel.from_model_config(
-            fetch_default_model(db_session, LLMModelFlowType.VISION)
+            fetch_role_model(db_session, ModelRole.IMAGE_PROCESSING)
         ),
     )
 
@@ -1667,9 +1661,9 @@ def list_llm_provider_basics(
     all_providers = fetch_existing_llm_providers(
         db_session, [], include_model_configurations=False
     )
-    default_text_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-    default_vision_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
-    default_craft_model = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+    default_text_model = fetch_role_model(db_session, ModelRole.CHAT)
+    default_vision_model = fetch_role_model(db_session, ModelRole.IMAGE_PROCESSING)
+    default_craft_model = fetch_role_model(db_session, ModelRole.CRAFT)
 
     # Use centralized access control logic with persona=None since we're
     # listing providers without a specific persona context. This correctly:
@@ -1827,8 +1821,8 @@ def list_llm_providers_for_persona(
         include_model_configurations=False,
     )
 
-    default_text_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-    default_vision_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
+    default_text_model = fetch_role_model(db_session, ModelRole.CHAT)
+    default_vision_model = fetch_role_model(db_session, ModelRole.IMAGE_PROCESSING)
 
     # Build default_text and default_vision using the persona's model config FK when
     # available, falling back to the global defaults.

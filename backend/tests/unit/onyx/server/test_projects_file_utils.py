@@ -51,7 +51,7 @@ def _patch_common_dependencies(
     upload_size_mb: int = 1,
     token_threshold_k: int = 100,
 ) -> None:
-    monkeypatch.setattr(utils, "fetch_default_model", lambda _db, _flow: None)
+    monkeypatch.setattr(utils, "fetch_role_model", lambda _db, _role: None)
     monkeypatch.setattr(utils, "get_tokenizer", lambda **_kwargs: _Tokenizer())
     monkeypatch.setattr(utils, "is_file_password_protected", lambda **_kwargs: False)
     monkeypatch.setattr(
