@@ -16700,6 +16700,7 @@
           "label": "In Arbeit"
         }
       },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Teilen"
       }

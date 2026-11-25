@@ -898,11 +898,11 @@ column's edge as the sidebar folds. A sidebar renders it rather than setting
 up its own branding.
 
 **Run status on chat rows.** Each chat row (`sections/sidebar/ChatButton.tsx`)
-shows the run status, with its name in a tooltip, for a chat that this tab
-holds in the session store. Working shimmers the title (`SidebarTab`
-`loading`). The other statuses put a mark at the row's end, which the options
-button replaces on hover: a warning icon, an error icon, or the blue unseen
-dot for Done. Working (`loading`, `streaming` or `cancelling`), Needs
+shows live status from the session store and unseen Done or Failed status
+from a separate store. The tooltip shows the title and status. Working shimmers
+the title (`SidebarTab` `loading`). The other statuses put a mark at the row's
+end. On hover, the options button replaces the warning icon, error icon, or
+blue unseen dot for Done. Working (`loading`, `streaming` or `cancelling`), Needs
 approval or Question waiting (`lib/chat/runStatus.ts:liveRunStatus`, from
 `readWaitingToolRequests`, less the requests that this client decided), and
 Failed or Done for a run that ended while its chat was not on screen.

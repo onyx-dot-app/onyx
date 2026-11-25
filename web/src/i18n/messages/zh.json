@@ -16700,6 +16700,7 @@
           "label": "处理中"
         }
       },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共享"
       }

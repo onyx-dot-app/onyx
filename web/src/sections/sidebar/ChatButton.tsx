@@ -462,7 +462,10 @@ const ChatButton = memo(
             tooltip={
               renaming || !runStatusLabel
                 ? undefined
-                : `${displayName} · ${runStatusLabel}`
+                : t("chatButton.runStatusTooltip", {
+                    title: displayName,
+                    status: runStatusLabel,
+                  })
             }
             rightChildren={rightMenu}
             rightChildrenAtRest={!!runStatusMarker && !renaming}

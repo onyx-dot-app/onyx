@@ -16700,6 +16700,7 @@
           "label": "قيد العمل"
         }
       },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "مشاركة"
       }
