@@ -110,10 +110,34 @@ class TestRequest:
         address_passes["send"].assert_called_once_with(
             "someone@example.com", f"{WEB_DOMAIN}/auth/magic-link?token=tok"
         )
-        # The domain checks ran as a registration: dotted gmail and the like.
+        # Sign-in rules only: the new-account rules wait for redemption, when
+        # it is known whether the address has an account.
         address_passes["verify_domain"].assert_called_once_with(
-            "someone@example.com", valid_email_domains=(), is_registration=True
+            "someone@example.com", valid_email_domains=()
         )
+
+    @pytest.mark.usefixtures("mail_is_configured", "not_sso_only")
+    def test_an_existing_dotted_gmail_address_can_ask_for_a_link(
+        self, client: TestClient
+    ) -> None:
+        """The real domain check on cloud. Dotted Gmail is refused only for a
+        new account, and Google sign-in may have created one."""
+        settings = MagicMock()
+        settings.valid_email_domains = ()
+        with (
+            patch("onyx.auth.users.MULTI_TENANT", True),
+            patch("onyx.auth.users.is_disposable_email", return_value=False),
+            patch(f"{_MODULE}.get_security_settings", return_value=settings),
+            patch(f"{_MODULE}.IS_PLAYGROUND", False),
+            patch(f"{_MODULE}.store_magic_link", AsyncMock(return_value="tok")),
+            patch(f"{_MODULE}.send_magic_link_email") as send,
+        ):
+            response = client.post(
+                "/auth/magic-link/request", json={"email": "jane.doe@gmail.com"}
+            )
+
+        assert response.status_code == 202
+        send.assert_called_once()
 
     @pytest.mark.usefixtures("mail_is_configured")
     def test_an_off_site_next_url_is_dropped_before_storage(

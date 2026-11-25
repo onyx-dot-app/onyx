@@ -102,11 +102,11 @@ async def request_magic_link(
     _refuse_when_sso_only()
 
     email = payload.email.lower()
-    # Decided by the address alone, so refused before any email goes out.
+    # Decided by the address alone, so refused before any email goes out. The
+    # stricter new-account rules run at redemption, once it is known whether
+    # the address has an account.
     verify_email_domain(
-        email,
-        valid_email_domains=get_security_settings().valid_email_domains,
-        is_registration=True,
+        email, valid_email_domains=get_security_settings().valid_email_domains
     )
     if IS_PLAYGROUND:
         fetch_ee_implementation_or_noop(
