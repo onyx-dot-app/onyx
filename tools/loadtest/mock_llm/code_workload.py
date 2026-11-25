@@ -14,8 +14,9 @@ from typing import Literal, NamedTuple, TypedDict, cast
 
 from mock_llm.search_workload import sample_histogram
 
-# The tool family whose observed turns a plan replays. Onyx gives a model the
-# Claude tool shapes when its name contains "claude", so the mock does too.
+# The tool family whose observed turns a plan replays. Keep in sync with how
+# Onyx picks a model's tool family: LLMConfig.tool_family in
+# backend/onyx/llm/interfaces.py (model_capabilities.is_claude_model).
 CodePool = Literal["openai", "claude"]
 
 

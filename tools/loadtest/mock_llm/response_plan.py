@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Literal
+from typing import Literal
 
 import tiktoken
 
@@ -25,6 +25,7 @@ from mock_llm.models import (
     ToolCallFunction,
     ToolDefinition,
     Usage,
+    content_text,
 )
 from mock_llm.profiles import (
     TurnProfile,
@@ -108,12 +109,13 @@ def citation_ids(request: ChatCompletionRequest) -> list[int]:
     ids: set[int] = set()
     last_user = _last_user_index(request.messages)
     for message in request.messages[last_user + 1 :]:
-        if message.role != "tool" or not isinstance(message.content, str):
+        text = content_text(message.content)
+        if message.role != "tool" or text is None:
             continue
         try:
-            payload = json.loads(message.content)
+            payload = json.loads(text)
         except ValueError:
-            ids |= code_mode.citation_ids(message.content)
+            ids |= code_mode.citation_ids(text)
             continue
         if not isinstance(payload, dict) or not isinstance(
             payload.get("results"), list
@@ -176,7 +178,7 @@ DEFAULT_TTFT_MS = int(os.environ.get("MOCK_TTFT_MS", "300"))
 DEFAULT_ITL_MS = int(os.environ.get("MOCK_ITL_MS", "15"))
 DEFAULT_LEN_TOKENS = int(os.environ.get("MOCK_LEN_TOKENS", "150"))
 
-_KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx|sections|class|tail)(\d+)")
+KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx|sections|class|tail)(\d+)")
 # Code profile query suffixes, in order; a turn with more searches repeats them.
 _CODE_QUERY_ASPECTS = (
     "overview",
@@ -220,9 +222,10 @@ class Knobs:
         self.code_batched: bool = "-codebatched" in model
         # Code profile only: the observed turns of this tool family, and the
         # percent of turns that run the long-tail plan (mock-profile-code-v1-tail10).
+        # The family rule mirrors model_capabilities.is_claude_model; keep in sync.
         self.code_pool: CodePool = "claude" if "claude" in model.lower() else "openai"
         self.tail_percent: int = 0
-        for name, value in _KNOB_RE.findall(model):
+        for name, value in KNOB_RE.findall(model):
             if name == "ttft":
                 self.ttft_s = int(value) / 1000.0
             elif name == "itl":
@@ -259,25 +262,13 @@ def _assistant_called(messages: list[ChatMessage], names: tuple[str, ...]) -> bo
     return False
 
 
-def _content_text(content: str | list[Any] | None) -> str | None:
-    """Extract text from message content, which is either a plain string or
-    a list of multimodal content parts."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        for part in content:
-            if isinstance(part, dict) and part.get("type") == "text":
-                return str(part.get("text", ""))
-    return None
-
-
 def _last_user_index(messages: list[ChatMessage]) -> int:
     """Ignore Onyx's operational reminders when locating the user turn."""
     for index in range(len(messages) - 1, -1, -1):
         message = messages[index]
         if message.role != "user":
             continue
-        text = (_content_text(message.content) or "").strip()
+        text = (content_text(message.content) or "").strip()
         # llm_step.py serializes USER_REMINDER messages with this wrapper.
         if text.startswith("<system-reminder>") and text.endswith("</system-reminder>"):
             continue
@@ -288,7 +279,7 @@ def _last_user_index(messages: list[ChatMessage]) -> int:
 def _last_user_text(messages: list[ChatMessage]) -> str:
     index = _last_user_index(messages)
     if index >= 0:
-        text = _content_text(messages[index].content)
+        text = content_text(messages[index].content)
         if text is not None:
             return text
     return "load test query"

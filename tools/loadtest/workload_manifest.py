@@ -5,14 +5,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 
 from mock_llm.profiles import profile_kind, turn_profile
-from mock_llm.response_plan import Knobs
+from mock_llm.response_plan import KNOB_RE, Knobs
 from onyx_client.messages import load_messages
+
+# Flag suffixes that change a profile's plan.
+MANIFEST_FLAGS: dict[str, set[str]] = {
+    "search": {"codebatched"},
+    "code": {"claude"},
+}
 
 
 def main() -> None:
@@ -23,19 +28,25 @@ def main() -> None:
     )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    if not re.fullmatch(
-        r"mock-profile-(chat|search|research|held)-v1(?:-agents[1-9][0-9]*)?"
-        r"|mock-profile-search-v1-codebatched"
-        r"|mock-profile-code-v1(?:-claude)?(?:-tail(?:100|[1-9]?[0-9]))?",
-        args.model,
+    try:
+        kind = profile_kind(args.model)
+        knobs = Knobs(args.model)
+    except ValueError as error:
+        parser.error(str(error))
+    if kind is None:
+        parser.error("Select a representative profile model")
+    # Base profile names with the suffixes that a manifest models, in any order.
+    base = f"mock-profile-{kind}-v1"
+    flags = set(KNOB_RE.sub("", args.model).removeprefix(base).split("-")) - {""}
+    knob_names = {name for name, _ in KNOB_RE.findall(args.model)}
+    if (
+        not args.model.startswith(base)
+        or not flags <= MANIFEST_FLAGS.get(kind, set())
+        or not knob_names <= {"agents"} | ({"tail"} if kind == "code" else set())
     ):
         parser.error(
             "Use a base profile name; manifests do not model stress or fault overrides"
         )
-    kind = profile_kind(args.model)
-    if kind is None:
-        parser.error("Select a representative profile model")
-    knobs = Knobs(args.model)
     questions = load_messages()
     plans = [
         turn_profile(

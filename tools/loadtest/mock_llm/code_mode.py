@@ -16,9 +16,12 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from mock_llm.models import ChatMessage, ToolDefinition
+from mock_llm.models import ChatMessage, ToolDefinition, content_text
 
-# Each tool family's run tool, and the tool that waits on its cells.
+# Each tool family's run tool, and the tool that waits on its cells. Onyx picks
+# the family from the model's names (LLMConfig.tool_family in
+# backend/onyx/llm/interfaces.py, model_capabilities.is_claude_model); keep in
+# sync with backend code_mode/shapes.py.
 WAIT_TOOLS = {"exec": "wait", "repl": "poll"}
 # A planned program failure raises this message; the load client does not
 # count it as a failed turn (onyx_client/stream_parser.py).
@@ -125,8 +128,7 @@ def running_cell(turn: Sequence[ChatMessage]) -> int | None:
     for message in reversed(turn):
         if message.role != "tool":
             continue
-        if not isinstance(message.content, str):
-            return None
-        match = _RUNNING_RE.search(message.content)
+        text = content_text(message.content)
+        match = _RUNNING_RE.search(text) if text is not None else None
         return int(match.group(1)) if match else None
     return None

@@ -374,26 +374,29 @@ the shape of those recorded turns.
 
 `mock_llm/code_calibration.json` comes from EnterpriseRAG-Bench chats recorded
 on 2026-11-25 with code mode on (stack-eval `v3-guidance`, 500 questions for
-each model). `mock_llm/derive_code_calibration.py` reads the chats' tool calls
-from the Onyx database and the benchmark's answer rows; its docstring has the
-export query. The file holds each recorded turn as its ordered programs, with
-each program's printed characters, searches, and failure. It holds no
+each model). `mock_llm/derive_code_calibration.py` reads the saved code mode
+results of the chats' tool calls and the benchmark's answer rows; its
+docstring has the export query, which exports no program code or document
+text. The file holds each recorded turn as its ordered programs, with each
+program's printed characters (as the model read them, after the output limit),
+`internal_search` calls, and failure (`failed` or `timed_out`). It holds no
 questions, programs, or document content. Questions that ended with an error
 are left out.
 
 | Pool | Source models | Programs per turn (mean, p50, p95, max) | Turns with 20 or more programs | Program output chars (mean, p50, p95) | Searches per program | Failed programs | Model seconds per call |
 |---|---|---|---:|---|---:|---:|---:|
-| `openai` | gpt-6-luna, deepseek-v4.1-flash | 4.67, 2, 22, 62 | 5.4% | 12,539, 10,039, 33,693 | 1.29 | 5.7% | 4.04 |
-| `claude` | claude-sonnet-5-5 | 3.87, 3, 8, 13 | 0% | 5,305, 3,862, 16,303 | 0.88 | 24.1% | 2.95 |
+| `openai` | gpt-6-luna, deepseek-v4.1-flash | 5.14, 2, 23, 62 | 5.5% | 14,999, 11,256, 40,054 | 1.24 | 5.2% | 3.25 |
+| `claude` | claude-sonnet-5-5 | 3.89, 3, 8, 13 | 0% | 5,475, 3,948, 17,283 | 0.88 | 24.0% | 2.95 |
 
 - **Turns.** A plan replays one recorded turn of the pool, chosen by its
   question hash and `MOCK_WORKLOAD_SEED`. So program count, output sizes,
   searches, and failures keep their recorded combinations, and the tail
   appears at its recorded share.
-- **Long tail.** 54 recorded turns had 20 or more programs (20–62, mean 32.4).
-  156 programs printed 36,000 characters or more (mean 39,551). A long-tail plan
-  takes a program count from those turns, and each program's output from those
-  near-cap programs and its searches from the tail turns' programs (mean 1.67).
+- **Long tail.** 55 recorded turns had 20 or more programs (20–62, mean 32.6).
+  620 programs printed 36,000 characters or more (mean 39,900): 11.8% of the
+  `openai` pool's programs. A long-tail plan takes a program count from those
+  turns, each program's output from those near-cap programs, and its searches
+  from the tail turns' programs (mean 1.62).
 - **Searches.** Each search sends one query, the recorded median. The first
   query is the question; later queries add a fixed suffix, and a turn with more
   than nine searches repeats queries, as recorded turns did.
@@ -405,9 +408,9 @@ are left out.
   programs that used a variable of an earlier cell. The load client counts
   them in `code_planned_failures` and does not fail the turn.
 
-Recorded outputs above 40,000 characters came from programs that raised their
-output limit. The mock's programs keep the default limit, so their output stops
-at 40,000 characters.
+A few recorded outputs (above 40,500 characters) came from programs that raised
+their output limit. The mock's programs keep the default limit, so their output
+stops at 40,000 characters.
 
 ### What a program prints
 
@@ -430,7 +433,7 @@ Onyx gives a model the Claude tool shapes when any of its names contains
 `claude`, so the `-claude` name gets `repl` and `poll` from the server, and
 also Claude prompt caching marks. The mock writes the same programs in either
 shape; it reads the shape from the offered tools. `-tail100` makes every turn
-a long-tail turn; `-tail10` raises the tail share above the recorded 5.4%.
+a long-tail turn; `-tail10` raises the tail share above the recorded 5.5%.
 Recorded Claude turns had no long tail, so a `-claude-tail<pct>` plan uses
 the tail of the `openai` pool.
 
@@ -693,7 +696,7 @@ Do not select a production configuration from probe success alone.
 | `ONYX_HEALTH_INTERVAL` | 1.0 | Seconds between health probes |
 | `ONYX_HEALTH_SLA_MS` | 10000 | Fail a probe slower than this; independent of Kubernetes probe settings |
 | `ONYX_LONGCONV_MODEL` | unset | Model for LongConversationUser; falls back to `ONYX_LLM_MODEL`, then the deployment default |
-| `ONYX_LONGCONV_USERS` | 0 | Pins this many LongConversationUser (and CompressionUser) users, independent of `-u` weights; 0 weights them. In distributed runs, set it on the master too |
+| `ONYX_LONGCONV_USERS` | 0 | Pins this many LongConversationUser users, independent of `-u` weights; 0 weights them. In distributed runs, set it on the master too |
 | `ONYX_LONGCONV_TURNS` | `ONYX_SESSION_TURNS`, else 20 | Turns of one LongConversationUser session |
 | `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (CompressionUser 60) |
 | `ONYX_LONGTURN_MODEL` | `mock-profile-code-v1-tail100` | Model for LongTurnUser |
@@ -812,8 +815,12 @@ from a new benchmark run. Update the table in
 Run the contract tests from `tools/loadtest`:
 
 ```bash
-uv run --group loadtest pytest tests/ -q
+uv run --only-group loadtest pytest tests/ -q
 ```
+
+The `Load Test Harness Tests` workflow runs them nightly and on pull requests
+that change `tools/loadtest/`. The nightly run catches drift from backend
+changes, such as a changed prompt or stream packet.
 
 This README uses Google's guidance on [document scope and organization](https://developers.google.com/tech-writing/one/documents)
 and [clear sentences](https://developers.google.com/tech-writing/one/clear-sentences).

@@ -158,14 +158,14 @@
     },
     {
       "title": "Peak RSS, restarts and OOM kills in the time range — $workload",
-      "description": "Peak RSS per pod over the selected range, container restarts in the range, and pods whose last termination was OOMKilled. Needs cAdvisor and kube-state-metrics.",
+      "description": "Per pod over the selected range: peak RSS (sum of the pod's containers), the count of container restarts, and 1 when a container's last termination was OOMKilled at any time in the range. Needs cAdvisor and kube-state-metrics.",
       "type": "table",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "targets": [
         {
           "refId": "A",
-          "expr": "max(max_over_time(container_memory_rss{namespace=\"$namespace\", pod=~\"$workload.*\", container!=\"\"}[$__range])) by (pod) / 1024 / 1024",
+          "expr": "max_over_time(sum(container_memory_rss{namespace=\"$namespace\", pod=~\"$workload.*\", container!=\"\"}) by (pod)[$__range:]) / 1024 / 1024",
           "legendFormat": "peak RSS MiB",
           "instant": true,
           "format": "table"
@@ -173,14 +173,14 @@
         {
           "refId": "B",
           "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", pod=~\"$workload.*\"}[$__range])) by (pod)",
-          "legendFormat": "restarts",
+          "legendFormat": "restart count",
           "instant": true,
           "format": "table"
         },
         {
           "refId": "C",
-          "expr": "max(kube_pod_container_status_last_terminated_reason{namespace=\"$namespace\", pod=~\"$workload.*\", reason=\"OOMKilled\"}) by (pod)",
-          "legendFormat": "last terminated OOMKilled",
+          "expr": "max(max_over_time(kube_pod_container_status_last_terminated_reason{namespace=\"$namespace\", pod=~\"$workload.*\", reason=\"OOMKilled\"}[$__range])) by (pod)",
+          "legendFormat": "last termination OOMKilled, seen in range",
           "instant": true,
           "format": "table"
         }

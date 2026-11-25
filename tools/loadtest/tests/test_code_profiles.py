@@ -345,6 +345,7 @@ def test_session_turns_report_in_bounded_ranges(turn: int, label: str) -> None:
         "mock-profile-code-v1-claude",
         "mock-profile-code-v1-tail10",
         "mock-profile-code-v1-claude-tail100",
+        "mock-profile-code-v1-tail10-claude",
     ],
 )
 def test_manifest_reports_planned_program_workload(
@@ -362,7 +363,13 @@ def test_manifest_reports_planned_program_workload(
 
 
 @pytest.mark.parametrize(
-    "model", ["mock-profile-code-v1-tail101", "mock-profile-code-v1-len10"]
+    "model",
+    [
+        "mock-profile-code-v1-tail101",
+        "mock-profile-code-v1-len10",
+        "mock-profile-code-v1-codebatched",
+        "mock-profile-search-v1-tail10",
+    ],
 )
 def test_manifest_rejects_other_code_overrides(
     model: str, monkeypatch: pytest.MonkeyPatch
@@ -381,3 +388,37 @@ def test_listed_models_include_the_code_profiles() -> None:
         "mock-profile-code-v1-tail100",
         "mock-profile-code-v1-claude-tail100",
     } <= names
+
+
+def test_tool_results_in_content_parts_are_read() -> None:
+    """Content parts, such as parts that carry cache markers, reach the same
+    wait and citation decisions as plain strings."""
+    question = question_with(lambda programs: len(programs) >= 2, code_pool="claude")
+    messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
+    tools = [REPL_TOOL, POLL_TOOL]
+    [first] = [c.model_dump() for c in next_plan(CLAUDE_MODEL, tools, messages).calls]
+    messages.append({"role": "assistant", "content": None, "tool_calls": [first]})
+    running = "Execution running in cell 4 after 30.0s with 1 tool call so far."
+    messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": first["id"],
+            "content": [
+                {"type": "text", "text": running, "cache_control": {"type": "x"}}
+            ],
+        }
+    )
+    [poll] = [c.model_dump() for c in next_plan(CLAUDE_MODEL, tools, messages).calls]
+    assert poll["function"]["name"] == "poll"
+
+    cited: list[dict[str, Any]] = [
+        {"role": "user", "content": "Find the policy"},
+        {"role": "assistant", "content": None, "tool_calls": [first]},
+        {
+            "role": "tool",
+            "tool_call_id": first["id"],
+            "content": [{"type": "text", "text": observation(7)}],
+        },
+    ]
+    answer = next_plan("mock-profile-chat-v1-ttft0-itl0", [], cited).answer
+    assert answer.endswith(" [7]")
