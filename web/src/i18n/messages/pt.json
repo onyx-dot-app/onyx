@@ -12211,7 +12211,7 @@
           "text": "{toolName} foi bloqueado"
         },
         "completedStatus": {
-          "text": "{toolName} concluído"
+          "text": "{toolName} executado"
         },
         "downloadFileLink": {
           "label": "Baixar"
@@ -12241,7 +12241,7 @@
           "label": "Resposta"
         },
         "runningStatus": {
-          "text": "{toolName} em execução..."
+          "text": "Executando {toolName}"
         },
         "unreachableStatus": {
           "text": "{toolName} não conseguiu alcançar o servidor"
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Lendo"
+            "status": "{count, plural, =0 {Navegando} one {Navegando # página} other {Navegando # páginas}}"
           },
           "read": {
-            "status": "Lido"
+            "status": "{count, plural, =0 {Navegou} one {Navegou # página} other {Navegou # páginas}}"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "Publicando arquivos"
+          },
+          "browsing": {
+            "label": "{count, plural, =0 {Navegando} one {Navegando # página} other {Navegando # páginas}}"
           }
         },
         "internalSearch": {

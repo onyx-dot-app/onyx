@@ -12211,7 +12211,7 @@
           "text": "تم حظر {toolName}"
         },
         "completedStatus": {
-          "text": "اكتمل {toolName}"
+          "text": "تم تنفيذ {toolName}"
         },
         "downloadFileLink": {
           "label": "تنزيل"
@@ -12241,7 +12241,7 @@
           "label": "الاستجابة"
         },
         "runningStatus": {
-          "text": "{toolName} قيد التشغيل..."
+          "text": "جارٍ تنفيذ {toolName}"
         },
         "unreachableStatus": {
           "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "جارٍ القراءة"
+            "status": "{count, plural, =0 {جارٍ التصفح} one {جارٍ تصفح صفحة واحدة} two {جارٍ تصفح صفحتين} few {جارٍ تصفح # صفحات} many {جارٍ تصفح # صفحة} other {جارٍ تصفح # صفحة}}"
           },
           "read": {
-            "status": "تمت القراءة"
+            "status": "{count, plural, =0 {تم التصفح} one {تم تصفح صفحة واحدة} two {تم تصفح صفحتين} few {تم تصفح # صفحات} many {تم تصفح # صفحة} other {تم تصفح # صفحة}}"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "جارٍ نشر الملفات"
+          },
+          "browsing": {
+            "label": "{count, plural, =0 {جارٍ التصفح} one {جارٍ تصفح صفحة واحدة} two {جارٍ تصفح صفحتين} few {جارٍ تصفح # صفحات} many {جارٍ تصفح # صفحة} other {جارٍ تصفح # صفحة}}"
           }
         },
         "internalSearch": {

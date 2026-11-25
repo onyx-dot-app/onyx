@@ -12211,7 +12211,7 @@
           "text": "{toolName} a été bloqué"
         },
         "completedStatus": {
-          "text": "{toolName} terminé"
+          "text": "{toolName} exécuté"
         },
         "downloadFileLink": {
           "label": "Télécharger"
@@ -12241,7 +12241,7 @@
           "label": "Réponse"
         },
         "runningStatus": {
-          "text": "{toolName} en cours d'exécution..."
+          "text": "Exécution de {toolName}"
         },
         "unreachableStatus": {
           "text": "{toolName} n'a pas pu joindre son serveur"
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Lecture"
+            "status": "{count, plural, =0 {Navigation} one {Navigation sur # page} other {Navigation sur # pages}}"
           },
           "read": {
-            "status": "Lu"
+            "status": "{count, plural, =0 {Navigation terminée} one {# page parcourue} other {# pages parcourues}}"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "Publication des fichiers"
+          },
+          "browsing": {
+            "label": "{count, plural, =0 {Navigation} one {Navigation sur # page} other {Navigation sur # pages}}"
           }
         },
         "internalSearch": {

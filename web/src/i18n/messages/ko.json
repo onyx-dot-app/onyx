@@ -12211,7 +12211,7 @@
           "text": "{toolName}이(가) 차단되었습니다"
         },
         "completedStatus": {
-          "text": "{toolName} 완료"
+          "text": "{toolName} 실행 완료"
         },
         "downloadFileLink": {
           "label": "다운로드"
@@ -12241,7 +12241,7 @@
           "label": "응답"
         },
         "runningStatus": {
-          "text": "{toolName} 실행 중..."
+          "text": "{toolName} 실행 중"
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "읽는 중"
+            "status": "{count, plural, =0 {탐색 중} other {# 페이지 탐색 중}}"
           },
           "read": {
-            "status": "읽었습니다"
+            "status": "{count, plural, =0 {탐색함} other {# 페이지 탐색함}}"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "파일 게시 중"
+          },
+          "browsing": {
+            "label": "{count, plural, =0 {탐색 중} other {# 페이지 탐색 중}}"
           }
         },
         "internalSearch": {

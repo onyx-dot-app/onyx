@@ -62,6 +62,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   const t = useTranslations("chat.messages.timeline");
   const fetchState = constructCurrentFetchState(packets);
   const { urls, documents, hasStarted, isLoading, isComplete } = fetchState;
+  // The pages the step browses: the fetched ones once they arrive.
+  // While fetching, the pages it asked for; once done, only the pages it
+  // read, so URLs that failed do not count as browsed.
+  const pageCount = documents.length || urls.length;
+  const readCount = documents.length;
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
 
@@ -69,8 +74,8 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     return children([
       {
         icon: STEP_ICONS.fetch,
-        status: t("fetch.reading.status"),
-        doneStatus: t("fetch.read.status"),
+        status: t("fetch.reading.status", { count: pageCount }),
+        doneStatus: t("fetch.read.status", { count: readCount }),
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -95,7 +100,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
           <div className="flex flex-col">
             <div className="mb-1">
               <Text as="p" color="text-02">
-                {t("fetch.reading.status")}
+                {t("fetch.reading.status", { count: pageCount })}
               </Text>
             </div>
             {displayDocuments ? (
@@ -128,8 +133,8 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   return children([
     {
       icon: STEP_ICONS.fetch,
-      status: t("fetch.reading.status"),
-      doneStatus: t("fetch.read.status"),
+      status: t("fetch.reading.status", { count: pageCount }),
+      doneStatus: t("fetch.read.status", { count: readCount }),
       supportsCollapsible: false,
       timelineLayout: "timeline",
       content: (
