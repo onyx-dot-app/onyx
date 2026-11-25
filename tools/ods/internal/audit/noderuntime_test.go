@@ -3,6 +3,7 @@ package audit
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -54,5 +55,27 @@ func TestNodeGroupedCVEsRemainIndependent(t *testing.T) {
 	}
 	if !slices.Equal(ids, []string{"CVE-2019-9511", "CVE-2019-9512"}) {
 		t.Fatalf("got %v", ids)
+	}
+}
+
+func TestNodeTrackingReportsEveryFixAndSeparatesReleasePolicy(t *testing.T) {
+	pins := []nodeRuntime{{nodeImagePin{"a", []string{"one"}}, "v22.0.0"}, {nodeImagePin{"b", []string{"two"}}, "v24.0.0"}}
+	releases := []nodeRelease{{"v22.0.0", false}, {"v22.23.5", true}, {"v24.0.0", false}, {"v24.22.3", true}}
+	advisories := map[string]nodeAdvisory{"1": {CVEs: []string{"CVE-2099-12345"}, Vulnerable: "22.x || 24.x", Patched: "^22.23.5 || ^24.22.3", Severity: "high"}}
+	report, err := nodeRuntimeReport(pins, advisories, releases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alerts := groupAlerts(report.Blocking, report.Findings, "main")
+	if len(alerts) != 1 {
+		t.Fatalf("got alerts %+v", alerts)
+	}
+	body := renderAlertBody(alerts[0])
+	if !strings.Contains(body, "22.23.5, 24.22.3") || !strings.Contains(body, "blocking security release requirement") {
+		t.Fatalf("issue: %s", body)
+	}
+	plan := PlanAnnouncement(AnnounceOptions{Failing: alerts, Branch: "main"})
+	if plan.Post == nil || !strings.Contains(plan.Post.Text, "1 high CVE, security release requirements: 2") {
+		t.Fatalf("post: %+v", plan.Post)
 	}
 }

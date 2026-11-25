@@ -62,6 +62,9 @@ func ScanNodeImages(webImage string) (*Result, error) {
 	if !ok || webDigest == "" {
 		return nil, fmt.Errorf("web runtime must be pinned by digest: %q", webImage)
 	}
+	if !slices.ContainsFunc(pins, func(pin nodeImagePin) bool { return strings.HasSuffix(pin.Image, "@"+webDigest) }) {
+		return nil, fmt.Errorf("web runtime %s is absent from the tracked Node image pins", webImage)
+	}
 	result, err := scanNodeRuntimes(pins)
 	if err != nil {
 		return nil, err

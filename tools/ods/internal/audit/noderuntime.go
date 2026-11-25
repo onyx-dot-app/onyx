@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	nodeAdvisoriesURL = "https://raw.githubusercontent.com/nodejs/security-wg/main/vuln/core/index.json"
-	nodeReleasesURL   = "https://nodejs.org/dist/index.json"
+	nodeAdvisoriesURL       = "https://raw.githubusercontent.com/nodejs/security-wg/main/vuln/core/index.json"
+	nodeReleasePolicySource = "node-security-releases"
+	nodeReleasesURL         = "https://nodejs.org/dist/index.json"
 )
 
 type nodeRuntime struct {
@@ -114,7 +115,7 @@ func nodeRuntimeReport(runtimes []nodeRuntime, advisories map[string]nodeAdvisor
 				ID:      "NODE-SECURITY-RELEASE-" + floor.String(),
 				Title:   "Node runtime predates the latest security release on its major line",
 				FixedIn: floor.String(), Severity: SeverityHigh,
-				URL: nodeReleasesURL, Source: "node-security-releases",
+				URL: nodeReleasesURL, Source: nodeReleasePolicySource,
 			})
 		}
 		for _, f := range findings {
