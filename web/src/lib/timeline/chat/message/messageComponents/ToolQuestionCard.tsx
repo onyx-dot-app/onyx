@@ -5,7 +5,13 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Button, InputTypeIn, SelectCard, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { SvgCheckSquare, SvgClock, SvgLoader, SvgX } from "@opal/icons";
+import {
+  SvgCheckSquare,
+  SvgClock,
+  SvgLoader,
+  SvgSquare,
+  SvgX,
+} from "@opal/icons";
 import CometEdge from "@/refresh-components/CometEdge";
 import type {
   ToolQuestion,
@@ -411,6 +417,14 @@ function QuestionOptions({
             >
               <Content
                 font="main-ui-body"
+                // A mark, not color alone, shows a multi-select choice.
+                icon={
+                  multiSelect
+                    ? isSelected
+                      ? SvgCheckSquare
+                      : SvgSquare
+                    : undefined
+                }
                 title={option.label}
                 description={option.description || undefined}
               />
