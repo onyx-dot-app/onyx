@@ -45,6 +45,31 @@ test("a details block renders its summary and markdown body", () => {
   expect(container).toHaveTextContent("After.");
 });
 
+test("a summary in its own HTML block with body text still makes a disclosure", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={"<details>\n\n<summary>More</summary>\nBody\n\n</details>"}
+    />
+  );
+
+  const details = container.querySelector("details");
+  expect(details?.querySelector("summary")).toHaveTextContent(/^More$/);
+  expect(details).toHaveTextContent("Body");
+});
+
+test("details tags inside a pre block stay raw HTML", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<pre><details><summary>Example</summary>literal</details></pre>\n\nAfter."
+      }
+    />
+  );
+
+  expect(container.querySelector("details")).toBeNull();
+  expect(container).toHaveTextContent("After.");
+});
+
 test("an open details block starts open", () => {
   const { container } = render(
     <AnswerMarkdown
