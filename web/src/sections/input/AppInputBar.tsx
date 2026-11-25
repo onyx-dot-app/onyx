@@ -435,12 +435,11 @@ const AppInputBar = React.memo(
       draftSeededRef.current = true;
       const draft = chatDraft === null ? null : toChatDraft(chatDraft);
       skipNextDraftSaveRef.current = true;
+      const hasMessage = Boolean(composedRef.current.message);
       setCurrentMessageFiles((files) =>
-        files.length > 0 || composedRef.current.message
-          ? files
-          : (draft?.files ?? [])
+        files.length > 0 || hasMessage ? files : (draft?.files ?? [])
       );
-      if (draft && !initialMessage && !composedRef.current.message) {
+      if (draft && !initialMessage && !hasMessage) {
         setMessage(draft.message, draft.mentions, { focus: false });
       }
     }, [

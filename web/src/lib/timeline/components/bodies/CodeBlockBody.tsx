@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, CodePanel } from "@opal/components";
-import { SvgTextLines } from "@opal/icons";
+import { SvgTextWrap } from "@opal/icons";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 
 interface CodeBlockBodyProps {
@@ -42,7 +42,7 @@ export function CodeBlockBody({
           copyText={code}
           rightChildren={
             <Button
-              icon={SvgTextLines}
+              icon={SvgTextWrap}
               size="2xs"
               prominence="tertiary"
               tooltip={wrapLabel}
