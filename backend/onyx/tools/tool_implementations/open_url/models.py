@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
@@ -64,3 +64,8 @@ class WebContentProvider(ABC):
     @abstractmethod
     def contents(self, urls: Sequence[str]) -> list[WebContent]:
         pass
+
+    def iter_contents(self, urls: Sequence[str]) -> Iterator[WebContent]:
+        """Each page as soon as it is fetched, in any order. A provider that
+        fetches in one batch yields them all at the end."""
+        yield from self.contents(urls)

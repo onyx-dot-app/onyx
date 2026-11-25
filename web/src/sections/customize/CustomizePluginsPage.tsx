@@ -94,14 +94,12 @@ function PluginRow({
   const contents =
     !enabled && heldBy.length > 0
       ? t("plugins.nameHeld", { names: heldBy.join(", ") })
-      : skill?.kind !== "plugin"
-        ? t("plugins.contents", { skills: entry.skills.length })
-        : skill.needed_count > 0
-          ? t("plugins.integrations", {
-              available: skill.available_count,
-              needed: skill.needed_count,
-            })
-          : (entry.description ?? "");
+      : skill && skill.needed_count > 0
+        ? t("plugins.integrations", {
+            available: skill.available_count,
+            needed: skill.needed_count,
+          })
+        : (entry.description ?? "");
   const menu: DropdownMenuItem[] = [
     ...(canToggle
       ? [

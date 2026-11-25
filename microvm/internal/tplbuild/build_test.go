@@ -253,8 +253,8 @@ func TestBuildWritesAVerifiedTemplate(t *testing.T) {
 	if b := cfg.Balloon; b == nil || !b.FreePageReporting || b.FreePageHinting || b.AmountMiB != 0 || b.StatsIntervalS <= 0 {
 		t.Fatalf("balloon %+v", cfg.Balloon)
 	}
-	// The fixture root drive serves user-uploads, not spaces.
-	if got := strings.Join(tpl.ManagedMounts(), ","); got != "skills,user-uploads" {
+	// The fixture root drive serves user-uploads only.
+	if got := strings.Join(tpl.ManagedMounts(), ","); got != "user-uploads" {
 		t.Fatalf("template mounts %s", got)
 	}
 	if tpl.LayoutVersion != template.LayoutVersion {

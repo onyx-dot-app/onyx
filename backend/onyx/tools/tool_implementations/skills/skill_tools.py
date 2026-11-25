@@ -1,7 +1,7 @@
 """Tools that list the user's skills and read their instructions. Each call
 reads the user's current skills, as Codex reads the current files."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import ClassVar, Final
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,6 +23,8 @@ from onyx.tools.interface import (
 )
 from onyx.tools.models import (
     CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     CustomToolCallSummary,
     ToolCallException,
     ToolContext,
@@ -49,12 +51,15 @@ class SkillsReadArguments(BaseModel):
 
 class _SkillTool(Tool):
     id = None
-    code_mode_exposure = CodeModeExposure.DIRECT
+    code_mode_exposure = CodeModeExposure.IMMEDIATE
+    code_mode_result = CodeModeResultSpec(
+        kind=CodeModeResultKind.TEXT, annotation="str"
+    )
     arguments: ClassVar[type[BaseModel]]
 
-    def __init__(self, user: User, *, built_ins: bool) -> None:
+    def __init__(self, user: User, *, with_sandbox: bool) -> None:
         self.user = user
-        self.built_ins = built_ins
+        self.with_sandbox = with_sandbox
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
@@ -79,7 +84,9 @@ class SkillsListTool(_SkillTool):
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(SkillsListArguments, invocation.arguments)
         with get_session_with_current_tenant() as db_session:
-            skills = list_chat_skills(db_session, self.user, built_ins=self.built_ins)
+            skills = list_chat_skills(
+                db_session, self.user, with_sandbox=self.with_sandbox
+            )
         page = skills[request.offset : request.offset + SKILLS_PER_PAGE]
         lines = [
             f"- {skill.name}: {truncate_catalog_description(skill.description)}"
@@ -110,7 +117,7 @@ class SkillsReadTool(_SkillTool):
                 (
                     skill
                     for skill in list_chat_skills(
-                        db_session, self.user, built_ins=self.built_ins
+                        db_session, self.user, with_sandbox=self.with_sandbox
                     )
                     if skill.name == request.name
                 ),
@@ -124,9 +131,9 @@ class SkillsReadTool(_SkillTool):
                         f"{SKILLS_LIST_TOOL_NAME} for the skills you can use."
                     ),
                 )
-            skill_md = read_chat_skills_md([skill], self.user.id, db_session).get(
-                (skill.version_id, skill.path)
-            )
+            skill_md = read_chat_skills_md(
+                [skill], self.user.id, db_session, with_sandbox=self.with_sandbox
+            ).get((skill.version_id, skill.path))
         if skill_md is None:
             raise ToolCallException(
                 message=f"Unreadable skill: {request.name}",
@@ -145,20 +152,22 @@ class SkillsReadTool(_SkillTool):
 
 
 def skills_catalog_message(
-    tools: Sequence[Tool], context_window_tokens: int
+    tools: Sequence[Tool],
+    context_window_tokens: int,
+    called_name: Callable[[str], str] = str,
 ) -> SystemMessage | None:
     """The catalog of the user's current skills, for the prompt of an agent
-    that has `skills_list`. Chat, Deep Research and research agents each
-    build it once, when the agent is built, so the prompt stays the same for
-    the agent's steps."""
+    that has `skills_list`, naming the skill tools by `called_name`. Chat,
+    Deep Research and research agents each build it once, when the agent is
+    built, so the prompt stays the same for the agent's steps."""
     list_tool = next((tool for tool in tools if isinstance(tool, SkillsListTool)), None)
     if list_tool is None:
         return None
     with get_session_with_current_tenant() as db_session:
         skills = list_chat_skills(
-            db_session, list_tool.user, built_ins=list_tool.built_ins
+            db_session, list_tool.user, with_sandbox=list_tool.with_sandbox
         )
-        catalog = render_skills_catalog(skills, context_window_tokens)
+        catalog = render_skills_catalog(skills, context_window_tokens, called_name)
         if catalog is None:
             return None
         unavailable = unavailable_need_names(

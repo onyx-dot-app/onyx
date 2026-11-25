@@ -1,8 +1,8 @@
-"""The copy generation of the background chat file copies into sandbox VMs
-(`tools/tool_implementations/sandbox/file_copies.py`, whose docstring has
-the rules): one per chat session. Each turn's copy and each chat purge take
-the next one. It expires COPY_STATE_SECONDS after the chat's last copy or
-purge.
+"""The copy generation of the background chat file and search result file
+copies into sandbox VMs (`tools/tool_implementations/sandbox/file_copies.py`,
+whose docstring has the rules): one per chat session. Each new turn of the
+chat (`SandboxTurn`) and each chat purge take the next one. It expires
+COPY_STATE_SECONDS after the chat's last turn or purge.
 """
 
 from uuid import UUID

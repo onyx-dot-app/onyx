@@ -9,13 +9,32 @@ import type {
 } from "@/app/craft/types/streamingTypes";
 import type { TimelineEvent } from "@/lib/timeline/events";
 
-jest.mock("@/components/chat/MinimalMarkdown", () => ({
-  __esModule: true,
-  default: ({ content }: { content: string }) => <div>{content}</div>,
+jest.mock("@/lib/answerText/components", () => ({
+  AnswerMarkdown: ({
+    content,
+    cursor,
+  }: {
+    content: string;
+    cursor?: boolean;
+  }) => (
+    <div>
+      {content}
+      {cursor && " (cursor)"}
+    </div>
+  ),
 }));
 
-jest.mock("@/app/app/message/BlinkingBar", () => ({
+jest.mock("@/lib/timeline/chat/message/BlinkingBar", () => ({
   BlinkingBar: () => <span data-testid="blinking-bar" />,
+}));
+
+// The response's cursor slot, as one countable element.
+jest.mock("@/lib/timeline/components/ResponseCursor", () => ({
+  responseCursorItem: () => ({
+    kind: "text",
+    key: "cursor",
+    node: <span data-testid="blinking-bar" />,
+  }),
 }));
 
 jest.mock("motion/react", () => ({
@@ -61,10 +80,10 @@ function thought(content: string): TimelineEvent {
 
 const endTurn: TimelineEvent = { type: "stop", stopReason: "end_turn" };
 
-// Opens a folded run card. Its fold button is named by the step count.
+// Opens the run card: the first fold control, the card's own.
 function openRun() {
-  const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
-  if (fold?.getAttribute("aria-expanded") === "false") fireEvent.click(fold);
+  const fold = screen.queryAllByRole("button", { expanded: false })[0];
+  if (fold) fireEvent.click(fold);
 }
 
 // Opens every closed step.
@@ -134,9 +153,8 @@ test("uses the text cursor without adding a second progress cursor", async () =>
     isStreaming: true,
     timelineEvents: [text("Writing")],
   });
-  // The text cursor is the inline `[*]()` marker in the (mocked) markdown.
-  // Live text types out.
-  expect(await screen.findByText(/Writing \[\*\]\(\)/)).toBeInTheDocument();
+  // The text cursor is inline in the (mocked) markdown. Live text types out.
+  expect(await screen.findByText(/Writing \(cursor\)/)).toBeInTheDocument();
   expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
 
@@ -304,7 +322,10 @@ describe("BuildMessageList thinking visibility", () => {
     // follows it.
     expect(await screen.findByText(/^Final answer/)).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: "1 step", expanded: false })
+      await screen.findByRole("button", {
+        name: /^Expand Thought/,
+        expanded: false,
+      })
     ).toBeInTheDocument();
     openRun();
     expect(screen.getByText("Thought")).toBeInTheDocument();
@@ -319,7 +340,7 @@ describe("BuildMessageList thinking visibility", () => {
       timelineEvents: [thought("Checking the app structure.")],
     });
 
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Thinking...")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
@@ -361,7 +382,7 @@ test("keeps a finalization cursor when attachment completes before any assistant
     />
   );
   expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
-  expect(screen.queryByText("Working")).not.toBeInTheDocument();
+  expect(screen.queryByText("Working...")).not.toBeInTheDocument();
 });
 
 test("keeps one assistant cursor during finalization and removes it when finalization stops", () => {

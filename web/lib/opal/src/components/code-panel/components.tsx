@@ -1,10 +1,12 @@
 "use client";
 
 import "@opal/components/code-panel/styles.css";
+import { useLayoutEffect, useRef } from "react";
 import { Hoverable } from "@opal/core";
 import { Section } from "@opal/layouts";
 import { Text } from "@opal/components/text/components";
 import { CopyButton } from "@opal/components/buttons/copy-button/components";
+import { LineLoader } from "@opal/loaders/line-loader/components";
 import type { RichStr } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -52,6 +54,11 @@ interface CodePanelLinesProps {
    * this text. For a panel without a header; a header has its own.
    */
   copyText?: string;
+  /**
+   * Grow with the lines instead of scrolling past 24rem, e.g. for code in
+   * answer text, whose page scrolls. @default false
+   */
+  grow?: boolean;
 }
 
 interface CodePanelColumnsProps {
@@ -61,9 +68,19 @@ interface CodePanelColumnsProps {
 
 interface CodePanelOutputProps {
   /** The output text. */
-  children: string;
+  children?: string;
   /** Error output: red text on a red tint. @default false */
   error?: boolean;
+  /**
+   * The output is still awaited: a line shimmer in place of the text.
+   * @default false
+   */
+  loading?: boolean;
+  /**
+   * Keep the newest output in view as it streams in, until the user scrolls
+   * up to read earlier output. @default false
+   */
+  follow?: boolean;
 }
 
 interface CodePanelContentProps {
@@ -144,10 +161,16 @@ function CodePanelLines({
   lineNumbers = false,
   markers = false,
   copyText,
+  grow = false,
 }: CodePanelLinesProps) {
   const columns = 1 + (lineNumbers ? 1 : 0) + (markers ? 1 : 0);
   const table = (
-    <div className="opal-code-panel-lines">
+    // Code reads left to right, in any page direction.
+    <div
+      dir="ltr"
+      className="opal-code-panel-lines"
+      data-grow={grow || undefined}
+    >
       <table>
         <tbody>
           {lines.map((line, index) => {
@@ -208,16 +231,44 @@ function CodePanelColumns({ children }: CodePanelColumnsProps) {
 }
 
 /** Output under the code, or error output. */
-function CodePanelOutput({ children, error = false }: CodePanelOutputProps) {
+function CodePanelOutput({
+  children,
+  error = false,
+  loading = false,
+  follow = false,
+}: CodePanelOutputProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Whether the view is at the bottom; scrolling up leaves it there.
+  const atBottom = useRef(true);
+  useLayoutEffect(() => {
+    const output = ref.current;
+    if (follow && atBottom.current && output) {
+      output.scrollTop = output.scrollHeight;
+    }
+  }, [children, follow]);
   return (
-    <div className="opal-code-panel-output" data-error={error}>
-      <Text
-        as="p"
-        font="secondary-mono"
-        color={error ? "status-error-05" : "text-03"}
-      >
-        {children}
-      </Text>
+    <div
+      ref={ref}
+      dir="ltr"
+      className="opal-code-panel-output"
+      data-error={error}
+      onScroll={(event) => {
+        const output = event.currentTarget;
+        atBottom.current =
+          output.scrollHeight - output.scrollTop - output.clientHeight < 8;
+      }}
+    >
+      {loading ? (
+        <LineLoader width="2/3" />
+      ) : (
+        <Text
+          as="p"
+          font="secondary-mono"
+          color={error ? "status-error-05" : "text-03"}
+        >
+          {children}
+        </Text>
+      )}
     </div>
   );
 }

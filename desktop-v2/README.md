@@ -99,7 +99,11 @@ no space.
   web UI's own `/api` route shows that `/api` does not reach the API server. These reasons,
   and a 5xx error, also replace a page that already loaded. On Linux and Windows, a main-window load
   that the web view cannot finish (for example, connection refused) shows this window instead
-  of the web view's error page. A certificate error also shows this window, not the web
+  of the web view's error page (on Windows, the main window is blank until then). On Linux and
+  Windows, the app also checks the server every 60 seconds while the main window is on screen,
+  so an outage while no page loads also shows this window after two failed checks. When the
+  server is back, the main window shows that page again without a reload, so unsaved edits stay.
+  A certificate error also shows this window, not the web
   view's certificate page, so the user cannot continue to the page. If the app's own check passes but the web view still fails (for
   example, a certificate that only the web view does not trust), the window checks again
   only on **Retry**. Otherwise it checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
@@ -138,14 +142,14 @@ IT can push the app to every device with Kandji, Jamf, Intune or Group Policy, a
 in advance. With a managed server, the app skips onboarding and opens at sign-in.
 
 The app reads the policy at launch, every 5 minutes, before each update check, and each time
-Preferences opens (`src-tauri/src/policy.rs`). A managed value wins over the user's own
+Preferences opens or comes to the front (`src-tauri/src/policy.rs`). A managed value wins over the user's own
 `config.json` value. Preferences shows managed values read-only, with "Managed by your
 organization". A `ServerURL` without `LockServerURL` shows "Default set by your organization",
 and the user can change it. Sample files for each platform are in [`deploy/`](deploy/).
 
 | Key | Type | Effect |
 |---|---|---|
-| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. The app keeps only the scheme, host and port: `https://onyx.example.com/app` becomes `https://onyx.example.com`, so Onyx must run at the server root. A URL with a user name or password is not valid. |
+| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. The app keeps only the scheme, host and port: `https://onyx.example.com/app` becomes `https://onyx.example.com`, so Onyx must run at the server root. A URL with a user name or password is not valid. A single word with no scheme, dot or port (`onyx`) is not valid; for a single-label host, add the scheme (`https://onyx`) or a port (`onyx:443`). |
 | `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the last valid `ServerURL` is used, else the user's saved server, and the server cannot change. |
 | `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. macOS only: Windows and Linux builds do not update themselves, so this key has no effect there. |
 | `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
@@ -153,8 +157,10 @@ and the user can change it. Sample files for each platform are in [`deploy/`](de
 | `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the Preferences switch is locked. See [Launch at login](#launch-at-login). |
 | `DisableNotifications` | bool | Turns off desktop notifications. |
 
-A change to `ServerURL` or `LockServerURL` applies at the next launch. The other keys apply at
-the next policy read.
+A change to `ServerURL` or `LockServerURL` applies at the next launch. If `LockServerURL` turns
+on while the app runs, the server in use is locked until then. If the policy names another
+server, Preferences says that Onyx uses it after a restart. The other keys apply at the next
+policy read.
 
 Booleans accept `true`/`false`, `1`/`0` and `yes`/`no` (as strings too). Other values are not
 valid.
@@ -498,30 +504,33 @@ How the app differs from macOS:
     stops when the NSIS version is installed. Uninstall the other one first.
   - Both installers refuse to install an older version over a newer one. Uninstall the newer
     version first.
-  - The NSIS uninstaller option **Delete the application data** also deletes the session
-    tokens from the user's Credential Manager. It does this only when the uninstaller runs as
-    the signed-in Windows user, not when another administrator's credentials elevate it. A
-    plain uninstall keeps the app's data and the token.
+  - The NSIS uninstaller option **Delete the application data** deletes the
+    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` folders of the
+    user who runs the uninstaller. It does not go into junctions or symbolic links: it keeps
+    the links inside these folders, and when a folder is itself a link it removes only the
+    link. Link targets do not change. The option also deletes the session tokens from the
+    user's Credential Manager. It does this only when the uninstaller runs as the signed-in
+    Windows user, not when another administrator's credentials elevate it. A plain uninstall
+    keeps the app's data and the token.
   - An MSI uninstall keeps the app's data and the token. To also delete the data of the
     user who runs `msiexec`, set `DELETEAPPDATA=1`:
-    `msiexec /x {ProductCode} DELETEAPPDATA=1`. This deletes that user's
-    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` after the
-    uninstall succeeds. It does not go into junctions or symbolic links: it keeps the links
-    inside these folders, and when a folder is itself a link it removes only the link. Link
-    targets do not change. An upgrade never deletes data.
+    `msiexec /x {ProductCode} DELETEAPPDATA=1`. This deletes that user's two folders, as the
+    NSIS option does, and that user's session tokens in Credential Manager, after the
+    uninstall succeeds. An upgrade never deletes data.
   - An uninstall that runs as LocalSystem (SCCM, Intune) deletes no user data, also with
     `DELETEAPPDATA=1`: each user controls their own folders, so a delete as LocalSystem is not
     safe there. After such an uninstall, each user's data folders and session token stay
-    (the token in that user's Credential Manager). The `DELETEAPPDATA=1` uninstall also keeps
-    the token in Credential Manager. The app uses a stored token only when the user's
-    config records it, so the user must sign in again when the config is gone or the user
-    signed out. The app then deletes the old token. If the config is still there, a reinstall
-    uses the token.
+    (the token in that user's Credential Manager). The app uses a stored token only when the
+    user's config records it, so the user must sign in again when the config is gone or the
+    user signed out. The app then deletes the old token. If the config is still there, a
+    reinstall uses the token.
 - On Linux the `.deb` registers `onyx://` in its desktop file (`onyx-v2.desktop`). AppImage
   and other builds that do not run from `/usr/bin` register it for the current user at launch,
   so they get sign-in links too. This needs `xdg-mime`. At each launch, a `.deb` install makes
   `onyx-v2.desktop` the current user's default for `onyx://` (v1 can also claim the scheme),
-  and removes the per-user `onyx://` entry that earlier versions wrote. This cleanup happens
+  and deletes the per-user `onyx://` entry that earlier versions wrote
+  (`~/.local/share/applications/onyx-desktop-v2-handler.desktop`). It deletes the file only if
+  it is that hidden entry and handles no other MIME type. This cleanup happens
   per user, at that user's first launch of the new version, not at package install. After
   `apt remove`, the default names a desktop file that no longer exists, and the desktop ignores
   it. The AppImage entry points to the AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
@@ -548,7 +557,8 @@ Linux needs some desktop services:
   app has focus, and with no XWayland it never works. Preferences shows a notice then. Open the
   launcher from the tray icon instead. Preferences also shows a notice when another app holds
   the shortcut.
-- **Tray icon**: it needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
+- **Tray icon**: Windows and Linux show the app icon (a black glyph on a white disc), so it
+  shows on light and dark panels. It needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
   tray icon without the AppIndicator extension (`gnome-shell-extension-appindicator`, on by
   default on Ubuntu). The icon file goes to `$XDG_RUNTIME_DIR/tray-icon`. When that directory
   is not set or the app cannot write to it (for example after `su`, or in some SSH and VDI
@@ -620,7 +630,10 @@ The app writes its log to `onyx.log` in the app's log folder (`init_logging` in
 
 Times are UTC. The log records the app's own messages at level `info` and higher: the app
 version and OS at startup, the saved server, sign-in (password or SSO) and sign-out, sign-in
-failures, offline and recovery, managed policy errors, downloads and failed links. At 1 MB the
+failures, onboarding server-check failures, a web sign-out or lost web session, offline and
+recovery, downloads and failed links. For managed policy, it records the policy in effect at
+startup, one line for each value that a later policy read changes, and policy errors (once,
+until they change). At 1 MB the
 file rotates to `onyx_<date>.log`, and the app keeps the four newest of those files. The log
 never holds a password, session token, cookie or sign-in code; URLs are written without their
 user info, query and fragment (`main_window::log_safe`). Debug builds also write the log to

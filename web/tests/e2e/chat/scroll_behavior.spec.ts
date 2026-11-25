@@ -241,4 +241,13 @@ test.describe("Turn anchoring - Fresh Chat Effect", () => {
       )
       .toBeLessThan(10);
   });
+
+  test("The conversation scrolls under the composer and ends above it", async ({
+    page,
+  }) => {
+    await sendMessage(page, "First message in the conversation");
+    await sendMessage(page, "Second message in the conversation");
+
+    await new ChatPage(page).expectConversationUnderComposer();
+  });
 });

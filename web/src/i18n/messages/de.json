@@ -4007,6 +4007,18 @@
               "description": "Geben Sie die zu indexierenden Postfächer an (z. B. INBOX, Sent, Drafts). Leer lassen, um alle Postfächer zu indexieren."
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "RU pro Minute",
+              "description": "Der Anteil am Ratenlimit Ihrer Microsoft-App-Registrierung, den dieser Connector nutzen darf, in Ressourceneinheiten (RU) pro Minute. Microsoft legt das Limit der App nach Lizenzstufe fest, von 1.250 bis 6.250 RU pro Minute. Leer lassen, damit Onyx das Limit lernt. [So finden Sie Ihre Stufe](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "Andere Connectors mit dieser App-Registrierung: {connectors}. Summe: {total} RU pro Minute.",
+              "none": "Kein anderer Connector mit dieser App-Registrierung legt RU pro Minute fest.",
+              "hidden": "{count, plural, one {# Connector, den Sie nicht sehen können} other {# Connectors, die Sie nicht sehen können}}",
+              "unavailable": "Die RU pro Minute der anderen Connectors mit dieser App-Registrierung konnten nicht geladen werden."
+            }
+          }
         }
       }
     },
@@ -12199,7 +12211,7 @@
           "text": "{toolName} wurde blockiert"
         },
         "completedStatus": {
-          "text": "{toolName} abgeschlossen"
+          "text": "{toolName} ausgeführt"
         },
         "downloadFileLink": {
           "label": "Herunterladen"
@@ -12229,13 +12241,10 @@
           "label": "Antwort"
         },
         "runningStatus": {
-          "text": "{toolName} wird ausgeführt..."
+          "text": "Führt {toolName} aus..."
         },
         "unreachableStatus": {
           "text": "{toolName} konnte seinen Server nicht erreichen"
-        },
-        "waitingIndicator": {
-          "text": "Warten auf Antwort..."
         }
       },
       "customToolAuth": {
@@ -12413,7 +12422,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "Denkt nach"
+          "text": "Denkt nach..."
         }
       },
       "timeline": {
@@ -12428,7 +12437,7 @@
             "status": "Plan erstellt"
           },
           "generating": {
-            "status": "Erstellt Plan"
+            "status": "Erstellt Plan..."
           }
         },
         "expandButton": {
@@ -12436,10 +12445,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Liest"
+            "status": "Webseiten werden aufgerufen..."
           },
           "read": {
-            "status": "Gelesen"
+            "status": "{count, plural, =0 {Webseiten aufgerufen} one {# Webseite aufgerufen} other {# Webseiten aufgerufen}}"
           }
         },
         "fileReader": {
@@ -12447,69 +12456,108 @@
             "status": "{fileName} gelesen (Zeichen {start, number}–{end, number} von {total, number})"
           },
           "reading": {
-            "status": "Liest Datei"
+            "status": "Liest Datei..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {# Bild generiert} other {# Bilder generiert}}"
         },
         "header": {
           "executingCode": {
-            "label": "Führt Code aus"
+            "label": "Führt Code aus..."
           },
           "executingNamedTool": {
-            "label": "Führt {toolName} aus"
+            "label": "Führt {toolName} aus..."
           },
           "executingTool": {
-            "label": "Führt Werkzeug aus"
+            "label": "Führt Werkzeug aus..."
           },
           "generatingImages": {
-            "label": "Bilder werden generiert"
+            "label": "Bilder werden generiert..."
           },
           "generatingPlan": {
-            "label": "Erstellt Plan"
+            "label": "Erstellt Plan..."
           },
           "queryingKnowledgeBase": {
-            "label": "Wissensdatenbank wird abgefragt"
+            "label": "Wissensdatenbank wird abgefragt..."
           },
           "reading": {
-            "label": "Liest"
+            "label": "Liest..."
           },
           "readingFile": {
-            "label": "Liest Datei"
+            "label": "Liest Datei..."
           },
           "researching": {
-            "label": "Recherchiert"
+            "label": "Recherchiert..."
           },
           "searchingWeb": {
-            "label": "Durchsucht das Web"
+            "label": "Durchsucht das Web..."
           },
           "thinking": {
-            "label": "Denkt nach"
-          },
-          "thinkingEllipsis": {
             "label": "Denkt nach..."
           },
           "updatingMemory": {
             "label": "Aktualisiert Erinnerung..."
           },
           "working": {
-            "label": "In Arbeit"
+            "label": "In Arbeit..."
           },
           "waitingForApproval": {
-            "label": "Wartet auf Ihre Freigabe"
+            "label": "Wartet auf Ihre Freigabe..."
           },
           "waitingForAnswer": {
-            "label": "Wartet auf Ihre Antwort"
+            "label": "Wartet auf Ihre Antwort..."
           },
           "runningCommand": {
-            "label": "Befehl wird ausgeführt"
+            "label": "Befehl wird ausgeführt..."
           },
           "editingFiles": {
-            "label": "Dateien werden bearbeitet"
+            "label": "Dateien werden bearbeitet..."
           },
           "publishingFiles": {
-            "label": "Dateien werden veröffentlicht"
+            "label": "Dateien werden veröffentlicht..."
+          },
+          "browsing": {
+            "label": "Webseiten werden aufgerufen..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "Arbeitet daran...",
+              "done": "Arbeit erledigt"
+            },
+            "crunchingDetails": {
+              "working": "Wertet die Details aus...",
+              "done": "Details ausgewertet"
+            },
+            "connectingDots": {
+              "working": "Verbindet die Punkte...",
+              "done": "Punkte verbunden"
+            },
+            "runningNumbers": {
+              "working": "Rechnet nach...",
+              "done": "Nachgerechnet"
+            },
+            "fillingGaps": {
+              "working": "Füllt die Lücken...",
+              "done": "Lücken gefüllt"
+            },
+            "sortingThingsOut": {
+              "working": "Sortiert die Dinge...",
+              "done": "Dinge sortiert"
+            },
+            "gatheringPieces": {
+              "working": "Sammelt die Teile...",
+              "done": "Teile gesammelt"
+            },
+            "workingThroughIt": {
+              "working": "Arbeitet es durch...",
+              "done": "Durchgearbeitet"
+            },
+            "ironingOutDetails": {
+              "working": "Feilt an den Details...",
+              "done": "Details ausgefeilt"
+            },
+            "roundingThingsOut": {
+              "working": "Rundet es ab...",
+              "done": "Abgerundet"
+            }
           }
         },
         "internalSearch": {
@@ -12517,10 +12565,10 @@
             "text": "Keine Ergebnisse gefunden"
           },
           "reading": {
-            "status": "Liest"
+            "status": "Liest..."
           },
           "read": {
-            "label": "Gelesen"
+            "label": "Gelesene Dokumente"
           },
           "header": {
             "default": "Interne Dokumente werden durchsucht",
@@ -12528,7 +12576,8 @@
             "sources": "Suche in {sources}",
             "doneSources": "{sources} durchsucht",
             "sourcesOverflow": "{sources} +{count} weitere",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "seit {date}",
@@ -12547,7 +12596,7 @@
             "text": "Erinnerungswerkzeug deaktiviert"
           },
           "updating": {
-            "status": "Aktualisiert Erinnerung"
+            "status": "Aktualisiert Erinnerung..."
           },
           "updated": {
             "status": "Erinnerung aktualisiert"
@@ -12569,10 +12618,7 @@
             "status": "Wissensdatenbank abgefragt"
           },
           "querying": {
-            "status": "Wissensdatenbank wird abgefragt"
-          },
-          "listed": {
-            "label": "{count, plural, one {# Dokument aufgelistet} other {# Dokumente aufgelistet}}"
+            "status": "Wissensdatenbank wird abgefragt..."
           },
           "query": {
             "table": {
@@ -12629,21 +12675,15 @@
             "label": "Ausgabe:"
           },
           "running": {
-            "status": "Python wird ausgeführt"
+            "status": "Python wird ausgeführt..."
           },
           "ran": {
             "status": "Python ausgeführt"
-          },
-          "runningCode": {
-            "label": "Führt Code aus..."
-          },
-          "writingCode": {
-            "status": "Schreibt Code..."
           }
         },
         "reasoning": {
           "thinking": {
-            "status": "Denkt nach"
+            "status": "Denkt nach..."
           },
           "thought": {
             "status": "Nachgedacht"
@@ -12679,7 +12719,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "Durchsucht das Web"
+            "status": "Durchsucht das Web..."
           },
           "searched": {
             "status": "Im Web gesucht"
@@ -12687,19 +12727,16 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {Befehl wird ausgeführt} started {Befehl gestartet} failed {Befehl fehlgeschlagen} canceled {Abgebrochen} done {Befehl ausgeführt} other {Befehl ausgeführt}}",
+            "status": "{phase, select, running {Befehl wird ausgeführt...} started {Befehl gestartet} failed {Befehl fehlgeschlagen} canceled {Abgebrochen} done {Befehl ausgeführt} other {Befehl ausgeführt}}",
             "workdir": {
               "label": "In {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Eingabe wird an Sitzung {sessionId} gesendet} failed {Eingabe an Sitzung {sessionId} konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an Sitzung {sessionId} gesendet} other {Eingabe an Sitzung {sessionId} gesendet}}} check {{phase, select, running {Sitzung {sessionId} wird geprüft} failed {Sitzung {sessionId} konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung {sessionId} geprüft} other {Sitzung {sessionId} geprüft}}} other {Sitzung {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {Eingabe wird an Sitzung {sessionId} gesendet...} failed {Eingabe an Sitzung {sessionId} konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an Sitzung {sessionId} gesendet} other {Eingabe an Sitzung {sessionId} gesendet}}} check {{phase, select, running {Sitzung {sessionId} wird geprüft...} failed {Sitzung {sessionId} konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung {sessionId} geprüft} other {Sitzung {sessionId} geprüft}}} other {Sitzung {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {Eingabe wird an die Sitzung gesendet} failed {Eingabe an die Sitzung konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an die Sitzung gesendet} other {Eingabe an die Sitzung gesendet}}} check {{phase, select, running {Sitzung wird geprüft} failed {Sitzung konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung geprüft} other {Sitzung geprüft}}} other {Sitzung}}"
+              "status": "{kind, select, send {{phase, select, running {Eingabe wird an die Sitzung gesendet...} failed {Eingabe an die Sitzung konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an die Sitzung gesendet} other {Eingabe an die Sitzung gesendet}}} check {{phase, select, running {Sitzung wird geprüft...} failed {Sitzung konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung geprüft} other {Sitzung geprüft}}} other {Sitzung}}"
             }
-          },
-          "output": {
-            "title": "Ausgabe"
           },
           "exitCode": {
             "label": "Exit-Code {exitCode}"
@@ -13018,6 +13055,12 @@
       },
       "copyButton": {
         "tooltip": "Inhalt kopieren"
+      },
+      "sourceButton": {
+        "tooltip": "Quelltext anzeigen"
+      },
+      "previewButton": {
+        "tooltip": "Vorschau anzeigen"
       },
       "downloadButton": {
         "label": "Datei herunterladen",
@@ -13480,10 +13523,6 @@
       "toggleButton": {
         "label": "Bereich ein- oder ausblenden"
       },
-      "downloadButton": {
-        "label": "Herunterladen",
-        "tooltip": "Datei herunterladen"
-      },
       "reloadButton": {
         "label": "Dateien aktualisieren",
         "error": "Die Dateien konnten nicht neu geladen werden. Versuchen Sie es erneut."
@@ -13516,6 +13555,34 @@
       },
       "menu": {
         "label": "Exportieren als…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "Aktivität"
+      },
+      "needsYou": {
+        "title": "Braucht Sie",
+        "approval": "{tool} genehmigen",
+        "question": "Eine Frage beantworten"
+      },
+      "agents": {
+        "title": "Agenten",
+        "status": {
+          "starting": "Startet",
+          "running": "Läuft",
+          "suspended": "Wartet",
+          "complete": "Fertig",
+          "limit": "Schrittlimit erreicht",
+          "cancelled": "Abgebrochen",
+          "stopped": "Gestoppt",
+          "error": "Fehlgeschlagen"
+        },
+        "finished": "Frühere Agenten"
+      },
+      "files": {
+        "title": "Dateien",
+        "viewAll": "{count, plural, one {# Datei anzeigen} other {Alle # Dateien anzeigen}}"
       }
     }
   },
@@ -14047,6 +14114,21 @@
         "label": "Tarif upgraden"
       },
       "availableFor": "Verfügbar im {plan}"
+    },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "Dies ist eine Enterprise-Funktion. Sie ist im Playground nicht verfügbar. Ihr eigenes Onyx hat sie. [Mit dem Vertrieb sprechen]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "Wir haben eigene Modellschlüssel eingerichtet, damit Sie die Funktionen ausprobieren können. Ihr eigenes Onyx läuft mit Ihren Schlüsseln. [Mit dem Vertrieb sprechen]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "Diese Funktion ist im Playground ausgeschaltet. Ihr eigenes Onyx hat sie. [Mit dem Vertrieb sprechen]({salesUrl})"
+        },
+        "title": "Playground-Limit",
+        "tooltip": "Im Playground nicht verfügbar. Ihr eigenes Onyx hat sie."
+      }
     },
     "placeholders": {
       "email": "e-mail@ihrefirma.com",
@@ -15004,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "In Arbeit"
+          "label": "In Arbeit..."
         }
       },
       "read": {
@@ -17213,18 +17295,6 @@
       "select": "{name} auswählen"
     }
   },
-  "opensearchHealth": {
-    "title": "OpenSearch benötigt mehr Ressourcen",
-    "disk": "Die OpenSearch-Festplattenbelegung beträgt auf einem Datenknoten mindestens 85 %. Bei voller Festplatte kann die Indexierung stoppen.",
-    "jvmMemory": "Die JVM-Speicherbelegung von OpenSearch lag bei wiederholten Prüfungen über 85 %. Suche und Indexierung können fehlschlagen.",
-    "vectorMemory": "Der Vektorspeicher von OpenSearch ist fast voll oder hat sein Limit erreicht. Die Suche wird langsamer, und Suche und Indexierung können fehlschlagen.",
-    "stale": "Die aktuelle Prüfung ist nicht verfügbar. Diese Warnung basiert auf der letzten erfolgreichen Prüfung; eine Erholung wurde nicht bestätigt.",
-    "dismiss": "Schließen",
-    "diskTitle": "Festplattenspeicher",
-    "jvmMemoryTitle": "JVM-Arbeitsspeicher",
-    "vectorMemoryTitle": "Vektorspeicher",
-    "viewDetails": "Details anzeigen"
-  },
   "plugins": {
     "member": {
       "sections": {
@@ -17818,7 +17888,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {1 Skill} other {{skills} Skills}}",
       "loadFailed": "Ihre Plugins konnten nicht geladen werden.",
       "filter": {
         "all": "Alle Plugins"

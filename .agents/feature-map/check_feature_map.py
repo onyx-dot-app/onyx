@@ -30,7 +30,13 @@ MAP_DIR = Path(__file__).resolve().parent
 REPO_ROOT = MAP_DIR.parent.parent
 COMPONENTS = "components"
 ALLOWLIST = "path-allowlist.txt"
-TOP_LEVEL_DOCS = ("ARCHITECTURE.md", "CROSS-CUTTING.md", "INDEX.md", "GLOSSARY.md")
+TOP_LEVEL_DOCS = (
+    "ARCHITECTURE.md",
+    "CROSS-CUTTING.md",
+    "INDEX.md",
+    "GLOSSARY.md",
+    "TECH-DEBT.md",
+)
 NOT_MAPPED = "Not mapped"
 COMMON_TASKS = "Common tasks"
 

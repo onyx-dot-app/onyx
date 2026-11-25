@@ -1,4 +1,5 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import {
   Packet,
   PacketType,
@@ -22,15 +23,15 @@ jest.mock("@/lib/chat/settleChatSession", () => ({
   ...jest.requireActual("@/lib/chat/settleChatSession"),
   refreshChatSession: jest.fn(async () => {}),
 }));
+let mockSearchParams = new URLSearchParams({
+  "user-prompt": "hello",
+  "send-on-load": "true",
+  tags: "eng",
+});
 jest.mock("@opal/navigation", () => ({
   ...jest.requireActual("@opal/navigation"),
   useNavigation: () => ({ go: jest.fn() }),
-  useSearchParams: () =>
-    new URLSearchParams({
-      "user-prompt": "hello",
-      "send-on-load": "true",
-      tags: "eng",
-    }),
+  useSearchParams: () => mockSearchParams,
 }));
 jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => ({ currentMessageFiles: [] }),
@@ -333,6 +334,55 @@ describe("useSendChatMessageFromURL", () => {
     expect(
       update(toolConfiguration.filters).tags.map((tag) => tag.tag_value)
     ).toEqual(["eng"]);
+  });
+
+  test("only the embedding extension, not a frame inside the page, can send a prompt", async () => {
+    mockSearchParams = new URLSearchParams();
+    global.fetch = jest.fn(async () => new Response("[]", { status: 200 }));
+    // The extension embeds the page: its window is the page's parent
+    const extension = document.createElement("iframe");
+    // An HTML file preview is a frame inside the page
+    const preview = document.createElement("iframe");
+    document.body.append(extension, preview);
+    const parent = Object.getOwnPropertyDescriptor(window, "parent");
+    Object.defineProperty(window, "parent", {
+      configurable: true,
+      value: extension.contentWindow,
+    });
+    const onSubmit = jest.fn();
+    function send(source: Window | null, prompt: string) {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source,
+          origin: "chrome-extension://abc",
+          data: {
+            type: SUBMIT_MESSAGE_TYPES.PAGE_CHANGE,
+            href: `${window.location.origin}${window.location.pathname}?user-prompt=${prompt}&send-on-load=true`,
+          },
+        })
+      );
+    }
+    try {
+      renderHook(() =>
+        useSendChatMessageFromURL({
+          onSubmit,
+          deepResearch: false,
+          toolConfiguration,
+        })
+      );
+
+      await act(async () => send(preview.contentWindow, "leak"));
+      await act(async () => send(extension.contentWindow, "hello"));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect(onSubmit.mock.calls.map(([message]) => message.message)).toEqual([
+        "hello",
+      ]);
+    } finally {
+      if (parent) Object.defineProperty(window, "parent", parent);
+      extension.remove();
+      preview.remove();
+    }
   });
 });
 

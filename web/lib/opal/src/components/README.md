@@ -24,6 +24,7 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [Badge](./badge/)                                                 | Small colored label for status/category metadata                          | [README](./badge/README.md)                                   |
 | [BadgeButton](./badge-button/)                                    | A clickable Badge: a button or a filter toggle                            | [README](./badge-button/README.md)                            |
 | [Tag](./tag/)                                                     | Gray removable or clickable pill (tag fields, tag lists)                   | [README](./tag/README.md)                                   |
+| [ReadOnlyRegion](./read-only-region/)                             | A region the user can see but not use: dimmed, no pointer, focus or keys   | [README](./read-only-region/README.md)                      |
 | [InputDateRangePicker](./inputs/chrono/input-date-range-picker/)  | Preset date-range strip with a custom-range calendar popover              | [README](./inputs/chrono/input-date-range-picker/README.md)   |
 | [InputSingleUpload](./inputs/uploads/input-single-upload/)        | Upload control in the input chrome: pick, drop or paste                   | [README](./inputs/uploads/input-single-upload/README.md)      |
 | [InputMultiUpload](./inputs/uploads/input-multi-upload/)          | Upload control for many files, shown as removable tags                    | [README](./inputs/uploads/input-multi-upload/README.md)       |

@@ -146,7 +146,6 @@ def delete_service_api_key_endpoint(
     deleted = delete_discord_service_api_key(db_session)
     if not deleted:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Service API key not found")
-    db_session.commit()
     return {"deleted": True}
 
 

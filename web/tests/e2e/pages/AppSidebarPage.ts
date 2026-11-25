@@ -187,6 +187,11 @@ export class AppSidebarPage {
     await this.page.waitForLoadState("networkidle");
   }
 
+  /** The account menu tab. It renders once the signed-in user loads. */
+  get accountMenu(): Locator {
+    return this.page.locator("#onyx-user-dropdown");
+  }
+
   /** The profile photo in the account menu tab. */
   get accountAvatarPhoto(): Locator {
     return this.page.locator("#onyx-user-dropdown img[src*='/profile-image']");

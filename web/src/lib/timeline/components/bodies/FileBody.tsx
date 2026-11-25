@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button, CodePanel } from "@opal/components";
 import { SvgChevronDown } from "@opal/icons";
-import { getLanguageFromPath } from "@/app/craft/utils/codeLanguage";
+import { getLanguageFromPath } from "@/lib/codeHighlight/language";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 
 const PREVIEW_LINE_COUNT = 8;

@@ -458,6 +458,12 @@ class SearchDocsResponse(BaseModel):
 
     # None uses all retrieved documents; an empty list selects no documents.
     displayed_docs: list[SearchDoc] | None = None
+    # open_url only: the requested URLs that these documents answer.
+    opened_urls: list[str] = Field(default_factory=list)
+    # By file ID: the name under which the chat stages each file of the
+    # documents for the Python tool, as the result names it. Live only: never
+    # serialized, so saved and streamed results lack it.
+    openable_file_names: dict[str, str] = Field(default_factory=dict, exclude=True)
 
 
 class SavedSearchDoc(SearchDoc):

@@ -4,7 +4,6 @@ import { useTranslations } from "next-intl";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import { RunCard } from "@/lib/timeline/components/RunCard";
 import { RunStep } from "@/lib/timeline/components/RunStep";
-import type { TimelineStepPosition } from "@/lib/timeline/types";
 import TaskBody from "@/lib/timeline/craft/components/tool-cards/TaskBody";
 import SkillBadge from "@/lib/timeline/craft/components/tool-cards/SkillBadge";
 import {
@@ -33,10 +32,9 @@ function normalizeThinking(text: string): string {
 
 interface CraftTimelineStepProps {
   entry: CraftTimelineEntry;
-  position: TimelineStepPosition;
 }
 
-function CraftTimelineStep({ entry, position }: CraftTimelineStepProps) {
+function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
   const t = useTranslations("chat.messages.timeline");
   const { payload } = entry;
 
@@ -53,7 +51,6 @@ function CraftTimelineStep({ entry, position }: CraftTimelineStepProps) {
       <RunStep
         // Thinking keeps its own icon while it streams.
         status={entry.status === "streaming" ? "done" : entry.status}
-        position={position}
         icon={STEP_ICONS.thinking}
         title={header}
         body={
@@ -75,7 +72,6 @@ function CraftTimelineStep({ entry, position }: CraftTimelineStepProps) {
     return (
       <RunStep
         status={entry.status}
-        position={position}
         hideHeader
         body={<TaskBody toolCall={toolCall} />}
       />
@@ -85,7 +81,6 @@ function CraftTimelineStep({ entry, position }: CraftTimelineStepProps) {
   return (
     <RunStep
       status={entry.status}
-      position={position}
       icon={getToolCallIcon(toolCall)}
       title={renderToolCallHeader(toolCall)}
       doneTitle={renderToolCallHeader(toolCall, true)}
@@ -121,10 +116,10 @@ export default function CraftTimeline({
       workingText={t("working.label")}
       autoCollapse={autoCollapse}
       isActive={isActive || entries.some((e) => e.status === "streaming")}
-      renderStep={(entry, position) => (
+      renderStep={(entry) => (
         // Every step starts closed. The card drops its steps when it
         // closes, so reopening it closes them all again.
-        <CraftTimelineStep entry={entry} position={position} />
+        <CraftTimelineStep entry={entry} />
       )}
     />
   );

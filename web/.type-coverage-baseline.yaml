@@ -12,12 +12,12 @@ total: 99.1
 packages:
   .: 100
   src: 99.5
-  src/app: 99.5
-  src/app/admin: 96.9
+  src/app: 99.6
+  src/app/admin: 97.2
   src/app/anonymous: 100
   src/app/api: 100
-  src/app/app: 98.9
-  src/app/auth: 98.9
+  src/app/app: 99.3
+  src/app/auth: 99
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
@@ -25,7 +25,7 @@ packages:
   src/app/ee: 95.6
   src/app/federated: 97
   src/app/mcp: 100
-  src/app/nrf: 99.2
+  src/app/nrf: 99.3
   src/app/oauth: 100
   src/app/oauth-config: 100
   src/app/oauth-provider: 100
@@ -58,18 +58,21 @@ packages:
   src/layouts: 100
   src/layouts/chromes: 99.7
   src/layouts/craft: 96.1
-  src/lib: 99.2
+  src/lib: 99.3
   src/lib/agents: 99.5
   src/lib/analytics: 99.4
+  src/lib/answerText: 100
   src/lib/app: 99.9
+  src/lib/appearance: 98.4
   src/lib/approvals: 100
   src/lib/auth: 98.4
   src/lib/badges: 100
   src/lib/banner: 99.3
   src/lib/billing: 100
   src/lib/build: 100
-  src/lib/chat: 99.6
-  src/lib/chatScroll: 99.8
+  src/lib/chat: 99.7
+  src/lib/chatScroll: 100
+  src/lib/codeHighlight: 98.4
   src/lib/common: 100
   src/lib/connectors: 99.1
   src/lib/constants: 100
@@ -77,10 +80,12 @@ packages:
   src/lib/customize: 100
   src/lib/docx: 100
   src/lib/extension: 100
+  src/lib/filePreview: 100
   src/lib/hierarchy: 100
-  src/lib/hooks: 95.9
+  src/lib/hooks: 96
   src/lib/integrations: 100
   src/lib/languageModels: 99.1
+  src/lib/marketplaces: 100
   src/lib/mcp: 99.3
   src/lib/multiModel: 100
   src/lib/navigation: 100
@@ -88,26 +93,28 @@ packages:
   src/lib/oauth: 99.4
   src/lib/oauth-provider: 100
   src/lib/onboarding: 99.8
-  src/lib/opensearch-health: 100
+  src/lib/outputPanel: 100
   src/lib/permissions: 100
   src/lib/plugins: 100
+  src/lib/pptx: 100
   src/lib/projects: 99.7
   src/lib/sandbox: 100
   src/lib/scheduledTasks: 100
   src/lib/search: 99.2
   src/lib/searchFilters: 98.4
   src/lib/searchSettings: 99.6
+  src/lib/service-status: 100
   src/lib/settings: 96.9
   src/lib/sidebar: 100
   src/lib/skills: 98.7
   src/lib/spendingLimits: 100
   src/lib/sso: 99.2
   src/lib/tiers: 100
-  src/lib/timeline: 99.5
+  src/lib/timeline: 99.2
   src/lib/tools: 99.6
-  src/lib/tracing: 96.9
+  src/lib/tracing: 98.7
   src/lib/usage: 97.9
-  src/lib/users: 99.1
+  src/lib/users: 100
   src/lib/voice: 99.3
   src/lib/webSearch: 97.4
   src/providers: 99.5
@@ -128,25 +135,30 @@ packages:
   src/sections/admin: 100
   src/sections/agents: 99.9
   src/sections/approvals: 99.1
-  src/sections/banners: 99.1
+  src/sections/banners: 98.5
   src/sections/cards: 100
-  src/sections/chat: 99.8
-  src/sections/customize: 99.8
+  src/sections/chat: 100
+  src/sections/customize: 99.9
   src/sections/document-sidebar: 99.5
+  src/sections/file-preview: 100
   src/sections/input: 99.9
   src/sections/integrations: 100
   src/sections/knowledge: 99.6
+  src/sections/marketplaces: 100
   src/sections/modals: 99.5
   src/sections/model-selector: 99.9
   src/sections/oauth: 100
   src/sections/oauth-provider: 100
+  src/sections/output-panel: 100
   src/sections/plugins: 99.9
+  src/sections/scheduledTasks: 99.5
   src/sections/settings: 100
   src/sections/sidebar: 99.1
-  src/sections/skills: 99.7
+  src/sections/skills: 99.8
   src/sections/usage: 99.6
-  src/views: 99.6
+  src/views: 99.8
   src/views/AgentEditorPage: 99.4
   src/views/AgentsCatalogPage: 99.1
   src/views/admin: 98.8
+  src/views/settings: 99.3
   types: 100

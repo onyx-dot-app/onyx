@@ -8,6 +8,7 @@ import { SettingsAppearancePage } from "@tests/e2e/pages/SettingsAppearancePage"
 // next/font registers each family under a name derived from its loader.
 const OPENDYSLEXIC_FAMILY = /openDyslexic/i;
 const HANKEN_GROTESK_FAMILY = /Hanken.Grotesk/i;
+const DM_MONO_FAMILY = /DM.Mono/i;
 // Computed letter-spacing of 14px preset text: the default font keeps the
 // preset's spacing, OpenDyslexic tightens it by 0.06em.
 const DEFAULT_LETTER_SPACING = "normal";
@@ -27,6 +28,10 @@ test("interface font applies at once and renders from the server after a reload"
   await settingsPage.goto();
   await settingsPage.expectInterfaceLetterSpacing(DEFAULT_LETTER_SPACING);
   const defaultWidth = await settingsPage.interfaceFontTitleWidth();
+  const defaultMonospace = await settingsPage.monospaceSpacing();
+  for (const { fontFamily } of defaultMonospace) {
+    expect(fontFamily).toMatch(DM_MONO_FAMILY);
+  }
 
   await settingsPage.chooseAppearanceOption(
     settingsPage.interfaceFontSelect,
@@ -38,6 +43,8 @@ test("interface font applies at once and renders from the server after a reload"
     (await settingsPage.interfaceFontTitleWidth()) / defaultWidth;
   expect(widthRatio).toBeGreaterThan(1);
   expect(widthRatio).toBeLessThan(MAX_OPENDYSLEXIC_WIDTH_RATIO);
+  // Monospace text keeps its spacing, so code stays aligned.
+  expect(await settingsPage.monospaceSpacing()).toEqual(defaultMonospace);
 
   // The save refreshed the appearance cookie, so the server layout renders
   // the font on first paint.

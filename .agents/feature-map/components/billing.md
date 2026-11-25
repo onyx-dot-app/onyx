@@ -170,7 +170,8 @@ one commit (`backend/ee/onyx/db/community_downgrade.py`):
   turns off standard answers, sets every SCIM token inactive and removes API keys
   through `backend/onyx/db/api_key.py:remove_all_api_keys__no_commit`.
 
-Then `downgrade_to_community` clears the LLM provider listing cache (listings are
+After the commit, `downgrade_to_community` runs `finish_user_delete` for the
+removed API-key users. Then it clears the LLM provider listing cache (listings are
 cached per group set), resets the enterprise settings, clears chat retention and
 deletes the license. The enterprise settings reset
 (`backend/ee/onyx/server/enterprise_settings/store.py:reset_settings`) also

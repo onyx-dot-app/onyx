@@ -545,9 +545,13 @@ def prepare_chat_turn(
             # multi-model turn has no sandbox tools and publishes no files;
             # the web's file cards rely on it. Bots get no sandbox until they
             # have service-account sandboxes. Deep research gets no sandbox.
+            # Only the chat's owner gets it: the session directory and the
+            # published files belong to the owner's chat (a chat without an
+            # owner, which any user can open, gets none).
             sandbox_tools = (
                 HARNESS_SANDBOX_ENABLED
                 and not user.is_anonymous
+                and chat_session.user_id == user.id
                 and new_msg_req.origin
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
                 and chat_session.incognito_record_mode is None
@@ -569,7 +573,7 @@ def prepare_chat_turn(
             )
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
-            chat_skills = list_chat_skills(db_session, user, built_ins=sandbox_tools)
+            chat_skills = list_chat_skills(db_session, user, with_sandbox=sandbox_tools)
             # A question records its picks when it is accepted, after the
             # checks that can reject it; regeneration reuses the record.
             accepts_question = queued_turn is not None or (
@@ -577,7 +581,11 @@ def prepare_chat_turn(
             )
             picks = (
                 accept_picked_skills(
-                    [new_msg_req.mentions], chat_skills, user.id, db_session
+                    [new_msg_req.mentions],
+                    chat_skills,
+                    user.id,
+                    db_session,
+                    with_sandbox=sandbox_tools,
                 )[0]
                 if accepts_question
                 else AcceptedPicks()

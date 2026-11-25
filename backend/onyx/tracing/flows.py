@@ -33,6 +33,7 @@ class LLMFlow(StrEnum):
     SEARCH_CONTEXT_EXPANSION_DECISION = "search_context_expansion_decision"
     CHAT_SESSION_NAMING = "chat_session_naming"
     MEMORY_UPDATE = "memory_update"
+    SUGGESTED_QUESTIONS = "suggested_questions"
 
     # Build session (assistants)
     BUILD_SESSION_NAMING = "build_session_naming"

@@ -861,7 +861,9 @@ const AppInputBar = React.memo(
       <div
         {...(isSearchMode ? { inert: true } : {})}
         className={cn(
-          "relative flex justify-between items-center w-full",
+          // A container, so controls can narrow with the composer, such as
+          // beside an open output panel, not only with the window
+          "@container/composer-controls relative flex justify-between items-center w-full",
           isSearchMode
             ? "opacity-0 p-0 h-0 overflow-hidden pointer-events-none"
             : "opacity-100 p-1 h-11 pointer-events-auto",

@@ -2,7 +2,10 @@ from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import normalize_email
-from ee.onyx.external_permissions.utils import credential_json
+from ee.onyx.external_permissions.utils import (
+    credential_json,
+    set_shared_source_api_limiter,
+)
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.microsoft_utils.entra import (
     EntraDirectoryObject,
@@ -81,6 +84,7 @@ def onedrive_group_sync(
         )
     )
     connector.load_credentials(credential_json(cc_pair))
+    set_shared_source_api_limiter(connector, cc_pair)
 
     groups = iter_entra_items(
         lambda next_link: connector.ops.list_groups(next_link=next_link),

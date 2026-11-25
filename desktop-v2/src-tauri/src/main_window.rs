@@ -831,6 +831,10 @@ fn recover_web_session(app: &AppHandle, url: &Url) {
     if RECOVERING.swap(true, Ordering::SeqCst) {
         return;
     }
+    log::info!(
+        "the web app started a sign-in ({}); checking the session",
+        log_safe(url.as_str())
+    );
     let app = app.clone();
     let url = url.clone();
     tauri::async_runtime::spawn(async move {
@@ -842,7 +846,9 @@ fn recover_web_session(app: &AppHandle, url: &Url) {
 async fn recover(app: &AppHandle, url: &Url) {
     let state = app.state::<AppState>();
     let epoch = state.epoch();
+    let choice = crate::offline::next_choice(app);
     let Ok((server, token)) = state.session() else {
+        log::info!("no app session; opening the sign-in window");
         close(app, &state.server().unwrap_or_default());
         crate::windows::route(app);
         return;
@@ -858,19 +864,28 @@ async fn recover(app: &AppHandle, url: &Url) {
     }
     match valid {
         Ok(true) if take_handover_retry(epoch) => {
-            if let Err(e) = hand_over_again(app, &server, &server_url, &path, epoch).await {
-                log::warn!("could not give the session back to the window: {e}");
-                release_handover_retry();
-                // Open the main window again, which hands the session over.
-                crate::windows::route(app);
+            match hand_over_again(app, &server, &server_url, &path, epoch).await {
+                Ok(()) => log::info!("the session is still valid; gave it back to the web app"),
+                Err(e) => {
+                    log::warn!("could not give the session back to the window: {e}");
+                    release_handover_retry();
+                    // Open the main window again, which hands the session over.
+                    crate::windows::route(app);
+                }
             }
         }
         Ok(true) => {
             log::warn!("the web app still asks for a sign-in; signing in again");
             crate::windows::end_rejected_session(app, &server, &token);
         }
-        Ok(false) => crate::windows::end_rejected_session(app, &server, &token),
-        Err(reason) => crate::windows::show_offline(app, &server, &path, reason, epoch),
+        Ok(false) => {
+            log::info!(
+                "the server ended the session (web sign-out or expiry); signed out of {}",
+                log_safe(&server)
+            );
+            crate::windows::end_rejected_session(app, &server, &token);
+        }
+        Err(reason) => crate::windows::show_offline(app, &server, &path, choice, reason, epoch),
     }
 }
 

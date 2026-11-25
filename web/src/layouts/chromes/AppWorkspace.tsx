@@ -14,4 +14,7 @@ export const AppWorkspaceElementsContext = createContext<{
   // The row's first element, before the page column: a closed panel puts its
   // toggle here, so the toggle comes before the page in keyboard order
   panelToggleSlot: HTMLElement | null;
+  // In the page column, after its footer: the chat's activity card pins to the
+  // column's top end from here
+  activitySlot: HTMLElement | null;
 } | null>(null);

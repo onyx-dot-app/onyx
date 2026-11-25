@@ -1,6 +1,7 @@
 """Text that the model reads for code mode: tool descriptions and each result."""
 
 import json
+import re
 from collections.abc import Sequence
 from typing import NamedTuple
 
@@ -38,6 +39,19 @@ from onyx.tools.tool_implementations.utils import (
 
 # Characters of the notes after the output; they are never cut by the budget.
 MAX_NOTES_CHARS = 10_000
+# Bounds on the deferred namespace lines of the `execute_code` description.
+MAX_DEFERRED_NAMESPACES_BYTES = 4 * 1024
+MAX_NAMESPACE_DESCRIPTION_CHARS = 250
+# Bytes kept for the omitted-namespaces line when the names do not all fit.
+_OMITTED_LINE_RESERVE_BYTES = 64
+_CUT_SUFFIX = "..."
+# The characters that `str.splitlines` breaks lines at.
+_LINE_BREAK = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
+_DEFERRED_NAMESPACES_HEADING = (
+    "\n  Deferred tool namespaces (`tool_search` with a namespace finds its "
+    "functions; call each by the name in its stub):\n"
+)
+_UNGROUPED_NOTE = "\n  Other deferred functions are in no namespace."
 
 
 def _limits_text(limits: SandboxLimits) -> str:
@@ -49,16 +63,68 @@ def _limits_text(limits: SandboxLimits) -> str:
 
 
 def _deferred_note(stubs: ToolStubs) -> str:
-    groups = [
-        *(f"the tool group `{namespace}`" for namespace in stubs.deferred_namespaces),
-        *(["other tools"] if stubs.has_deferred_functions_without_namespace else []),
-    ]
+    """One line per deferred namespace, in `deferred_namespaces` order: its
+    name and the first line of its description. The lines fit a byte budget;
+    names take it before descriptions."""
+    descriptions = stubs.deferred_namespaces
+    ungrouped = (
+        _UNGROUPED_NOTE if stubs.has_deferred_functions_without_namespace else ""
+    )
+    budget = MAX_DEFERRED_NAMESPACES_BYTES - len(
+        f"{_DEFERRED_NAMESPACES_HEADING}{ungrouped}".encode()
+    )
+    name_bytes = {
+        namespace: len(f"  - {namespace}\n".encode()) for namespace in descriptions
+    }
+    remaining = budget - sum(name_bytes.values())
+    lines: list[str] = []
+    if remaining < 0:
+        remaining = budget - _OMITTED_LINE_RESERVE_BYTES
+        for namespace, size in name_bytes.items():
+            if size > remaining:
+                break
+            remaining -= size
+            lines.append(f"  - {namespace}")
+        omitted = len(name_bytes) - len(lines)
+        lines.append(
+            f"  ... {omitted} additional namespace{'' if omitted == 1 else 's'} "
+            "omitted."
+        )
+    else:
+        # Descriptions take the rest in namespace order, so built-in
+        # namespaces keep theirs before integrations do.
+        for namespace, description in descriptions.items():
+            # The description bytes that fit after ": ".
+            cap = remaining - 2
+            first_line = _LINE_BREAK.split((description or "").strip(), 1)[0].rstrip()
+            if cap <= len(_CUT_SUFFIX) or not first_line:
+                lines.append(f"  - {namespace}")
+                continue
+            if len(first_line) > MAX_NAMESPACE_DESCRIPTION_CHARS:
+                first_line = (
+                    first_line[: MAX_NAMESPACE_DESCRIPTION_CHARS - len(_CUT_SUFFIX)]
+                    + _CUT_SUFFIX
+                )
+            encoded = first_line.encode()
+            if len(encoded) <= cap:
+                remaining -= len(encoded) + 2
+            else:
+                first_line = (
+                    encoded[: cap - len(_CUT_SUFFIX)].decode(errors="ignore")
+                    + _CUT_SUFFIX
+                )
+                remaining = 0
+            lines.append(f"  - {namespace}: {first_line}")
+    listed = (
+        f"{_DEFERRED_NAMESPACES_HEADING}{'\n'.join(lines)}{ungrouped}" if lines else ""
+    )
     return (
-        f"\n- More functions are available than the ones listed below: those of "
-        f"{', '.join(groups)}. Find them with `await tool_search(query)`; each match has "
-        "the function's name, description and stub. Read the stub before you call "
-        f"a function, then call it like a listed one, as `await {TOOLS_NAMESPACE}.<name>(...)`, "
-        "in this program or a later one."
+        "\n- More functions are available than the ones in the Functions list "
+        "below. Find them with `await tool_search(query)`; each match has the "
+        "function's name, description and stub. Read the stub before you call a "
+        "function, then call it like a listed one, as "
+        f"`await {TOOLS_NAMESPACE}.<name>(...)`, in this program or a later one."
+        f"{listed}"
     )
 
 

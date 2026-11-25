@@ -3,7 +3,7 @@
 Search, read, upload, organize, and delete files and folders via
 `https://www.googleapis.com/drive/v3/`.
 
-    python /mnt/skills/google-drive/gdrive_api.py <command> [args]
+    python /var/lib/onyx/skills/google-drive/gdrive_api.py <command> [args]
 
 Read commands auto-paginate and prune empty fields. Id arguments also accept
 a full Drive/Docs URL — the id is extracted for you. Add `--shared-drives` to a

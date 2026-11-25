@@ -158,6 +158,9 @@ from onyx.redis.redis_pool import (
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.redis_utils import is_fence
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.server.features.suggested_questions.scheduling import (
+    request_refresh_for_new_documents,
+)
 from onyx.server.metrics.connector_health_metrics import (
     on_connector_error_state_change,
     on_connector_indexing_success,
@@ -754,6 +757,9 @@ def check_indexing_completion(
                 docs_indexed=attempt.new_docs_indexed or 0,
                 success_timestamp=attempt.time_updated.timestamp(),
             )
+            if attempt.new_docs_indexed:
+                # A safety net for the per-batch request above.
+                request_refresh_for_new_documents(tenant_id)
 
             # Clear repeated error state on success
             if cc_pair.in_repeated_error_state:
@@ -2282,6 +2288,9 @@ def _docprocessing_task(
 
         # Clean up this batch after successful processing
         storage.delete_batch_by_num(batch_num)
+        if index_pipeline_result.new_docs:
+            # Lets the first indexed batch start the first suggested questions.
+            request_refresh_for_new_documents(tenant_id)
         safe_record_single_event(
             IndexAttemptStage.FINALIZATION,
             index_attempt_id,

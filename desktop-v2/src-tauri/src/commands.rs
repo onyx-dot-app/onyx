@@ -46,6 +46,8 @@ struct ManagedPrefs {
     /// The server in use is the managed one.
     server_managed: bool,
     server_locked: bool,
+    /// Managed policy locks another server, which applies at the next launch.
+    server_next_launch: bool,
     hotkey_managed: bool,
     launcher_disabled: bool,
     launch_at_login_managed: bool,
@@ -62,8 +64,11 @@ fn managed_prefs(
     updates_supported: bool,
 ) -> ManagedPrefs {
     ManagedPrefs {
-        server_managed: server_url.is_some() && server_url == policy.server_url.as_deref(),
+        server_managed: policy.next_server_url.is_none()
+            && server_url.is_some()
+            && server_url == policy.server_url.as_deref(),
         server_locked: policy.lock_server_url,
+        server_next_launch: policy.next_server_url.is_some(),
         hotkey_managed: policy.hotkey_managed(),
         launcher_disabled: policy.disable_launcher,
         launch_at_login_managed: policy.launch_at_login.is_some(),
@@ -709,7 +714,7 @@ mod tests {
 
     #[test]
     fn onboarding_shows_why_an_unlocked_managed_server_was_ignored() {
-        for value in ["ftp://bad.example", "not a url"] {
+        for value in ["ftp://bad.example", "not a url", "garbage"] {
             let policy =
                 policy::parse(|key| (key == "ServerURL").then(|| RawValue::Str(value.to_string())));
             let setup = server_setup(&policy, None);
@@ -903,5 +908,21 @@ mod tests {
             server_lock_reason(&Policy::unreadable()),
             Some(SERVER_LOCKED_INVALID)
         );
+    }
+
+    #[test]
+    fn a_server_locked_at_runtime_is_not_labeled_as_the_managed_one() {
+        let mine = "http://localhost:8899";
+        let policy = Policy {
+            server_url: Some(mine.into()),
+            lock_server_url: true,
+            next_server_url: Some("https://onyx.example.com".into()),
+            ..Policy::default()
+        };
+        let prefs = managed_prefs(&policy, Some(mine), true);
+        assert!(!prefs.server_managed);
+        assert!(prefs.server_locked);
+        assert!(prefs.server_next_launch);
+        assert!(!managed_prefs(&Policy::default(), Some(mine), true).server_next_launch);
     }
 }

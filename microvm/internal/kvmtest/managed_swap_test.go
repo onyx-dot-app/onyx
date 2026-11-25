@@ -77,7 +77,7 @@ func putImage(ctx context.Context, ha pb.HostAgentClient, z []byte) (*pb.PutMana
 }
 
 const managedHoldPy = `import hashlib, os, sys, time
-d = '/mnt/skills/hello'
+d = '/mnt/user-uploads/hello'
 f = open(d + '/SKILL.md', 'rb')
 big = open(d + '/big.bin', 'rb')
 os.chdir(d)
@@ -129,7 +129,7 @@ func TestManagedSwapKVM(t *testing.T) {
 	}
 	tpl := br.GetTemplate()
 	t.Logf("template %s managed_slots=%d built=%v build_ms=%d", tpl.GetVersion(), tpl.GetManagedSlots(), br.GetBuilt(), br.GetBuildMs())
-	if tpl.GetManagedSlots() != 2 || strings.Join(tpl.GetManagedMounts(), ",") != "skills,user-uploads,spaces" {
+	if tpl.GetManagedSlots() != 2 || strings.Join(tpl.GetManagedMounts(), ",") != "user-uploads,spaces" {
 		t.Fatalf("template has %d managed slots, mounts %v", tpl.GetManagedSlots(), tpl.GetManagedMounts())
 	}
 
@@ -167,7 +167,7 @@ func TestManagedSwapKVM(t *testing.T) {
 	}
 	swap := func(what, image string, idx []int) []*pb.SwapResult {
 		t0 := time.Now()
-		r, err := ha.SwapManaged(ctx, &pb.SwapManagedRequest{ImageId: image, Targets: targets(idx...)})
+		r, err := ha.SwapManaged(ctx, &pb.SwapManagedRequest{ImageId: image, Targets: targets(idx...), Mount: "user-uploads"})
 		if err != nil {
 			t.Fatalf("%s: %v", what, err)
 		}
@@ -189,7 +189,7 @@ func TestManagedSwapKVM(t *testing.T) {
 	}
 
 	// Before any swap: slot A has the empty template placeholder.
-	if r, err := run(0, "grep ' /mnt/skills ' /proc/self/mountinfo; ls -A /mnt/skills | wc -l"); err == nil {
+	if r, err := run(0, "grep ' /mnt/user-uploads ' /proc/self/mountinfo; ls -A /mnt/user-uploads | wc -l"); err == nil {
 		t.Logf("before: %s", strings.TrimSpace(r.stdout))
 	}
 
@@ -272,18 +272,18 @@ func TestManagedSwapKVM(t *testing.T) {
 
 	// 4. Guest checks.
 	const checks = `set -u
-cat /mnt/skills/hello/SKILL.md
-echo mounts=$(grep -c ' /mnt/skills ' /proc/self/mountinfo)
-grep ' /mnt/skills ' /proc/self/mountinfo | awk '{print "opts=" $6, "src=" $(NF-1)}'
-/mnt/skills/hello/run.sh >/dev/null 2>&1; echo exec_rc=$?
-sh /mnt/skills/hello/run.sh
-mount -o remount,rw /mnt/skills 2>/dev/null; echo remount_rc=$?
-touch /mnt/skills/x 2>/dev/null; echo touch_rc=$?
-dev=$(grep ' /mnt/skills ' /proc/self/mountinfo | awk '{print $(NF-1)}')
+cat /mnt/user-uploads/hello/SKILL.md
+echo mounts=$(grep -c ' /mnt/user-uploads ' /proc/self/mountinfo)
+grep ' /mnt/user-uploads ' /proc/self/mountinfo | awk '{print "opts=" $6, "src=" $(NF-1)}'
+/mnt/user-uploads/hello/run.sh >/dev/null 2>&1; echo exec_rc=$?
+sh /mnt/user-uploads/hello/run.sh
+mount -o remount,rw /mnt/user-uploads 2>/dev/null; echo remount_rc=$?
+touch /mnt/user-uploads/x 2>/dev/null; echo touch_rc=$?
+dev=$(grep ' /mnt/user-uploads ' /proc/self/mountinfo | awk '{print $(NF-1)}')
 blockdev --setrw "$dev" 2>/dev/null; echo setrw_rc=$?
-mount -o remount,rw /mnt/skills 2>/dev/null; echo remount2_rc=$?
-touch /mnt/skills/y 2>/dev/null; echo touch2_rc=$?
-echo files=$(ls /mnt/skills/lib | wc -l)
+mount -o remount,rw /mnt/user-uploads 2>/dev/null; echo remount2_rc=$?
+touch /mnt/user-uploads/y 2>/dev/null; echo touch2_rc=$?
+echo files=$(ls /mnt/user-uploads/lib | wc -l)
 `
 	failures := 0
 	for i := range ids {
@@ -293,7 +293,7 @@ echo files=$(ls /mnt/skills/lib | wc -l)
 		}
 		out := r.stdout
 		ok := strings.HasPrefix(out, "skills v2\n") && strings.Contains(out, "mounts=1\n") &&
-			strings.Contains(out, "src=/dev/vdc") && strings.Contains(out, "exec_rc=126") &&
+			strings.Contains(out, "src=/dev/vdg") && strings.Contains(out, "exec_rc=126") &&
 			strings.Contains(out, "ran v2") && !strings.Contains(out, "remount_rc=0") && !strings.Contains(out, "touch_rc=0") &&
 			!strings.Contains(out, "remount2_rc=0") && !strings.Contains(out, "touch2_rc=0") && strings.Contains(out, "files=300")
 		for _, o := range []string{"ro", "nosuid", "nodev", "noexec"} {
@@ -355,8 +355,9 @@ echo files=$(ls /mnt/skills/lib | wc -l)
 	}
 	same := 0
 	for _, vm := range l.GetVms() {
-		if pidsBefore[vm.GetSandboxId()] == vm.GetPid() && vm.GetManaged().GetActive() == pb.ManagedSlot_MANAGED_SLOT_A &&
-			vm.GetManaged().GetSlotAImage() == imgs["v2"].id && vm.GetManaged().GetSlotBImage() == imgs["v1"].id {
+		up := vm.GetManagedMounts()["user-uploads"]
+		if pidsBefore[vm.GetSandboxId()] == vm.GetPid() && up.GetActive() == pb.ManagedSlot_MANAGED_SLOT_A &&
+			up.GetSlotAImage() == imgs["v2"].id && up.GetSlotBImage() == imgs["v1"].id {
 			same++
 		}
 	}
@@ -378,8 +379,8 @@ echo files=$(ls /mnt/skills/lib | wc -l)
 	if !again[0].GetOk() || again[0].GetChanged() {
 		t.Fatalf("repeat: %v", again[0])
 	}
-	if r, err := run(0, "cat /mnt/skills/hello/SKILL.md; grep ' /mnt/skills ' /proc/self/mountinfo | awk '{print $(NF-1)}'"); err != nil ||
-		r.stdout != "skills v3\n/dev/vdf\n" {
+	if r, err := run(0, "cat /mnt/user-uploads/hello/SKILL.md; grep ' /mnt/user-uploads ' /proc/self/mountinfo | awk '{print $(NF-1)}'"); err != nil ||
+		r.stdout != "skills v3\n/dev/vdh\n" {
 		t.Fatalf("after v3: %q %v", r.stdout, err)
 	}
 
@@ -394,27 +395,29 @@ echo files=$(ls /mnt/skills/lib | wc -l)
 		t.Fatal(err)
 	}
 	for _, vm := range l.GetVms() {
-		if vm.GetManaged().GetActive() != pb.ManagedSlot_MANAGED_SLOT_B || vm.GetManaged().GetSlotBImage() != imgs["v3"].id {
-			t.Errorf("after restart %s: %v", vm.GetSandboxId(), vm.GetManaged())
+		up := vm.GetManagedMounts()["user-uploads"]
+		if up.GetActive() != pb.ManagedSlot_MANAGED_SLOT_B || up.GetSlotBImage() != imgs["v3"].id {
+			t.Errorf("after restart %s: %v", vm.GetSandboxId(), vm.GetManagedMounts())
 		}
 	}
 	mustOK("v2 after restart", swap("v2 after an agent restart", imgs["v2"].id, []int{0}), pb.ManagedSlot_MANAGED_SLOT_A)
-	if r, err := run(0, "cat /mnt/skills/hello/SKILL.md"); err != nil || r.stdout != "skills v2\n" {
+	if r, err := run(0, "cat /mnt/user-uploads/hello/SKILL.md"); err != nil || r.stdout != "skills v2\n" {
 		t.Fatalf("after restart swap: %q %v", r.stdout, err)
 	}
-	// 10. The user-uploads and spaces mounts swap the same way, each on its
-	// own slots; skills does not change.
-	for _, sw := range []struct{ mount, image, want, dev string }{
-		{"user-uploads", imgs["v1"].id, "skills v1", "/dev/vdh"}, {"spaces", imgs["v3"].id, "skills v3", "/dev/vdj"},
-	} {
-		r, err := ha.SwapManaged(ctx, &pb.SwapManagedRequest{ImageId: sw.image, Targets: targets(0), Mount: sw.mount})
-		if err != nil || !r.GetResults()[0].GetOk() || r.GetResults()[0].GetActive() != pb.ManagedSlot_MANAGED_SLOT_B {
-			t.Fatalf("swap %s: %v %v", sw.mount, r, err)
-		}
-		out, err := run(0, fmt.Sprintf("cat /mnt/%s/hello/SKILL.md; grep ' /mnt/%s ' /proc/self/mountinfo | awk '{print $(NF-1)}'; cat /mnt/skills/hello/SKILL.md", sw.mount, sw.mount))
-		if err != nil || out.stdout != sw.want+"\n"+sw.dev+"\nskills v2\n" {
-			t.Fatalf("after %s swap: %q %v", sw.mount, out.stdout, err)
-		}
+	// 10. The spaces mount swaps the same way, on its own slots;
+	// user-uploads does not change. Skills are no managed mount: they go to
+	// the guest daemon's root-owned folder.
+	r, err := ha.SwapManaged(ctx, &pb.SwapManagedRequest{ImageId: imgs["v3"].id, Targets: targets(0), Mount: "spaces"})
+	if err != nil || !r.GetResults()[0].GetOk() || r.GetResults()[0].GetActive() != pb.ManagedSlot_MANAGED_SLOT_B {
+		t.Fatalf("swap spaces: %v %v", r, err)
+	}
+	out, err := run(0, "cat /mnt/spaces/hello/SKILL.md; grep ' /mnt/spaces ' /proc/self/mountinfo | awk '{print $(NF-1)}'; cat /mnt/user-uploads/hello/SKILL.md")
+	if err != nil || out.stdout != "skills v3\n/dev/vdj\nskills v2\n" {
+		t.Fatalf("after spaces swap: %q %v", out.stdout, err)
+	}
+	if r, err := run(0, "stat -c %U:%a /var/lib/onyx/skills; grep -c ' /mnt/skills ' /proc/self/mountinfo || true"); err != nil ||
+		r.stdout != "root:755\n0\n" {
+		t.Fatalf("skills folder: %q %v", r.stdout, err)
 	}
 	l, err = ha.List(ctx, &pb.ListRequest{})
 	if err != nil {
@@ -422,7 +425,7 @@ echo files=$(ls /mnt/skills/lib | wc -l)
 	}
 	for _, vm := range l.GetVms() {
 		if vm.GetSandboxId() == ids[0] && (vm.GetManagedMounts()["spaces"].GetSlotBImage() != imgs["v3"].id ||
-			vm.GetManagedMounts()["user-uploads"].GetActive() != pb.ManagedSlot_MANAGED_SLOT_B) {
+			vm.GetManagedMounts()["user-uploads"].GetActive() != pb.ManagedSlot_MANAGED_SLOT_A) {
 			t.Errorf("mounts after swaps: %v", vm.GetManagedMounts())
 		}
 	}

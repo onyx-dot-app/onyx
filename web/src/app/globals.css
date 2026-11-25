@@ -22,6 +22,17 @@
   If we ever want to remove these styles, we need to add an explicit border
   color utility to any element that depends on these defaults.
 */
+/* The page content's room for the chat's right panel toggle: its 12px inset
+   and its 36px button, which abuts the next button as the header's buttons
+   abut each other. The panel's size button sits beside it at the same 48px
+   (`end-12` in sections/chat/ChatRightPanel.tsx). Registered so the page can
+   ease it with the panel's slide. */
+@property --panel-toggle-reserve {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 48px;
+}
+
 @layer base {
   *,
   ::after,
@@ -112,47 +123,22 @@
 
 :root[data-interface-font="opendyslexic"] {
   --font-interface: var(--font-opendyslexic);
+  /* OpenDyslexic spaces letters and words widely; tighten both so text width
+     stays close to the default font. The typography presets in the interface
+     and content fonts read these, and em follows each element's font size.
+     Presets in other fonts, such as mono, keep their own spacing. */
+  --font-interface-letter-spacing: -0.06em;
+  --font-interface-word-spacing: -0.2em;
+  --font-content-letter-spacing: -0.06em;
+  --font-content-word-spacing: -0.2em;
 }
 
-/* OpenDyslexic spaces letters and words widely; tighten both so text width
-   stays close to the default font. Set on each element so the em follows its
-   font size, and unlayered so it overrides the letter-spacing of the
-   typography presets. */
-:root[data-interface-font="opendyslexic"] * {
-  letter-spacing: -0.06em;
-  word-spacing: -0.2em;
-}
-
-/* Code keeps its monospace spacing, including inline code drawn as a
-   .font-mono span. */
+/* Monospace text without a preset inherits spacing from the text around it;
+   it keeps the spacing it has without OpenDyslexic. */
 :root[data-interface-font="opendyslexic"]
   :is(code, pre, kbd, samp, .font-mono) {
   letter-spacing: normal;
   word-spacing: normal;
-}
-
-/* Answers in the default font start from normal word spacing, which they
-   would otherwise inherit from the OpenDyslexic text around them. */
-:root[data-interface-font="opendyslexic"][data-response-font="default"]
-  .response-text {
-  word-spacing: normal;
-}
-
-/* Text in other fonts keeps the spacing it has without OpenDyslexic. */
-:root[data-interface-font="opendyslexic"]
-  :is(code, pre, kbd, samp, .font-mono)
-  *,
-:root[data-interface-font="opendyslexic"][data-response-font="default"]
-  :is(.response-text, .response-text *) {
-  letter-spacing: revert-layer;
-}
-:root[data-interface-font="opendyslexic"]
-  :is(code, pre, kbd, samp, .font-mono)
-  *,
-:root[data-interface-font="opendyslexic"][data-response-font="default"]
-  .response-text
-  * {
-  word-spacing: revert-layer;
 }
 
 :root[data-interface-font="atkinson"] {
@@ -163,6 +149,8 @@
    main-content presets follow the interface font. */
 :root[data-response-font="default"] .response-text {
   --font-content: var(--font-hanken-grotesk);
+  --font-content-letter-spacing: 0em;
+  --font-content-word-spacing: normal;
 }
 
 /* Markdown chat overrides — placed in `utilities` so they sit in the same
@@ -245,7 +233,7 @@
 
   .default-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #888 transparent;
+    scrollbar-color: var(--border-02) transparent;
     overflow-y: scroll;
     overflow-x: hidden;
   }

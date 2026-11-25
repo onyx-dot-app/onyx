@@ -53,6 +53,7 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
     build_graph_user_url,
 )
 from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.outlook.models import (
     OutlookAttachment,
     OutlookDeltaPage,
@@ -385,6 +386,8 @@ class OutlookSourceOperations(SourceOperations):
     # Built lazily on first use so the credential is decrypted at the first
     # remote call, not at construction.
     _graph_gateway: MicrosoftGraphGateway | None = None
+    # Paces every Graph call. None: the calls are not limited.
+    request_pacer: MicrosoftRequestPacer | None = None
 
     def _config_value(self, key: str, default: str) -> str:
         config = self.connector_specific_config or {}
@@ -415,6 +418,7 @@ class OutlookSourceOperations(SourceOperations):
             ),
             graph_api_host=self._graph_host(),
             graph_api_version=GRAPH_API_VERSION,
+            get_pacer=lambda: self.request_pacer,
         )
         return self._graph_gateway
 
@@ -865,6 +869,7 @@ class OutlookSourceOperations(SourceOperations):
                 url=url,
                 cap=cap,
                 description=f"outlook attachment {attachment_id}",
+                pacer=self.request_pacer,
             )
         except requests.RequestException as e:
             raise microsoft_error_from_exception(e) from e

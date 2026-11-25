@@ -1,5 +1,5 @@
 """The docconversion worker's Postgres pool holds a connection for each
-file thread of each task."""
+file thread of each task, for the source with the most file threads."""
 
 from types import SimpleNamespace
 from typing import Any
@@ -8,11 +8,20 @@ from unittest.mock import patch
 import pytest
 
 from onyx.background.celery.apps import docconversion
-from onyx.configs.app_configs import GOOGLE_DRIVE_CONVERSION_WORKERS
 
 
 @pytest.mark.parametrize("concurrency", [1, 2, 6])
-def test_pool_holds_each_conversion_thread(concurrency: int) -> None:
+@pytest.mark.parametrize(("drive_threads", "sharepoint_threads"), [(32, 16), (8, 48)])
+def test_pool_holds_each_conversion_thread(
+    concurrency: int,
+    drive_threads: int,
+    sharepoint_threads: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(docconversion, "GOOGLE_DRIVE_CONVERSION_WORKERS", drive_threads)
+    monkeypatch.setattr(
+        docconversion, "SHAREPOINT_CONVERSION_WORKERS", sharepoint_threads
+    )
     init_kwargs: dict[str, Any] = {}
 
     def init_engine(**kwargs: Any) -> None:
@@ -30,6 +39,5 @@ def test_pool_holds_each_conversion_thread(concurrency: int) -> None:
         )
 
     # A task thread and its file threads, for each task.
-    assert init_kwargs["pool_size"] >= concurrency * (
-        GOOGLE_DRIVE_CONVERSION_WORKERS + 1
-    )
+    file_threads = max(drive_threads, sharepoint_threads)
+    assert init_kwargs["pool_size"] >= concurrency * (file_threads + 1)

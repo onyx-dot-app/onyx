@@ -119,6 +119,16 @@
   }
 }
 
+/* Markdown in the wave stays one inline run, so the wave measures and paints
+   every glyph. A code span's chip would hide the wave behind it, so its text
+   rests at the wave's base colour instead. */
+.opal-text-loader-wave .block {
+  display: inline;
+}
+.opal-text-loader-wave code {
+  color: var(--text-02);
+}
+
 /* Right-to-left text is read from the right, so both waves run that way. */
 .opal-shimmer-block:dir(rtl)::after,
 .opal-text-loader-wave:dir(rtl) {

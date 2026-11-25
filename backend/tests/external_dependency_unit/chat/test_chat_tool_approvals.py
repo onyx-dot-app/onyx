@@ -157,6 +157,7 @@ class ApprovalChat(BaseModel):
         return MCPTool(
             integration_id=self.integration_id,
             integration_name="approvals",
+            integration_description=None,
             server_url="https://example.com/mcp",
             transport=None,
             tool_name=ACTION,

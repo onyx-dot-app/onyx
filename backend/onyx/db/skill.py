@@ -438,8 +438,8 @@ def list_runtime_skills_for_user(
 
 
 def list_chat_built_in_skills(db_session: Session) -> list[RuntimeSkill]:
-    """The available built-ins that chat shows and mounts. They do not
-    depend on the user."""
+    """The available built-ins that chat shows and that load_skill copies
+    into the VM. They do not depend on the user."""
     return [
         RuntimeSkill(
             id=row.id,
@@ -458,13 +458,13 @@ def list_chat_built_in_skills(db_session: Session) -> list[RuntimeSkill]:
 
 
 def list_chat_skills(
-    db_session: Session, user: User, *, built_ins: bool
+    db_session: Session, user: User, *, with_sandbox: bool
 ) -> list[ChatSkill]:
-    """``built_ins``: only when the turn has the sandbox tools."""
+    """Built-ins only ``with_sandbox``: when the turn has the sandbox tools."""
     if user.is_anonymous:
         return []
     skills: list[ChatSkill] = []
-    if built_ins:
+    if with_sandbox:
         skills += [
             ChatSkill(
                 name=plugin_skill.name if plugin_skill.path else built_in.name,

@@ -24,11 +24,15 @@ import {
   InputTypeInTag,
   InputTypeIn,
   InputSwitch,
+  MessageCard,
   Text,
   type TagItem,
 } from "@opal/components";
+import { SvgLock } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
+import { usePlaygroundRestriction } from "@/lib/playground/hooks";
+import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { Tier } from "@/lib/tiers/types";
@@ -61,6 +65,7 @@ interface ToggleRowProps {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
+  disabledTooltip?: string | RichStr;
 }
 
 function ToggleRow({
@@ -69,6 +74,7 @@ function ToggleRow({
   checked,
   onCheckedChange,
   disabled,
+  disabledTooltip,
 }: ToggleRowProps) {
   return (
     <InputHorizontal
@@ -76,12 +82,9 @@ function ToggleRow({
       description={description}
       withLabel
       disabled={disabled}
+      disabledTooltip={disabledTooltip}
     >
-      <InputSwitch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
-      />
+      <InputSwitch checked={checked} onCheckedChange={onCheckedChange} />
     </InputHorizontal>
   );
 }
@@ -189,6 +192,9 @@ export default function SecurityHardeningPage() {
   // Invite-only lives in workspace settings, not SecuritySettings, so it has
   // its own save path.
   const workspaceSettings = useSettings();
+  const anonymousAccess = usePlaygroundRestriction(
+    PlaygroundRestrictedFeature.ANONYMOUS_ACCESS
+  );
   const saveWorkspaceSettings = useCallback(
     async (updates: Partial<Settings>) => {
       const newSettings: Settings = {
@@ -413,18 +419,40 @@ export default function SecurityHardeningPage() {
                 }
               />
 
-              <ToggleRow
-                title={t("authentication.anonymousUsers.title")}
-                description={markdown(
-                  t("authentication.anonymousUsers.description")
-                )}
-                checked={workspaceSettings.anonymous_user_enabled ?? false}
-                onCheckedChange={(checked) =>
-                  void saveWorkspaceSettings({
-                    anonymous_user_enabled: checked,
-                  })
-                }
-              />
+              {/* The reason sits outside the dimmed row, so it keeps its
+                  contrast and a keyboard user reads it without the tooltip. */}
+              {anonymousAccess.restricted && (
+                <MessageCard
+                  icon={SvgLock}
+                  title={anonymousAccess.title}
+                  description={anonymousAccess.description}
+                />
+              )}
+              {/* The row appears once the setting is known, so it never
+                  shows a value it does not have. */}
+              {anonymousAccess.known && (
+                <ToggleRow
+                  title={t("authentication.anonymousUsers.title")}
+                  description={markdown(
+                    t("authentication.anonymousUsers.description")
+                  )}
+                  checked={
+                    !anonymousAccess.restricted &&
+                    (workspaceSettings.anonymous_user_enabled ?? false)
+                  }
+                  onCheckedChange={(checked) =>
+                    void saveWorkspaceSettings({
+                      anonymous_user_enabled: checked,
+                    })
+                  }
+                  disabled={anonymousAccess.restricted}
+                  disabledTooltip={
+                    anonymousAccess.restricted
+                      ? anonymousAccess.tooltip
+                      : undefined
+                  }
+                />
+              )}
 
               {!isMultiTenant && (
                 <>

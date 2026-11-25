@@ -100,7 +100,7 @@ pub fn init(app: &AppHandle) {
 fn open_answer(app: &AppHandle, answer: Answer) {
     // A stale notification is ignored: the launcher no longer holds its
     // answer, and showing another chat would be wrong.
-    crate::launcher::show(
+    crate::launcher::show_for_notification(
         app,
         move |app| {
             let current = answer.is_current(&app.state::<AppState>());

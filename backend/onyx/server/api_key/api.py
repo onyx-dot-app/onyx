@@ -17,6 +17,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.api_key.models import APIKeyArgs
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -24,7 +25,14 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 
-router = APIRouter(prefix="/admin/api-key")
+router = APIRouter(
+    prefix="/admin/api-key",
+    dependencies=[
+        Depends(
+            restrict_in_playground(PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS)
+        )
+    ],
+)
 
 
 @router.get("")

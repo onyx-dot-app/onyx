@@ -13,6 +13,7 @@ import pytest
 
 from onyx.agents.models import MessageDelivery
 from onyx.chat.mention_models import RecordedMention, SkillMention
+from onyx.configs.chat_configs import CODE_MODE_ENABLED
 from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
@@ -39,7 +40,10 @@ from onyx.skills.chat import MAX_SKILL_PROMPT_BYTES
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+    tool_call_reply,
+)
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import (
@@ -84,15 +88,12 @@ def test_chat_agent_reads_a_skill_from_its_catalog(
     chat_session_id = ChatSessionManager.create(user_performing_action=admin_user).id
     mock_llm.conversation(
         "chat",
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id="call_read", name="skills_read", arguments={"name": skill.name}
-                )
-            ],
+        tool_call_reply(
+            ToolCall(
+                id="call_read", name="skills_read", arguments={"name": skill.name}
+            ),
             conditions=RequestConditions(
-                offers=sorted(_SKILLS_TOOLS),
-                prompt_contains=[f"- {skill.name}: {description}"],
+                prompt_contains=[f"- {skill.name}: {description}"]
             ),
         ),
         Reply(
@@ -111,7 +112,10 @@ def test_chat_agent_reads_a_skill_from_its_catalog(
     assert response.full_message == "Notes grouped by area."
     _, answer_request = mock_llm.requests_in("chat")
     # `skills_read` returns the whole SKILL.md, as Codex reads the file.
-    assert answer_request.tool_result("call_read") == skill_md
+    assert _as_read(skill_md) in (answer_request.tool_result("call_read") or "")
+    if CODE_MODE_ENABLED:
+        # A program's calls render inside its code cell.
+        return
     tool_packets = [
         packet["obj"]
         for packet in response.packets
@@ -126,6 +130,12 @@ def test_chat_agent_reads_a_skill_from_its_catalog(
         (StreamingType.CUSTOM_TOOL_DELTA.value, "skills_read"),
     ]
     assert tool_packets[1]["data"] == {"skill": skill.name}
+
+
+def _as_read(text: str) -> str:
+    """`text` as a read shows it to the model: the tool result itself, or
+    in code mode, the program's result value."""
+    return repr(text) if CODE_MODE_ENABLED else text
 
 
 def _mentioned(mentions: list[RecordedMention]) -> list[tuple[str, str]]:
@@ -161,8 +171,8 @@ def test_picked_skill_pins_its_version_to_its_question(
                 prompt_contains=[_injected(skill.name, skill_md)]
             ),
         ),
-        Reply(
-            tool_calls=[read],
+        tool_call_reply(
+            read,
             conditions=RequestConditions(
                 prompt_contains=[_injected(skill.name, edited)]
             ),
@@ -200,7 +210,7 @@ def test_picked_skill_pins_its_version_to_its_question(
         _injected(skill.name, edited)
     ]
     # `skills_read` reads the version the user runs now.
-    assert read_result.tool_result(read.id) == edited
+    assert _as_read(edited) in (read_result.tool_result(read.id) or "")
     user_messages = [
         message
         for message in ChatSessionManager.get_chat_history(chat_session, admin_user)
@@ -604,15 +614,20 @@ def _send_during_response(
         return held.result(timeout=120)
 
 
+def _paused_list_reply(gate: str) -> Reply:
+    """A first step that lists the skills, as the server offers
+    `skills_list`, and pauses at `gate` until a send arrives."""
+    reply = tool_call_reply(ToolCall(id="call_list", name="skills_list"))
+    reply.text = "Checking."
+    reply.pause_after_first_chunk = gate
+    return reply
+
+
 def _paused_then_answers(gate: str) -> tuple[Reply, Reply]:
     """A first step that pauses at `gate` until a send arrives, then the
     answer."""
     return (
-        Reply(
-            text="Checking.",
-            tool_calls=[ToolCall(id="call_list", name="skills_list")],
-            pause_after_first_chunk=gate,
-        ),
+        _paused_list_reply(gate),
         Reply(
             text="Answer with the skill.",
             conditions=RequestConditions(has_results_for=["call_list"]),
@@ -687,15 +702,9 @@ def test_a_send_picks_a_skill_created_while_its_response_runs(
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
     mock_llm.conversation(
         "chat",
-        Reply(
-            text="Checking.",
-            tool_calls=[ToolCall(id="call_list", name="skills_list")],
-            pause_after_first_chunk=gate,
-        ),
-        Reply(
-            tool_calls=[
-                ToolCall(id="call_read", name="skills_read", arguments={"name": name})
-            ],
+        _paused_list_reply(gate),
+        tool_call_reply(
+            ToolCall(id="call_read", name="skills_read", arguments={"name": name}),
             conditions=RequestConditions(has_results_for=["call_list"]),
         ),
         Reply(
@@ -719,7 +728,7 @@ def test_a_send_picks_a_skill_created_while_its_response_runs(
     _, read_step, answer_step = mock_llm.requests_in("chat")
     assert _texts_after(read_step, sent) == [_injected(name, skill_md)]
     assert f"- {name}: {description}" in (read_step.tool_result("call_list") or "")
-    assert answer_step.tool_result("call_read") == skill_md
+    assert _as_read(skill_md) in (answer_step.tool_result("call_read") or "")
 
 
 def test_deleted_picked_skill_keeps_its_text_in_later_turns(
@@ -952,3 +961,6 @@ def test_user_without_custom_skills_gets_no_skills_tools(
     assert response.full_message == "Plain answer."
     (request,) = mock_llm.requests_in("chat")
     assert "<skills_instructions>" not in request.prompt_text
+    # Code mode declares program functions inside `execute_code`.
+    declared_tools = json.dumps(request.body.get("tools", []))
+    assert not [name for name in _SKILLS_TOOLS if name in declared_tools]

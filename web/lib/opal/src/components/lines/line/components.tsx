@@ -1,162 +1,120 @@
 "use client";
 
-import { Section } from "@opal/layouts/general/components";
 import { Text } from "@opal/components/text/components";
 import { Collapsible } from "@opal/components/collapsible/components";
 import { Presence } from "@opal/components/presence/components";
 import {
   LineRoot,
-  LineRow,
-  type LineBaseProps,
   type LineExpandableProps,
 } from "@opal/components/lines/line-base/components";
-import type { RichStr } from "@opal/types";
+import { ContentIcon } from "@opal/layouts/content/components";
+import { TextLoader } from "@opal/loaders/text-loader/components";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 
-type LineStepProps = LineBaseProps &
-  LineExpandableProps & {
-    /** One line of a list or a timeline. */
-    flavour?: "step";
-    /** What the line is about. Fills the row, on one line. */
-    title: string | RichStr;
+/** A card's header: its own title, or any content. */
+type LineCardHeaderProps =
+  | {
+      /** The title's icon, in a box one line tall, as `Content` draws it. */
+      icon?: IconFunctionComponent;
+      /**
+       * The header's title, as `Content` lays out an inline title. A new
+       * title animates the old one out and the new one in; a card's header
+       * that toggles it darkens the title and the icon on hover.
+       */
+      title: string | RichStr;
+      /** The title's identity: a new key swaps it. Defaults to its text. */
+      titleKey?: React.Key;
+      /** Shimmer the title, e.g. while the card's work runs. */
+      shimmer?: boolean;
+      children?: never;
+    }
+  | {
+      /** The header: any content, such as a title that animates. */
+      children: React.ReactNode;
+      icon?: never;
+      title?: never;
+      titleKey?: never;
+      shimmer?: never;
+    };
+
+type LineProps = LineExpandableProps &
+  LineCardHeaderProps & {
     /**
-     * The title's identity. A new key swaps the title through an animation;
-     * a new title with the same key updates in place, so a live title that
-     * changes often does not flash. Defaults to the title's text.
+     * Where the body starts: `flush` with the card's padding, or `title`,
+     * under the header's title text (past its icon). @default "flush"
      */
-    titleKey?: React.Key;
+    bodyInset?: "flush" | "title";
+    /** Trailing content at the end of the header, such as the fold button. */
+    rightChildren?: React.ReactNode;
+    /** Fills the card with `background-tint-00`, e.g. while it is open. */
+    filled: boolean;
     /**
-     * Makes the row toggle the line, as a `Collapsible.Header` with a chevron
-     * fold button: a click on the row calls this, and hovering it darkens
-     * its title and icon (no fill). The body never calls this. Controls in
-     * `rightChildren` keep their own clicks.
+     * The fold button's label, e.g. "3 steps": the header's own button, which
+     * lights up while the header is hovered. Without one, a card with
+     * `onClick` shows a chevron.
+     */
+    foldLabel?: string;
+    /**
+     * Makes the header toggle the card: a click on it, or on its fold button,
+     * calls this, and a folded card fills on hover.
      */
     onClick?: () => void;
   };
 
-type LineCardProps = LineExpandableProps & {
-  /** A card: any header, trailing controls and a body below. */
-  flavour: "card";
-  /** The header: any content, such as a title that animates. */
-  children: React.ReactNode;
-  /** Trailing content at the end of the header, such as the fold button. */
-  rightChildren?: React.ReactNode;
-  /** Fills the card with `background-tint-00`, e.g. while it is open. */
-  filled: boolean;
-  /**
-   * The fold button's label, e.g. "3 steps": the header's own button, which
-   * lights up while the header is hovered. Needs `onClick`.
-   */
-  foldLabel?: string;
-  /**
-   * Makes the header toggle the card: a click on it, or on its fold button,
-   * calls this, and a folded card fills on hover.
-   */
-  onClick?: () => void;
-};
-
-type LineProps = LineStepProps | LineCardProps;
-
-/**
- * One line of a list or a timeline: an icon, a title and trailing content,
- * 1.75rem tall plus its padding. The variant colours the icon; a heavy
- * variant also tints the line, and its body when expanded. A title too long
- * for the row shows in full in a tooltip.
- *
- * With `onClick`, the row toggles the line and hovers subtly; the body keeps
- * its own clicks and selection. With `expandable`, a body opens below the
- * row while `expanded`.
- */
-function LineStep({
-  variant = "default",
-  padding = 1,
-  icon,
+/** A card's own title: the icon and the title inline, as `Content` lays
+ *  them out, so a running (shimmering) and a finished title line up. */
+function LineCardTitle({
+  icon: Icon,
   title,
   titleKey,
-  rightChildren,
-  onClick,
-  expandable,
-  expanded,
-  expandedContent,
-}: LineStepProps) {
-  const content = (
-    <Section
-      flexDirection="row"
-      justifyContent="start"
-      height="fit"
-      className="min-w-0 flex-1"
-    >
-      <span className="opal-line-title">
-        {/* A new title key (e.g. "Searching" to "Searched") swaps; it never
-            flashes. */}
-        <Presence.Swap
-          swapKey={titleKey ?? (typeof title === "string" ? title : title.raw)}
-        >
-          <Text
-            maxLines={1}
-            overflowTooltip
-            font="secondary-action"
-            color="inherit"
-          >
-            {title}
-          </Text>
-        </Presence.Swap>
-      </span>
-    </Section>
-  );
-
-  if (!expandable && !onClick) {
-    return (
-      <LineRoot variant={variant} padding={padding}>
-        <LineRow padding={padding} icon={icon} rightChildren={rightChildren}>
-          {content}
-        </LineRow>
-      </LineRoot>
-    );
-  }
-
+  shimmer,
+}: {
+  icon?: IconFunctionComponent;
+  title: string | RichStr;
+  titleKey?: React.Key;
+  shimmer: boolean;
+}) {
+  const text = typeof title === "string" ? title : title.raw;
   return (
-    <LineRoot variant={variant} padding={padding}>
-      <Collapsible.Root
-        open={!!expandable && expanded}
-        onOpenChange={() => onClick?.()}
-      >
-        {onClick ? (
-          // The row toggles the line and hovers subtly: its title and icon
-          // darken, with no fill. The chevron is the keyboard control.
-          <Collapsible.Header
-            name={title}
-            rightChildren={rightChildren}
-            size="md"
-            foldButton="chevron"
-            hover="subtle"
-          >
-            <LineRow padding={padding} icon={icon}>
-              {content}
-            </LineRow>
-          </Collapsible.Header>
-        ) : (
-          <LineRow padding={padding} icon={icon} rightChildren={rightChildren}>
-            {content}
-          </LineRow>
-        )}
-        {expandable && (
-          <Collapsible.Content>
-            <div className="opal-line-body" data-opal-line-body-inset="content">
-              {expandedContent}
-            </div>
-          </Collapsible.Content>
-        )}
-      </Collapsible.Root>
-    </LineRoot>
+    // The title font on the row: the text's line boxes (a shimmer's span is
+    // inline) then match the icon box, one title line tall. Block wrappers:
+    // the icon, the swap and the loader render divs.
+    <div className="opal-line-title opal-line-card-title font-main-ui-action">
+      {Icon && <ContentIcon icon={Icon} font="main-ui-action" />}
+      <Presence.Swap swapKey={titleKey ?? text} axis="inline">
+        {/* One line: a long title truncates, shimmering or settled. */}
+        <div className="opal-line-card-title-text">
+          {shimmer ? (
+            <TextLoader font="main-ui-action">{title}</TextLoader>
+          ) : (
+            <Text
+              as="p"
+              font="main-ui-action"
+              color="inherit"
+              maxLines={1}
+              overflowTooltip
+            >
+              {title}
+            </Text>
+          )}
+        </div>
+      </Presence.Swap>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Card
-// ---------------------------------------------------------------------------
-
-function LineCard({
+/**
+ * A run card: a header (its own title, or any content) with trailing
+ * controls, and a body below it that opens and closes. 0.25rem of padding,
+ * 0.75rem corners, and a neutral fill while `filled`. A card inside a card's
+ * body has no padding of its own, so its title lines up with the outer one.
+ */
+function Line({
   children,
+  icon,
+  title,
+  titleKey,
+  shimmer = false,
   rightChildren,
   filled,
   foldLabel,
@@ -164,12 +122,13 @@ function LineCard({
   expandable,
   expanded,
   expandedContent,
-}: LineCardProps) {
+  bodyInset = "flush",
+}: LineProps) {
   return (
     <LineRoot
       variant="default"
       padding={0}
-      flavour="card"
+      card
       filled={filled}
       clickable={!!onClick && !filled}
     >
@@ -185,35 +144,41 @@ function LineCard({
             button carries the label (e.g. "N steps") and lights up while the
             header is hovered. */}
         <Collapsible.Header
+          // The fold button is named after the card, e.g. "Expand Searched
+          // the web".
+          name={title}
           rightChildren={rightChildren}
           size="md"
-          foldButton={onClick && foldLabel !== undefined ? "icon" : "none"}
+          foldButton={
+            !onClick ? "none" : foldLabel !== undefined ? "icon" : "chevron"
+          }
           foldLabel={foldLabel}
         >
-          {children}
+          {title !== undefined ? (
+            <LineCardTitle
+              icon={icon}
+              title={title}
+              titleKey={titleKey}
+              shimmer={shimmer}
+            />
+          ) : (
+            children
+          )}
         </Collapsible.Header>
         {expandable && (
           <Collapsible.Content>
-            <div className="opal-line-body" data-opal-line-body-inset="flush">
+            <div
+              className="opal-line-body"
+              data-opal-line-body-inset={bodyInset}
+              // `title` passes the icon only when the header shows one.
+              data-opal-line-has-icon={icon !== undefined || undefined}
+            >
               {expandedContent}
             </div>
           </Collapsible.Content>
         )}
       </Collapsible.Root>
     </LineRoot>
-  );
-}
-
-/**
- * A line in one of two flavours. `step` (the default): one line of a list or
- * a timeline, an icon, a title and trailing content. `card`: a run card, any
- * header with trailing controls, the steps in its body, and a neutral fill.
- */
-function Line(props: LineProps) {
-  return props.flavour === "card" ? (
-    <LineCard {...props} />
-  ) : (
-    <LineStep {...props} />
   );
 }
 

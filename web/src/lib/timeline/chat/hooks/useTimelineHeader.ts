@@ -16,7 +16,7 @@ import {
 import {
   firstActivityPacket,
   type TimelineTranslate,
-} from "@/app/app/message/messageComponents/toolDisplayHelpers";
+} from "@/lib/timeline/chat/message/messageComponents/toolDisplayHelpers";
 
 /** Header text for the activity of one step, or null for no tool activity. */
 function stepHeaderText(
@@ -46,7 +46,7 @@ function stepHeaderText(
       );
     }
     case PacketType.FETCH_TOOL_START:
-      return t("header.reading.label");
+      return t("header.browsing.label");
     case PacketType.PYTHON_TOOL_START:
       return t("header.executingCode.label");
     case PacketType.IMAGE_GENERATION_TOOL_START:
@@ -105,11 +105,6 @@ export function useTimelineHeader(
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
-    const thinkingHeader = t("header.thinkingEllipsis.label");
-
-    // Get the last (current) turn group
-    const currentTurn = turnGroups.at(-1);
-
     if (awaitingUser) {
       return {
         headerText: t(
@@ -122,21 +117,16 @@ export function useTimelineHeader(
       };
     }
 
+    const working = t("header.working.label");
     if (codeModeWorking) {
-      return { headerText: t("header.working.label"), hasPackets, userStopped };
+      return { headerText: working, hasPackets, userStopped };
     }
 
-    if (!currentTurn) {
-      return { headerText: thinkingHeader, hasPackets, userStopped };
-    }
-
-    const currentStep = currentTurn.steps[0];
-    if (!currentStep?.packets?.length) {
-      return { headerText: thinkingHeader, hasPackets, userStopped };
-    }
-
+    // The current step's activity. A step with no activity of its own yet is
+    // working.
+    const packets = turnGroups.at(-1)?.steps[0]?.packets;
     const headerText =
-      stepHeaderText(currentStep.packets, t, locale) ?? thinkingHeader;
+      (packets && stepHeaderText(packets, t, locale)) ?? working;
     return { headerText, hasPackets, userStopped };
   }, [turnGroups, stopReason, codeModeWorking, awaitingUser, t, locale]);
 }

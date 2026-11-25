@@ -43,4 +43,5 @@ export {
   type UseImageDropzoneReturn,
 } from "@opal/hooks/useImageDropzone";
 export { default as usePresence } from "@opal/hooks/usePresence";
+export { default as usePublishedHeight } from "@opal/hooks/usePublishedHeight";
 export { default as useWindowFileDrag } from "@opal/hooks/useWindowFileDrag";
