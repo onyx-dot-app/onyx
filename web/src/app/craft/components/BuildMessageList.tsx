@@ -117,8 +117,6 @@ export default function BuildMessageList({
   const showStreamingArea =
     hasStreamItems ||
     (isStreaming && (!isFinalizing || lastMessage?.type !== "assistant"));
-  // The turn's cursor waits at the end, before the first entry and under a
-  // run, also while its steps run. Streaming text carries it instead.
   const showStreamCursor =
     isStreaming &&
     !timelineState.entries.some(
