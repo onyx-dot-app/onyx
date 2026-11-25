@@ -434,11 +434,13 @@ class LibraryListFilters(BaseModel):
     )
     modified_after: _UtcDatetime | None = Field(
         default=None,
-        description=f"Files last published at or after this time. {_TIME_FILTER}",
+        description="Files whose latest change (publish or rename) is at or after "
+        f"this time. {_TIME_FILTER}",
     )
     modified_before: _UtcDatetime | None = Field(
         default=None,
-        description=f"Files last published before this time. {_TIME_FILTER}",
+        description="Files whose latest change (publish or rename) is before this "
+        f"time. {_TIME_FILTER}",
     )
     include_file_types: _FileTypes | None = Field(
         default=None,
@@ -473,8 +475,8 @@ class LibraryListArguments(BaseModel):
     )
     sort: ArtifactSort = Field(
         default="modified_at",
-        description="created_at: first publish; modified_at: latest publish; "
-        "name: file name; size: file size.",
+        description="created_at: first publish; modified_at: latest change (publish "
+        "or rename); name: file name; size: file size.",
     )
     sort_order: SortOrder = "desc"
     filters: LibraryListFilters | None = None
@@ -598,13 +600,14 @@ class ListedArtifact(BaseModel):
     # (db/chat.py:get_user_published_file); a list page has none, because
     # it shows the newest.
     latest_version_number: Annotated[int | None, OMITTED_WHEN_NONE] = None
-    # The file record's display name; a page cuts it (shown_artifact).
+    # The artifact's name: a rename's, else the file record's; a page cuts
+    # it (shown_artifact).
     file_name: str
     title: str | None
     artifact_type: ArtifactType
     mime_type: str
     file_size_bytes: int
-    # The artifact's first and latest publish.
+    # The artifact's first publish and latest change (publish or rename).
     created_at: datetime
     modified_at: datetime
     chat_id: UUID
@@ -781,10 +784,25 @@ class DeleteOperation(BaseModel):
     target: LibraryFileTarget
 
 
+class RenameOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: Literal["rename"]
+    target: LibraryFileTarget
+    new_name: _EchoedText = Field(
+        description="The new file name, not a path, with the current extension."
+    )
+
+
+ManageOperation = Annotated[
+    DeleteOperation | RenameOperation, Field(discriminator="operation")
+]
+
+
 class ManageLibraryArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operations: list[DeleteOperation] = Field(
+    operations: list[ManageOperation] = Field(
         min_length=1,
         max_length=MANAGE_LIBRARY_MAX_OPERATIONS,
         description="The operations, run in order.",
@@ -795,7 +813,7 @@ class ManageResult(BaseModel):
     """The outcome of one library_manage_library operation, in the operations'
     order: the artifact as the operation left it, or the error."""
 
-    operation: Literal["delete"]
+    operation: Literal["delete", "rename"]
     ok: bool
     error: Annotated[str | None, OMITTED_WHEN_NONE] = None
     library_file_id: Annotated[UUID | None, OMITTED_WHEN_NONE] = None
@@ -815,12 +833,13 @@ class ManageResults(BaseModel):
 
 
 # The arguments that each action of the artifact tool takes.
-ArtifactAction = Literal["publish", "list", "read", "delete"]
+ArtifactAction = Literal["publish", "list", "read", "delete", "rename"]
 ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
     "publish": frozenset({*ARTIFACT_PUBLISH_PATHS, "title", "url", "force"}),
     "list": frozenset({"scope", "type", "query", "limit", "after"}),
     "read": frozenset({"url", "path", "paths", "out_dir"}),
     "delete": frozenset({"url"}),
+    "rename": frozenset({"url", "name"}),
 }
 
 
@@ -835,7 +854,8 @@ class ArtifactArguments(BaseModel):
         default="publish",
         description="publish (the default) gives files from the VM to the user; "
         "list finds published files; read copies published files into the VM; "
-        "delete deletes a published file, after the user approves.",
+        "delete deletes a published file, after the user approves; rename "
+        "renames a published file.",
     )
     file_path: _EchoedText | None = Field(
         default=None,
@@ -856,7 +876,12 @@ class ArtifactArguments(BaseModel):
         "one that ends in /v<N> names that version. publish with file_path: "
         "the file to add a version to, by the url of the version you last saw. "
         "delete: the file to delete, with all its versions, by the url of its "
-        "newest version.",
+        "newest version. rename: the file to rename.",
+    )
+    name: _EchoedText | None = Field(
+        default=None,
+        description="rename: the new file name, not a path, with the current "
+        "extension.",
     )
     force: bool | None = Field(
         default=None,
@@ -912,6 +937,12 @@ class ArtifactArguments(BaseModel):
                     "takes": ", ".join(sorted(takes)),
                 },
             )
+        if self.action in ("delete", "rename") and self.url is None:
+            raise PydanticCustomError(
+                "action_arguments", "{action} takes url", {"action": self.action}
+            )
+        if self.action == "rename" and self.name is None:
+            raise PydanticCustomError("action_arguments", "rename takes url and name")
         return self
 
 

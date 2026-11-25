@@ -5734,7 +5734,7 @@ class ChatArtifact(Base):
     __table_args__ = (
         # Also the index of the chat's artifacts
         UniqueConstraint("chat_session_id", "path"),
-        # The user's artifacts by latest publish (library_list).
+        # The user's artifacts by latest change (library_list).
         Index(
             "ix_chat_artifact_user_id_updated_at",
             "user_id",
@@ -5757,11 +5757,15 @@ class ChatArtifact(Base):
     )
     # The absolute, normalized VM path
     path: Mapped[str] = mapped_column(Text, nullable=False)
+    # The name that a rename gave it; NULL: the newest available version's
+    # file name (db/chat.py:_newest_available_version reads the effective
+    # name).
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     # The first publish
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    # The latest publish
+    # The latest change (publish or rename)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

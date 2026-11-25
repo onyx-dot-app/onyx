@@ -11,6 +11,7 @@ import threading
 import time
 from collections.abc import Callable, Generator, Sequence
 from typing import IO
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -84,7 +85,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
-from onyx.tools.models import ToolContext, ToolOptions
+from onyx.tools.models import ToolCallException, ToolContext, ToolOptions
 from onyx.tools.tool_implementations.sandbox import artifact_operations, file_copies
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import (
@@ -96,12 +97,16 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactById,
     ArtifactList,
     ArtifactNotFound,
+    ArtifactPublished,
+    DeleteOperation,
     LibraryFileTarget,
     LibraryListFilters,
+    ManageLibraryArguments,
     ManageResults,
     MaterializedItems,
     PublishedFile,
     PublishFileArgument,
+    RenameOperation,
     VmChatFile,
     artifact_url,
 )
@@ -1565,6 +1570,9 @@ class _Family:
         version `version` when there is one."""
         raise NotImplementedError
 
+    def rename(self, call_id: str, artifact_id: UUID, name: str) -> Delta:
+        raise NotImplementedError
+
 
 class _Library(_Family):
     def llm(self, steps: list[Delta]) -> ChatLLM:
@@ -1629,6 +1637,21 @@ class _Library(_Family):
             LibraryManageLibraryTool.NAME,
             call_id,
             {"operations": [{"operation": "delete", "target": target}]},
+        )
+
+    def rename(self, call_id: str, artifact_id: UUID, name: str) -> Delta:
+        return tool_step(
+            LibraryManageLibraryTool.NAME,
+            call_id,
+            {
+                "operations": [
+                    {
+                        "operation": "rename",
+                        "target": {"library_file_id": str(artifact_id)},
+                        "new_name": name,
+                    }
+                ]
+            },
         )
 
 
@@ -1699,6 +1722,13 @@ class _Artifact(_Family):
                 if version is None
                 else artifact_url(artifact_id, version),
             },
+        )
+
+    def rename(self, call_id: str, artifact_id: UUID, name: str) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {"action": "rename", "url": artifact_url(artifact_id, 1), "name": name},
         )
 
 
@@ -2571,8 +2601,17 @@ def test_the_delete_card_tells_apart_same_name_files_by_their_folders(
         if artifact_id is not None
     ]
 
-    both = artifact_operations.delete_approval_details(user.id, targets)
-    one = artifact_operations.delete_approval_details(user.id, targets[:1])
+    both = artifact_operations.delete_approval_details(
+        user.id,
+        [DeleteOperation(operation="delete", target=target) for target in targets],
+    )
+    one = artifact_operations.delete_approval_details(
+        user.id,
+        [
+            DeleteOperation(operation="delete", target=targets[0]),
+            RenameOperation(operation="rename", target=targets[1], new_name="a.md"),
+        ],
+    )
 
     assert both is not None and one is not None
     assert both.payload == {
@@ -2582,6 +2621,45 @@ def test_the_delete_card_tells_apart_same_name_files_by_their_folders(
         ]
     }
     assert one.display_name == "Delete q3/report.md"
+    assert one.payload == {
+        "Delete": ["q3/report.md (1 version) from chat \u201cReports\u201d"],
+        "Also in this call": [
+            "rename q4/report.md from chat \u201cReports\u201d to a.md"
+        ],
+    }
+
+
+def test_the_delete_card_names_the_chat_of_each_other_operations_file(
+    db_session: Session, user: User
+) -> None:
+    deleted = _artifact_id(
+        _publish(_chat(db_session, user, "Reports"), "notes.md", b"a")
+    )
+    renamed = _artifact_id(
+        _publish(_chat(db_session, user, "Drafts"), "notes.md", b"b")
+    )
+
+    card = artifact_operations.delete_approval_details(
+        user.id,
+        [
+            DeleteOperation(
+                operation="delete", target=LibraryFileTarget(library_file_id=deleted)
+            ),
+            RenameOperation(
+                operation="rename",
+                target=LibraryFileTarget(library_file_id=renamed),
+                new_name="final.md",
+            ),
+        ],
+    )
+
+    assert card is not None
+    assert card.payload == {
+        "Delete": ["notes.md (1 version) from chat \u201cReports\u201d"],
+        "Also in this call": [
+            "rename notes.md from chat \u201cDrafts\u201d to final.md"
+        ],
+    }
 
 
 def test_a_delete_of_a_file_that_is_not_found_yet_still_asks(
@@ -2596,8 +2674,13 @@ def test_a_delete_of_a_file_that_is_not_found_yet_still_asks(
     card = artifact_operations.delete_approval_details(
         user.id,
         [
-            LibraryFileTarget(library_file_id=artifact_id, version_number=2),
-            LibraryFileTarget(library_file_id=missing),
+            DeleteOperation(
+                operation="delete",
+                target=LibraryFileTarget(library_file_id=artifact_id, version_number=2),
+            ),
+            DeleteOperation(
+                operation="delete", target=LibraryFileTarget(library_file_id=missing)
+            ),
         ],
     )
 
@@ -2617,33 +2700,50 @@ def test_the_delete_card_cuts_a_long_path_and_chat_title_as_the_list_does(
     title = "T" * (ARTIFACTS_CHAT_TITLE_MAX_CHARS + 50)
     source = _chat(db_session, user, title)
     folder = "/".join(f"folder{index:02d}" for index in range(40))
-    artifact_id = save_chat_artifact(
-        b"report",
-        name="report.md",
-        mime_type="text/plain",
-        target=ArtifactAtPath(
-            chat_session_id=source,
-            path=f"{session_workspace(source)}/{folder}/report.md",
-        ),
-        title=None,
-        thumbnail=None,
-    ).artifact_id
-    assert artifact_id is not None
-    path = f"{folder}/report.md"
-    assert len(path) > ARTIFACTS_PATH_MAX_CHARS
-    shown = "\u2026" + path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :]
+    artifact_ids = [
+        save_chat_artifact(
+            b"report",
+            name=name,
+            mime_type="text/plain",
+            target=ArtifactAtPath(
+                chat_session_id=source,
+                path=f"{session_workspace(source)}/{folder}/{name}",
+            ),
+            title=None,
+            thumbnail=None,
+        ).artifact_id
+        for name in ("report.md", "notes.md")
+    ]
+    deleted, renamed = [
+        LibraryFileTarget(library_file_id=artifact_id)
+        for artifact_id in artifact_ids
+        if artifact_id is not None
+    ]
+    shown = [
+        "\u2026" + path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :]
+        for path in (f"{folder}/report.md", f"{folder}/notes.md")
+    ]
+    assert len(folder) > ARTIFACTS_PATH_MAX_CHARS
 
     card = artifact_operations.delete_approval_details(
-        user.id, [LibraryFileTarget(library_file_id=artifact_id)]
+        user.id,
+        [
+            DeleteOperation(operation="delete", target=deleted),
+            RenameOperation(operation="rename", target=renamed, new_name="b.md"),
+        ],
     )
 
     assert card is not None
-    assert card.display_name == f"Delete {shown}"
+    assert card.display_name == f"Delete {shown[0]}"
     assert card.payload == {
         "Delete": [
-            f"{shown} (1 version) from chat "
+            f"{shown[0]} (1 version) from chat "
             f"\u201c{title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]}\u201d"
-        ]
+        ],
+        "Also in this call": [
+            f"rename {shown[1]} from chat "
+            f"\u201c{title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]}\u201d to b.md"
+        ],
     }
 
 
@@ -2790,3 +2890,298 @@ def test_a_delete_by_an_older_version_asks_and_is_refused(
     )
     db_session.expire_all()
     assert db_session.get(ChatArtifact, artifact_id) is not None
+
+
+def test_a_rename_by_an_older_version_gives_the_newest_version(
+    db_session: Session, user: User
+) -> None:
+    chat = _chat(db_session, user, "Notes")
+    older = _publish(chat, "notes.md", b"v1")
+    newest = _publish(chat, "notes.md", b"v2")
+    artifact_id = _artifact_id(older)
+
+    [result] = artifact_operations.manage(
+        user.id,
+        CancellationSignal(),
+        ManageLibraryArguments.model_validate(
+            {
+                "operations": [
+                    {
+                        "operation": "rename",
+                        "target": {"file_id": older},
+                        "new_name": "summary.md",
+                    }
+                ]
+            }
+        ),
+    ).results
+
+    assert (
+        result.ok,
+        result.file_id,
+        result.version_number,
+        result.file_name,
+        result.url,
+    ) == (True, newest, 2, "summary.md", artifact_url(artifact_id, 2))
+
+
+def test_a_rename_into_a_chat_deleted_during_it_writes_no_name(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, user: User
+) -> None:
+    """The artifact's chat is checked when the rename writes: a chat deleted
+    after the lookup gets the not-found error, and the name stays."""
+    chat = _chat(db_session, user, "Notes")
+    artifact_id = _artifact_id(_publish(chat, "notes.md", b"v1"))
+    real_rename = artifact_operations.rename_chat_artifact
+
+    def delete_the_chat_then_rename(
+        session: Session, renamed_id: UUID, name: str
+    ) -> None:
+        with get_session_with_current_tenant() as other:
+            other.execute(
+                update(ChatSession).where(ChatSession.id == chat).values(deleted=True)
+            )
+            other.commit()
+        real_rename(session, renamed_id, name)
+
+    monkeypatch.setattr(
+        artifact_operations, "rename_chat_artifact", delete_the_chat_then_rename
+    )
+    with pytest.raises(ToolCallException) as refused:
+        artifact_operations.manage(
+            user.id,
+            CancellationSignal(),
+            ManageLibraryArguments.model_validate(
+                {
+                    "operations": [
+                        {
+                            "operation": "rename",
+                            "target": {"library_file_id": str(artifact_id)},
+                            "new_name": "summary.md",
+                        }
+                    ]
+                }
+            ),
+        )
+
+    assert f"No published file {artifact_id} in your chats" in (
+        refused.value.llm_facing_message
+    )
+    db_session.expire_all()
+    renamed = db_session.get(ChatArtifact, artifact_id)
+    assert renamed is not None and renamed.name is None
+
+
+def test_a_rename_keeps_the_extension_by_the_lists_last_dot_rule(
+    db_session: Session, user: User
+) -> None:
+    """The list reads a file's type from the text after the last dot, so a
+    rename that adds an extension to a file without one is refused."""
+    artifact_id = _artifact_id(_publish(_chat(db_session, user), "README", b"r"))
+
+    with pytest.raises(ToolCallException) as refused:
+        artifact_operations.manage(
+            user.id,
+            CancellationSignal(),
+            ManageLibraryArguments.model_validate(
+                {
+                    "operations": [
+                        {
+                            "operation": "rename",
+                            "target": {"library_file_id": str(artifact_id)},
+                            "new_name": ".csv",
+                        }
+                    ]
+                }
+            ),
+        )
+
+    assert "README, so its name must have no extension" in (
+        refused.value.llm_facing_message
+    )
+    db_session.expire_all()
+    assert db_session.get_one(ChatArtifact, artifact_id).name is None
+
+
+def test_a_rename_needs_a_name_before_the_extension(
+    db_session: Session, user: User
+) -> None:
+    """A name that is only an extension has no stem, so the rename is
+    refused and the file keeps its name and type."""
+    artifact_id = _artifact_id(_publish(_chat(db_session, user), "chart.png", b"p"))
+
+    with pytest.raises(ToolCallException) as refused:
+        artifact_operations.manage(
+            user.id,
+            CancellationSignal(),
+            ManageLibraryArguments.model_validate(
+                {
+                    "operations": [
+                        {
+                            "operation": "rename",
+                            "target": {"library_file_id": str(artifact_id)},
+                            "new_name": ".png",
+                        }
+                    ]
+                }
+            ),
+        )
+
+    assert "'.png' has no name before its extension" in (
+        refused.value.llm_facing_message
+    )
+    db_session.expire_all()
+    assert db_session.get_one(ChatArtifact, artifact_id).name is None
+
+
+def test_the_delete_card_lists_the_other_operations_of_the_call(
+    db_session: Session, user: User
+) -> None:
+    """One approval covers the whole call, so the card shows what else it
+    does."""
+    chat = _chat(db_session, user, "Reports")
+    doomed = _artifact_id(_publish(chat, "old.md", b"old"))
+    kept = _artifact_id(_publish(chat, "draft.md", b"draft"))
+    turn = MagicMock(spec=SandboxTurn)
+    turn.user_id = user.id
+
+    details = LibraryManageLibraryTool(turn).approval_details(
+        {
+            "operations": [
+                {"operation": "delete", "target": {"library_file_id": str(doomed)}},
+                {
+                    "operation": "rename",
+                    "target": {"library_file_id": str(kept)},
+                    "new_name": "final.md",
+                },
+            ]
+        }
+    )
+
+    assert details is not None
+    assert details.payload == {
+        "Delete": ["old.md (1 version) from chat \u201cReports\u201d"],
+        "Also in this call": [
+            "rename draft.md from chat \u201cReports\u201d to final.md"
+        ],
+    }
+
+
+def test_a_rename_names_the_file_everywhere_and_later_publishes_keep_it(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    user: User,
+    family: _Family,
+) -> None:
+    """A rename shows in the list, the name sort, the panel, a copy's name
+    and the card of a later publish of the same path, which keeps it. A
+    name with another extension, or one that the VM would change, is
+    refused."""
+    _publish(_chat(db_session, user, "Other"), "b.md", b"b")
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Notes")
+    ref = chat.ref(db_session)
+    sandbox.write_file(ref, "notes.md", b"v1")
+    llm = family.llm([family.publish("publish", ["notes.md"]), Delta(content="Done.")])
+    chat.send(llm)
+    [published] = ArtifactPublished.model_validate_json(
+        last_tool_text(llm, "publish")
+    ).files
+    artifact_id = published.library_file_id
+    published_at = db_session.get_one(ChatArtifact, artifact_id).updated_at
+    sandbox.write_file(ref, "notes.md", b"v2")
+    llm = family.llm(
+        [
+            family.rename("extension", artifact_id, "summary.txt"),
+            family.rename("unsafe", artifact_id, "sum:mary.md"),
+            family.rename("rename", artifact_id, "a-summary.md"),
+            family.list("list", None, 10, None),
+            family.read("read", artifact_id, None, "work"),
+            family.publish("again", ["notes.md"]),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    assert "its name must end in '.md'" in last_tool_text(llm, "extension")
+    assert "try 'sum_mary.md'" in last_tool_text(llm, "unsafe")
+    assert '"file_name":"a-summary.md"' in last_tool_text(llm, "rename")
+    listed = ArtifactList.model_validate_json(last_tool_text(llm, "list")).files
+    assert [entry.file_name for entry in listed] == ["a-summary.md", "b.md"]
+    # A rename bumps the artifact's modified_at, as a publish does.
+    assert listed[0].modified_at > published_at
+    [copied] = MaterializedItems.model_validate_json(last_tool_text(llm, "read")).items
+    assert copied.path == "work/a-summary.md"
+    assert _vm_file(node, ref, "work/a-summary.md") == b"v1"
+    [again] = [
+        obj
+        for obj in _publish_packets(parts)
+        if isinstance(obj, packets.PublishFilesEnd)
+    ]
+    assert [(file.name, file.version) for file in again.files] == [("a-summary.md", 2)]
+    db_session.expire_all()
+    [panel] = get_chat_published_files(chat.chat_session_id, db_session)
+    assert (panel.name, panel.version) == ("a-summary.md", 2)
+    page = get_user_published_files(
+        db_session,
+        user.id,
+        query=None,
+        chat_session_id=None,
+        filters=LibraryListFilters(),
+        sort="name",
+        sort_order="asc",
+        limit=10,
+        cursor=None,
+    )
+    assert page is not None
+    assert [entry.file_name for entry, _ in page] == ["a-summary.md", "b.md"]
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_delete_batched_with_a_rename_runs_both_only_after_approval(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, user: User
+) -> None:
+    """One request covers the whole call: its card lists the delete, and
+    nothing runs before the approval."""
+    source = _chat(db_session, user, "Reports")
+    doomed = _artifact_id(_publish(source, "old.md", b"old"))
+    kept = _artifact_id(_publish(source, "notes.md", b"notes"))
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    llm = ChatLLM(
+        [
+            tool_step(
+                LibraryManageLibraryTool.NAME,
+                "manage",
+                {
+                    "operations": [
+                        {
+                            "operation": "rename",
+                            "target": {"library_file_id": str(kept)},
+                            "new_name": "summary.md",
+                        },
+                        {
+                            "operation": "delete",
+                            "target": {"library_file_id": str(doomed)},
+                        },
+                    ]
+                },
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    assert _stops(chat.send(llm)) == [packets.AWAITING_USER]
+
+    [request] = _requests(db_session, chat.chat_session_id)
+    assert request.display_name == "Delete old.md"
+    db_session.expire_all()
+    assert db_session.get_one(ChatArtifact, kept).name is None
+    assert db_session.get(ChatArtifact, doomed) is not None
+
+    _decide(db_session, chat, ApprovalChoice.APPROVE_ONCE)
+    db_session.expire_all()
+    assert db_session.get_one(ChatArtifact, kept).name == "summary.md"
+    assert db_session.get(ChatArtifact, doomed) is None

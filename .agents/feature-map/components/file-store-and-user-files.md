@@ -137,7 +137,13 @@ level: `delete_chat_artifact_files` cleans up one version (its thumbnail,
 then its file, whose delete removes the version row), and whatever belongs
 to the whole artifact runs after the commit that removes the artifact row,
 in every path that removes one. Other chats' cards of a deleted artifact
-keep their saved name, and their download is not found. The sandbox tools `library_list` and `library_prepare_materialize`
+keep their saved name, and their download is not found. An artifact's name
+is `ChatArtifact.name` once a rename (`library_manage_library`) sets it, else the
+`FileRecord.display_name` of the version that the read selects, by default the
+newest available one; every read of the name
+uses that one expression (`db/chat.py:_newest_available_version`), and a
+later publish of the path keeps it. The download's Content-Disposition keeps
+the record's name. The sandbox tools `library_list` and `library_prepare_materialize`
 ([[code-execution]]) read these rows for the owner's chats that are not
 deleted; the default list order reads the index on `(user_id, updated_at
 DESC)`, and the other sorts read all of the owner's artifacts. The save writes the file record, upserts the artifact (its row
