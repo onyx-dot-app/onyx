@@ -290,7 +290,8 @@ function ChatPanelContent({
   }, [reduceMotion]);
   // The setting decides whether a running turn is followed. With nothing
   // running, a view at the end keeps to it while layout settles.
-  const autoScroll = user?.preferences?.auto_scroll !== false || !isRunning;
+  const followNewReplies = user?.preferences?.auto_scroll !== false;
+  const autoScroll = followNewReplies || !isRunning;
   // The latest user message anchors a new turn.
   // The transcript on screen. A switch to or from a subagent fades the old
   // one out first; the scroll container takes the new one's key after that,
@@ -323,6 +324,10 @@ function ChatPanelContent({
         if (isRunning) {
           toast.error(t("toast.operationWait"));
           return false;
+        }
+
+        if (followNewReplies) {
+          scrollContainerRef.current?.scrollToBottom("instant");
         }
 
         // Add user message to state
@@ -413,6 +418,7 @@ function ChatPanelContent({
       return true;
     },
     [
+      followNewReplies,
       hasSession,
       sessionId,
       isRunning,
@@ -516,6 +522,7 @@ function ChatPanelContent({
             {/* Main content area — cross-fades when switching between the main
             agent and a subagent (keyed by the viewed agent). */}
             <ChatScrollContainer
+              isStreaming={isRunning}
               ref={scrollContainerRef}
               sessionId={scrollViewKey}
               anchorSelector={

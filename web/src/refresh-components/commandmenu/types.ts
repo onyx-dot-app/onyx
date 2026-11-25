@@ -27,6 +27,8 @@ export interface CommandMenuProps {
  */
 export interface CommandMenuContentProps {
   children: React.ReactNode;
+  /** Runs when the closed menu would return focus; `preventDefault` keeps focus where it is. */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 /**

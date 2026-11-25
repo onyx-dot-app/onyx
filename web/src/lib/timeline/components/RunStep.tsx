@@ -5,6 +5,7 @@ import { Line, Presence } from "@opal/components";
 import { LineLoader } from "@opal/loaders";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
+import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
 
 export interface RunStepProps {
@@ -59,9 +60,17 @@ export function RunStep({
   loading = false,
 }: RunStepProps) {
   const [open, setOpen] = useState(defaultExpanded);
+  const { rowRef, onToggle } = useRevealOnOpen();
   if (hideHeader) return <>{body}</>;
+  const toggle = () => {
+    onToggle(!open);
+    setOpen(!open);
+  };
 
-  const shownTitle = status === "done" ? (doneTitle ?? title) : title;
+  // A failed step has finished too: it shows how it ended, e.g. "failed
+  // (HTTP 401)".
+  const shownTitle =
+    status === "done" || status === "error" ? (doneTitle ?? title) : title;
   // A running step can always be opened (it still starts closed): before its
   // first content arrives, its body is a loading shimmer. A finished step
   // with nothing to show is a static row, so a click cannot open it.
@@ -84,19 +93,23 @@ export function RunStep({
     : { expandable: false as const };
 
   return (
-    <Line
-      icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
-      title={shownTitle ?? ""}
-      titleKey={titleKey}
-      shimmer={status === "streaming"}
-      rightChildren={headerAccessory}
-      // Filled while open; otherwise only on hover.
-      filled={hasBody && open}
-      onClick={hasBody ? () => setOpen((prev) => !prev) : undefined}
-      // The body starts under the title text.
-      bodyInset="title"
-      {...cardBody}
-    />
+    <div ref={rowRef}>
+      <Line
+        icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
+        title={shownTitle ?? ""}
+        titleKey={titleKey}
+        shimmer={status === "streaming"}
+        // A failed step is tinted red, as its icon already is.
+        variant={status === "error" ? "error-heavy" : "default"}
+        rightChildren={headerAccessory}
+        // Filled while open; otherwise only on hover.
+        filled={hasBody && open}
+        onClick={hasBody ? toggle : undefined}
+        // The body starts under the title text.
+        bodyInset="title"
+        {...cardBody}
+      />
+    </div>
   );
 }
 

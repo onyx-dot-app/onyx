@@ -270,6 +270,8 @@ test.each([0, 1])(
   "live text remains animated after a restored prefix of %s packets",
   (restoredCount) => {
     jest.useFakeTimers();
+    const matchMedia = window.matchMedia;
+    window.matchMedia = (query) => ({ ...matchMedia(query), matches: false });
     seedSessionAwaitingAnswer();
     const packets: Packet[] = [
       {
@@ -333,10 +335,62 @@ test.each([0, 1])(
       }
     } finally {
       view.unmount();
+      window.matchMedia = matchMedia;
       jest.useRealTimers();
     }
   }
 );
+
+test("live text shows at once when the user prefers reduced motion", () => {
+  jest.useFakeTimers();
+  seedSessionAwaitingAnswer();
+  const packets: Packet[] = [
+    {
+      placement,
+      obj: {
+        type: "message_start",
+        id: "answer",
+        content: "",
+        final_documents: null,
+      },
+    },
+  ];
+  const props = {
+    chatState,
+    nodeId: NEW_ANSWER_NODE_ID,
+    llmManager: null,
+    hideFooter: true,
+    disableTTS: true,
+  };
+  const view = render(
+    <AgentMessage
+      {...props}
+      rawPackets={packets}
+      packetCount={packets.length}
+    />
+  );
+  try {
+    packets.push({
+      placement,
+      obj: {
+        type: "message_delta",
+        content: "Every word shows without the typewriter.",
+      },
+    });
+    view.rerender(
+      <AgentMessage
+        {...props}
+        rawPackets={packets}
+        packetCount={packets.length}
+      />
+    );
+    expect(view.container.textContent).toContain(
+      "Every word shows without the typewriter."
+    );
+  } finally {
+    view.unmount();
+  }
+});
 
 test("a failed streaming answer stops its existing autoplay session", async () => {
   mockStreamTTS.mockClear();

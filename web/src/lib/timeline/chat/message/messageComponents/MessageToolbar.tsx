@@ -40,6 +40,7 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
 import { getModelIcon } from "@/lib/languageModels/utils";
+import { Section } from "@opal/layouts";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
@@ -270,181 +271,181 @@ export default function MessageToolbar({
         <FeedbackModal {...feedbackModalProps!} />
       </modal.Provider>
 
-      <div
-        data-testid="AgentMessage/toolbar"
-        className="flex justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 ps-1"
-      >
-        <TooltipGroup>
-          <div className="flex items-center">
-            {includeMessageSwitcher && (
-              <div className="-mx-1">
-                <MessageSwitcher
-                  currentPage={(currentMessageInd ?? 0) + 1}
-                  totalPages={otherMessagesCanSwitchTo?.length || 0}
-                  handlePrevious={() => {
-                    const prevMessage = getPreviousMessage();
-                    if (prevMessage !== undefined && onMessageSelection) {
-                      onMessageSelection(prevMessage);
-                    }
+      <TooltipGroup>
+        <Section
+          data-testid="AgentMessage/toolbar"
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="center"
+          width="auto"
+          height="fit"
+          wrap
+          gap={0}
+          className="max-w-[calc(100%-0.25rem)] ms-1"
+        >
+          {includeMessageSwitcher && (
+            <div className="-mx-1">
+              <MessageSwitcher
+                currentPage={(currentMessageInd ?? 0) + 1}
+                totalPages={otherMessagesCanSwitchTo?.length || 0}
+                handlePrevious={() => {
+                  const prevMessage = getPreviousMessage();
+                  if (prevMessage !== undefined && onMessageSelection) {
+                    onMessageSelection(prevMessage);
+                  }
+                }}
+                handleNext={() => {
+                  const nextMessage = getNextMessage();
+                  if (nextMessage !== undefined && onMessageSelection) {
+                    onMessageSelection(nextMessage);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          <CopyButton
+            getCopyText={() =>
+              convertMarkdownTablesToTsv(
+                removeThinkingTokens(getTextContent(rawPackets)) as string
+              )
+            }
+            getHtmlContent={() =>
+              answerRefs.current
+                .map((element) => element?.innerHTML || "")
+                .join("\n")
+            }
+            data-testid="AgentMessage/copy-button"
+          />
+          {!incognitoEnabled && (
+            <>
+              <SelectButton
+                icon={SvgThumbsUp}
+                onClick={() => handleFeedbackClick("like")}
+                variant="select-light"
+                state={isFeedbackTransient("like") ? "selected" : "empty"}
+                tooltip={
+                  currentFeedback === "like"
+                    ? t("toolbar.likeButton.removeTooltip")
+                    : t("toolbar.likeButton.tooltip")
+                }
+                data-testid="AgentMessage/like-button"
+              />
+              <SelectButton
+                icon={SvgThumbsDown}
+                onClick={() => handleFeedbackClick("dislike")}
+                variant="select-light"
+                state={isFeedbackTransient("dislike") ? "selected" : "empty"}
+                tooltip={
+                  currentFeedback === "dislike"
+                    ? t("toolbar.dislikeButton.removeTooltip")
+                    : t("toolbar.dislikeButton.tooltip")
+                }
+                data-testid="AgentMessage/dislike-button"
+              />
+            </>
+          )}
+          {ttsEnabled && (
+            <TTSButton
+              text={removeThinkingTokens(getTextContent(rawPackets)) as string}
+            />
+          )}
+
+          {/* Read-only model label where the regenerate selector is not
+                available, so the answer still shows which model answered. */}
+          {readOnlyModelName && (
+            <SelectButton
+              chevron
+              disabled
+              icon={getModelIcon(currentModelProvider ?? "", readOnlyModelName)}
+            >
+              {readOnlyModelName}
+            </SelectButton>
+          )}
+
+          {onRegenerate &&
+            messageId !== undefined &&
+            parentMessage &&
+            !isFollowUp &&
+            llmManager && (
+              <div data-testid="AgentMessage/regenerate">
+                <ModelSelector
+                  providerOptions={llmManager.llmProviders}
+                  modelPaging={llmManager.modelPaging}
+                  value={
+                    // The response's model may live under a different
+                    // provider than the global selection, so resolve it
+                    // across all providers, by raw or display name.
+                    ownModelName
+                      ? (llmManager.llmProviders
+                          ?.flatMap((p) => p.model_configurations)
+                          .find(
+                            (m) =>
+                              m.name === ownModelName ||
+                              m.effectiveDisplayName === ownModelName
+                          )?.id ?? null)
+                      : findModelConfigId(
+                          llmManager.llmProviders,
+                          llmManager.currentLlm.provider,
+                          currentModelName ?? llmManager.currentLlm.modelName
+                        )
+                  }
+                  renderTrigger={() => {
+                    const rawName =
+                      ownModelName ??
+                      currentModelName ??
+                      llmManager!.currentLlm.modelName;
+                    const mc = llmManager!.llmProviders
+                      ?.flatMap((p) => p.model_configurations)
+                      .find(
+                        (m) =>
+                          m.name === rawName ||
+                          m.effectiveDisplayName === rawName
+                      );
+                    const displayName = mc?.effectiveDisplayName ?? rawName;
+                    return (
+                      <SelectButton
+                        chevron
+                        icon={SvgRefreshCw}
+                        tooltip={t("toolbar.regenerateButton.tooltip")}
+                        foldable={distinctModelsUsed <= 1}
+                      >
+                        {displayName}
+                      </SelectButton>
+                    );
                   }}
-                  handleNext={() => {
-                    const nextMessage = getNextMessage();
-                    if (nextMessage !== undefined && onMessageSelection) {
-                      onMessageSelection(nextMessage);
-                    }
+                  onChange={(opt) => {
+                    const regenerator = onRegenerate({
+                      messageId,
+                      parentMessage,
+                    });
+                    regenerator({
+                      name: opt.name,
+                      provider: opt.provider,
+                      modelName: opt.modelName,
+                    });
                   }}
+                  temperatureManager={llmManager}
+                  reasoningManager={llmManager}
                 />
               </div>
             )}
 
-            <CopyButton
-              getCopyText={() =>
-                convertMarkdownTablesToTsv(
-                  removeThinkingTokens(getTextContent(rawPackets)) as string
-                )
+          {nodeId && (citations.length > 0 || documentMap.size > 0) && (
+            <SourcesTagWrapper
+              citations={citations}
+              documentMap={documentMap}
+              nodeId={nodeId}
+              selectedMessageForDocDisplay={selectedMessageForDocDisplay}
+              sourcesPanelVisible={sourcesPanelVisible}
+              updateCurrentRightPanel={updateCurrentRightPanel}
+              updateCurrentSelectedNodeForDocDisplay={
+                updateCurrentSelectedNodeForDocDisplay
               }
-              getHtmlContent={() =>
-                answerRefs.current
-                  .map((element) => element?.innerHTML || "")
-                  .join("\n")
-              }
-              data-testid="AgentMessage/copy-button"
             />
-            {!incognitoEnabled && (
-              <>
-                <SelectButton
-                  icon={SvgThumbsUp}
-                  onClick={() => handleFeedbackClick("like")}
-                  variant="select-light"
-                  state={isFeedbackTransient("like") ? "selected" : "empty"}
-                  tooltip={
-                    currentFeedback === "like"
-                      ? t("toolbar.likeButton.removeTooltip")
-                      : t("toolbar.likeButton.tooltip")
-                  }
-                  data-testid="AgentMessage/like-button"
-                />
-                <SelectButton
-                  icon={SvgThumbsDown}
-                  onClick={() => handleFeedbackClick("dislike")}
-                  variant="select-light"
-                  state={isFeedbackTransient("dislike") ? "selected" : "empty"}
-                  tooltip={
-                    currentFeedback === "dislike"
-                      ? t("toolbar.dislikeButton.removeTooltip")
-                      : t("toolbar.dislikeButton.tooltip")
-                  }
-                  data-testid="AgentMessage/dislike-button"
-                />
-              </>
-            )}
-            {ttsEnabled && (
-              <TTSButton
-                text={
-                  removeThinkingTokens(getTextContent(rawPackets)) as string
-                }
-              />
-            )}
-
-            {/* Read-only model label where the regenerate selector is not
-                available, so the answer still shows which model answered. */}
-            {readOnlyModelName && (
-              <SelectButton
-                chevron
-                disabled
-                icon={getModelIcon(
-                  currentModelProvider ?? "",
-                  readOnlyModelName
-                )}
-              >
-                {readOnlyModelName}
-              </SelectButton>
-            )}
-
-            {onRegenerate &&
-              messageId !== undefined &&
-              parentMessage &&
-              !isFollowUp &&
-              llmManager && (
-                <div data-testid="AgentMessage/regenerate">
-                  <ModelSelector
-                    providerOptions={llmManager.llmProviders}
-                    modelPaging={llmManager.modelPaging}
-                    value={
-                      // The response's model may live under a different
-                      // provider than the global selection, so resolve it
-                      // across all providers, by raw or display name.
-                      ownModelName
-                        ? (llmManager.llmProviders
-                            ?.flatMap((p) => p.model_configurations)
-                            .find(
-                              (m) =>
-                                m.name === ownModelName ||
-                                m.effectiveDisplayName === ownModelName
-                            )?.id ?? null)
-                        : findModelConfigId(
-                            llmManager.llmProviders,
-                            llmManager.currentLlm.provider,
-                            currentModelName ?? llmManager.currentLlm.modelName
-                          )
-                    }
-                    renderTrigger={() => {
-                      const rawName =
-                        ownModelName ??
-                        currentModelName ??
-                        llmManager!.currentLlm.modelName;
-                      const mc = llmManager!.llmProviders
-                        ?.flatMap((p) => p.model_configurations)
-                        .find(
-                          (m) =>
-                            m.name === rawName ||
-                            m.effectiveDisplayName === rawName
-                        );
-                      const displayName = mc?.effectiveDisplayName ?? rawName;
-                      return (
-                        <SelectButton
-                          chevron
-                          icon={SvgRefreshCw}
-                          tooltip={t("toolbar.regenerateButton.tooltip")}
-                          foldable={distinctModelsUsed <= 1}
-                        >
-                          {displayName}
-                        </SelectButton>
-                      );
-                    }}
-                    onChange={(opt) => {
-                      const regenerator = onRegenerate({
-                        messageId,
-                        parentMessage,
-                      });
-                      regenerator({
-                        name: opt.name,
-                        provider: opt.provider,
-                        modelName: opt.modelName,
-                      });
-                    }}
-                    temperatureManager={llmManager}
-                    reasoningManager={llmManager}
-                  />
-                </div>
-              )}
-
-            {nodeId && (citations.length > 0 || documentMap.size > 0) && (
-              <SourcesTagWrapper
-                citations={citations}
-                documentMap={documentMap}
-                nodeId={nodeId}
-                selectedMessageForDocDisplay={selectedMessageForDocDisplay}
-                sourcesPanelVisible={sourcesPanelVisible}
-                updateCurrentRightPanel={updateCurrentRightPanel}
-                updateCurrentSelectedNodeForDocDisplay={
-                  updateCurrentSelectedNodeForDocDisplay
-                }
-              />
-            )}
-          </div>
-        </TooltipGroup>
-      </div>
+          )}
+        </Section>
+      </TooltipGroup>
     </>
   );
 }

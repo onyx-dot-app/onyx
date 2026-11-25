@@ -4518,9 +4518,7 @@ def test_a_hosted_agent_run_copies_the_chat_files(
             if tool.name == ExecCommandTool.NAME
         ]
         if "Initial task" in texts:
-            if "Follow up" in texts and not isinstance(
-                request.messages[-1], ToolResultMessage
-            ):
+            if "Follow up" in texts and "hosted" not in exec_descriptions:
                 exec_descriptions["hosted"] = description
                 return AssistantMessage(
                     content=[
@@ -4531,8 +4529,11 @@ def test_a_hosted_agent_run_copies_the_chat_files(
                         )
                     ]
                 )
+            if "Follow up" in texts:
+                # Keep this turn active until its background copy finishes.
+                _wait_until(lambda: _attachments(node, ref) == copied)
             return AssistantMessage(content=[TextContent(text="Worker done.")])
-        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+        if "root" in exec_descriptions:
             return AssistantMessage(content=[TextContent(text="Started.")])
         exec_descriptions["root"] = description
         return AssistantMessage(

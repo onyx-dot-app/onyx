@@ -17,6 +17,8 @@ import { isFinalAnswerComplete } from "@/app/app/services/packetUtils";
 import {
   stripPartialCitations,
   ScrollableTable,
+  MarkdownImage,
+  MarkdownLinkContent,
 } from "@/lib/timeline/chat/message/messageComponents/markdownUtils";
 import { BlinkingBar } from "../../BlinkingBar";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -30,6 +32,7 @@ import { extractChatImageFileId } from "@/app/app/components/files/images/utils"
 import { useInResponse } from "@/lib/timeline/components/Response";
 import { ResponseCursorAnchor } from "@/lib/timeline/components/ResponseCursor";
 import { AnswerMarkdown } from "@/lib/answerText/components";
+import { prefersReducedMotion } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
@@ -249,7 +252,8 @@ export const MessageTextRenderer: MessageRenderer<
     animate &&
     !shouldUseAutoPlaybackSync &&
     stopReason !== StopReason.USER_CANCELLED &&
-    smoothStreamingEnabled;
+    smoothStreamingEnabled &&
+    !prefersReducedMotion();
 
   const isStreamFinished = isFinalAnswerComplete(packets);
 
@@ -257,7 +261,8 @@ export const MessageTextRenderer: MessageRenderer<
     content,
     isStreamingAnimationEnabled,
     isStreamFinished,
-    restoredTextLength
+    restoredTextLength,
+    prefersReducedMotion
   );
 
   // One-way signal: stream done AND typewriter caught up. Do NOT derive
@@ -304,6 +309,7 @@ export const MessageTextRenderer: MessageRenderer<
 
   const markdownComponents = useMemo<Components>(
     () => ({
+      img: MarkdownImage,
       a: ({ href, children }) => {
         const s = stateRef.current;
         const imageFileId = extractChatImageFileId(
@@ -319,15 +325,17 @@ export const MessageTextRenderer: MessageRenderer<
           );
         }
         return (
-          <MemoizedAnchor
-            updatePresentingDocument={s?.setPresentingDocument || (() => {})}
-            docs={s?.docs || []}
-            userFiles={s?.userFiles || []}
-            citations={s?.citations}
-            href={href}
-          >
-            {children}
-          </MemoizedAnchor>
+          <MarkdownLinkContent>
+            <MemoizedAnchor
+              updatePresentingDocument={s?.setPresentingDocument || (() => {})}
+              docs={s?.docs || []}
+              userFiles={s?.userFiles || []}
+              citations={s?.citations}
+              href={href}
+            >
+              {children}
+            </MemoizedAnchor>
+          </MarkdownLinkContent>
         );
       },
       b: ({ className, children }) => (

@@ -1,5 +1,6 @@
-import { renderHook } from "@tests/setup/test-utils";
+import { fireEvent, render, renderHook, screen } from "@tests/setup/test-utils";
 import { useAppPosition } from "@/lib/navigation/hooks";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 let mockPathname = "/app";
 let mockParams = new URLSearchParams();
@@ -49,4 +50,41 @@ test("keeps conversation routing separate from Customize", () => {
   expect(result.current.isCustomize()).toBe(false);
   expect(result.current.chat()).toBe("existing-chat");
   expect(result.current.href()).toBe("/app?chatId=existing-chat");
+});
+
+describe("going to a new session while a sent chat's URL is not rendered yet", () => {
+  // A send from a new session makes its chat current and writes its URL; the
+  // page still renders the new session until that URL lands.
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app?chatId=sent-chat");
+    useChatSessionStore.getState().setCurrentSession("sent-chat");
+  });
+  afterEach(() => {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
+    });
+    window.history.replaceState(null, "", "/");
+  });
+
+  test("openNewSession clears the sent chat", () => {
+    const { result } = renderHook(() => useAppPosition());
+    result.current.openNewSession();
+    expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+    expect(window.location.search).toBe("");
+  });
+
+  test("a click on the new-session link clears the sent chat", () => {
+    const { result } = renderHook(() => useAppPosition());
+    render(<a {...result.current.linkToNewSession()}>New Session</a>);
+    fireEvent.click(screen.getByText("New Session"));
+    expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+  });
+
+  test("leaves a rendered chat to the page", () => {
+    mockParams = new URLSearchParams("chatId=sent-chat");
+    const { result } = renderHook(() => useAppPosition());
+    result.current.openNewSession();
+    expect(useChatSessionStore.getState().currentSessionId).toBe("sent-chat");
+  });
 });

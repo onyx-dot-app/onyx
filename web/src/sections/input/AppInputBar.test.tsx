@@ -64,7 +64,10 @@ const storedMcpTool = memberTool({
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
 }));
-let mockUser: { preferences: { shortcut_enabled: boolean } } | null = null;
+let mockUser: {
+  id: string;
+  preferences: { shortcut_enabled: boolean };
+} | null = null;
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: mockUser, isAdmin: false }),
 }));
@@ -88,8 +91,14 @@ let mockIncognitoEnabled = false;
 jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({ incognitoEnabled: mockIncognitoEnabled }),
 }));
+let mockSearchResults = false;
 jest.mock("@/providers/QueryControllerProvider", () => ({
-  useQueryController: () => ({ state: { phase: "idle", appMode: "chat" } }),
+  useQueryController: () => ({
+    state: {
+      phase: mockSearchResults ? "search-results" : "idle",
+      appMode: "chat",
+    },
+  }),
 }));
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({ stopTTS: jest.fn() }),
@@ -114,10 +123,11 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
 }));
+let mockChatId: string | null = null;
 jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
-    isNewSession: () => true,
-    chat: () => null,
+    isNewSession: () => mockChatId === null,
+    chat: () => mockChatId,
     agent: () => null,
     project: () => null,
   }),
@@ -239,13 +249,15 @@ function Composer({
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  mockUser = null;
+  mockUser = { id: "test-user", preferences: { shortcut_enabled: false } };
   mockChatSkills = NO_SKILLS;
   mockIncognitoEnabled = false;
+  mockSearchResults = false;
   mockSttEnabled = false;
   mockMicrophone = null;
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
+  mockChatId = null;
 });
 
 test("incognito greys out Deep Research and explains why", async () => {
@@ -263,23 +275,114 @@ test("incognito greys out Deep Research and explains why", async () => {
   );
 });
 
+function projectFile(id: string): ProjectFile {
+  return {
+    id,
+    name: `${id}.txt`,
+    project_id: null,
+    user_id: null,
+    file_id: `${id}-file-id`,
+    created_at: "2026-01-01T00:00:00Z",
+    status: UserFileStatus.COMPLETED,
+    file_type: "text/plain",
+    last_accessed_at: "2026-01-01T00:00:00Z",
+    chat_file_type: ChatFileType.PLAIN_TEXT,
+    token_count: null,
+    chunk_count: null,
+  };
+}
+
+test("an immediate reload restores draft text and completed uploads", async () => {
+  const uploading = {
+    ...projectFile("uploading-file"),
+    status: UserFileStatus.UPLOADING,
+  };
+  const first = render(<Composer />);
+  const processing = {
+    ...projectFile("processing-file"),
+    status: UserFileStatus.PROCESSING,
+  };
+  mockProjectsContext.currentMessageFiles = [
+    projectFile("draft-file"),
+    processing,
+    uploading,
+  ];
+  first.rerender(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "unsent text");
+  first.unmount();
+
+  expect(sessionStorage.length).toBe(0);
+  mockProjectsContext.currentMessageFiles = [];
+  render(<Composer />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("unsent text");
+  const restoreFiles =
+    mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+  expect(restoreFiles([])).toEqual([projectFile("draft-file"), processing]);
+  const currentFiles = [projectFile("new-attachment")];
+  expect(restoreFiles(currentFiles)).toBe(currentFiles);
+});
+
+test("a composer for another chat drops the files a left composer kept", async () => {
+  mockChatId = "chat-a";
+  mockProjectsContext.currentMessageFiles = [projectFile("chat-a-file")];
+  const first = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "draft for A");
+  // Chat A's composer unmounts (e.g. a visit to Settings); the shared
+  // attachment list keeps chat A's file.
+  first.unmount();
+
+  mockChatId = "chat-b";
+  render(<Composer />);
+  const restoreFiles =
+    mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+  expect(restoreFiles([projectFile("chat-a-file")])).toEqual([]);
+});
+
+test("keeps the query in the editor when an auto-routed search returns", async () => {
+  const { rerender } = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "query to refine");
+  mockSearchResults = true;
+  rerender(<Composer />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("query to refine");
+});
+
+test("a different account cannot restore the previous account's draft", async () => {
+  const first = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "account A draft");
+  first.unmount();
+
+  mockUser = { id: "another-user", preferences: { shortcut_enabled: false } };
+  render(<Composer />);
+  expect(screen.getByRole("textbox")).not.toHaveTextContent("account A draft");
+});
+
+test("incognito keeps its draft out of storage and restores the regular draft on exit", async () => {
+  const user = setupUser();
+  const { rerender } = render(<Composer />);
+  const message = () => screen.getByRole("textbox");
+
+  await user.type(message(), "regular draft");
+  mockIncognitoEnabled = true;
+  rerender(<Composer />);
+  expect(message()).toBeEmptyDOMElement();
+
+  await user.type(message(), "private draft");
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  expect(localStorage.getItem(draftKey("chat", ":test-user:new"))).toContain(
+    "regular draft"
+  );
+  expect(
+    localStorage.getItem(draftKey("chat", ":test-user:new"))
+  ).not.toContain("private draft");
+  expect(sessionStorage.length).toBe(0);
+
+  mockIncognitoEnabled = false;
+  rerender(<Composer />);
+  expect(message()).toHaveTextContent("regular draft");
+  expect(message()).not.toHaveTextContent("private draft");
+});
+
 describe("restore after a failed send", () => {
-  function projectFile(id: string): ProjectFile {
-    return {
-      id,
-      name: `${id}.txt`,
-      project_id: null,
-      user_id: null,
-      file_id: `${id}-file-id`,
-      created_at: "2026-01-01T00:00:00Z",
-      status: UserFileStatus.COMPLETED,
-      file_type: "text/plain",
-      last_accessed_at: "2026-01-01T00:00:00Z",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
-      token_count: null,
-      chunk_count: null,
-    };
-  }
   const failedFiles = [projectFile("failed-file")] satisfies ProjectFile[];
 
   test("puts the message, its picks and its files back into an empty composer", async () => {
@@ -310,6 +413,7 @@ describe("restore after a failed send", () => {
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer inputBarRef={inputBarRef} />);
     await setupUser().type(screen.getByRole("textbox"), "newer draft");
+    mockProjectsContext.setCurrentMessageFiles.mockClear();
     act(() =>
       inputBarRef.current?.restore({
         message: "failed message",
@@ -328,6 +432,7 @@ describe("restore after a failed send", () => {
     ] satisfies ProjectFile[];
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer inputBarRef={inputBarRef} />);
+    mockProjectsContext.setCurrentMessageFiles.mockClear();
     act(() =>
       inputBarRef.current?.restore({
         message: "failed message",
@@ -369,7 +474,7 @@ describe("`@` skill mentions", () => {
   });
 
   beforeEach(() => {
-    mockUser = { preferences: { shortcut_enabled: true } };
+    mockUser = { id: "test-user", preferences: { shortcut_enabled: true } };
     mockChatSkills = {
       ...NO_SKILLS,
       skills: [

@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 
 /** The whole close in `styles.css`: the fade, then the collapse. */
 const FOLD_CLOSE_MS: number = 250;
+/** The height expansion of an open in `styles.css`. */
+const FOLD_OPEN_MS: number = 150;
 
 type FoldProps = {
   /** Whether the fold is open. */
@@ -112,4 +114,4 @@ function Fold({ open, keepMounted = false, id, frame, children }: FoldProps) {
   );
 }
 
-export { Fold, type FoldProps };
+export { Fold, FOLD_OPEN_MS, type FoldProps };

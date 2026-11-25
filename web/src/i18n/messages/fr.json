@@ -11792,7 +11792,12 @@
         "toast": "Authentification réussie"
       },
       "scrollToBottomButton": {
-        "label": "Aller en bas"
+        "label": "Aller en bas",
+        "reason": {
+          "approval": "Approbation requise",
+          "newAnswer": "Nouvelle réponse",
+          "question": "Question en attente"
+        }
       },
       "sessionAccessDenied": {
         "description": "Vous n'avez pas la permission de voir cette session de discussion.",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "Copié !",
           "label": "Copier"
+        },
+        "wrapButton": {
+          "unwrapLabel": "Sans retour à la ligne",
+          "wrapLabel": "Retour à la ligne"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "Modifier"
+        },
+        "foldButton": {
+          "collapseLabel": "Afficher moins",
+          "expandLabel": "Afficher le message complet"
         }
       },
       "imageTool": {
@@ -12338,6 +12351,12 @@
         },
         "stoppedStatus": {
           "text": "Génération d'images arrêtée"
+        }
+      },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Image indisponible",
+          "withAlt": "{alt} · Image indisponible"
         }
       },
       "markdownTable": {
@@ -12368,6 +12387,9 @@
         "previousButton": {
           "tooltip": "Précédent"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "Hier à {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,14 +16704,29 @@
       "rename": {
         "label": "Renommer"
       },
+      "runStatus": {
+        "approval": {
+          "label": "Approbation requise"
+        },
+        "done": {
+          "label": "Terminé"
+        },
+        "failed": {
+          "label": "Échec"
+        },
+        "question": {
+          "label": "Question en attente"
+        },
+        "working": {
+          "label": "En cours"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Partager"
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "Créer le nouveau projet \"<name>{projectName}</name>\""
-      },
       "footer": {
         "openAction": {
           "label": "Ouvrir"
@@ -16701,25 +16738,21 @@
           "label": "Tout afficher"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Maj"
+      },
       "list": {
         "empty": {
-          "text": "Aucune discussion ni aucun projet pour l'instant"
+          "text": "Aucune discussion pour l'instant"
         },
         "noResults": {
           "text": "Aucun résultat trouvé"
         }
       },
-      "newProject": {
-        "label": "Nouveau projet"
-      },
       "newSession": {
         "label": "Nouvelle session"
-      },
-      "noMoreResults": {
-        "text": "Aucun autre résultat"
-      },
-      "projectsFilter": {
-        "label": "Projets"
       },
       "recentFilter": {
         "label": "Récent"
@@ -16728,10 +16761,25 @@
         "label": "Sessions récentes"
       },
       "searchInput": {
-        "placeholder": "Rechercher des sessions de discussion, des projets..."
+        "placeholder": "Rechercher des sessions de discussion..."
       },
       "sessionsFilter": {
         "label": "Sessions"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "Changer de modèle"
+        },
+        "nextChat": {
+          "label": "Session suivante"
+        },
+        "previousChat": {
+          "label": "Session précédente"
+        },
+        "title": "Raccourcis",
+        "toggleSidebar": {
+          "label": "Afficher/masquer la barre latérale"
+        }
       }
     },
     "notifications": {

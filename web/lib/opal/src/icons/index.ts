@@ -194,6 +194,7 @@ export { default as SvgTerminal } from "@opal/icons/terminal";
 export { default as SvgTerminalSmall } from "@opal/icons/terminal-small";
 export { default as SvgTextLines } from "@opal/icons/text-lines";
 export { default as SvgTextLinesSmall } from "@opal/icons/text-lines-small";
+export { default as SvgTextWrap } from "@opal/icons/text-wrap";
 export { default as SvgThermometer } from "@opal/icons/thermometer";
 export { default as SvgThumbsDown } from "@opal/icons/thumbs-down";
 export { default as SvgThumbsUp } from "@opal/icons/thumbs-up";

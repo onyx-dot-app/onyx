@@ -10,7 +10,10 @@ import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
 import { startChatLoad } from "@/lib/chat/publishedFiles";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
-import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import {
+  useChatSessionStore,
+  type SessionError,
+} from "@/app/app/stores/useChatSessionStore";
 import { asksUser, readWaitingToolRequests } from "@/lib/chat/toolApprovals";
 import {
   CHAT_STATUS_POLL_MS,
@@ -29,6 +32,8 @@ interface SettleChatSessionOptions {
   streamUnavailable?: boolean;
   /** The reader failed before its first batch, so its answers are unread. */
   streamUnread?: boolean;
+  /** A send failed before it attached a reader. */
+  preparationError?: SessionError;
 }
 
 /** The rows a stream writes, in model-index order; null when one is missing. */
@@ -212,7 +217,7 @@ const refreshingSessions = new Map<
   {
     refresh: Promise<void>;
     controller: AbortController;
-    reader: Promise<void> | undefined;
+    reader: Promise<SessionError | void> | undefined;
   }
 >();
 
@@ -344,6 +349,7 @@ export async function settleChatSession({
   refreshHistory = true,
   streamUnavailable = false,
   streamUnread = false,
+  preparationError,
 }: SettleChatSessionOptions): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   const sendAcknowledged = session?.sendAcknowledged;
@@ -368,10 +374,22 @@ export async function settleChatSession({
       }
       if (!ownsSettlement()) return;
     }
+    let sendError: SessionError | void = preparationError;
     if (readerFinished) {
-      await readerFinished;
+      sendError = await readerFinished;
       if (!ownsSettlement()) return;
     }
+    // Keep the rejected send visible without marking the followed run failed.
+    const handoffError: SessionError | undefined = sendError
+      ? { ...sendError, affectsRunStatus: false }
+      : undefined;
+    const preserveHandoffError = () => {
+      if (handoffError) {
+        useChatSessionStore
+          .getState()
+          .setUncaughtError(sessionId, handoffError);
+      }
+    };
     // A reader that lost a running stream reattaches: from its saved cursor,
     // or from the start into reset rows. The received rows stay on screen
     // until the replay delivers its first batch.
@@ -407,9 +425,10 @@ export async function settleChatSession({
           useChatSessionStore.getState().updateSessionData(sessionId, {
             chatState: "streaming",
             uncaughtError:
-              current.uncaughtError?.error === errorMessage
+              handoffError ??
+              (current.uncaughtError?.error === errorMessage
                 ? null
-                : current.uncaughtError,
+                : current.uncaughtError),
           });
           void followChatSession({
             sessionId,
@@ -435,6 +454,7 @@ export async function settleChatSession({
         local.chatState !== "cancelling" &&
         streamResponses(local.messageTree, next)
       ) {
+        preserveHandoffError();
         followChatStream(sessionId, next, errorMessage);
         return;
       }
@@ -442,6 +462,7 @@ export async function settleChatSession({
       if (!ownsSettlement()) return;
     }
     if (next) {
+      preserveHandoffError();
       await refreshChatSession(sessionId, errorMessage);
       return;
     }
@@ -452,6 +473,7 @@ export async function settleChatSession({
         : await fetchSettledChatSession(sessionId);
       if (!ownsSettlement()) return;
       if (settled?.is_processing || settled?.current_stream) {
+        preserveHandoffError();
         await refreshChatSession(sessionId, errorMessage, {
           page: settled,
           loadSequence,
@@ -470,7 +492,8 @@ export async function settleChatSession({
         store.applyLoadedSession(sessionId, settled, loadSequence, {
           ...merged,
           uncaughtError:
-            latestType === "assistant" || latestType === "error"
+            current.uncaughtError?.affectsRunStatus !== false &&
+            (latestType === "assistant" || latestType === "error")
               ? null
               : current.uncaughtError,
         });
@@ -546,10 +569,11 @@ export async function settleChatSession({
       }
     }
     const store = useChatSessionStore.getState();
-    if (store.sessions.get(sessionId)?.uncaughtError?.error === errorMessage) {
-      store.setUncaughtError(sessionId, null);
-    }
+    const uncaughtError = store.sessions.get(sessionId)?.uncaughtError ?? null;
     store.updateSessionData(sessionId, {
+      uncaughtError:
+        sendError ??
+        (uncaughtError?.error === errorMessage ? null : uncaughtError),
       chatState: "input",
       regenerationState: null,
       streamingStartTime: undefined,

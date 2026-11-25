@@ -9,6 +9,7 @@ import io
 import threading
 import time
 from collections.abc import Callable, Generator, Iterator
+from copy import copy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -1276,7 +1277,7 @@ def test_a_failed_size_lookup_skips_only_its_file(
     )
     db_session.commit()
     internal.add_search_results(QUERY, [broken.result(), fine.result()])
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     get_file_size = store.get_file_size
 
     def failing(file_id: str, db_session: Session | None = None) -> int | None:
