@@ -5,7 +5,7 @@ interface UploadProgressStore {
   progressByTempId: Readonly<Record<string, number>>;
 }
 
-const useUploadProgressStore = create<UploadProgressStore>(() => ({
+export const useUploadProgressStore = create<UploadProgressStore>(() => ({
   progressByTempId: {},
 }));
 
@@ -28,6 +28,8 @@ function clearProgress(tempIds: string[]): void {
 /** Registers an upload request for the files with these temporary IDs. */
 export function trackUpload(tempIds: string[]): {
   options: Required<UploadFilesOptions>;
+  /** Whether the user cancelled this file while its batch kept uploading. */
+  isCancelled: (tempId: string) => boolean;
   finish: () => void;
 } {
   const batch: UploadBatch = {
@@ -47,6 +49,7 @@ export function trackUpload(tempIds: string[]): {
           return { progressByTempId };
         }),
     },
+    isCancelled: (tempId) => !batch.pending.has(tempId),
     finish: () => {
       tempIds.forEach((id) => {
         if (batchByTempId.get(id) === batch) batchByTempId.delete(id);
@@ -67,9 +70,4 @@ export function cancelUpload(tempId: string): void {
   batch.pending.delete(tempId);
   clearProgress([tempId]);
   if (batch.pending.size === 0) batch.controller.abort();
-}
-
-/** The fraction of the file's upload request sent, once known. */
-export function useUploadProgress(tempId: string): number | undefined {
-  return useUploadProgressStore((state) => state.progressByTempId[tempId]);
 }
