@@ -28,9 +28,7 @@ def _request_field(issue: JiraIssue) -> dict[str, Any] | None:
     if not isinstance(fields, dict):
         return None
     for value in fields.values():
-        if isinstance(value, dict) and isinstance(
-            value.get(_REQUEST_TYPE_FIELD), dict
-        ):
+        if isinstance(value, dict) and isinstance(value.get(_REQUEST_TYPE_FIELD), dict):
             return value
     return None
 
@@ -55,6 +53,28 @@ def request_metadata(issue: JiraIssue) -> dict[str, str]:
         if isinstance(portal_link, str) and portal_link:
             metadata[PORTAL_LINK_KEY] = portal_link
     return metadata
+
+
+def _without_internal_comments(issue: JiraIssue) -> JiraIssue:
+    """A copy of the issue without agent-only comments (`jsdPublic` is false).
+    The input is not changed."""
+    fields: Any = issue.get("fields")
+    if not isinstance(fields, dict):
+        return issue
+    comment: Any = fields.get("comment")
+    if not isinstance(comment, dict):
+        return issue
+    comments: Any = comment.get("comments")
+    if not isinstance(comments, list):
+        return issue
+    public_comments = [
+        c for c in comments if not (isinstance(c, dict) and c.get("jsdPublic") is False)
+    ]
+    filtered: JiraIssue = {
+        **issue,
+        "fields": {**fields, "comment": {**comment, "comments": public_comments}},
+    }
+    return filtered
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -88,7 +108,9 @@ class JiraServiceManagementConnector(JiraConnector):
         include_permissions: bool,
     ) -> Generator[Document | HierarchyNode, None, None]:
         for item in super()._issue_to_items(
-            issue, seen_hierarchy_node_ids, include_permissions
+            _without_internal_comments(issue),
+            seen_hierarchy_node_ids,
+            include_permissions,
         ):
             if isinstance(item, Document):
                 item.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
@@ -96,12 +118,11 @@ class JiraServiceManagementConnector(JiraConnector):
             yield item
 
     def validate_connector_settings(self) -> None:
-        super().validate_connector_settings()
         if self._source_operations is None or self.jira_project is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
         try:
             project: dict[str, Any] = self.source_operations.get_project(
-                project_key=self.jira_project
+                project_key=self.jira_project, fast=True
             )
         except Exception as e:
             self._handle_jira_connector_settings_error(e)

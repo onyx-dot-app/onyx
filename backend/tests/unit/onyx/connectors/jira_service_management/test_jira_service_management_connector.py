@@ -1,3 +1,4 @@
+import copy
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
@@ -5,8 +6,14 @@ import pytest
 from pydantic import ValidationError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.jira.source_operations import JiraSourceOperations
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+)
+from onyx.connectors.jira.source_operations import (
+    JiraApiError,
+    JiraSourceOperations,
+)
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
 )
@@ -14,7 +21,7 @@ from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
     request_metadata,
 )
-from onyx.connectors.models import Document
+from onyx.connectors.models import ConnectorMissingCredentialError, Document
 
 _BASE_URL = "https://example.atlassian.net"
 
@@ -72,6 +79,7 @@ def test_validation_accepts_a_service_desk_project() -> None:
     gateway = create_autospec(JiraSourceOperations, instance=True)
     gateway.get_project.return_value = {"key": "HELP", "projectTypeKey": "service_desk"}
     _connector(gateway).validate_connector_settings()
+    gateway.get_project.assert_called_once_with(project_key="HELP", fast=True)
 
 
 def test_validation_rejects_a_software_project() -> None:
@@ -79,6 +87,56 @@ def test_validation_rejects_a_software_project() -> None:
     gateway.get_project.return_value = {"key": "HELP", "projectTypeKey": "software"}
     with pytest.raises(ConnectorValidationError, match="not a Jira Service"):
         _connector(gateway).validate_connector_settings()
+    gateway.get_project.assert_called_once_with(project_key="HELP", fast=True)
+
+
+def test_validation_requires_credentials() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url=_BASE_URL, project_key="HELP"
+    )
+    with pytest.raises(ConnectorMissingCredentialError):
+        connector.validate_connector_settings()
+
+
+def test_validation_maps_an_unauthorized_error() -> None:
+    gateway = create_autospec(JiraSourceOperations, instance=True)
+    gateway.get_project.side_effect = JiraApiError("Unauthorized", status_code=401)
+    with pytest.raises(CredentialExpiredError):
+        _connector(gateway).validate_connector_settings()
+
+
+def test_internal_comments_are_not_indexed() -> None:
+    issue = _request_issue()
+    issue["fields"]["comment"] = {
+        "comments": [
+            {"body": "public reply", "jsdPublic": True},
+            {"body": "no flag reply"},
+            {"body": "agent only note", "jsdPublic": False},
+            {
+                "body": "bot noise",
+                "jsdPublic": True,
+                "author": {"emailAddress": "bot@x.com"},
+            },
+        ]
+    }
+    before = copy.deepcopy(issue)
+    connector = JiraServiceManagementConnector(
+        jira_base_url=_BASE_URL,
+        project_key="HELP",
+        comment_email_blacklist=["bot@x.com"],
+    )
+    connector._source_operations = create_autospec(JiraSourceOperations, instance=True)
+    documents = [
+        item
+        for item in connector._issue_to_items(issue, set(), False)
+        if isinstance(item, Document)
+    ]
+    text = documents[0].sections[0].text or ""
+    assert "public reply" in text
+    assert "no flag reply" in text
+    assert "agent only note" not in text
+    assert "bot noise" not in text
+    assert issue == before
 
 
 def test_request_metadata_reads_the_portal_field() -> None:

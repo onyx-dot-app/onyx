@@ -6,10 +6,13 @@ description: "Access requests and comments from a Jira Service Management projec
 ## How it works
 
 The Jira Service Management connector indexes the requests of one service project. A request is a Jira issue,
-so the connector reads the project through the Jira API. Each request carries its comments, its Jira fields
-and, when the portal reports them, its request type, portal status and portal link as metadata.
+so the connector reads the project through the Jira API. Each request carries its comments, its Jira fields and,
+when the portal reports them, its request type, portal status and portal link as metadata.
 
-Onyx checks the project for new and changed requests every **30** minutes.
+Onyx checks Jira Service Management for new and changed requests on the connector's refresh schedule.
+The default is every **30** minutes.
+
+Onyx indexes public comments. It does not index internal (agent-only) comments.
 
 | Content  | Notes                                                                                           |
 | -------- | ----------------------------------------------------------------------------------------------- |
