@@ -8,9 +8,11 @@ import {
 import { ChatSessionSharedStatus, type ChatSession } from "@/app/app/types";
 import { useUnseenRuns } from "@/lib/chat/runStatus";
 import ChatButton from "@/sections/sidebar/ChatButton";
+import { takeRecentChatShortcutTarget } from "@/lib/shortcuts/utils";
 
 const mockRename = jest.fn();
 const mockRefresh = jest.fn();
+const mockFetchProjects = jest.fn();
 
 jest.mock("@/app/app/services/lib", () => ({
   deleteChatSession: jest.fn(),
@@ -29,7 +31,7 @@ jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => ({
     refreshCurrentProjectDetails: jest.fn(),
     projects: [],
-    fetchProjects: jest.fn(),
+    fetchProjects: mockFetchProjects,
     currentProjectId: null,
     createProject: jest.fn(),
   }),
@@ -142,6 +144,12 @@ test("double-click on the row starts the rename", () => {
   expect(screen.getByRole("textbox")).toBeInTheDocument();
 });
 
+test("double-click keeps the opened chat from taking focus off the rename", () => {
+  render(<ChatButton chatSession={chatSession} />);
+  fireEvent.doubleClick(screen.getByTestId("ChatButton"));
+  expect(takeRecentChatShortcutTarget("chat-1")).toBe(true);
+});
+
 test("the menu opened from the row takes focus on its trigger", async () => {
   openContextMenu();
   await screen.findByRole("menuitem", { name: "Rename" });
@@ -163,4 +171,27 @@ test("right-click after a hover closes the tooltip and focuses the options butto
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
   );
   expect(screen.getByRole("button", { name: "Chat options" })).toHaveFocus();
+});
+
+test("Regenerate title in a project also refreshes the projects", async () => {
+  mockFetchProjects.mockResolvedValue(undefined);
+  render(
+    <ChatButton
+      chatSession={chatSession}
+      project={{
+        id: 7,
+        name: "Plans",
+        description: null,
+        created_at: chatSession.time_created,
+        user_id: "user-1",
+        instructions: null,
+        chat_sessions: [chatSession],
+      }}
+    />
+  );
+  fireEvent.contextMenu(screen.getByTestId("ChatButton"));
+  fireEvent.click(
+    await screen.findByRole("menuitem", { name: "Regenerate title" })
+  );
+  await waitFor(() => expect(mockFetchProjects).toHaveBeenCalled());
 });

@@ -52,6 +52,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
+import { markRecentChatShortcutTarget } from "@/lib/shortcuts/utils";
 import { usePinChatAgent } from "@/lib/agents/hooks";
 import { useChatExportMenu, useChatRunStatus } from "@/lib/chat/hooks";
 import { useUnseenRuns, type ChatRunStatus } from "@/lib/chat/runStatus";
@@ -347,10 +348,21 @@ const ChatButton = memo(
       await pinChatAgent(chatSession);
     }
 
+    // A project's chat rows read the projects cache, not the recents list.
+    async function refreshAfterRename() {
+      await Promise.all([
+        refreshChatSessions(),
+        project ? fetchProjects() : undefined,
+        project && currentProjectId
+          ? refreshCurrentProjectDetails()
+          : undefined,
+      ]);
+    }
+
     async function handleRename(newName: string) {
       setDisplayName(newName);
       await renameChatSession(chatSession.id, newName);
-      await refreshChatSessions();
+      await refreshAfterRename();
     }
 
     async function handleRegenerateTitle() {
@@ -358,7 +370,7 @@ const ChatButton = memo(
       try {
         const response = await renameChatSession(chatSession.id, null, true);
         if (!response.ok) throw new Error(`Rename failed: ${response.status}`);
-        await refreshChatSessions();
+        await refreshAfterRename();
       } catch (error) {
         console.error("Failed to regenerate chat title:", error);
         showErrorNotification(t("chatButton.regenerateTitleError.message"));
@@ -387,6 +399,9 @@ const ChatButton = memo(
       )
         return;
       event.preventDefault();
+      // The first click opens the chat, which focuses the composer on load
+      // and would blur the rename input.
+      markRecentChatShortcutTarget(chatSession.id);
       setRenaming(true);
     }
 

@@ -485,9 +485,36 @@ describe("edit a sent message in the composer", () => {
       temp_id: "temp_draft",
       status: UserFileStatus.PROCESSING,
     };
-    upload.finish([uploaded]);
+    act(() => upload.finish([uploaded]));
 
     await setupUser().keyboard("{Escape}");
+
+    expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  test("a draft file that finished uploading during the edit survives a remount", async () => {
+    const uploading = {
+      ...projectFile("temp_saved"),
+      temp_id: "temp_saved",
+      status: UserFileStatus.UPLOADING,
+    };
+    const upload = trackUpload(["temp_saved"]);
+    mockProjectsContext.currentMessageFiles = [uploading];
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const uploaded = {
+      ...projectFile("user-saved"),
+      temp_id: "temp_saved",
+      status: UserFileStatus.PROCESSING,
+    };
+    act(() => upload.finish([uploaded]));
+    first.unmount();
+
+    render(<Composer />);
+    await setupUser().click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
 
     expect(lastFiles()).toEqual([uploaded]);
   });

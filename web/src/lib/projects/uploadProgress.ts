@@ -4,16 +4,21 @@ import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
 
 interface UploadProgressStore {
   progressByTempId: Readonly<Record<string, number>>;
+  /** Counts held uploads that settled, so a holder can update its files. */
+  heldSettled: number;
 }
 
 export const useUploadProgressStore = create<UploadProgressStore>(() => ({
   progressByTempId: {},
+  heldSettled: 0,
 }));
 
 /** One request uploads a batch of files, so its files share one controller. */
 interface UploadBatch {
   controller: AbortController;
   pending: Set<string>;
+  /** Every byte was sent, so the server may save the files even on abort. */
+  sent: boolean;
 }
 
 const batchByTempId = new Map<string, UploadBatch>();
@@ -43,36 +48,47 @@ export function trackUpload(tempIds: string[]): {
   const batch: UploadBatch = {
     controller: new AbortController(),
     pending: new Set(tempIds),
+    sent: false,
   };
   tempIds.forEach((id) => batchByTempId.set(id, batch));
   return {
     options: {
       signal: batch.controller.signal,
-      onProgress: (progress) =>
+      onProgress: (progress) => {
+        if (progress >= 1) batch.sent = true;
         useUploadProgressStore.setState((state) => {
           const progressByTempId = { ...state.progressByTempId };
           batch.pending.forEach((id) => {
             progressByTempId[id] = progress;
           });
           return { progressByTempId };
-        }),
+        });
+      },
     },
     isCancelled: (tempId) => !batch.pending.has(tempId),
     finish: (uploaded = []) => {
       const uploadedByTempId = new Map(uploaded.map((f) => [f.temp_id, f]));
+      let settledHeld = false;
       tempIds.forEach((id) => {
         if (batchByTempId.get(id) === batch) batchByTempId.delete(id);
-        if (heldUploads.has(id))
+        if (heldUploads.has(id)) {
           heldUploads.set(id, uploadedByTempId.get(id) ?? null);
+          settledHeld = true;
+        }
       });
       clearProgress(tempIds);
+      if (settledHeld)
+        useUploadProgressStore.setState((state) => ({
+          heldSettled: state.heldSettled + 1,
+        }));
     },
   };
 }
 
 /**
  * Stops waiting for the file's upload. The request is aborted when no other
- * file in its batch still waits for it.
+ * file in its batch still waits for it and its bytes are not all sent. Once
+ * they are, the request finishes and its caller deletes the cancelled files.
  */
 export function cancelUpload(tempId: string): void {
   const batch = batchByTempId.get(tempId);
@@ -80,7 +96,7 @@ export function cancelUpload(tempId: string): void {
   batchByTempId.delete(tempId);
   batch.pending.delete(tempId);
   clearProgress([tempId]);
-  if (batch.pending.size === 0) batch.controller.abort();
+  if (batch.pending.size === 0 && !batch.sent) batch.controller.abort();
 }
 
 /** Keeps the results of these files' running uploads for `releaseUploads`. */
@@ -101,9 +117,9 @@ export function releaseUploads(files: ProjectFile[]): ProjectFile[] {
     if (file.status !== UserFileStatus.UPLOADING || !file.temp_id)
       return [file];
     const result = heldUploads.get(file.temp_id);
+    if (result === undefined)
+      return batchByTempId.has(file.temp_id) ? [file] : [];
     heldUploads.delete(file.temp_id);
-    if (result === null) return [];
-    if (result) return [{ ...file, ...result }];
-    return batchByTempId.has(file.temp_id) ? [file] : [];
+    return result === null ? [] : [{ ...file, ...result }];
   });
 }
