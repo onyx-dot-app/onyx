@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useMemo } from "react";
+import type { Element } from "hast";
 import ReactMarkdown, {
   type Components,
   type ExtraProps,
