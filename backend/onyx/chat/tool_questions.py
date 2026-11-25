@@ -84,7 +84,8 @@ def card_answers(
     ordered: list[ToolQuestionAnswer] = []
     for question in questions:
         answer = given[question.id]
-        labels = [option.label for option in question.options]
+        # A saved question can repeat a label; each label counts once.
+        labels = list(dict.fromkeys(option.label for option in question.options))
         chosen = set(answer.option_labels)
         # A note counts by the text that the answer saves.
         if (
