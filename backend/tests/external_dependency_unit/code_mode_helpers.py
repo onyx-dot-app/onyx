@@ -15,6 +15,7 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.models import ToolCall, User
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.cancellation import check_cancelled, current_cancellation
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_request import ChatCompletionMessage, ToolMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -53,8 +54,9 @@ class ChatLLM(ScriptedLLM):
         *,
         gates: dict[int, Callable[[], None]] | None = None,
         hold_open: bool = False,
+        family: ToolFamily = ToolFamily.OPENAI,
     ) -> None:
-        super().__init__([], max_input_tokens=128000)
+        super().__init__([], max_input_tokens=128000, family=family)
         self.script = list(steps)
         self.gates = gates or {}
         self.hold_open = hold_open

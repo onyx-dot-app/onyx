@@ -18,6 +18,10 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    OPENAI_CODE_MODE,
+    CodeModeShape,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -52,10 +56,11 @@ def tool_call_reply(
     tool_choice: str | None = None,
     required: bool = True,
     conditions: RequestConditions | None = None,
+    shape: CodeModeShape = OPENAI_CODE_MODE,
 ) -> Reply:
     """A reply that calls tools the way the server offers them: native tool
-    calls, or with code mode on, one `exec` program that awaits each
-    call in order. A program calls a tool as `tools.<name>`, with the other
+    calls, or with code mode on, one program of `shape`'s run tool that awaits
+    each call in order. A program calls a tool as `tools.<name>`, with the other
     characters of its name as `_`; it can call a deferred (MCP or custom)
     function without `tool_search`. The
     program call takes the first call's id, so a later reply can wait for
@@ -81,10 +86,12 @@ def tool_call_reply(
         for call in calls
     )
     return Reply(
-        tool_calls=[ToolCall(id=calls[0].id, name="exec", arguments={"code": program})],
+        tool_calls=[
+            ToolCall(id=calls[0].id, name=shape.run_name, arguments={"code": program})
+        ],
         conditions=base.model_copy(
             update={
-                "offers": [*base.offers, "exec"],
+                "offers": [*base.offers, shape.run_name],
                 "tool_choice": tool_choice or base.tool_choice,
             }
         ),

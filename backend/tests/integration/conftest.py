@@ -552,6 +552,22 @@ def mock_llm(
 
 
 @pytest.fixture
+def claude_mock_llm(
+    mock_llm: MockLLMScript, admin_user: DATestUser
+) -> Generator[DATestLLMProvider, None, None]:
+    """A provider of a Claude-named model on the test's mock LLM script, beside
+    the default. Chats that pick it get the Claude tool family."""
+    provider = MockLLMManager.create(
+        mock_llm.api_base,
+        admin_user,
+        model_name="claude-sonnet-4-5-mock",
+        make_default=False,
+    )
+    yield provider
+    LLMProviderManager.delete(provider, user_performing_action=admin_user)
+
+
+@pytest.fixture
 def api_key(admin_user: DATestUser) -> DATestAPIKey:
     return APIKeyManager.create(user_performing_action=admin_user)
 

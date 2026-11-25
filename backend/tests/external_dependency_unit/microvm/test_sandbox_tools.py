@@ -123,6 +123,7 @@ from onyx.llm.cancellation import (
     cancellation_scope,
 )
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_request import UserMessage as PromptUserMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -1637,10 +1638,6 @@ class NamedChatLLM(ChatLLM):
         )
 
 
-def _claude(steps: Sequence[Delta]) -> NamedChatLLM:
-    return NamedChatLLM(steps, model_name="claude-opus-4-5")
-
-
 @pytest.mark.parametrize(
     ("model_name", "deployment_name", "claude"),
     [
@@ -1678,7 +1675,7 @@ def test_claude_models_get_edit_and_write_and_others_apply_patch(
 def test_edit_and_write_calls_render_patch_cards_live_and_on_replay(
     db_session: Session, node: RunningFakeAgent, chat: SandboxChat
 ) -> None:
-    llm = _claude(
+    llm = ChatLLM(
         [
             tool_step(
                 WriteTool.NAME, "create", {"file_path": "a.py", "content": "x = 1\n"}
@@ -1699,7 +1696,8 @@ def test_edit_and_write_calls_render_patch_cards_live_and_on_replay(
                 {"file_path": "a.py", "old_string": "zzz", "new_string": "q"},
             ),
             Delta(content="Done."),
-        ]
+        ],
+        family=ToolFamily.CLAUDE,
     )
     parts = chat.send(llm)
 
@@ -1764,8 +1762,9 @@ def test_a_program_edits_and_writes_files(
         "except Exception as error:\n"
         "    print('raised:', error)\n"
     )
-    llm = _claude(
-        [code_step(CLAUDE_CODE_MODE, "code", program), Delta(content="Done.")]
+    llm = ChatLLM(
+        [code_step(CLAUDE_CODE_MODE, "code", program), Delta(content="Done.")],
+        family=ToolFamily.CLAUDE,
     )
     chat.send(llm, code_mode=True)
 
@@ -1815,11 +1814,12 @@ def test_file_calls_of_one_step_take_turns(
         "edit",
         {"file_path": "a.py", "old_string": "a = 1", "new_string": "a = 2"},
     ).tool_calls
-    llm = _claude(
+    llm = ChatLLM(
         [
             Delta(tool_calls=[write_call, edit_call.model_copy(update={"index": 1})]),
             Delta(content="Done."),
-        ]
+        ],
+        family=ToolFamily.CLAUDE,
     )
     chat.send(llm)
 
