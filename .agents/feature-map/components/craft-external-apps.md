@@ -32,6 +32,11 @@ already has credentials. It shows Connected only after the decision succeeds,
 and stays retryable after a failure. When the user declines, the agent gets a
 rejection and can choose another way.
 
+A command that a chat runs in its VM gets the same wait while the chat's
+`exec_command` call waits on it: the card shows on that call, with approve
+once, approve for this command, or reject. A background process gets an
+error instead ([[#chat-command-approvals]]).
+
 The user can set personal Allow, Ask or Blocked choices per action when
 the admin allows it. Scheduled tasks run in chat, not in Craft
 ([[craft-scheduled-tasks]]).
@@ -97,8 +102,11 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
                     each candidate the user runs; API before MCP
                     None -> no gate; host-claiming resolvers may still inject
  6 session          verified session tag required for any matched request
- 7 policy           resolve_craft_action_policies; strictest action governs
+ 7 policy           resolve_craft_action_policies (a chat: its agent's
+                    policies); strictest action governs
                     DENY -> 403   ASK -> session grant or approval wait
+                    (a chat: command grant or approval wait while a call
+                    waits on the command, else 403)
  8 recheck          after an approval: same actions, live policy, same run
  9 injection        CredentialInjectionDispatcher: OnyxPat, Integration
                     resolvers, first claim wins
@@ -267,15 +275,19 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    approval to another session of the same user. The comment in
    `GateAddon._extract_session_tag` explains why signing the MCP session header
    adds nothing. Keep the user check. A tag that is no build session can be
-   a chat: each chat VM command sends its chat session as the proxy URL user
-   (`server/features/build/sandbox/firecracker/harness_sandbox.py`), and `IdentityResolver.resolve_chat_session`
+   a chat: each chat VM command sends `<chat session>.<command ID>` as the
+   proxy URL user (`server/features/build/sandbox/firecracker/harness_sandbox.py:command_proxy_user`,
+   parsed by `sandbox_proxy/addons/gate.py:parse_session_tag`), and `IdentityResolver.resolve_chat_session`
    accepts a chat of the owner that is not deleted. Such a request takes the
    agent policies of that chat (`integrations/policy.py:resolve_chat_action_policies`)
-   with no chat grant and no run mode. Allow goes out, Blocked is denied, and
-   Ask is refused with `approval_needs_tool`, which names the chat tool
+   with no chat grant and no run mode. Allow goes out, and Blocked is denied.
+   Ask is held only while a call of the chat waits on the command
+   ([[#chat-command-approvals]]); otherwise, as for a background process, it is
+   refused with `approval_needs_tool`, which names the chat tool
    (`sandbox_proxy/addons/gate.py:_app_tool_hint`: `custom__<id>__<action key>` for a REST or GraphQL app,
    `app__<id>__<action>` for a preset), or says that the app has no tool for
-   the request, as for a request that matches only `unspecified`. The initial IP listing fails loudly when
+   the request, as for a request that matches only `unspecified`. The command ID is a same-user hint like
+   the session tag: a process of the VM can send another command's ID. The initial IP listing fails loudly when
    two sandboxes share an IP
    (`backend/onyx/sandbox_proxy/sandbox_identity/kubernetes.py:K8sInformerLookup._initial_list`,
    `backend/onyx/sandbox_proxy/sandbox_identity/docker.py:DockerEventsLookup._initial_sync`).
@@ -352,6 +364,32 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     (`backend/onyx/server/features/build/connect_app.py:_PENDING_TTL_S`). "Connected" only allows the permission;
     it does not check that a credential exists. The proxy still gates the
     later calls.
+13. `chat-command-approvals` **A chat command's Ask waits only on a call that
+    shows its card.** The `exec_command` or `write_stdin` call that waits on a
+    command marks it in the foreground
+    (`sandbox_proxy/approval_cache.py:mark_command_foreground`, renewed each
+    second, 60 s TTL) through
+    `tools/tool_implementations/sandbox/command_approvals.py:CommandApprovals`,
+    which the harness calls before the start or the write
+    (`server/features/build/sandbox/harness_base.py:CommandHold`). The gate holds the request only while the
+    mark names the tagged chat, writes an `action_approval` row with
+    `chat_session_id` and `command_id` (method, path and body as its payload),
+    announces it under the command ID, and sends no notification. It checks
+    the mark again after the write and expires its own row when the call
+    ended, so no row waits that no card shows. The call's watcher shows the row
+    as a `ToolApprovalRequest` progress card and its end as the resolution;
+    `HarnessSandbox._collect` does not yield while a row of the command waits.
+    The user decides through `POST /chat/approvals/{id}/decision`
+    (`server/query_and_chat/command_approvals.py:decide_command_approval`):
+    approve once, `approve_command` (`decided_via` COMMAND_GRANT, a cache set
+    of `integration:action` per command that the gate checks before it holds,
+    which also approves the command's other waiting rows that it covers), or
+    reject. A grant applies only in the foreground, never to an action that
+    always asks, and is deleted when the command exits. When the call ends,
+    `CommandApprovals.end` refuses the command's waiting rows: REJECTED by the
+    user on a Stop, EXPIRED otherwise. These rows are not in
+    `approval_request`, so the chat run state, replay and Stop routes never
+    read them.
 
 ---
 
@@ -460,5 +498,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - Matching and policies: `backend/tests/unit/external_apps/` and
   `backend/tests/external_dependency_unit/integrations/`.
 - Approval routes: `backend/tests/external_dependency_unit/craft/`.
+- Chat command approvals: `backend/tests/unit/sandbox_proxy/test_gate.py`,
+  `backend/tests/unit/sandbox_proxy/test_command_grants.py` and
+  `backend/tests/external_dependency_unit/sandbox_proxy/test_chat_command_approvals.py`.
+  Only a Firecracker VM proves the proxy URL user through the host relay.
 - End to end with a real sandbox and proxy:
   `backend/tests/integration/tests/craft/docker_e2e/`.

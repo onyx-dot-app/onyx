@@ -172,11 +172,17 @@ started the agent, with `agent_name` set
 `can_approve_for_chat` is false for an action that asks each time, the
 request tool of an app (`integrations/policy.py:always_asks`): the
 card offers no approval for the chat, no saved grant skips its card, and the
-decision route saves such an approval as a single one.
+decision route saves such an approval as a single one. An exec_command or
+write_stdin call also sends both packets, from its progress, for an app
+request of its command that the egress proxy holds
+(`CommandApprovalRequest`, `CommandApprovalResolved`;
+[[craft-external-apps#chat-command-approvals]]): `can_approve_for_command`
+and `app_name` are set, and these packets are live only.
 `tool_approval_resolved` carries an `outcome`
 (`chat/renderer.py:approval_outcome`): `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an
-earlier one), `rejected` (also a user Stop of a live turn), `disabled` (an
+earlier one), `approved_for_command` (a command grant; command requests
+only), `rejected` (also a user Stop of a live turn), `disabled` (an
 approval of a tool that the policy now disables, or a request deleted with its
 tool's server), or `cancelled` for a call that stopped waiting without a
 decision. Requests have no deadline. A turn whose run has nothing left but
