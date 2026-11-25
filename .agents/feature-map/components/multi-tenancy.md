@@ -137,12 +137,12 @@ signs people in with Google or with a link sent by email. The link itself is in
 rules ride along through EE hooks in `ee/onyx/server/tenants/provisioning.py`.
 `check_playground_address` refuses a free-mail address before any email goes
 out, since that is a fact about the domain, not about anyone's account. For
-every other address the request answers "link sent", so a stranger typing an
-address learns nothing about it; the sign-up rules above run when the link is
-redeemed, through `get_or_provision_tenant`. `is_team_choice_refusal` names the
-one refusal with a question, a running trial from the domain: the redeem route
-answers `team_choice` with a fresh token that carries "start a new team", so
-the question costs no second email.
+every other eligible address the answer does not show whether it has an account;
+the sign-up rules above run when the link is redeemed, through
+`get_or_provision_tenant`. `is_team_choice_refusal` names the one refusal with a
+question, a running trial from the domain: the redeem route answers
+`team_choice` with a fresh token that carries "start a new team", so the
+question costs no second email.
 
 **Two Alembic trees.** `backend/alembic/` migrates the tenant tables
 (`db/models.py:Base`) once per tenant schema. `backend/alembic_tenants/`
