@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FileDescriptor } from "@/app/app/types";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/lib/timeline/chat/message/MessageSwitcher";
