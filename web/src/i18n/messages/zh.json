@@ -11427,6 +11427,7 @@
         "loginBadCredentials": "此账户无法登录，可能已被停用。请联系您的工作区管理员。",
         "loginRequired": "您需要先通过身份提供方登录。",
         "magicLinkInvalid": "此登录链接已失效或已被使用。请重新获取。",
+        "magicLinkWrongEmail": "此链接是发送到另一个邮箱地址的。请重新获取链接。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
         "playgroundActiveTenant": "您公司的团队已经在试用 Onyx。加入您的团队，还是创建新团队？",
         "playgroundAskAdmin": "请让您的管理员邀请您。",
@@ -11608,6 +11609,10 @@
       }
     },
     "magicLink": {
+      "confirmEmail": {
+        "description": "此链接是在与请求它的浏览器不同的浏览器中打开的。请输入接收此链接的邮箱地址。",
+        "title": "确认您的邮箱"
+      },
       "differentEmailButton": {
         "label": "使用其他邮箱"
       },

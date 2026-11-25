@@ -11427,6 +11427,7 @@
         "loginBadCredentials": "Esta cuenta no puede iniciar sesión. Puede estar desactivada. Contacta al administrador de tu espacio de trabajo.",
         "loginRequired": "Primero debes iniciar sesión con tu proveedor de identidad.",
         "magicLinkInvalid": "Este enlace de inicio de sesión ha caducado o ya se usó. Pide uno nuevo.",
+        "magicLinkWrongEmail": "Este enlace se envió a otra dirección de correo. Pide un enlace nuevo.",
         "oauthUserAlreadyExists": "Ya existe una cuenta con este correo con otro método de inicio de sesión. Inicia sesión como lo hiciste la primera vez, o pide a tu administrador que vincule este proveedor.",
         "playgroundActiveTenant": "Un equipo de tu empresa ya está probando Onyx. ¿Unirte a tu equipo o crear un equipo nuevo?",
         "playgroundAskAdmin": "Pide a tu administrador que te invite.",
@@ -11608,6 +11609,10 @@
       }
     },
     "magicLink": {
+      "confirmEmail": {
+        "description": "Este enlace se abrió en un navegador distinto del que lo pidió. Escribe la dirección de correo a la que se envió.",
+        "title": "Confirma tu correo"
+      },
       "differentEmailButton": {
         "label": "Usar otro correo"
       },

@@ -32,6 +32,7 @@ const KNOWN_ERROR_CODES = [
   "PLAYGROUND_ACTIVE_TENANT",
   "PLAYGROUND_CHECK_FAILED",
   "MAGIC_LINK_INVALID",
+  "MAGIC_LINK_WRONG_EMAIL",
   "MAGIC_LINK_USE_SSO",
 ] as const;
 
@@ -79,6 +80,7 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
     PLAYGROUND_ACTIVE_TENANT: t("error.code.playgroundActiveTenant"),
     PLAYGROUND_CHECK_FAILED: t("error.code.playgroundCheckFailed"),
     MAGIC_LINK_INVALID: t("error.code.magicLinkInvalid"),
+    MAGIC_LINK_WRONG_EMAIL: t("error.code.magicLinkWrongEmail"),
     MAGIC_LINK_USE_SSO: t("magicLink.useSso.error"),
   } satisfies Record<KnownErrorCode, string>;
   const isPlayground = rawMessage?.startsWith("PLAYGROUND_") ?? false;
@@ -176,7 +178,8 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
               {t("error.returnToLoginButton.label")}
             </Button>
           </>
-        ) : rawMessage === MagicLinkRefusal.INVALID ? (
+        ) : rawMessage === MagicLinkRefusal.INVALID ||
+          rawMessage === MagicLinkRefusal.WRONG_EMAIL ? (
           <Button
             {...navigation.linkTo(loginPath({ autoRedirectToSso: false }))}
             width="full"

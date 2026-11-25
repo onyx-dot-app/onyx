@@ -11427,6 +11427,7 @@
         "loginBadCredentials": "Ce compte ne peut pas se connecter. Il est peut-être désactivé. Contactez l'administrateur de votre espace de travail.",
         "loginRequired": "Vous devez d'abord vous connecter avec votre fournisseur d'identité.",
         "magicLinkInvalid": "Ce lien de connexion a expiré ou a déjà été utilisé. Demandez-en un nouveau.",
+        "magicLinkWrongEmail": "Ce lien a été envoyé à une autre adresse e-mail. Demandez un nouveau lien.",
         "oauthUserAlreadyExists": "Un compte avec cette adresse e-mail existe déjà avec une autre méthode de connexion. Connectez-vous comme la première fois, ou demandez à votre administrateur d'associer ce fournisseur.",
         "playgroundActiveTenant": "Une équipe de votre entreprise essaie déjà Onyx. Rejoindre votre équipe ou créer une nouvelle équipe ?",
         "playgroundAskAdmin": "Demandez à votre administrateur de vous inviter.",
@@ -11608,6 +11609,10 @@
       }
     },
     "magicLink": {
+      "confirmEmail": {
+        "description": "Ce lien a été ouvert dans un autre navigateur que celui qui l'a demandé. Saisissez l'adresse e-mail à laquelle il a été envoyé.",
+        "title": "Confirmez votre adresse e-mail"
+      },
       "differentEmailButton": {
         "label": "Utiliser une autre adresse e-mail"
       },

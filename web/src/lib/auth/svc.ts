@@ -218,17 +218,19 @@ export async function requestMagicLink(
 }
 
 /**
- * Redeem the token from an emailed link. The token works once. Throws a
+ * Redeem the token from an emailed link. The token works once. Pass `email`
+ * when the backend asked for it (`confirm_email`). Throws a
  * `FetchError` whose message is the backend's `detail`: an error code such as
  * `MAGIC_LINK_INVALID` or a `PLAYGROUND_*` refusal, or a sentence.
  */
 export async function redeemMagicLink(
-  token: string
+  token: string,
+  email?: string
 ): Promise<MagicLinkRedeemed> {
   const response = await fetch("/api/auth/magic-link/redeem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify(email === undefined ? { token } : { token, email }),
   });
   if (!response.ok) {
     const detail = await parseErrorDetail(response, "Request failed");

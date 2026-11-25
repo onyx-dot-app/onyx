@@ -53,6 +53,16 @@ function redeemedTokens(fetchMock: jest.SpyInstance): string[] {
   );
 }
 
+function redeemBodies(fetchMock: jest.SpyInstance): unknown[] {
+  return fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init.body)));
+}
+
+const CONFIRM_EMAIL = jsonResponse(200, {
+  state: "confirm_email",
+  next_url: null,
+  team_choice_token: null,
+});
+
 beforeEach(() => {
   mockToken = "tok";
   mockGo.mockReset();
@@ -170,6 +180,54 @@ describe("MagicLinkRedeem", () => {
       screen.getByText("Ask your admin to invite you.")
     ).toBeInTheDocument();
     expect(redeemedTokens(fetchMock)).toEqual(["tok"]);
+    expect(mockLoad).not.toHaveBeenCalled();
+  });
+
+  test("opened in another browser, it asks for the address before signing in", async () => {
+    const fetchMock = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(CONFIRM_EMAIL)
+      .mockResolvedValueOnce(signedIn("/app"));
+    const user = setupUser();
+
+    render(<MagicLinkRedeem />);
+    await user.type(
+      await screen.findByTestId("magic-link-confirm-email"),
+      " bob@acme.com "
+    );
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() =>
+      expect(mockLoad).toHaveBeenCalledWith("/app", { replace: true })
+    );
+    expect(redeemBodies(fetchMock)).toEqual([
+      { token: "tok" },
+      { token: "tok", email: "bob@acme.com" },
+    ]);
+  });
+
+  test("a wrong address opens the error page with its code", async () => {
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(CONFIRM_EMAIL)
+      .mockResolvedValueOnce(
+        jsonResponse(403, { detail: "MAGIC_LINK_WRONG_EMAIL" })
+      );
+    const user = setupUser();
+
+    render(<MagicLinkRedeem />);
+    await user.type(
+      await screen.findByTestId("magic-link-confirm-email"),
+      "victim@example.com"
+    );
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() =>
+      expect(mockGo).toHaveBeenCalledWith(
+        "/auth/error?error=MAGIC_LINK_WRONG_EMAIL",
+        { replace: true }
+      )
+    );
     expect(mockLoad).not.toHaveBeenCalled();
   });
 });

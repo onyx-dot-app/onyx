@@ -149,14 +149,22 @@ sign-in and sign-up pages ask for the link
 password form's place. The link opens a web page
 (`web/src/app/auth/magic-link/MagicLinkRedeem.tsx`) that POSTs the token once,
 so a mail scanner that fetches the link cannot use it up; it shows the
-playground's join-or-new question itself. Nothing is created until the token is
-redeemed (`onyx/auth/users.py:UserManager.magic_link_login`). Redeeming resolves
-the tenant, runs the same gates as a password sign-up (invite-only, allowed
-domains, the seat limit), then creates the user, verified, with a random
-password, or signs the existing user in, and sets the session cookie. An account
-whose SSO session has expired (`oidc_expiry`) is sent to SSO with
-`MAGIC_LINK_USE_SSO`. A used or expired token is `MAGIC_LINK_INVALID`. The
-playground adds its sign-up rules through EE hooks; see [[multi-tenancy]].
+playground's join-or-new question itself. The request sets an HttpOnly cookie in
+the asking browser and the record keeps its hash
+(`onyx/auth/magic_link.py:opened_where_requested`). Redeeming in that browser
+signs in at once; anywhere else the route answers `confirm_email` without using
+the token, and needs the address the link went to. A wrong address uses the link
+up (`MAGIC_LINK_WRONG_EMAIL`). Without this, a link forwarded to someone would
+sign them in to the sender's account. The playground's join-or-new token is
+marked `proven`, since only the page that passed the check receives it. Nothing
+is created until the token is redeemed
+(`onyx/auth/users.py:UserManager.magic_link_login`). Redeeming resolves the
+tenant, runs the same gates as a password sign-up (invite-only, allowed domains,
+the seat limit), then creates the user, verified, with a random password, or
+signs the existing user in, and sets the session cookie. An account whose SSO
+session has expired (`oidc_expiry`) is sent to SSO with `MAGIC_LINK_USE_SSO`. A
+used or expired token is `MAGIC_LINK_INVALID`. The playground adds its sign-up
+rules through EE hooks; see [[multi-tenancy]].
 
 **OAuth provider.** The routes mount only when `WEB_DOMAIN` is HTTPS, or HTTP on
 a loopback host (`oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS`). The

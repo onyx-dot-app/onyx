@@ -11427,6 +11427,7 @@
         "loginBadCredentials": "이 계정으로는 로그인할 수 없습니다. 비활성화되었을 수 있습니다. 워크스페이스 관리자에게 문의하세요.",
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
         "magicLinkInvalid": "이 로그인 링크는 만료되었거나 이미 사용되었습니다. 새 링크를 요청하세요.",
+        "magicLinkWrongEmail": "이 링크는 다른 이메일 주소로 전송되었습니다. 새 링크를 요청하세요.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
         "playgroundActiveTenant": "회사의 팀이 이미 Onyx를 사용해 보고 있습니다. 팀에 참여하시겠습니까, 새 팀을 시작하시겠습니까?",
         "playgroundAskAdmin": "관리자에게 초대를 요청하세요.",
@@ -11608,6 +11609,10 @@
       }
     },
     "magicLink": {
+      "confirmEmail": {
+        "description": "이 링크는 요청한 브라우저와 다른 브라우저에서 열렸습니다. 링크를 받은 이메일 주소를 입력하세요.",
+        "title": "이메일 확인"
+      },
       "differentEmailButton": {
         "label": "다른 이메일 사용"
       },

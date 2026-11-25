@@ -11427,6 +11427,7 @@
         "loginBadCredentials": "This account can't sign in. It may be deactivated. Contact your workspace admin.",
         "loginRequired": "You need to log in with your identity provider first.",
         "magicLinkInvalid": "This sign-in link has expired or was already used. Ask for a new one.",
+        "magicLinkWrongEmail": "This link was sent to a different email address. Ask for a new link.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
         "playgroundActiveTenant": "A team from your company is already trying Onyx. Join your team, or start a new team?",
         "playgroundAskAdmin": "Ask your admin to invite you.",
@@ -11608,6 +11609,10 @@
       }
     },
     "magicLink": {
+      "confirmEmail": {
+        "description": "This link was opened in a different browser from the one that asked for it. Enter the email address it was sent to.",
+        "title": "Confirm your email"
+      },
       "differentEmailButton": {
         "label": "Use a different email"
       },

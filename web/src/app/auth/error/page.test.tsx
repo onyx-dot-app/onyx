@@ -194,4 +194,19 @@ describe("auth error page", () => {
       screen.getByRole("link", { name: "Sign in with SSO" })
     ).toHaveAttribute("href", "/auth/login");
   });
+
+  test("offers a new link when the typed address was not the link's", async () => {
+    mockError = "MAGIC_LINK_WRONG_EMAIL";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(
+        "This link was sent to a different email address. Ask for a new link."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Get a new link" })
+    ).toHaveAttribute("href", "/auth/login?autoRedirectToSso=false");
+  });
 });

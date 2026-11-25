@@ -1,6 +1,7 @@
 """The magic link routes: what is refused before an email goes out, what the
 email carries, what a click gets back, and the playground's two extra rules."""
 
+import hashlib
 from collections.abc import Callable, Iterator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -10,7 +11,11 @@ from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 
 from onyx.auth import magic_link
-from onyx.auth.magic_link import MagicLinkRecord
+from onyx.auth.magic_link import (
+    MAGIC_LINK_BROWSER_COOKIE,
+    MAGIC_LINK_WRONG_EMAIL_CODE,
+    MagicLinkRecord,
+)
 from onyx.auth.users import auth_backend, get_user_manager
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -107,14 +112,19 @@ class TestRequest:
 
         assert response.status_code == 202
         assert response.json() == {"email": "someone@example.com"}
-        address_passes["store"].assert_awaited_once_with(
-            MagicLinkRecord(
-                email="someone@example.com",
-                start_new_team=True,
-                next_url="/app?x=1",
-                referral_source="ads",
-            )
-        )
+        (stored,) = address_passes["store"].await_args.args
+        assert stored.model_dump(exclude={"browser_hash"}) == MagicLinkRecord(
+            email="someone@example.com",
+            start_new_team=True,
+            next_url="/app?x=1",
+            referral_source="ads",
+        ).model_dump(exclude={"browser_hash"})
+        # This browser holds the secret; the record holds only its hash.
+        secret = response.cookies.get(MAGIC_LINK_BROWSER_COOKIE)
+        assert secret
+        assert stored.browser_hash == hashlib.sha256(secret.encode()).hexdigest()
+        set_cookie = response.headers["set-cookie"].lower()
+        assert "httponly" in set_cookie and "samesite=lax" in set_cookie
         address_passes["send"].assert_called_once_with(
             "someone@example.com", f"{WEB_DOMAIN}/auth/magic-link?token=tok"
         )
@@ -265,6 +275,7 @@ class TestRequest:
         address_passes["release"].assert_awaited_once_with(
             "someone@example.com", "claim"
         )
+        assert MAGIC_LINK_BROWSER_COOKIE not in response.cookies
 
     @pytest.mark.usefixtures("mail_is_configured")
     def test_one_email_per_address_a_minute(
@@ -279,11 +290,13 @@ class TestRequest:
         address_passes["send"].assert_not_called()
 
 
+BROWSER_SECRET = "this-browser-asked"
 RECORD = MagicLinkRecord(
     email="someone@example.com",
     start_new_team=True,
     next_url="/app",
     referral_source="ads",
+    browser_hash=hashlib.sha256(BROWSER_SECRET.encode()).hexdigest(),
 )
 TEAM_CHOICE = OnyxError(OnyxErrorCode.REGISTRATION_DISABLED, "PLAYGROUND_ACTIVE_TENANT")
 
@@ -307,6 +320,15 @@ def _is_team_choice(error: OnyxError) -> bool:
 
 @pytest.mark.usefixtures("not_sso_only")
 class TestRedeem:
+    @pytest.fixture(autouse=True)
+    def peeked(self, client: TestClient) -> Iterator[AsyncMock]:
+        """By default the link is opened in the browser that asked for it."""
+        client.cookies.set(MAGIC_LINK_BROWSER_COOKIE, BROWSER_SECRET)
+        with patch(
+            f"{_MODULE}.peek_magic_link", AsyncMock(return_value=RECORD)
+        ) as peek:
+            yield peek
+
     def test_a_good_token_signs_in_and_sets_the_cookies(
         self, client: TestClient, user_manager: MagicMock
     ) -> None:
@@ -338,10 +360,12 @@ class TestRedeem:
         user_manager.on_after_login.assert_awaited_once()
 
     def test_a_used_or_expired_token_is_one_generic_refusal(
-        self, client: TestClient, user_manager: MagicMock
+        self, client: TestClient, user_manager: MagicMock, peeked: AsyncMock
     ) -> None:
-        with patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=None)):
+        peeked.return_value = None
+        with patch(f"{_MODULE}.consume_magic_link", AsyncMock()) as consume:
             response = client.post("/auth/magic-link/redeem", json={"token": "old"})
+        consume.assert_not_awaited()
 
         assert response.status_code == OnyxErrorCode.INVALID_TOKEN.status_code
         assert response.json()["detail"] == MAGIC_LINK_INVALID_CODE
@@ -386,8 +410,9 @@ class TestRedeem:
             "team_choice_token": "tok2",
         }
         # The same address and landing, with only the choice changed.
+        # Only the choice changes, and the token never leaves this page.
         store.assert_awaited_once_with(
-            first_click.model_copy(update={"start_new_team": True})
+            first_click.model_copy(update={"start_new_team": True, "proven": True})
         )
         login.assert_not_awaited()
         assert "set-cookie" not in response.headers
@@ -478,6 +503,115 @@ class TestRedeem:
 
         assert response.status_code == OnyxErrorCode.VALIDATION_ERROR.status_code
         login.assert_not_awaited()
+
+
+class TestRedeemElsewhere:
+    """A link opened in another browser than the one that asked for it."""
+
+    @pytest.fixture(autouse=True)
+    def setup(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> Iterator[dict[str, AsyncMock]]:
+        client.cookies.clear()
+        user_manager.magic_link_login.return_value = _user()
+        with (
+            patch(f"{_MODULE}.is_sso_only", return_value=False),
+            patch(f"{_MODULE}.peek_magic_link", AsyncMock(return_value=RECORD)) as peek,
+            patch(
+                f"{_MODULE}.consume_magic_link", AsyncMock(return_value=RECORD)
+            ) as consume,
+            patch.object(
+                magic_link_api.auth_backend,
+                "login",
+                AsyncMock(return_value=_login_response()),
+            ),
+        ):
+            yield {"peek": peek, "consume": consume}
+
+    def test_asks_for_the_address_and_keeps_the_token(
+        self,
+        client: TestClient,
+        user_manager: MagicMock,
+        setup: dict[str, AsyncMock],
+    ) -> None:
+        response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.status_code == 200
+        assert response.json()["state"] == "confirm_email"
+        setup["consume"].assert_not_awaited()
+        user_manager.magic_link_login.assert_not_awaited()
+
+    def test_another_browsers_cookie_is_not_this_one(
+        self, client: TestClient, setup: dict[str, AsyncMock]
+    ) -> None:
+        client.cookies.set(MAGIC_LINK_BROWSER_COOKIE, "some-other-request")
+
+        response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.json()["state"] == "confirm_email"
+        setup["consume"].assert_not_awaited()
+
+    def test_the_right_address_signs_in(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        response = client.post(
+            "/auth/magic-link/redeem",
+            json={"token": "tok", "email": " Someone@Example.com "},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["state"] == "signed_in"
+        user_manager.magic_link_login.assert_awaited_once()
+
+    def test_a_wrong_address_uses_the_link_up(
+        self,
+        client: TestClient,
+        user_manager: MagicMock,
+        setup: dict[str, AsyncMock],
+    ) -> None:
+        response = client.post(
+            "/auth/magic-link/redeem",
+            json={"token": "tok", "email": "victim@example.com"},
+        )
+
+        assert response.status_code == OnyxErrorCode.UNAUTHORIZED.status_code
+        assert response.json()["detail"] == MAGIC_LINK_WRONG_EMAIL_CODE
+        # One try, so the address cannot be guessed.
+        setup["consume"].assert_awaited_once_with("tok")
+        user_manager.magic_link_login.assert_not_awaited()
+
+    def test_a_record_without_a_browser_always_asks(
+        self, client: TestClient, setup: dict[str, AsyncMock]
+    ) -> None:
+        setup["peek"].return_value = RECORD.model_copy(update={"browser_hash": None})
+        client.cookies.set(MAGIC_LINK_BROWSER_COOKIE, BROWSER_SECRET)
+
+        response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.json()["state"] == "confirm_email"
+
+    def test_a_proven_record_needs_no_browser(
+        self, client: TestClient, setup: dict[str, AsyncMock]
+    ) -> None:
+        proven = RECORD.model_copy(update={"browser_hash": None, "proven": True})
+        setup["peek"].return_value = proven
+        setup["consume"].return_value = proven
+
+        response = client.post("/auth/magic-link/redeem", json={"token": "tok2"})
+
+        assert response.json()["state"] == "signed_in"
+
+    def test_signing_in_clears_the_browser_cookie(self, client: TestClient) -> None:
+        client.cookies.set(MAGIC_LINK_BROWSER_COOKIE, BROWSER_SECRET)
+
+        response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        cleared = [
+            c
+            for c in response.headers.get_list("set-cookie")
+            if c.startswith(f"{MAGIC_LINK_BROWSER_COOKIE}=")
+        ]
+        assert cleared and "max-age=0" in cleared[0].lower()
 
 
 @pytest.mark.parametrize(

@@ -94,6 +94,8 @@ A user types their email address and Onyx sends a link. One click signs them in.
   Without them the option does not show.
 - Set `WEB_DOMAIN` to the address where users open Onyx. The link points there.
 - A link works once and expires after 15 minutes. One address gets at most one link a minute.
+- The link signs in at once in the browser that asked for it. Opened anywhere else, for example on a phone,
+  the page asks for the email address the link was sent to. A wrong address uses the link up.
 - A new email address creates a new account. **Restrict Open Sign-Up** and **Allowed Email Domains** apply.
 - A new account counts as verified, because the click proves the email address.
 - An existing account signs in with the link too, whether it was created with a password or with SSO.

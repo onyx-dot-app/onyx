@@ -11,6 +11,7 @@ export enum SessionEndReason {
 export enum MagicLinkRefusal {
   USE_SSO = "MAGIC_LINK_USE_SSO",
   INVALID = "MAGIC_LINK_INVALID",
+  WRONG_EMAIL = "MAGIC_LINK_WRONG_EMAIL",
   PLAYGROUND_FREE_MAIL = "PLAYGROUND_FREE_MAIL",
 }
 
@@ -20,7 +21,10 @@ export type MagicLinkRedeemed =
   | { state: "signed_in"; next_url: string; team_choice_token: null }
   // Playground: a team from the domain has a running trial. Redeeming
   // `team_choice_token` starts a new team; joining needs no call.
-  | { state: "team_choice"; next_url: null; team_choice_token: string };
+  | { state: "team_choice"; next_url: null; team_choice_token: string }
+  // Opened in another browser than the one that asked for it. Redeem again
+  // with the address the link went to; the token is still unused.
+  | { state: "confirm_email"; next_url: null; team_choice_token: null };
 
 // Error body of the fastapi-users routes (`fastapi_users.router.common.ErrorModel`).
 // The register and reset-password routes send an object when the password is
