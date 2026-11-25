@@ -110,12 +110,14 @@ Group or user restriction needs EE.
   EE, no permission picker, `PUT /integrations/{id}/access`) and Publish to Org
   (`POST /integrations/{id}/publish`, off without global manage:actions). A row opens
   `/app/customize/integrations/[id]` (`sections/customize/CustomizeIntegrationPage.tsx`):
-  the connection status (a needs-reconnect reason as its tooltip), Connect or
-  Disconnect and the "..." menu in the header, then Overview (type, sign-in,
-  owner, and the "Use This Integration" switch) and Actions (each action with
-  the admin's Allow, Ask or Blocked, and the user's "Don't ask me" switch when
-  the admin allows it). There is no Configuration tab; `?tab=configuration`
-  links open Overview. The admin sets the
+  the connection status, Connect or Disconnect (also while turned off, for the
+  user's own connection) and the "..." menu in the header, then Overview (type,
+  sign-in, owner, a needs-reconnect reason as text, and the "Use This
+  Integration" switch) and Actions (each action with the admin's Allow, Ask or
+  Blocked, and the user's "Don't ask me" switch when the admin allows it).
+  There is no Configuration tab; an old `?tab=configuration` link opens
+  Overview. On a phone a Turned off row shows the short state; a No access row
+  keeps its reason, since it opens no page. The admin sets the
   policy only on `/admin/integrations/[id]`. A plugin that holds one skill
   opens that skill's page. When the admin lets users save it, each action that asks offers
   "Don't ask me" (saved as Always allow). A member with manage:actions adds a private integration

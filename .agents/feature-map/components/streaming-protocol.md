@@ -171,6 +171,8 @@ started the agent, with `agent_name` set
 ([[mcp-and-custom-tools#chat-approval-records-replay]]).
 `app_name` is the action's integration name, live (`chat/tool_approvals.py`)
 and on replay (`db/chat_response.py`), so the card reads "{action} in {app}".
+A shared view clears it (`backend/onyx/server/query_and_chat/chat_backend.py:get_chat_session`): the viewer may
+not have access to the integration.
 `can_approve_for_chat` is false for an action that asks each time, the
 request tool of an app (`integrations/policy.py:always_asks`): the
 card offers no approval for the chat, no saved grant skips its card, and the
