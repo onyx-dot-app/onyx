@@ -45,7 +45,7 @@ from onyx.db.chat import (
     session_ancestors,
 )
 from onyx.db.chat_checkpoint import (
-    chat_has_checkpoint,
+    chat_checkpoint_exists,
     check_checkpoint_owner__no_commit,
     resumable_parked_runs,
 )
@@ -339,10 +339,11 @@ def submit_human_message__no_commit(
     return _pending_human_message(row)
 
 
-def has_chat_inputs(session: Session, chat_session_id: UUID) -> bool:
-    """Whether any inbox row belongs to this conversation, including its agents.
+def chat_inbox_signals(session: Session, chat_session_id: UUID) -> tuple[bool, bool]:
+    """Whether any inbox row belongs to this conversation, including its agents,
+    and whether a response of the chat itself has a checkpoint. One statement.
 
-    Without one, the conversation has no queued turn and no running child.
+    Without an inbox row, the conversation has no queued turn and no running child.
     """
     addressed = (
         select(ChatInput.id)
@@ -355,7 +356,10 @@ def has_chat_inputs(session: Session, chat_session_id: UUID) -> bool:
         .where(ChatMessage.chat_session_id == chat_session_id)
         .exists()
     )
-    return bool(session.scalar(select(or_(addressed, descendant))))
+    has_inputs, has_checkpoint = session.execute(
+        select(or_(addressed, descendant), chat_checkpoint_exists(chat_session_id))
+    ).one()
+    return bool(has_inputs), bool(has_checkpoint)
 
 
 def list_human_messages(
@@ -462,10 +466,10 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     inbox = ChatInbox(
         branch=branch, selected_response_id=selected.id if selected else None
     )
-    has_inputs = has_chat_inputs(session, chat_session_id)
+    has_inputs, has_checkpoint = chat_inbox_signals(session, chat_session_id)
     # A parked agent has a result row, so only a parked root response can wait
     # in a chat without inbox rows.
-    if has_inputs or chat_has_checkpoint(session, chat_session_id):
+    if has_inputs or has_checkpoint:
         inbox.resumable_runs = resumable_parked_runs(session, chat_session_id)
     # A selected response that is active and not parked has, or had, an owner.
     if selected is not None and (

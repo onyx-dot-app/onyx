@@ -2855,7 +2855,7 @@ def test_message_poll_retries_after_database_failure(
     assert not owner.has_owned_work
     owner._pending_dispatch = True
     with (
-        patch("onyx.db.chat_inputs.has_chat_inputs", return_value=True),
+        patch("onyx.db.chat_inputs.chat_inbox_signals", return_value=(True, False)),
         patch(
             "onyx.db.chat_inputs.pending_inputs",
             side_effect=OperationalError(
@@ -2866,7 +2866,7 @@ def test_message_poll_retries_after_database_failure(
         owner.poll_control()
         assert owner.has_owned_work
     with (
-        patch("onyx.db.chat_inputs.has_chat_inputs", return_value=True),
+        patch("onyx.db.chat_inputs.chat_inbox_signals", return_value=(True, False)),
         patch("onyx.db.chat_inputs.pending_inputs", wraps=pending_inputs) as read,
     ):
         owner.poll_control()
@@ -2941,7 +2941,7 @@ def test_message_submitted_during_empty_poll_starts_after_parent_releases(
         assert child_finished.wait(10)
         # The inbox is still empty, so the scan passes its inbox check only here.
         with (
-            patch("onyx.db.chat_inputs.has_chat_inputs", return_value=True),
+            patch("onyx.db.chat_inputs.chat_inbox_signals", return_value=(True, False)),
             patch("onyx.db.chat_inputs.pending_inputs", side_effect=read_then_wait),
         ):
             polling = start_thread_future(

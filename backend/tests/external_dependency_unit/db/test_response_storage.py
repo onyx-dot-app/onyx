@@ -4717,3 +4717,20 @@ def test_selected_branch_reads_one_statement(
     selected, branch = get_selected_branch(db_session, uuid4())
     assert selected is None
     assert branch.message_ids == []
+
+
+def test_inbox_read_of_an_idle_chat_runs_two_statements(
+    db_session: Session, conversation: ChatSession, executed_sql: list[str]
+) -> None:
+    response = _response(db_session, conversation)
+    message_id, session_id = response.id, conversation.id
+    db_session.commit()
+    db_session.expire_all()
+    executed_sql.clear()
+
+    inbox = read_chat_inbox(db_session, session_id)
+    # The selected branch, then the inbox rows and the checkpoint together.
+    assert len(executed_sql) == 2
+    assert inbox.selected_response_id == message_id
+    assert not inbox.resumable_runs
+    assert inbox.next_turn is None
