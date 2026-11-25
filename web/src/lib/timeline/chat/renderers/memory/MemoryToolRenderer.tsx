@@ -48,7 +48,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
       {
         icon: STEP_ICONS.edit,
         status: t("memory.default.status"),
-        content: <div />,
+        content: null,
         supportsCollapsible: false,
         timelineLayout: "timeline",
       },
@@ -170,7 +170,8 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
       doneStatus: doneStatusLabel,
       supportsCollapsible: false,
       timelineLayout: "timeline",
-      content: memoryContent,
+      // Nothing to open until the memory's text arrives.
+      content: memoryText ? memoryContent : null,
     },
   ]);
 };

@@ -93,6 +93,14 @@
   @apply cursor-auto;
 }
 
+/* A card's header is always as tall as its fold button (an `md` button), with
+   its content centred, so a card that cannot fold yet keeps its height when
+   the button arrives. */
+.opal-line[data-opal-line-flavour="card"] .opal-collapsible-header {
+  @apply flex flex-col justify-center;
+  min-height: var(--height-line-h3-section);
+}
+
 /* ── Card flavour ────────────────────────────────────────────────────────────
    A run card: 0.25rem of padding around the header and the body, 0.75rem
    corners, and a neutral fill while filled. A folded card that its header

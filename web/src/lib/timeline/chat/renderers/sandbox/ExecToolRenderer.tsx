@@ -184,7 +184,16 @@ export function ExecToolRenderer({
       icon: STEP_ICONS.execute,
       status,
       supportsCollapsible: true,
-      content,
+      // A command shows at once; input to a session waits for its characters,
+      // its output or its end.
+      content:
+        start.type === PacketType.EXEC_COMMAND_START ||
+        start.chars ||
+        output ||
+        end !== null ||
+        error !== null
+          ? content
+          : null,
     },
   ]);
 }

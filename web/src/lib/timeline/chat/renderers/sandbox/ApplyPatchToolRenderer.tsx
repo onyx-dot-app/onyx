@@ -241,7 +241,15 @@ export function ApplyPatchToolRenderer({
       // the title.
       statusKey: liveProgress === null ? undefined : "progress",
       supportsCollapsible: true,
-      content,
+      // Nothing to open until a file, the patch or an error arrives.
+      content:
+        (liveProgress?.tool_name === "apply_patch" &&
+          liveProgress.paths.length > 0) ||
+        (end !== null && end.files.length > 0) ||
+        error !== null ||
+        patch
+          ? content
+          : null,
     },
   ]);
 }

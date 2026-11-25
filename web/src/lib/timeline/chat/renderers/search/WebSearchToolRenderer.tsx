@@ -62,7 +62,8 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         icon: STEP_ICONS.webSearch,
         status: queriesHeader,
         doneStatus: queriesDoneHeader,
-        content: <div />,
+        // Nothing to open until the first query arrives.
+        content: null,
         supportsCollapsible: false,
         timelineLayout: "timeline",
       },

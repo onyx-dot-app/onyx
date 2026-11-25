@@ -1,4 +1,3 @@
-import { Section } from "@opal/layouts";
 import { FileBody } from "@/lib/timeline/components/bodies/FileBody";
 import { useEffect } from "react";
 import { codeSpan, markdown } from "@opal/utils";
@@ -96,7 +95,7 @@ export const FileReaderToolRenderer: MessageRenderer<
         doneStatus: doneStatusText,
         supportsCollapsible: true,
         timelineLayout: "timeline",
-        content: <></>,
+        content: null,
       },
     ]);
   }
@@ -110,32 +109,24 @@ export const FileReaderToolRenderer: MessageRenderer<
       doneStatus: doneStatusText,
       supportsCollapsible: true,
       timelineLayout: "timeline",
-      content: (
-        <Section gap={1} alignItems="start" height="fit">
-          {state.fileName ? (
-            <>
-              {/* The panel's title row names the file; the step's title
-                  gives the character range. */}
-              {hasPreview && (
-                <FileBody
-                  content={
-                    state.previewEnd
-                      ? `${state.previewStart}\n\u2026\n${state.previewEnd}`
-                      : state.previewStart
-                  }
-                  path={state.fileName}
-                  emptyLabel={tRead("emptyFile.label")}
-                  moreLinesLabel={(count) =>
-                    tRead("moreLines.label", { count })
-                  }
-                  showAllLabel={tRead("showAll.button")}
-                  excerpt
-                />
-              )}
-            </>
-          ) : null}
-        </Section>
-      ),
+      // Nothing to show until the file's preview arrives; until then a
+      // running step shows a loading shimmer. The panel's title row names
+      // the file; the step's title gives the character range.
+      content:
+        state.fileName && hasPreview ? (
+          <FileBody
+            content={
+              state.previewEnd
+                ? `${state.previewStart}\n\u2026\n${state.previewEnd}`
+                : state.previewStart
+            }
+            path={state.fileName}
+            emptyLabel={tRead("emptyFile.label")}
+            moreLinesLabel={(count) => tRead("moreLines.label", { count })}
+            showAllLabel={tRead("showAll.button")}
+            excerpt
+          />
+        ) : null,
     },
   ]);
 };

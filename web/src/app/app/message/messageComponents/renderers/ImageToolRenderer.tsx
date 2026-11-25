@@ -100,9 +100,7 @@ export const ImageToolRenderer: MessageRenderer<
           </Text>
         ))}
       </Section>
-    ) : (
-      <></>
-    );
+    ) : null;
 
   return children([
     {
