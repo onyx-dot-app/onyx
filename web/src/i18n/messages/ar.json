@@ -15097,7 +15097,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added} إضافات، {removed} عمليات حذف"
+          "label": "{added, plural, one {# إضافة} other {# إضافات}}، {removed, plural, one {# حذف} other {# عمليات حذف}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {# سطر دون تغيير} other {# أسطر دون تغيير}}"

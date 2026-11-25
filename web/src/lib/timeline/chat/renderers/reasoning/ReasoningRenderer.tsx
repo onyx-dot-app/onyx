@@ -132,8 +132,6 @@ export const ReasoningRenderer: MessageRenderer<
     {
       icon: STEP_ICONS.thinking,
       status: displayStatus,
-      // One key, or each new piece of text would swap the title.
-      statusKey: hasEnd ? undefined : "live",
       // A title from the reasoning itself stays; the default turns past tense.
       doneStatus: title || thoughtStatus,
       // Nothing to open until body text arrives; a heading moves into the
