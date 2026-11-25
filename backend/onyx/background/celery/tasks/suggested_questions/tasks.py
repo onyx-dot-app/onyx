@@ -12,12 +12,18 @@ from uuid import UUID
 
 from celery import Task, shared_task
 from celery.utils.log import get_task_logger
+from sqlalchemy.orm import Session
 
+from onyx.access.access import get_censoring_enabled_sources
+from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.db.suggested_questions import count_candidate_documents
+from onyx.db.suggested_questions import (
+    count_candidate_documents,
+    get_visible_document_ids,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.secondary_llm_flows.suggested_questions import (
     build_triage_clients,
@@ -35,11 +41,14 @@ from onyx.server.features.suggested_questions.config import (
     SQ_RUN_RETRY_DELAY_S,
     SQ_RUN_WINDOW_HOURS,
     SQ_SAVE_MARGIN_S,
+    SQ_SHARED_REFRESH_AT,
 )
 from onyx.server.features.suggested_questions.models import (
     CandidateDocument,
     PoolQuestion,
     QuestionPool,
+    RunDecision,
+    UserRecord,
 )
 from onyx.server.features.suggested_questions.scheduling import (
     count_usable_questions,
@@ -85,30 +94,23 @@ class RunOutOfTime(Exception):
     max_retries=SQ_RUN_RETRIES,
 )
 def generate_suggested_questions_pool(
-    self: Task, *, tenant_id: str, reason: str
+    self: Task, *, tenant_id: str, reason: str, requester_id: str | None = None
 ) -> None:
+    """`requester_id` is the person short of questions who asked for the run;
+    the run skips when they are no longer short."""
     if not _start(self, lambda: release_pool_flag(tenant_id)):
         return
+    kwargs = {"tenant_id": tenant_id, "reason": reason, "requester_id": requester_id}
     try:
         with pool_lock(0):
-            _run_pool(tenant_id, reason)
+            _run_pool(tenant_id, reason, UUID(requester_id) if requester_id else None)
     except CacheLockAcquisitionError:
-        # Try again later rather than drop the request: documents indexed
-        # during the running run are not in it. worth_running decides then.
-        _retry_later(
-            self,
-            SQ_POOL_BUSY_RETRY_S,
-            {"tenant_id": tenant_id, "reason": reason},
-            "pool still busy",
-        )
+        # Try again later rather than drop the request: the running run may
+        # not cover it. The run rules decide then.
+        _retry_later(self, SQ_POOL_BUSY_RETRY_S, kwargs, "pool still busy")
     except NothingSearchableYet:
         # Not recorded as a run, so a first run stays a first run.
-        _retry_later(
-            self,
-            SQ_RUN_RETRY_DELAY_S,
-            {"tenant_id": tenant_id, "reason": reason},
-            "documents not searchable yet",
-        )
+        _retry_later(self, SQ_RUN_RETRY_DELAY_S, kwargs, "documents not searchable yet")
     except Exception as e:
         task_logger.exception("Suggested questions: pool run failed (%s)", reason)
         raise self.retry(exc=e, countdown=SQ_RUN_RETRY_DELAY_S)
@@ -187,7 +189,7 @@ def _start(task: Task, release_flag: Callable[[], None]) -> bool:
         return False
 
 
-def _run_pool(tenant_id: str, reason: str) -> None:
+def _run_pool(tenant_id: str, reason: str, requester_id: UUID | None) -> None:
     started = datetime.now(UTC)
     clock = _RunClock()
     stored = load_pool(refresh_cache=True)
@@ -198,6 +200,15 @@ def _run_pool(tenant_id: str, reason: str) -> None:
         decision = worth_running(
             stored, started, count_candidate_documents(db_session, covered)
         )
+        evict_first: set[str] = set()
+        if decision.run and requester_id is not None:
+            requester = load_user_record(requester_id, refresh_cache=True)
+            if _has_enough_shared(pool, requester_id, requester, db_session, started):
+                decision = RunDecision(
+                    run=False, reason="the person is no longer short"
+                )
+            # A full shelf drops the questions they used before older ones.
+            evict_first = set(requester.used)
         if not decision.run:
             task_logger.info(
                 "Suggested questions: pool run skipped (%s): %s",
@@ -223,6 +234,7 @@ def _run_pool(tenant_id: str, reason: str) -> None:
         candidates,
         started,
         clock,
+        evict_first,
     )
     private_documents = {c.document_id for c in candidates if c.owner_ids}
     private_added = sum(q.document_id in private_documents for q in added)
@@ -232,6 +244,39 @@ def _run_pool(tenant_id: str, reason: str) -> None:
         decision.reason,
         len(added) - private_added,
         private_added,
+    )
+
+
+def _has_enough_shared(
+    pool: QuestionPool,
+    requester_id: UUID,
+    record: UserRecord,
+    db_session: Session,
+    now: datetime,
+) -> bool:
+    """Whether the person now has more unused shared questions than the point
+    at which they asked for a run, for example because another run filled the
+    shelf. Counted the way the chat page counts them: only questions about
+    documents the person may open now. A person who is gone needs no run."""
+    user = fetch_user_by_id(db_session, requester_id)
+    if user is None or not user.is_active:
+        return True
+    unused = [q for q in pool.questions if q.id not in record.used]
+    visible = _visible_document_ids(db_session, user, unused)
+    return count_usable_questions(unused, visible, now) > SQ_SHARED_REFRESH_AT
+
+
+def _visible_document_ids(
+    db_session: Session, user: User, questions: list[PoolQuestion]
+) -> set[str]:
+    """The documents of these questions the person may open now, by the rules
+    the chat page uses, so a run counts questions the way the page does."""
+    return get_visible_document_ids(
+        db_session,
+        user,
+        get_user_external_group_ids(db_session, user),
+        [q.document_id for q in questions],
+        get_censoring_enabled_sources(),
     )
 
 
@@ -247,8 +292,8 @@ def _run_topup(tenant_id: str, user_id: UUID, attempt: dict[str, bool]) -> None:
         if user is None or not user.is_active:
             return
         unused = [q for q in record.questions if q.id not in record.used]
-        live = get_live_document_ids(db_session, [q.document_id for q in unused])
-        if count_usable_questions(unused, live, started) > SQ_PRIVATE_REFILL_AT:
+        visible = _visible_document_ids(db_session, user, unused)
+        if count_usable_questions(unused, visible, started) > SQ_PRIVATE_REFILL_AT:
             task_logger.info("Suggested questions: %s has enough questions", user_id)
             return
         # The person's own documents only: pool runs fill the shared shelf.
@@ -303,6 +348,7 @@ def _save(
     candidates: list[CandidateDocument],
     now: datetime,
     clock: "_RunClock",
+    evict_first: set[str] | None = None,
 ) -> None:
     """Put each new question on its shelf: the shared shelf in the pool, or the
     private shelf of each person whose bucket chose its document. Questions
@@ -335,7 +381,11 @@ def _save(
         clock.check_lock()
         save_pool(
             pool.model_copy(
-                update={"questions": merge_questions(kept, shared_added, live)}
+                update={
+                    "questions": merge_questions(
+                        kept, shared_added, live, evict_first=evict_first or set()
+                    )
+                }
             )
         )
 

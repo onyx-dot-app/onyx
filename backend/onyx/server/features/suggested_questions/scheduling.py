@@ -62,12 +62,15 @@ def is_enabled() -> bool:
     return settings.application_status == ApplicationStatus.ACTIVE
 
 
-def request_pool_refresh(tenant_id: str, reason: RefreshReason) -> None:
+def request_pool_refresh(
+    tenant_id: str, reason: RefreshReason, requester_id: UUID | None = None
+) -> bool:
     """Queue a pool run when the run rules allow it now, unless one is already
-    queued."""
+    queued. `requester_id` is the person short of questions who asked; the run
+    skips when they are no longer short. Returns whether a run is queued."""
     try:
         if not is_enabled():
-            return
+            return False
         pool = load_pool()
         now = datetime.now(UTC)
         with get_session_with_current_tenant() as db_session:
@@ -75,22 +78,27 @@ def request_pool_refresh(tenant_id: str, reason: RefreshReason) -> None:
                 db_session, fresh_document_ids(pool.questions, now) if pool else set()
             )
         if not worth_running(pool, now, candidates).run:
-            return
+            return False
         cache = get_cache_backend(tenant_id=tenant_id)
         token = _token()
         # The queued run does the same work, so a second one is not queued.
         if not cache.set_if_absent(_POOL_QUEUED_KEY, token, ex=SQ_TASK_EXPIRES_S):
-            return
+            return True
+        kwargs: dict[str, Any] = {"tenant_id": tenant_id, "reason": reason.value}
+        if requester_id is not None:
+            kwargs["requester_id"] = str(requester_id)
         _send(
             cache,
             _POOL_QUEUED_KEY,
             token,
             OnyxCeleryTask.GENERATE_SUGGESTED_QUESTIONS_POOL,
-            {"tenant_id": tenant_id, "reason": reason.value},
+            kwargs,
         )
         logger.info("Suggested questions: requested a pool run (%s)", reason.value)
+        return True
     except Exception:
         logger.exception("Suggested questions: could not request a pool run")
+        return False
 
 
 def request_refresh_for_new_documents(tenant_id: str) -> None:
@@ -112,17 +120,17 @@ def request_refresh_for_new_documents(tenant_id: str) -> None:
 
 def request_user_topup(
     tenant_id: str, user_id: UUID, record: UserRecord, now: datetime
-) -> None:
+) -> bool:
     """Queue a run for one person who has fewer questions than they should,
-    within their top-up limits."""
+    within their top-up limits. Returns whether a run is queued."""
     try:
         if not is_enabled() or not topup_allowed(record, now):
-            return
+            return False
         cache = get_cache_backend(tenant_id=tenant_id)
         queued_key = _TOPUP_QUEUED_KEY.format(user_id)
         token = _token()
         if not cache.set_if_absent(queued_key, token, ex=SQ_TASK_EXPIRES_S):
-            return
+            return True
         _send(
             cache,
             queued_key,
@@ -131,8 +139,10 @@ def request_user_topup(
             {"tenant_id": tenant_id, "user_id": str(user_id)},
         )
         logger.info("Suggested questions: requested a top-up for %s", user_id)
+        return True
     except Exception:
         logger.exception("Suggested questions: could not request a top-up")
+        return False
 
 
 def release_pool_flag(tenant_id: str) -> None:
