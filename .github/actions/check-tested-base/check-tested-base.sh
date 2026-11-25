@@ -37,20 +37,30 @@ else
 fi
 TARGET="${MERGE_GROUP_BASE_REF#refs/heads/}"
 
-# Runs a read-only gh command and prints its output. A failed read (a GitHub
-# error, or a body that is not JSON) is tried again: one bad answer must not
-# fail this check, because in a stack it ejects every PR from the queue. It
-# fails when every try fails.
+# The job times out at 29 minutes. Retries and merge queue polls stop at this
+# deadline, so the script fails with a reason instead of a timeout.
+DEADLINE=$((SECONDS + 26 * 60))
+
+# Runs a read-only gh command and prints its output. A failed read is tried
+# again: one bad answer must not fail this check, because in a stack it ejects
+# every PR from the queue. It fails when every try fails, or at DEADLINE. Give
+# gh --json or --jq, so that gh parses the body and a body that is not JSON
+# counts as a failed read.
 GH_TRIES=5
 gh_read() {
   local try output
   for ((try = 1; try <= GH_TRIES; try++)); do
     if output="$(gh "$@")"; then
-      printf '%s' "${output}"
+      # The command substitution removed the trailing newline.
+      printf '%s\n' "${output}"
       return 0
     fi
     echo "GitHub read failed (try ${try}/${GH_TRIES}): gh $1 $2" >&2
     if ((try < GH_TRIES)); then
+      if ((SECONDS + 15 >= DEADLINE)); then
+        echo "No time is left to try again." >&2
+        return 1
+      fi
       sleep 15
     fi
   done
@@ -117,14 +127,12 @@ too_deep() {
 # an entry above them fails, and the stack tip's entry can pass while a PR
 # below it fails. So a lower PR that relies on the tip's verdict waits for
 # every PR up to the tip. The waits clear from the top down, one poll for each
-# level. All waits share 80 polls of 20 seconds, which stay under the queue's
-# 30-minute check timeout. Sets WAIT_FAILURE when it returns 1.
+# level. All waits poll every 20 seconds until DEADLINE. Sets WAIT_FAILURE
+# when it returns 1.
 WAIT_FAILURE=""
-POLLS_LEFT=80
 wait_for_entries() {
   local pairs="$1" entries line pending="" pair pr sha
-  while ((POLLS_LEFT > 0)); do
-    POLLS_LEFT=$((POLLS_LEFT - 1))
+  while ((SECONDS < DEADLINE)); do
     # A failed read is not a removal: retry it, so one GitHub error does not
     # eject the whole stack.
     # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
@@ -138,7 +146,7 @@ wait_for_entries() {
       }' \
       -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
       --jq '.data.repository.mergeQueue.entries.nodes[] | "\(.pullRequest.number) \(.state) \(.pullRequest.headRefOid)"')"; then
-      echo "Could not read the merge queue (${POLLS_LEFT} polls left). Trying again."
+      echo "Could not read the merge queue ($((DEADLINE - SECONDS)) seconds left). Trying again."
       sleep 20
       continue
     fi
@@ -168,7 +176,7 @@ wait_for_entries() {
       echo "Every PR up to the stack tip passed its merge queue checks."
       return 0
     fi
-    echo "Waiting in the merge queue for${pending} (${POLLS_LEFT} polls left)"
+    echo "Waiting in the merge queue for${pending} ($((DEADLINE - SECONDS)) seconds left)"
     sleep 20
   done
   WAIT_FAILURE="These PRs did not pass their merge queue checks in time:${pending}."
@@ -204,9 +212,11 @@ if [[ -n "${stack_json}" && "${stack_json}" != "null" ]]; then
 fi
 
 # Verdict record of CONTEXT on commit $1: "<tested base sha> <tested base ref>".
+# gh --jq has no --arg, so the context goes in as a JSON string literal.
+CONTEXT_JSON="$(jq -n --arg ctx "${CONTEXT}" '$ctx')"
 verdict_on() {
   gh_read api "repos/${REPO}/commits/${1}/status" \
-    | jq -r --arg ctx "${CONTEXT}" '.statuses[] | select(.context == $ctx) | .description'
+    --jq ".statuses[] | select(.context == ${CONTEXT_JSON}) | .description"
 }
 
 # True when $1 is in the history of $2. The compare API reports base...head as
