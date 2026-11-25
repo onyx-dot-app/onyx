@@ -205,12 +205,8 @@ test("every feature the server can restrict has a page or is a toggle", () => {
       .map((route) => route.featureKey)
       .filter((feature) => feature !== undefined)
   );
-  // Contextual RAG lives on the Index Settings page under `embedding`, and
-  // anonymous access is a switch on the Security page.
-  const toggles = [
-    PlaygroundRestrictedFeature.CONTEXTUAL_RAG,
-    PlaygroundRestrictedFeature.ANONYMOUS_ACCESS,
-  ];
+  // Anonymous access is a switch on the Security page.
+  const toggles = [PlaygroundRestrictedFeature.ANONYMOUS_ACCESS];
   for (const feature of Object.values(PlaygroundRestrictedFeature)) {
     expect(onPages.has(feature) || toggles.includes(feature)).toBe(true);
   }

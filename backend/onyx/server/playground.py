@@ -69,7 +69,6 @@ class PlaygroundRestrictedFeature(StrEnum):
 
     # Enterprise-only: visible, not configurable.
     LLM_PROVIDERS = "llm_providers"
-    CONTEXTUAL_RAG = "contextual_rag"
     SSO = "sso"
     SCIM = "scim"
     WHITELABEL = "whitelabel"
