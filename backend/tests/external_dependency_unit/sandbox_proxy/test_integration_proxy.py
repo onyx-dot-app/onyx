@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from mitmproxy import http
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
@@ -30,7 +30,6 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     ActionApproval,
-    ApiApp,
     BuildSession,
     ChatSession,
     Integration,
@@ -694,43 +693,6 @@ def test_the_task_catalog_lists_what_chat_can_run(
     }
     assert {mcp.id, openapi.id} <= listed
     assert custom.id not in listed
-
-
-def test_an_openapi_app_with_only_its_tool_row_stays_runnable(
-    db_session: Session, created: list[int], user: User
-) -> None:
-    """During a rolling deploy an older server writes an OpenAPI app with
-    only its tool row. Chat builds its tools from that row, so the task
-    catalog lists it and the gate names its chat tool."""
-    host = _host()
-    openapi, _ = make_openapi_integration(
-        db_session,
-        openapi_schema={
-            "openapi": "3.0.0",
-            "info": {"title": "Orders", "description": "Orders", "version": "1"},
-            "servers": [{"url": f"https://{host}/v1"}],
-            "paths": {
-                "/orders": {
-                    "get": {"operationId": "listOrders", "summary": "List orders"}
-                }
-            },
-        },
-    )
-    created.append(openapi.id)
-    api_app_id = openapi.api_app_id
-    openapi.api_app_id = None
-    db_session.flush()
-    db_session.execute(delete(ApiApp).where(ApiApp.id == api_app_id))
-    _run(db_session, [openapi])
-
-    views = {
-        view.id: view for view in list_task_integration_views(db_session, user, None)
-    }
-    assert views[openapi.id].runnable
-
-    matched = _evaluate(_request(f"https://{host}/v1/orders", method="GET"), user)
-    assert isinstance(matched, AllMatchedActions)
-    assert matched.target.api_app and matched.target.chat_tools
 
 
 def test_the_task_catalog_ignores_the_owners_always_allow(

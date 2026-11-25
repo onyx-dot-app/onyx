@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType, IntegrationKind
 from onyx.db.integration import (
     get_external_app_for_integration,
-    list_api_apps_by_integration,
     list_enabled_integrations_by_id,
     list_external_apps_by_integration,
     list_integrations_by_ids,
@@ -128,7 +127,6 @@ def _integration_view(
     user: User,
     settings: ActionSettings | None,
     app: ExternalApp | None,
-    has_api_app: bool,
 ) -> TaskIntegrationView:
     # A scheduled run ignores the owner's Always allow choices.
     inherited = _interactive_policies(
@@ -151,7 +149,7 @@ def _integration_view(
             if settings is not None
             else None
         ),
-        runnable=_chat_runnable(integration, app, has_api_app),
+        runnable=_chat_runnable(integration, app),
         actions=[
             TaskActionView(
                 key=action.key,
@@ -167,15 +165,12 @@ def _integration_view(
     )
 
 
-def _chat_runnable(
-    integration: Integration, app: ExternalApp | None, has_api_app: bool
-) -> bool:
-    """Chat runs an API integration through its ``api_app`` (also the one that
-    ``list_api_apps_by_integration`` reads from the tool row) or its preset
+def _chat_runnable(integration: Integration, app: ExternalApp | None) -> bool:
+    """Chat runs an API integration through its ``api_app`` or its preset
     (``build_integration_chat_tools``)."""
     return integration.enabled and not (
         integration.kind is IntegrationKind.API
-        and not has_api_app
+        and integration.api_app_id is None
         and (app is None or app.app_type == ExternalAppType.CUSTOM)
     )
 
@@ -213,7 +208,6 @@ def list_task_integration_views(
         for state in load_user_integration_states([user.id], db_session)
     }
     apps = list_external_apps_by_integration(list(states), db_session)
-    api_apps = list_api_apps_by_integration(list(states), db_session)
     views = [
         _integration_view(
             db_session,
@@ -222,15 +216,12 @@ def list_task_integration_views(
             user,
             links.get(integration.id),
             apps.get(integration.id),
-            integration.id in api_apps,
         )
         for integration in list_integrations_by_ids(list(states), db_session)
         if integration.id in links
         or (
             states[integration.id].on
-            and _chat_runnable(
-                integration, apps.get(integration.id), integration.id in api_apps
-            )
+            and _chat_runnable(integration, apps.get(integration.id))
         )
     ]
     return sorted(views, key=lambda view: (view.name.lower(), view.id))
