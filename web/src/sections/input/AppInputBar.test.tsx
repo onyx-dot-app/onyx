@@ -33,7 +33,9 @@ import { trackUpload } from "@/lib/projects/uploadProgress";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
 import {
   MAX_MENTIONS_PER_MESSAGE,
+  type ChatSessionQueue,
   type ComposedMessage,
+  type PendingChatMessage,
 } from "@/lib/chat/types";
 
 function memberTool(overrides: Partial<ToolSnapshot> = {}): ToolSnapshot {
@@ -211,6 +213,7 @@ function Composer({
   chatState = "input",
   disabled = false,
   onSubmit = jest.fn(),
+  queueOverride,
 }: {
   agentId?: number;
   tools?: MinimalAgent["tools"];
@@ -218,10 +221,12 @@ function Composer({
   chatState?: ChatState;
   disabled?: boolean;
   onSubmit?: AppInputBarProps["onSubmit"];
+  queueOverride?: ChatSessionQueue;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
-  const queue = useChatSessionQueue(false);
+  const sessionQueue = useChatSessionQueue(false);
+  const queue = queueOverride ?? sessionQueue;
   return (
     <>
       <Button
@@ -450,6 +455,62 @@ describe("edit a sent message in the composer", () => {
     );
     return { inputBarRef, onSubmit };
   }
+
+  test("does not start while a queued message is withdrawn for an edit", async () => {
+    const store = useChatSessionStore.getState();
+    store.createSession("queue-session");
+    store.setCurrentSession("queue-session");
+    const withdrawal = deferred<PendingChatMessage | null>();
+    const queued: PendingChatMessage = {
+      id: "queued-1",
+      message: "queued text",
+      delivery: "queue",
+      target_response_id: null,
+      deep_research: false,
+      llm_override: null,
+      mentions: [],
+    };
+    const queue: ChatSessionQueue = {
+      enabled: true,
+      messages: [queued],
+      error: null,
+      busy: false,
+      hasActiveSubagents: false,
+      needsResponseSelection: false,
+      submit: jest.fn(),
+      withdraw: () => withdrawal.promise,
+      interrupt: jest.fn(),
+      stopSubagents: jest.fn(),
+    };
+    const inputBarRef = createRef<AppInputBarHandle>();
+    mockProjectsContext.currentMessageFiles = [];
+    render(<Composer inputBarRef={inputBarRef} queueOverride={queue} />);
+    await setupUser().click(
+      screen.getByRole("button", { name: "Edit queued message: queued text" })
+    );
+
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    await act(async () => withdrawal.resolve(null));
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
+  test("Escape ends the edit when the text starts with / and shortcuts are off", async () => {
+    const { inputBarRef } = startEdit([]);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const user = setupUser();
+    await user.clear(screen.getByRole("textbox"));
+    await user.type(screen.getByRole("textbox"), "/x");
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
 
   test("does not start while a response streams", () => {
     const { inputBarRef } = startEdit([], "streaming");

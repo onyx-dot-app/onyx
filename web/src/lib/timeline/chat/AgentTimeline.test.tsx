@@ -227,6 +227,35 @@ describe("AgentTimeline's collapsed run card", () => {
       clock.mockRestore();
     }
   });
+
+  it("keeps a later run's time when it collapses as it stops", async () => {
+    let now = 1_000_000;
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const view = render(
+        <AgentTimeline
+          turnGroups={longRun.slice(0, 1)}
+          chatState={{ agent }}
+          isFirstRun={false}
+        />
+      );
+      now += 40_000;
+      // The sixth step and the stop arrive together: the run card first
+      // mounts settled.
+      view.rerender(
+        <AgentTimeline
+          turnGroups={longRun}
+          chatState={{ agent }}
+          isFirstRun={false}
+          stopPacketSeen
+        />
+      );
+
+      expect(await screen.findByText(/^Worked for 40/)).toBeVisible();
+    } finally {
+      clock.mockRestore();
+    }
+  });
 });
 
 describe("AgentTimeline while a tool call waits for the user", () => {

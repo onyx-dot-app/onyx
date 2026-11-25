@@ -145,7 +145,7 @@ function sendsInterrupt(step: TransformedStep): boolean {
   );
 }
 
-export function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
+function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
   const interrupted = sendsInterrupt(step);
   const failed = step.packets.some((packet) =>
     isFailurePacket(packet, interrupted)
