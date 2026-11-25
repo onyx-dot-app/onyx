@@ -323,11 +323,11 @@ _TIMEOUTS = [
 @contextmanager
 def _force_path(postgres_first: bool) -> Generator[None, None, None]:
     with patch.object(
-        content,
-        "CONTENT_FIRST",
-        content.ContentFirst.POSTGRES
+        content.ContentFilter,
+        "choose_path",
+        return_value=content.ContentPath.POSTGRES_FIRST
         if postgres_first
-        else content.ContentFirst.OPENSEARCH,
+        else content.ContentPath.OPENSEARCH_FIRST,
     ):
         yield
 
@@ -395,40 +395,6 @@ def test_cursor_keeps_its_way(content_env: ContentEnv) -> None:
 def _cursor_path(cursor: str) -> str:
     padded = cursor + "=" * (-len(cursor) % 4)
     return json.loads(base64.urlsafe_b64decode(padded.encode()))["p"]
-
-
-@pytest.mark.parametrize(
-    ("setting", "with_title_filter", "expected_path"),
-    [
-        # Without a Postgres-only filter, "auto" would go to OpenSearch first.
-        (content.ContentFirst.POSTGRES, False, content.ContentPath.POSTGRES_FIRST),
-        # With one, "auto" would go to Postgres first.
-        (content.ContentFirst.OPENSEARCH, True, content.ContentPath.OPENSEARCH_FIRST),
-    ],
-)
-def test_setting_overrides_the_choice(
-    content_env: ContentEnv,
-    setting: content.ContentFirst,
-    with_title_filter: bool,
-    expected_path: content.ContentPath,
-) -> None:
-    kwargs: dict[str, JsonValue] = {
-        "updated_after": (datetime.now(timezone.utc) - timedelta(days=6)).isoformat()
-    }
-    if with_title_filter:
-        kwargs["title_contains"] = content_env.tag
-    with patch.object(content, "CONTENT_FIRST", setting):
-        text = _run(
-            content_env.tool,
-            table="document",
-            content_contains=_PHRASE,
-            limit=2,
-            **kwargs,
-        )
-    assert _listed(content_env, text) == ["fox", "dog"]
-    cursor = _next_cursor(text)
-    assert cursor is not None
-    assert _cursor_path(cursor) == expected_path.value
 
 
 @pytest.mark.parametrize("postgres_first", [True, False])
@@ -610,14 +576,11 @@ def test_stop_ends_the_scan_between_batches(
 
 
 @pytest.mark.parametrize("postgres_first", [True, False])
-def test_auto_picks_the_way_by_candidate_count(
+def test_picks_the_way_by_candidate_count(
     content_env: ContentEnv, postgres_first: bool
 ) -> None:
-    with (
-        patch.object(content, "CONTENT_FIRST", content.ContentFirst.AUTO),
-        patch.object(
-            content, "MAX_POSTGRES_FIRST_CANDIDATES", 10**9 if postgres_first else -1
-        ),
+    with patch.object(
+        content, "MAX_POSTGRES_FIRST_CANDIDATES", 10**9 if postgres_first else -1
     ):
         text = _run(
             content_env.tool,
@@ -636,6 +599,18 @@ def test_auto_picks_the_way_by_candidate_count(
             else content.ContentPath.OPENSEARCH_FIRST
         ).value
     )
+
+
+def test_goes_to_opensearch_first_without_postgres_filters(
+    content_env: ContentEnv,
+) -> None:
+    with patch.object(content, "MAX_POSTGRES_FIRST_CANDIDATES", 10**9):
+        text = _run(
+            content_env.tool, table="document", content_contains=_PHRASE, limit=2
+        )
+    cursor = _next_cursor(text)
+    assert cursor is not None
+    assert _cursor_path(cursor) == content.ContentPath.OPENSEARCH_FIRST.value
 
 
 def test_rejects_unsupported_content_queries(content_env: ContentEnv) -> None:
@@ -663,27 +638,16 @@ def test_rejects_content_when_unavailable(content_env: ContentEnv) -> None:
 
 
 @pytest.mark.parametrize(
-    "setting",
-    ["DISABLE_POSTGRES_QUERY_CONTENT_FILTER", "DISABLE_VECTOR_DB", "CONTENT_FIRST"],
+    "setting", ["DISABLE_POSTGRES_QUERY_CONTENT_FILTER", "DISABLE_VECTOR_DB"]
 )
 def test_each_setting_turns_the_filter_off(setting: str) -> None:
-    # CONTENT_FIRST is None when POSTGRES_QUERY_CONTENT_FIRST is invalid.
-    value = None if setting == "CONTENT_FIRST" else True
     with (
         patch.object(content, "DISABLE_POSTGRES_QUERY_CONTENT_FILTER", False),
         patch.object(content, "DISABLE_VECTOR_DB", False),
-        patch.object(content, "CONTENT_FIRST", content.ContentFirst.AUTO),
     ):
         assert content._content_filter_is_available()
-        with patch.object(content, setting, value):
+        with patch.object(content, setting, True):
             assert not content._content_filter_is_available()
-
-
-def test_invalid_setting_turns_the_filter_off() -> None:
-    with patch.object(content, "POSTGRES_QUERY_CONTENT_FIRST", "opensearh"):
-        assert content._load_content_first() is None
-    with patch.object(content, "POSTGRES_QUERY_CONTENT_FIRST", "postgres"):
-        assert content._load_content_first() == content.ContentFirst.POSTGRES
 
 
 def test_censoring_sources_come_from_ee() -> None:

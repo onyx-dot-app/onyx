@@ -19,8 +19,6 @@ a synthetic 1M-document index. An OpenSearch page of 100 matches took
 10 ms; a Postgres candidate batch took 70 ms-1.1 s whatever its size; an
 exact count of 20,000 matches took 0.4 s.
 
-POSTGRES_QUERY_CONTENT_FIRST overrides the choice for every call.
-
 Sources that censor records at read time (Salesforce) match only under a
 public connector, where search does not censor them either: elsewhere a phrase
 in a record the caller cannot read would still match its document.
@@ -37,10 +35,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.chat_configs import (
-    DISABLE_POSTGRES_QUERY_CONTENT_FILTER,
-    POSTGRES_QUERY_CONTENT_FIRST,
-)
+from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_CONTENT_FILTER
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.preprocessing.access_filters import (
@@ -67,12 +62,9 @@ from onyx.document_index.interfaces import (
 )
 from onyx.document_index.opensearch.client import SEARCH_TIMEOUT_ERRORS
 from onyx.llm.cancellation import check_cancelled
-from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
-
-logger = setup_logger()
 
 # At most this many candidates take the Postgres-first way.
 MAX_POSTGRES_FIRST_CANDIDATES = 20_000
@@ -98,39 +90,10 @@ class ContentPath(str, Enum):
     OPENSEARCH_FIRST = "opensearch_first"
 
 
-class ContentFirst(str, Enum):
-    """The POSTGRES_QUERY_CONTENT_FIRST setting."""
-
-    AUTO = "auto"
-    POSTGRES = "postgres"
-    OPENSEARCH = "opensearch"
-
-
-def _load_content_first() -> ContentFirst | None:
-    """None for an unknown value: the tool then refuses content filters, so a
-    typo neither breaks imports nor silently means "auto"."""
-    try:
-        return ContentFirst(POSTGRES_QUERY_CONTENT_FIRST)
-    except ValueError:
-        logger.error(
-            "Invalid POSTGRES_QUERY_CONTENT_FIRST %r: use auto, postgres or "
-            "opensearch. postgres_query's document content filter is off.",
-            POSTGRES_QUERY_CONTENT_FIRST,
-        )
-        return None
-
-
-CONTENT_FIRST = _load_content_first()
-
-
 def _content_filter_is_available() -> bool:
     """Whether this deployment can match document content: the document index
-    is on, the filter is not turned off, and the setting is valid."""
-    return (
-        not DISABLE_VECTOR_DB
-        and not DISABLE_POSTGRES_QUERY_CONTENT_FILTER
-        and CONTENT_FIRST is not None
-    )
+    is on and the filter is not turned off."""
+    return not DISABLE_VECTOR_DB and not DISABLE_POSTGRES_QUERY_CONTENT_FILTER
 
 
 CONTENT_FILTER_AVAILABLE = _content_filter_is_available()
@@ -217,11 +180,7 @@ class ContentFilter:
         )
 
     def choose_path(self) -> ContentPath:
-        if CONTENT_FIRST == ContentFirst.POSTGRES:
-            return ContentPath.POSTGRES_FIRST
-        if CONTENT_FIRST == ContentFirst.OPENSEARCH or not (
-            self._has_postgres_only_filter()
-        ):
+        if not self._has_postgres_only_filter():
             return ContentPath.OPENSEARCH_FIRST
         candidates = try_count_documents_for_tool(
             self._db_session,

@@ -134,9 +134,3 @@ DISABLE_POSTGRES_QUERY_TOOL = (
 DISABLE_POSTGRES_QUERY_CONTENT_FILTER = (
     os.environ.get("DISABLE_POSTGRES_QUERY_CONTENT_FILTER", "false").lower() == "true"
 )
-# Which store the content filter queries first: "auto" (OpenSearch, unless a
-# filter that only Postgres applies leaves few candidates), "postgres" or
-# "opensearch".
-POSTGRES_QUERY_CONTENT_FIRST = os.environ.get(
-    "POSTGRES_QUERY_CONTENT_FIRST", "auto"
-).lower()
