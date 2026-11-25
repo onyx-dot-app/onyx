@@ -278,7 +278,10 @@ describe("toChatTimelineEntry status", () => {
     expect(toChatTimelineEntry(execStep(end)).status).toBe(status);
   });
 
-  function stdinStep(chars: string): TransformedStep {
+  function stdinStep(
+    chars: string,
+    end: Partial<ExecEnd> = {}
+  ): TransformedStep {
     const packets: Packet[] = [
       {
         placement: at(0),
@@ -295,6 +298,7 @@ describe("toChatTimelineEntry status", () => {
           truncated: false,
           output: "^C\n",
           error: null,
+          ...end,
         },
       },
       { placement: at(0), obj: { type: PacketType.SECTION_END } },
@@ -304,6 +308,14 @@ describe("toChatTimelineEntry status", () => {
 
   it("a Ctrl+C that stops a running process is not a failure", () => {
     expect(toChatTimelineEntry(stdinStep("\u0003")).status).toBe("done");
+  });
+
+  it("a deadline after Ctrl+C still fails", () => {
+    expect(
+      toChatTimelineEntry(
+        stdinStep("\u0003", { completion: "deadline_exceeded" })
+      ).status
+    ).toBe("error");
   });
 
   it("a process that exits non-zero after other input still fails", () => {

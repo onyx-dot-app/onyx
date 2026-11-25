@@ -179,7 +179,8 @@ export function ExecToolRenderer({
           <Text
             font="secondary-body"
             color={
-              end.completion === "canceled" || interrupted
+              end.completion === "canceled" ||
+              (interrupted && end.completion !== "deadline_exceeded")
                 ? "status-warning-05"
                 : "status-error-05"
             }

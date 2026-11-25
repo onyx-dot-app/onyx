@@ -92,12 +92,12 @@ function isFailurePacket(packet: Packet, interrupted: boolean): boolean {
     case PacketType.EXEC_END:
       // A user's stop ("canceled") is not a failure, and neither is the exit
       // of a process that the step itself stopped with Ctrl+C.
-      if (obj.error !== null) return true;
-      if (interrupted) return false;
+      if (obj.error !== null || obj.completion === "deadline_exceeded")
+        return true;
       return (
-        (obj.exit_code !== null && obj.exit_code !== 0) ||
-        obj.completion === "signaled" ||
-        obj.completion === "deadline_exceeded"
+        !interrupted &&
+        ((obj.exit_code !== null && obj.exit_code !== 0) ||
+          obj.completion === "signaled")
       );
     case PacketType.APPLY_PATCH_END:
     case PacketType.PUBLISH_FILES_END:
