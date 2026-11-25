@@ -1213,7 +1213,7 @@ def test_a_send_after_a_failed_turn_continues_the_conversation(
     ]
     [(kind, result_text)] = history[3:]
     assert kind == "UserMessage"
-    assert result_text.startswith("Background agent result")
+    assert result_text.startswith("<agent_notification>")
     assert "Worker stopped early" in result_text
     db_session.expire_all()
     question = db_session.scalar(

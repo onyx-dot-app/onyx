@@ -426,7 +426,7 @@ A subagent waits for those results before finishing, or before its last step, an
 this releases its execution thread until it can incorporate the results.
 The root can finish its response while background children continue.
 
-Chat's root can also end its turn with its wait tool (`wait_agent`; the Claude tool shape has none and waits for the agents that a response started by itself) and get one follow-up for those children;
+Chat's root can also end its turn with its wait tool (`wait_agent`; the Claude tool shape has none, so its root answers each result as its agent finishes) and get one follow-up for those children. Each result names the agents that still run.
 `.agents/feature-map/components/chat-persistence.md` describes the wait rule.
 Foreground tools retain their `ChildRunWait` result path.
 

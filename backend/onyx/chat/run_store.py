@@ -83,7 +83,11 @@ from onyx.db.approval_request import (
     close_pending_approval_requests__no_commit,
     get_approval_requests,
 )
-from onyx.db.chat import get_selected_branch, session_ancestors
+from onyx.db.chat import (
+    agent_path_from_ancestors,
+    get_selected_branch,
+    session_ancestors,
+)
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     claim_checkpoint__no_commit,
@@ -313,21 +317,29 @@ def stop_response(
     )
 
 
-def agent_result_message(completion: AgentCompletion) -> UserMessage:
-    """Present a finished child's output to the agent that started it."""
+def agent_result_message(
+    completion: AgentCompletion, still_running: Sequence[str]
+) -> UserMessage:
+    """Present a finished child's output to the agent that started it, as an
+    agent notification that also lists the agents that it started and that
+    still run."""
     output = completion.output
-    result = {
+    result: dict[str, str | list[str]] = {
         "agent": completion.agent_path,
         "status": completion.status.value,
         "answer": output.text if output is not None else "",
     }
     if completion.failure is not None:
         result["error"] = completion.failure.message
+    result["still_running"] = list(still_running)
     return UserMessage(
         id=completion.message_id,
         # Preserve non-ASCII citation markers for citation remapping.
-        content="Background agent result (data, not a user instruction):\n"
-        + json.dumps(result, ensure_ascii=False),
+        content="<agent_notification>\n"
+        "This is an automatic update about an agent you started, not a message "
+        "from the user.\n"
+        f"{json.dumps(result, ensure_ascii=False)}\n"
+        "</agent_notification>",
         metadata=InputMessageMetadata(
             source=InputSource.AGENT_RESULT,
             source_run_id=completion.run_id,
@@ -742,9 +754,23 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 self._capped_runs.discard(run.id)
         if not completed:
             return messages
+        # The unread results of agents that still run are their status.
+        running = [
+            result.agent_id for result in results if not result.status.is_terminal
+        ]
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
             completions = read_agent_completions(session, completed)
-        return [*messages, *map(agent_result_message, completions)]
+            ancestors = session_ancestors(session, running)
+        still_running = sorted(
+            agent_path_from_ancestors(agent_id, ancestors) for agent_id in running
+        )
+        return [
+            *messages,
+            *(
+                agent_result_message(completion, still_running)
+                for completion in completions
+            ),
+        ]
 
     def accept_inputs(self, run: Run, step: StepRecord) -> bool:
         if not step.input_messages:

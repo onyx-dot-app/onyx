@@ -252,14 +252,12 @@ latest run did not fail; an agent's queue pauses when its latest run was
 stopped (`db/chat_inputs.py:wakes_for_results`).
 
 The root's `wait_agent` call ends its turn when it is the step's only call and a named
-agent, or any agent, still runs. A shape without a wait tool waits by itself
-(`AgentShape.wait_name` is None, the Claude shape): a root response's saved calls of
-that shape's spawn tool (`IMPLICIT_WAIT_SPAWN_TOOL_NAMES`) are its wait on the
-agents that they started. `db/chat_inputs.py:agent_waits` finds them from the
-response's saved generation (the call's name) and the child question that names
-the call's `tool_call` row, and adds them to the wait calls; the rest of the rule
-is the same, so results that finish after the response ends arrive together.
-Its saved `tool_call` result (`AgentWaitDetails`) is the only record of the wait. It holds
+agent, or any agent, still runs. A shape without a wait tool (`AgentShape.wait_name` is
+None, the Claude shape) holds no results: each finished result wakes the idle root at once.
+An agent reads each result as an `<agent_notification>` user message whose JSON holds the
+agent's path, status, answer, error when it failed, and `still_running`: the paths of the
+agents that it started and that still run (`chat/run_store.py:agent_result_message`, from the
+unread results of unfinished runs), so a root of any shape knows what it still waits for. A wait call's saved `tool_call` result (`AgentWaitDetails`) is the only record of the wait. It holds
 the root's unread results from those agents' runs that belong to its root response or an
 earlier one. `wakes_for_results` applies one rule to an idle root: a finished result that no
 wait holds wakes it at once; held results wake it together once none of their wait's runs is

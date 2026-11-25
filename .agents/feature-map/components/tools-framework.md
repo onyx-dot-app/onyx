@@ -199,10 +199,10 @@ use, because a chat's history holds calls of both families. A shape also
 names the arguments that other code reads by name, as fields: the shell
 card's `command_argument` and `workdir_argument`, and the spawn errors'
 `spawn_name_argument` and `spawn_task_argument`. A sandbox turn carries its
-`ShellShape` (`SandboxTurn.shell`). The agent shape tells whether the root
-waits for the agents that it created by itself (no `wait_name`, the Claude
-shape; [[chat-persistence]]); `ChatAgent` picks the root's instructions from
-it. A call of another family's name for a tool that the agent offers gets a
+`ShellShape` (`SandboxTurn.shell`). The agent shape tells whether the root has
+a wait tool (no `wait_name` in the Claude shape, whose root reads each result
+as its agent finishes; [[chat-persistence]]); `ChatAgent` picks the root's
+instructions from it. A call of another family's name for a tool that the agent offers gets a
 result that names the agent's own (`unknown_tool_hint`). A description
 that names another tool is a template that `Tool.describe(called_name)`
 fills: with the tool's name, or in code mode with its program function
@@ -304,7 +304,7 @@ Results reach the agent's spawner automatically before its next model call.
 A subagent suspends before completing until the results of children it spawned are available.
 The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results.
-Only the root gets the wait tool (`wait_agent`, in the OpenAI shape only) and the `ROOT_AGENT_INSTRUCTIONS` prompt block, which names the wait tool when the shape has one; the wait rule is in [[chat-persistence]]. These results
+Only the root gets the wait tool (`wait_agent`, in the OpenAI shape only) the `ROOT_AGENT_INSTRUCTIONS` prompt block, the same for both families except its last line, the agent shape's `wait_line` (call the wait tool, or end the response to wait); the wait rule is in [[chat-persistence]]. These results
 stay in model history; only the parent's response appears as a chat message.
 Tool replies use concise text, and models see agent paths, never IDs. `send_message` takes
 a `target` (`to` in the Claude shape), `interrupt_agent` a `target`, and `wait_agent` `targets`: a path from spawn/list, or

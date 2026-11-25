@@ -1,11 +1,13 @@
-"""The root waits for its agents, with `wait_agent` or, in the Claude tool shape,
-by itself, and answers their results once.
+"""The root reads its agents' results: with `wait_agent` it answers them once,
+and without a wait (the Claude tool shape has none) it answers each result as
+its agent finishes. Each result says which agents the root started still run.
 
 Each test runs real chat turns against Postgres with a scripted model. Child
 runs release through the run store, whose release event dispatches the root's
 follow-up.
 """
 
+import json
 import time
 from collections.abc import Callable, Generator
 from threading import Event
@@ -22,7 +24,6 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution, run_store
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
-from onyx.chat.models import AgentWait
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX, stop_response
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
@@ -65,7 +66,6 @@ from tests.unit.onyx.agents.fakes import TEST_MODEL_NAMES, FakeModelClient
 WAIT_TIMEOUT_S = 30
 WAITING = "Waiting for the workers."
 QUESTION = "Ask the workers"
-LATER_QUESTION = "Ask more workers"
 # A status request without pass-through headers.
 _NO_HEADERS = Request({"type": "http", "headers": []})
 
@@ -101,12 +101,8 @@ class Workers:
         before_wait: Callable[[], object] | None = None,
         wait: bool = True,
         family: ToolFamily = ToolFamily.OPENAI,
-        later: tuple[str, ...] = (),
     ) -> None:
-        # `later` are workers that a later turn, LATER_QUESTION, starts.
-        self.names = names + later
-        self.later = later
-        self.later_requests = 0
+        self.names = names
         # The root's tool family; the Claude shape has no wait tool, so its
         # root ends its first turn with text.
         self.family = family
@@ -136,12 +132,7 @@ class Workers:
                 raise RuntimeError(f"Worker {worker} failed")
             return _text(f"Result {worker}")
         self.root_requests.append(request)
-        if LATER_QUESTION in texts:
-            self.later_requests += 1
-            if self.later_requests == 1:
-                return AssistantMessage(content=self._spawns(self.later))
-            return _text(WAITING)
-        spawns = self._spawns(tuple(n for n in self.names if n not in self.later))
+        spawns = self._spawns(self.names)
         if len(self.root_requests) == 1:
             if self.spawn_and_wait:
                 return AssistantMessage(content=[*spawns, self._wait_call()])
@@ -238,8 +229,7 @@ def _start(
     )
     _send(chat, owner, QUESTION)
     for name in workers.names:
-        if name not in workers.later:
-            assert workers.started[name].wait(WAIT_TIMEOUT_S)
+        assert workers.started[name].wait(WAIT_TIMEOUT_S)
 
 
 def _send(chat: ChatSession, owner: User, message: str) -> None:
@@ -472,6 +462,8 @@ def test_the_root_waits_for_staggered_agents_and_answers_once(
     assert _accepted_results(db_session, follow_up) == sorted(
         response.id for response in finished
     )
+    # The wait answers once all three finished, as each result says.
+    assert _still_running(workers.root_requests[-1]) == [[], [], []]
     # The follow-up read the results, so the wait cannot wake the root again.
     assert read_chat_inbox(db_session, chat.id).next_turn is None
 
@@ -721,96 +713,61 @@ def test_agents_of_the_current_user_turn(
     assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)
 
 
-# A Claude root has no wait tool: a response that ends while the agents that
-# it started run waits for them by itself (no AgentShape.wait_name).
+def _still_running(request: GenerationRequest) -> list[list[str]]:
+    """The `still_running` list of each agent notification in a root request."""
+    return [
+        json.loads(message.text.splitlines()[2])["still_running"]
+        for message in request.messages
+        if message.text.startswith("<agent_notification>")
+    ]
 
 
 @pytest.mark.usefixtures("idle_turn_work")
-def test_a_claude_root_answers_its_staggered_agents_once(
+def test_a_claude_root_answers_each_agent_as_it_finishes(
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Three agents finish at different times, one with an error; the root
-    answers all their results in one follow-up."""
+    """A Claude root has no wait tool: each finished agent, one with an error,
+    starts its own follow-up, and each result names the agents that still
+    run."""
     names = ("alpha", "beta", "gamma")
     workers = Workers(names, failing=frozenset({"beta"}), family=ToolFamily.CLAUDE)
     _start(chat, owner, workers, monkeypatch)
     [answer] = _root_answers(db_session, chat.id)
     assert answer.message == WAITING
-    finished = [_finish(db_session, chat, workers, name) for name in names[:2]]
-    assert finished[1].response_status == RunStatus.ERROR
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-    assert _follow_ups(db_session, chat.id) == []
-    finished.append(_finish(db_session, chat, workers, names[2]))
-    _settled(db_session, chat.id, 2)
-    [follow_up] = _follow_ups(db_session, chat.id)
-    assert _accepted_results(db_session, follow_up) == sorted(
-        response.id for response in finished
-    )
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-
-
-@pytest.mark.usefixtures("idle_turn_work")
-def test_the_default_root_answers_each_agent_that_it_did_not_wait_for(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Without a wait call, a root of the default shape answers each result
-    on its own."""
-    names = ("alpha", "beta")
-    workers = Workers(names, wait=False)
-    _start(chat, owner, workers, monkeypatch)
-    _finish(db_session, chat, workers, "alpha")
-    _settled(db_session, chat.id, 2)
-    _finish(db_session, chat, workers, "beta")
-    _settled(db_session, chat.id, 3)
+    expected = [["/root/beta", "/root/gamma"], ["/root/gamma"], []]
+    for count, name in enumerate(names, start=1):
+        _finish(db_session, chat, workers, name)
+        _settled(db_session, chat.id, count + 1)
+        assert _still_running(workers.root_requests[-1])[-1] == expected[count - 1]
+    # Beta failed, so its result has no answer text.
     assert [answer.message for answer in _follow_ups(db_session, chat.id)] == [
         "Answer with alpha",
-        "Answer with alpha, beta",
+        "Answer with alpha",
+        "Answer with alpha, gamma",
     ]
-
-
-@pytest.mark.usefixtures("idle_turn_work")
-def test_a_claude_agent_that_finishes_before_the_response_ends_waits_with_the_rest(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workers = Workers(
-        ("alpha", "beta"),
-        family=ToolFamily.CLAUDE,
-        before_wait=lambda: _finish(db_session, chat, workers, "alpha"),
-    )
-    _start(chat, owner, workers, monkeypatch)
     assert read_chat_inbox(db_session, chat.id).next_turn is None
-    assert _follow_ups(db_session, chat.id) == []
-    _finish(db_session, chat, workers, "beta")
-    _settled(db_session, chat.id, 2)
-    [follow_up] = _follow_ups(db_session, chat.id)
-    assert follow_up.message == "Answer with alpha, beta"
 
 
 @pytest.mark.usefixtures("idle_turn_work")
-def test_a_user_turn_reads_the_results_that_a_claude_root_holds(
+def test_a_user_turn_reads_a_claude_agents_result_with_the_agents_still_running(
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A user turn reads the held results at its first step; the wait on the
-    agent that still runs holds its result for one follow-up."""
+    """Alpha's wake is lost, so the next user turn reads its result; beta's
+    result then starts its own follow-up."""
+    dropped = _drop_dispatches(monkeypatch)
     workers = Workers(("alpha", "beta"), family=ToolFamily.CLAUDE)
     _start(chat, owner, workers, monkeypatch)
-    _finish(db_session, chat, workers, "alpha")
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
+    dropped.drop_next(lambda: _finish(db_session, chat, workers, "alpha"))
     _send(chat, owner, "A question")
     _settled(db_session, chat.id, 2)
     assert _root_answers(db_session, chat.id)[-1].message == "Answer with alpha"
+    assert _still_running(workers.root_requests[-1]) == [["/root/beta"]]
     _finish(db_session, chat, workers, "beta")
     _settled(db_session, chat.id, 3)
     [follow_up] = _follow_ups(db_session, chat.id)
@@ -818,96 +775,21 @@ def test_a_user_turn_reads_the_results_that_a_claude_root_holds(
 
 
 @pytest.mark.usefixtures("idle_turn_work")
-def test_an_interrupted_claude_agent_releases_the_wait(
+def test_an_interrupted_claude_agent_gives_no_result(
     chat: ChatSession,
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An interrupted run leaves no result, so the wait holds only the other
-    agent, and its result alone starts the follow-up."""
+    """Beta's result starts a follow-up while alpha runs; an interrupted run
+    leaves no result, so it starts none."""
     workers = Workers(("alpha", "beta"), family=ToolFamily.CLAUDE)
     _start(chat, owner, workers, monkeypatch)
     beta = _finish(db_session, chat, workers, "beta")
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-    _interrupt(db_session, chat, "alpha")
     _settled(db_session, chat.id, 2)
+    assert _still_running(workers.root_requests[-1]) == [["/root/alpha"]]
+    _interrupt(db_session, chat, "alpha")
+    assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)
     [follow_up] = _follow_ups(db_session, chat.id)
     assert _accepted_results(db_session, follow_up) == [beta.id]
-
-
-@pytest.mark.usefixtures("idle_turn_work")
-def test_a_running_claude_response_holds_none_of_its_agents_results(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A response reads its agents' results as they finish while it runs; its
-    wait on them starts when it ends."""
-    held_while_running: list[list[AgentWait]] = []
-
-    def finish_alpha_while_running() -> None:
-        _finish(db_session, chat, workers, "alpha")
-        db_session.expire_all()
-        held_while_running.append(
-            agent_waits(
-                db_session, chat.id, get_selected_branch(db_session, chat.id)[1]
-            )
-        )
-
-    workers = Workers(
-        ("alpha", "beta"),
-        family=ToolFamily.CLAUDE,
-        before_wait=finish_alpha_while_running,
-    )
-    _start(chat, owner, workers, monkeypatch)
-    assert held_while_running == [[]]
-    [answer] = _root_answers(db_session, chat.id)
-    [wait] = agent_waits(
-        db_session, chat.id, get_selected_branch(db_session, chat.id)[1]
-    )
-    assert wait.response_id == answer.id
-    assert wait.agent_ids == frozenset(
-        response.chat_session_id
-        for response in _worker_responses(db_session, chat.id).values()
-    )
-    # Alpha finished during the response's last model call, so the wait
-    # holds its result with beta's.
-    _finish(db_session, chat, workers, "beta")
-    _settled(db_session, chat.id, 2)
-    [follow_up] = _follow_ups(db_session, chat.id)
-    assert follow_up.message == "Answer with alpha, beta"
-
-
-@pytest.mark.usefixtures("idle_turn_work")
-def test_each_claude_response_waits_for_its_own_agents(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A later response starts more agents while the first response's agents
-    still run: each response's wait holds only its own agents, so each
-    gives one follow-up with its own results."""
-    workers = Workers(
-        ("alpha", "beta"), family=ToolFamily.CLAUDE, later=("gamma", "delta")
-    )
-    _start(chat, owner, workers, monkeypatch)
-    alpha = _finish(db_session, chat, workers, "alpha")
-    _send(chat, owner, LATER_QUESTION)
-    for name in ("gamma", "delta"):
-        assert workers.started[name].wait(WAIT_TIMEOUT_S)
-    _settled(db_session, chat.id, 2)
-    # The user turn read alpha's result; beta still holds the first wait.
-    gamma = _finish(db_session, chat, workers, "gamma")
-    beta = _finish(db_session, chat, workers, "beta")
-    _settled(db_session, chat.id, 3)
-    [first] = _follow_ups(db_session, chat.id)
-    assert _accepted_results(db_session, first) == [beta.id]
     assert read_chat_inbox(db_session, chat.id).next_turn is None
-    delta = _finish(db_session, chat, workers, "delta")
-    _settled(db_session, chat.id, 4)
-    second = _follow_ups(db_session, chat.id)[1]
-    assert _accepted_results(db_session, second) == sorted([gamma.id, delta.id])
-    assert alpha.id not in _accepted_results(db_session, second)

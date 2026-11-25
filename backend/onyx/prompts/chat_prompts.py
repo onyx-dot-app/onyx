@@ -167,10 +167,9 @@ SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent age
 You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
 
 
-# The root agent's block when the tool shape has a wait tool, `{name}`.
-ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results from your agents arrive automatically as messages.
-To answer with the combined results of your agents, call {name}. To answer now, end your response; later results start a new response."""
-# The root agent's block when the tool shape has no wait tool: a response
-# that ends while its agents run waits for them by itself.
-ROOT_AGENT_IMPLICIT_WAIT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results of agents that finish while you work arrive as messages.
-When you end your response while agents that you created in it still run, their results are held until all of them finish, then arrive together in one new response. End your response to answer now, or to wait for those agents."""
+# The root agent's block; `{wait_line}` is the agent shape's
+# (AgentShape.wait_line).
+ROOT_AGENT_INSTRUCTIONS = """Agents you start run in the background. When one finishes, you get an agent notification with its answer. It is not a message from the user.
+Keep doing useful work that doesn't overlap with your agents' tasks, and use their results when they arrive. Don't redo an agent's task yourself.
+Don't predict or invent the results of agents that are still running.
+Before your final answer, wait for the agents whose results you need. Each notification lists the ones still running. {wait_line}"""

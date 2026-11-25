@@ -96,12 +96,12 @@ class AgentShape(NamedTuple):
     spawn_name_argument: str
     spawn_task_argument: str
     send_arguments: type[ToolArguments[SendRequest]]
-    # The root's tool that ends its response until its agents finish. None:
-    # the shape has none, and a root response waits for the agents that it
-    # created by itself; when it ends while they run, their results arrive
-    # together in one new response once all of them finish
-    # (db/chat_inputs.py:agent_waits).
+    # The root's tool that ends its response until its agents finish
+    # (db/chat_inputs.py:agent_waits). None: the shape has none, and each
+    # result reaches the root as its agent finishes.
     wait_name: str | None
+    # The root instructions' line on how the root waits for its agents.
+    wait_line: str
 
 
 AGENT_SHAPES: Mapping[ToolFamily, AgentShape] = {
@@ -112,6 +112,7 @@ AGENT_SHAPES: Mapping[ToolFamily, AgentShape] = {
         spawn_task_argument="message",
         send_arguments=SendMessageArguments,
         wait_name=WAIT_AGENT_TOOL_NAME,
+        wait_line=f"Call `{WAIT_AGENT_TOOL_NAME}` to wait for them.",
     ),
     # The shape Claude models are trained on.
     ToolFamily.CLAUDE: AgentShape(
@@ -121,6 +122,8 @@ AGENT_SHAPES: Mapping[ToolFamily, AgentShape] = {
         spawn_task_argument="prompt",
         send_arguments=SendMessageToArguments,
         wait_name=None,
+        wait_line="End your response to wait; the next notification starts a new "
+        "response.",
     ),
 }
 # The names across the shapes and saved chats: the spawn tool, and the
@@ -130,9 +133,4 @@ SPAWN_TOOL_NAMES = frozenset(shape.spawn_name for shape in AGENT_SHAPES.values()
 AGENT_START_TOOL_NAMES = SPAWN_TOOL_NAMES | {SEND_MESSAGE_TOOL_NAME}
 WAIT_AGENT_TOOL_NAMES = frozenset(
     shape.wait_name for shape in AGENT_SHAPES.values() if shape.wait_name is not None
-)
-# The spawn tools of the shapes without a wait tool; a saved call of one is
-# its root response's wait.
-IMPLICIT_WAIT_SPAWN_TOOL_NAMES = frozenset(
-    shape.spawn_name for shape in AGENT_SHAPES.values() if shape.wait_name is None
 )

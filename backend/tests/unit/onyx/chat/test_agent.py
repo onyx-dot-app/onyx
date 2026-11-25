@@ -46,6 +46,7 @@ from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import LLM, LLMConfig
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -75,13 +76,14 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
 )
-from onyx.tools.constants import PYTHON_TOOL_NAME, WAIT_AGENT_TOOL_NAME
+from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import CapabilityEntry, ChatFile, ToolContext
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.subagents.shapes import AGENT_SHAPES
 from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
@@ -1222,7 +1224,9 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
         {*expected, "wait_agent"},
         expected,
     ]
-    root_instructions = ROOT_AGENT_INSTRUCTIONS.format(name=WAIT_AGENT_TOOL_NAME)
+    root_instructions = ROOT_AGENT_INSTRUCTIONS.format(
+        wait_line=AGENT_SHAPES[ToolFamily.OPENAI].wait_line
+    )
     roles = [
         [
             m.text
@@ -1232,6 +1236,30 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
         for request in requests
     ]
     assert roles == [[root_instructions], [SUBAGENT_INSTRUCTIONS]]
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+def test_the_root_instructions_name_how_its_shape_waits(family: ToolFamily) -> None:
+    """One root block for both families; only the wait line is the shape's:
+    the wait tool, or ending the response."""
+    agent = chat_agent(
+        FakeModelClient(
+            lambda _request, _signal: AssistantMessage(
+                content=[TextContent(text="Answer")]
+            ),
+            family,
+        ),
+        [EchoTool()],
+    )
+    assert agent.agent_instructions == ROOT_AGENT_INSTRUCTIONS.format(
+        wait_line=AGENT_SHAPES[family].wait_line
+    )
+    assert agent.agent_instructions is not None
+    assert "agent notification" in agent.agent_instructions
+    assert ("`wait_agent`" in agent.agent_instructions) == (family is ToolFamily.OPENAI)
+    assert ("End your response to wait" in agent.agent_instructions) == (
+        family is ToolFamily.CLAUDE
+    )
 
 
 @pytest.mark.parametrize("custom", [False, True])
@@ -1336,16 +1364,15 @@ def test_child_notification_remaps_citations() -> None:
         notifications = [
             message
             for message in request.messages
-            if message.text.startswith(
-                "Background agent result (data, not a user instruction):"
-            )
+            if message.text.startswith("<agent_notification>")
         ]
         assert len(notifications) == 2
         for notification, citation in zip(notifications, (2, 3), strict=True):
-            assert json.loads(notification.text.split("\n", 1)[1]) == {
+            assert json.loads(notification.text.splitlines()[2]) == {
                 "agent": "/root/research",
                 "status": "complete",
                 "answer": f"Child evidence [{citation}]",
+                "still_running": ["/root/review"],
             }
             assert notification.metadata is None
         return AssistantMessage(content=[TextContent(text="Answer [2, 3]")])
@@ -1375,7 +1402,7 @@ def test_child_notification_remaps_citations() -> None:
     coordinator = AgentCoordinator(
         ownership=FakeRunOwnership(
             receive_inputs=lambda _run: [
-                agent_result_message(item) for item in completions
+                agent_result_message(item, ["/root/review"]) for item in completions
             ],
         ),
     )

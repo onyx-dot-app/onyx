@@ -119,7 +119,7 @@ def test_each_family_calls_agents_skills_and_pages_by_its_own_shape(
     """A chat answers with the default model, then with a Claude model. Each
     turn starts an agent, messages a missing agent and reads a skill with
     its family's tools; each agent's result starts a follow-up, also in the
-    Claude shape, which has no wait tool and waits by itself. A reload replays the
+    Claude shape, which has no wait tool. A reload replays the
     calls of both shapes without the agents' runs."""
     nonce = uuid4().hex
     first_task = f"Research the first topic. {uuid4().hex}"
@@ -279,8 +279,9 @@ def test_each_family_calls_agents_skills_and_pages_by_its_own_shape(
     assert _arguments(openai_tools, "wait_agent") == {"targets"}
     assert _arguments(claude_tools, "agent") == {"description", "prompt"}
     assert _arguments(claude_tools, "send_message") == {"to", "message", "delivery"}
-    assert "call wait_agent." in openai_request.prompt_text
-    assert "call wait" not in claude_request.prompt_text
+    assert "Call `wait_agent` to wait for them." in openai_request.prompt_text
+    assert "wait_agent" not in claude_request.prompt_text
+    assert "End your response to wait" in claude_request.prompt_text
     # The agents got their tasks, and messages reach agents by each
     # family's argument.
     assert [request.prompt_text for request in mock_llm.requests_in(first_task)]
@@ -343,23 +344,23 @@ def _finished_children(session_id: UUID) -> int:
 
 
 @pytest.mark.parametrize("family", list(ToolFamily))
-def test_each_family_answers_the_results_of_its_agents_as_its_shape_waits(
+def test_each_family_answers_each_result_of_its_agents_with_those_still_running(
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     mock_llm_of_family: Callable[[ToolFamily], DATestLLMProvider | None],
     family: ToolFamily,
 ) -> None:
-    """A Claude root that ends its response while its agents run waits for
-    them by itself: three agents that finish at different times give one
-    new response with all three results. The OpenAI shape, which waits only
-    with wait_agent, answers each result in its own response."""
+    """A root that ends its response while its agents run, without a wait
+    call (the Claude shape has no wait tool), answers each result as its agent
+    finishes: three agents that finish at different times give three
+    responses, and each result names the agents that still run."""
     nonce = uuid4().hex
     tasks = [f"Task {index}. {uuid4().hex}" for index in range(3)]
     results = [f"Result {index} {uuid4().hex}" for index in range(3)]
     shape = AGENT_SHAPES[family]
     spawn_arguments = (
         [
-            {"description": f"worker {index}", "prompt": task}
+            {"description": f"worker{index}", "prompt": task}
             for index, task in enumerate(tasks)
         ]
         if family is ToolFamily.CLAUDE
@@ -368,22 +369,20 @@ def test_each_family_answers_the_results_of_its_agents_as_its_shape_waits(
             for index, task in enumerate(tasks)
         ]
     )
-    follow_ups = (
-        [
-            Reply(
-                text="All three finished.",
-                conditions=RequestConditions(prompt_contains=results),
-            )
-        ]
-        if family is ToolFamily.CLAUDE
-        else [
-            Reply(
-                text=f"Agent {index} finished.",
-                conditions=RequestConditions(prompt_contains=results[: index + 1]),
-            )
-            for index in range(3)
-        ]
-    )
+    statuses = [
+        '"still_running": ["/root/worker1", "/root/worker2"]',
+        '"still_running": ["/root/worker2"]',
+        '"still_running": []',
+    ]
+    follow_ups = [
+        Reply(
+            text=f"Agent {index} finished.",
+            conditions=RequestConditions(
+                prompt_contains=[*results[: index + 1], statuses[index]]
+            ),
+        )
+        for index in range(3)
+    ]
     mock_llm.conversation(
         nonce,
         Reply(
@@ -432,25 +431,10 @@ def test_each_family_answers_the_results_of_its_agents_as_its_shape_waits(
                 f"agent {index} finishes",
             )
             # A result that no wait holds starts a response at once.
-            client.get(
-                f"{API_SERVER_URL}/chat/chat-session/{session.id}/status",
-                headers=admin_user.headers,
-            ).raise_for_status()
-            if family is ToolFamily.OPENAI:
-                _wait_until(
-                    _answered(session.id, admin_user, f"Agent {index} finished."),
-                    f"the result of agent {index} is answered",
-                )
-        _wait_until(
-            _answered(
-                session.id,
-                admin_user,
-                "All three finished."
-                if family is ToolFamily.CLAUDE
-                else "Agent 2 finished.",
-            ),
-            "the last follow-up is answered",
-        )
+            _wait_until(
+                _answered(session.id, admin_user, f"Agent {index} finished."),
+                f"the result of agent {index} is answered",
+            )
         answers = [
             message.message
             for message in _detail(session.id, admin_user).messages
@@ -461,16 +445,12 @@ def test_each_family_answers_the_results_of_its_agents_as_its_shape_waits(
             mock_llm.release_gate(task)
         assert ChatSessionManager.delete(session, admin_user)
 
-    assert answers == (
-        ["Started three agents.", "All three finished."]
-        if family is ToolFamily.CLAUDE
-        else [
-            "Started three agents.",
-            "Agent 0 finished.",
-            "Agent 1 finished.",
-            "Agent 2 finished.",
-        ]
-    )
+    assert answers == [
+        "Started three agents.",
+        "Agent 0 finished.",
+        "Agent 1 finished.",
+        "Agent 2 finished.",
+    ]
     # Every turn of the chat used the family's model, the follow-ups too.
     assert {request.body["model"] for request in mock_llm.requests_in(nonce)} == {
         MOCK_LLM_MODEL_NAME if provider is None else CLAUDE_MOCK_LLM_MODEL_NAME

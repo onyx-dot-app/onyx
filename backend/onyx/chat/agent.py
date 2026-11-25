@@ -67,7 +67,6 @@ from onyx.llm.models import (
 )
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
-    ROOT_AGENT_IMPLICIT_WAIT_INSTRUCTIONS,
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
@@ -186,10 +185,8 @@ class ChatAgent(Agent, RestorableFeature):
         if is_subagent:
             self.agent_instructions = SUBAGENT_INSTRUCTIONS
         elif create_subagent is not None:
-            self.agent_instructions = (
-                ROOT_AGENT_IMPLICIT_WAIT_INSTRUCTIONS
-                if agent_shape.wait_name is None
-                else ROOT_AGENT_INSTRUCTIONS.format(name=agent_shape.wait_name)
+            self.agent_instructions = ROOT_AGENT_INSTRUCTIONS.format(
+                wait_line=agent_shape.wait_line
             )
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
