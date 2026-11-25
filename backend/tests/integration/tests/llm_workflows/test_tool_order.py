@@ -2,6 +2,7 @@
 both tool families: the direct tool list, and the functions that the code mode
 run tool's description lists. The persona's tool order does not change it."""
 
+import json
 from collections.abc import Callable
 from contextlib import ExitStack
 from uuid import uuid4
@@ -122,7 +123,10 @@ def test_the_model_reads_the_tools_in_rank_order(
                 "description": "Ping a service",
                 "auth_mode": "none",
                 "auth_method": None,
-                "config": {"shape": "openapi", "openapi_spec": _PING_SPEC},
+                "config": {
+                    "shape": "openapi",
+                    "openapi_document": json.dumps(_PING_SPEC),
+                },
             },
             admin_user,
         ).id
