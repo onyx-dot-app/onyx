@@ -381,6 +381,10 @@ export default function useChatController({
       }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
+      const restoreSubmittedInput = () => {
+        if ((incognitoEnabledRef.current ?? false) !== incognito) return;
+        restoreInputBar({ message, mentions, files: currentMessageFiles });
+      };
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
@@ -464,11 +468,7 @@ export default function useChatController({
               scroll: false,
             });
           }
-          restoreInputBar({
-            message,
-            mentions,
-            files: currentMessageFiles,
-          });
+          restoreSubmittedInput();
           return;
         }
 
@@ -768,11 +768,7 @@ export default function useChatController({
           store.currentSessionId === frozenSessionId &&
           !regenerationRequest
         ) {
-          restoreInputBar({
-            message,
-            mentions,
-            files: currentMessageFiles,
-          });
+          restoreSubmittedInput();
         }
       };
       const discardUnsentTurn = () => {
