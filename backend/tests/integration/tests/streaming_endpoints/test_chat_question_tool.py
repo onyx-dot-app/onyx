@@ -361,6 +361,7 @@ def test_a_multi_select_answer_gives_the_model_every_chosen_option(
             }
         )
         # The same options in another order repeat the saved answer.
+        body["answers"][0]["option_labels"] = ["Email", "Wiki"]
         assert http.post(url, json=body).status_code == 200
 
         saved = _saved(http, session.id)
