@@ -324,7 +324,7 @@ for (const theme of THEMES) {
         );
         await expect(aiMessage.locator(".katex")).toHaveCount(2);
         await expect(aiMessage.locator(".katex-display")).toBeVisible();
-        await expect(aiMessage.getByRole("code")).toContainText(
+        await expect(aiMessage.getByTestId("code-block")).toContainText(
           "\\int_0^1 x^2 \\, dx = \\frac{1}{3}"
         );
       });
