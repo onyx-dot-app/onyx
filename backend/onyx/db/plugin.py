@@ -523,6 +523,26 @@ def get_visible_versions_skill_md(
     }
 
 
+def get_skills_bundle_paths(
+    skills: Collection[SkillKey], db_session: Session
+) -> dict[SkillKey, list[str] | None]:
+    """The file paths of each skill's version bundle, None where the version
+    has no file list."""
+    if not skills:
+        return {}
+    rows = db_session.execute(
+        select(PluginVersion.id, PluginSkill.path, PluginVersion.file_manifest)
+        .join(PluginSkill, PluginSkill.plugin_version_id == PluginVersion.id)
+        .where(tuple_(PluginVersion.id, PluginSkill.path).in_(list(skills)))
+    ).tuples()
+    return {
+        (version_id, path): (
+            None if manifest is None else [str(entry["path"]) for entry in manifest]
+        )
+        for version_id, path, manifest in rows
+    }
+
+
 def get_versions_needs(
     version_ids: Iterable[UUID], db_session: Session
 ) -> dict[UUID, list[PluginNeed]]:

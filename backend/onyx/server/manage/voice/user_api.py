@@ -12,10 +12,13 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.db.user_preferences import (
+    fetch_user_preferences,
+    upsert_user_preferences__no_commit,
+)
 from onyx.db.voice import (
     fetch_default_stt_provider,
     fetch_default_tts_provider,
-    update_user_voice_settings,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -230,11 +233,7 @@ async def synthesize_speech(
         final_speed = (
             speed
             if speed is not None
-            else (
-                user.voice_playback_speed
-                if user.voice_playback_speed is not None
-                else 1.0
-            )
+            else fetch_user_preferences(user, db_session).voice_playback_speed
         )
 
         logger.info(
@@ -291,12 +290,10 @@ def update_voice_settings(
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """Update user's voice settings."""
-    update_user_voice_settings(
-        db_session=db_session,
-        user_id=user.id,
-        auto_send=request.auto_send,
-        auto_playback=request.auto_playback,
-        playback_speed=request.playback_speed,
+    upsert_user_preferences__no_commit(
+        db_session,
+        user.id,
+        **request.model_dump(by_alias=True, exclude_none=True),
     )
     db_session.commit()
     return {"status": "ok"}

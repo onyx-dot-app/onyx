@@ -5,8 +5,7 @@ import {
   LineLoader,
   type LineLoaderWidth,
 } from "@opal/loaders/line-loader/components";
-import { pick, seededRandom, type NonEmpty } from "@opal/loaders/random";
-import { cn } from "@opal/utils";
+import { cn, pick, seededRandom, type NonEmpty } from "@opal/utils";
 
 type ChatMessageLoaderOrientation = "start" | "end";
 

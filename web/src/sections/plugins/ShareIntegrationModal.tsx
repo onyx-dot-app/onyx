@@ -1,5 +1,6 @@
 "use client";
 
+import { getUserInitials } from "@/lib/users/svc";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -145,7 +146,7 @@ export default function ShareIntegrationModal({
               <ShareAccessRow
                 key={share.user_id}
                 icon={SvgUser}
-                avatarInitial={share.email.charAt(0).toUpperCase()}
+                avatarInitials={getUserInitials(null, share.email)}
                 title={share.email}
                 rightChildren={
                   <Button

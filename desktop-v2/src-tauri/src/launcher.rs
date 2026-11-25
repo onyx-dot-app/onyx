@@ -215,7 +215,10 @@ mod platform {
 
 #[cfg(not(target_os = "macos"))]
 mod platform {
-    use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+    use tauri::{
+        AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
+        WindowEvent,
+    };
 
     use super::{local_navigation_allowed, local_new_window, LAUNCHER};
 
@@ -226,7 +229,7 @@ mod platform {
         let nav_app = app.clone();
         let window = WebviewWindowBuilder::new(app, LAUNCHER, url)
             .title("Onyx Launcher")
-            .inner_size(720.0, 460.0)
+            .inner_size(super::SIZE.0, super::SIZE.1)
             .decorations(false)
             .transparent(true)
             // The page draws its own rounded frame; a native shadow would
@@ -245,17 +248,129 @@ mod platform {
         let handle = window.clone();
         window.on_window_event(move |event| {
             if let WindowEvent::Focused(false) = event {
+                // Windows can move the foreground once more right after a
+                // notification click shows the launcher.
+                #[cfg(windows)]
+                if super::take_blur_grace(std::time::Instant::now()) {
+                    return;
+                }
                 let _ = handle.hide();
             }
         });
         Ok(())
     }
 
+    /// Brings the launcher to the foreground after a notification click.
+    /// Windows gives the foreground only to the process that got the last
+    /// input, here the notification host. If the first try fails, a
+    /// synthetic Alt press makes this process the one with the last input;
+    /// no other thread's input queue is joined.
+    #[cfg(windows)]
+    pub fn take_foreground(app: &AppHandle) {
+        use ::windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+            KEYEVENTF_KEYUP, VK_MENU,
+        };
+        use ::windows::Win32::UI::WindowsAndMessaging::{
+            BringWindowToTop, GetForegroundWindow, SetForegroundWindow,
+        };
+
+        let Some(window) = app.get_webview_window(LAUNCHER) else {
+            return;
+        };
+        let Ok(hwnd) = window.hwnd() else {
+            return;
+        };
+        let alt = |flags: KEYBD_EVENT_FLAGS| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VK_MENU,
+                    dwFlags: flags,
+                    ..Default::default()
+                },
+            },
+        };
+        let size = std::mem::size_of::<INPUT>() as i32;
+        // SAFETY: plain Win32 calls on the main thread with a live window
+        // handle; SendInput reads only the local array.
+        let raised = unsafe {
+            if GetForegroundWindow() == hwnd {
+                return;
+            }
+            let _ = BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd).as_bool() || {
+                SendInput(&[alt(KEYBD_EVENT_FLAGS(0))], size);
+                let raised = SetForegroundWindow(hwnd).as_bool();
+                SendInput(&[alt(KEYEVENTF_KEYUP)], size);
+                raised
+            }
+        };
+        if !raised {
+            log::warn!("Windows did not bring the launcher to the foreground");
+        }
+        // Keyboard focus into the web view.
+        let _ = window.set_focus();
+    }
+
     pub fn show(app: &AppHandle) -> Result<(), String> {
         let window = app.get_webview_window(LAUNCHER).ok_or("launcher missing")?;
-        let _ = window.center();
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())
+        match position_on_cursor_monitor(app) {
+            Some((position, _size)) => {
+                let _ = window.set_position(position);
+                // A hidden window keeps its size through a display scale change.
+                #[cfg(windows)]
+                let _ = window.set_size(_size);
+            }
+            None => {
+                let _ = window.center();
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            present(&window)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            window.show().map_err(|e| e.to_string())?;
+            window.set_focus().map_err(|e| e.to_string())
+        }
+    }
+
+    /// The launcher's place and physical size on the monitor under the
+    /// pointer, the one the user works on. `center()` keeps it on the monitor
+    /// it was on.
+    fn position_on_cursor_monitor(
+        app: &AppHandle,
+    ) -> Option<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
+        let cursor = app.cursor_position().ok()?;
+        let monitor = app.monitor_from_point(cursor.x, cursor.y).ok()??;
+        // The known size: tao reports a wrong outer size for a window that
+        // was never shown on Linux. The logical size is kept on a monitor with
+        // another scale.
+        Some(super::placement(
+            monitor.work_area(),
+            monitor.scale_factor(),
+        ))
+    }
+
+    /// Shows the launcher and asks the window manager for focus. KWin and
+    /// Openbox refuse focus to a request without a fresh X timestamp, and no
+    /// key event reaches GTK for a grabbed global shortcut.
+    #[cfg(target_os = "linux")]
+    fn present(window: &tauri::WebviewWindow) -> Result<(), String> {
+        use gdkx11::glib::Cast;
+        use gtk::prelude::{GtkWindowExt, WidgetExt};
+
+        let gtk_window = window.gtk_window().map_err(|e| e.to_string())?;
+        gtk_window.show_all();
+        let time = gtk_window
+            .window()
+            .and_then(|w| w.downcast::<gdkx11::X11Window>().ok())
+            .map(|w| gdkx11::functions::x11_get_server_time(&w))
+            .unwrap_or(gdkx11::gdk::ffi::GDK_CURRENT_TIME as u32);
+        gtk_window.present_with_time(time);
+        Ok(())
     }
 
     pub fn hide(app: &AppHandle) {
@@ -270,6 +385,33 @@ mod platform {
         app.get_webview_window(LAUNCHER)
             .is_some_and(|w| w.is_visible().unwrap_or(false))
     }
+}
+
+/// The launcher's size on Windows and Linux, in logical pixels.
+#[cfg(any(not(target_os = "macos"), test))]
+const SIZE: (f64, f64) = (720.0, 460.0);
+
+/// The launcher's place and physical size, centered in `work_area` at `scale`.
+#[cfg(any(not(target_os = "macos"), test))]
+fn placement(
+    work_area: &tauri::PhysicalRect<i32, u32>,
+    scale: f64,
+) -> (tauri::PhysicalPosition<i32>, tauri::PhysicalSize<u32>) {
+    let size = tauri::LogicalSize::new(SIZE.0, SIZE.1).to_physical::<u32>(scale);
+    (centered(work_area, size), size)
+}
+
+/// The top-left corner that centers a window of `size` in `work_area`.
+#[cfg(any(not(target_os = "macos"), test))]
+fn centered(
+    work_area: &tauri::PhysicalRect<i32, u32>,
+    size: tauri::PhysicalSize<u32>,
+) -> tauri::PhysicalPosition<i32> {
+    let offset = |area: u32, window: u32| (i64::from(area) - i64::from(window)) / 2;
+    tauri::PhysicalPosition::new(
+        (i64::from(work_area.position.x) + offset(work_area.size.width, size.width)) as i32,
+        (i64::from(work_area.position.y) + offset(work_area.size.height, size.height)) as i32,
+    )
 }
 
 /// Where the launcher page keeps recent questions (`Launcher.tsx`).
@@ -335,9 +477,10 @@ pub fn toggle(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send +
     });
 }
 
-/// Shows the launcher with what it last showed if `wanted` still holds on the
-/// main thread. Does nothing if the launcher is showing.
-pub fn show(
+/// Shows the launcher with what it last showed, for a click on a
+/// notification, if `wanted` still holds on the main thread. A launcher that
+/// is showing stays; on Windows it also takes the foreground.
+pub fn show_for_notification(
     app: &AppHandle,
     wanted: impl FnOnce(&AppHandle) -> bool + Send + 'static,
     when_signed_out: impl FnOnce(&AppHandle) + Send + 'static,
@@ -346,10 +489,48 @@ pub fn show(
     let _ = app.run_on_main_thread(move || {
         // `wanted` runs for a visible launcher too: it can route the page
         // (a notification click switches to the answer).
-        if wanted(&handle) && !platform::is_visible(&handle) {
+        if !wanted(&handle) {
+            return;
+        }
+        #[cfg(windows)]
+        start_blur_grace(std::time::Instant::now());
+        if !platform::is_visible(&handle) {
             show_now(&handle, when_signed_out);
         }
+        #[cfg(windows)]
+        if platform::is_visible(&handle) {
+            platform::take_foreground(&handle);
+        }
     });
+}
+
+/// How long after a notification click the launcher ignores losing focus.
+#[cfg(any(windows, test))]
+const BLUR_GRACE: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// When a notification click last showed the launcher.
+#[cfg(windows)]
+static BLUR_GRACE_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+#[cfg(windows)]
+fn start_blur_grace(now: std::time::Instant) {
+    *BLUR_GRACE_START.lock().unwrap_or_else(|p| p.into_inner()) = Some(now);
+}
+
+/// Whether the launcher ignores this loss of focus. Only the first one after
+/// a notification click is ignored.
+#[cfg(windows)]
+fn take_blur_grace(now: std::time::Instant) -> bool {
+    let started = BLUR_GRACE_START
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
+    in_blur_grace(started, now)
+}
+
+#[cfg(any(windows, test))]
+fn in_blur_grace(started: Option<std::time::Instant>, now: std::time::Instant) -> bool {
+    started.is_some_and(|started| now.saturating_duration_since(started) < BLUR_GRACE)
 }
 
 fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
@@ -371,4 +552,62 @@ fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
 pub fn is_visible(app: &AppHandle) -> bool {
     app.get_webview_window(LAUNCHER)
         .is_some_and(|w| w.is_visible().unwrap_or(false))
+}
+
+#[cfg(test)]
+mod tests {
+    use tauri::{PhysicalPosition, PhysicalRect, PhysicalSize};
+
+    use super::{centered, in_blur_grace, placement, BLUR_GRACE};
+
+    #[test]
+    fn only_a_loss_of_focus_soon_after_a_notification_click_is_ignored() {
+        let start = std::time::Instant::now();
+        let soon = start + std::time::Duration::from_millis(300);
+        assert!(in_blur_grace(Some(start), start));
+        assert!(in_blur_grace(Some(start), soon));
+        assert!(!in_blur_grace(Some(start), start + BLUR_GRACE));
+        assert!(!in_blur_grace(None, soon));
+        // A clock read before the click does not count as later.
+        assert!(in_blur_grace(Some(soon), start));
+    }
+
+    fn area(x: i32, y: i32, width: u32, height: u32) -> PhysicalRect<i32, u32> {
+        PhysicalRect {
+            position: PhysicalPosition::new(x, y),
+            size: PhysicalSize::new(width, height),
+        }
+    }
+
+    #[test]
+    fn the_size_follows_the_monitor_scale() {
+        // 1280x1080 at 125%, with a 60px taskbar.
+        assert_eq!(
+            placement(&area(0, 0, 1280, 1020), 1.25),
+            (PhysicalPosition::new(190, 222), PhysicalSize::new(900, 575))
+        );
+        assert_eq!(
+            placement(&area(0, 0, 1280, 1020), 1.0),
+            (PhysicalPosition::new(280, 280), PhysicalSize::new(720, 460))
+        );
+    }
+
+    #[test]
+    fn centers_on_the_given_monitor() {
+        let size = PhysicalSize::new(720, 460);
+        assert_eq!(
+            centered(&area(0, 0, 1920, 1040), size),
+            PhysicalPosition::new(600, 290)
+        );
+        // A second monitor to the left of and above the primary one.
+        assert_eq!(
+            centered(&area(-2560, -400, 2560, 1400), size),
+            PhysicalPosition::new(-1640, 70)
+        );
+        // A work area smaller than the window keeps the window centered on it.
+        assert_eq!(
+            centered(&area(100, 0, 600, 400), size),
+            PhysicalPosition::new(40, -30)
+        );
+    }
 }

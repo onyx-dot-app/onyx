@@ -35,9 +35,9 @@ export async function navigateToAgentInHistorySidebar(
 export async function sendMessage(page: Page, message: string) {
   const chat = new ChatPage(page);
 
-  await page.locator("#onyx-chat-input-textbox").click();
-  await page.locator("#onyx-chat-input-textbox").fill(message);
-  await page.locator("#onyx-chat-input-send-button").click();
+  await chat.inputBar.textbox.click();
+  await chat.inputBar.fill(message);
+  await chat.inputBar.sendButton.click();
 
   // Wait on the latest turn, not on a count of AI messages: a long chat
   // mounts only the messages near the viewport.

@@ -24,7 +24,7 @@ ARG FC_BASE_CONFIG=resources/guest_configs/microvm-kernel-ci-x86_64-6.18.config
 ARG FC_BASE_CONFIG_SHA256=ba22401a0c7292a4c024ebcd10a562d4a1f1bfd2faed671406d3b159c0cf5215
 
 # Ubuntu 24.04 (gcc 13) is the toolchain the tested kernel was built with.
-FROM --platform=$BUILDPLATFORM ${BASE_IMAGE_REGISTRY}/library/ubuntu:24.04@sha256:73b999393d07f2bf65a40373778a44dc9a6d54ad7718d29247d8ff9413c4d6a8 AS builder
+FROM --platform=$BUILDPLATFORM ${BASE_IMAGE_REGISTRY}/library/ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289 AS builder
 ARG BUILDARCH
 ARG DEBIAN_FRONTEND=noninteractive
 RUN set -eux; \

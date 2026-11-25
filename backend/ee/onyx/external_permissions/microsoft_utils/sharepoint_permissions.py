@@ -35,6 +35,7 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
 from onyx.connectors.microsoft_utils.sharepoint_rest import (
     SharepointPermissionReader,
 )
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.logger import setup_logger
 
@@ -71,6 +72,8 @@ def _is_public_item(
 
     try:
         scopes = reader.list_sharing_link_scopes(item=drive_item)
+    except ConnectorStopSignal:
+        raise
     except Exception as e:
         logger.error("Failed to check if item %s is public: %s", drive_item.id, e)
         return False
@@ -233,7 +236,7 @@ def _get_cached_group_expansion(
     permission_cache: SharepointPermissionCache,
 ) -> SharepointGroupExpansion:
     cache_key = _group_cache_key(site_url, group)
-    cached_expansion = permission_cache.group_expansions.get(cache_key)
+    cached_expansion = permission_cache.get_group_expansion(cache_key)
     if cached_expansion is not None:
         return cached_expansion
 
@@ -254,7 +257,7 @@ def _get_cached_group_expansion(
         nested_groups = set()
 
     expansion = SharepointGroupExpansion(nested_groups=nested_groups)
-    permission_cache.group_expansions[cache_key] = expansion
+    permission_cache.set_group_expansion(cache_key, expansion)
     return expansion
 
 
@@ -362,6 +365,23 @@ def get_external_access_from_sharepoint(
         site_url,
         securable,
         permission_cache,
+    )
+
+
+def get_securable_external_access_from_sharepoint(
+    reader: SharepointPermissionReader,
+    site_url: str,
+    securable: SharepointSecurable,
+    permission_cache: SharepointPermissionCache | None = None,
+) -> ExternalAccess:
+    """The access that the role assignments of ``securable`` give. For a file
+    with no role assignments of its own, the securable it inherits them from
+    gives the same access as a read of the file."""
+    return _get_external_access_from_securable(
+        reader,
+        site_url,
+        securable,
+        permission_cache or SharepointPermissionCache(),
     )
 
 

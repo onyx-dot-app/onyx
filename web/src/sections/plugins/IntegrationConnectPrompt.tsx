@@ -70,7 +70,13 @@ export default function IntegrationConnectPrompt({
   return (
     <>
       {pending.length > 0 && toolConfiguration.ready && (
-        <Section width="auto" height="auto" className="ms-1">
+        <Section
+          width="auto"
+          height="auto"
+          className="ms-1 @max-[30rem]/composer-controls:[&_[data-button-label]]:hidden"
+        >
+          {/* In a narrow composer the trigger is its icon, so the send
+              button keeps its place */}
           <Button
             ref={triggerRef}
             icon={needsReconnect ? WarningKey : InfoKey}

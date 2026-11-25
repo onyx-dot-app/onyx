@@ -15,6 +15,10 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import KV_SETTINGS_KEY, OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server.playground import (
+    PlaygroundRestrictedFeature,
+    is_restricted_in_playground,
+)
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -85,6 +89,13 @@ def load_settings(raise_on_error: bool = False) -> Settings:
         anonymous_user_enabled = False
 
     settings.anonymous_user_enabled = anonymous_user_enabled
+
+    # Restricted on the playground whatever is stored, so the gateway and the
+    # anonymous login refuse and the web app shows the switches off.
+    if is_restricted_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS):
+        settings.anonymous_user_enabled = False
+    if is_restricted_in_playground(PlaygroundRestrictedFeature.LLM_GATEWAY):
+        settings.llm_gateway_enabled = False
     if settings.query_history_type is None:
         settings.query_history_type = ONYX_QUERY_HISTORY_TYPE
 

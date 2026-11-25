@@ -72,7 +72,7 @@ mnt /tmp -t tmpfs -o nosuid,nodev,mode=1777 tmpfs
 # Onyx directories for files that Onyx puts in the VM. The sandbox user owns
 # them, so commands can add and delete files there. The template boot makes
 # them and its snapshot keeps them, so every VM restored from it has them.
-if ! { mkdir -p /tmp/onyx/tool-results /tmp/onyx/search-files /tmp/onyx/artifacts && chown -R 1000:1000 /tmp/onyx; }; then
+if ! { mkdir -p /tmp/onyx/tool-results /tmp/onyx/artifacts && chown -R 1000:1000 /tmp/onyx; }; then
   log "/tmp/onyx failed"
 fi
 for link in fd:/proc/self/fd stdin:/proc/self/fd/0 stdout:/proc/self/fd/1 stderr:/proc/self/fd/2; do

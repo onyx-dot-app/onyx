@@ -10,7 +10,7 @@ from ee.onyx.db.user_tenant_mapping import (
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import User
+from onyx.auth.users import User, finish_user_delete_in_own_session
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -67,7 +67,7 @@ async def leave_organization(
         # Validate and stage local cleanup before the irreversible remote call.
         # Keep it uncommitted so a remote failure preserves the local account.
         try:
-            delete_user_from_db__no_commit(user_to_delete, db_session)
+            cleanup = delete_user_from_db__no_commit(user_to_delete, db_session)
         except Exception:
             db_session.rollback()
             raise
@@ -91,7 +91,10 @@ async def leave_organization(
             remove_user_from_invited_users(user_email.user_email)
             remove_all_users_from_tenant(tenant_id)
         finally:
-            await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
+            try:
+                await asyncio.to_thread(finish_user_delete_in_own_session, cleanup)
+            finally:
+                await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         return
 
     db_session.expunge(user_to_delete)

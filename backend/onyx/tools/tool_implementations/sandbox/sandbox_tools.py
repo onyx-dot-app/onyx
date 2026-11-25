@@ -7,27 +7,41 @@ They have no tool row: a chat turn builds them when it offers the sandbox
 sandbox is the isolation, so calls need no approval.
 """
 
+import base64
 import posixpath
 import time
 from collections.abc import Callable, Generator, Hashable, Iterator, Sequence
+from concurrent.futures import Future
 from contextlib import closing, contextmanager
 from functools import partial
 from typing import Literal
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.agents.tools import (
     ToolExecutionMode,
     ToolInvocation,
     ToolProgress,
 )
-from onyx.db.chat import delete_unpublished_chat_artifacts, save_chat_artifact
+from onyx.db.chat import (
+    delete_unpublished_chat_artifacts,
+    get_user_published_file,
+    get_user_published_files,
+    save_chat_artifact,
+)
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.utils import chat_output_file_type
+from onyx.llm.cancellation import wait_for_future
 from onyx.llm.model_capabilities import is_claude_model
 from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.microvm.models import FileType
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
     APPLY_PATCH_USE,
+    ARTIFACTS_DOWNLOAD_DESCRIPTION,
+    ARTIFACTS_LIST_DESCRIPTION,
     ATTACHMENTS_NOT_SAVED_NOTE,
     CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
@@ -43,6 +57,7 @@ from onyx.prompts.sandbox_tools import (
     WRITE_USE,
 )
 from onyx.server.features.build.sandbox.harness_base import (
+    ARTIFACT_FILES_DIR,
     CHAT_FILES_DIR,
     RENDER_FIRST_PAGE_BUDGET_SECONDS,
     RENDER_FIRST_PAGE_MAX_INPUT_BYTES,
@@ -50,15 +65,20 @@ from onyx.server.features.build.sandbox.harness_base import (
     HarnessSandbox,
     HarnessSandboxError,
     SandboxPathError,
+    chat_file_name,
     session_relative_path,
 )
 from onyx.server.features.build.sandbox.models import (
+    CHAT_SKILLS_PATH,
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
     SandboxPathInfo,
+    chat_skill_folder,
     session_workspace,
 )
+from onyx.skills.chat import SkillLoadError, load_chat_skill_files
+from onyx.tools.constants import LOAD_SKILL_TOOL_NAME
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -66,17 +86,32 @@ from onyx.tools.interface import (
 )
 from onyx.tools.models import (
     CodeModeExposure,
+    CodeModeFunctionName,
     CodeModeResultKind,
     CodeModeResultSpec,
+    CustomToolCallSummary,
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.tool_implementations.sandbox import file_copies
+from onyx.tools.tool_implementations.sandbox.file_copies import (
+    COPY_BASE_SECONDS,
+    COPY_MIN_BYTES_PER_SECOND,
+)
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACTS_LIST_MAX_CHARS,
+    ARTIFACTS_LIST_MAX_LIMIT,
+    ARTIFACTS_QUERY_MAX_CHARS,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_TITLE_CHARS,
     ApplyPatchArguments,
     ApplyPatchFileChange,
     ApplyPatchResult,
+    ArtifactCursor,
+    ArtifactList,
+    ArtifactsDownloadArguments,
+    ArtifactsListArguments,
+    DownloadedArtifact,
     EditArguments,
     ExecCommandArguments,
     ExecCommandOutput,
@@ -834,18 +869,290 @@ class PublishFilesTool(_FileTool):
         )
 
 
+@contextmanager
+def _artifact_errors(action: str) -> Iterator[None]:
+    """The tool errors of an artifact tool's `action` ("The download"): a
+    sandbox error's own message, or a fixed one; the details go to the log."""
+    try:
+        yield
+    except ToolCallException:
+        raise
+    except HarnessSandboxError as error:
+        raise _tool_error(str(error)) from error
+    except TimeoutError as error:
+        logger.warning("artifact_tool_timed_out action=%s", action, exc_info=True)
+        raise _tool_error(f"{action} timed out; try again") from error
+    except Exception as error:
+        logger.exception("artifact_tool_failed action=%s", action)
+        raise _tool_error(f"{action} failed; try again") from error
+
+
+# The most entries that a download lists in ARTIFACT_FILES_DIR: the chat's
+# downloads. A file past it is written again.
+_DOWNLOADS_MAX_LISTED = 10_000
+# How often a download that waits for a write slot checks for pod shutdown.
+_SLOT_CHECK_SECONDS = 1.0
+
+
+class _ArtifactTool(SandboxTool):
+    """What the artifact tools share. They reach only the files published in
+    the user's own root chats that are not deleted
+    (`db/chat.py:get_user_published_files`), this chat included. In code mode
+    they are the deferred group `artifacts`, which tool_search finds; the
+    model learns of them from the publish_files description and the group's
+    line in the execute_code description, not the system prompt. Running a
+    call again changes nothing, so a call that a lost server left running
+    runs again."""
+
+    USE = None
+    interrupted_result = None
+    CODE_MODE_NAME: str
+    RESULT: type[BaseModel]
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
+
+    @property
+    def code_mode_function_name(self) -> CodeModeFunctionName:
+        return CodeModeFunctionName(
+            name=self.CODE_MODE_NAME,
+            namespace="artifacts",
+            namespace_description="Find and download the files that you published "
+            "in this chat and the user's other chats.",
+        )
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.JSON_OBJECT, model=self.RESULT
+        )
+
+
+class ArtifactsListTool(_ArtifactTool):
+    """Lists published files from the database; it never starts the VM. A
+    page keeps to ARTIFACTS_LIST_MAX_CHARS, under the spill limit of one
+    result; the step's budget can still spill it."""
+
+    NAME = "artifacts_list"
+    CODE_MODE_NAME = "list"
+    DESCRIPTION = ARTIFACTS_LIST_DESCRIPTION
+    ARGUMENTS = ArtifactsListArguments
+    RESULT = ArtifactList
+    display_name = "Find Published Files"
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(ArtifactsListArguments, invocation.arguments)
+        chat_id: UUID | None = None
+        if arguments.chat_id is not None:
+            try:
+                chat_id = UUID(arguments.chat_id)
+            except ValueError as error:
+                raise _tool_error(f"No chat {arguments.chat_id} of yours") from error
+        before: ArtifactCursor | None = None
+        if arguments.cursor is not None:
+            try:
+                before = ArtifactCursor.model_validate_json(
+                    base64.urlsafe_b64decode(arguments.cursor)
+                )
+            except ValueError as error:
+                raise _tool_error(
+                    "The cursor is not a next_cursor of this tool; list again "
+                    "without it"
+                ) from error
+        query = (arguments.query or "").strip()
+        if len(query) > ARTIFACTS_QUERY_MAX_CHARS:
+            raise _tool_error(
+                f"The query is longer than {ARTIFACTS_QUERY_MAX_CHARS} characters"
+            )
+        limit = min(max(arguments.limit, 1), ARTIFACTS_LIST_MAX_LIMIT)
+        with _artifact_errors("The listing"):
+            with get_session_with_current_tenant() as db_session:
+                rows = get_user_published_files(
+                    db_session,
+                    self._turn.user_id,
+                    query=query or None,
+                    chat_session_id=chat_id,
+                    limit=limit,
+                    before=before,
+                )
+        if rows is None:
+            raise _tool_error(f"No chat {arguments.chat_id} of yours")
+        shown, more = rows[:limit], len(rows) > limit
+        while True:
+            content = ArtifactList(
+                artifacts=[artifact for artifact, _ in shown],
+                next_cursor=base64.urlsafe_b64encode(
+                    shown[-1][1].model_dump_json().encode()
+                ).decode()
+                if more and shown
+                else None,
+            ).model_dump_json()
+            if len(content) <= ARTIFACTS_LIST_MAX_CHARS or len(shown) <= 1:
+                return ToolResult(content=content)
+            shown, more = shown[:-1], True
+
+
+class ArtifactsDownloadTool(_ArtifactTool):
+    """Copies a published file into the chat's working directory, in
+    ARTIFACT_FILES_DIR under its chat file name (`chat_file_name`). The
+    access check comes first, so a refused file never starts the VM. The copy
+    follows the chat file copies (file_copies.py): a regular file of the
+    record's size at the path is in place and is not written again, the read
+    and the write take one of the VM's write slots, the daemon writes
+    atomically, and the write's timeout grows with the size. The call waits
+    for the slot until a Stop or pod shutdown, then for the read and the
+    write; a Stop ends the wait, and the write then lands on its own."""
+
+    NAME = "artifacts_download"
+    CODE_MODE_NAME = "download"
+    DESCRIPTION = ARTIFACTS_DOWNLOAD_DESCRIPTION
+    ARGUMENTS = ArtifactsDownloadArguments
+    RESULT = DownloadedArtifact
+    display_name = "Download Published File"
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        file_id = parse_tool_arguments(
+            ArtifactsDownloadArguments, invocation.arguments
+        ).file_id
+        with _artifact_errors("The download"):
+            with get_session_with_current_tenant() as db_session:
+                found = get_user_published_file(db_session, self._turn.user_id, file_id)
+            if found is None:
+                raise _tool_error(f"No published file {file_id} in your chats")
+            if found.size > PUBLISH_FILES_MAX_BYTES:
+                raise _tool_error(
+                    f"{found.name} is larger than {PUBLISH_FILES_MAX_BYTES >> 20} MiB"
+                )
+            path = f"{ARTIFACT_FILES_DIR}/{chat_file_name(found.file_id, found.name)}"
+            ref = self._turn.start_call()
+            files = self._turn.sandbox.session_files(ref)
+            entry = next(
+                (
+                    entry
+                    for entry in files.list_files(
+                        ARTIFACT_FILES_DIR, max_entries=_DOWNLOADS_MAX_LISTED
+                    ).entries
+                    if entry.path == path
+                ),
+                None,
+            )
+            cached = (
+                entry is not None
+                and entry.type is FileType.REGULAR
+                and entry.size == found.size
+            )
+            if not cached:
+                invocation.cancellation.check()
+                timeout = COPY_BASE_SECONDS + found.size / COPY_MIN_BYTES_PER_SECOND
+                slot: Future[None] = Future()
+                copied: Future[None] = Future()
+
+                def copy() -> None:
+                    slot.set_result(None)
+                    try:
+                        with get_default_file_store().read_file(
+                            found.file_id, use_tempfile=True
+                        ) as content:
+                            files.write(path, content, timeout_seconds=timeout)
+                    except BaseException as error:
+                        copied.set_exception(error)
+                        return
+                    copied.set_result(None)
+
+                pool = file_copies.file_copy_pool()
+                tasks = [copy]
+                pool.writes.want(ref.sandbox_id, lambda: tasks.pop() if tasks else None)
+                # The wait for a slot has no timeout: it ends at a Stop, or
+                # when pod shutdown drops the queued task.
+                while True:
+                    try:
+                        wait_for_future(
+                            slot, _SLOT_CHECK_SECONDS, invocation.cancellation
+                        )
+                        break
+                    except TimeoutError:
+                        if pool.stopped.is_set():
+                            raise RuntimeError(
+                                "the pod's file copies stopped"
+                            ) from None
+                # The file store read, at the write's rate, then the write.
+                wait_for_future(copied, 2 * timeout, invocation.cancellation)
+        logger.info("artifacts_download file=%s cached=%s", file_id, cached)
+        return ToolResult(
+            content=DownloadedArtifact(
+                path=path,
+                file_id=found.file_id,
+                name=found.name,
+                size=found.size,
+                mime_type=found.mime_type,
+                chat_id=found.chat_id,
+                cached=cached,
+            ).model_dump_json()
+        )
+
+
+class LoadSkillArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, description="Skill name.")
+
+
+class LoadSkillTool(SandboxTool):
+    """Copies one of the user's skills into its read-only sandbox folder."""
+
+    NAME = LOAD_SKILL_TOOL_NAME
+    USE = None
+    DESCRIPTION = (
+        "Copy a skill's files into the sandbox, read-only, at "
+        f"{CHAT_SKILLS_PATH}/<name>/. Call it before you run the skill's "
+        "scripts or open its other files. It returns when the copy is done."
+    )
+    ARGUMENTS = LoadSkillArguments
+    display_name = "Load skill"
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(LoadSkillArguments, invocation.arguments)
+        try:
+            skill = load_chat_skill_files(self._turn.user_id, arguments.name)
+        except SkillLoadError as e:
+            raise ToolCallException(message=str(e), llm_facing_message=str(e)) from e
+        self._turn.sandbox.install_skill(
+            self._turn.start_call(), arguments.name, skill.version, skill.files
+        )
+        return ToolResult(
+            content=f"Skill '{arguments.name}' is at {chat_skill_folder(arguments.name)}/ (read-only).",
+            details=CustomToolCallSummary(
+                tool_name=self.name,
+                response_type="json",
+                tool_result={"skill": arguments.name},
+            ),
+        )
+
+
 def sandbox_tools_for_model(
     model_names: Sequence[str],
 ) -> tuple[type[SandboxTool], ...]:
     """The sandbox tools of a chat turn whose model has these names
     (model_identity_names), in the order the prompt names them: Claude models
     edit files with edit and write, the tools they are trained on; the others
-    with apply_patch. Every model gets publish_files. The turn builds them,
-    and its prompt and token estimate name them."""
+    with apply_patch. Every model gets publish_files and the artifact tools.
+    The turn builds them, and its prompt and token estimate name them."""
     file_tools = (
         (EditTool, WriteTool) if is_claude_model(model_names) else (ApplyPatchTool,)
     )
-    return (ExecCommandTool, WriteStdinTool, *file_tools, PublishFilesTool)
+    return (
+        ExecCommandTool,
+        WriteStdinTool,
+        *file_tools,
+        PublishFilesTool,
+        ArtifactsListTool,
+        ArtifactsDownloadTool,
+    )
 
 
 def sandbox_guidance(

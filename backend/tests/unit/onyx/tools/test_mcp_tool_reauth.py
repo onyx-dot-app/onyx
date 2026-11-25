@@ -41,6 +41,7 @@ def _tool(credentials: CallCredentials) -> MCPTool:
     return MCPTool(
         integration_id=5,
         integration_name="test",
+        integration_description=None,
         server_url="https://mcp.example/mcp",
         transport=None,
         tool_name="test",

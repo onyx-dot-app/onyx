@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import useSWR from "swr";
-import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
+import type { FederatedConnectorOAuthStatus } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 /**

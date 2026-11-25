@@ -33,7 +33,7 @@ import {
   NotificationType,
   type Notification,
   type NotificationsResponse,
-} from "@/lib/notifications/interfaces";
+} from "@/lib/notifications/types";
 import { buildBannerQueue, type BannerQueueItem } from "@/lib/banner/queue";
 
 export type { BannerQueueItem } from "@/lib/banner/queue";

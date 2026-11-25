@@ -15,16 +15,9 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import {
-  SvgDownloadCloud,
-  SvgFiles,
-  SvgSearchMenu,
-  SvgSidebar,
-} from "@opal/icons";
+import { SvgFiles, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
-import { buildImgUrl } from "@/app/app/components/files/images/utils";
-import { downloadFile } from "@/lib/download";
 import {
   useChatSessionStore,
   useCurrentRightPanelState,
@@ -48,10 +41,11 @@ import {
 } from "@/lib/chat/rightPanel";
 import {
   OUTPUT_PANEL_HEADER_CONTROL_WIDTH,
-  PANEL_TOGGLE_RESERVE,
+  PANEL_TOGGLE_RESERVE_VAR,
 } from "@/lib/outputPanel/layout";
 import { retainedFileViewers } from "@/lib/outputPanel/tabs";
 import { getFileIcon } from "@/lib/utils";
+import { PreviewActionsSlotContext } from "@/sections/file-preview/FloatingFooter";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import { OutputPanelLayout } from "@/sections/output-panel/OutputPanelLayout";
 import {
@@ -328,6 +322,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // Reload loads the file list; an open file's tab keeps showing its file.
   // As Craft's, the button is off while the reload runs.
   const [reloading, setReloading] = useState(false);
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const reload = async () => {
     setReloading(true);
     try {
@@ -345,14 +340,23 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // closing gives focus back to it when it closed the panel, or when the move
   // or the panel took focus.
   const closedByToggleRef = useRef(false);
+  // The open panel holds the toggle, so the page needs no room for it
+  useLayoutEffect(() => {
+    const page = workspace.page.current;
+    if (!open || !page) return;
+    page.style.setProperty(PANEL_TOGGLE_RESERVE_VAR, "0px");
+    return () => {
+      page.style.removeProperty(PANEL_TOGGLE_RESERVE_VAR);
+    };
+  }, [open, workspace.page]);
   const toggle = sessionId !== null && (
-    // At Craft's place: centered in the 52px header row, 12px from the end
-    <div className="absolute end-3 top-3 z-30">
+    // On the chat header's button line: 8px from the top, as its padding
+    // (a flex box, so no line box shifts it), 12px from the end
+    <Section width="fit" height="auto" className="absolute end-3 top-2 z-30">
       <Button
         ref={toggleRef}
         icon={SvgSidebar}
         prominence="tertiary"
-        size="sm"
         aria-expanded={open}
         // Decides from what the user sees: the host can hide a panel
         // whose state is open, such as Sources without retrieval
@@ -363,7 +367,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
         tooltip={t("toggleButton.label")}
         aria-label={t("toggleButton.label")}
       />
-    </div>
+    </Section>
   );
   const asideRef = useRef<HTMLElement>(null);
   const wasOpenRef = useRef(open);
@@ -440,8 +444,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
               />
             }
             toolbar={
-              // As Craft's: reload before the search or the file's path, and
-              // a file's download after it
+              // As Craft's: reload before the search or the file's path
               shown !== RIGHT_PANEL_SOURCES_TAB && (
                 <PanelUrlBar
                   displayUrl={
@@ -461,22 +464,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                     isUserRefreshing: reloading,
                   }}
                 >
-                  {shownFile && (
-                    <Button
-                      icon={SvgDownloadCloud}
-                      prominence="tertiary"
-                      size="sm"
-                      onClick={() =>
-                        downloadFile(shownFile.name, {
-                          url: buildImgUrl(shownFile.file_id),
-                        })
-                      }
-                      tooltip={t("downloadButton.tooltip")}
-                      aria-label={t("downloadButton.tooltip")}
-                    >
-                      {t("downloadButton.label")}
-                    </Button>
-                  )}
+                  {/* The shown file's preview puts its actions here */}
+                  {shownFile && <div ref={setActionsSlot} />}
                 </PanelUrlBar>
               )
             }
@@ -531,7 +520,11 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                           "invisible pointer-events-none [content-visibility:hidden]"
                       )}
                     >
-                      <PublishedFilePreview file={file} />
+                      <PreviewActionsSlotContext.Provider
+                        value={visible ? actionsSlot : null}
+                      >
+                        <PublishedFilePreview file={file} />
+                      </PreviewActionsSlotContext.Provider>
                     </div>
                   );
                 })}
@@ -539,10 +532,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           </OutputPanelLayout>
           {/* Beside the room of the toggle, which the panel places over the
               workspace's end */}
-          <div
-            className="absolute top-3"
-            style={{ insetInlineEnd: PANEL_TOGGLE_RESERVE }}
-          >
+          {/* end-12 is --panel-toggle-reserve's 48px (globals.css) */}
+          <Section width="fit" height="auto" className="absolute end-12 top-2">
             {!layout.narrow && (
               <PanelSizeButton
                 full={full}
@@ -556,7 +547,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                 }
               />
             )}
-          </div>
+          </Section>
           {dragging && (
             // Over the content, so the pointer hovers nothing in it
             <div className="absolute inset-0 z-40 cursor-col-resize" />

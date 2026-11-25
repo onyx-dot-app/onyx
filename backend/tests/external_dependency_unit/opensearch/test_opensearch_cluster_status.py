@@ -20,7 +20,7 @@ from onyx.auth.users import current_user
 from onyx.cache.redis_backend import RedisCacheBackend
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, VectorQuantization
-from onyx.db.models import SearchSettings, User
+from onyx.db.models import User
 from onyx.document_index.opensearch.client import (
     OpenSearchClient,
     OpenSearchIndexClient,
@@ -383,16 +383,16 @@ def status_api(
     )
     monkeypatch.setattr(
         service_status_api,
-        "get_current_search_settings",
-        lambda _db: SearchSettings(
-            index_name="test_missing_index",
-            model_name="test-model",
-            model_dim=DIM,
-            vector_quantization=VectorQuantization.NONE,
-        ),
-    )
-    monkeypatch.setattr(
-        service_status_api, "get_secondary_search_settings", lambda _db: None
+        "onyx_index_refs",
+        lambda _db: [
+            OnyxIndexRef(
+                index_name="test_missing_index",
+                is_current=True,
+                model_name="test-model",
+                model_dim=DIM,
+                vector_quantization=VectorQuantization.NONE,
+            )
+        ],
     )
     calls: list[int] = []
 

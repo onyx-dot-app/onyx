@@ -126,6 +126,8 @@ HIDDEN_TOOLS = frozenset(
 SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 # Tools whose code argument streams to the browser while the model writes it.
 CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
+# Tools whose prompt argument streams to the browser while the model writes it.
+PROMPT_ARGUMENT_TOOLS = frozenset({ImageGenerationTool.NAME})
 # Tools whose calls observe a code mode cell; each call renders as one code mode card.
 CODE_MODE_TOOL_NAMES = frozenset({CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME})
 
@@ -225,11 +227,12 @@ class _ArgumentStream:
         self,
         call_id: str,
         name: str,
-        report: Literal["code"] | FileToolName,
+        report: Literal["text"] | FileToolName,
     ) -> None:
         self.id = call_id
         self.name = name
-        # How the arguments show: as code or as a file tool's progress.
+        # How the arguments show: as their text (code or a prompt), or as a
+        # file tool's progress.
         self.report = report
         # The arguments text of the last report, and what it parsed to.
         self.reported = ""
@@ -453,9 +456,10 @@ class MessageRenderer:
             self._raw_thinking += event.text
             return result + self._append(event.text, thinking=True)
         if isinstance(event, ToolCallStartEvent):
-            report: Literal["code"] | FileToolName | None = (
-                "code"
+            report: Literal["text"] | FileToolName | None = (
+                "text"
                 if event.tool_name in CODE_ARGUMENT_TOOLS
+                or event.tool_name in PROMPT_ARGUMENT_TOOLS
                 else event.tool_name
                 if is_file_tool(event.tool_name)
                 else None
@@ -702,6 +706,8 @@ class ToolRenderer:
         self._queries: set[str] = set()
         self._documents: set[str] = set()
         self._last_details: BaseModel | None = None
+        # The content of a result without details that the card shows.
+        self._last_content: str | None = None
         self.has_child_output = False
         self._has_python_output = False
         self._files: set[str] = set()
@@ -883,7 +889,11 @@ class ToolRenderer:
         new_docs = [doc for doc in docs if doc.document_id not in self._documents]
         self._documents.update(doc.document_id for doc in docs)
         if self.call.name == OpenURLTool.NAME:
-            return [packets.OpenUrlDocuments(documents=new_docs)] if new_docs else []
+            return (
+                [packets.OpenUrlDocuments(documents=new_docs, urls=details.opened_urls)]
+                if new_docs
+                else []
+            )
         if self.call.name == PostgresTool.NAME:
             return (
                 [packets.PostgresToolDocuments(documents=new_docs)] if new_docs else []
@@ -1031,14 +1041,19 @@ class ToolRenderer:
                         ),
                     ]
                 )
-        elif content and self.call.name not in {
-            SearchTool.NAME,
-            WebSearchTool.NAME,
-            OpenURLTool.NAME,
-            ImageGenerationTool.NAME,
-            MemoryTool.NAME,
-            PostgresTool.NAME,
-        }:
+        elif (
+            content
+            and content != self._last_content
+            and self.call.name
+            not in {
+                SearchTool.NAME,
+                WebSearchTool.NAME,
+                OpenURLTool.NAME,
+                ImageGenerationTool.NAME,
+                MemoryTool.NAME,
+                PostgresTool.NAME,
+            }
+        ):
             objects.append(
                 packets.CustomToolDelta(
                     tool_name=self.call.name,
@@ -1047,6 +1062,7 @@ class ToolRenderer:
                     data=content,
                 )
             )
+            self._last_content = content
         self._last_details = details
         return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
 

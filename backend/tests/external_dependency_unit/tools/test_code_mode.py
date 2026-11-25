@@ -211,6 +211,7 @@ def _persona_with_mcp_tool(
             "required": ["result"],
         },
     )
+    integration.description = "Greets people by name.\nSends no email."
     give_access(db_session, [integration])
     persona = Persona(
         name=f"Code Mode Persona {uuid4().hex[:8]}",
@@ -1132,13 +1133,18 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     )
     assert final_answer(send(chat_session.id, user, llm, "Say hi.")) == "Found it."
 
-    # MCP functions are deferred: the description names their group, not the stub.
+    # MCP functions are deferred: the description lists their namespace with
+    # the first line of the integration's description, not the stub.
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
         if tool["function"]["name"] == "execute_code"
     ]
-    assert f"the tool group `{namespace}`" in description
+    assert (
+        f"call each by the name in its stub):\n  - {namespace}: Greets people "
+        "by name.\n" in description
+    )
+    assert "Sends no email." not in description
     assert f"{namespace}__hello" not in description
 
     text = last_tool_text(llm, "find")

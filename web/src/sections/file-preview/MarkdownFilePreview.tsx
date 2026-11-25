@@ -11,7 +11,7 @@ import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import { rehypeDirection } from "@/lib/rehypeDirection";
 import { transformLinkUri, URI_SCHEME_REGEX } from "@/lib/utils";
 import "katex/dist/katex.min.css";
-import "@/app/app/message/custom-code-styles.css";
+import "@/lib/timeline/chat/message/custom-code-styles.css";
 
 interface MarkdownFilePreviewProps {
   text: string;

@@ -45,6 +45,7 @@ from onyx.db.models import ConnectorCredentialPair, Credential, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.staging import RawFileCallback
+from onyx.redis.redis_run_scoped_cache import RedisRunScopedCache
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 
@@ -213,6 +214,9 @@ def instantiate_connector(
     # Every source-API call of the connector waits after the calls of other
     # workers, for a worker with many threads such as docconversion.
     bulk_source_api_calls: bool = False,
+    # The pair that the connector runs for. A Microsoft connector with its
+    # own rate budget keys the budget by it.
+    cc_pair_id: int | None = None,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
@@ -224,9 +228,13 @@ def instantiate_connector(
         )
     )
 
+    # The credential in the source's own keys, read only when the limiter
+    # needs it.
+    load_credential_json: Callable[[], dict[str, Any]]
     if isinstance(connector, CredentialsConnector):
         provider = build_db_credentials_provider(source, credential.id)
         connector.set_credentials_provider(provider)
+        load_credential_json = provider.get_credentials
     else:
         if credential.credential_json:
             # Distinct decrypt site from OnyxDBCredentialsProvider (static /
@@ -247,6 +255,9 @@ def instantiate_connector(
         )
         new_credentials = connector.load_credentials(credential_json)
 
+        def load_credential_json() -> dict[str, Any]:
+            return credential_json
+
         if new_credentials is not None:
             backend_update_credential_json(
                 credential, source, new_credentials, db_session
@@ -257,8 +268,16 @@ def instantiate_connector(
     if raw_file_callback is not None:
         connector.set_raw_file_callback(raw_file_callback)
 
+    connector.set_run_scoped_cache_factory(RedisRunScopedCache)
+
     source_api_limiter = build_source_api_limiter(
-        source, credential.id, should_stop, bulk_source_api_calls
+        source,
+        credential.id,
+        should_stop,
+        bulk_source_api_calls,
+        load_credential_json=load_credential_json,
+        cc_pair_id=cc_pair_id,
+        connector_specific_config=connector_specific_config,
     )
     if source_api_limiter is not None:
         connector.set_source_api_limiter(source_api_limiter)

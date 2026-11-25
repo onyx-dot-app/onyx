@@ -66,7 +66,11 @@ def downloads(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     asked: list[str] = []
 
     def download(
-        get_access_token: Callable[[], str], url: str, cap: int, description: str
+        get_access_token: Callable[[], str],
+        url: str,
+        cap: int,
+        description: str,
+        pacer: object = None,  # noqa: ARG001
     ) -> bytes:
         assert get_access_token() == "token" and cap > 0 and description
         asked.append(url)

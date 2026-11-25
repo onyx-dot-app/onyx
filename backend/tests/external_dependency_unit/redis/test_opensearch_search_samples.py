@@ -67,13 +67,16 @@ def _write(cache: CacheBackend, samples: list[SearchSample]) -> None:
 
 
 def _sample(
-    at_ms: int, client_ms: float, result: SearchResult = SearchResult.OK
+    at_ms: int,
+    client_ms: float,
+    result: SearchResult = SearchResult.OK,
+    search_type: OpenSearchSearchType = OpenSearchSearchType.HYBRID,
 ) -> SearchSample:
     return SearchSample(
         at_ms=at_ms,
         client_ms=client_ms,
         server_ms=None if result != SearchResult.OK else int(client_ms * 0.8),
-        search_type="hybrid",
+        search_type=search_type.value,
         result=result,
     )
 
@@ -211,6 +214,42 @@ def test_a_minute_over_the_batch_cap_is_marked_partial(
     # The counts cover only part of the minute, and the response says so.
     assert activity.partial
     assert activity.total_count == 2
+
+
+def test_only_main_search_queries_count(cache: CacheBackend) -> None:
+    now_ms = 1_800_000_030_000
+    minute_ms = now_ms // MINUTE_MS * MINUTE_MS
+    # One user search: the main query, then the cheap fetches that follow it.
+    _write(
+        cache,
+        [
+            _sample(minute_ms + 1, 400),
+            _sample(minute_ms + 2, 17, search_type=OpenSearchSearchType.HYBRID_FETCH),
+            *(
+                _sample(
+                    minute_ms + 3 + i,
+                    18,
+                    search_type=OpenSearchSearchType.DOC_ID_RETRIEVAL,
+                )
+                for i in range(15)
+            ),
+            _sample(
+                minute_ms + 20,
+                60_000,
+                SearchResult.TIMEOUT,
+                search_type=OpenSearchSearchType.DOC_ID_RETRIEVAL,
+            ),
+            _sample(minute_ms + 30, 5, search_type=OpenSearchSearchType.KEYWORD),
+        ],
+    )
+    activity = read_search_activity(now_ms)
+    # The hybrid and keyword queries count; the fetches, even a failed one, do not.
+    assert (activity.total_count, activity.error_count) == (2, 0)
+    assert activity.p90_ms == 400
+    assert {sample.search_type for sample in activity.samples} == {
+        OpenSearchSearchType.HYBRID.value,
+        OpenSearchSearchType.KEYWORD.value,
+    }
 
 
 def test_searches_endpoint(

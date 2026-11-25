@@ -13,7 +13,7 @@
 | `TextLoader`        | Real text for a status still in progress: the text itself shimmers.                                                                             |
 | `IconLoader`        | An inline spinner, e.g. beside a label or in a row.                                                                                             |
 
-`LineLoader`, `CardLoader`, `DropdownLoader` and `TextLoader` share one wave: 40% of the length but at least 40px, a 2s crossing whatever the length, then a 1s pause. Only the colours differ. The shimmer and the spinner hold still under `prefers-reduced-motion`. `CardLoader`, `DropdownLoader`, `LineLoader`, `SidebarLoader` and `IconLoader` announce themselves to screen readers with the Opal loading label; `TextLoader` shows real text, so it says nothing extra.
+`LineLoader`, `CardLoader`, `DropdownLoader` and `TextLoader` share one wave: 40% of the length but at least 40px, a 2s crossing whatever the length, then a 1s pause. Only the colours differ. The shimmer and the spinner hold still under reduced motion (the OS setting or `data-motion="reduced"`). `CardLoader`, `DropdownLoader`, `LineLoader`, `SidebarLoader` and `IconLoader` announce themselves to screen readers with the Opal loading label; `TextLoader` shows real text, so it says nothing extra.
 
 ## CardLoader
 
@@ -81,7 +81,7 @@ Each tab has a sidebar tab's footprint, so the real tabs replace it without a sh
 <TextLoader font="main-ui-body">Indexing documents…</TextLoader>
 ```
 
-Props: `children` (plain `string`; markdown is not accepted), `font` (`TextFont`, default `"main-ui-action"`). The text rests at `text-02` and the wave peaks at `text-04`.
+Props: `children` (`string | RichStr`; markdown renders inline only, and a code span keeps its chip with `text-02` text instead of the wave), `font` (`TextFont`, default `"main-ui-action"`). The text rests at `text-02` and the wave peaks at `text-04`.
 
 The wave is 40% of the text's length, never narrower than 40px. Its rate scales with the length, so it crosses any text in 2s, with a 1s pause between waves; on wrapped text it runs along each line in reading order. Those four values are constants at the top of `text-loader/components.tsx`.
 

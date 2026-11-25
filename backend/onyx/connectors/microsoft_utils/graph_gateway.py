@@ -15,6 +15,7 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     microsoft_error_from_exception,
 )
 from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
+from onyx.connectors.microsoft_utils.request_pacer import PacerSource
 
 
 class MicrosoftGraphAuthConfig(BaseModel):
@@ -43,8 +44,10 @@ class MicrosoftGraphGateway:
         auth_config: MicrosoftGraphAuthConfig,
         graph_api_host: str,
         graph_api_version: str,
+        get_pacer: PacerSource | None = None,
     ) -> None:
         self.auth_config = auth_config
+        self._get_pacer = get_pacer
         self.graph_api_host = graph_api_host.rstrip("/")
         self.graph_api_base = f"{self.graph_api_host}/{graph_api_version}"
         self._auth_context: MicrosoftAuthContext | None = None
@@ -78,7 +81,9 @@ class MicrosoftGraphGateway:
     @property
     def client(self) -> GraphApiClient:
         if self._client is None:
-            self._client = GraphApiClient(self.access_token, self.graph_api_base)
+            self._client = GraphApiClient(
+                self.access_token, self.graph_api_base, self._get_pacer
+            )
         return self._client
 
     def get_json(

@@ -22,8 +22,12 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.external_app import delete_external_app__no_commit
-from onyx.db.integration import replace_integration_actions__no_commit
+from onyx.db.integration import (
+    replace_integration_actions__no_commit,
+    write_openapi_document__no_commit,
+)
 from onyx.db.models import (
+    ApiApp,
     ExternalApp,
     Integration,
     Integration__User,
@@ -211,6 +215,7 @@ def make_openapi_integration(
         header_template=header_template,
         tool_id=tool.id,
     )
+    write_openapi_document__no_commit(integration, openapi_schema, db_session)
     sync_integration_actions__no_commit(integration, db_session)
     db_session.commit()
     return integration, tool
@@ -332,10 +337,12 @@ def delete_integrations(db_session: Session, integration_ids: Sequence[int]) -> 
     server_ids = [i.mcp_server_id for i in integrations if i.mcp_server_id]
     app_ids = [i.external_app_id for i in integrations if i.external_app_id]
     tool_ids = [i.tool_id for i in integrations if i.tool_id]
+    api_app_ids = [i.api_app_id for i in integrations if i.api_app_id]
     for app_id in app_ids:
         delete_external_app__no_commit(db_session, app_id)
     db_session.execute(delete(Integration).where(Integration.id.in_(integration_ids)))
     db_session.execute(delete(Tool).where(Tool.id.in_(tool_ids)))
+    db_session.execute(delete(ApiApp).where(ApiApp.id.in_(api_app_ids)))
     db_session.execute(delete(MCPServer).where(MCPServer.id.in_(server_ids)))
     db_session.execute(delete(ExternalApp).where(ExternalApp.id.in_(app_ids)))
     db_session.commit()

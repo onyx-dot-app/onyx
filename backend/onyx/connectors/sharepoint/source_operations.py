@@ -35,6 +35,11 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_GRAPH_API_HOST,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    DEFAULT_DRIVE_DELTA_PAGE_SIZE,
+    DRIVE_ITEM_FOLDER_PROPERTY,
+    DRIVE_ITEM_ID_PROPERTY,
+    ODATA_DELTA_LINK_PROPERTY,
+    ODATA_NEXT_LINK_PROPERTY,
     DriveDeltaFetchResult,
     fetch_drive_delta_checkpoint_page,
 )
@@ -45,6 +50,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
     download_via_graph_api,
     download_with_cap,
+    drive_item_in_time_window,
     extract_drive_item_content,
     iter_drive_items_delta,
     iter_drive_items_paged,
@@ -84,16 +90,25 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
 from onyx.connectors.microsoft_utils.models import (
     EntraMember,
     MicrosoftTokenInfo,
+    SharepointLibraryInheritance,
     SharepointPrincipal,
     SharepointRoleAssignment,
     SharepointSecurable,
+)
+from onyx.connectors.microsoft_utils.request_pacer import (
+    THROTTLE_STATUSES,
+    MicrosoftCall,
+    MicrosoftRequestPacer,
+    prepare_sdk_client,
 )
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.sharepoint.connector_utils import (
     tenant_domain_from_site_urls,
     validate_site_url_host,
 )
+from onyx.connectors.sharepoint.listing import LISTING_SELECT_FIELDS
 from onyx.connectors.sharepoint.models import (
+    DriveChildrenPage,
     SharepointCredentials,
     SharepointDrive,
     SitePagesPage,
@@ -176,6 +191,8 @@ class SharepointSourceOperations(SourceOperations):
     _graph_gateway: MicrosoftGraphGateway | None = None
     _sdk_client: GraphClient | None = None
     _tenant_domain_cache: str | None = None
+    # Paces every Graph and REST call. None: the calls are not limited.
+    request_pacer: MicrosoftRequestPacer | None = None
 
     def _config(self, key: str, default: str) -> str:
         return str((self.connector_specific_config or {}).get(key) or default).rstrip(
@@ -217,6 +234,7 @@ class SharepointSourceOperations(SourceOperations):
             ),
             graph_api_host=self._env().graph_host,
             graph_api_version=GRAPH_API_VERSION,
+            get_pacer=lambda: self.request_pacer,
         )
         self._graph_gateway = gateway
         return gateway
@@ -239,8 +257,11 @@ class SharepointSourceOperations(SourceOperations):
         one, so every read gets its own client. Tests set ``_sdk_client``."""
         if self._sdk_client is not None:
             return self._sdk_client
-        return GraphClient(
-            self._gateway().token_response, environment=self._env().environment
+        return prepare_sdk_client(
+            GraphClient(
+                self._gateway().token_response, environment=self._env().environment
+            ),
+            lambda: self.request_pacer,
         )
 
     def _tenant_domain(self) -> str:
@@ -303,8 +324,12 @@ class SharepointSourceOperations(SourceOperations):
 
         msal_app: msal.ConfidentialClientApplication = self._auth().app
         tenant_domain: str = self._tenant_domain()
-        context = ClientContext(site_url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+        context = prepare_sdk_client(
+            ClientContext(site_url).with_access_token(
+                lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+            ),
+            lambda: self.request_pacer,
+            MicrosoftCall.REST,
         )
         local.entry = (context, site_url, time.monotonic())
         return context
@@ -498,16 +523,95 @@ class SharepointSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_delta_page(
-        self, *, drive_id: str, page_url: str, allow_full_resync: bool
+        self,
+        *,
+        drive_id: str,
+        page_url: str,
+        allow_full_resync: bool,
+        select_fields: str = DRIVE_ITEM_SELECT_FIELDS,
     ) -> DriveDeltaFetchResult:
+        """One page of a drive's delta. ``select_fields`` is the ``$select`` of
+        the URL that a 410 resync starts."""
         with raise_microsoft_errors():
             return fetch_drive_delta_checkpoint_page(
                 self._graph_api(),
                 page_url=page_url,
                 drive_id=drive_id,
-                select_fields=DRIVE_ITEM_SELECT_FIELDS,
+                select_fields=select_fields,
                 allow_full_resync=allow_full_resync,
             )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Reads the delta endpoint that the documents check reads through "
+            "get_delta_page, with the token `latest`."
+        ),
+    )
+    def get_latest_delta_link(self, *, drive_id: str) -> str | None:
+        """The delta cursor of the drive's state now. Graph answers
+        ``token=latest`` with no items and the link. A later read of the
+        link returns the changes after this call, with the fields of this
+        call's ``$select``."""
+        with raise_microsoft_errors():
+            data: dict[str, Any] = self._get(
+                f"{self._base()}/drives/{drive_id}/root/delta",
+                {"token": "latest", "$select": LISTING_SELECT_FIELDS},
+            )
+        link: object = data.get(ODATA_DELTA_LINK_PROPERTY)
+        return link if isinstance(link, str) and link else None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Reads the children endpoint that iter_folder_items reads, one "
+            "page for each call."
+        ),
+    )
+    def get_children_page(
+        self,
+        *,
+        drive_id: str,
+        folder_id: str | None = None,
+        next_link: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> DriveChildrenPage:
+        """One page of the children of a folder, the drive root when
+        ``folder_id`` is None, or the page behind ``next_link``. The files
+        are those in the time window."""
+        base: str = f"{self._base()}/drives/{drive_id}"
+        params: dict[str, str] | None = None
+        url: str
+        if next_link is not None:
+            # A next link already holds the query.
+            url = next_link
+        else:
+            url = (
+                f"{base}/items/{folder_id}/children"
+                if folder_id
+                else f"{base}/root/children"
+            )
+            params = {
+                "$top": str(DEFAULT_DRIVE_DELTA_PAGE_SIZE),
+                "$select": LISTING_SELECT_FIELDS,
+            }
+        with raise_microsoft_errors():
+            data: dict[str, Any] = self._get(url, params)
+        files: list[DriveItemData] = []
+        folder_ids: list[str] = []
+        for item in data.get("value", []):
+            if DRIVE_ITEM_FOLDER_PROPERTY in item:
+                folder_ids.append(item[DRIVE_ITEM_ID_PROPERTY])
+            elif drive_item_in_time_window(item, start, end):
+                files.append(DriveItemData.from_graph_json(item))
+        return DriveChildrenPage(
+            files=files,
+            folder_ids=folder_ids,
+            next_link=data.get(ODATA_NEXT_LINK_PROPERTY),
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -541,10 +645,20 @@ class SharepointSourceOperations(SourceOperations):
                 try:
                     return len(
                         download_with_cap(
-                            item.download_url, REQUEST_TIMEOUT_SECONDS, max_bytes
+                            item.download_url,
+                            REQUEST_TIMEOUT_SECONDS,
+                            max_bytes,
+                            self.request_pacer,
                         )
                     )
                 except requests.RequestException as error:
+                    # A throttle is not a refused link: /content redirects
+                    # to the same download host.
+                    if (
+                        error.response is not None
+                        and error.response.status_code in THROTTLE_STATUSES
+                    ):
+                        raise
                     # The link's query carries a download credential.
                     logger.warning(
                         "Download link of '%s' refused (%s). Reading through Graph.",
@@ -553,7 +667,12 @@ class SharepointSourceOperations(SourceOperations):
                     )
             gateway: MicrosoftGraphGateway = self._gateway()
             content: bytes = download_via_graph_api(
-                gateway.access_token, drive_id, item.id, max_bytes, self._base()
+                gateway.access_token,
+                drive_id,
+                item.id,
+                max_bytes,
+                self._base(),
+                self.request_pacer,
             )
         return len(content)
 
@@ -576,8 +695,9 @@ class SharepointSourceOperations(SourceOperations):
             item,
             SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
             self._base(),
-            self._gateway().access_token(),
+            self._gateway().access_token,
             raw_file_callback,
+            self.request_pacer,
         )
 
     @source_operation(
@@ -611,6 +731,23 @@ class SharepointSourceOperations(SourceOperations):
         return self._reads().list_site_group_users(
             site_url=site_url, group_name=group_name, max_rows=max_rows
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Reads the items of a library over the REST context that "
+            "list_role_assignments uses, which the permission check reads. "
+            "A failure only makes each file read its own permissions."
+        ),
+    )
+    def get_library_inheritance(
+        self, *, site_url: str, list_id: str
+    ) -> SharepointLibraryInheritance | None:
+        """For each file and folder of the library, if it has role
+        assignments of its own. One read for each 5,000 items. None for a
+        library too large to read (LIBRARY_INHERITANCE_MAX_ITEMS)."""
+        return self._reads().get_library_inheritance(site_url=site_url, list_id=list_id)
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},

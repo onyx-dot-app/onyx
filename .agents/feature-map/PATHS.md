@@ -81,7 +81,7 @@ covers new files that match it.
 | `backend/onyx/server/features/search/`, `backend/onyx/server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/`, `backend/ee/onyx/search/` | internal-search |
 | `web/src/ee/sections/SearchUI.tsx`, `web/src/ee/sections/SearchCard.tsx`, `web/src/ee/lib/search/`, `web/src/ee/providers/QueryControllerProvider.tsx`, `web/src/providers/QueryControllerProvider.tsx` | internal-search |
 | `backend/onyx/document_index/` | document-index |
-| `backend/onyx/server/manage/opensearch_health/`, `backend/ee/onyx/server/service_status/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx`, `web/src/lib/service-status/`, `web/src/views/admin/ServiceStatusPage/`, `web/src/app/ee/admin/service-status/` | document-index |
+| `backend/ee/onyx/server/service_status/`, `web/src/lib/service-status/`, `web/src/views/admin/ServiceStatusPage/`, `web/src/app/ee/admin/service-status/` | document-index |
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
 | `backend/onyx/db/search_settings.py`, `backend/onyx/db/swap_index.py`, `backend/onyx/db/port_attempt.py`, `backend/onyx/db/port_orphan_candidate.py` | document-index |
 | `backend/onyx/redis/redis_document_set.py`, `backend/onyx/redis/redis_usergroup.py`, `backend/ee/onyx/background/celery/tasks/vespa/` | document-index |
@@ -156,7 +156,7 @@ covers new files that match it.
 | `backend/onyx/auth/`, `backend/ee/onyx/auth/`, `backend/onyx/server/auth/`, `backend/onyx/server/saml*.py`, `backend/onyx/server/oidc_multi.py`, `backend/onyx/server/sso_discovery.py`, `backend/onyx/server/manage/sso/`, `backend/onyx/server/manage/oauth_test.py` | auth-and-identity |
 | `backend/onyx/server/auth/mobile.py`, `backend/onyx/auth/mobile_sso/` | mobile-app, auth-and-identity |
 | `backend/ee/onyx/server/scim/`, `backend/ee/onyx/db/saml.py`, `backend/ee/onyx/db/scim.py`, `backend/ee/onyx/db/tenant_sso_domain.py`, `backend/ee/onyx/background/celery/tasks/sso_domain_revalidation/` | auth-and-identity |
-| `backend/onyx/db/users.py`, `backend/onyx/db/auth.py`, `backend/onyx/db/api_key.py`, `backend/onyx/db/pat.py`, `backend/onyx/db/saml.py`, `backend/onyx/db/sso_provider.py`, `backend/onyx/server/api_key/`, `backend/onyx/server/pat/`, `backend/onyx/server/manage/users.py` | auth-and-identity |
+| `backend/onyx/db/users.py`, `backend/onyx/db/auth.py`, `backend/onyx/db/api_key.py`, `backend/onyx/db/pat.py`, `backend/onyx/db/saml.py`, `backend/onyx/db/sso_provider.py`, `backend/onyx/server/api_key/`, `backend/onyx/server/pat/`, `backend/onyx/server/manage/users.py`, `backend/onyx/server/manage/profile_image.py` | auth-and-identity |
 | `backend/onyx/oauth/` | auth-and-identity |
 | `backend/onyx/oauth_provider/`, `backend/onyx/db/oauth_provider.py`, `backend/onyx/server/oauth_provider/` | auth-and-identity |
 | `backend/onyx/server/security/`, `backend/onyx/db/security_settings.py`, `backend/onyx/server/features/password/` | auth-and-identity |
@@ -202,6 +202,7 @@ covers new files that match it.
 | `backend/ee/onyx/db/standard_answer.py`, `backend/ee/onyx/server/manage/standard_answer.py`, `backend/ee/onyx/onyxbot/slack/handlers/handle_standard_answers.py`, `backend/ee/onyx/server/query_and_chat/query_backend.py` | standard-answers |
 | `backend/onyx/db/notification.py`, `backend/onyx/db/release_notes.py`, `backend/onyx/db/admin_banner.py`, `backend/onyx/server/features/notifications/`, `backend/onyx/server/features/release_notes/`, `backend/onyx/server/features/admin_banner/`, `backend/onyx/db/connector_alerts.py` | notifications |
 | `backend/ee/onyx/utils/license_notifications.py` | notifications |
+| `backend/ee/onyx/utils/opensearch_notifications.py` | notifications, document-index |
 | `backend/ee/onyx/background/celery/tasks/license_notifications/` | notifications, billing |
 
 ## Backend: integrations
@@ -273,6 +274,8 @@ covers new files that match it.
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
 | `web/src/lib/timeline/` | chat-frontend, craft-frontend |
 | `web/src/lib/outputPanel/`, `web/src/sections/output-panel/` | chat-frontend, craft-frontend |
+| `web/src/lib/rehypeStreamingCursor.ts` | chat-frontend, craft-frontend |
+| `web/src/lib/answerText/`, `web/src/lib/codeHighlight/` | chat-frontend, craft-frontend |
 | `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
@@ -283,9 +286,10 @@ covers new files that match it.
 | `web/src/lib/richInputTile.ts`, `web/src/lib/contentEditable.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/app/customize/`, `web/src/sections/customize/`, `web/src/lib/customize/` | plugins, skills, chat-frontend |
-| `web/src/app/app/settings/llm-gateway/` | llm-gateway |
 | `web/src/app/app/settings/usage/` | observability |
-| `web/src/views/SettingsPage.tsx` | chat-preferences |
+| `web/src/views/settings/`, `web/src/app/app/settings/account/`, `web/src/app/app/settings/appearance/`, `web/src/app/app/settings/chat-preferences/`, `web/src/app/app/settings/layout.tsx`, `web/src/providers/WideChatProvider.tsx`, `web/src/providers/AppearancePreferencesProvider.tsx`, `web/src/lib/appearance/` | chat-preferences |
+| `web/src/views/settings/ThirdPartyAccessSettings.tsx`, `web/src/views/settings/PATModal.tsx`, `web/src/app/app/settings/third-party-access/` | auth-and-identity, federated-search |
+| `web/src/views/settings/LLMGatewaySection.tsx` | llm-gateway |
 | `web/src/hooks/useUserPersonalization.ts`, `web/src/hooks/usePromptShortcuts.ts`, `web/src/hooks/useMemoryManager.ts`, `web/src/sections/settings/Memories.tsx`, `web/src/refresh-components/modals/MemoriesModal.tsx` | chat-preferences |
 | `web/src/lib/settings/`, `web/src/providers/SettingsProvider.tsx` | chat-preferences, whitelabelling-and-theme |
 | `web/src/providers/VoiceModeProvider.tsx`, `web/src/hooks/useVoiceRecorder.ts`, `web/src/hooks/useVoicePlayback.ts`, `web/src/hooks/useVoiceStatus.ts`, `web/src/lib/streamingTTS.ts`, `web/src/sections/input/MicrophoneButton.tsx`, `web/src/components/voice/` | voice |
@@ -399,7 +403,7 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/configs/`, `backend/ee/onyx/configs/app_configs.py`, `backend/shared_configs/` | Settings for every area. Read the component that documents the setting. |
 | `backend/onyx/server/runtime/` | `OnyxRuntime` resolves a setting from the database, the cache, env vars and defaults. |
 | `backend/onyx/server/middleware/api_prefix.py` | Removes the API prefix from a request path for the middlewares that match on routes. |
-| `backend/onyx/server/manage/get_state.py`, `backend/onyx/server/manage/models.py`, `backend/onyx/server/models.py`, `backend/onyx/server/utils.py`, `backend/onyx/server/utils_vector_db.py` | Health, version and auth-type probes, and models and helpers that many routes share. |
+| `backend/onyx/server/manage/get_state.py`, `backend/onyx/server/manage/models.py`, `backend/onyx/server/models.py`, `backend/onyx/server/playground.py`, `backend/onyx/server/utils.py`, `backend/onyx/server/utils_vector_db.py` | Health, version and auth-type probes, the playground restrictions, and models and helpers that many routes share. |
 | `deployment/` | Deployment files. Read the component of the service you deploy. |
 | `backend/Dockerfile`, `backend/Dockerfile.model_server`, `web/Dockerfile` | Image builds. `.github/workflows/deployment.yml` sets their build args, such as the version and the git details on the About page. |
 | `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | Reverse-proxy templates. The `cli/` copies are generated: run `ods generate-compose --write` after you change `deployment/data/nginx/`. |
@@ -426,4 +430,4 @@ the admin routes and check that each has a row above, run
 | `web/src/lib/types.ts` | Shared frontend types for users, preferences, permissions, and connectors. Read the component that owns the changed type. |
 | `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts`, `web/src/hooks/useDraft.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
-| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/tailwind-themes/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |
+| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/providers/AppProvider.tsx`, `web/src/app/globals.css`, `web/src/app/css/`, `web/src/app/fonts/`, `web/tailwind-themes/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, fonts, translations and static assets. |

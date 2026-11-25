@@ -11,6 +11,7 @@ Errors: a daemon error is a `SandboxDaemonError` (domain
 running, the daemon is unreachable) is a `HostAgentError`.
 """
 
+import hashlib
 import os
 import secrets
 import threading
@@ -650,6 +651,34 @@ class SandboxDaemonClient:
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e
         return WrittenFile(info=_file_entry(r.info), sha256=r.sha256)
+
+    def install_skill(self, *, name: str, version: str, tar: bytes) -> bool:
+        """Put one skill in the VM skills folder from a plain tar whose
+        members are all under `<name>/`. False when the folder already had
+        `version`."""
+        header = sandboxd_pb2.InstallSkillHeader(
+            name=name,
+            version=version,
+            size_bytes=len(tar),
+            sha256=hashlib.sha256(tar).hexdigest(),
+        )
+
+        def requests() -> Iterator[sandboxd_pb2.InstallSkillRequest]:
+            yield sandboxd_pb2.InstallSkillRequest(header=header)
+            for start in range(0, len(tar), _WRITE_CHUNK_BYTES):
+                yield sandboxd_pb2.InstallSkillRequest(
+                    data=tar[start : start + _WRITE_CHUNK_BYTES]
+                )
+
+        try:
+            r: sandboxd_pb2.InstallSkillResponse = self._stub.InstallSkill(
+                requests(),
+                metadata=self._authed(),
+                timeout=_TRANSFER_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return r.installed
 
     def upload_file(
         self,

@@ -175,7 +175,7 @@
 }
 
 .line-item-text-action {
-  font-family: var(--font-hanken-grotesk);
+  font-family: var(--font-interface);
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
@@ -184,7 +184,7 @@
 }
 
 .line-item-text-muted {
-  font-family: var(--font-hanken-grotesk);
+  font-family: var(--font-interface);
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
@@ -197,7 +197,7 @@
 }
 
 .line-item-text-skeleton {
-  font-family: var(--font-hanken-grotesk);
+  font-family: var(--font-interface);
   font-size: 12px;
   font-weight: 400;
   line-height: 16px;

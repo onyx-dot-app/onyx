@@ -32,7 +32,12 @@ A window with a start share keeps its share past an idle time. It stores its
 share in Redis whenever the share changes, for STORED_SHARE_TTL_SECONDS. A
 window with no state, for example in a new run, starts from the stored share
 and grows slowly from it. With no stored share, it starts from its start
-share and grows with the recovery above.
+share, and that share is its ceiling. It also grows slowly, because a fast
+growth from a cold start passes the rate of the service in a few minutes.
+
+A pause is a separate key whose TTL is the time left in the pause. A service
+that answers with a wait time (Retry-After) asks every caller to stop, so each
+caller reads the pause before it sends a request.
 
 One try does a small, bounded amount of work, whatever the number of
 requests in the window. Each request in the log carries the units of the log
@@ -356,6 +361,11 @@ for i = 1, n do
       factor = start_share
       starts[i] = 2
       redis.call('HSET', meta, 'factor', tostring(factor), 'grown_at', now)
+      if factor < 1 then
+        -- The service accepted no share yet: the start share is the
+        -- ceiling, so the window grows slowly from it.
+        redis.call('HSET', meta, 'ceiling', tostring(factor))
+      end
     end
     redis.call('PEXPIRE', meta, math.max(period, meta_ttl))
   end
@@ -575,6 +585,12 @@ return {math.floor(factor * 1000 + 0.5), applied,
 """
 )
 
+# The day budget keeps the units of each hour for the current hour and the
+# 24 hours before it, plus one hour of margin.
+_DAY_KEY_TTL_SECONDS = 26 * 3600
+_SECONDS_PER_HOUR = 3600
+_DAY_HOURS = 24
+
 
 _last_unreachable_warning = 0.0
 _unreachable_warning_lock = threading.Lock()
@@ -767,6 +783,86 @@ class RedisRateWindows:
             accepted_share=accepted / 1000,
             ceiling=ceiling / 1000,
         )
+
+    def pause(self, key: str, seconds: float) -> float:
+        """Pauses every caller that reads ``key`` for ``seconds`` from now. A
+        pause that ends later stays. Returns the seconds until the pause
+        ends. The pause is the TTL of the key, so Redis keeps the time and
+        clock skew between pods has no effect. PEXPIRE with GT needs Redis
+        7.0 or later."""
+        if seconds <= 0:
+            return self.pause_left(key)
+        ms = max(1, int(seconds * 1000))
+        try:
+            # no-direct-redis: allow the pause is shared by every indexing and sync worker
+            with self._redis.pipeline() as pipe:
+                left_ms = (
+                    pipe.set(key, 1, px=ms, nx=True)
+                    .pexpire(key, ms, gt=True)
+                    .pttl(key)
+                    .execute()[-1]
+                )
+        except RedisError as error:
+            _warn_redis_unreachable(error)
+            return 0.0
+        return max(0, int(left_ms)) / 1000
+
+    def pause_left(self, key: str) -> float:
+        """The seconds until the pause of ``key`` ends, or 0 with no pause.
+        When Redis cannot be reached, there is no pause."""
+        try:
+            # no-direct-redis: allow the pause is shared by every indexing and sync worker
+            left_ms = self._redis.pttl(key)
+        except RedisError as error:
+            _warn_redis_unreachable(error)
+            return 0.0
+        # PTTL is -2 with no key and -1 with no TTL. A pause always has one.
+        return max(0, left_ms) / 1000
+
+    def try_take_from_day(self, key: str, cost: int, limit: int) -> float:
+        """Takes ``cost`` units from a budget of ``limit`` units in any 24
+        hours and returns 0, or takes nothing and returns the seconds until
+        the next hour. When Redis cannot be reached, the request is not
+        limited.
+
+        The key is a hash of the units of each hour, so its size does not
+        grow with the number of requests. The day counts the current hour and
+        the 24 hours before it, so no unit leaves before it is 24 hours old.
+        One request always fits an empty day. Redis gives the hour, so clock
+        skew between pods has no effect.
+
+        The call adds its units and reads the day in one MULTI. When the day
+        is then over the limit, it takes its units back. So the budget never
+        admits more than the limit. Near the limit, two calls can both take
+        their units back when one of them would fit. That call tries again
+        after a short wait, which costs little."""
+        try:
+            # no-direct-redis: allow the budget is shared by every indexing and sync worker
+            now, _ = self._redis.time()
+            hour = now // _SECONDS_PER_HOUR
+            field = str(hour)
+            with self._redis.pipeline() as pipe:
+                hours: dict[bytes, bytes] = (
+                    pipe.hincrby(key, field, cost)
+                    .expire(key, _DAY_KEY_TTL_SECONDS)
+                    .hgetall(key)
+                    .execute()[-1]
+                )
+            total = 0
+            stale: list[bytes] = []
+            for name, units in hours.items():
+                if int(name) < hour - _DAY_HOURS:
+                    stale.append(name)
+                else:
+                    total += int(units)
+            if stale:
+                self._redis.hdel(key, *stale)
+            if total - cost > 0 and total > limit:
+                self._redis.hincrby(key, field, -cost)
+                return float((hour + 1) * _SECONDS_PER_HOUR - now)
+        except RedisError as error:
+            _warn_redis_unreachable(error)
+        return 0.0
 
     def delete(self, window: RateWindow) -> None:
         """Removes the window's state. For tests."""

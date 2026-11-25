@@ -12,7 +12,12 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
-from onyx.tools.models import CodeModeExposure, CodeModeFunctionName, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeFunctionName,
+    IntegrationActionRef,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.code_mode.models import (
     SandboxLimits,
 )
@@ -33,9 +38,11 @@ class FakeTool(Tool):
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
         exposure: CodeModeExposure = CodeModeExposure.IMMEDIATE,
         namespace: str | None = None,
+        namespace_description: str | None = None,
     ) -> None:
         self._name = name
         self._namespace = namespace
+        self._namespace_description = namespace_description
         self._exposure = exposure
         self._run_function = run
         self._parameters: dict[str, JsonValue] = (
@@ -76,7 +83,11 @@ class FakeTool(Tool):
 
     @property
     def code_mode_function_name(self) -> CodeModeFunctionName:
-        return CodeModeFunctionName(name=self._name, namespace=self._namespace)
+        return CodeModeFunctionName(
+            name=self._name,
+            namespace=self._namespace,
+            namespace_description=self._namespace_description,
+        )
 
     def tool_definition(self) -> ToolDefinition:
         return ToolDefinition(
@@ -165,10 +176,13 @@ class FakeMCPTool(MCPTool):
         parameters: dict[str, JsonValue],
         *,
         server: str = "acme",
+        server_description: str | None = None,
         output_schema: dict[str, JsonValue] | None = None,
     ) -> None:
+        self.integration_action = IntegrationActionRef(integration_id=1, action=name)
         self._integration_id = 1
         self._integration_name = server
+        self._integration_description = server_description
         self._mcp_tool_name = name
         self._output_schema = output_schema
         self._name = name

@@ -6,7 +6,7 @@
       "account": "로그인 계정: {email}",
       "workspace": "워크스페이스: {workspaceName}",
       "appAddress": "앱 주소: {origin}",
-      "access": "접근 권한이 있는 문서의 검색 결과를 읽습니다. 웹 검색을 사용하고 웹 페이지를 엽니다.",
+      "access": "접근 권한이 있는 문서의 검색 결과를 읽습니다. 웹 검색을 사용하고 웹 페이지를 엽니다. 채팅 기록을 읽습니다.",
       "allow": "접근 허용",
       "deny": "거부",
       "pending": "선택을 저장하는 중...",
@@ -4028,6 +4028,18 @@
             "mailboxes": {
               "label": "사서함",
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
+            }
+          }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "분당 RU",
+              "description": "이 커넥터가 사용할 수 있는 Microsoft 앱 등록 속도 제한의 몫입니다. 단위는 분당 리소스 단위(RU)입니다. Microsoft는 라이선스 등급에 따라 앱의 제한을 분당 1,250~6,250 RU로 정합니다. 비워 두면 Onyx가 제한을 학습합니다. [등급 확인 방법](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "이 앱 등록을 사용하는 다른 커넥터: {connectors}. 합계: 분당 {total} RU.",
+              "none": "이 앱 등록에서 분당 RU를 설정한 다른 커넥터가 없습니다.",
+              "hidden": "{count, plural, other {볼 수 없는 커넥터 #개}}",
+              "unavailable": "이 앱 등록을 사용하는 다른 커넥터의 분당 RU를 불러올 수 없습니다."
             }
           }
         }
@@ -8122,6 +8134,13 @@
         },
         "setDefaultButton": {
           "label": "기본값으로 설정"
+        },
+        "deleteButton": {
+          "ariaLabel": "{title} 삭제",
+          "tooltip": "삭제"
+        },
+        "reconnectButton": {
+          "label": "다시 연결"
         }
       }
     },
@@ -9081,6 +9100,9 @@
       "provider": {
         "connected": {
           "label": "연결됨"
+        },
+        "disconnected": {
+          "suffix": "(연결 해제됨)"
         }
       },
       "setupModal": {
@@ -9098,8 +9120,6 @@
         }
       },
       "toasts": {
-        "connected": "{label}에 연결했습니다",
-        "disconnected": "{label} 연결을 해제했습니다",
         "unexpectedError": "예기치 않은 오류가 발생했습니다."
       },
       "providers": {
@@ -9140,6 +9160,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "**{label}**의 API 키와 설정이 삭제됩니다. 다시 트레이스를 보내려면 처음부터 설정하세요.",
+        "description": "이 공급자의 API 키와 설정을 삭제합니다.",
+        "submit": {
+          "label": "삭제"
+        },
+        "title": "{label} 삭제",
+        "envBody": "**{label}**의 API 키와 설정이 삭제됩니다. 트레이싱은 꺼진 상태로 유지됩니다. 환경 변수 설정으로 다시 트레이스를 보내려면 다시 연결하세요."
       }
     },
     "usage": {
@@ -9842,7 +9871,7 @@
       },
       "tierTooltip": "LLM 게이트웨이는 Business 또는 Enterprise 플랜이 필요합니다.",
       "scopeNote": {
-        "title": "각 사용자는 설정 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
+        "title": "각 사용자는 설정 → 타사 액세스 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
       },
       "toasts": {
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다"
@@ -10715,7 +10744,7 @@
         "title": "검색 클러스터 - OpenSearch",
         "status": "클러스터 상태",
         "version": "OpenSearch {version}",
-        "health": "상태 {health}",
+        "noVersion": "OpenSearch",
         "updated": "{time} 업데이트됨",
         "dataNodes": "데이터 노드",
         "shards": "샤드",
@@ -11399,6 +11428,7 @@
         "playgroundAskAdmin": "관리자에게 초대를 요청하세요.",
         "playgroundCheckFailed": "가입을 확인할 수 없습니다. 나중에 다시 시도하세요.",
         "playgroundEmailUsed": "플레이그라운드 액세스를 이미 사용했습니다.",
+        "playgroundFreeMail": "회사 이메일을 사용하세요.",
         "playgroundLimitReached": "귀사는 플레이그라운드 액세스를 이미 사용했습니다.",
         "serverError": "ID 공급자에서 오류가 발생했습니다. 다시 시도하세요.",
         "staleSignIn": "이 로그인 링크가 만료되었거나 더 이상 유효하지 않습니다. 다시 로그인하세요.",
@@ -11800,33 +11830,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "삭제"
-      },
-      "deleteModal": {
-        "description": "이 채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
-        "submitButton": {
-          "label": "삭제"
-        },
-        "title": "채팅 삭제"
-      },
-      "exportAs": {
-        "label": "다른 형식으로 내보내기…"
-      },
-      "exportFailed": {
-        "message": "채팅 내보내기에 실패했습니다. 다시 시도해 주세요."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "일반 텍스트"
-      },
-      "fullWidth": {
-        "ariaLabel": "전체 너비 채팅 전환",
-        "fitTooltip": "너비 맞춤",
-        "fullTooltip": "전체 너비"
-      },
       "incognitoExit": {
         "ariaLabel": "시크릿 채팅 종료",
         "tooltip": "시크릿 채팅 종료"
@@ -11853,14 +11856,14 @@
       "modeButton": {
         "ariaLabel": "앱 모드 변경"
       },
-      "moveToProject": {
-        "label": "프로젝트로 이동"
-      },
       "openSidebar": {
         "ariaLabel": "사이드바 열기"
       },
       "share": {
-        "label": "공유"
+        "label": "공유…"
+      },
+      "shareMenu": {
+        "label": "공유 또는 내보내기"
       }
     },
     "banners": {
@@ -11905,6 +11908,14 @@
       "licenseExpiry": {
         "source": {
           "label": "라이선스"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "검색 클러스터"
+        },
+        "cta": {
+          "label": "서비스 상태 열기"
         }
       },
       "nextButton": {
@@ -12223,7 +12234,7 @@
           "text": "{toolName}이(가) 차단되었습니다"
         },
         "completedStatus": {
-          "text": "{toolName} 완료"
+          "text": "{toolName} 실행 완료"
         },
         "downloadFileLink": {
           "label": "다운로드"
@@ -12257,9 +12268,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
-        },
-        "waitingIndicator": {
-          "text": "응답 대기 중..."
         }
       },
       "customToolAuth": {
@@ -12437,7 +12445,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "생각 중"
+          "text": "생각 중..."
         }
       },
       "timeline": {
@@ -12452,7 +12460,7 @@
             "status": "계획 생성됨"
           },
           "generating": {
-            "status": "계획 생성 중"
+            "status": "계획 생성 중..."
           }
         },
         "expandButton": {
@@ -12460,10 +12468,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "읽는 중"
+            "status": "웹 페이지 탐색 중..."
           },
           "read": {
-            "status": "읽었습니다"
+            "status": "{count, plural, =0 {웹 페이지를 탐색했습니다} other {웹 페이지 #개를 탐색했습니다}}"
           }
         },
         "fileReader": {
@@ -12471,69 +12479,108 @@
             "status": "{fileName} 읽음 (총 {total, number}자 중 {start, number}–{end, number}자)"
           },
           "reading": {
-            "status": "파일 읽는 중"
+            "status": "파일 읽는 중..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {이미지 #개 생성됨} other {이미지 #개 생성됨}}"
         },
         "header": {
           "executingCode": {
-            "label": "코드 실행 중"
+            "label": "코드 실행 중..."
           },
           "executingNamedTool": {
-            "label": "{toolName} 실행 중"
+            "label": "{toolName} 실행 중..."
           },
           "executingTool": {
-            "label": "도구 실행 중"
+            "label": "도구 실행 중..."
           },
           "generatingImages": {
-            "label": "이미지 생성 중"
+            "label": "이미지 생성 중..."
           },
           "generatingPlan": {
-            "label": "계획 생성 중"
+            "label": "계획 생성 중..."
           },
           "queryingKnowledgeBase": {
-            "label": "지식 베이스 조회 중"
+            "label": "지식 베이스 조회 중..."
           },
           "reading": {
-            "label": "읽는 중"
+            "label": "읽는 중..."
           },
           "readingFile": {
-            "label": "파일 읽는 중"
+            "label": "파일 읽는 중..."
           },
           "researching": {
-            "label": "리서치 중"
+            "label": "리서치 중..."
           },
           "searchingWeb": {
-            "label": "웹 검색 중"
+            "label": "웹 검색 중..."
           },
           "thinking": {
-            "label": "생각 중"
-          },
-          "thinkingEllipsis": {
             "label": "생각 중..."
           },
           "updatingMemory": {
             "label": "메모리 업데이트 중..."
           },
           "working": {
-            "label": "작업 중"
+            "label": "작업 중..."
           },
           "waitingForApproval": {
-            "label": "승인을 기다리는 중"
+            "label": "승인을 기다리는 중..."
           },
           "waitingForAnswer": {
-            "label": "답변을 기다리는 중"
+            "label": "답변을 기다리는 중..."
           },
           "runningCommand": {
-            "label": "명령 실행 중"
+            "label": "명령 실행 중..."
           },
           "editingFiles": {
-            "label": "파일 편집 중"
+            "label": "파일 편집 중..."
           },
           "publishingFiles": {
-            "label": "파일 게시 중"
+            "label": "파일 게시 중..."
+          },
+          "browsing": {
+            "label": "웹 페이지 탐색 중..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "작업 중...",
+              "done": "작업을 마쳤습니다"
+            },
+            "crunchingDetails": {
+              "working": "세부 사항을 분석하는 중...",
+              "done": "세부 사항을 분석했습니다"
+            },
+            "connectingDots": {
+              "working": "점들을 연결하는 중...",
+              "done": "점들을 연결했습니다"
+            },
+            "runningNumbers": {
+              "working": "숫자를 계산하는 중...",
+              "done": "숫자를 계산했습니다"
+            },
+            "fillingGaps": {
+              "working": "빈 곳을 채우는 중...",
+              "done": "빈 곳을 채웠습니다"
+            },
+            "sortingThingsOut": {
+              "working": "정리하는 중...",
+              "done": "정리했습니다"
+            },
+            "gatheringPieces": {
+              "working": "조각을 모으는 중...",
+              "done": "조각을 모았습니다"
+            },
+            "workingThroughIt": {
+              "working": "해결하는 중...",
+              "done": "해결했습니다"
+            },
+            "ironingOutDetails": {
+              "working": "세부 사항을 다듬는 중...",
+              "done": "세부 사항을 다듬었습니다"
+            },
+            "roundingThingsOut": {
+              "working": "마무리하는 중...",
+              "done": "마무리했습니다"
+            }
           }
         },
         "internalSearch": {
@@ -12541,10 +12588,10 @@
             "text": "결과를 찾을 수 없음"
           },
           "reading": {
-            "status": "읽는 중"
+            "status": "읽는 중..."
           },
           "read": {
-            "label": "읽었습니다"
+            "label": "읽은 문서"
           },
           "header": {
             "default": "내부 문서 검색 중",
@@ -12552,7 +12599,8 @@
             "sources": "{sources} 검색 중",
             "doneSources": "{sources}을(를) 검색했습니다",
             "sourcesOverflow": "{sources} 외 {count}개",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "{date} 이후",
@@ -12571,7 +12619,7 @@
             "text": "메모리 도구가 비활성화되었습니다"
           },
           "updating": {
-            "status": "메모리 업데이트 중"
+            "status": "메모리 업데이트 중..."
           },
           "updated": {
             "status": "메모리를 업데이트했습니다"
@@ -12593,10 +12641,7 @@
             "status": "지식 베이스 조회 완료"
           },
           "querying": {
-            "status": "지식 베이스 조회 중"
-          },
-          "listed": {
-            "label": "{count, plural, one {문서 #개 나열됨} other {문서 #개 나열됨}}"
+            "status": "지식 베이스 조회 중..."
           },
           "query": {
             "table": {
@@ -12653,21 +12698,15 @@
             "label": "출력:"
           },
           "running": {
-            "status": "Python 실행 중"
+            "status": "Python 실행 중..."
           },
           "ran": {
             "status": "Python을 실행했습니다"
-          },
-          "runningCode": {
-            "label": "코드 실행 중..."
-          },
-          "writingCode": {
-            "status": "코드 작성 중..."
           }
         },
         "reasoning": {
           "thinking": {
-            "status": "생각 중"
+            "status": "생각 중..."
           },
           "thought": {
             "status": "생각했습니다"
@@ -12703,7 +12742,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "웹 검색 중"
+            "status": "웹 검색 중..."
           },
           "searched": {
             "status": "웹을 검색했습니다"
@@ -12711,19 +12750,16 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {명령 실행 중} started {명령 시작됨} failed {명령 실패} canceled {취소됨} done {명령 실행됨} other {명령 실행됨}}",
+            "status": "{phase, select, running {명령 실행 중...} started {명령 시작됨} failed {명령 실패} canceled {취소됨} done {명령 실행됨} other {명령 실행됨}}",
             "workdir": {
               "label": "위치: {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중...} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중...} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {세션에 입력을 보내는 중} failed {세션에 입력을 보내지 못함} canceled {취소됨} done {세션에 입력을 보냄} other {세션에 입력을 보냄}}} check {{phase, select, running {세션 확인 중} failed {세션을 확인하지 못함} canceled {취소됨} done {세션 확인함} other {세션 확인함}}} other {세션}}"
+              "status": "{kind, select, send {{phase, select, running {세션에 입력을 보내는 중...} failed {세션에 입력을 보내지 못함} canceled {취소됨} done {세션에 입력을 보냄} other {세션에 입력을 보냄}}} check {{phase, select, running {세션 확인 중...} failed {세션을 확인하지 못함} canceled {취소됨} done {세션 확인함} other {세션 확인함}}} other {세션}}"
             }
-          },
-          "output": {
-            "title": "출력"
           },
           "exitCode": {
             "label": "종료 코드 {exitCode}"
@@ -13042,6 +13078,12 @@
       },
       "copyButton": {
         "tooltip": "내용 복사"
+      },
+      "sourceButton": {
+        "tooltip": "소스 보기"
+      },
+      "previewButton": {
+        "tooltip": "미리보기 표시"
       },
       "downloadButton": {
         "label": "파일 다운로드",
@@ -13504,10 +13546,6 @@
       "toggleButton": {
         "label": "패널 표시 전환"
       },
-      "downloadButton": {
-        "label": "다운로드",
-        "tooltip": "파일 다운로드"
-      },
       "reloadButton": {
         "label": "파일 새로 고침",
         "error": "파일을 다시 불러오지 못했습니다. 다시 시도하세요."
@@ -13520,6 +13558,54 @@
       },
       "resizeHandle": {
         "label": "패널 크기 조정"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "채팅 내보내기에 실패했습니다. 다시 시도해 주세요."
+      },
+      "plaintext": {
+        "label": "일반 텍스트"
+      },
+      "asMarkdown": {
+        "label": "Markdown으로 내보내기"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "일반 텍스트로 내보내기"
+      },
+      "menu": {
+        "label": "다른 형식으로 내보내기…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "활동"
+      },
+      "needsYou": {
+        "title": "확인 필요",
+        "approval": "{tool} 승인",
+        "question": "질문에 답변"
+      },
+      "agents": {
+        "title": "에이전트",
+        "status": {
+          "starting": "시작 중",
+          "running": "실행 중",
+          "suspended": "대기 중",
+          "complete": "완료",
+          "limit": "단계 한도 도달",
+          "cancelled": "취소됨",
+          "stopped": "중지됨",
+          "error": "실패"
+        },
+        "finished": "이전 에이전트"
+      },
+      "files": {
+        "title": "파일",
+        "viewAll": "{count, plural, other {파일 #개 모두 보기}}"
       }
     }
   },
@@ -13577,11 +13663,6 @@
       },
       "plant": {
         "label": "식물"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "가"
       }
     },
     "commandMenu": {
@@ -14056,6 +14137,21 @@
         "label": "플랜 업그레이드"
       },
       "availableFor": "{plan}에서 사용 가능"
+    },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "이 기능은 Enterprise 기능입니다. 플레이그라운드에서는 사용할 수 없습니다. 자체 Onyx에서는 사용할 수 있습니다. [영업팀에 문의]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "기능을 사용해 보실 수 있도록 자체 모델 키를 설정해 두었습니다. 자체 Onyx에서는 고객님의 키로 실행됩니다. [영업팀에 문의]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "이 기능은 플레이그라운드에서 꺼져 있습니다. 자체 Onyx에서는 사용할 수 있습니다. [영업팀에 문의]({salesUrl})"
+        },
+        "title": "플레이그라운드 제한",
+        "tooltip": "플레이그라운드에서는 사용할 수 없습니다. 자체 Onyx에서는 사용할 수 있습니다."
+      }
     },
     "placeholders": {
       "email": "ireum@hoesa.com",
@@ -15013,7 +15109,7 @@
       },
       "group": {
         "working": {
-          "label": "작업 중"
+          "label": "작업 중..."
         }
       },
       "read": {
@@ -15782,7 +15878,8 @@
       "scrollRight": "탭을 오른쪽으로 스크롤"
     },
     "toast": {
-      "moreCount": "+{count}개 더"
+      "moreCount": "+{count}개 더",
+      "closeAll": "모두 닫기"
     },
     "sidebar": {
       "open": "사이드바 열기",
@@ -15796,11 +15893,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "익명",
-        "description": "계정 이메일 주소입니다.",
-        "title": "이메일"
-      },
       "password": {
         "changeButton": "비밀번호 변경",
         "description": "계정 비밀번호를 변경합니다.",
@@ -15833,8 +15925,7 @@
           "mismatch": "비밀번호가 일치하지 않습니다",
           "newRequired": "새 비밀번호는 필수입니다"
         }
-      },
-      "title": "계정"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15919,13 +16010,62 @@
         "title": "채팅 배경"
       },
       "colorMode": {
-        "auto": "자동",
+        "auto": "시스템",
         "dark": "다크",
-        "description": "UI에 사용할 색상 모드를 선택하세요.",
+        "description": "UI에 사용할 테마를 선택하세요.",
         "light": "라이트",
-        "title": "색상 모드"
+        "title": "테마"
       },
-      "title": "모양"
+      "general": {
+        "title": "일반"
+      },
+      "fonts": {
+        "title": "글꼴"
+      },
+      "transcriptWidth": {
+        "title": "대화 너비",
+        "description": "이 기기에서 채팅 메시지와 입력창의 너비를 설정합니다.",
+        "standard": "표준",
+        "wide": "넓게",
+        "placeholder": "너비 선택"
+      },
+      "responseFont": {
+        "default": "기본값",
+        "match": "인터페이스와 동일",
+        "title": "응답 글꼴",
+        "description": "채팅 응답에 사용할 글꼴을 선택하세요.",
+        "placeholder": "글꼴 선택"
+      },
+      "interfaceFont": {
+        "title": "인터페이스 글꼴",
+        "description": "앱 전체 텍스트에 사용할 글꼴을 선택하세요.",
+        "default": "기본값",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "시스템",
+        "placeholder": "글꼴 선택"
+      },
+      "accessibility": {
+        "title": "접근성"
+      },
+      "motion": {
+        "title": "모션",
+        "description": "시스템의 모션 설정을 따르거나 앱 전체에서 애니메이션을 줄입니다.",
+        "placeholder": "모션 설정 선택",
+        "system": "시스템",
+        "reduced": "줄이기"
+      },
+      "popupDismissal": {
+        "title": "알림",
+        "description": "알림이 자동으로 닫힐지, 직접 닫을 때까지 화면에 남을지 선택하세요.",
+        "placeholder": "알림을 닫는 시점 선택",
+        "auto_dismiss": "자동으로 닫기",
+        "stay_on_screen": "화면에 유지"
+      },
+      "dynamicConversations": {
+        "title": "동적 대화",
+        "description": "긴 대화를 스크롤할 때 메시지를 불러오고 해제합니다. 성능이 향상되지만, 스크린 리더는 해제된 메시지에 접근할 수 없습니다. 모든 메시지를 불러온 상태로 유지하려면 이 기능을 끄세요."
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15959,7 +16099,6 @@
         "description": "스트리밍 응답을 한 글자씩 애니메이션으로 표시합니다. 비활성화하면 도착한 청크를 그대로 표시합니다.",
         "title": "부드러운 스트리밍"
       },
-      "title": "채팅",
       "toasts": {
         "saveFailed": "환경설정을 저장하지 못했습니다"
       },
@@ -15972,6 +16111,7 @@
     },
     "connectors": {
       "connectButton": "연결",
+      "disconnectAriaLabel": "{name} 연결 해제",
       "disconnectModal": {
         "continueNote": "{name} 콘텐츠를 참조하는 기존 세션은 계속 사용할 수 있습니다.",
         "description": "{appName}는 더 이상 {name} 계정의 콘텐츠에 접근하거나 검색할 수 없습니다.",
@@ -15979,11 +16119,9 @@
         "submit": "연결 해제",
         "title": "*{name}* 연결 해제"
       },
-      "emptyMessage": "조직에 설정된 커넥터가 없습니다.",
       "status": {
         "connected": "연결됨",
-        "notConnected": "연결 안 됨",
-        "paused": "일시 중지됨"
+        "notConnected": "연결 안 됨"
       },
       "title": "커넥터",
       "toasts": {
@@ -16047,7 +16185,6 @@
         "description": "UI에 사용할 언어를 선택하세요.",
         "title": "표시 언어"
       },
-      "title": "언어",
       "toasts": {
         "updateFailed": "언어 설정을 변경하지 못했습니다"
       }
@@ -16060,23 +16197,20 @@
         "placeholder": "섹션 선택"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "계정 및 액세스"
+        "appearance": {
+          "label": "모양"
+        },
+        "usage": {
+          "label": "사용량"
+        },
+        "account": {
+          "label": "계정"
         },
         "chatPreferences": {
           "label": "채팅 환경설정"
         },
-        "connectors": {
-          "label": "커넥터"
-        },
-        "general": {
-          "label": "일반"
-        },
-        "llmGateway": {
-          "label": "LLM 게이트웨이"
-        },
-        "usage": {
-          "label": "사용량"
+        "thirdPartyAccess": {
+          "label": "타사 액세스"
         }
       }
     },
@@ -16125,9 +16259,9 @@
       }
     },
     "personalPreferences": {
-      "description": "원하는 설정을 자연어로 입력하세요.",
+      "description": "{appName}는 모든 채팅에서 이 내용을 기억합니다.",
       "placeholder": "시스템이 어떻게 동작하고 어떤 어조를 사용할지 설명하세요.",
-      "title": "개인 환경설정"
+      "title": "지침"
     },
     "profile": {
       "fullName": {
@@ -16141,8 +16275,68 @@
       },
       "workRole": {
         "description": "직무를 알려주면 응답을 더 잘 맞출 수 있습니다.",
-        "placeholder": "직무",
-        "title": "직무"
+        "placeholder": "직무 선택",
+        "title": "어떤 업무를 하시나요?",
+        "other": {
+          "placeholder": "직무를 입력하세요",
+          "title": "내 업무"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "10MB 이하의 이미지를 선택하세요.",
+          "invalidType": "PNG, JPEG 또는 WebP 이미지를 선택하세요."
+        },
+        "description": "PNG, JPEG 또는 WebP, 최대 10MB.",
+        "toasts": {
+          "updateFailed": "프로필 사진을 업데이트하지 못했습니다. 다시 시도하세요."
+        },
+        "title": "프로필 사진",
+        "editButton": {
+          "ariaLabel": "프로필 사진 변경"
+        },
+        "uploadButton": {
+          "ariaLabel": "프로필 사진 업로드"
+        },
+        "menu": {
+          "label": "프로필 사진 옵션",
+          "replace": {
+            "label": "사진 바꾸기"
+          },
+          "remove": {
+            "label": "삭제"
+          }
+        },
+        "cropModal": {
+          "title": "사진 자르기",
+          "description": "드래그하거나 화살표 키로 위치를 조정하세요. 슬라이더나 스크롤로 확대/축소하세요.",
+          "area": {
+            "ariaLabel": "자르기 영역"
+          },
+          "zoom": {
+            "ariaLabel": "확대/축소"
+          },
+          "zoomIn": {
+            "ariaLabel": "확대"
+          },
+          "zoomOut": {
+            "ariaLabel": "축소"
+          },
+          "reset": {
+            "label": "초기화"
+          },
+          "cancel": {
+            "label": "취소"
+          },
+          "save": {
+            "label": "저장"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName}이(가) 대화할 때 이 이름을 사용합니다.",
+        "placeholder": "이름 추가",
+        "title": "{appName}이(가) 어떻게 불러 드릴까요?"
       }
     },
     "promptShortcuts": {
@@ -16152,7 +16346,6 @@
         "publicTooltip": "조직 전체 프롬프트 단축어는 삭제할 수 없습니다.",
         "removeAriaLabel": "단축어 제거"
       },
-      "title": "프롬프트 단축어",
       "toasts": {
         "bothRequired": "단축어와 확장 내용을 모두 입력해야 합니다",
         "deleteFailed": "단축어를 삭제하지 못했습니다",
@@ -16175,9 +16368,6 @@
       "empty": {
         "description": "채팅을 시작하면 모델 사용량과 비용이 여기에 표시됩니다.",
         "title": "아직 기록된 사용량이 없습니다"
-      },
-      "header": {
-        "title": "사용량"
       },
       "loadError": {
         "description": "사용량을 가져오는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
@@ -16238,9 +16428,31 @@
       },
       "playbackSpeed": {
         "description": "음성 재생 속도를 조정합니다.",
-        "title": "재생 속도"
+        "title": "재생 속도",
+        "value": "{speed}x"
       },
       "title": "음성"
+    },
+    "modelPreferences": {
+      "title": "모델 환경설정"
+    },
+    "interactions": {
+      "title": "상호작용"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "그룹 관리자",
+        "description": "이 워크스페이스에서의 액세스 수준입니다.",
+        "admin": "관리자",
+        "basic": "기본 사용자",
+        "title": "내 역할"
+      },
+      "tenantId": {
+        "description": "도움을 요청할 때 이 ID를 지원팀에 알려 주세요.",
+        "copyTooltip": "테넌트 ID 복사",
+        "title": "테넌트 ID"
+      },
+      "title": "조직"
     }
   },
   "sidebar": {
@@ -17106,19 +17318,6 @@
       "select": "{name} 선택"
     }
   },
-  "opensearchHealth": {
-    "title": "OpenSearch에 더 많은 리소스가 필요합니다",
-    "disk": "OpenSearch 데이터 노드의 디스크 사용률이 85% 이상입니다. 디스크가 가득 차면 인덱싱이 중단될 수 있습니다.",
-    "jvmMemory": "반복 검사에서 OpenSearch JVM 메모리 사용률이 85%를 초과했습니다. 검색 및 인덱싱이 실패할 수 있습니다.",
-    "vectorMemory": "OpenSearch 벡터 메모리가 거의 가득 찼거나 한도에 도달했습니다. 검색 및 인덱싱이 실패할 수 있습니다.",
-    "contact": "시스템 관리자 또는 Onyx 팀([support@onyx.app](mailto:support@onyx.app))에 문의하세요.",
-    "stale": "최신 검사를 사용할 수 없습니다. 이 경고는 마지막으로 성공한 검사를 반영하며 복구는 확인되지 않았습니다.",
-    "dismiss": "닫기",
-    "diskTitle": "디스크 공간",
-    "jvmMemoryTitle": "JVM 메모리",
-    "vectorMemoryTitle": "벡터 메모리",
-    "viewDetails": "세부 정보 보기"
-  },
   "plugins": {
     "member": {
       "sections": {
@@ -17712,7 +17911,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {스킬 1개} other {스킬 {skills}개}}",
       "loadFailed": "플러그인을 불러오지 못했습니다.",
       "filter": {
         "all": "모든 플러그인"
@@ -17726,7 +17924,7 @@
         "title": "일치하는 플러그인이 없습니다",
         "clear": "모든 플러그인 보기"
       },
-      "intro": "플러그인은 스킬과 스킬에 필요한 통합을 묶은 것입니다. Claude Code 또는 Codex 플러그인을 업로드하거나, GitHub에서 마켓플레이스를 추가하거나, 스킬을 추가하세요. 추가한 각 스킬은 자체 플러그인으로 제공됩니다.",
+      "intro": "플러그인은 스킬과 스킬에 필요한 통합을 묶은 것입니다. Claude Code 또는 Codex 플러그인을 업로드하거나, GitHub에서 마켓플레이스를 추가하거나, 스킬을 추가하세요. 루트에 SKILL.md 하나만 있는 플러그인은 스킬 탭에 표시됩니다.",
       "integrations": "{needed}개 중 {available}개 통합 사용 가능",
       "nameHeld": "꺼짐: {names}이(가) 같은 스킬 이름을 사용합니다"
     },
@@ -17975,6 +18173,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {이 실행은 아래에서 승인을 기다리고 있습니다.} other {이 실행은 진행 중입니다.}}",
       "startedAt": "{time}에 시작됨",
       "viewTask": "작업 보기"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "마케팅"
+      },
+      "finance": {
+        "label": "재무"
+      },
+      "other": {
+        "label": "기타"
+      },
+      "engineering": {
+        "label": "엔지니어링"
+      },
+      "customerSupportSuccess": {
+        "label": "고객 지원 및 성공"
+      },
+      "peopleHr": {
+        "label": "인사"
+      },
+      "dataAnalytics": {
+        "label": "데이터 및 분석"
+      },
+      "legal": {
+        "label": "법무"
+      },
+      "design": {
+        "label": "디자인"
+      },
+      "product": {
+        "label": "프로덕트"
+      },
+      "operations": {
+        "label": "운영"
+      },
+      "sales": {
+        "label": "영업"
+      },
+      "leadership": {
+        "label": "경영진"
+      }
     }
   }
 }

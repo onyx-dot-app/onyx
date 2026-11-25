@@ -88,7 +88,7 @@ def test_custom_app_skill_runs_without_a_connection(session: Session) -> None:
     }
     assert states[skill.id].can_run
     assert skill.name in {
-        s.name for s in list_chat_skills(session, user, built_ins=False)
+        s.name for s in list_chat_skills(session, user, with_sandbox=False)
     }
     assert skill.id in {
         runtime.id

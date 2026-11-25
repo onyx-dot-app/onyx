@@ -39,6 +39,7 @@ class MessageOrigin(str, Enum):
     WIDGET = "widget"
     DISCORDBOT = "discordbot"
     MOBILE = "mobile"
+    DESKTOP = "desktop"
     UNKNOWN = "unknown"
     UNSET = "unset"
 
@@ -509,6 +510,17 @@ class ChatSessionProcessingStatus(BaseModel):
     # while the chat has no request: a client that loaded nothing compares
     # against the empty version.
     approvals_version: str = ""
+
+
+class ChatSubagent(BaseModel):
+    """A background agent that the chat's selected branch started."""
+
+    id: UUID
+    # The agent tree path, such as `/root/researcher`
+    path: str
+    # None before its first run starts
+    status: RunStatus | None
+    stopped_by_user: bool
 
 
 class ChatSessionDetailResponse(BaseModel):

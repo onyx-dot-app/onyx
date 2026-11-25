@@ -15,7 +15,10 @@ from onyx.background.celery.tasks.docprocessing.batch_counters import (
     on_docprocessing_task_postrun,
     on_docprocessing_task_prerun,
 )
-from onyx.configs.app_configs import GOOGLE_DRIVE_CONVERSION_WORKERS
+from onyx.configs.app_configs import (
+    GOOGLE_DRIVE_CONVERSION_WORKERS,
+    SHAREPOINT_CONVERSION_WORKERS,
+)
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_DOCCONVERSION_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics.celery_task_metrics import (
@@ -42,10 +45,11 @@ DOCCONVERSION_POOL_OVERFLOW = 8
 
 def docconversion_pool_size(concurrency: int) -> int:
     """The Postgres pool of a docconversion worker. Each task converts up
-    to GOOGLE_DRIVE_CONVERSION_WORKERS files at once, and each file thread
+    to the conversion workers of its source at once, and each file thread
     can hold a connection, for example to store a staged file. The task's
     own thread holds one more."""
-    return concurrency * (GOOGLE_DRIVE_CONVERSION_WORKERS + 1)
+    file_threads = max(GOOGLE_DRIVE_CONVERSION_WORKERS, SHAREPOINT_CONVERSION_WORKERS)
+    return concurrency * (file_threads + 1)
 
 
 celery_app = Celery(__name__)

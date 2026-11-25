@@ -5,8 +5,7 @@ import { MemoryToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
 import { SvgMaximize2 } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";
@@ -19,7 +18,7 @@ import { useCreateModal } from "@opal/components";
  * MemoryToolRenderer - Renders memory tool execution steps
  *
  * States:
- * - Loading (start, no delta): "Saving memory..." with BlinkingBar
+ * - Loading (start, no delta): "Saving memory..."
  * - Delta received: operation label + memory text
  * - Complete (SectionEnd): "Memory saved" / "Memory updated" + memory text
  * - No Access: "Memory tool disabled"
@@ -49,7 +48,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
       {
         icon: STEP_ICONS.edit,
         status: t("memory.default.status"),
-        content: <div />,
+        content: null,
         supportsCollapsible: false,
         timelineLayout: "timeline",
       },
@@ -139,9 +138,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
             }}
           />
         </Section>
-      ) : (
-        !stopPacketSeen && <BlinkingBar />
-      )}
+      ) : null}
     </div>
   );
 
@@ -173,7 +170,8 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
       doneStatus: doneStatusLabel,
       supportsCollapsible: false,
       timelineLayout: "timeline",
-      content: memoryContent,
+      // Nothing to open until the memory's text arrives.
+      content: memoryText ? memoryContent : null,
     },
   ]);
 };

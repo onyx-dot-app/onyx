@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { Section } from "@opal/layouts";
-import ToolQuestionCard from "@/app/app/message/messageComponents/ToolQuestionCard";
+import ToolQuestionCard from "@/lib/timeline/chat/message/messageComponents/ToolQuestionCard";
 import { useCurrentMessageTree } from "@/app/app/stores/useChatSessionStore";
 import {
   readWaitingQuestions,

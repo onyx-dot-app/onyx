@@ -7,8 +7,7 @@ import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import {
   SearchChipList,
@@ -36,7 +35,7 @@ const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
  * RenderType modes:
  * - FULL: Shows queries timeline step. Used when step is expanded in timeline.
  * - HIGHLIGHT: Shows queries with header embedded directly in content.
- *              No StepContainer wrapper. Used for parallel streaming preview.
+ *              No RunStep wrapper. Used for parallel streaming preview.
  * - INLINE: Shows queries for collapsed streaming view.
  */
 export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
@@ -63,14 +62,15 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         icon: STEP_ICONS.webSearch,
         status: queriesHeader,
         doneStatus: queriesDoneHeader,
-        content: <div />,
+        // Nothing to open until the first query arrives.
+        content: null,
         supportsCollapsible: false,
         timelineLayout: "timeline",
       },
     ]);
   }
 
-  // HIGHLIGHT mode: header embedded in content, no StepContainer
+  // HIGHLIGHT mode: header embedded in content, no RunStep
   if (isHighlight) {
     return children([
       {
@@ -91,7 +91,6 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               expansionCount={QUERIES_PER_EXPANSION}
               getKey={(_, index) => index}
               toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               showDetailsCard={false}
               isQuery={true}
             />
@@ -116,7 +115,6 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             expansionCount={QUERIES_PER_EXPANSION}
             getKey={(_, index) => index}
             toSourceInfo={queryToSourceInfo}
-            emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             showDetailsCard={false}
             isQuery={true}
           />

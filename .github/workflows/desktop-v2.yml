@@ -90,10 +90,13 @@ jobs:
         working-directory: ./desktop-v2
         run: bun run typecheck
 
-      # Unsigned: reviewers open it with right-click > Open.
+      # Unsigned: reviewers open it with right-click > Open. The cache restores
+      # target/, so an older DMG is removed before the build.
       - name: Build universal DMG
         working-directory: ./desktop-v2
-        run: bun run tauri build --target universal-apple-darwin --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
+        run: |
+          rm -rf src-tauri/target/universal-apple-darwin/release/bundle
+          bun run tauri build --target universal-apple-darwin --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
 
       # Fork pull requests get no installer artifact.
       - name: Upload DMG
@@ -120,8 +123,10 @@ jobs:
             bundle-paths: |
               desktop-v2/src-tauri/target/release/bundle/nsis/*.exe
               desktop-v2/src-tauri/target/release/bundle/msi/*.msi
+          # The oldest supported Ubuntu LTS: the bundles need the glibc they
+          # are built with or newer.
           - name: Linux x64
-            platform: ubuntu-24.04
+            platform: ubuntu-22.04
             artifact: linux-x64
             bundles: appimage,deb
             bundle-paths: |
@@ -178,9 +183,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             desktop-v2/src-tauri/target/
-          key: ${{ runner.os }}-desktop-v2-cargo-${{ hashFiles('desktop-v2/src-tauri/Cargo.lock') }}
+          key: ${{ matrix.platform }}-desktop-v2-cargo-${{ hashFiles('desktop-v2/src-tauri/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-v2-cargo-
+            ${{ matrix.platform }}-desktop-v2-cargo-
 
       - name: Install web dependencies
         working-directory: ./web
@@ -212,14 +217,82 @@ jobs:
 
       # Unsigned: for reviewers only.
       # APPIMAGE_EXTRACT_AND_RUN: the runner has no FUSE for linuxdeploy.
-      # NO_STRIP: linuxdeploy's strip cannot read Ubuntu 24.04's libraries.
+      # NO_STRIP: linuxdeploy's strip cannot read some system libraries.
+      # Cargo strips the Linux app binary instead.
+      # WINDOWS_SIGN_COMMAND: the Authenticode hook. It is empty until release
+      # engineering sets the repository variable and the signing credentials
+      # (README, "Windows code signing"). Tauri then signs the app, the
+      # uninstaller and both installers.
       - name: Build installers
         working-directory: ./desktop-v2
         env:
           BUNDLES: ${{ matrix.bundles }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
-        run: bun run tauri build --bundles "${BUNDLES}" -- --locked
+          WINDOWS_SIGN_COMMAND: ${{ runner.os == 'Windows' && github.event.pull_request.head.repo.full_name == github.repository && vars.DESKTOP_V2_WINDOWS_SIGN_COMMAND || '' }}
+        run: |
+          set -euo pipefail
+          # The cache restores target/, so installers from an older build would
+          # sit next to the new ones and be uploaded and checked with them.
+          rm -rf src-tauri/target/release/bundle
+          if [ "${RUNNER_OS}" = "Linux" ]; then
+            export CARGO_PROFILE_RELEASE_STRIP=symbols
+          fi
+          # The run number goes in the version as build metadata (0.1.0+123),
+          # so each build shows its own version. The MSI and NSIS file
+          # versions get it as the fourth number.
+          CONFIG=$(bun -e '
+            const config = { version: require("./src-tauri/tauri.conf.json").version + "+" + process.env.GITHUB_RUN_NUMBER };
+            if (process.env.WINDOWS_SIGN_COMMAND) config.bundle = { windows: { signCommand: process.env.WINDOWS_SIGN_COMMAND } };
+            console.log(JSON.stringify(config));
+          ')
+          bun run tauri build --bundles "${BUNDLES}" --config "${CONFIG}" -- --locked
+
+      - name: Check Authenticode signatures
+        if: runner.os == 'Windows' && github.event.pull_request.head.repo.full_name == github.repository && vars.DESKTOP_V2_WINDOWS_SIGN_COMMAND != ''
+        working-directory: ./desktop-v2/src-tauri/target/release
+        shell: pwsh
+        # Tauri restores the unsigned app in target/release after each
+        # package, so the app is checked inside the installers.
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installers = @(Get-ChildItem bundle/nsis/*.exe, bundle/msi/*.msi)
+          $payload = Join-Path $env:RUNNER_TEMP 'signed-payload'
+          foreach ($msi in Get-ChildItem bundle/msi/*.msi) {
+            $process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/a', "`"$($msi.FullName)`"", '/qn', "TARGETDIR=`"$payload\msi-$($msi.BaseName)`"")
+            if ($process.ExitCode -ne 0) { throw "Could not extract $($msi.Name) (exit code $($process.ExitCode))." }
+          }
+          foreach ($nsis in Get-ChildItem bundle/nsis/*.exe) {
+            7z x $nsis.FullName "-o$payload\nsis-$($nsis.BaseName)" -y | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not extract $($nsis.Name)." }
+          }
+          $apps = @(Get-ChildItem -Path $payload -Recurse -Filter onyx-desktop-v2.exe)
+          if ($apps.Count -ne $installers.Count) { throw "Found $($apps.Count) packaged apps for $($installers.Count) installers." }
+          $files = $installers + $apps
+          $unsigned = $files | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne 'Valid' }
+          foreach ($file in $unsigned) { Write-Error "No valid Authenticode signature: $($file.Name)" -ErrorAction Continue }
+          if ($unsigned) { exit 1 }
+
+      # The .deb declares libc6 (>= 2.35) in tauri.conf.json. No file in the
+      # .deb or the AppImage may need a newer glibc.
+      - name: Check the glibc floor
+        if: runner.os == 'Linux'
+        working-directory: ./desktop-v2/src-tauri/target/release/bundle
+        run: |
+          set -euo pipefail
+          FLOOR=2.35
+          WORK="${RUNNER_TEMP}/glibc-check"
+          mkdir -p "${WORK}"
+          dpkg-deb -x deb/*.deb "${WORK}/deb"
+          APPIMAGE=$(ls "${PWD}"/appimage/*.AppImage)
+          (cd "${WORK}" && "${APPIMAGE}" --appimage-extract > /dev/null)
+          NEEDED=$(find "${WORK}" -type f -exec sh -c 'file -b "$1" | grep -q "^ELF" && objdump -T "$1"' _ {} \; 2> /dev/null \
+            | grep -o 'GLIBC_[0-9.]*' | sed 's/^GLIBC_//' | sort -uV | tail -n 1)
+          echo "The bundles need glibc ${NEEDED} or newer."
+          if [ "$(printf '%s\n' "${NEEDED}" "${FLOOR}" | sort -V | tail -n 1)" != "${FLOOR}" ]; then
+            echo "glibc ${NEEDED} is newer than the declared floor ${FLOOR}." >&2
+            exit 1
+          fi
 
       # Fork pull requests get no installer artifact or attestation.
       - name: Attest build provenance

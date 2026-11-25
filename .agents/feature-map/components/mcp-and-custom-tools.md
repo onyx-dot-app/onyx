@@ -334,7 +334,13 @@ admin value is not Ask.
   kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
   preset or URL patterns), then the `integration` row with exactly one of
   `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client
-  and the actions. It writes no plugin row. The creator is the owner. "For the organization"
+  and the actions. It writes no plugin row. An OpenAPI integration also gets
+  an `api_app` row (`integration.api_app_id`) with the spec as JSON text and
+  its server URL. For one release each create and spec change writes both
+  the `tool` row and the `api_app` row
+  (`db/integration.py:write_openapi_document__no_commit`); the readers still
+  read the `tool` row, and nothing reads `api_app` yet. Migration
+  `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
   sets the install setting AVAILABLE; else the integration is private and
   starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
@@ -348,7 +354,7 @@ admin value is not Ask.
   constant
   (`backend/tests/external_dependency_unit/integrations/test_list_query_counts.py`).
 - Delete (`db/integration.py:delete_integration__no_commit`) deletes the
-  integration and then its kind row. A deleted kind row deletes its integration by cascade.
+  integration, then its kind row and its `api_app` row. A deleted kind row deletes its integration by cascade.
 - A preset keeps its client id, secret and host settings (Zendesk
   `subdomain`) on `integration_oauth_client`; the host settings are in
   `additional_params`, which

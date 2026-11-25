@@ -48,8 +48,12 @@ type questionServerOptions struct {
 type questionRun struct {
 	// bodies receives the body of each answers request.
 	bodies chan []byte
-	// sent closes when the server finished the stream of the message.
+	// sent closes when the server finished the stream of the message. ask
+	// can still be reading it.
 	sent chan struct{}
+	// statusRead closes at ask's first status read. A prompt reads the
+	// status only after ask received the whole stream, with its stop.
+	statusRead chan struct{}
 	// answerElsewhere answers q1 as another client does; the status then
 	// names the continuation and a new approvals version.
 	answerElsewhere func()
@@ -63,7 +67,8 @@ func newQuestionServer(t *testing.T, opts questionServerOptions) *questionRun {
 	if opts.answerStatus == 0 {
 		opts.answerStatus = http.StatusOK
 	}
-	run := &questionRun{bodies: make(chan []byte, 4), sent: make(chan struct{})}
+	run := &questionRun{bodies: make(chan []byte, 4), sent: make(chan struct{}), statusRead: make(chan struct{})}
+	var statusReadOnce sync.Once
 	var mu sync.Mutex
 	var answers any
 	// continuing marks stream 3 as the running continuation, and elsewhere
@@ -109,6 +114,7 @@ func newQuestionServer(t *testing.T, opts questionServerOptions) *questionRun {
 		fmt.Fprintf(w, `{"question_request_id":%q,"continuation":%s}`, r.PathValue("id"), continuation)
 	})
 	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/status", func(w http.ResponseWriter, r *http.Request) {
+		statusReadOnce.Do(func() { close(run.statusRead) })
 		mu.Lock()
 		defer mu.Unlock()
 		if continuing && elsewhere {
@@ -340,7 +346,7 @@ func TestAsk_InterruptedQuestionPromptLeavesTheQuestionWaiting(t *testing.T) {
 	}()
 
 	waitForText(t, errOut, questionPromptText, 1)
-	within(t, run.sent)
+	within(t, run.statusRead)
 	cancel()
 
 	err := within(t, done)

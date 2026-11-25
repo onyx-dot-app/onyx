@@ -713,6 +713,14 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
 
     `SHAREPOINT_CONNECTOR_SIZE_THRESHOLD`: File size threshold for SharePoint
 
+    `SHAREPOINT_CONVERSION_WORKERS`:
+    Number of SharePoint files and site pages that one conversion task downloads and converts at the same time.
+    The default is 4. SharePoint limits the download rate, so more threads do not convert more documents per minute.
+    They only wait longer and use more memory.
+
+    `SHAREPOINT_LISTING_WORKERS`:
+    Number of folders of one drive that the SharePoint listing reads at the same time on a full pass. The default is 8.
+
     **Jira Connector**
 
     `JIRA_CONNECTOR_LABELS_TO_SKIP`: Labels to skip during indexing

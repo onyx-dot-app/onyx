@@ -6,7 +6,9 @@ import { LOGOUT_DISABLED } from "@/lib/constants";
 import { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
+  buildUserProfileImageUrl,
   checkUserIsNoAuthUser,
+  getUserAddressedName,
   getUserDisplayName,
   getUserEmail,
   logout,
@@ -358,7 +360,13 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
           <SidebarTab
             icon={(props) => (
               <div className="w-[16px] flex flex-col justify-center items-center">
-                <UserAvatar user={user} {...props} size={props.size} />
+                <UserAvatar
+                  {...props}
+                  name={getUserAddressedName(user)}
+                  email={getUserEmail(user)}
+                  imageUrl={buildUserProfileImageUrl(user)}
+                  size={props.size}
+                />
               </div>
             )}
             rightChildren={

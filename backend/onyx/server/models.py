@@ -42,6 +42,7 @@ class FullUserSnapshot(BaseModel):
     is_active: bool
     password_configured: bool
     personal_name: str | None
+    profile_image_file_id: str | None = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
     # Most recent chat activity. None when the user has never chatted. Distinct
@@ -69,6 +70,7 @@ class FullUserSnapshot(BaseModel):
             is_active=user.is_active,
             password_configured=user.password_configured,
             personal_name=user.personal_name,
+            profile_image_file_id=user.profile_image_file_id,
             created_at=user.created_at,
             updated_at=user.updated_at,
             last_active=last_active,

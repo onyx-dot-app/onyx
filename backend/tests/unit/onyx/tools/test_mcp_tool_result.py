@@ -44,6 +44,7 @@ def _github_tool() -> MCPTool:
     return MCPTool(
         integration_id=1,
         integration_name="GitHub",
+        integration_description=None,
         server_url="https://mcp.example",
         transport=None,
         tool_name="list_issues",

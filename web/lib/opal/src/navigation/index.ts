@@ -5,6 +5,7 @@
  */
 export {
   useNavigation,
+  useRenderedPathname,
   useRouteRendering,
   loadPage,
   Navigation,

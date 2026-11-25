@@ -25,7 +25,6 @@ from onyx.db.skill import (
     RuntimeSkill,
     RuntimeSkillFolder,
     SkillValidityUpdate,
-    list_chat_built_in_skills,
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
@@ -37,7 +36,7 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
     MAX_FILE_BYTES,
 )
-from onyx.server.features.build.sandbox.models import FileSet, SkillsBundle
+from onyx.server.features.build.sandbox.models import CHAT_SKILLS_PATH, FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
@@ -61,7 +60,13 @@ from onyx.skills.limits import (
     SKILL_RUNTIME_MAX_BYTES,
     SKILL_RUNTIME_MAX_FILES,
 )
-from onyx.skills.models import SandboxSkillsState, SkillOmission, SkillUsage
+from onyx.skills.models import (
+    ChatSkill,
+    ChatSkillFiles,
+    SandboxSkillsState,
+    SkillOmission,
+    SkillUsage,
+)
 from onyx.skills.rendering import (
     CLAUDE_SKILL_DIR_PLACEHOLDER,
     render_company_search_skill,
@@ -190,7 +195,7 @@ def _usage_of(files: FileSet) -> SkillUsage:
     )
 
 
-def _resolve_skill_dir(files: FileSet, name: str) -> bool:
+def _resolve_skill_dir(files: FileSet, name: str, skills_root: str) -> bool:
     """Point ``${CLAUDE_SKILL_DIR}`` in the root ``SKILL.md`` of one skill's
     files at the skill's sandbox folder. Only the sent copy changes, not the
     stored bundle. False when the resolved file passes the per-file limit."""
@@ -199,7 +204,7 @@ def _resolve_skill_dir(files: FileSet, name: str) -> bool:
     if content is None or CLAUDE_SKILL_DIR_PLACEHOLDER.encode() not in content:
         return True
     resolved = resolve_skill_dir_placeholder(
-        content.decode("utf-8"), f"{SKILLS_MOUNT_PATH}/{name}"
+        content.decode("utf-8"), f"{skills_root}/{name}"
     ).encode("utf-8")
     if len(resolved) > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES):
         logger.warning(
@@ -262,7 +267,10 @@ def _sandbox_path(path: str, folders: Iterable[RuntimeSkillFolder]) -> str | Non
 
 
 def _assemble_skills(
-    skills: Iterable[RuntimeSkill], user: User, db_session: Session
+    skills: Iterable[RuntimeSkill],
+    user: User,
+    db_session: Session,
+    skills_root: str = SKILLS_MOUNT_PATH,
 ) -> AssembledSkills:
     """Hydrate the skills, in the keep order, as a flat ``{path: bytes}`` map.
 
@@ -379,7 +387,9 @@ def _assemble_skills(
                 _render_template(
                     skill_files, runtime_skill, definition, db_session, user
                 )
-        if not all(_resolve_skill_dir(skill_files, name) for name in names):
+        if not all(
+            _resolve_skill_dir(skill_files, name, skills_root) for name in names
+        ):
             continue
         size = _larger(size, _usage_of(skill_files))
         if left_out(runtime_skill, size):
@@ -445,33 +455,64 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     return build_user_skills_payload(user, db_session).files
 
 
-def build_chat_built_ins_bundle(db_session: Session) -> SkillsBundle | None:
-    """The chat built-ins as one bundle, or None when none is available."""
-    skills = list_chat_built_in_skills(db_session)
-    if not skills:
-        return None
-    return _chat_built_ins_bundle(
-        tuple(
-            (skill.built_in_skill_id or "", skill.name, skill.plugin_skills)
-            for skill in skills
+def build_chat_skill_files(
+    skill: ChatSkill, user: User, db_session: Session
+) -> ChatSkillFiles | None:
+    """The skill's files at the version the user runs, each under
+    `<name>/`, with the key of that version, or None when they cannot be
+    read. A built-in's key is the hash of its files, which change only with
+    a deploy; a custom skill's is its version and folder."""
+    if skill.built_in_skill_id is not None:
+        files, digest = _chat_built_in_skill_files(
+            skill.built_in_skill_id, skill.path, skill.name
         )
+        return ChatSkillFiles(version=digest, files=dict(files))
+    runtime_skill = next(
+        (
+            runtime_skill
+            for runtime_skill in list_runtime_skills_for_user(
+                db_session=db_session, user=user
+            )
+            if runtime_skill.version is not None
+            and runtime_skill.version.id == skill.version_id
+        ),
+        None,
     )
+    if runtime_skill is None:
+        return None
+    if runtime_skill.plugin_skills:
+        runtime_skill = runtime_skill.model_copy(
+            update={
+                "plugin_skills": tuple(
+                    folder
+                    for folder in runtime_skill.plugin_skills
+                    if folder.path == skill.path
+                )
+            }
+        )
+        if not runtime_skill.plugin_skills:
+            return None
+    files = _assemble_skills([runtime_skill], user, db_session, CHAT_SKILLS_PATH).files
+    if not files:
+        return None
+    return ChatSkillFiles(version=f"{skill.version_id}:{skill.path}", files=files)
 
 
 @cache
-def _chat_built_ins_bundle(
-    skills: tuple[tuple[str, str, tuple[RuntimeSkillFolder, ...]], ...],
-) -> SkillsBundle:
-    # Keyed without row ids, so tenants with the same built-ins share one
-    # bundle. Chat built-ins have no template, so no file depends on the user.
+def _chat_built_in_skill_files(
+    built_in_skill_id: str, path: str, name: str
+) -> tuple[tuple[tuple[str, bytes], ...], str]:
     files: FileSet = {}
-    for built_in_skill_id, name, folders in skills:
-        _add_static_builtin(
-            files,
-            folders or (RuntimeSkillFolder(path="", name=name),),
-            BUILT_IN_SKILLS[built_in_skill_id],
-        )
-    return SkillsBundle.from_files(files)
+    _add_static_builtin(
+        files,
+        (RuntimeSkillFolder(path=path, name=name),),
+        BUILT_IN_SKILLS[built_in_skill_id],
+    )
+    digest = hashlib.sha256()
+    for file_path, data in sorted(files.items()):
+        digest.update(f"{file_path}\0{len(data)}\0".encode())
+        digest.update(data)
+    return tuple(sorted(files.items())), digest.hexdigest()
 
 
 def push_skill_to_affected_sandboxes(skill: Plugin, db_session: Session) -> None:

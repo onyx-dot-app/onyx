@@ -11,15 +11,6 @@ import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
 
-export interface FederatedConnectorOAuthStatus {
-  federated_connector_id: number;
-  source: string;
-  name: string;
-  has_oauth_token: boolean;
-  oauth_token_expires_at?: string;
-  authorize_url?: string;
-}
-
 const MAX_SKIP_COUNT = 2;
 
 function useFederatedOauthModal() {

@@ -42,6 +42,7 @@ export function apiKeyToMemberRow(
     is_scim_synced: false,
     craft_enabled: null,
     personal_name: key.api_key_name ?? labels.unnamedKey,
+    profile_image_file_id: null,
     created_at: null,
     updated_at: null,
     last_active: null,

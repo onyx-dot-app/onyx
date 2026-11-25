@@ -6,7 +6,7 @@ license: Proprietary. LICENSE.txt has complete terms
 
 # PPTX Skill
 
-> **Path convention**: Run all commands from your working directory, the chat session folder. The skill files are read-only at `/mnt/skills/pptx/`. Never `cd` into the skill directory. Run skill scripts with their interpreter and the absolute path, for example `python /mnt/skills/pptx/scripts/lint.py deck.pptx` or `node /mnt/skills/pptx/scripts/icon.js`. Write all generated files (unpacked dirs, output presentations, thumbnails, PDFs, images) to the working directory. Give the finished deck to the user with `publish_files`.
+> **Path convention**: Run all commands from your working directory, the chat session folder. The skill files are read-only at `/var/lib/onyx/skills/pptx/`. Never `cd` into the skill directory. Run skill scripts with their interpreter and the absolute path, for example `python /var/lib/onyx/skills/pptx/scripts/lint.py deck.pptx` or `node /var/lib/onyx/skills/pptx/scripts/icon.js`. Write all generated files (unpacked dirs, output presentations, thumbnails, PDFs, images) to the working directory. Give the finished deck to the user with `publish_files`.
 
 ## Quick Reference
 
@@ -16,8 +16,8 @@ license: Proprietary. LICENSE.txt has complete terms
 | Edit or create from template | Read [editing.md](editing.md) |
 | Create from scratch | Read [components.md](components.md) — tested layout library (default); [pptxgenjs.md](pptxgenjs.md) for raw layouts it doesn't cover |
 | Charts from real data | Read [charts.md](charts.md) — deck-styled matplotlib PNGs via `scripts/chart.py` |
-| Icons | `node /mnt/skills/pptx/scripts/icon.js <name> --color <hex>` — see [pptxgenjs.md](pptxgenjs.md#icons) |
-| Lint layout (QA step 0) | `python /mnt/skills/pptx/scripts/lint.py output.pptx` |
+| Icons | `node /var/lib/onyx/skills/pptx/scripts/icon.js <name> --color <hex>` — see [pptxgenjs.md](pptxgenjs.md#icons) |
+| Lint layout (QA step 0) | `python /var/lib/onyx/skills/pptx/scripts/lint.py output.pptx` |
 
 ---
 
@@ -82,10 +82,10 @@ Once a template is chosen, follow [editing.md](editing.md). Use the from-scratch
 python -m markitdown presentation.pptx
 
 # Visual overview
-python /mnt/skills/pptx/scripts/thumbnail.py presentation.pptx
+python /var/lib/onyx/skills/pptx/scripts/thumbnail.py presentation.pptx
 
 # Raw XML
-python /mnt/skills/pptx/scripts/office/unpack.py presentation.pptx unpacked/
+python /var/lib/onyx/skills/pptx/scripts/office/unpack.py presentation.pptx unpacked/
 ```
 
 ---
@@ -214,7 +214,7 @@ Your first render is almost never correct. Approach QA as a bug hunt, not a conf
 Before any render or vision pass, run the deterministic layout linter — it catches the mechanical defects (off-slide shapes, sub-margin text, text overflow, overlapping text frames, low-contrast explicit colors, unknown fonts) with exact slide/shape references:
 
 ```bash
-python /mnt/skills/pptx/scripts/lint.py output.pptx
+python /var/lib/onyx/skills/pptx/scripts/lint.py output.pptx
 ```
 
 - Exit 0 with `LINT_CLEAN` means no findings. Exit 1 means ERRORs exist. Exit 2 means the linter did not run: for `ERROR_MISSING_DEPENDENCY`, run the install command on line 2, then run the linter again.
@@ -288,7 +288,7 @@ Report ALL issues found, including minor ones.
 Convert presentations to individual slide images for visual inspection:
 
 ```bash
-python /mnt/skills/pptx/scripts/office/soffice.py --headless --convert-to pdf output.pptx
+python /var/lib/onyx/skills/pptx/scripts/office/soffice.py --headless --convert-to pdf output.pptx
 pdftoppm -jpeg -r 150 output.pdf slide
 ```
 
@@ -307,5 +307,5 @@ pdftoppm -jpeg -r 150 -f N -l N output.pdf slide-fixed
 - `pip install "markitdown[pptx]"` - text extraction
 - `pip install Pillow` - thumbnail grids
 - `npm install -g pptxgenjs` - creating from scratch
-- LibreOffice (`soffice`) - PDF conversion (auto-configured for sandboxed environments via `/mnt/skills/pptx/scripts/office/soffice.py`)
+- LibreOffice (`soffice`) - PDF conversion (auto-configured for sandboxed environments via `/var/lib/onyx/skills/pptx/scripts/office/soffice.py`)
 - Poppler (`pdftoppm`) - PDF to images

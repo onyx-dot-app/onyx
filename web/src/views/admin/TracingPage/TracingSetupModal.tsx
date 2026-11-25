@@ -89,12 +89,13 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
         hasStoredKey,
         config,
       });
-      toast.success(t("toasts.connected", { label: detail.label }));
       await onSaved();
       onClose?.();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t("toasts.unexpectedError")
+        error instanceof Error && error.message
+          ? error.message
+          : t("toasts.unexpectedError")
       );
     } finally {
       setSubmitting(false);

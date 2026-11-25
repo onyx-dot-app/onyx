@@ -48,6 +48,9 @@ class OnyxErrorCode(Enum):
     # An admin turned the feature off for this workspace; no credential
     # change re-enables it.
     FEATURE_DISABLED = ("FEATURE_DISABLED", 403)
+    # The playground (free trial) does not allow the feature; no setting on
+    # the tenant changes that. See onyx/server/playground.py.
+    PLAYGROUND_RESTRICTED = ("PLAYGROUND_RESTRICTED", 403)
 
     # --------------------------------------------------------------------------
     # Validation / Bad Request (400)

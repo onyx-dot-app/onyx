@@ -16,7 +16,7 @@ it, so no command takes an account.
 
 ## Usage
 
-    python /mnt/skills/zendesk/zendesk_api.py <command> [args]
+    python /var/lib/onyx/skills/zendesk/zendesk_api.py <command> [args]
 
 Read commands auto-paginate and prune empty fields. `python zendesk_api.py
 <command> -h` shows a command's flags.

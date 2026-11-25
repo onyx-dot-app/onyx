@@ -1,3 +1,4 @@
+import json
 from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
@@ -6,6 +7,7 @@ from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import (
+    ApiAppType,
     ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
@@ -18,6 +20,7 @@ from onyx.db.enums import (
 )
 from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.models import (
+    ApiApp,
     ExternalApp,
     Integration,
     IntegrationAction,
@@ -32,6 +35,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
 from onyx.integrations.models import IntegrationActionSpec
+from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
 
 
 def get_integration_by_id(
@@ -435,7 +439,9 @@ def insert_integration__no_commit(
     tool_id: int | None = None,
     db_session: Session,
 ) -> Integration:
-    """Insert the integration of a kind row. Exactly one kind row id is set."""
+    """Insert the integration of a kind row. Exactly one kind row id is set.
+    The caller writes the document of an OpenAPI integration with
+    ``write_openapi_document__no_commit``."""
     integration = Integration(
         kind=IntegrationKind.MCP if mcp_server_id is not None else IntegrationKind.API,
         mcp_server_id=mcp_server_id,
@@ -526,6 +532,31 @@ def create_openapi_tool_row__no_commit(
     return tool
 
 
+def write_openapi_document__no_commit(
+    integration: Integration, spec: dict[str, Any], db_session: Session
+) -> None:
+    """The one writer of an OpenAPI app's document. For one release it writes
+    both the tool row, which the readers use, and the ``api_app`` row.
+    Creates the ``api_app`` row when the integration has none, as for one
+    that older code made."""
+    tool = get_openapi_tool_for_integration(integration.id, db_session)
+    if tool is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "The OpenAPI schema is missing.")
+    tool.openapi_schema = spec
+    app = (
+        db_session.get(ApiApp, integration.api_app_id)
+        if integration.api_app_id is not None
+        else None
+    )
+    if app is None:
+        app = ApiApp(api_type=ApiAppType.REST)
+        db_session.add(app)
+    app.base_url = openapi_to_url(spec)
+    app.openapi_document = json.dumps(spec)
+    db_session.flush()
+    integration.api_app_id = app.id
+
+
 def create_external_app_row__no_commit(
     *,
     name: str,
@@ -610,6 +641,7 @@ def delete_integration__no_commit(
     mcp_server_id = integration.mcp_server_id
     tool_id = integration.tool_id
     external_app_id = integration.external_app_id
+    api_app_id = integration.api_app_id
     db_session.delete(integration)
     db_session.flush()
     server = db_session.get(MCPServer, mcp_server_id) if mcp_server_id else None
@@ -618,6 +650,9 @@ def delete_integration__no_commit(
     tool = db_session.get(Tool, tool_id) if tool_id else None
     if tool is not None:
         db_session.delete(tool)
+    app = db_session.get(ApiApp, api_app_id) if api_app_id else None
+    if app is not None:
+        db_session.delete(app)
     if external_app_id is not None:
         delete_external_app__no_commit(db_session, external_app_id)
     db_session.flush()

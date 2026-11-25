@@ -4251,6 +4251,230 @@ func (x *RestoreSessionResponse) GetRoots() []string {
 	return nil
 }
 
+type InstallSkillHeader struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Folder name: one path part, not starting with ".".
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Opaque version, at most 256 bytes, no line breaks.
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Exact tar size and hex SHA-256.
+	SizeBytes     int64          `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Sha256        string         `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Limits        *ArchiveLimits `protobuf:"bytes,5,opt,name=limits,proto3" json:"limits,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallSkillHeader) Reset() {
+	*x = InstallSkillHeader{}
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallSkillHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallSkillHeader) ProtoMessage() {}
+
+func (x *InstallSkillHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallSkillHeader.ProtoReflect.Descriptor instead.
+func (*InstallSkillHeader) Descriptor() ([]byte, []int) {
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *InstallSkillHeader) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *InstallSkillHeader) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *InstallSkillHeader) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *InstallSkillHeader) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *InstallSkillHeader) GetLimits() *ArchiveLimits {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+type InstallSkillRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Part:
+	//
+	//	*InstallSkillRequest_Header
+	//	*InstallSkillRequest_Data
+	Part          isInstallSkillRequest_Part `protobuf_oneof:"part"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallSkillRequest) Reset() {
+	*x = InstallSkillRequest{}
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallSkillRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallSkillRequest) ProtoMessage() {}
+
+func (x *InstallSkillRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallSkillRequest.ProtoReflect.Descriptor instead.
+func (*InstallSkillRequest) Descriptor() ([]byte, []int) {
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *InstallSkillRequest) GetPart() isInstallSkillRequest_Part {
+	if x != nil {
+		return x.Part
+	}
+	return nil
+}
+
+func (x *InstallSkillRequest) GetHeader() *InstallSkillHeader {
+	if x != nil {
+		if x, ok := x.Part.(*InstallSkillRequest_Header); ok {
+			return x.Header
+		}
+	}
+	return nil
+}
+
+func (x *InstallSkillRequest) GetData() []byte {
+	if x != nil {
+		if x, ok := x.Part.(*InstallSkillRequest_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isInstallSkillRequest_Part interface {
+	isInstallSkillRequest_Part()
+}
+
+type InstallSkillRequest_Header struct {
+	// The first message.
+	Header *InstallSkillHeader `protobuf:"bytes,1,opt,name=header,proto3,oneof"`
+}
+
+type InstallSkillRequest_Data struct {
+	// Later messages: the tar bytes (at most 1 MiB each).
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
+}
+
+func (*InstallSkillRequest_Header) isInstallSkillRequest_Part() {}
+
+func (*InstallSkillRequest_Data) isInstallSkillRequest_Part() {}
+
+type InstallSkillResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// False when the folder already had the version.
+	Installed     bool  `protobuf:"varint,1,opt,name=installed,proto3" json:"installed,omitempty"`
+	Files         int64 `protobuf:"varint,2,opt,name=files,proto3" json:"files,omitempty"`
+	ExpandedBytes int64 `protobuf:"varint,3,opt,name=expanded_bytes,json=expandedBytes,proto3" json:"expanded_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallSkillResponse) Reset() {
+	*x = InstallSkillResponse{}
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallSkillResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallSkillResponse) ProtoMessage() {}
+
+func (x *InstallSkillResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallSkillResponse.ProtoReflect.Descriptor instead.
+func (*InstallSkillResponse) Descriptor() ([]byte, []int) {
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *InstallSkillResponse) GetInstalled() bool {
+	if x != nil {
+		return x.Installed
+	}
+	return false
+}
+
+func (x *InstallSkillResponse) GetFiles() int64 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *InstallSkillResponse) GetExpandedBytes() int64 {
+	if x != nil {
+		return x.ExpandedBytes
+	}
+	return 0
+}
+
 // Browser placeholders.
 type BrowserStartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -4260,7 +4484,7 @@ type BrowserStartRequest struct {
 
 func (x *BrowserStartRequest) Reset() {
 	*x = BrowserStartRequest{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[52]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4272,7 +4496,7 @@ func (x *BrowserStartRequest) String() string {
 func (*BrowserStartRequest) ProtoMessage() {}
 
 func (x *BrowserStartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[52]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4285,7 +4509,7 @@ func (x *BrowserStartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrowserStartRequest.ProtoReflect.Descriptor instead.
 func (*BrowserStartRequest) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{52}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{55}
 }
 
 type BrowserStartResponse struct {
@@ -4296,7 +4520,7 @@ type BrowserStartResponse struct {
 
 func (x *BrowserStartResponse) Reset() {
 	*x = BrowserStartResponse{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[53]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4308,7 +4532,7 @@ func (x *BrowserStartResponse) String() string {
 func (*BrowserStartResponse) ProtoMessage() {}
 
 func (x *BrowserStartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[53]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4321,7 +4545,7 @@ func (x *BrowserStartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrowserStartResponse.ProtoReflect.Descriptor instead.
 func (*BrowserStartResponse) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{53}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{56}
 }
 
 type BrowserStopRequest struct {
@@ -4332,7 +4556,7 @@ type BrowserStopRequest struct {
 
 func (x *BrowserStopRequest) Reset() {
 	*x = BrowserStopRequest{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[54]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4344,7 +4568,7 @@ func (x *BrowserStopRequest) String() string {
 func (*BrowserStopRequest) ProtoMessage() {}
 
 func (x *BrowserStopRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[54]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4357,7 +4581,7 @@ func (x *BrowserStopRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrowserStopRequest.ProtoReflect.Descriptor instead.
 func (*BrowserStopRequest) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{54}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{57}
 }
 
 type BrowserStopResponse struct {
@@ -4368,7 +4592,7 @@ type BrowserStopResponse struct {
 
 func (x *BrowserStopResponse) Reset() {
 	*x = BrowserStopResponse{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[55]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4380,7 +4604,7 @@ func (x *BrowserStopResponse) String() string {
 func (*BrowserStopResponse) ProtoMessage() {}
 
 func (x *BrowserStopResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[55]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4393,7 +4617,7 @@ func (x *BrowserStopResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrowserStopResponse.ProtoReflect.Descriptor instead.
 func (*BrowserStopResponse) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{55}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{58}
 }
 
 type ManagedStatusRequest struct {
@@ -4406,7 +4630,7 @@ type ManagedStatusRequest struct {
 
 func (x *ManagedStatusRequest) Reset() {
 	*x = ManagedStatusRequest{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[56]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4418,7 +4642,7 @@ func (x *ManagedStatusRequest) String() string {
 func (*ManagedStatusRequest) ProtoMessage() {}
 
 func (x *ManagedStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[56]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4431,7 +4655,7 @@ func (x *ManagedStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedStatusRequest.ProtoReflect.Descriptor instead.
 func (*ManagedStatusRequest) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{56}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ManagedStatusRequest) GetMount() string {
@@ -4461,7 +4685,7 @@ type ManagedSlotState struct {
 
 func (x *ManagedSlotState) Reset() {
 	*x = ManagedSlotState{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[57]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4473,7 +4697,7 @@ func (x *ManagedSlotState) String() string {
 func (*ManagedSlotState) ProtoMessage() {}
 
 func (x *ManagedSlotState) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[57]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4486,7 +4710,7 @@ func (x *ManagedSlotState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedSlotState.ProtoReflect.Descriptor instead.
 func (*ManagedSlotState) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{57}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ManagedSlotState) GetSlot() ManagedSlot {
@@ -4553,7 +4777,7 @@ type ManagedStatusResponse struct {
 
 func (x *ManagedStatusResponse) Reset() {
 	*x = ManagedStatusResponse{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[58]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4565,7 +4789,7 @@ func (x *ManagedStatusResponse) String() string {
 func (*ManagedStatusResponse) ProtoMessage() {}
 
 func (x *ManagedStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[58]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4578,7 +4802,7 @@ func (x *ManagedStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedStatusResponse.ProtoReflect.Descriptor instead.
 func (*ManagedStatusResponse) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{58}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ManagedStatusResponse) GetMountPoint() string {
@@ -4624,7 +4848,7 @@ type MountManagedRequest struct {
 
 func (x *MountManagedRequest) Reset() {
 	*x = MountManagedRequest{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[59]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4636,7 +4860,7 @@ func (x *MountManagedRequest) String() string {
 func (*MountManagedRequest) ProtoMessage() {}
 
 func (x *MountManagedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[59]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4649,7 +4873,7 @@ func (x *MountManagedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MountManagedRequest.ProtoReflect.Descriptor instead.
 func (*MountManagedRequest) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{59}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *MountManagedRequest) GetSlot() ManagedSlot {
@@ -4700,7 +4924,7 @@ type MountManagedResponse struct {
 
 func (x *MountManagedResponse) Reset() {
 	*x = MountManagedResponse{}
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[60]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4712,7 +4936,7 @@ func (x *MountManagedResponse) String() string {
 func (*MountManagedResponse) ProtoMessage() {}
 
 func (x *MountManagedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[60]
+	mi := &file_sandboxd_v1_sandboxd_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4725,7 +4949,7 @@ func (x *MountManagedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MountManagedResponse.ProtoReflect.Descriptor instead.
 func (*MountManagedResponse) Descriptor() ([]byte, []int) {
-	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{60}
+	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *MountManagedResponse) GetActive() ManagedSlot {
@@ -5079,7 +5303,22 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\x05files\x18\x01 \x01(\x03R\x05files\x12 \n" +
 	"\vdirectories\x18\x02 \x01(\x03R\vdirectories\x12%\n" +
 	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\x12\x14\n" +
-	"\x05roots\x18\x04 \x03(\tR\x05roots\"\x15\n" +
+	"\x05roots\x18\x04 \x03(\tR\x05roots\"\xb3\x01\n" +
+	"\x12InstallSkillHeader\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\x128\n" +
+	"\x06limits\x18\x05 \x01(\v2 .craft.sandboxd.v1.ArchiveLimitsR\x06limits\"t\n" +
+	"\x13InstallSkillRequest\x12?\n" +
+	"\x06header\x18\x01 \x01(\v2%.craft.sandboxd.v1.InstallSkillHeaderH\x00R\x06header\x12\x14\n" +
+	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\x06\n" +
+	"\x04part\"q\n" +
+	"\x14InstallSkillResponse\x12\x1c\n" +
+	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x14\n" +
+	"\x05files\x18\x02 \x01(\x03R\x05files\x12%\n" +
+	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\"\x15\n" +
 	"\x13BrowserStartRequest\"\x16\n" +
 	"\x14BrowserStartResponse\"\x14\n" +
 	"\x12BrowserStopRequest\"\x15\n" +
@@ -5175,7 +5414,7 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\vManagedSlot\x12\x1c\n" +
 	"\x18MANAGED_SLOT_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eMANAGED_SLOT_A\x10\x01\x12\x12\n" +
-	"\x0eMANAGED_SLOT_B\x10\x022\xd4\x0f\n" +
+	"\x0eMANAGED_SLOT_B\x10\x022\xb7\x10\n" +
 	"\bSandboxd\x12M\n" +
 	"\x06Health\x12 .craft.sandboxd.v1.HealthRequest\x1a!.craft.sandboxd.v1.HealthResponse\x12M\n" +
 	"\x06SetKey\x12 .craft.sandboxd.v1.SetKeyRequest\x1a!.craft.sandboxd.v1.SetKeyResponse\x12G\n" +
@@ -5197,7 +5436,8 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\tStatFiles\x12#.craft.sandboxd.v1.StatFilesRequest\x1a$.craft.sandboxd.v1.StatFilesResponse\x12U\n" +
 	"\bZipFiles\x12\".craft.sandboxd.v1.ZipFilesRequest\x1a#.craft.sandboxd.v1.ZipFilesResponse0\x01\x12g\n" +
 	"\x0eCaptureSession\x12(.craft.sandboxd.v1.CaptureSessionRequest\x1a).craft.sandboxd.v1.CaptureSessionResponse0\x01\x12g\n" +
-	"\x0eRestoreSession\x12(.craft.sandboxd.v1.RestoreSessionRequest\x1a).craft.sandboxd.v1.RestoreSessionResponse(\x01\x12_\n" +
+	"\x0eRestoreSession\x12(.craft.sandboxd.v1.RestoreSessionRequest\x1a).craft.sandboxd.v1.RestoreSessionResponse(\x01\x12a\n" +
+	"\fInstallSkill\x12&.craft.sandboxd.v1.InstallSkillRequest\x1a'.craft.sandboxd.v1.InstallSkillResponse(\x01\x12_\n" +
 	"\fBrowserStart\x12&.craft.sandboxd.v1.BrowserStartRequest\x1a'.craft.sandboxd.v1.BrowserStartResponse\x12\\\n" +
 	"\vBrowserStop\x12%.craft.sandboxd.v1.BrowserStopRequest\x1a&.craft.sandboxd.v1.BrowserStopResponse\x12b\n" +
 	"\rManagedStatus\x12'.craft.sandboxd.v1.ManagedStatusRequest\x1a(.craft.sandboxd.v1.ManagedStatusResponse\x12_\n" +
@@ -5216,7 +5456,7 @@ func file_sandboxd_v1_sandboxd_proto_rawDescGZIP() []byte {
 }
 
 var file_sandboxd_v1_sandboxd_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_sandboxd_v1_sandboxd_proto_msgTypes = make([]protoimpl.MessageInfo, 66)
+var file_sandboxd_v1_sandboxd_proto_msgTypes = make([]protoimpl.MessageInfo, 69)
 var file_sandboxd_v1_sandboxd_proto_goTypes = []any{
 	(ErrorReason)(0),               // 0: craft.sandboxd.v1.ErrorReason
 	(OutputStream)(0),              // 1: craft.sandboxd.v1.OutputStream
@@ -5278,43 +5518,46 @@ var file_sandboxd_v1_sandboxd_proto_goTypes = []any{
 	(*RestoreSessionHeader)(nil),   // 57: craft.sandboxd.v1.RestoreSessionHeader
 	(*RestoreSessionRequest)(nil),  // 58: craft.sandboxd.v1.RestoreSessionRequest
 	(*RestoreSessionResponse)(nil), // 59: craft.sandboxd.v1.RestoreSessionResponse
-	(*BrowserStartRequest)(nil),    // 60: craft.sandboxd.v1.BrowserStartRequest
-	(*BrowserStartResponse)(nil),   // 61: craft.sandboxd.v1.BrowserStartResponse
-	(*BrowserStopRequest)(nil),     // 62: craft.sandboxd.v1.BrowserStopRequest
-	(*BrowserStopResponse)(nil),    // 63: craft.sandboxd.v1.BrowserStopResponse
-	(*ManagedStatusRequest)(nil),   // 64: craft.sandboxd.v1.ManagedStatusRequest
-	(*ManagedSlotState)(nil),       // 65: craft.sandboxd.v1.ManagedSlotState
-	(*ManagedStatusResponse)(nil),  // 66: craft.sandboxd.v1.ManagedStatusResponse
-	(*MountManagedRequest)(nil),    // 67: craft.sandboxd.v1.MountManagedRequest
-	(*MountManagedResponse)(nil),   // 68: craft.sandboxd.v1.MountManagedResponse
-	nil,                            // 69: craft.sandboxd.v1.InitRequest.EnvEntry
-	nil,                            // 70: craft.sandboxd.v1.Command.EnvEntry
-	nil,                            // 71: craft.sandboxd.v1.Command.LabelsEntry
-	nil,                            // 72: craft.sandboxd.v1.Execution.LabelsEntry
-	nil,                            // 73: craft.sandboxd.v1.ListRequest.LabelsEntry
-	(*timestamppb.Timestamp)(nil),  // 74: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),    // 75: google.protobuf.Duration
+	(*InstallSkillHeader)(nil),     // 60: craft.sandboxd.v1.InstallSkillHeader
+	(*InstallSkillRequest)(nil),    // 61: craft.sandboxd.v1.InstallSkillRequest
+	(*InstallSkillResponse)(nil),   // 62: craft.sandboxd.v1.InstallSkillResponse
+	(*BrowserStartRequest)(nil),    // 63: craft.sandboxd.v1.BrowserStartRequest
+	(*BrowserStartResponse)(nil),   // 64: craft.sandboxd.v1.BrowserStartResponse
+	(*BrowserStopRequest)(nil),     // 65: craft.sandboxd.v1.BrowserStopRequest
+	(*BrowserStopResponse)(nil),    // 66: craft.sandboxd.v1.BrowserStopResponse
+	(*ManagedStatusRequest)(nil),   // 67: craft.sandboxd.v1.ManagedStatusRequest
+	(*ManagedSlotState)(nil),       // 68: craft.sandboxd.v1.ManagedSlotState
+	(*ManagedStatusResponse)(nil),  // 69: craft.sandboxd.v1.ManagedStatusResponse
+	(*MountManagedRequest)(nil),    // 70: craft.sandboxd.v1.MountManagedRequest
+	(*MountManagedResponse)(nil),   // 71: craft.sandboxd.v1.MountManagedResponse
+	nil,                            // 72: craft.sandboxd.v1.InitRequest.EnvEntry
+	nil,                            // 73: craft.sandboxd.v1.Command.EnvEntry
+	nil,                            // 74: craft.sandboxd.v1.Command.LabelsEntry
+	nil,                            // 75: craft.sandboxd.v1.Execution.LabelsEntry
+	nil,                            // 76: craft.sandboxd.v1.ListRequest.LabelsEntry
+	(*timestamppb.Timestamp)(nil),  // 77: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),    // 78: google.protobuf.Duration
 }
 var file_sandboxd_v1_sandboxd_proto_depIdxs = []int32{
-	74, // 0: craft.sandboxd.v1.HealthResponse.guest_time:type_name -> google.protobuf.Timestamp
-	74, // 1: craft.sandboxd.v1.HealthResponse.initialized_at:type_name -> google.protobuf.Timestamp
-	75, // 2: craft.sandboxd.v1.HealthResponse.uptime:type_name -> google.protobuf.Duration
-	74, // 3: craft.sandboxd.v1.InitRequest.host_time:type_name -> google.protobuf.Timestamp
-	69, // 4: craft.sandboxd.v1.InitRequest.env:type_name -> craft.sandboxd.v1.InitRequest.EnvEntry
-	75, // 5: craft.sandboxd.v1.InitResponse.clock_step:type_name -> google.protobuf.Duration
+	77, // 0: craft.sandboxd.v1.HealthResponse.guest_time:type_name -> google.protobuf.Timestamp
+	77, // 1: craft.sandboxd.v1.HealthResponse.initialized_at:type_name -> google.protobuf.Timestamp
+	78, // 2: craft.sandboxd.v1.HealthResponse.uptime:type_name -> google.protobuf.Duration
+	77, // 3: craft.sandboxd.v1.InitRequest.host_time:type_name -> google.protobuf.Timestamp
+	72, // 4: craft.sandboxd.v1.InitRequest.env:type_name -> craft.sandboxd.v1.InitRequest.EnvEntry
+	78, // 5: craft.sandboxd.v1.InitResponse.clock_step:type_name -> google.protobuf.Duration
 	14, // 6: craft.sandboxd.v1.InitResponse.grown:type_name -> craft.sandboxd.v1.GrownFS
-	70, // 7: craft.sandboxd.v1.Command.env:type_name -> craft.sandboxd.v1.Command.EnvEntry
-	75, // 8: craft.sandboxd.v1.Command.deadline:type_name -> google.protobuf.Duration
-	71, // 9: craft.sandboxd.v1.Command.labels:type_name -> craft.sandboxd.v1.Command.LabelsEntry
+	73, // 7: craft.sandboxd.v1.Command.env:type_name -> craft.sandboxd.v1.Command.EnvEntry
+	78, // 8: craft.sandboxd.v1.Command.deadline:type_name -> google.protobuf.Duration
+	74, // 9: craft.sandboxd.v1.Command.labels:type_name -> craft.sandboxd.v1.Command.LabelsEntry
 	15, // 10: craft.sandboxd.v1.RunRequest.command:type_name -> craft.sandboxd.v1.Command
 	15, // 11: craft.sandboxd.v1.StartRequest.command:type_name -> craft.sandboxd.v1.Command
 	19, // 12: craft.sandboxd.v1.StartResponse.started:type_name -> craft.sandboxd.v1.ExecStarted
-	74, // 13: craft.sandboxd.v1.ExecStarted.started_at:type_name -> google.protobuf.Timestamp
-	74, // 14: craft.sandboxd.v1.ExecStarted.deadline_at:type_name -> google.protobuf.Timestamp
+	77, // 13: craft.sandboxd.v1.ExecStarted.started_at:type_name -> google.protobuf.Timestamp
+	77, // 14: craft.sandboxd.v1.ExecStarted.deadline_at:type_name -> google.protobuf.Timestamp
 	1,  // 15: craft.sandboxd.v1.OutputChunk.stream:type_name -> craft.sandboxd.v1.OutputStream
 	1,  // 16: craft.sandboxd.v1.OutputGap.stream:type_name -> craft.sandboxd.v1.OutputStream
 	2,  // 17: craft.sandboxd.v1.ExecResult.completion:type_name -> craft.sandboxd.v1.Completion
-	74, // 18: craft.sandboxd.v1.ExecResult.finished_at:type_name -> google.protobuf.Timestamp
+	77, // 18: craft.sandboxd.v1.ExecResult.finished_at:type_name -> google.protobuf.Timestamp
 	19, // 19: craft.sandboxd.v1.ExecEvent.started:type_name -> craft.sandboxd.v1.ExecStarted
 	20, // 20: craft.sandboxd.v1.ExecEvent.output:type_name -> craft.sandboxd.v1.OutputChunk
 	21, // 21: craft.sandboxd.v1.ExecEvent.gap:type_name -> craft.sandboxd.v1.OutputGap
@@ -5322,15 +5565,15 @@ var file_sandboxd_v1_sandboxd_proto_depIdxs = []int32{
 	3,  // 23: craft.sandboxd.v1.CancelRequest.signal:type_name -> craft.sandboxd.v1.CancelSignal
 	22, // 24: craft.sandboxd.v1.CancelResponse.result:type_name -> craft.sandboxd.v1.ExecResult
 	4,  // 25: craft.sandboxd.v1.Execution.state:type_name -> craft.sandboxd.v1.ExecState
-	72, // 26: craft.sandboxd.v1.Execution.labels:type_name -> craft.sandboxd.v1.Execution.LabelsEntry
-	74, // 27: craft.sandboxd.v1.Execution.started_at:type_name -> google.protobuf.Timestamp
-	74, // 28: craft.sandboxd.v1.Execution.deadline_at:type_name -> google.protobuf.Timestamp
+	75, // 26: craft.sandboxd.v1.Execution.labels:type_name -> craft.sandboxd.v1.Execution.LabelsEntry
+	77, // 27: craft.sandboxd.v1.Execution.started_at:type_name -> google.protobuf.Timestamp
+	77, // 28: craft.sandboxd.v1.Execution.deadline_at:type_name -> google.protobuf.Timestamp
 	22, // 29: craft.sandboxd.v1.Execution.result:type_name -> craft.sandboxd.v1.ExecResult
 	29, // 30: craft.sandboxd.v1.InspectResponse.execution:type_name -> craft.sandboxd.v1.Execution
-	73, // 31: craft.sandboxd.v1.ListRequest.labels:type_name -> craft.sandboxd.v1.ListRequest.LabelsEntry
+	76, // 31: craft.sandboxd.v1.ListRequest.labels:type_name -> craft.sandboxd.v1.ListRequest.LabelsEntry
 	29, // 32: craft.sandboxd.v1.ListResponse.executions:type_name -> craft.sandboxd.v1.Execution
 	5,  // 33: craft.sandboxd.v1.FileInfo.type:type_name -> craft.sandboxd.v1.FileType
-	74, // 34: craft.sandboxd.v1.FileInfo.modified_at:type_name -> google.protobuf.Timestamp
+	77, // 34: craft.sandboxd.v1.FileInfo.modified_at:type_name -> google.protobuf.Timestamp
 	34, // 35: craft.sandboxd.v1.ReadFileResponse.info:type_name -> craft.sandboxd.v1.FileInfo
 	37, // 36: craft.sandboxd.v1.WriteFileRequest.header:type_name -> craft.sandboxd.v1.WriteFileHeader
 	34, // 37: craft.sandboxd.v1.WriteFileResponse.info:type_name -> craft.sandboxd.v1.FileInfo
@@ -5346,63 +5589,67 @@ var file_sandboxd_v1_sandboxd_proto_depIdxs = []int32{
 	55, // 47: craft.sandboxd.v1.CaptureSessionResponse.summary:type_name -> craft.sandboxd.v1.CaptureSummary
 	53, // 48: craft.sandboxd.v1.RestoreSessionHeader.limits:type_name -> craft.sandboxd.v1.ArchiveLimits
 	57, // 49: craft.sandboxd.v1.RestoreSessionRequest.header:type_name -> craft.sandboxd.v1.RestoreSessionHeader
-	7,  // 50: craft.sandboxd.v1.ManagedSlotState.slot:type_name -> craft.sandboxd.v1.ManagedSlot
-	7,  // 51: craft.sandboxd.v1.ManagedStatusResponse.active:type_name -> craft.sandboxd.v1.ManagedSlot
-	65, // 52: craft.sandboxd.v1.ManagedStatusResponse.slots:type_name -> craft.sandboxd.v1.ManagedSlotState
-	7,  // 53: craft.sandboxd.v1.MountManagedRequest.slot:type_name -> craft.sandboxd.v1.ManagedSlot
-	7,  // 54: craft.sandboxd.v1.MountManagedResponse.active:type_name -> craft.sandboxd.v1.ManagedSlot
-	7,  // 55: craft.sandboxd.v1.MountManagedResponse.previous:type_name -> craft.sandboxd.v1.ManagedSlot
-	8,  // 56: craft.sandboxd.v1.Sandboxd.Health:input_type -> craft.sandboxd.v1.HealthRequest
-	10, // 57: craft.sandboxd.v1.Sandboxd.SetKey:input_type -> craft.sandboxd.v1.SetKeyRequest
-	12, // 58: craft.sandboxd.v1.Sandboxd.Init:input_type -> craft.sandboxd.v1.InitRequest
-	16, // 59: craft.sandboxd.v1.Sandboxd.Run:input_type -> craft.sandboxd.v1.RunRequest
-	17, // 60: craft.sandboxd.v1.Sandboxd.Start:input_type -> craft.sandboxd.v1.StartRequest
-	24, // 61: craft.sandboxd.v1.Sandboxd.Stream:input_type -> craft.sandboxd.v1.StreamRequest
-	25, // 62: craft.sandboxd.v1.Sandboxd.Interact:input_type -> craft.sandboxd.v1.InteractRequest
-	27, // 63: craft.sandboxd.v1.Sandboxd.Cancel:input_type -> craft.sandboxd.v1.CancelRequest
-	30, // 64: craft.sandboxd.v1.Sandboxd.Inspect:input_type -> craft.sandboxd.v1.InspectRequest
-	32, // 65: craft.sandboxd.v1.Sandboxd.List:input_type -> craft.sandboxd.v1.ListRequest
-	35, // 66: craft.sandboxd.v1.Sandboxd.ReadFile:input_type -> craft.sandboxd.v1.ReadFileRequest
-	38, // 67: craft.sandboxd.v1.Sandboxd.WriteFile:input_type -> craft.sandboxd.v1.WriteFileRequest
-	41, // 68: craft.sandboxd.v1.Sandboxd.UploadFile:input_type -> craft.sandboxd.v1.UploadFileRequest
-	43, // 69: craft.sandboxd.v1.Sandboxd.ListFiles:input_type -> craft.sandboxd.v1.ListFilesRequest
-	45, // 70: craft.sandboxd.v1.Sandboxd.DeleteFile:input_type -> craft.sandboxd.v1.DeleteFileRequest
-	47, // 71: craft.sandboxd.v1.Sandboxd.StatFiles:input_type -> craft.sandboxd.v1.StatFilesRequest
-	50, // 72: craft.sandboxd.v1.Sandboxd.ZipFiles:input_type -> craft.sandboxd.v1.ZipFilesRequest
-	54, // 73: craft.sandboxd.v1.Sandboxd.CaptureSession:input_type -> craft.sandboxd.v1.CaptureSessionRequest
-	58, // 74: craft.sandboxd.v1.Sandboxd.RestoreSession:input_type -> craft.sandboxd.v1.RestoreSessionRequest
-	60, // 75: craft.sandboxd.v1.Sandboxd.BrowserStart:input_type -> craft.sandboxd.v1.BrowserStartRequest
-	62, // 76: craft.sandboxd.v1.Sandboxd.BrowserStop:input_type -> craft.sandboxd.v1.BrowserStopRequest
-	64, // 77: craft.sandboxd.v1.Sandboxd.ManagedStatus:input_type -> craft.sandboxd.v1.ManagedStatusRequest
-	67, // 78: craft.sandboxd.v1.Sandboxd.MountManaged:input_type -> craft.sandboxd.v1.MountManagedRequest
-	9,  // 79: craft.sandboxd.v1.Sandboxd.Health:output_type -> craft.sandboxd.v1.HealthResponse
-	11, // 80: craft.sandboxd.v1.Sandboxd.SetKey:output_type -> craft.sandboxd.v1.SetKeyResponse
-	13, // 81: craft.sandboxd.v1.Sandboxd.Init:output_type -> craft.sandboxd.v1.InitResponse
-	23, // 82: craft.sandboxd.v1.Sandboxd.Run:output_type -> craft.sandboxd.v1.ExecEvent
-	18, // 83: craft.sandboxd.v1.Sandboxd.Start:output_type -> craft.sandboxd.v1.StartResponse
-	23, // 84: craft.sandboxd.v1.Sandboxd.Stream:output_type -> craft.sandboxd.v1.ExecEvent
-	26, // 85: craft.sandboxd.v1.Sandboxd.Interact:output_type -> craft.sandboxd.v1.InteractResponse
-	28, // 86: craft.sandboxd.v1.Sandboxd.Cancel:output_type -> craft.sandboxd.v1.CancelResponse
-	31, // 87: craft.sandboxd.v1.Sandboxd.Inspect:output_type -> craft.sandboxd.v1.InspectResponse
-	33, // 88: craft.sandboxd.v1.Sandboxd.List:output_type -> craft.sandboxd.v1.ListResponse
-	36, // 89: craft.sandboxd.v1.Sandboxd.ReadFile:output_type -> craft.sandboxd.v1.ReadFileResponse
-	39, // 90: craft.sandboxd.v1.Sandboxd.WriteFile:output_type -> craft.sandboxd.v1.WriteFileResponse
-	42, // 91: craft.sandboxd.v1.Sandboxd.UploadFile:output_type -> craft.sandboxd.v1.UploadFileResponse
-	44, // 92: craft.sandboxd.v1.Sandboxd.ListFiles:output_type -> craft.sandboxd.v1.ListFilesResponse
-	46, // 93: craft.sandboxd.v1.Sandboxd.DeleteFile:output_type -> craft.sandboxd.v1.DeleteFileResponse
-	49, // 94: craft.sandboxd.v1.Sandboxd.StatFiles:output_type -> craft.sandboxd.v1.StatFilesResponse
-	52, // 95: craft.sandboxd.v1.Sandboxd.ZipFiles:output_type -> craft.sandboxd.v1.ZipFilesResponse
-	56, // 96: craft.sandboxd.v1.Sandboxd.CaptureSession:output_type -> craft.sandboxd.v1.CaptureSessionResponse
-	59, // 97: craft.sandboxd.v1.Sandboxd.RestoreSession:output_type -> craft.sandboxd.v1.RestoreSessionResponse
-	61, // 98: craft.sandboxd.v1.Sandboxd.BrowserStart:output_type -> craft.sandboxd.v1.BrowserStartResponse
-	63, // 99: craft.sandboxd.v1.Sandboxd.BrowserStop:output_type -> craft.sandboxd.v1.BrowserStopResponse
-	66, // 100: craft.sandboxd.v1.Sandboxd.ManagedStatus:output_type -> craft.sandboxd.v1.ManagedStatusResponse
-	68, // 101: craft.sandboxd.v1.Sandboxd.MountManaged:output_type -> craft.sandboxd.v1.MountManagedResponse
-	79, // [79:102] is the sub-list for method output_type
-	56, // [56:79] is the sub-list for method input_type
-	56, // [56:56] is the sub-list for extension type_name
-	56, // [56:56] is the sub-list for extension extendee
-	0,  // [0:56] is the sub-list for field type_name
+	53, // 50: craft.sandboxd.v1.InstallSkillHeader.limits:type_name -> craft.sandboxd.v1.ArchiveLimits
+	60, // 51: craft.sandboxd.v1.InstallSkillRequest.header:type_name -> craft.sandboxd.v1.InstallSkillHeader
+	7,  // 52: craft.sandboxd.v1.ManagedSlotState.slot:type_name -> craft.sandboxd.v1.ManagedSlot
+	7,  // 53: craft.sandboxd.v1.ManagedStatusResponse.active:type_name -> craft.sandboxd.v1.ManagedSlot
+	68, // 54: craft.sandboxd.v1.ManagedStatusResponse.slots:type_name -> craft.sandboxd.v1.ManagedSlotState
+	7,  // 55: craft.sandboxd.v1.MountManagedRequest.slot:type_name -> craft.sandboxd.v1.ManagedSlot
+	7,  // 56: craft.sandboxd.v1.MountManagedResponse.active:type_name -> craft.sandboxd.v1.ManagedSlot
+	7,  // 57: craft.sandboxd.v1.MountManagedResponse.previous:type_name -> craft.sandboxd.v1.ManagedSlot
+	8,  // 58: craft.sandboxd.v1.Sandboxd.Health:input_type -> craft.sandboxd.v1.HealthRequest
+	10, // 59: craft.sandboxd.v1.Sandboxd.SetKey:input_type -> craft.sandboxd.v1.SetKeyRequest
+	12, // 60: craft.sandboxd.v1.Sandboxd.Init:input_type -> craft.sandboxd.v1.InitRequest
+	16, // 61: craft.sandboxd.v1.Sandboxd.Run:input_type -> craft.sandboxd.v1.RunRequest
+	17, // 62: craft.sandboxd.v1.Sandboxd.Start:input_type -> craft.sandboxd.v1.StartRequest
+	24, // 63: craft.sandboxd.v1.Sandboxd.Stream:input_type -> craft.sandboxd.v1.StreamRequest
+	25, // 64: craft.sandboxd.v1.Sandboxd.Interact:input_type -> craft.sandboxd.v1.InteractRequest
+	27, // 65: craft.sandboxd.v1.Sandboxd.Cancel:input_type -> craft.sandboxd.v1.CancelRequest
+	30, // 66: craft.sandboxd.v1.Sandboxd.Inspect:input_type -> craft.sandboxd.v1.InspectRequest
+	32, // 67: craft.sandboxd.v1.Sandboxd.List:input_type -> craft.sandboxd.v1.ListRequest
+	35, // 68: craft.sandboxd.v1.Sandboxd.ReadFile:input_type -> craft.sandboxd.v1.ReadFileRequest
+	38, // 69: craft.sandboxd.v1.Sandboxd.WriteFile:input_type -> craft.sandboxd.v1.WriteFileRequest
+	41, // 70: craft.sandboxd.v1.Sandboxd.UploadFile:input_type -> craft.sandboxd.v1.UploadFileRequest
+	43, // 71: craft.sandboxd.v1.Sandboxd.ListFiles:input_type -> craft.sandboxd.v1.ListFilesRequest
+	45, // 72: craft.sandboxd.v1.Sandboxd.DeleteFile:input_type -> craft.sandboxd.v1.DeleteFileRequest
+	47, // 73: craft.sandboxd.v1.Sandboxd.StatFiles:input_type -> craft.sandboxd.v1.StatFilesRequest
+	50, // 74: craft.sandboxd.v1.Sandboxd.ZipFiles:input_type -> craft.sandboxd.v1.ZipFilesRequest
+	54, // 75: craft.sandboxd.v1.Sandboxd.CaptureSession:input_type -> craft.sandboxd.v1.CaptureSessionRequest
+	58, // 76: craft.sandboxd.v1.Sandboxd.RestoreSession:input_type -> craft.sandboxd.v1.RestoreSessionRequest
+	61, // 77: craft.sandboxd.v1.Sandboxd.InstallSkill:input_type -> craft.sandboxd.v1.InstallSkillRequest
+	63, // 78: craft.sandboxd.v1.Sandboxd.BrowserStart:input_type -> craft.sandboxd.v1.BrowserStartRequest
+	65, // 79: craft.sandboxd.v1.Sandboxd.BrowserStop:input_type -> craft.sandboxd.v1.BrowserStopRequest
+	67, // 80: craft.sandboxd.v1.Sandboxd.ManagedStatus:input_type -> craft.sandboxd.v1.ManagedStatusRequest
+	70, // 81: craft.sandboxd.v1.Sandboxd.MountManaged:input_type -> craft.sandboxd.v1.MountManagedRequest
+	9,  // 82: craft.sandboxd.v1.Sandboxd.Health:output_type -> craft.sandboxd.v1.HealthResponse
+	11, // 83: craft.sandboxd.v1.Sandboxd.SetKey:output_type -> craft.sandboxd.v1.SetKeyResponse
+	13, // 84: craft.sandboxd.v1.Sandboxd.Init:output_type -> craft.sandboxd.v1.InitResponse
+	23, // 85: craft.sandboxd.v1.Sandboxd.Run:output_type -> craft.sandboxd.v1.ExecEvent
+	18, // 86: craft.sandboxd.v1.Sandboxd.Start:output_type -> craft.sandboxd.v1.StartResponse
+	23, // 87: craft.sandboxd.v1.Sandboxd.Stream:output_type -> craft.sandboxd.v1.ExecEvent
+	26, // 88: craft.sandboxd.v1.Sandboxd.Interact:output_type -> craft.sandboxd.v1.InteractResponse
+	28, // 89: craft.sandboxd.v1.Sandboxd.Cancel:output_type -> craft.sandboxd.v1.CancelResponse
+	31, // 90: craft.sandboxd.v1.Sandboxd.Inspect:output_type -> craft.sandboxd.v1.InspectResponse
+	33, // 91: craft.sandboxd.v1.Sandboxd.List:output_type -> craft.sandboxd.v1.ListResponse
+	36, // 92: craft.sandboxd.v1.Sandboxd.ReadFile:output_type -> craft.sandboxd.v1.ReadFileResponse
+	39, // 93: craft.sandboxd.v1.Sandboxd.WriteFile:output_type -> craft.sandboxd.v1.WriteFileResponse
+	42, // 94: craft.sandboxd.v1.Sandboxd.UploadFile:output_type -> craft.sandboxd.v1.UploadFileResponse
+	44, // 95: craft.sandboxd.v1.Sandboxd.ListFiles:output_type -> craft.sandboxd.v1.ListFilesResponse
+	46, // 96: craft.sandboxd.v1.Sandboxd.DeleteFile:output_type -> craft.sandboxd.v1.DeleteFileResponse
+	49, // 97: craft.sandboxd.v1.Sandboxd.StatFiles:output_type -> craft.sandboxd.v1.StatFilesResponse
+	52, // 98: craft.sandboxd.v1.Sandboxd.ZipFiles:output_type -> craft.sandboxd.v1.ZipFilesResponse
+	56, // 99: craft.sandboxd.v1.Sandboxd.CaptureSession:output_type -> craft.sandboxd.v1.CaptureSessionResponse
+	59, // 100: craft.sandboxd.v1.Sandboxd.RestoreSession:output_type -> craft.sandboxd.v1.RestoreSessionResponse
+	62, // 101: craft.sandboxd.v1.Sandboxd.InstallSkill:output_type -> craft.sandboxd.v1.InstallSkillResponse
+	64, // 102: craft.sandboxd.v1.Sandboxd.BrowserStart:output_type -> craft.sandboxd.v1.BrowserStartResponse
+	66, // 103: craft.sandboxd.v1.Sandboxd.BrowserStop:output_type -> craft.sandboxd.v1.BrowserStopResponse
+	69, // 104: craft.sandboxd.v1.Sandboxd.ManagedStatus:output_type -> craft.sandboxd.v1.ManagedStatusResponse
+	71, // 105: craft.sandboxd.v1.Sandboxd.MountManaged:output_type -> craft.sandboxd.v1.MountManagedResponse
+	82, // [82:106] is the sub-list for method output_type
+	58, // [58:82] is the sub-list for method input_type
+	58, // [58:58] is the sub-list for extension type_name
+	58, // [58:58] is the sub-list for extension extendee
+	0,  // [0:58] is the sub-list for field type_name
 }
 
 func init() { file_sandboxd_v1_sandboxd_proto_init() }
@@ -5440,13 +5687,17 @@ func file_sandboxd_v1_sandboxd_proto_init() {
 		(*RestoreSessionRequest_Header)(nil),
 		(*RestoreSessionRequest_Data)(nil),
 	}
+	file_sandboxd_v1_sandboxd_proto_msgTypes[53].OneofWrappers = []any{
+		(*InstallSkillRequest_Header)(nil),
+		(*InstallSkillRequest_Data)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sandboxd_v1_sandboxd_proto_rawDesc), len(file_sandboxd_v1_sandboxd_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   66,
+			NumMessages:   69,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

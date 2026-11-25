@@ -10,11 +10,12 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
+import { useTranslations } from "next-intl";
+import { toast } from "@opal/layouts";
 import {
   User,
   UserPersonalization,
-  ThemePreference,
+  UserPreferences,
   Permission,
 } from "@/lib/types";
 import { hasAnyAdminPermission } from "@/lib/permissions/utils";
@@ -24,10 +25,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata, useTokenRefresh } from "@/lib/auth/hooks";
 import { AuthTypeMetadata } from "@/lib/auth/types";
-import {
-  updateUserPersonalization as persistPersonalization,
-  setUserDefaultModel,
-} from "@/lib/users/svc";
+import { updateUserPersonalization as persistPersonalization } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
 import { isSupportedLocale, type Locale } from "@/i18n/config";
 
@@ -38,6 +36,17 @@ const ME_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
 
 // Ceiling on reporting loading for a failing /api/me, so the account menu always comes back.
 const ME_LOADING_DEADLINE_MS = 30_000;
+
+/** The voice settings endpoint names its fields without the `voice_` prefix. */
+interface VoiceSettingsRequestBody {
+  auto_send?: boolean;
+  auto_playback?: boolean;
+  playback_speed?: number;
+}
+
+type PreferenceRequestBody =
+  | Partial<UserPreferences>
+  | VoiceSettingsRequestBody;
 
 /** Only "resolved" lets a null user mean signed out. "unavailable" means /api/me keeps failing for a possibly valid session. */
 export type UserResolution = "loading" | "unavailable" | "resolved";
@@ -56,36 +65,23 @@ export interface UserContextType {
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
   authTypeMetadata: AuthTypeMetadata | undefined;
-  updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
-  updateUserShortcuts: (enabled: boolean) => Promise<void>;
-  updateUserPasteAsTile: (enabled: boolean) => Promise<void>;
-  updateUserInterruptOnSend: (enabled: boolean) => Promise<void>;
-  toggleAgentPinnedStatus: (
-    currentPinnedAgentIDs: number[],
-    agentId: number,
-    isPinned: boolean
+  /**
+   * Saves a preference change: applies `patch` to the cached user at once,
+   * sends it to `endpoint` as a PATCH with `body` (the patch by default), and
+   * on failure restores the cached user and shows an error toast. Resolves to
+   * whether the save succeeded.
+   */
+  updatePreferences: (
+    patch: Partial<UserPreferences>,
+    endpoint: string,
+    body?: PreferenceRequestBody
   ) => Promise<boolean>;
-  updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
-  updateUserTemperatureDefault: (value: number | null) => Promise<void>;
-  updateUserReasoningEffortDefault: (
-    value: ReasoningEffortOverride | null
-  ) => Promise<void>;
+  /** Saves only the given personalization fields; rejects on failure. */
   updateUserPersonalization: (
-    personalization: UserPersonalization
-  ) => Promise<void>;
-  updateUserThemePreference: (
-    themePreference: ThemePreference
+    patch: Partial<UserPersonalization>
   ) => Promise<void>;
   // null clears the preference so the user follows the workspace default.
   updateUserLanguage: (language: Locale | null) => Promise<void>;
-  updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
-  updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
-  updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
-  updateUserVoiceSettings: (settings: {
-    auto_send?: boolean;
-    auto_playback?: boolean;
-    playback_speed?: number;
-  }) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -94,13 +90,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser, userError } = useCurrentUser();
   // undefined = in flight. An error counts as resolved, so a failed load fails closed.
   const isUserLoading = fetchedUser === undefined && userError === undefined;
-  // Permissions read the fetch result, not `upToDateUser`: that copy lands one render late,
-  // so a page gate could see empty permissions after `isUserLoading` went false and redirect.
-  const authUser = fetchedUser ?? null;
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettingsData = useSettings();
   const posthog = usePostHog();
+  const t = useTranslations("settings");
 
   // For auto_scroll and temperature_override_enabled:
   // - If user has a preference set, use that
@@ -109,30 +103,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const wsTemperatureOverride =
     updatedSettingsData.temperature_override_enabled;
 
-  const mergeUserPreferences = useCallback(
-    (currentUser: User | null): User | null => {
-      if (!currentUser) return null;
-      return {
-        ...currentUser,
-        preferences: {
-          ...currentUser.preferences,
-          auto_scroll:
-            currentUser.preferences?.auto_scroll ?? wsAutoScroll ?? false,
-          temperature_override_enabled:
-            currentUser.preferences?.temperature_override_enabled ??
-            wsTemperatureOverride ??
-            true,
-        },
-      };
-    },
-    [wsAutoScroll, wsTemperatureOverride]
-  );
-
-  const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    setUpToDateUser(mergeUserPreferences(fetchedUser ?? null));
-  }, [fetchedUser, mergeUserPreferences]);
+  // Derived from the SWR cache, the one client copy of the user, so
+  // preference saves and /me fetches cannot overwrite each other.
+  const user = useMemo((): User | null => {
+    if (!fetchedUser) return null;
+    return {
+      ...fetchedUser,
+      preferences: {
+        ...fetchedUser.preferences,
+        auto_scroll:
+          fetchedUser.preferences?.auto_scroll ?? wsAutoScroll ?? false,
+        temperature_override_enabled:
+          fetchedUser.preferences?.temperature_override_enabled ??
+          wsTemperatureOverride ??
+          true,
+      },
+    };
+  }, [fetchedUser, wsAutoScroll, wsTemperatureOverride]);
 
   const [meRetriesExhausted, setMeRetriesExhausted] = useState(false);
 
@@ -175,19 +162,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [userError, mutateUser]);
 
   const awaitingMe = fetchedUser === undefined && !meRetriesExhausted;
-  const mergePending = fetchedUser != null && upToDateUser === null;
-  const userResolution: UserResolution =
-    awaitingMe || mergePending
-      ? "loading"
-      : fetchedUser === undefined
-        ? "unavailable"
-        : "resolved";
+  const userResolution: UserResolution = awaitingMe
+    ? "loading"
+    : fetchedUser === undefined
+      ? "unavailable"
+      : "resolved";
 
   useEffect(() => {
     if (!posthog) return;
 
     if (fetchedUser?.id) {
-      const identifyData: Record<string, any> = {
+      const identifyData: Record<string, string> = {
         email: fetchedUser.email,
       };
       if (fetchedUser.team_name) {
@@ -200,11 +185,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [posthog, fetchedUser]);
 
   // Use the custom token refresh hook — on refresh failure, revalidate via SWR
-  // so the result goes through mergeUserPreferences
   const onRefreshFail = useCallback(async () => {
     await mutateUser();
   }, [mutateUser]);
-  useTokenRefresh(upToDateUser, authTypeMetadataLoading, onRefreshFail);
+  useTokenRefresh(user, authTypeMetadataLoading, onRefreshFail);
 
   // Sync user's theme preference from DB to next-themes on load
   const { setTheme, theme } = useTheme();
@@ -218,21 +202,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (!theme) return;
 
     // Wait for user data to load
-    if (!upToDateUser?.id) return;
+    if (!user?.id) return;
 
     // Only sync if user has a saved preference
-    const savedTheme = upToDateUser?.preferences?.theme_preference;
+    const savedTheme = user?.preferences?.theme_preference;
     if (!savedTheme) return;
 
     // Sync DB theme to localStorage
     setTheme(savedTheme);
     hasSyncedThemeRef.current = true;
-  }, [
-    upToDateUser?.id,
-    upToDateUser?.preferences?.theme_preference,
-    theme,
-    setTheme,
-  ]);
+  }, [user?.id, user?.preferences?.theme_preference, theme, setTheme]);
 
   // The backend owns NEXT_LOCALE (set on PATCH /user/language, reconciled on
   // GET /me). This effect is the one place the UI catches up: whenever
@@ -246,7 +225,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     ? undefined
     : updatedSettingsData.default_language;
   const effectiveLanguage: Locale | undefined =
-    upToDateUser?.preferences?.language ?? workspaceLanguage;
+    user?.preferences?.language ?? workspaceLanguage;
 
   useEffect(() => {
     if (!isSupportedLocale(effectiveLanguage)) return;
@@ -257,506 +236,107 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         // The next successful /me resolves the drift.
         console.error("Error reconciling the UI language:", error);
       });
-  }, [upToDateUser?.id, effectiveLanguage, navigation, mutateUser]);
+  }, [user?.id, effectiveLanguage, navigation, mutateUser]);
 
-  const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              temperature_override_enabled: enabled,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch(
-        `/api/temperature-override-enabled?temperature_override_enabled=${enabled}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update user temperature override setting");
-      }
-    } catch (error) {
-      console.error("Error updating user temperature override setting:", error);
-      throw error;
-    }
-  };
-
-  const updateUserTemperatureDefault = async (value: number | null) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              temperature_default: value,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch(`/api/temperature-default`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ temperature_default: value }),
-      });
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update user temperature default");
-      }
-    } catch (error) {
-      console.error("Error updating user temperature default:", error);
-      throw error;
-    }
-  };
-
-  const updateUserReasoningEffortDefault = async (
-    value: ReasoningEffortOverride | null
-  ) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              reasoning_effort_default: value,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch(`/api/reasoning-effort-default`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reasoning_effort_default: value }),
-      });
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update user reasoning default");
-      }
-    } catch (error) {
-      console.error("Error updating user reasoning default:", error);
-      throw error;
-    }
-  };
-
-  const updateUserShortcuts = async (enabled: boolean) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              shortcut_enabled: enabled,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch(
-        `/api/shortcut-enabled?shortcut_enabled=${enabled}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update user shortcut setting");
-      }
-    } catch (error) {
-      console.error("Error updating user shortcut setting:", error);
-      throw error;
-    }
-  };
-
-  const updateUserPasteAsTile = async (enabled: boolean) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              paste_as_tile: enabled,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch(
-        `/api/paste-as-tile?paste_as_tile=${enabled}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update paste tile setting");
-      }
-    } catch (error) {
-      console.error("Error updating paste tile setting:", error);
-      throw error;
-    }
-  };
-
-  const updateUserInterruptOnSend = async (enabled: boolean) => {
-    const response = await fetch(
-      `/api/interrupt-on-send?interrupt_on_send=${enabled}`,
-      { method: "PATCH" }
-    );
-    if (!response.ok) throw new Error("Failed to update send behavior");
-    await refreshUser();
-  };
-
-  const updateUserAutoScroll = async (autoScroll: boolean) => {
-    try {
-      const response = await fetch("/api/auto-scroll", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ auto_scroll: autoScroll }),
-      });
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              auto_scroll: autoScroll,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update auto-scroll setting");
-      }
-    } catch (error) {
-      console.error("Error updating auto-scroll setting:", error);
-      throw error;
-    }
-  };
-
-  const updateUserPersonalization = async (
-    personalization: UserPersonalization
-  ) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (!prevUser) {
-          return prevUser;
-        }
-
-        return {
-          ...prevUser,
-          personalization,
-        };
-      });
-
-      const response = await persistPersonalization(personalization);
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update personalization settings");
-      }
-
-      await refreshUser();
-    } catch (error) {
-      console.error("Error updating personalization settings:", error);
-      throw error;
-    }
-  };
-
-  const toggleAgentPinnedStatus = async (
-    currentPinnedAgentIDs: number[],
-    agentId: number,
-    isPinned: boolean
-  ) => {
-    setUpToDateUser((prevUser) => {
-      if (!prevUser) return prevUser;
-      return {
-        ...prevUser,
-        preferences: {
-          ...prevUser.preferences,
-          pinned_assistants: isPinned
-            ? [...currentPinnedAgentIDs, agentId]
-            : currentPinnedAgentIDs.filter((id) => id !== agentId),
-        },
-      };
-    });
-
-    let updatedPinnedAgentsIds = isPinned
-      ? [...currentPinnedAgentIDs, agentId]
-      : currentPinnedAgentIDs.filter((id) => id !== agentId);
-    try {
-      const response = await fetch(`/api/user/pinned-assistants`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ordered_assistant_ids: updatedPinnedAgentsIds,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update pinned assistants");
-      }
-
-      await refreshUser();
-      return true;
-    } catch (error) {
-      console.error("Error updating pinned assistants:", error);
-      return false;
-    }
-  };
-
-  const updateUserThemePreference = async (
-    themePreference: ThemePreference
-  ) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              theme_preference: themePreference,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch(`/api/user/theme-preference`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ theme_preference: themePreference }),
-      });
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update theme preference");
-      }
-    } catch (error) {
-      console.error("Error updating theme preference:", error);
-      throw error;
-    }
-  };
-
-  const updateUserLanguage = async (language: Locale | null) => {
-    try {
-      const response = await fetch(`/api/user/language`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ language }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update language preference");
-      }
-
-      // Applied after the PATCH so the reconcile effect never sees a value the
-      // server does not hold yet. The effect then re-renders the layout.
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              language,
-            },
-          };
-        }
-        return prevUser;
-      });
-    } catch (error) {
-      // Restore server truth on any failure path (bad status or network
-      // error); the stored preference is unchanged server-side.
+  const updatePreferences = useCallback(
+    async (
+      patch: Partial<UserPreferences>,
+      endpoint: string,
+      body: PreferenceRequestBody = patch
+    ): Promise<boolean> => {
+      if (!fetchedUser) return false;
+      const withPatch = (current: User | null | undefined): User | null =>
+        current
+          ? { ...current, preferences: { ...current.preferences, ...patch } }
+          : null;
+      // The patch builds on the displayed user, so overlapping saves keep
+      // each other's changes. The displayed user stays as the cache on
+      // success; a failure shows the server's state.
       try {
-        await refreshUser();
-      } catch (refreshError) {
-        // Best effort: the next successful /me resolves any drift.
-        console.error(
-          "Error restoring user state after failed language update:",
-          refreshError
+        await mutateUser(
+          async () => {
+            const response = await fetch(endpoint, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            if (!response.ok) {
+              throw new Error(`PATCH ${endpoint} failed: ${response.status}`);
+            }
+            return undefined;
+          },
+          {
+            optimisticData: (_committed, displayed) => withPatch(displayed),
+            rollbackOnError: false,
+            populateCache: false,
+            revalidate: false,
+          }
         );
+        return true;
+      } catch (error) {
+        console.error("Error saving preferences:", error);
+        void mutateUser();
+        toast.error(t("chats.toasts.saveFailed"));
+        return false;
       }
-      console.error("Error updating language preference:", error);
-      throw error;
-    }
-  };
+    },
+    [fetchedUser, mutateUser, t]
+  );
 
-  const updateUserChatBackground = async (chatBackground: string | null) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              chat_background: chatBackground,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch(`/api/user/chat-background`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
+  const updateUserPersonalization = useCallback(
+    async (patch: Partial<UserPersonalization>) => {
+      if (!fetchedUser) throw new Error("No signed-in user");
+      await mutateUser(
+        async () => {
+          const response = await persistPersonalization(patch);
+          if (!response.ok) {
+            throw new Error("Failed to update personalization settings");
+          }
+          return undefined;
         },
-        body: JSON.stringify({ chat_background: chatBackground }),
-      });
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update chat background");
-      }
-    } catch (error) {
-      console.error("Error updating chat background:", error);
-      throw error;
-    }
-  };
-
-  const updateUserDefaultModel = async (defaultModel: string | null) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              default_model: defaultModel,
-            },
-          };
+        {
+          // Built on the displayed user, like updatePreferences.
+          optimisticData: (_committed, displayed) =>
+            displayed?.personalization
+              ? {
+                  ...displayed,
+                  personalization: { ...displayed.personalization, ...patch },
+                }
+              : (displayed ?? null),
+          rollbackOnError: false,
+          // The refetch, also after a failure, returns the server's state,
+          // including the ids of new memories.
+          populateCache: false,
+          revalidate: true,
         }
-        return prevUser;
-      });
+      );
+    },
+    [fetchedUser, mutateUser]
+  );
 
-      const response = await setUserDefaultModel(defaultModel);
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update default model");
-      }
-    } catch (error) {
-      console.error("Error updating default model:", error);
-      throw error;
-    }
-  };
-
-  const updateUserDefaultAppMode = async (mode: "CHAT" | "SEARCH") => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              default_app_mode: mode,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch("/api/user/default-app-mode", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
+  const updateUserLanguage = useCallback(
+    async (language: Locale | null) => {
+      await mutateUser(
+        async (current) => {
+          const response = await fetch(`/api/user/language`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ language }),
+          });
+          if (!response.ok) {
+            throw new Error("Failed to update language preference");
+          }
+          // Applied after the PATCH so the reconcile effect never sees a
+          // value the server does not hold yet.
+          return current
+            ? { ...current, preferences: { ...current.preferences, language } }
+            : current;
         },
-        body: JSON.stringify({ default_app_mode: mode }),
-      });
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update default app mode");
-      }
-    } catch (error) {
-      console.error("Error updating default app mode:", error);
-      throw error;
-    }
-  };
-
-  const updateUserVoiceSettings = async (settings: {
-    auto_send?: boolean;
-    auto_playback?: boolean;
-    playback_speed?: number;
-  }) => {
-    try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              voice_auto_send:
-                settings.auto_send ?? prevUser.preferences.voice_auto_send,
-              voice_auto_playback:
-                settings.auto_playback ??
-                prevUser.preferences.voice_auto_playback,
-              voice_playback_speed:
-                settings.playback_speed ??
-                prevUser.preferences.voice_playback_speed,
-            },
-          };
-        }
-        return prevUser;
-      });
-
-      const response = await fetch("/api/voice/settings", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(settings),
-      });
-
-      if (!response.ok) {
-        await refreshUser();
-        throw new Error("Failed to update voice settings");
-      }
-    } catch (error) {
-      console.error("Error updating voice settings:", error);
-      throw error;
-    }
-  };
+        { revalidate: false }
+      );
+    },
+    [mutateUser]
+  );
 
   const refreshUser = async () => {
     await mutateUser();
@@ -765,35 +345,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   return (
     <UserContext.Provider
       value={{
-        user: upToDateUser,
+        user,
         userResolution,
         refreshUser,
         authTypeMetadata,
-        updateUserAutoScroll,
-        updateUserShortcuts,
-        updateUserPasteAsTile,
-        updateUserInterruptOnSend,
-        updateUserTemperatureOverrideEnabled,
-        updateUserTemperatureDefault,
-        updateUserReasoningEffortDefault,
+        updatePreferences,
         updateUserPersonalization,
-        updateUserThemePreference,
         updateUserLanguage,
-        updateUserChatBackground,
-        updateUserDefaultModel,
-        updateUserDefaultAppMode,
-        updateUserVoiceSettings,
-        toggleAgentPinnedStatus,
-        isAdmin: (
-          authUser?.effective_permissions ?? EMPTY_PERMISSIONS
-        ).includes(Permission.FULL_ADMIN_PANEL_ACCESS),
-        hasAdminAccess: hasAnyAdminPermission(
-          authUser?.admin_capabilities ?? EMPTY_PERMISSIONS
+        isAdmin: (user?.effective_permissions ?? EMPTY_PERMISSIONS).includes(
+          Permission.FULL_ADMIN_PANEL_ACCESS
         ),
-        permissions: authUser?.effective_permissions ?? EMPTY_PERMISSIONS,
-        adminCapabilities: authUser?.admin_capabilities ?? EMPTY_PERMISSIONS,
+        hasAdminAccess: hasAnyAdminPermission(
+          user?.admin_capabilities ?? EMPTY_PERMISSIONS
+        ),
+        permissions: user?.effective_permissions ?? EMPTY_PERMISSIONS,
+        adminCapabilities: user?.admin_capabilities ?? EMPTY_PERMISSIONS,
         isUserLoading,
-        isCloudSuperuser: authUser?.is_cloud_superuser ?? false,
+        isCloudSuperuser: user?.is_cloud_superuser ?? false,
       }}
     >
       {children}

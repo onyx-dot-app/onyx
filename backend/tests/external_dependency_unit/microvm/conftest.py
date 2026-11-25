@@ -111,3 +111,23 @@ def new_file_copy_pool(
     yield new
     for pool in pools:
         pool.shutdown()
+
+
+Idle = Callable[[], bool]
+
+
+@pytest.fixture
+def idle(monkeypatch: pytest.MonkeyPatch, new_file_copy_pool: NewFileCopyPool) -> Idle:
+    """Whether every copy that the test started has ended. The test starts
+    with a new pod pool; a pool that it makes for another pod counts too.
+    A fixture that cleans up what copies use waits for this first."""
+    pools: list[FileCopyPool] = []
+    init = FileCopyPool.__init__
+
+    def tracked(pool: FileCopyPool) -> None:
+        init(pool)
+        pools.append(pool)
+
+    monkeypatch.setattr(FileCopyPool, "__init__", tracked)
+    new_file_copy_pool()
+    return lambda: all(pool.idle() for pool in pools)

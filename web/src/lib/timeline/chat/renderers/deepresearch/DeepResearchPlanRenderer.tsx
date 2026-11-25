@@ -9,7 +9,7 @@ import {
 import {
   MessageRenderer,
   FullChatState,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import {
@@ -72,7 +72,8 @@ export const DeepResearchPlanRenderer: MessageRenderer<
       icon: STEP_ICONS.thinking,
       status: statusText,
       doneStatus: doneStatusText,
-      content: planContent,
+      // Nothing to open until the plan's first words arrive.
+      content: fullContent ? planContent : null,
     },
   ]);
 };

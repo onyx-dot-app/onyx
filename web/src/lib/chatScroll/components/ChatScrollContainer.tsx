@@ -10,7 +10,7 @@ import React, {
   useState,
 } from "react";
 import { ScrollContainerProvider } from "@/lib/chatScroll/components/ScrollContainerContext";
-import { cn } from "@opal/utils";
+import { cn, prefersReducedMotion } from "@opal/utils";
 import { CHAT_GUTTER } from "@/lib/chat/layout";
 import { getChatScrollMemory } from "@/lib/chatScroll/scrollMemory";
 
@@ -78,12 +78,13 @@ export interface ChatScrollContainerProps {
   /** Hide the scrollbar (scroll still works, just invisible) */
   hideScrollbar?: boolean;
 
-  /** Full-width mode: edge-to-edge scroll container instead of the centered
-   *  reading layout (drops the reserved scrollbar gutter). */
-  fullWidth?: boolean;
+  /** Wide width: drops the reserved scrollbar gutter so the wide column gets
+   *  the room. */
+  wide?: boolean;
 
-  /** Rendered inside the scroll element, after the content (a sticky
-   *  composer). It is not content: "at the bottom" ignores it. */
+  /** Rendered inside the scroll element, after the content: a sticky
+   *  composer, or room for one laid over the view. It is not content: "at
+   *  the bottom" ignores it. */
   footer?: React.ReactNode;
 
   /** Fade content opacity at the top and bottom edges. */
@@ -156,7 +157,7 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
-        fullWidth = false,
+        wide = false,
         footer,
         fadeEdges = true,
         className,
@@ -418,7 +419,10 @@ const ChatScrollContainer = React.memo(
           if (container.scrollTop < glideStart) {
             container.scrollTop = glideStart;
           }
-          container.scrollTo({ top: targetScrollTop, behavior: "smooth" });
+          container.scrollTo({
+            top: targetScrollTop,
+            behavior: prefersReducedMotion() ? "auto" : "smooth",
+          });
 
           // The glide ends on a scrollend at its target (the jump above can
           // fire one early); the timeout covers browsers without it and a
@@ -772,7 +776,7 @@ const ChatScrollContainer = React.memo(
         <div
           className={
             className ??
-            "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-1"
+            "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden"
           }
         >
           <div
@@ -784,12 +788,14 @@ const ChatScrollContainer = React.memo(
               scrollClassName ??
               cn(
                 // A size container: the latest turn's min-height is in cqh.
-                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size]",
+                // Focus and scrollIntoView keep clear of a composer laid
+                // over the view.
+                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size] scroll-pb-(--app-composer-height)",
                 hideScrollbar ? "no-scrollbar" : "default-scrollbar",
-                // Full-width (always the case below md) drops the reserved
-                // gutters so content sits flush with the chat edge; centered
-                // mode keeps both-edges to avoid shift.
-                !fullWidth && "md:[scrollbar-gutter:stable_both-edges]"
+                // The wide width (and every width below md) drops the
+                // reserved gutters so content gets the room; the reading
+                // width keeps both-edges to avoid shift.
+                !wide && "md:[scrollbar-gutter:stable_both-edges]"
               )
             }
             onScroll={() => {

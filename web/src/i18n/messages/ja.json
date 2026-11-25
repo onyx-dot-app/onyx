@@ -6,7 +6,7 @@
       "account": "ログイン中: {email}",
       "workspace": "ワークスペース: {workspaceName}",
       "appAddress": "アプリのアドレス: {origin}",
-      "access": "アクセス可能なドキュメントの検索結果を読み取ります。ウェブ検索を使用し、ウェブページを開きます。",
+      "access": "アクセス可能なドキュメントの検索結果を読み取ります。ウェブ検索を使用し、ウェブページを開きます。チャット履歴を読み取ります。",
       "allow": "アクセスを許可",
       "deny": "拒否",
       "pending": "選択を保存中...",
@@ -4028,6 +4028,18 @@
             "mailboxes": {
               "label": "メールボックス",
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
+            }
+          }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "1 分あたりの RU",
+              "description": "このコネクタが使用できる、Microsoft アプリ登録のレート制限の割り当てです。単位は 1 分あたりのリソース ユニット (RU) です。Microsoft はライセンス階層に応じて、アプリの制限を 1 分あたり 1,250〜6,250 RU に設定します。空欄にすると、Onyx が制限を学習します。[階層の確認方法](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "このアプリ登録を使用する他のコネクタ: {connectors}。合計: 1 分あたり {total} RU。",
+              "none": "このアプリ登録で 1 分あたりの RU を設定している他のコネクタはありません。",
+              "hidden": "{count, plural, other {表示できないコネクタ # 件}}",
+              "unavailable": "このアプリ登録を使用する他のコネクタの 1 分あたりの RU を読み込めませんでした。"
             }
           }
         }
@@ -8122,6 +8134,13 @@
         },
         "setDefaultButton": {
           "label": "デフォルトに設定"
+        },
+        "deleteButton": {
+          "ariaLabel": "{title} を削除",
+          "tooltip": "削除"
+        },
+        "reconnectButton": {
+          "label": "再接続"
         }
       }
     },
@@ -9081,6 +9100,9 @@
       "provider": {
         "connected": {
           "label": "接続済み"
+        },
+        "disconnected": {
+          "suffix": "(接続解除済み)"
         }
       },
       "setupModal": {
@@ -9098,8 +9120,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} に接続しました",
-        "disconnected": "{label} を切断しました",
         "unexpectedError": "予期しないエラーが発生しました。"
       },
       "providers": {
@@ -9140,6 +9160,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "**{label}** の API キーと設定が削除されます。再度トレースを送信するには、最初から設定してください。",
+        "description": "このプロバイダーの API キーと設定を削除します。",
+        "submit": {
+          "label": "削除"
+        },
+        "title": "{label} を削除",
+        "envBody": "**{label}** の API キーと設定が削除されます。トレースはオフのままです。環境変数の設定で再度トレースを送信するには、再接続してください。"
       }
     },
     "usage": {
@@ -9842,7 +9871,7 @@
       },
       "tierTooltip": "LLM ゲートウェイには Business プランまたは Enterprise プランが必要です。",
       "scopeNote": {
-        "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
+        "title": "各ユーザーは設定 → サードパーティアクセス → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
       },
       "toasts": {
         "settingsUpdateFailed": "設定の更新に失敗しました"
@@ -10715,7 +10744,7 @@
         "title": "検索クラスター - OpenSearch",
         "status": "クラスターの状態",
         "version": "OpenSearch {version}",
-        "health": "状態 {health}",
+        "noVersion": "OpenSearch",
         "updated": "{time}に更新",
         "dataNodes": "データノード",
         "shards": "シャード",
@@ -11399,6 +11428,7 @@
         "playgroundAskAdmin": "管理者に招待を依頼してください。",
         "playgroundCheckFailed": "サインアップを確認できませんでした。しばらくしてからもう一度お試しください。",
         "playgroundEmailUsed": "プレイグラウンドへのアクセスはすでに使用済みです。",
+        "playgroundFreeMail": "勤務先のメールアドレスを使用してください。",
         "playgroundLimitReached": "貴社はプレイグラウンドへのアクセスをすでに使用済みです。",
         "serverError": "ID プロバイダーでエラーが発生しました。もう一度お試しください。",
         "staleSignIn": "このログインリンクは期限切れか、無効になっています。もう一度ログインしてください。",
@@ -11800,33 +11830,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "削除"
-      },
-      "deleteModal": {
-        "description": "このチャットを削除してもよろしいですか？この操作は元に戻せません。",
-        "submitButton": {
-          "label": "削除"
-        },
-        "title": "チャットを削除"
-      },
-      "exportAs": {
-        "label": "形式を指定してエクスポート…"
-      },
-      "exportFailed": {
-        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "プレーンテキスト"
-      },
-      "fullWidth": {
-        "ariaLabel": "チャットの全幅表示を切り替え",
-        "fitTooltip": "幅を合わせる",
-        "fullTooltip": "全幅"
-      },
       "incognitoExit": {
         "ariaLabel": "シークレットチャットを終了",
         "tooltip": "シークレットチャットを終了"
@@ -11853,14 +11856,14 @@
       "modeButton": {
         "ariaLabel": "アプリモードを変更"
       },
-      "moveToProject": {
-        "label": "プロジェクトに移動"
-      },
       "openSidebar": {
         "ariaLabel": "サイドバーを開く"
       },
       "share": {
-        "label": "共有"
+        "label": "共有…"
+      },
+      "shareMenu": {
+        "label": "共有またはエクスポート"
       }
     },
     "banners": {
@@ -11905,6 +11908,14 @@
       "licenseExpiry": {
         "source": {
           "label": "ライセンス"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "検索クラスター"
+        },
+        "cta": {
+          "label": "サービスステータスを開く"
         }
       },
       "nextButton": {
@@ -12223,7 +12234,7 @@
           "text": "{toolName} はブロックされました"
         },
         "completedStatus": {
-          "text": "{toolName} が完了しました"
+          "text": "{toolName} を実行しました"
         },
         "downloadFileLink": {
           "label": "ダウンロード"
@@ -12257,9 +12268,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName} はサーバーに接続できませんでした"
-        },
-        "waitingIndicator": {
-          "text": "レスポンスを待っています..."
         }
       },
       "customToolAuth": {
@@ -12437,7 +12445,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "思考中"
+          "text": "思考中..."
         }
       },
       "timeline": {
@@ -12452,7 +12460,7 @@
             "status": "プランを生成しました"
           },
           "generating": {
-            "status": "プランを生成中"
+            "status": "プランを生成中..."
           }
         },
         "expandButton": {
@@ -12460,10 +12468,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "読み取り中"
+            "status": "ウェブページを閲覧中..."
           },
           "read": {
-            "status": "読み込みました"
+            "status": "{count, plural, =0 {ウェブページを閲覧しました} other {# 件のウェブページを閲覧しました}}"
           }
         },
         "fileReader": {
@@ -12471,69 +12479,108 @@
             "status": "{fileName} を読み取りました ({total, number} 文字中 {start, number}–{end, number} 文字目)"
           },
           "reading": {
-            "status": "ファイルを読み取り中"
+            "status": "ファイルを読み取り中..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
         },
         "header": {
           "executingCode": {
-            "label": "コードを実行中"
+            "label": "コードを実行中..."
           },
           "executingNamedTool": {
-            "label": "{toolName} を実行中"
+            "label": "{toolName} を実行中..."
           },
           "executingTool": {
-            "label": "ツールを実行中"
+            "label": "ツールを実行中..."
           },
           "generatingImages": {
-            "label": "画像を生成中"
+            "label": "画像を生成中..."
           },
           "generatingPlan": {
-            "label": "プランを生成中"
+            "label": "プランを生成中..."
           },
           "queryingKnowledgeBase": {
-            "label": "ナレッジベースを照会中"
+            "label": "ナレッジベースを照会中..."
           },
           "reading": {
-            "label": "読み取り中"
+            "label": "読み取り中..."
           },
           "readingFile": {
-            "label": "ファイルを読み取り中"
+            "label": "ファイルを読み取り中..."
           },
           "researching": {
-            "label": "リサーチ中"
+            "label": "リサーチ中..."
           },
           "searchingWeb": {
-            "label": "ウェブを検索中"
+            "label": "ウェブを検索中..."
           },
           "thinking": {
-            "label": "思考中"
-          },
-          "thinkingEllipsis": {
             "label": "思考中..."
           },
           "updatingMemory": {
             "label": "メモリを更新中..."
           },
           "working": {
-            "label": "作業中"
+            "label": "作業中..."
           },
           "waitingForApproval": {
-            "label": "承認を待っています"
+            "label": "承認を待っています..."
           },
           "waitingForAnswer": {
-            "label": "回答を待っています"
+            "label": "回答を待っています..."
           },
           "runningCommand": {
-            "label": "コマンドを実行中"
+            "label": "コマンドを実行中..."
           },
           "editingFiles": {
-            "label": "ファイルを編集中"
+            "label": "ファイルを編集中..."
           },
           "publishingFiles": {
-            "label": "ファイルを公開しています"
+            "label": "ファイルを公開しています..."
+          },
+          "browsing": {
+            "label": "ウェブページを閲覧中..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "作業中...",
+              "done": "作業しました"
+            },
+            "crunchingDetails": {
+              "working": "詳細を分析中...",
+              "done": "詳細を分析しました"
+            },
+            "connectingDots": {
+              "working": "点と点をつないでいます...",
+              "done": "点と点をつなぎました"
+            },
+            "runningNumbers": {
+              "working": "数字を計算中...",
+              "done": "数字を計算しました"
+            },
+            "fillingGaps": {
+              "working": "足りない部分を補っています...",
+              "done": "足りない部分を補いました"
+            },
+            "sortingThingsOut": {
+              "working": "整理しています...",
+              "done": "整理しました"
+            },
+            "gatheringPieces": {
+              "working": "ピースを集めています...",
+              "done": "ピースを集めました"
+            },
+            "workingThroughIt": {
+              "working": "取り組んでいます...",
+              "done": "取り組みました"
+            },
+            "ironingOutDetails": {
+              "working": "細部を詰めています...",
+              "done": "細部を詰めました"
+            },
+            "roundingThingsOut": {
+              "working": "仕上げています...",
+              "done": "仕上げました"
+            }
           }
         },
         "internalSearch": {
@@ -12541,10 +12588,10 @@
             "text": "結果が見つかりません"
           },
           "reading": {
-            "status": "読み取り中"
+            "status": "読み取り中..."
           },
           "read": {
-            "label": "読み込みました"
+            "label": "読んだドキュメント"
           },
           "header": {
             "default": "社内ドキュメントを検索中",
@@ -12552,7 +12599,8 @@
             "sources": "{sources}を検索中",
             "doneSources": "{sources}を検索しました",
             "sourcesOverflow": "{sources} 他{count}件",
-            "withTimeWindow": "{header}({timeWindow})"
+            "withTimeWindow": "{header}({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "{date}以降",
@@ -12571,7 +12619,7 @@
             "text": "メモリツールは無効です"
           },
           "updating": {
-            "status": "メモリを更新中"
+            "status": "メモリを更新中..."
           },
           "updated": {
             "status": "メモリを更新しました"
@@ -12593,10 +12641,7 @@
             "status": "ナレッジベースを照会しました"
           },
           "querying": {
-            "status": "ナレッジベースを照会中"
-          },
-          "listed": {
-            "label": "{count, plural, one {# 件のドキュメントを一覧表示} other {# 件のドキュメントを一覧表示}}"
+            "status": "ナレッジベースを照会中..."
           },
           "query": {
             "table": {
@@ -12653,21 +12698,15 @@
             "label": "出力:"
           },
           "running": {
-            "status": "Python を実行中"
+            "status": "Python を実行中..."
           },
           "ran": {
             "status": "Python を実行しました"
-          },
-          "runningCode": {
-            "label": "コードを実行中..."
-          },
-          "writingCode": {
-            "status": "コードを作成中..."
           }
         },
         "reasoning": {
           "thinking": {
-            "status": "思考中"
+            "status": "思考中..."
           },
           "thought": {
             "status": "思考しました"
@@ -12703,7 +12742,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "ウェブを検索中"
+            "status": "ウェブを検索中..."
           },
           "searched": {
             "status": "ウェブを検索しました"
@@ -12711,19 +12750,16 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {コマンドを実行中} started {コマンドを開始しました} failed {コマンドが失敗しました} canceled {キャンセルされました} done {コマンドを実行しました} other {コマンドを実行しました}}",
+            "status": "{phase, select, running {コマンドを実行中...} started {コマンドを開始しました} failed {コマンドが失敗しました} canceled {キャンセルされました} done {コマンドを実行しました} other {コマンドを実行しました}}",
             "workdir": {
               "label": "場所: {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中} failed {セッション {sessionId} に入力を送信できませんでした} canceled {キャンセルされました} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中} failed {セッション {sessionId} を確認できませんでした} canceled {キャンセルされました} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中...} failed {セッション {sessionId} に入力を送信できませんでした} canceled {キャンセルされました} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中...} failed {セッション {sessionId} を確認できませんでした} canceled {キャンセルされました} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {セッションに入力を送信中} failed {セッションに入力を送信できませんでした} canceled {キャンセルされました} done {セッションに入力を送信しました} other {セッションに入力を送信しました}}} check {{phase, select, running {セッションを確認中} failed {セッションを確認できませんでした} canceled {キャンセルされました} done {セッションを確認しました} other {セッションを確認しました}}} other {セッション}}"
+              "status": "{kind, select, send {{phase, select, running {セッションに入力を送信中...} failed {セッションに入力を送信できませんでした} canceled {キャンセルされました} done {セッションに入力を送信しました} other {セッションに入力を送信しました}}} check {{phase, select, running {セッションを確認中...} failed {セッションを確認できませんでした} canceled {キャンセルされました} done {セッションを確認しました} other {セッションを確認しました}}} other {セッション}}"
             }
-          },
-          "output": {
-            "title": "出力"
           },
           "exitCode": {
             "label": "終了コード {exitCode}"
@@ -13042,6 +13078,12 @@
       },
       "copyButton": {
         "tooltip": "内容をコピー"
+      },
+      "sourceButton": {
+        "tooltip": "ソースを表示"
+      },
+      "previewButton": {
+        "tooltip": "プレビューを表示"
       },
       "downloadButton": {
         "label": "ファイルをダウンロード",
@@ -13504,10 +13546,6 @@
       "toggleButton": {
         "label": "パネルの表示を切り替え"
       },
-      "downloadButton": {
-        "label": "ダウンロード",
-        "tooltip": "ファイルをダウンロード"
-      },
       "reloadButton": {
         "label": "ファイルを更新",
         "error": "ファイルを再読み込みできませんでした。もう一度お試しください。"
@@ -13520,6 +13558,54 @@
       },
       "resizeHandle": {
         "label": "パネルのサイズを変更"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
+      },
+      "plaintext": {
+        "label": "プレーンテキスト"
+      },
+      "asMarkdown": {
+        "label": "Markdown としてエクスポート"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "プレーンテキストとしてエクスポート"
+      },
+      "menu": {
+        "label": "形式を指定してエクスポート…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "アクティビティ"
+      },
+      "needsYou": {
+        "title": "対応が必要",
+        "approval": "{tool}を承認",
+        "question": "質問に回答"
+      },
+      "agents": {
+        "title": "エージェント",
+        "status": {
+          "starting": "開始中",
+          "running": "実行中",
+          "suspended": "待機中",
+          "complete": "完了",
+          "limit": "ステップ上限に到達",
+          "cancelled": "キャンセル済み",
+          "stopped": "停止済み",
+          "error": "失敗"
+        },
+        "finished": "以前のエージェント"
+      },
+      "files": {
+        "title": "ファイル",
+        "viewAll": "{count, plural, other {#件のファイルをすべて表示}}"
       }
     }
   },
@@ -13577,11 +13663,6 @@
       },
       "plant": {
         "label": "植物"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "あア"
       }
     },
     "commandMenu": {
@@ -14056,6 +14137,21 @@
         "label": "プランをアップグレード"
       },
       "availableFor": "{plan}で利用可能"
+    },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "これはEnterprise機能です。プレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "機能をお試しいただけるよう、当社のモデルキーを設定しています。ご自身のOnyxではご自身のキーで動作します。[営業に相談]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "この機能はプレイグラウンドでは無効になっています。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})"
+        },
+        "title": "プレイグラウンドの制限",
+        "tooltip": "プレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。"
+      }
     },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
@@ -15013,7 +15109,7 @@
       },
       "group": {
         "working": {
-          "label": "作業中"
+          "label": "作業中..."
         }
       },
       "read": {
@@ -15782,7 +15878,8 @@
       "scrollRight": "タブを右にスクロール"
     },
     "toast": {
-      "moreCount": "他 {count} 件"
+      "moreCount": "他 {count} 件",
+      "closeAll": "すべて閉じる"
     },
     "sidebar": {
       "open": "サイドバーを開く",
@@ -15796,11 +15893,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "匿名",
-        "description": "アカウントのメールアドレスです。",
-        "title": "メールアドレス"
-      },
       "password": {
         "changeButton": "パスワードを変更",
         "description": "アカウントのパスワードを更新します。",
@@ -15833,8 +15925,7 @@
           "mismatch": "パスワードが一致しません",
           "newRequired": "新しいパスワードは必須です"
         }
-      },
-      "title": "アカウント"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15919,13 +16010,62 @@
         "title": "チャットの背景"
       },
       "colorMode": {
-        "auto": "自動",
+        "auto": "システム",
         "dark": "ダーク",
-        "description": "UI で使用するカラーモードを選択してください。",
+        "description": "UI で使用するテーマを選択してください。",
         "light": "ライト",
-        "title": "カラーモード"
+        "title": "テーマ"
       },
-      "title": "外観"
+      "general": {
+        "title": "一般"
+      },
+      "fonts": {
+        "title": "フォント"
+      },
+      "transcriptWidth": {
+        "title": "会話の表示幅",
+        "description": "このデバイスでのチャットメッセージと入力バーの幅を設定します。",
+        "standard": "標準",
+        "wide": "ワイド",
+        "placeholder": "幅を選択"
+      },
+      "responseFont": {
+        "default": "デフォルト",
+        "match": "インターフェースに合わせる",
+        "title": "回答のフォント",
+        "description": "チャットの回答に使用するフォントを選択してください。",
+        "placeholder": "フォントを選択"
+      },
+      "interfaceFont": {
+        "title": "インターフェースのフォント",
+        "description": "アプリ全体のテキストに使用するフォントを選択してください。",
+        "default": "デフォルト",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "システム",
+        "placeholder": "フォントを選択"
+      },
+      "accessibility": {
+        "title": "アクセシビリティ"
+      },
+      "motion": {
+        "title": "モーション",
+        "description": "システムのモーション設定に従うか、アプリ全体でアニメーションを減らします。",
+        "placeholder": "モーション設定を選択",
+        "system": "システム",
+        "reduced": "減らす"
+      },
+      "popupDismissal": {
+        "title": "通知",
+        "description": "通知を自動で閉じるか、閉じるまで表示し続けるかを選択します。",
+        "placeholder": "通知を閉じるタイミングを選択",
+        "auto_dismiss": "自動で閉じる",
+        "stay_on_screen": "画面に表示し続ける"
+      },
+      "dynamicConversations": {
+        "title": "動的な会話",
+        "description": "長い会話をスクロールすると、メッセージを読み込んだり解放したりします。パフォーマンスは向上しますが、解放されたメッセージにはスクリーンリーダーからアクセスできません。すべてのメッセージを読み込んだままにするには、オフにしてください。"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15959,7 +16099,6 @@
         "description": "ストリーミング応答を 1 文字ずつアニメーション表示します。無効にすると、受信したチャンクをそのまま表示します。",
         "title": "スムーズストリーミング"
       },
-      "title": "チャット",
       "toasts": {
         "saveFailed": "設定を保存できませんでした"
       },
@@ -15972,6 +16111,7 @@
     },
     "connectors": {
       "connectButton": "接続",
+      "disconnectAriaLabel": "{name} の接続を解除",
       "disconnectModal": {
         "continueNote": "{name} のコンテンツを参照している既存のセッションは、引き続き利用できます。",
         "description": "{appName} はあなたの {name} アカウントのコンテンツにアクセスまたは検索できなくなります。",
@@ -15979,11 +16119,9 @@
         "submit": "切断",
         "title": "*{name}* を切断"
       },
-      "emptyMessage": "組織に設定されたコネクターはありません。",
       "status": {
         "connected": "接続済み",
-        "notConnected": "未接続",
-        "paused": "一時停止中"
+        "notConnected": "未接続"
       },
       "title": "コネクター",
       "toasts": {
@@ -16047,7 +16185,6 @@
         "description": "UI で使用する言語を選択してください。",
         "title": "表示言語"
       },
-      "title": "言語",
       "toasts": {
         "updateFailed": "言語設定を更新できませんでした"
       }
@@ -16060,23 +16197,20 @@
         "placeholder": "セクションを選択"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "アカウントとアクセス"
+        "appearance": {
+          "label": "外観"
+        },
+        "usage": {
+          "label": "使用状況"
+        },
+        "account": {
+          "label": "アカウント"
         },
         "chatPreferences": {
           "label": "チャット設定"
         },
-        "connectors": {
-          "label": "コネクタ"
-        },
-        "general": {
-          "label": "一般"
-        },
-        "llmGateway": {
-          "label": "LLMゲートウェイ"
-        },
-        "usage": {
-          "label": "使用状況"
+        "thirdPartyAccess": {
+          "label": "サードパーティアクセス"
         }
       }
     },
@@ -16125,9 +16259,9 @@
       }
     },
     "personalPreferences": {
-      "description": "カスタム設定を自然な文章で入力してください。",
+      "description": "{appName} はすべてのチャットでこれらを考慮します。",
       "placeholder": "システムに期待する動作と、使ってほしい口調を記述してください。",
-      "title": "個人設定"
+      "title": "指示"
     },
     "profile": {
       "fullName": {
@@ -16141,8 +16275,68 @@
       },
       "workRole": {
         "description": "役割を入力すると、応答をより適切に調整できます。",
-        "placeholder": "あなたの役割",
-        "title": "職務"
+        "placeholder": "役割を選択",
+        "title": "あなたの仕事に最も近いものは？",
+        "other": {
+          "placeholder": "役割を入力",
+          "title": "あなたの仕事"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "10 MB 以下の画像を選択してください。",
+          "invalidType": "PNG、JPEG、WebP の画像を選択してください。"
+        },
+        "description": "PNG、JPEG、WebP（最大 10 MB）。",
+        "toasts": {
+          "updateFailed": "プロフィール写真を更新できませんでした。もう一度お試しください。"
+        },
+        "title": "プロフィール写真",
+        "editButton": {
+          "ariaLabel": "プロフィール写真を変更"
+        },
+        "uploadButton": {
+          "ariaLabel": "プロフィール写真をアップロード"
+        },
+        "menu": {
+          "label": "プロフィール写真のオプション",
+          "replace": {
+            "label": "写真を置き換える"
+          },
+          "remove": {
+            "label": "削除"
+          }
+        },
+        "cropModal": {
+          "title": "写真を切り抜く",
+          "description": "ドラッグするか矢印キーで位置を調整します。スライダーまたはスクロールでズームします。",
+          "area": {
+            "ariaLabel": "切り抜き範囲"
+          },
+          "zoom": {
+            "ariaLabel": "ズーム"
+          },
+          "zoomIn": {
+            "ariaLabel": "拡大"
+          },
+          "zoomOut": {
+            "ariaLabel": "縮小"
+          },
+          "reset": {
+            "label": "リセット"
+          },
+          "cancel": {
+            "label": "キャンセル"
+          },
+          "save": {
+            "label": "保存"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} はこの名前であなたに話しかけます。",
+        "placeholder": "名前を入力",
+        "title": "{appName} にどう呼ばれたいですか？"
       }
     },
     "promptShortcuts": {
@@ -16152,7 +16346,6 @@
         "publicTooltip": "組織全体のプロンプトショートカットは削除できません。",
         "removeAriaLabel": "ショートカットを削除"
       },
-      "title": "プロンプトショートカット",
       "toasts": {
         "bothRequired": "ショートカットと展開後のテキストの両方が必要です",
         "deleteFailed": "ショートカットを削除できませんでした",
@@ -16175,9 +16368,6 @@
       "empty": {
         "description": "チャットを始めると、モデルの使用状況とコストがここに表示されます。",
         "title": "まだ使用記録がありません"
-      },
-      "header": {
-        "title": "使用状況"
       },
       "loadError": {
         "description": "使用状況の取得中に問題が発生しました。しばらくしてからもう一度お試しください。",
@@ -16238,9 +16428,31 @@
       },
       "playbackSpeed": {
         "description": "音声再生の速度を調整します。",
-        "title": "再生速度"
+        "title": "再生速度",
+        "value": "{speed}x"
       },
       "title": "音声"
+    },
+    "modelPreferences": {
+      "title": "モデルの設定"
+    },
+    "interactions": {
+      "title": "操作"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "グループマネージャー",
+        "description": "このワークスペースでのアクセス レベルです。",
+        "admin": "管理者",
+        "basic": "一般ユーザー",
+        "title": "あなたのロール"
+      },
+      "tenantId": {
+        "description": "サポートに問い合わせる際はこの ID を伝えてください。",
+        "copyTooltip": "テナント ID をコピー",
+        "title": "テナント ID"
+      },
+      "title": "組織"
     }
   },
   "sidebar": {
@@ -17106,19 +17318,6 @@
       "select": "{name} を選択"
     }
   },
-  "opensearchHealth": {
-    "title": "OpenSearchのリソースが不足しています",
-    "disk": "OpenSearchのデータノードでディスク使用率が85%以上です。ディスクがいっぱいになるとインデックス作成が停止する可能性があります。",
-    "jvmMemory": "OpenSearchのJVMメモリ使用率が複数回のチェックで85%を超えています。検索やインデックス作成が失敗する可能性があります。",
-    "vectorMemory": "OpenSearchのベクトルメモリがほぼ満杯、または上限に達しています。検索やインデックス作成が失敗する可能性があります。",
-    "contact": "システム管理者、またはOnyxチーム（[support@onyx.app](mailto:support@onyx.app)）にお問い合わせください。",
-    "stale": "最新のチェックを利用できません。この警告は最後に成功したチェックに基づいており、復旧は確認されていません。",
-    "dismiss": "閉じる",
-    "diskTitle": "ディスク容量",
-    "jvmMemoryTitle": "JVMメモリ",
-    "vectorMemoryTitle": "ベクトルメモリ",
-    "viewDetails": "詳細を表示"
-  },
   "plugins": {
     "member": {
       "sections": {
@@ -17712,7 +17911,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {スキル 1 件} other {スキル {skills} 件}}",
       "loadFailed": "プラグインを読み込めませんでした。",
       "filter": {
         "all": "すべてのプラグイン"
@@ -17726,7 +17924,7 @@
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
-      "intro": "プラグインはスキルと、そのスキルに必要な連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。追加した各スキルは個別のプラグインになります。",
+      "intro": "プラグインはスキルと、そのスキルに必要な連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。ルートに SKILL.md だけがあるプラグインは［スキル］タブに表示されます。",
       "integrations": "{needed} 件中 {available} 件の連携が利用可能",
       "nameHeld": "オフ: {names} が同じスキル名を使用しています"
     },
@@ -17975,6 +18173,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {この実行は下であなたの承認を待っています。} other {この実行は進行中です。}}",
       "startedAt": "{time} に開始",
       "viewTask": "タスクを表示"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "マーケティング"
+      },
+      "finance": {
+        "label": "財務"
+      },
+      "other": {
+        "label": "その他"
+      },
+      "engineering": {
+        "label": "エンジニアリング"
+      },
+      "customerSupportSuccess": {
+        "label": "カスタマーサポート・サクセス"
+      },
+      "peopleHr": {
+        "label": "人事"
+      },
+      "dataAnalytics": {
+        "label": "データ・分析"
+      },
+      "legal": {
+        "label": "法務"
+      },
+      "design": {
+        "label": "デザイン"
+      },
+      "product": {
+        "label": "プロダクト"
+      },
+      "operations": {
+        "label": "オペレーション"
+      },
+      "sales": {
+        "label": "営業"
+      },
+      "leadership": {
+        "label": "経営"
+      }
     }
   }
 }

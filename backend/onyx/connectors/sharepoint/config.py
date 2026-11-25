@@ -18,6 +18,7 @@ from onyx.connectors.field_policy import (
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
     MicrosoftCloudBinding,
+    MicrosoftRateBudget,
 )
 
 SITE_URL_FORMAT_ERROR = (
@@ -45,7 +46,9 @@ class SharepointCredentialBinding(MicrosoftCloudBinding):
     )
 
 
-class SharepointConnectorConfig(SharepointCredentialBinding, ConnectorConfig):
+class SharepointConnectorConfig(
+    SharepointCredentialBinding, MicrosoftRateBudget, ConnectorConfig
+):
     batch_size: Annotated[int, _COSMETIC] = INDEX_BATCH_SIZE
     sites: Annotated[
         list[str] | None,

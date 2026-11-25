@@ -94,11 +94,40 @@ pub fn answer_finished(app: &AppHandle, id: u64, ok: bool) {
     }
 }
 
+/// Whether the pet belongs on screen: it was there when the user last left
+/// it, and the launcher it opens is not turned off by policy.
+fn wanted(saved: Option<bool>, launcher_disabled: bool) -> bool {
+    saved == Some(true) && !launcher_disabled
+}
+
 /// Shows the pet at startup if it was on screen when the app last ran.
 pub fn restore(app: &AppHandle) {
-    if app.state::<AppState>().config.get().aonyx == Some(true) {
+    let state = app.state::<AppState>();
+    if wanted(state.config.get().aonyx, state.policy().disable_launcher) {
         show(app);
     }
+}
+
+/// Shows or hides the pet after the launcher policy changed. The saved
+/// choice stays, so the pet comes back when the policy allows it.
+pub fn sync_policy(app: &AppHandle) {
+    let app = app.clone();
+    // Queued from another thread: a sync command (`get_prefs`) runs this on
+    // the main thread, where building the pet window deadlocks on Windows.
+    tauri::async_runtime::spawn(async move {
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let state = handle.state::<AppState>();
+            let disabled = state.policy().disable_launcher;
+            if wanted(state.config.get().aonyx, disabled) {
+                if !platform::is_visible(&handle) {
+                    show_now(&handle);
+                }
+            } else if disabled {
+                platform::hide(&handle);
+            }
+        });
+    });
 }
 
 /// The launcher's easter egg: shows the pet, or sends it away.
@@ -218,6 +247,53 @@ pub fn save_pending_position(app: &AppHandle) {
             log::warn!("could not save the Aonyx position: {e}");
         }
     }
+}
+
+/// Whether the pet stepped down from always-on-top for a file chooser.
+#[cfg(target_os = "linux")]
+static BELOW_CHOOSER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The always-on-top change for the pet, if any, when a file chooser opens
+/// (`opened`) or its window has focus again.
+#[cfg(any(target_os = "linux", test))]
+fn on_top_change(below: &std::sync::atomic::AtomicBool, opened: bool) -> Option<bool> {
+    if opened {
+        (!below.swap(true, Ordering::SeqCst)).then_some(false)
+    } else {
+        below.swap(false, Ordering::SeqCst).then_some(true)
+    }
+}
+
+/// The pet stays above every window, also the file chooser that WebKitGTK
+/// opens for `window`, and can cover its buttons. It steps down while the
+/// chooser is open, until `window` has focus again.
+#[cfg(target_os = "linux")]
+pub fn step_aside_for_file_choosers(window: &tauri::WebviewWindow) {
+    fn apply(app: &AppHandle, opened: bool) {
+        if let Some(on_top) = on_top_change(&BELOW_CHOOSER, opened) {
+            if let Some(pet) = app.get_webview_window(LABEL) {
+                let _ = pet.set_always_on_top(on_top);
+            }
+        }
+    }
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
+        use webkit2gtk::WebViewExt;
+        webview.inner().connect_run_file_chooser(move |_, _| {
+            apply(&app, true);
+            // WebKitGTK's own handler opens the chooser.
+            false
+        });
+    });
+    if let Err(e) = result {
+        log::warn!("could not watch for file choosers: {e}");
+    }
+    let app = window.app_handle().clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::Focused(true) = event {
+            apply(&app, false);
+        }
+    });
 }
 
 /// The right-click menu on the pet.
@@ -371,5 +447,32 @@ mod platform {
         let events_app = app.clone();
         window.on_window_event(move |event| on_window_event(&events_app, event));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicBool;
+
+    use super::{on_top_change, wanted};
+
+    #[test]
+    fn the_pet_stays_away_while_the_launcher_is_off() {
+        assert!(wanted(Some(true), false));
+        assert!(!wanted(Some(true), true));
+        assert!(!wanted(Some(false), false));
+        assert!(!wanted(None, false));
+    }
+
+    #[test]
+    fn steps_down_for_a_file_chooser_and_back_up_once_after_it() {
+        let below = AtomicBool::new(false);
+        // Focus without a chooser changes nothing.
+        assert_eq!(on_top_change(&below, false), None);
+        assert_eq!(on_top_change(&below, true), Some(false));
+        // A second chooser before focus comes back changes nothing.
+        assert_eq!(on_top_change(&below, true), None);
+        assert_eq!(on_top_change(&below, false), Some(true));
+        assert_eq!(on_top_change(&below, false), None);
     }
 }

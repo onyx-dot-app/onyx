@@ -11,6 +11,7 @@
 import {
   CODE_MODE_TOOL_TYPE,
   isCodeInterpreterToolType,
+  IMAGE_GENERATION_TOOL_TYPE,
   PacketType,
   StopReason,
   type Packet,
@@ -37,9 +38,12 @@ function toolStart(packet: Packet): ToolStart | null {
     case PacketType.PYTHON_TOOL_START:
       return { toolType: "python", kind: "execute" };
     case PacketType.TOOL_CALL_ARGUMENT_DELTA:
-      // Streamed code arrives before the Python start packet.
-      return isCodeInterpreterToolType(obj.tool_type)
-        ? { toolType: "python", kind: "execute" }
+      // Streamed code or an image prompt arrives before its start packet.
+      if (isCodeInterpreterToolType(obj.tool_type)) {
+        return { toolType: "python", kind: "execute" };
+      }
+      return obj.tool_type === IMAGE_GENERATION_TOOL_TYPE
+        ? { toolType: "image_generation", kind: "other" }
         : null;
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return { toolType: "image_generation", kind: "other" };

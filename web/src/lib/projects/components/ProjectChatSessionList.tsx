@@ -37,8 +37,10 @@ import {
 import { timeAgo } from "@opal/time";
 import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
+import { showErrorNotification } from "@/lib/sidebar/utils";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
+import { useChatExportMenu } from "@/lib/chat/hooks";
 
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
@@ -73,13 +75,22 @@ function ProjectChatItem({
 
   const { refreshChatSessions, removeSession } = useChatSessions();
   const { fetchProjects, projects } = useProjectsContext();
+  const { exportMenuItem } = useChatExportMenu(chat);
 
   const isChatUsingDefaultAgent = chat.persona_id === DEFAULT_AGENT_ID;
 
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
-      await deleteChatSession(chat.id);
+      try {
+        await deleteChatSession(chat.id);
+      } catch (error) {
+        console.error("Failed to delete chat:", error);
+        showErrorNotification(tSidebar("chatButton.deleteError.message"));
+        deleteModal.toggle(false);
+        setMenuOpen(false);
+        return;
+      }
       removeSession(chat.id);
       await refreshChatSessions();
       await fetchProjects();
@@ -94,6 +105,7 @@ function ProjectChatItem({
       fetchProjects,
       afterRefresh,
       deleteModal,
+      tSidebar,
     ]
   );
 
@@ -171,6 +183,7 @@ function ProjectChatItem({
       title: tSidebar("chatButton.moveToProject.label"),
       onSelect: (views) => views.push("move"),
     },
+    exportMenuItem,
     {
       kind: "action",
       id: "remove",
@@ -347,7 +360,7 @@ export default function ProjectChatSessionList() {
               : SvgBubbleText;
 
             return (
-              <div key={chat.id} className="px-1">
+              <div key={chat.id} className="px-1" data-testid="ProjectChatItem">
                 <ProjectChatItem
                   chat={chat}
                   projectId={currentProjectId}
