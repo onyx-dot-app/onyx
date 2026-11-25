@@ -86,7 +86,8 @@ Group or user restriction needs EE.
   a personal marketplace's plugin), and **Everyone** needs
   `canChangeOrganizationAccess` for every selected row (never a synced one).
   A row's Delete opens the same confirm for that plugin.
-  Search and the status filter clear the selection. A failed `GET /skills`
+  Search (on both Plugins pages) also matches the owner email and the shared group names, as Admin
+  Skills did. Search and the status filter clear the selection. A failed `GET /skills`
   shows an error in place of the list; the Marketplaces section stays.
   `/admin/plugins/[pluginId]` renders `MemberPluginDetailPage`. These pages read their panel from the path
   (`lib/customize/hooks.ts:usePanel`), so the links, back links, the
