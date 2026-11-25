@@ -10823,7 +10823,9 @@
     "sandboxStatus": {
       "page": {
         "description": "Shows where chat sandbox tools run, and why chats do not get them.",
-        "loadFailed": "Unable to load the sandbox status."
+        "loadFailed": "Unable to load the sandbox status.",
+        "refreshFailed": "Unable to refresh the sandbox status",
+        "refreshFailedDescription": "The page shows the last status it read. It tries again every 20 seconds."
       },
       "summary": {
         "toolsOffered": "Chat Sandbox Tools Are On",
@@ -10831,7 +10833,8 @@
         "toolsOfferedDescription": "At least one sandbox node is live and has the sandbox template.",
         "runtime": "Runtime: {runtime}",
         "template": "Template: {template}",
-        "noTemplate": "Template: not set"
+        "noTemplate": "Template: not set",
+        "toolsOfferedAlwaysDescription": "The runtime is firecracker, so chats always get the tools. A sandbox fails to start when no node serves it."
       },
       "reasons": {
         "runtimeWithoutFirecracker": "The sandbox runtime is not Firecracker. Set the runtime to auto or firecracker on a cluster with KVM nodes.",

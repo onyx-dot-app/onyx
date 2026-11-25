@@ -10823,7 +10823,9 @@
     "sandboxStatus": {
       "page": {
         "description": "チャットのサンドボックスツールが実行される場所と、チャットでツールを使えない理由を表示します。",
-        "loadFailed": "サンドボックスの状態を読み込めません。"
+        "loadFailed": "サンドボックスの状態を読み込めません。",
+        "refreshFailed": "サンドボックスの状態を更新できません",
+        "refreshFailedDescription": "最後に読み取った状態を表示しています。20 秒ごとに再試行します。"
       },
       "summary": {
         "toolsOffered": "チャットのサンドボックスツールはオンです",
@@ -10831,7 +10833,8 @@
         "toolsOfferedDescription": "1 つ以上のサンドボックスノードが稼働中で、サンドボックステンプレートがあります。",
         "runtime": "ランタイム: {runtime}",
         "template": "テンプレート: {template}",
-        "noTemplate": "テンプレート: 未設定"
+        "noTemplate": "テンプレート: 未設定",
+        "toolsOfferedAlwaysDescription": "ランタイムが firecracker のため、チャットは常にツールを使えます。対応するノードがない場合、サンドボックスは起動しません。"
       },
       "reasons": {
         "runtimeWithoutFirecracker": "サンドボックスランタイムが Firecracker ではありません。KVM ノードがあるクラスタでランタイムを auto または firecracker に設定してください。",

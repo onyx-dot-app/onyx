@@ -10823,7 +10823,9 @@
     "sandboxStatus": {
       "page": {
         "description": "Zeigt, wo die Sandbox-Werkzeuge im Chat laufen und warum Chats sie nicht erhalten.",
-        "loadFailed": "Der Sandbox-Status konnte nicht geladen werden."
+        "loadFailed": "Der Sandbox-Status konnte nicht geladen werden.",
+        "refreshFailed": "Der Sandbox-Status konnte nicht aktualisiert werden",
+        "refreshFailedDescription": "Die Seite zeigt den zuletzt gelesenen Status. Sie versucht es alle 20 Sekunden erneut."
       },
       "summary": {
         "toolsOffered": "Sandbox-Werkzeuge im Chat sind an",
@@ -10831,7 +10833,8 @@
         "toolsOfferedDescription": "Mindestens ein Sandbox-Knoten ist aktiv und hat die Sandbox-Vorlage.",
         "runtime": "Laufzeit: {runtime}",
         "template": "Vorlage: {template}",
-        "noTemplate": "Vorlage: nicht gesetzt"
+        "noTemplate": "Vorlage: nicht gesetzt",
+        "toolsOfferedAlwaysDescription": "Die Laufzeit ist firecracker, daher erhalten Chats die Werkzeuge immer. Eine Sandbox startet nicht, wenn kein Knoten sie bedient."
       },
       "reasons": {
         "runtimeWithoutFirecracker": "Die Sandbox-Laufzeit ist nicht Firecracker. Setzen Sie die Laufzeit auf auto oder firecracker in einem Cluster mit KVM-Knoten.",

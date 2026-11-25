@@ -10823,7 +10823,9 @@
     "sandboxStatus": {
       "page": {
         "description": "显示聊天沙箱工具的运行位置，以及聊天无法使用这些工具的原因。",
-        "loadFailed": "无法加载沙箱状态。"
+        "loadFailed": "无法加载沙箱状态。",
+        "refreshFailed": "无法刷新沙箱状态",
+        "refreshFailedDescription": "页面显示上次读取的状态。每 20 秒重试一次。"
       },
       "summary": {
         "toolsOffered": "聊天沙箱工具已开启",
@@ -10831,7 +10833,8 @@
         "toolsOfferedDescription": "至少有一个沙箱节点处于活动状态并具有沙箱模板。",
         "runtime": "运行时：{runtime}",
         "template": "模板：{template}",
-        "noTemplate": "模板：未设置"
+        "noTemplate": "模板：未设置",
+        "toolsOfferedAlwaysDescription": "运行时为 firecracker，因此聊天始终可以使用这些工具。没有节点提供服务时，沙箱无法启动。"
       },
       "reasons": {
         "runtimeWithoutFirecracker": "沙箱运行时不是 Firecracker。请在具有 KVM 节点的集群中将运行时设置为 auto 或 firecracker。",

@@ -52,7 +52,9 @@ function SummaryCard({ status }: SummaryCardProps) {
       description={
         status.tools_off_reason
           ? offReasonText(status.tools_off_reason)
-          : t("toolsOfferedDescription")
+          : status.runtime === "auto"
+            ? t("toolsOfferedDescription")
+            : t("toolsOfferedAlwaysDescription")
       }
       bottomChildren={
         <Section gap={0.25} alignItems="start" width="full">
@@ -84,8 +86,20 @@ function NodeCard({ node }: NodeCardProps) {
       data-testid="sandbox-status-node"
     >
       <Section gap={0.5} alignItems="start" width="full">
-        <Section flexDirection="row" gap={0.5} alignItems="center" width="fit">
-          <Text as="p" font="main-ui-action" color="text-04">
+        <Section
+          flexDirection="row"
+          gap={0.5}
+          alignItems="center"
+          width="full"
+          wrap
+        >
+          <Text
+            as="p"
+            font="main-ui-action"
+            color="text-04"
+            maxLines={1}
+            overflowTooltip
+          >
             {node.node_id}
           </Text>
           <Badge
@@ -145,6 +159,13 @@ export default function SandboxStatusPage() {
       <SettingsLayouts.Body>
         {data && (
           <Section gap={2} alignItems="stretch" width="full">
+            {error && (
+              <MessageCard
+                variant="error"
+                title={t("page.refreshFailed")}
+                description={t("page.refreshFailedDescription")}
+              />
+            )}
             <SummaryCard status={data} />
             <Section gap={1} alignItems="stretch" width="full">
               <Text as="p" font="main-ui-action" color="text-04">

@@ -10823,7 +10823,9 @@
     "sandboxStatus": {
       "page": {
         "description": "Muestra dónde se ejecutan las herramientas de sandbox del chat y por qué los chats no las reciben.",
-        "loadFailed": "No se pudo cargar el estado del sandbox."
+        "loadFailed": "No se pudo cargar el estado del sandbox.",
+        "refreshFailed": "No se pudo actualizar el estado del sandbox",
+        "refreshFailedDescription": "La página muestra el último estado que leyó. Lo intenta de nuevo cada 20 segundos."
       },
       "summary": {
         "toolsOffered": "Las herramientas de sandbox del chat están activadas",
@@ -10831,7 +10833,8 @@
         "toolsOfferedDescription": "Al menos un nodo de sandbox está activo y tiene la plantilla del sandbox.",
         "runtime": "Entorno: {runtime}",
         "template": "Plantilla: {template}",
-        "noTemplate": "Plantilla: sin definir"
+        "noTemplate": "Plantilla: sin definir",
+        "toolsOfferedAlwaysDescription": "El entorno es firecracker, por lo que los chats siempre reciben las herramientas. Un sandbox no se inicia si ningún nodo lo atiende."
       },
       "reasons": {
         "runtimeWithoutFirecracker": "El entorno del sandbox no es Firecracker. Configure el entorno como auto o firecracker en un clúster con nodos KVM.",

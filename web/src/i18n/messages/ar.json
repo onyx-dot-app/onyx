@@ -10823,7 +10823,9 @@
     "sandboxStatus": {
       "page": {
         "description": "يعرض مكان تشغيل أدوات بيئة العزل في الدردشة، وسبب عدم حصول الدردشات عليها.",
-        "loadFailed": "تعذر تحميل حالة بيئة العزل."
+        "loadFailed": "تعذر تحميل حالة بيئة العزل.",
+        "refreshFailed": "تعذر تحديث حالة بيئة العزل",
+        "refreshFailedDescription": "تعرض الصفحة آخر حالة تمت قراءتها. وتعيد المحاولة كل 20 ثانية."
       },
       "summary": {
         "toolsOffered": "أدوات بيئة العزل في الدردشة مفعّلة",
@@ -10831,7 +10833,8 @@
         "toolsOfferedDescription": "عقدة واحدة على الأقل لبيئة العزل نشطة ولديها قالب بيئة العزل.",
         "runtime": "بيئة التشغيل: {runtime}",
         "template": "القالب: {template}",
-        "noTemplate": "القالب: غير محدد"
+        "noTemplate": "القالب: غير محدد",
+        "toolsOfferedAlwaysDescription": "بيئة التشغيل هي firecracker، لذا تحصل الدردشات دائمًا على الأدوات. لا تبدأ بيئة العزل عندما لا تخدمها أي عقدة."
       },
       "reasons": {
         "runtimeWithoutFirecracker": "بيئة تشغيل بيئة العزل ليست Firecracker. اضبط بيئة التشغيل على auto أو firecracker في مجموعة تحتوي على عقد KVM.",

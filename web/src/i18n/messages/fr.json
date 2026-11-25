@@ -10823,7 +10823,9 @@
     "sandboxStatus": {
       "page": {
         "description": "Indique où s'exécutent les outils sandbox du chat et pourquoi les chats ne les reçoivent pas.",
-        "loadFailed": "Impossible de charger l'état du sandbox."
+        "loadFailed": "Impossible de charger l'état du sandbox.",
+        "refreshFailed": "Impossible d'actualiser l'état du sandbox",
+        "refreshFailedDescription": "La page affiche le dernier état lu. Elle réessaie toutes les 20 secondes."
       },
       "summary": {
         "toolsOffered": "Les outils sandbox du chat sont activés",
@@ -10831,7 +10833,8 @@
         "toolsOfferedDescription": "Au moins un nœud sandbox est actif et possède le modèle du sandbox.",
         "runtime": "Environnement : {runtime}",
         "template": "Modèle : {template}",
-        "noTemplate": "Modèle : non défini"
+        "noTemplate": "Modèle : non défini",
+        "toolsOfferedAlwaysDescription": "L'environnement est firecracker, donc les chats reçoivent toujours les outils. Un sandbox ne démarre pas si aucun nœud ne le sert."
       },
       "reasons": {
         "runtimeWithoutFirecracker": "L'environnement du sandbox n'est pas Firecracker. Définissez l'environnement sur auto ou firecracker dans un cluster avec des nœuds KVM.",

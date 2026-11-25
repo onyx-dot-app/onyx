@@ -11,10 +11,10 @@ const mockUseSandboxStatus = useSandboxStatus as jest.MockedFunction<
   typeof useSandboxStatus
 >;
 
-function mockStatus(data: SandboxStatus): void {
+function mockStatus(data: SandboxStatus, error?: Error): void {
   mockUseSandboxStatus.mockReturnValue({
     data,
-    error: undefined,
+    error,
     isLoading: false,
     isValidating: false,
     mutate: jest.fn(),
@@ -80,5 +80,42 @@ describe("SandboxStatusPage", () => {
     expect(screen.getByText("Agent version: 0.8.0")).toBeInTheDocument();
     expect(screen.getByText("No report yet")).toBeInTheDocument();
     expect(screen.getByText("Not Reporting")).toBeInTheDocument();
+  });
+
+  it("says firecracker offers tools without a node check", () => {
+    mockStatus({
+      runtime: "firecracker",
+      template: "craft-fc-abc1234",
+      tools_offered: true,
+      tools_off_reason: null,
+      nodes: [],
+    });
+    render(<SandboxStatusPage />);
+
+    expect(
+      screen.getByText(/The runtime is firecracker, so chats always get/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/At least one sandbox node is live/)
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the last status and warns when a refresh fails", () => {
+    mockStatus(
+      {
+        runtime: "auto",
+        template: "craft-fc-abc1234",
+        tools_offered: false,
+        tools_off_reason: "NO_REGISTERED_NODE",
+        nodes: [],
+      },
+      new Error("network")
+    );
+    render(<SandboxStatusPage />);
+
+    expect(
+      screen.getByText("Unable to refresh the sandbox status")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Chat Sandbox Tools Are Off")).toBeInTheDocument();
   });
 });
