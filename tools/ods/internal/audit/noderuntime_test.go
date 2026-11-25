@@ -16,12 +16,12 @@ func TestNodeRuntimeReport(t *testing.T) {
 		version string
 		want    int
 	}{{"v24.16.0", 4}, {"v24.22.1", 2}, {"v24.22.3", 0}, {"v24.22.4", 0}} {
-		result, err := nodeRuntimeReport([]NodeRuntime{{"node@fixture", tc.version, []string{"web/Dockerfile", "release.yml"}}}, advisories, releases)
+		result, err := nodeRuntimeReport([]nodeRuntime{{nodeImagePin{"node@fixture", []string{"web/Dockerfile", "release.yml"}}, tc.version}}, advisories, releases)
 		if err != nil || len(result.Blocking) != tc.want || len(result.ScannedPackages) != 1 {
 			t.Fatalf("%s: got %+v, %v", tc.version, result, err)
 		}
 	}
-	runtimes := []NodeRuntime{{"node@fixture", "v24.22.3", []string{"web/Dockerfile"}}}
+	runtimes := []nodeRuntime{{nodeImagePin{"node@fixture", []string{"web/Dockerfile"}}, "v24.22.3"}}
 	if _, err := nodeRuntimeReport(runtimes, nil, releases); err == nil {
 		t.Fatal("accepted missing advisories")
 	}
@@ -36,7 +36,7 @@ func TestNodeGroupedCVEsRemainIndependent(t *testing.T) {
 	if err := json.Unmarshal([]byte(feed), &advisories); err != nil {
 		t.Fatal(err)
 	}
-	result, err := nodeRuntimeReport([]NodeRuntime{{"node@fixture", "v24.16.0", []string{"release.yml"}}}, advisories, []nodeRelease{{"v24.16.0", true}})
+	result, err := nodeRuntimeReport([]nodeRuntime{{nodeImagePin{"node@fixture", []string{"release.yml"}}, "v24.16.0"}}, advisories, []nodeRelease{{"v24.16.0", true}})
 	if err != nil {
 		t.Fatal(err)
 	}

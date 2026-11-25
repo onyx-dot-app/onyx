@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"regexp"
 	"slices"
 	"strconv"
@@ -18,10 +19,9 @@ const (
 	nodeReleasesURL   = "https://nodejs.org/dist/index.json"
 )
 
-type NodeRuntime struct {
-	Image     string   `json:"image"`
-	Version   string   `json:"version"`
-	Consumers []string `json:"consumers"`
+type nodeRuntime struct {
+	nodeImagePin
+	Version string
 }
 
 type nodeAdvisory struct {
@@ -42,7 +42,17 @@ type nodeRelease struct {
 
 var stableNodeRelease = regexp.MustCompile(`^v([0-9]+)\.[0-9]+\.[0-9]+$`)
 
-func CheckNodeRuntimes(runtimes []NodeRuntime) (*Result, error) {
+func scanNodeRuntimes(pins []nodeImagePin) (*Result, error) {
+	runtimes := make([]nodeRuntime, 0, len(pins))
+	for _, pin := range pins {
+		cmd := exec.Command("docker", "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--entrypoint", "node", pin.Image, "--version")
+		output, err := cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("read Node version from %s: %w", pin.Image, err)
+		}
+		runtimes = append(runtimes, nodeRuntime{pin, strings.TrimSpace(string(output))})
+	}
+
 	client := &http.Client{Timeout: 45 * time.Second}
 	var advisories map[string]nodeAdvisory
 	var releases []nodeRelease
@@ -61,7 +71,7 @@ func CheckNodeRuntimes(runtimes []NodeRuntime) (*Result, error) {
 	return nodeRuntimeReport(runtimes, advisories, releases)
 }
 
-func nodeRuntimeReport(runtimes []NodeRuntime, advisories map[string]nodeAdvisory, releases []nodeRelease) (*Result, error) {
+func nodeRuntimeReport(runtimes []nodeRuntime, advisories map[string]nodeAdvisory, releases []nodeRelease) (*Result, error) {
 	if len(runtimes) == 0 || len(advisories) == 0 || len(releases) == 0 {
 		return nil, fmt.Errorf("missing Node runtime inventory, advisory feed or release feed")
 	}

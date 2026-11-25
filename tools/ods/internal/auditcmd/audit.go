@@ -73,8 +73,7 @@ how it gates deploys.`,
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 
 	cmd.AddCommand(newAuditImageCommand())
-	cmd.AddCommand(newNodeImagePinsCommand())
-	cmd.AddCommand(newNodeRuntimesCommand())
+	cmd.AddCommand(newNodeImagesCommand())
 	cmd.AddCommand(newAuditCraftFCCommand())
 	cmd.AddCommand(newAuditGateCommand())
 	cmd.AddCommand(newAuditIgnoreCommand(terminalEditUI()))
