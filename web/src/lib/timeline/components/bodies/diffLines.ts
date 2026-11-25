@@ -229,17 +229,6 @@ export function countDiffLines(lines: DiffLine[]): DiffCounts {
   return { added, removed };
 }
 
-// Adapted from T3 Code's formatCompactDiffCount.
-export function formatDiffCount(value: number): string {
-  if (value < 1000) return String(value);
-  if (value < 999_500) {
-    const k = value / 1000;
-    return `${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : Math.round(k)}k`;
-  }
-  const m = value / 1_000_000;
-  return `${m < 10 ? m.toFixed(1).replace(/\.0$/, "") : Math.round(m)}m`;
-}
-
 export interface PatchFile {
   /** The file's path, and its new path when it moved. */
   path: string;
@@ -283,6 +272,8 @@ export function parseApplyPatch(patch: string): ParsedPatch {
   let isNewFile = false;
   let count = 0;
   let lines = patch.split(/\r?\n/);
+  // The split leaves an empty element after a final newline.
+  if (lines.at(-1) === "") lines.pop();
   const opener = HEREDOC_OPEN.exec(lines[0]?.trim() ?? "");
   if (opener) {
     const closing = lines.findLastIndex((line) => line.trim() === opener[1]);
@@ -290,7 +281,13 @@ export function parseApplyPatch(patch: string): ParsedPatch {
   }
   let shown = 0;
   for (const line of lines) {
-    if (line === "*** Begin Patch" || line === "*** End Patch") continue;
+    if (
+      line === "*** Begin Patch" ||
+      line === "*** End Patch" ||
+      line === "*** End of File"
+    ) {
+      continue;
+    }
     const header = line.match(/^\*\*\* (Add|Update|Delete) File: (.*)$/);
     if (header || (file === null && count === 0)) {
       count++;
