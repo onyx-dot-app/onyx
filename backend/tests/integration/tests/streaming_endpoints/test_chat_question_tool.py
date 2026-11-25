@@ -296,83 +296,88 @@ def test_a_multi_select_answer_gives_the_model_every_chosen_option(
     )
     provider = mock_llm_of_family(family)
     session = ChatSessionManager.create(user_performing_action=admin_user)
-    with _http(streaming_api, admin_user) as http:
-        message = SendMessageRequest(
-            chat_session_id=session.id,
-            message=f"Post the update. {nonce}",
-            llm_override=LLMOverride(
-                model_configuration_id=provider.model_configuration_ids[0]
+    try:
+        with _http(streaming_api, admin_user) as http:
+            message = SendMessageRequest(
+                chat_session_id=session.id,
+                message=f"Post the update. {nonce}",
+                llm_override=LLMOverride(
+                    model_configuration_id=provider.model_configuration_ids[0]
+                )
+                if provider
+                else None,
             )
-            if provider
-            else None,
-        )
-        with http.stream(
-            "POST",
-            "/chat/send-chat-message",
-            json=message.model_dump(mode="json"),
-        ) as response:
-            [asked] = _of_type(list(_packets(response)), ToolQuestionRequest)
-        assert [
-            (question.id, question.header, question.multi_select)
-            for question in asked.questions
-        ] == [(channels, "Channels", True), (scope, "Scope", False)]
-        assert [option.label for option in asked.questions[0].options] == _CHANNELS
-        url = f"/chat/question-requests/{asked.question_request_id}/answers"
+            with http.stream(
+                "POST",
+                "/chat/send-chat-message",
+                json=message.model_dump(mode="json"),
+            ) as response:
+                [asked] = _of_type(list(_packets(response)), ToolQuestionRequest)
+            assert [
+                (question.id, question.header, question.multi_select)
+                for question in asked.questions
+            ] == [(channels, "Channels", True), (scope, "Scope", False)]
+            assert [option.label for option in asked.questions[0].options] == _CHANNELS
+            url = f"/chat/question-requests/{asked.question_request_id}/answers"
 
-        # Two options for a single-select question, a repeated option, and
-        # an option that the question does not list are refused.
-        for channel_labels, scope_labels in (
-            (["Email"], ["Company", "Team (Recommended)"]),
-            (["Email", "Email"], ["Company"]),
-            (["Email", "Fax"], ["Company"]),
-        ):
-            refused = http.post(
-                url,
-                json={
-                    "answers": [
-                        {"question_id": channels, "option_labels": channel_labels},
-                        {"question_id": scope, "option_labels": scope_labels},
-                    ]
-                },
-            )
-            assert refused.status_code == 400, (channel_labels, scope_labels)
+            # Two options for a single-select question, a repeated option, and
+            # an option that the question does not list are refused.
+            for channel_labels, scope_labels in (
+                (["Email"], ["Company", "Team (Recommended)"]),
+                (["Email", "Email"], ["Company"]),
+                (["Email", "Fax"], ["Company"]),
+            ):
+                refused = http.post(
+                    url,
+                    json={
+                        "answers": [
+                            {"question_id": channels, "option_labels": channel_labels},
+                            {"question_id": scope, "option_labels": scope_labels},
+                        ]
+                    },
+                )
+                assert refused.status_code == 400, (channel_labels, scope_labels)
 
-        body = {
-            "answers": [
-                {
-                    "question_id": channels,
-                    "option_labels": ["Wiki", "Email"],
-                    "user_note": "Teams too",
-                },
-                {"question_id": scope, "option_labels": ["Company"]},
-            ]
-        }
-        answered = http.post(url, json=body)
-        answered.raise_for_status()
-        continued = _follow(http, session.id, answered.json()["continuation"])
-        assert _stops(continued)[-1] == "finished"
-        assert _result(mock_llm, nonce, CALL_ID) == json.dumps(
-            {
-                "answers": {
-                    channels: {"answers": ["Email", "Wiki", "user_note: Teams too"]},
-                    scope: {"answers": ["Company"]},
-                }
+            body = {
+                "answers": [
+                    {
+                        "question_id": channels,
+                        "option_labels": ["Wiki", "Email"],
+                        "user_note": "Teams too",
+                    },
+                    {"question_id": scope, "option_labels": ["Company"]},
+                ]
             }
-        )
-        # The same options in another order repeat the saved answer.
-        body["answers"][0]["option_labels"] = ["Email", "Wiki"]
-        assert http.post(url, json=body).status_code == 200
+            answered = http.post(url, json=body)
+            answered.raise_for_status()
+            continued = _follow(http, session.id, answered.json()["continuation"])
+            assert _stops(continued)[-1] == "finished"
+            assert _result(mock_llm, nonce, CALL_ID) == json.dumps(
+                {
+                    "answers": {
+                        channels: {
+                            "answers": ["Email", "Wiki", "user_note: Teams too"]
+                        },
+                        scope: {"answers": ["Company"]},
+                    }
+                }
+            )
+            # The same options in another order repeat the saved answer.
+            body["answers"][0]["option_labels"] = ["Email", "Wiki"]
+            assert http.post(url, json=body).status_code == 200
 
-        saved = _saved(http, session.id)
-        assert _of_type(saved, ToolQuestionRequest) == [asked]
-        [resolved] = _of_type(saved, ToolQuestionResolved)
-        assert [
-            (answer.question_id, answer.option_labels, answer.user_note)
-            for answer in resolved.answers or []
-        ] == [
-            (channels, ["Email", "Wiki"], "Teams too"),
-            (scope, ["Company"], None),
-        ]
+            saved = _saved(http, session.id)
+            assert _of_type(saved, ToolQuestionRequest) == [asked]
+            [resolved] = _of_type(saved, ToolQuestionResolved)
+            assert [
+                (answer.question_id, answer.option_labels, answer.user_note)
+                for answer in resolved.answers or []
+            ] == [
+                (channels, ["Email", "Wiki"], "Teams too"),
+                (scope, ["Company"], None),
+            ]
+    finally:
+        assert ChatSessionManager.delete(session, admin_user)
 
 
 def _ask(call_id: str) -> ToolCall:
