@@ -271,9 +271,14 @@ def _external_apps(
 
 
 def _shapes(
-    integrations: Collection[Integration], external_apps: Mapping[int, ExternalApp]
+    integrations: Collection[Integration],
+    external_apps: Mapping[int, ExternalApp],
+    *,
+    skip_unknown: bool = False,
 ) -> dict[int, tuple[IntegrationShape, str | None]]:
-    """The shape and the preset id of each integration."""
+    """The shape and the preset id of each integration. ``skip_unknown``
+    leaves out an integration with no shape, e.g. one that a later release
+    wrote, so that a list still shows the others."""
     shapes: dict[int, tuple[IntegrationShape, str | None]] = {}
     for integration in integrations:
         if integration.kind is IntegrationKind.MCP:
@@ -284,6 +289,12 @@ def _shapes(
             continue
         app = external_apps.get(integration.id)
         if app is None:
+            if skip_unknown:
+                logger.warning(
+                    "Skipping integration %s: it has no settings of a known shape.",
+                    integration.id,
+                )
+                continue
             raise OnyxError(
                 OnyxErrorCode.NOT_FOUND,
                 f"Integration {integration.id} has no API settings.",
@@ -1210,7 +1221,15 @@ def _admin_views(
     user: User,
     integrations: Collection[Integration],
     db_session: Session,
+    *,
+    skip_unknown: bool = False,
 ) -> list[AdminIntegration]:
+    shapes = _shapes(
+        integrations,
+        _external_apps(integrations, db_session),
+        skip_unknown=skip_unknown,
+    )
+    integrations = [i for i in integrations if i.id in shapes]
     owner_emails = _owner_emails(integrations, db_session)
     statuses = _organization_statuses(integrations, db_session)
     access = _access_views(
@@ -1220,7 +1239,6 @@ def _admin_views(
         integration_statuses(integrations, user, db_session),
         db_session,
     )
-    shapes = _shapes(integrations, _external_apps(integrations, db_session))
     action_counts = count_actions(
         [integration.id for integration in integrations], db_session
     )
@@ -1268,7 +1286,7 @@ def list_admin_integrations(user: User, db_session: Session) -> list[AdminIntegr
             for integration in integrations
             if integration.id in accessible or manages_integration(user, integration)
         ]
-    return _admin_views(user, integrations, db_session)
+    return _admin_views(user, integrations, db_session, skip_unknown=True)
 
 
 def _config_view(
@@ -1503,11 +1521,14 @@ def _member_views(
     integrations: Collection[Integration],
     states: Mapping[int, UserIntegrationState],
     db_session: Session,
+    *,
+    skip_unknown: bool = False,
 ) -> list[MemberIntegration]:
+    external_apps = _external_apps(integrations, db_session)
+    shapes = _shapes(integrations, external_apps, skip_unknown=skip_unknown)
+    integrations = [i for i in integrations if i.id in shapes]
     statuses = integration_statuses(integrations, user, db_session)
     access = _access_views(user, integrations, states, statuses, db_session)
-    external_apps = _external_apps(integrations, db_session)
-    shapes = _shapes(integrations, external_apps)
     mcp_servers = list_mcp_servers_by_integration(
         [
             integration.id
@@ -1554,7 +1575,11 @@ def list_member_integrations(
     made available only to groups the user is not in (``no_access``)."""
     states = _integration_states(user, db_session)
     return _member_views(
-        user, list_integrations_by_ids(list(states), db_session), states, db_session
+        user,
+        list_integrations_by_ids(list(states), db_session),
+        states,
+        db_session,
+        skip_unknown=True,
     ) + _no_access_views(
         user,
         list_integrations_by_ids(
@@ -1568,6 +1593,10 @@ def _no_access_views(
     user: User, integrations: Collection[Integration], db_session: Session
 ) -> list[MemberIntegration]:
     """Only what a row shows: no configuration, connection or owner."""
+    shapes = _shapes(
+        integrations, _external_apps(integrations, db_session), skip_unknown=True
+    )
+    integrations = [i for i in integrations if i.id in shapes]
     status = IntegrationStatus(state=ConnectionState.NOT_CONNECTED, reason=None)
     access = _access_views(
         user,
@@ -1576,7 +1605,6 @@ def _no_access_views(
         {integration.id: status for integration in integrations},
         db_session,
     )
-    shapes = _shapes(integrations, _external_apps(integrations, db_session))
     return [
         MemberIntegration(
             id=integration.id,
@@ -1711,15 +1739,16 @@ def set_action_grants__no_commit(
 def agent_catalog(user: User, db_session: Session) -> list[AgentIntegrationOption]:
     """Each integration that the user has access to and that an admin did
     not turn off, in name order."""
-    integrations = [
+    enabled = [
         integration
         for integration in list_integrations_by_ids(
             list(_integration_states(user, db_session)), db_session
         )
         if integration.enabled
     ]
+    shapes = _shapes(enabled, _external_apps(enabled, db_session), skip_unknown=True)
+    integrations = [i for i in enabled if i.id in shapes]
     integration_ids = [integration.id for integration in integrations]
-    shapes = _shapes(integrations, _external_apps(integrations, db_session))
     actions = integration_actions_by_id(integration_ids, db_session)
     admin_rows = list_admin_policy_rows(db_session, integration_ids)
     return [

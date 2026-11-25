@@ -56,7 +56,7 @@ See tools/ods/README.md for profiles, ports and ownership.`,
 
 	cmd.AddCommand(newStackLifecycleCommand("up", "Set up the worktree, start infrastructure, migrate and start the services"))
 	cmd.AddCommand(newStackLifecycleCommand("start", "Start or reconcile the services against running infrastructure"))
-	cmd.AddCommand(newStackLifecycleCommand("restart", "Stop the services and start them again"))
+	cmd.AddCommand(newStackLifecycleCommand("restart", "Stop the services, clear the Next.js development cache, and start the services again"))
 	cmd.AddCommand(newStackStopCommand("stop", "Stop the services, keep the infrastructure"))
 	cmd.AddCommand(newStackStopCommand("down", "Stop the services and the infrastructure (volumes are kept)"))
 	cmd.AddCommand(newStackStatusCommand())

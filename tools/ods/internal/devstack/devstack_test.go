@@ -601,8 +601,25 @@ func TestStatus_notReadyWhileStartIsIncomplete(t *testing.T) {
 
 func TestRestart_holdsOneLock(t *testing.T) {
 	s := newTestStack(t, t.TempDir())
+	cache := filepath.Join(s.Root, "web", ".next", "dev")
+	if err := os.MkdirAll(cache, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cache, "stale"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	build := filepath.Join(s.Root, "web", ".next", "BUILD_ID")
+	if err := os.WriteFile(build, []byte("production"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	p := &fakeProvider{services: []string{"web"}}
 	first := mustUp(t, s, p)
+	if _, err := s.Start(context.Background(), p, testOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(cache, "stale")); err != nil {
+		t.Fatalf("up or start changed the cache: %v", err)
+	}
 
 	// Plan runs inside the locked restart, after the services were stopped:
 	// a competing lifecycle command must be refused at that point.
@@ -610,6 +627,9 @@ func TestRestart_holdsOneLock(t *testing.T) {
 	hooked := false
 	p.planHook = func() {
 		hooked = true
+		if _, err := os.Stat(cache); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("cache still present at service planning: %v", err)
+		}
 		var unlock func()
 		unlock, lockErr = s.Lock(context.Background(), "intruder", 100*time.Millisecond)
 		if lockErr == nil {
@@ -623,10 +643,68 @@ func TestRestart_holdsOneLock(t *testing.T) {
 	if !hooked {
 		t.Fatal("plan hook did not run")
 	}
+	if content, err := os.ReadFile(build); err != nil || string(content) != "production" {
+		t.Fatalf("restart changed the production build: %q, %v", content, err)
+	}
 	if !errors.Is(lockErr, ErrLocked) {
 		t.Errorf("another command could take the lock during restart: %v", lockErr)
 	}
 	if status.Ports["web"] != first.Ports["web"] {
 		t.Errorf("restart changed the port: %d -> %d", first.Ports["web"], status.Ports["web"])
+	}
+}
+
+func TestRestart_preservesCacheUsedByOtherStackMode(t *testing.T) {
+	for _, mode := range []Mode{Shared, Isolated} {
+		t.Run(string(mode), func(t *testing.T) {
+			local := newTestStack(t, t.TempDir())
+			shared, err := Open(local.Root, local.Project+"-shared", Shared)
+			if err != nil {
+				t.Fatal(err)
+			}
+			shared.Registry = local.Registry
+			t.Cleanup(func() { _ = shared.Stop(context.Background(), testOptions()) })
+
+			restarting, running := local, shared
+			if mode == Shared {
+				restarting, running = shared, local
+			}
+			p := &fakeProvider{services: []string{"web"}}
+			mustUp(t, running, p)
+			mustUp(t, restarting, p)
+			web := servicePID(t, running, "web")
+			original := servicePID(t, restarting, "web")
+			if mode == Shared {
+				state, err := running.ReadState()
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Model the state left by an exited launcher with a recorded child.
+				state.Services[0].Members = map[int]string{web.PID: web.StartMarker}
+				state.Services[0].PID = 0
+				if err := running.WriteState(state); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cache := filepath.Join(local.Root, "web", ".next", "dev")
+			if err := os.MkdirAll(cache, 0700); err != nil {
+				t.Fatal(err)
+			}
+
+			refused, err := restarting.Restart(context.Background(), p, testOptions())
+			if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%s stack runs web", running.Mode)) {
+				t.Fatalf("restart error = %v", err)
+			}
+			if refused == nil || refused.Ready || refused.Phase != PhaseFailed || len(refused.Errors) != 1 || refused.Errors[0] != err.Error() {
+				t.Fatalf("refused restart status = %+v", refused)
+			}
+			status, statusErr := restarting.Status()
+			if statusErr != nil || status == nil || !status.Ready || !isCurrent(original) {
+				t.Fatalf("refused restart disrupted its own stack: %+v, %v", status, statusErr)
+			}
+			if _, err := os.Stat(cache); err != nil || !isCurrent(web) {
+				t.Fatalf("restart disrupted the running web server or its cache: %v", err)
+			}
+		})
 	}
 }
