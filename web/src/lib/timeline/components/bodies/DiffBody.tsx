@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, CodePanel, type CodePanelLine } from "@opal/components";
 import { SvgColumn, SvgMenu } from "@opal/icons";
+import type { RichStr } from "@opal/types";
 import { DiffStat } from "@/lib/timeline/components/bodies/DiffStat";
 import {
   collapseUnchanged,
   computeDiff,
   countDiffLines,
+  type DiffCounts,
   type DiffLine,
 } from "@/lib/timeline/components/bodies/diffLines";
 
@@ -43,8 +45,11 @@ function toSideLine(line: DiffLine, side: "old" | "new"): CodePanelLine {
 }
 
 type DiffBodyProps = {
-  title: string;
+  title: string | RichStr;
+  /** Defaults to the new text; a panel of ready lines has none. */
   copyText?: string;
+  /** The change's line counts when `lines` is a cut of it. */
+  counts?: DiffCounts;
 } & ({ oldText: string; newText: string } | { lines: DiffLine[] });
 
 /**
@@ -54,7 +59,7 @@ type DiffBodyProps = {
  */
 export function DiffBody(props: DiffBodyProps) {
   const t = useTranslations("craft.toolCards.diff");
-  const { title, copyText } = props;
+  const { title, copyText, counts } = props;
   const given = "lines" in props ? props.lines : null;
   const oldText = "oldText" in props ? props.oldText : "";
   const newText = "newText" in props ? props.newText : "";
@@ -67,7 +72,10 @@ export function DiffBody(props: DiffBodyProps) {
       ),
     [given, oldText, newText, t]
   );
-  const stats = useMemo(() => countDiffLines(diffLines), [diffLines]);
+  const stats = useMemo(
+    () => counts ?? countDiffLines(diffLines),
+    [counts, diffLines]
+  );
 
   const autoSideBySide =
     stats.added + stats.removed > SIDE_BY_SIDE_AUTO_THRESHOLD;
@@ -83,7 +91,7 @@ export function DiffBody(props: DiffBodyProps) {
     <CodePanel>
       <CodePanel.Header
         title={title}
-        copyText={copyText ?? newText}
+        copyText={copyText ?? (given === null ? newText : undefined)}
         rightChildren={
           <>
             <DiffStat added={stats.added} removed={stats.removed} />
