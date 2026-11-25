@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
+// Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
+import { useEffect, useState } from "react";
 import { cn } from "@opal/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useTranslations } from "next-intl";
+import { Button, Text } from "@opal/components";
+import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 
 interface FullImageModalProps {
-  src: string;
+  urls: string[];
+  initialIndex?: number;
   alt?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -14,19 +18,40 @@ interface FullImageModalProps {
 }
 
 export function FullImageModal({
-  src,
+  urls,
+  initialIndex = 0,
   alt,
   open,
   onOpenChange,
   onCloseAutoFocus,
 }: FullImageModalProps) {
   const t = useTranslations("chat.files");
+  const [offset, setOffset] = useState(0);
+  const count = urls.length;
+  const index =
+    count > 0 ? (((initialIndex + offset) % count) + count) % count : 0;
+  const src = urls[index];
 
-  // pre-fetch image
   useEffect(() => {
-    const img = new Image();
-    img.src = src;
-  }, [src]);
+    for (const url of urls) {
+      const img = new Image();
+      img.src = url;
+    }
+  }, [urls]);
+
+  if (!src) return null;
+
+  const step = (direction: -1 | 1) =>
+    setOffset((current) => current + direction);
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (count <= 1) return;
+    if (event.key === "ArrowLeft") step(-1);
+    else if (event.key === "ArrowRight") step(1);
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -34,6 +59,7 @@ export function FullImageModal({
         <Dialog.Overlay className="fixed inset-0 bg-black bg-opacity-80 z-modal-overlay backdrop-blur-xl" />
         <Dialog.Content
           onCloseAutoFocus={onCloseAutoFocus}
+          onKeyDown={onKeyDown}
           className={cn(
             "fixed inset-0 flex items-center justify-center p-4 z-modal",
             "w-full max-w-(--breakpoint-lg) h-fit top-1/2 right-auto left-1/2 -translate-y-2/4 -translate-x-2/4",
@@ -45,9 +71,43 @@ export function FullImageModal({
           </Dialog.Title>
           <img
             src={src}
-            alt={alt || t("fullImageModal.image.alt")}
+            alt={(count <= 1 && alt) || t("fullImageModal.image.alt")}
             className="max-w-full max-h-[calc(100dvh-2rem)] object-contain"
           />
+          {count > 1 && (
+            <>
+              <div className="absolute start-2 top-1/2 -translate-y-1/2">
+                <Button
+                  icon={SvgChevronLeft}
+                  prominence="secondary"
+                  tooltip={t("fullImageModal.previous")}
+                  aria-label={t("fullImageModal.previous")}
+                  onClick={() => step(-1)}
+                />
+              </div>
+              <div className="absolute end-2 top-1/2 -translate-y-1/2">
+                <Button
+                  icon={SvgChevronRight}
+                  prominence="secondary"
+                  tooltip={t("fullImageModal.next")}
+                  aria-label={t("fullImageModal.next")}
+                  onClick={() => step(1)}
+                />
+              </div>
+              <div
+                className="absolute bottom-2 start-1/2 -translate-x-1/2"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <Text font="secondary-body" color="text-03">
+                  {t("fullImageModal.position", {
+                    current: index + 1,
+                    total: count,
+                  })}
+                </Text>
+              </div>
+            </>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

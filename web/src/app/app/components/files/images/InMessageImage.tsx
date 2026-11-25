@@ -1,8 +1,13 @@
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { SvgDownload } from "@opal/icons";
 import { ImageShape } from "@/app/app/services/streamingModels";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
+import {
+  GALLERY_IMAGE_ATTR,
+  collectGallery,
+  type GalleryState,
+} from "@/app/app/components/files/images/gallery";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { cn, clickOnKeyDown } from "@opal/utils";
@@ -41,7 +46,9 @@ export const InMessageImage = memo(function InMessageImage({
   shape = DEFAULT_SHAPE,
 }: InMessageImageProps) {
   const t = useTranslations("chat.files");
-  const [fullImageShowing, setFullImageShowing] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [gallery, setGallery] = useState<GalleryState | null>(null);
+  const openGallery = () => setGallery(collectGallery(triggerRef.current));
   const [imageLoaded, setImageLoaded] = useState(loadedImages.has(fileId));
 
   const normalizedShape = SHAPE_CLASSES[shape] ? shape : DEFAULT_SHAPE;
@@ -73,22 +80,29 @@ export const InMessageImage = memo(function InMessageImage({
 
   return (
     <>
-      <FullImageModal
-        src={buildImgUrl(fileId)}
-        open={fullImageShowing}
-        onOpenChange={(open) => setFullImageShowing(open)}
-      />
+      {gallery && (
+        <FullImageModal
+          urls={gallery.urls}
+          initialIndex={gallery.index}
+          open
+          onOpenChange={(open) => {
+            if (!open) setGallery(null);
+          }}
+        />
+      )}
 
       <Hoverable.Root group="messageImage" width="fit">
         {/* The container holds its own download button, so it takes the button
             semantics rather than a <button> wrapping a <button>. */}
         <div
+          ref={triggerRef}
           className={cn("relative", shapeContainerClasses)}
           role="button"
           tabIndex={0}
           aria-label={t("inMessageImage.viewFullImage.label")}
-          onClick={() => setFullImageShowing(true)}
-          onKeyDown={clickOnKeyDown(() => setFullImageShowing(true))}
+          {...{ [GALLERY_IMAGE_ATTR]: buildImgUrl(fileId) }}
+          onClick={openGallery}
+          onKeyDown={clickOnKeyDown(openGallery)}
         >
           {!imageLoaded && (
             <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />

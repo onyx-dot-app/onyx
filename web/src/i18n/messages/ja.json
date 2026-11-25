@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "アップロードされた添付ファイル"
-        }
+        },
+        "next": "次の画像",
+        "position": "{current} / {total}",
+        "previous": "前の画像"
       },
       "inMessageImage": {
         "downloadButton": {

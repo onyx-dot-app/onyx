@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "مرفق تم رفعه"
-        }
+        },
+        "next": "الصورة التالية",
+        "position": "{current} / {total}",
+        "previous": "الصورة السابقة"
       },
       "inMessageImage": {
         "downloadButton": {

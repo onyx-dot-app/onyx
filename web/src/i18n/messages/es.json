@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "Archivo adjunto subido"
-        }
+        },
+        "next": "Imagen siguiente",
+        "position": "{current} / {total}",
+        "previous": "Imagen anterior"
       },
       "inMessageImage": {
         "downloadButton": {
