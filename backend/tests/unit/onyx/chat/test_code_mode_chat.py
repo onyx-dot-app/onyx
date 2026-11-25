@@ -608,7 +608,8 @@ def test_sandbox_tool_definitions_are_the_same_in_every_chat(
     family: ToolFamily, code_mode: bool
 ) -> None:
     """Tool definitions open the cached prefix, so they hold nothing of one
-    chat; only the sandbox section names the chat's working directory."""
+    chat, also when only one chat has files; only the sandbox section names
+    the chat's working directory."""
 
     def definitions(turn: SandboxTurn) -> list[str]:
         tools: list[Tool] = [tool(turn) for tool in SANDBOX_TOOLS[family].tools]
@@ -617,7 +618,7 @@ def test_sandbox_tool_definitions_are_the_same_in_every_chat(
         )
         return [tool.tool_definition().model_dump_json() for tool in offered]
 
-    first, second = _sandbox_turn(family), _sandbox_turn(family)
+    first, second = _sandbox_turn(family), _sandbox_turn(family, chat_files=True)
     assert first.workdir != second.workdir
     assert definitions(first) == definitions(second)
     assert [text for text in definitions(first) if first.workdir in text] == []

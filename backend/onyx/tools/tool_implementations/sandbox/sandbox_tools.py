@@ -29,7 +29,6 @@ from onyx.prompts.sandbox_tools import (
     ARTIFACT_DESCRIPTION,
     ARTIFACT_RESULTS,
     ATTACHMENTS_NOT_SAVED_NOTE,
-    CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
     EXEC_CD_RULE,
     EXEC_COMMAND_DESCRIPTION,
@@ -300,22 +299,13 @@ class SandboxTool(Tool):
         return self.describe(str)
 
     def describe(self, called_name: Callable[[str], str]) -> str:
-        return self.describe_in(
-            self._turn.shell, called_name, chat_files=bool(self._turn.vm_chat_files)
-        )
+        return self.describe_in(self._turn.shell, called_name)
 
     @classmethod
-    def describe_in(
-        cls,
-        shell: ShellShape,
-        called_name: Callable[[str], str],
-        *,
-        chat_files: bool,  # noqa: ARG003
-    ) -> str:
+    def describe_in(cls, shell: ShellShape, called_name: Callable[[str], str]) -> str:
         """The description in a turn of the `shell` shape, naming each tool
-        as `called_name` gives its name; `chat_files`: the turn has chat
-        files in the VM. It holds nothing of one chat, so every chat's tool
-        definitions are the same."""
+        as `called_name` gives its name. It holds nothing of one chat, so
+        every chat's tool definitions are the same."""
         return cls.DESCRIPTION.format(
             shell=called_name(shell.name),
             write_stdin=called_name(WriteStdinTool.NAME),
@@ -351,19 +341,6 @@ class ExecCommandTool(SandboxTool):
     @classmethod
     def tool_name(cls, shell: ShellShape) -> str:
         return shell.name
-
-    @classmethod
-    def describe_in(
-        cls,
-        shell: ShellShape,
-        called_name: Callable[[str], str],
-        *,
-        chat_files: bool,
-    ) -> str:
-        description = super().describe_in(shell, called_name, chat_files=chat_files)
-        if chat_files:
-            return f"{description}\n\n{CHAT_FILES_LAYOUT}"
-        return description
 
     @property
     def arguments(self) -> type[BaseModel]:
