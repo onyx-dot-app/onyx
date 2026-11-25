@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "Integrationen",
-      "description": "Verbinden Sie MCP-Server und Apps. Jede Integration hat einen Eigentümer, eine Installationseinstellung und eigene Freigaben.",
+      "description": "Verbinden Sie MCP-Server und Apps.",
       "search": "Integrationen suchen",
       "open": "{name} öffnen",
       "loadFailed": "Die Integrationen konnten nicht geladen werden.",
@@ -10612,7 +10612,6 @@
         "overview": {
           "readOnly": "Sie können diese Integration sehen, aber nicht ändern.",
           "noDescription": "Keine Beschreibung",
-          "type": "Typ",
           "signIn": "Anmeldung",
           "createdBy": "Hinzugefügt von",
           "needsSetup": "Einrichtung nötig",
@@ -10704,9 +10703,9 @@
           "setByAdmin": "Vom Admin festgelegt",
           "alwaysAsks": "Craft fragt vor jeder Anfrage nach, die zu keiner anderen Aktion passt. Sie können Erlauben nicht festlegen.",
           "useDefaults": "Standards verwenden",
-          "readOnly": "Lesende Aktionen ({count})",
-          "write": "Schreibende Aktionen ({count})",
-          "other": "Weitere Aktionen ({count})",
+          "readOnly": "Lesende Aktionen",
+          "write": "Schreibende Aktionen",
+          "other": "Weitere Aktionen",
           "empty": "Diese Integration hat keine Aktionen.",
           "connectFirst": {
             "title": "Verbinden Sie zuerst den Server",
@@ -10723,7 +10722,7 @@
         "saveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
         "title": "Installationseinstellung",
         "description": "Wer in der Organisation diese Integration erhält.",
-        "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie.",
+        "notAvailable": "Privat. Nur der Eigentümer und die Personen, mit denen sie geteilt ist, nutzen sie.",
         "required": "Mitglieder, die sich mit ihrem eigenen Konto anmelden, müssen sie verbinden, bevor sie Chat und Craft nutzen können."
       },
       "ownedBy": "Eigentümer: {owner}",

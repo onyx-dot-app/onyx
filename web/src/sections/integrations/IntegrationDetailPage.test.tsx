@@ -154,6 +154,26 @@ test("lists the URL patterns of a URL-pattern app", async () => {
   expect(view.getByText("https://api.example.com/v1/*")).toBeInTheDocument();
 });
 
+test("shows the status badge only when the integration needs work", async () => {
+  mockFetch({ [URL_DETAIL]: makeDetail() });
+  open();
+  await inPanel();
+  await screen.findByRole("switch", {
+    name: detailCopy.overview.enabled.title,
+  });
+  expect(screen.queryByText(copy.status.ready)).not.toBeInTheDocument();
+});
+
+test("shows Needs setup in the header", async () => {
+  mockFetch({ [URL_DETAIL]: makeDetail({ needs_setup: true }) });
+  open();
+  expect(
+    await screen.findByText(copy.status.needsSetup, {
+      selector: "[data-opal-content-title]",
+    })
+  ).toBeInTheDocument();
+});
+
 test("deletes the integration after a confirmation", async () => {
   const fetchMock = mockFetch({
     [URL_DETAIL]: makeDetail(),

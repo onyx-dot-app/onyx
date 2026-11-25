@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "Integrations",
-      "description": "Connect MCP servers and apps. Each integration has an owner, an install setting and its own shares.",
+      "description": "Connect MCP servers and apps.",
       "search": "Search integrations",
       "open": "Open {name}",
       "loadFailed": "Could not load the integrations.",
@@ -10612,7 +10612,6 @@
         "overview": {
           "readOnly": "You can see this integration. You cannot change it.",
           "noDescription": "No description",
-          "type": "Type",
           "signIn": "Sign-in",
           "createdBy": "Added by",
           "needsSetup": "Needs setup",
@@ -10704,9 +10703,9 @@
           "setByAdmin": "Set by admin",
           "alwaysAsks": "Craft asks before each request that matches no other action. You cannot set Allow.",
           "useDefaults": "Use defaults",
-          "readOnly": "Read-Only Actions ({count})",
-          "write": "Write Actions ({count})",
-          "other": "Other Actions ({count})",
+          "readOnly": "Read-Only Actions",
+          "write": "Write Actions",
+          "other": "Other Actions",
           "empty": "This integration has no actions.",
           "connectFirst": {
             "title": "Connect the server first",
@@ -10723,7 +10722,7 @@
         "saveFailed": "Could not save the install setting.",
         "title": "Install Setting",
         "description": "Who in the organization gets this integration.",
-        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it.",
+        "notAvailable": "Private. Only the owner and the people it is shared with use it.",
         "required": "Members who sign in with their own account must connect it before they can use chat and Craft."
       },
       "ownedBy": "Owned by {owner}",

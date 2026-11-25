@@ -255,20 +255,22 @@ export default function IntegrationActionsTab({
     <Section gap={4} alignItems="stretch" height="auto">
       <Section
         flexDirection="row"
-        justifyContent="between"
+        justifyContent={data.actions.length > 0 ? "between" : "end"}
         gap={2}
         wrap
         height="auto"
       >
-        <Section width="auto" height="auto">
-          <InputTypeIn
-            icon="search"
-            aria-label={t("search")}
-            placeholder={t("search")}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </Section>
+        {data.actions.length > 0 && (
+          <Section width="auto" height="auto">
+            <InputTypeIn
+              icon="search"
+              aria-label={t("search")}
+              placeholder={t("search")}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </Section>
+        )}
         <Section flexDirection="row" width="auto" height="auto" gap={2}>
           {isMcp && (
             <Button
@@ -359,17 +361,17 @@ export default function IntegrationActionsTab({
           {[
             {
               id: "read",
-              title: t("readOnly", { count: readActions.length }),
+              title: t("readOnly"),
               actions: readActions,
             },
             {
               id: "write",
-              title: t("write", { count: writeActions.length }),
+              title: t("write"),
               actions: writeActions,
             },
             {
               id: "other",
-              title: t("other", { count: otherActions.length }),
+              title: t("other"),
               actions: otherActions,
             },
           ].map((group) =>

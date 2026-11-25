@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "連携",
-      "description": "MCP サーバーとアプリを接続します。各統合には所有者、インストール設定、独自の共有があります。",
+      "description": "MCP サーバーとアプリを接続します。",
       "search": "連携を検索",
       "open": "{name} を開く",
       "loadFailed": "連携を読み込めませんでした。",
@@ -10612,7 +10612,6 @@
         "overview": {
           "readOnly": "この連携は表示できますが、変更はできません。",
           "noDescription": "説明なし",
-          "type": "種類",
           "signIn": "ログイン",
           "createdBy": "追加したユーザー",
           "needsSetup": "要セットアップ",
@@ -10704,9 +10703,9 @@
           "setByAdmin": "管理者が設定",
           "alwaysAsks": "Craft は、他のアクションに一致しない各リクエストの前に確認します。許可は設定できません。",
           "useDefaults": "デフォルトを使用",
-          "readOnly": "読み取りアクション ({count})",
-          "write": "書き込みアクション ({count})",
-          "other": "その他のアクション ({count})",
+          "readOnly": "読み取りアクション",
+          "write": "書き込みアクション",
+          "other": "その他のアクション",
           "empty": "この連携にはアクションがありません。",
           "connectFirst": {
             "title": "まずサーバーに接続してください",
@@ -10723,7 +10722,7 @@
         "saveFailed": "インストール設定を保存できませんでした。",
         "title": "インストール設定",
         "description": "組織内でこの連携を使える人。",
-        "notAvailable": "非公開。所有者、共有相手、独自の設定を持つグループだけが使えます。",
+        "notAvailable": "非公開。所有者と共有相手だけが使えます。",
         "required": "自分のアカウントでサインインするメンバーは、チャットと Craft を使う前に接続する必要があります。"
       },
       "ownedBy": "所有者: {owner}",

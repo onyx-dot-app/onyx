@@ -107,13 +107,25 @@ test("shows each integration with its type, sign-in, install setting and status"
   );
   expect(reportsRow.getByText(copy.shape.openapi)).toBeInTheDocument();
   expect(reportsRow.getByText("Organization API key")).toBeInTheDocument();
+  expect(reportsRow.getByText("Weekly reports")).toBeInTheDocument();
   expect(
-    reportsRow.getByText("Owned by owner@example.com")
-  ).toBeInTheDocument();
+    reportsRow.queryByText("Owned by owner@example.com")
+  ).not.toBeInTheDocument();
   expect(
     reportsRow.getByRole("combobox", { name: "Install setting of Reports API" })
   ).toHaveValue(messages.skills.installationPolicy.NOT_AVAILABLE.label);
   expect(reportsRow.getByText(copy.status.needsSetup)).toBeInTheDocument();
+});
+
+test("shows the owner when the integration has no description", async () => {
+  mockFetch({
+    "/api/admin/integrations": [{ ...reports, description: "" }],
+  });
+  render(<IntegrationsPage />);
+
+  expect(
+    await screen.findByText("Owned by owner@example.com")
+  ).toBeInTheDocument();
 });
 
 test("on a phone the list shows only the name and the status", async () => {

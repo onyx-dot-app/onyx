@@ -29,7 +29,9 @@ export default function IntegrationKindFilter({
           interaction={value === "all" ? "rest" : "hover"}
           aria-label={t("label")}
           tooltip={t("label")}
-        />
+        >
+          {value === "all" ? undefined : t(value)}
+        </Button>
       </Dropdown.Trigger>
       <Dropdown.Data
         label={t("label")}

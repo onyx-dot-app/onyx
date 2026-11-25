@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "연동",
-      "description": "MCP 서버와 앱을 연결합니다. 각 통합에는 소유자, 설치 설정, 자체 공유가 있습니다.",
+      "description": "MCP 서버와 앱을 연결합니다.",
       "search": "연동 검색",
       "open": "{name} 열기",
       "loadFailed": "연동을 불러올 수 없습니다.",
@@ -10612,7 +10612,6 @@
         "overview": {
           "readOnly": "이 연동을 볼 수는 있지만 변경할 수는 없습니다.",
           "noDescription": "설명 없음",
-          "type": "유형",
           "signIn": "로그인",
           "createdBy": "추가한 사람",
           "needsSetup": "설정 필요",
@@ -10704,9 +10703,9 @@
           "setByAdmin": "관리자가 설정함",
           "alwaysAsks": "Craft는 다른 작업과 일치하지 않는 각 요청 전에 확인합니다. 허용으로 설정할 수 없습니다.",
           "useDefaults": "기본값 사용",
-          "readOnly": "읽기 전용 액션({count})",
-          "write": "쓰기 액션({count})",
-          "other": "기타 액션({count})",
+          "readOnly": "읽기 전용 액션",
+          "write": "쓰기 액션",
+          "other": "기타 액션",
           "empty": "이 연동에는 액션이 없습니다.",
           "connectFirst": {
             "title": "먼저 서버를 연결하세요",
@@ -10723,7 +10722,7 @@
         "saveFailed": "설치 설정을 저장할 수 없습니다.",
         "title": "설치 설정",
         "description": "조직에서 이 통합을 받는 사람입니다.",
-        "notAvailable": "비공개입니다. 소유자, 공유받은 사람, 자체 설정이 있는 그룹만 사용합니다.",
+        "notAvailable": "비공개입니다. 소유자와 공유받은 사람만 사용합니다.",
         "required": "자신의 계정으로 로그인하는 멤버는 채팅과 Craft를 사용하기 전에 연결해야 합니다."
       },
       "ownedBy": "소유자: {owner}",

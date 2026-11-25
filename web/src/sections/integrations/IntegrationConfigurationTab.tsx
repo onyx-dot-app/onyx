@@ -353,7 +353,11 @@ export default function IntegrationConfigurationTab({
           <Content
             font="main-ui-action"
             title={t("signIn.title")}
-            description={t("signIn.description")}
+            description={
+              integration.auth_mode !== "none"
+                ? t("signIn.description")
+                : undefined
+            }
           />
           <IntegrationSignInFields
             draft={signIn}

@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "Integrações",
-      "description": "Conecte servidores MCP e aplicativos. Cada integração tem um proprietário, uma configuração de instalação e seus próprios compartilhamentos.",
+      "description": "Conecte servidores MCP e aplicativos.",
       "search": "Pesquisar integrações",
       "open": "Abrir {name}",
       "loadFailed": "Não foi possível carregar as integrações.",
@@ -10612,7 +10612,6 @@
         "overview": {
           "readOnly": "Você pode ver esta integração, mas não pode alterá-la.",
           "noDescription": "Sem descrição",
-          "type": "Tipo",
           "signIn": "Login",
           "createdBy": "Adicionada por",
           "needsSetup": "Requer configuração",
@@ -10704,9 +10703,9 @@
           "setByAdmin": "Definido pelo administrador",
           "alwaysAsks": "O Craft pergunta antes de cada solicitação que não corresponde a nenhuma outra ação. Não é possível definir Permitir.",
           "useDefaults": "Usar padrões",
-          "readOnly": "Ações somente leitura ({count})",
-          "write": "Ações de gravação ({count})",
-          "other": "Outras ações ({count})",
+          "readOnly": "Ações somente leitura",
+          "write": "Ações de gravação",
+          "other": "Outras ações",
           "empty": "Esta integração não tem ações.",
           "connectFirst": {
             "title": "Conecte o servidor primeiro",
@@ -10723,7 +10722,7 @@
         "saveFailed": "Não foi possível salvar a configuração de instalação.",
         "title": "Configuração de Instalação",
         "description": "Quem recebe esta integração na organização.",
-        "notAvailable": "Privada. Só a usam o proprietário, as pessoas com quem ela é compartilhada e os grupos com configuração própria.",
+        "notAvailable": "Privada. Só a usam o proprietário e as pessoas com quem ela é compartilhada.",
         "required": "Os membros que entram com a própria conta precisam conectá-la antes de usar o chat e o Craft."
       },
       "ownedBy": "Proprietário: {owner}",

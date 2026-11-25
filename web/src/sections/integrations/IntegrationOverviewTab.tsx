@@ -50,9 +50,9 @@ export default function IntegrationOverviewTab({
         descriptionLabel={t("description")}
         description={integration.description || t("noDescription")}
         facts={[
-          { label: t("type"), value: labels.shape(integration) },
           { label: t("signIn"), value: labels.signIn(integration) },
-          ...(integration.created_by_email
+          ...(integration.created_by_email &&
+          integration.created_by_email !== integration.access.owner_email
             ? [{ label: t("createdBy"), value: integration.created_by_email }]
             : []),
           ...(integration.access.owner_email

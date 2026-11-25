@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "集成",
-      "description": "连接 MCP 服务器和应用。每个集成都有所有者、安装设置和自己的共享。",
+      "description": "连接 MCP 服务器和应用。",
       "search": "搜索集成",
       "open": "打开 {name}",
       "loadFailed": "无法加载集成。",
@@ -10612,7 +10612,6 @@
         "overview": {
           "readOnly": "您可以查看此集成，但无法更改。",
           "noDescription": "无描述",
-          "type": "类型",
           "signIn": "登录",
           "createdBy": "添加者",
           "needsSetup": "需要设置",
@@ -10704,9 +10703,9 @@
           "setByAdmin": "由管理员设置",
           "alwaysAsks": "对于不匹配任何其他操作的每个请求，Craft 都会先询问。您无法设置为允许。",
           "useDefaults": "使用默认值",
-          "readOnly": "只读操作 ({count})",
-          "write": "写入操作 ({count})",
-          "other": "其他操作 ({count})",
+          "readOnly": "只读操作",
+          "write": "写入操作",
+          "other": "其他操作",
           "empty": "此集成没有操作。",
           "connectFirst": {
             "title": "请先连接服务器",
@@ -10723,7 +10722,7 @@
         "saveFailed": "无法保存安装设置。",
         "title": "安装设置",
         "description": "组织中谁可以使用此集成。",
-        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。",
+        "notAvailable": "私有。只有所有者和共享对象可以使用。",
         "required": "使用自己账号登录的成员必须先连接它，才能使用聊天和 Craft。"
       },
       "ownedBy": "所有者：{owner}",
