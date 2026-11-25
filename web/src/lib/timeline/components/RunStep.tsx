@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import { Line, Presence } from "@opal/components";
 import { LineLoader } from "@opal/loaders";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -17,6 +17,24 @@ export interface RunStepOpenState {
 }
 
 export const RunStepOpenContext = createContext<RunStepOpenState | null>(null);
+
+/** A run's open step ids, in the order the user opened them. */
+export function useRunStepOpenState(): RunStepOpenState {
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set());
+  return useMemo(
+    () => ({
+      openIds,
+      setOpen: (id, open) =>
+        setOpenIds((previous) => {
+          const next = new Set(previous);
+          if (open) next.add(id);
+          else next.delete(id);
+          return next;
+        }),
+    }),
+    [openIds]
+  );
+}
 
 export interface RunStepProps {
   /** Keeps the step's open state in its run card. Such a step starts closed. */

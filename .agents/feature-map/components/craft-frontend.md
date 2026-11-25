@@ -195,7 +195,10 @@ the user was there; a scroll up or an opened step stops that. The list keeps
 the step the user opened in view. The card keeps the ids of its open steps
 (`RunStepOpenContext`), so a step stays open when the card folds and reopens.
 A chat run of at most `MAX_HOISTED_STEPS` steps shows each
-step as its own card instead of one run card. Every other block folds, even
+step as its own card instead of one run card. `AgentTimeline` owns one set of
+open step ids for both layouts. When a step is open as the run passes the
+limit, the run card replaces the step cards at once and opens with that step
+still open. Every other block folds, even
 with one entry, once
 a text reply follows. A whole response is laid out by the shared `Response`
 (`web/src/lib/timeline/components/Response.tsx`): `BuildMessageList` and chat's

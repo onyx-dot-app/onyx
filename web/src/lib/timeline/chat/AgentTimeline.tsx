@@ -19,6 +19,10 @@ import { useTimelineHeader } from "@/lib/timeline/chat/hooks/useTimelineHeader";
 import { useTimelineStepState } from "@/lib/timeline/chat/hooks/useTimelineStepState";
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { RunCard } from "@/lib/timeline/components/RunCard";
+import {
+  RunStepOpenContext,
+  useRunStepOpenState,
+} from "@/lib/timeline/components/RunStep";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import { ChatStep } from "@/lib/timeline/chat/ChatStep";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
@@ -171,10 +175,18 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // Whether the run card took the step cards' place here: it then fades in,
   // folded.
   const [cardHandedOver, setCardHandedOver] = useState(false);
+  // One set for the step cards and the run card, so an open step stays open
+  // across the handover.
+  const stepOpenState = useRunStepOpenState();
+  // A step was open at the handover: the run card takes over at once and
+  // open, so the step the user reads does not vanish.
+  const [handedOverOpen, setHandedOverOpen] = useState(false);
   if (hoisted && layout === "collapsed") setLayout("hoisted");
   if (!hoisted && layout === "hoisted") {
-    setLayout(prefersReducedMotion() ? "collapsed" : "handover");
+    const keepOpen = stepOpenState.openIds.size > 0;
+    setLayout(keepOpen || prefersReducedMotion() ? "collapsed" : "handover");
     setCardHandedOver(true);
+    setHandedOverOpen(keepOpen);
   }
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -225,46 +237,48 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   }, [layout]);
 
   const stepCards = (
-    <TimelineRoot>
-      <Section alignItems="stretch" gap={2} height="auto">
-        {steps.slice(0, MAX_HOISTED_STEPS).map((runStep) => (
-          // A step that arrives while the run works rises in; a saved run's
-          // steps appear at once.
-          <Presence
-            key={runStep.id}
-            appear={isActive}
-            grow
-            data-run-handover-step=""
-          >
-            <ChatStep
-              step={runStep.step}
-              status={runStep.status}
-              position={{ isFirst: true, isLast: true }}
-              chatState={chatState}
-              stopPacketSeen={stopPacketSeen}
-              stopReason={stopReason}
-              // A finished memory step keeps its tag in its header, as the
-              // collapsed run card does.
-              headerAccessory={
-                runStep.status === "done"
-                  ? memoryStepTag(runStep.step.packets)
-                  : undefined
-              }
+    <RunStepOpenContext.Provider value={stepOpenState}>
+      <TimelineRoot>
+        <Section alignItems="stretch" gap={2} height="auto">
+          {steps.slice(0, MAX_HOISTED_STEPS).map((runStep) => (
+            // A step that arrives while the run works rises in; a saved run's
+            // steps appear at once.
+            <Presence
+              key={runStep.id}
+              appear={isActive}
+              grow
+              data-run-handover-step=""
+            >
+              <ChatStep
+                step={runStep.step}
+                status={runStep.status}
+                position={{ isFirst: true, isLast: true }}
+                chatState={chatState}
+                stopPacketSeen={stopPacketSeen}
+                stopReason={stopReason}
+                // A finished memory step keeps its tag in its header, as the
+                // collapsed run card does.
+                headerAccessory={
+                  runStep.status === "done"
+                    ? memoryStepTag(runStep.step.packets)
+                    : undefined
+                }
+              />
+            </Presence>
+          ))}
+          {/* A short run has no run card of its own, so a wait for the user's
+            approval or answer shows as a header-only card under its steps. */}
+          <Presence show={awaitingUser !== null} grow>
+            <RunCard
+              steps={[]}
+              workingText={headerText}
+              isActive
+              renderStep={() => null}
             />
           </Presence>
-        ))}
-        {/* A short run has no run card of its own, so a wait for the user's
-            approval or answer shows as a header-only card under its steps. */}
-        <Presence show={awaitingUser !== null} grow>
-          <RunCard
-            steps={[]}
-            workingText={headerText}
-            isActive
-            renderStep={() => null}
-          />
-        </Presence>
-      </Section>
-    </TimelineRoot>
+        </Section>
+      </TimelineRoot>
+    </RunStepOpenContext.Provider>
   );
 
   return (
@@ -273,7 +287,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     <div ref={boxRef} className="relative">
       {layout !== "hoisted" && (
         <div key="card" ref={cardRef}>
-          <Presence appear={cardHandedOver}>
+          <Presence appear={cardHandedOver && !handedOverOpen}>
             {/* Collapsed: the run's steps in one run card, titled by its
                 current step while it works. */}
             <RunCard
@@ -281,7 +295,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               workingText={headerText}
               icon={SvgListTree}
               appear={!cardHandedOver}
-              startFolded={cardHandedOver}
+              startFolded={cardHandedOver && !handedOverOpen}
+              stepOpenState={stepOpenState}
               isActive={isActive}
               // A stop after text followed did not end this run's work.
               isStopped={stopPacketSeen && userStopped && !hasDisplayContent}

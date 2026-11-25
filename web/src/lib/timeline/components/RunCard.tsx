@@ -22,6 +22,7 @@ import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 import {
   RunStepOpenContext,
   type RunStepOpenState,
+  useRunStepOpenState,
 } from "@/lib/timeline/components/RunStep";
 import type {
   TimelineEntryStatus,
@@ -70,6 +71,9 @@ export interface RunCardProps<S extends RunCardStep> {
   /** Mount folded, even while the run works. */
   startFolded?: boolean;
   summary?: RunCardSummary;
+  /** The run's open step ids, when the run also shows its steps elsewhere
+   * (AgentTimeline's hoisted step cards). Defaults to the card's own. */
+  stepOpenState?: RunStepOpenState;
 }
 
 /** The open card's step list scrolls inside this height. */
@@ -161,6 +165,7 @@ export function RunCard<S extends RunCardStep>({
   appear = true,
   startFolded = false,
   summary,
+  stepOpenState: sharedOpenState,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
   const isRunning =
@@ -180,27 +185,27 @@ export function RunCard<S extends RunCardStep>({
   const { listRef, onScroll, reveal } = useStepListScroll(isRunning);
   const { rowRef, onToggle } = useRevealOnOpen();
   // Kept here, so each step's open state survives a fold of the card.
-  const [openStepIds, setOpenStepIds] = useState<ReadonlySet<string>>(
-    () => new Set()
-  );
+  const ownOpenState = useRunStepOpenState();
+  const { openIds, setOpen } = sharedOpenState ?? ownOpenState;
   const stepOpenState = useMemo<RunStepOpenState>(
     () => ({
-      openIds: openStepIds,
+      openIds,
       contained: true,
       setOpen: (id, open) => {
         // The list keeps an opened step in view, and the chat the card.
         reveal(open ? id : null);
         onToggle(open);
-        setOpenStepIds((previous) => {
-          const next = new Set(previous);
-          if (open) next.add(id);
-          else next.delete(id);
-          return next;
-        });
+        setOpen(id, open);
       },
     }),
-    [openStepIds, reveal, onToggle]
+    [openIds, setOpen, reveal, onToggle]
   );
+  // A card that mounts with an open step (a handover) keeps the latest one
+  // in view.
+  const [initialOpenId] = useState(() => Array.from(openIds).at(-1));
+  useEffect(() => {
+    if (initialOpenId !== undefined) reveal(initialOpenId);
+  }, [initialOpenId, reveal]);
   // A card the user folded or opened keeps their choice.
   const userToggled = useRef(false);
   const toggle = () => {
