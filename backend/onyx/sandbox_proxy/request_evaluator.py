@@ -22,6 +22,7 @@ from onyx.db.enums import (
     IntegrationKind,
 )
 from onyx.db.integration import (
+    get_api_app_for_integration,
     get_external_app_for_integration,
     list_enabled_integrations_by_id,
 )
@@ -169,12 +170,16 @@ class IntegrationRequestEvaluator(RequestEvaluator):
             if picked is None:
                 return None
             integration, match = picked
+            api_app = (
+                integration.kind is IntegrationKind.API
+                and get_api_app_for_integration(integration.id, db) is not None
+            )
             target = GatedTarget(
                 integration_id=integration.id,
                 kind=integration.kind,
                 app_name=integration.name,
-                api_app=integration.api_app_id is not None,
-                chat_tools=_has_chat_tools(integration, db),
+                api_app=api_app,
+                chat_tools=api_app or _has_chat_tools(integration, db),
             )
         if not match.actions:
             return McpProtocolRequest(target=target)
@@ -206,7 +211,7 @@ class IntegrationRequestEvaluator(RequestEvaluator):
 
 def _has_chat_tools(integration: Integration, db_session: Session) -> bool:
     """A CUSTOM external app has no chat tools."""
-    if integration.kind is not IntegrationKind.API or integration.api_app_id:
+    if integration.kind is not IntegrationKind.API:
         return True
     app = get_external_app_for_integration(integration.id, db_session)
     return app is None or app.app_type is not ExternalAppType.CUSTOM
