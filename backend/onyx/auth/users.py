@@ -1426,11 +1426,25 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     valid_email_domains=valid_email_domains,
                     is_registration=True,
                 )
-                user = await self._insert_web_user(email, is_verified=True)
-                await seed_pinned_personas_from_featured(
-                    db_session=db_session, user=user
-                )
-                await self.on_after_register(user, request)
+                try:
+                    user = await self._insert_web_user(email, is_verified=True)
+                except IntegrityError as error:
+                    # Two links for this new address were redeemed at once and
+                    # the other request inserted first, as in ``create``. Sign
+                    # in to that row; it already ran the new-account steps.
+                    await db_session.rollback()
+                    logger.warning(
+                        "IntegrityError on magic link sign-up, assuming duplicate: %s",
+                        error,
+                    )
+                    user = await self.user_db.get_by_email(email)
+                    if user is None:
+                        raise error
+                else:
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
+                    await self.on_after_register(user, request)
             elif not user.account_type.is_web_login():
                 # A permission-sync placeholder for this address becomes the
                 # real account, the same way a first OAuth login claims it.
