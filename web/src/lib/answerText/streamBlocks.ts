@@ -21,6 +21,23 @@ function mathFence(line: string): string | null {
   return fence;
 }
 
+/** Whether `text` ends inside a fenced code block that is not closed yet. */
+export function endsInOpenCodeFence(text: string): boolean {
+  let fence: string | null = null;
+  for (const line of text.split("\n")) {
+    const opener = /^[ \t>]*(`{3,}(?![^`\n]*`)|~{3,})/.exec(line)?.[1];
+    if (!opener) continue;
+    if (fence === null) fence = opener;
+    else if (
+      opener[0] === fence[0] &&
+      opener.length >= fence.length &&
+      line.trim().replace(/^[> \t]*/, "") === opener
+    )
+      fence = null;
+  }
+  return fence !== null;
+}
+
 /**
  * Cuts Markdown at blank lines that close every open block, so each piece
  * renders exactly as it would inside the whole text. Returns null when the
