@@ -211,6 +211,34 @@ test("a command shows its output while it runs and how it ended", async () => {
   }
 });
 
+test("command output keeps its terminal colors", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      call({
+        type: PacketType.EXEC_COMMAND_START,
+        cmd: "make test",
+        workdir: null,
+      }),
+      call({
+        type: PacketType.EXEC_OUTPUT_DELTA,
+        text: "\u001b[32m3 passed\u001b[0m, \u001b[31m1 failed\u001b[0m\n",
+      }),
+    ])
+  );
+  try {
+    await openRun();
+    const failed = await screen.findByText("1 failed");
+    expect(failed).toHaveStyle({ color: "var(--opal-ansi-1)" });
+    expect(screen.getByText("3 passed")).toHaveStyle({
+      color: "var(--opal-ansi-2)",
+    });
+    expect(view.container).not.toHaveTextContent("\u001b");
+  } finally {
+    view.unmount();
+  }
+});
+
 test("session input shows typed keys, and polls show the session state", async () => {
   const sent = at({ turn_index: 0, tab_index: 0 });
   const polled = at({ turn_index: 1, tab_index: 0 });
