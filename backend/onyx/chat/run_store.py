@@ -78,7 +78,6 @@ from onyx.chat.tool_approvals import (
 )
 from onyx.chat.tool_questions import question_answer
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
-from onyx.configs.constants import MessageType
 from onyx.db.approval_request import (
     close_pending_approval_requests__no_commit,
     get_approval_requests,
@@ -117,6 +116,7 @@ from onyx.db.chat_response import (
     read_response__no_commit,
     read_response_status__no_commit,
     reserve_child_response__no_commit,
+    response_awaits_root_run__no_commit,
     save_chat_turn,
     save_response_record__no_commit,
 )
@@ -1172,13 +1172,10 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             return str(message_id)
         if parent_run_id is None:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                response = find_response__no_commit(session, self.response_id)
-                if (
-                    response is None
-                    or response.chat_session_id != self.chat_session_id
-                    or agent.id != str(self.chat_session_id)
-                    or response.message_type != MessageType.ASSISTANT
-                    or response.response_status is not None
+                if agent.id != str(
+                    self.chat_session_id
+                ) or not response_awaits_root_run__no_commit(
+                    session, self.response_id, self.chat_session_id
                 ):
                     raise ValueError("Response is unavailable for a new run")
             return str(self.response_id)

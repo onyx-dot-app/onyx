@@ -1265,6 +1265,25 @@ def find_response__no_commit(session: Session, response_id: int) -> ChatMessage 
     )
 
 
+def response_awaits_root_run__no_commit(
+    session: Session, response_id: int, chat_session_id: UUID
+) -> bool:
+    """Whether the response is an assistant row of the chat that no run started."""
+    row = session.execute(
+        select(
+            ChatMessage.chat_session_id,
+            ChatMessage.message_type,
+            ChatMessage.response_status,
+        ).where(ChatMessage.id == response_id)
+    ).one_or_none()
+    return (
+        row is not None
+        and row.chat_session_id == chat_session_id
+        and row.message_type == MessageType.ASSISTANT
+        and row.response_status is None
+    )
+
+
 def read_response__no_commit(
     session: Session, response_id: int
 ) -> SavedResponse | None:
