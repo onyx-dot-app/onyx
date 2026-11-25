@@ -47,6 +47,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibraryListTool,
     LibraryManageLibraryTool,
     LibraryReadTool,
+    LibrarySearchTool,
     _exec_result,
 )
 from onyx.tools.tool_implementations.sandbox.spill import (
@@ -260,7 +261,13 @@ def test_many_short_lines_under_the_character_limit_stay_whole(
 
 
 @pytest.mark.parametrize(
-    "name", [LibraryReadTool.NAME, LibraryFindTool.NAME, ArtifactTool.NAME]
+    "name",
+    [
+        LibraryReadTool.NAME,
+        LibraryFindTool.NAME,
+        LibrarySearchTool.NAME,
+        ArtifactTool.NAME,
+    ],
 )
 def test_a_bounded_library_result_past_the_steps_budget_stays_whole(
     turn: _FakeVMTurn, name: str

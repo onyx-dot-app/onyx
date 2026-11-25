@@ -13,8 +13,9 @@ from pydantic import BaseModel, JsonValue, ValidationError
 
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.prompt_utils import build_system_prompt
+from onyx.context.search.models import ChunkIndexRequest, InferenceChunk
 from onyx.file_store.models import ArtifactText
-from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import ToolResult
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
@@ -29,7 +30,10 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_MATERIALIZE_MAX_ITEMS,
     ARTIFACTS_NAME_MAX_CHARS,
     ARTIFACTS_PATH_MAX_CHARS,
-    ARTIFACTS_QUERY_MAX_CHARS,
+    LIBRARY_SEARCH_CHUNKS_PER_QUERY,
+    LIBRARY_SEARCH_MAX_SNIPPETS,
+    LIBRARY_SEARCH_MAX_TOP_K,
+    LIBRARY_SEARCH_SNIPPET_MAX_CHARS,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_FILES,
     PUBLISH_FILES_MAX_TITLE_CHARS,
@@ -43,6 +47,9 @@ from onyx.tools.tool_implementations.sandbox.models import (
     LibraryListFilters,
     LibraryPrepareMaterializeArguments,
     LibraryReadArguments,
+    LibrarySearchArguments,
+    LibrarySearchCursor,
+    LibrarySearchResult,
     ListedArtifact,
     ManageLibraryArguments,
     ReadItem,
@@ -63,6 +70,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibraryPrepareMaterializeTool,
     LibraryReadTool,
     LibraryReplaceLibraryFileTool,
+    LibrarySearchTool,
     WriteStdinTool,
     WriteTool,
     sandbox_tools_for_model,
@@ -92,6 +100,7 @@ def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() 
         LibraryFindTool,
         LibraryReplaceLibraryFileTool,
         LibraryManageLibraryTool,
+        LibrarySearchTool,
     )
     shared = {ExecCommandTool, WriteStdinTool}
     assert not (set(claude) - shared) & (set(other) - shared)
@@ -107,6 +116,7 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
     assert stubs.deferred_namespaces == {
         "library": LibraryListTool.CODE_MODE_NAMESPACE_DESCRIPTION
     }
+    assert not stubs.has_deferred_functions_without_namespace
     assert {
         name for name, function in stubs.functions.items() if function.deferred
     } == {
@@ -117,6 +127,7 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
         "library__prepare_materialize",
         "library__read",
         "library__replace_library_file",
+        "library__search",
     }
     assert "library__" not in stubs.listed_text
     assert "create_library_file" not in stubs.listed_text
@@ -190,7 +201,6 @@ def test_the_deferred_note_says_what_the_library_group_is_for() -> None:
 class _Listed(BaseModel):
     """The arguments of one get_user_published_files call."""
 
-    query: str | None
     limit: int
 
 
@@ -212,11 +222,10 @@ def _run(
         _db_session: object,
         _user_id: object,
         *,
-        query: str | None,
         limit: int,
         **_: object,
     ) -> list[tuple[ListedArtifact, ArtifactCursor]]:
-        listed.append(_Listed(query=query, limit=limit))
+        listed.append(_Listed(limit=limit))
         assert rows is not None
         return rows
 
@@ -272,21 +281,16 @@ def test_bad_list_arguments_are_tool_errors_without_the_database(
             "those, or list again without the cursor"
         )
 
-    long_query, _ = _run(monkeypatch, {"query": "x" * (ARTIFACTS_QUERY_MAX_CHARS + 1)})
-    assert long_query.is_error
-    assert long_query.content == (
-        f"The query is longer than {ARTIFACTS_QUERY_MAX_CHARS} characters"
-    )
+    # Search finds files by text; the list has no query.
+    query, _ = _run(monkeypatch, {"query": "q3"})
+    assert query.is_error
+    assert "query" in query.content
 
 
-def test_the_limit_is_clamped_and_a_blank_query_lists_every_file(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_the_limit_is_clamped(monkeypatch: pytest.MonkeyPatch) -> None:
     for limit, used in ((0, 1), (-3, 1), (500, ARTIFACTS_LIST_MAX_LIMIT), (7, 7)):
-        _, [listed] = _run(monkeypatch, {"limit": limit, "query": "   "}, rows=[])
-        assert listed == _Listed(query=None, limit=used)
-    _, [listed] = _run(monkeypatch, {"query": "  q3 "}, rows=[])
-    assert listed.query == "q3"
+        _, [listed] = _run(monkeypatch, {"limit": limit}, rows=[])
+        assert listed == _Listed(limit=used)
 
 
 def _key(sort: ArtifactSort, sort_order: SortOrder) -> dict[str, object]:
@@ -384,6 +388,11 @@ _LONG_ID = "x" * (ARTIFACTS_PATH_MAX_CHARS + 1)
                     "operations.0.update.file_uri.file_id",
                 ),
             )
+        ),
+        (
+            LibrarySearchArguments,
+            {"search_query": [{"q": "q3"}], "chat_id": _LONG_ID},
+            "chat_id",
         ),
     ],
 )
@@ -912,3 +921,342 @@ def test_a_read_or_find_splits_one_file_into_lines_at_a_time(
         ]
         * 2
     )
+
+
+def test_a_snippet_is_the_highlight_or_the_text_around_the_first_query_word() -> None:
+    snippet = artifact_operations.search_snippet
+    assert (
+        snippet(["", "the <hi>river</hi>\n bend"], "unused", ["river"])
+        == "the river bend"
+    )
+    # Without highlights, the text starts at the word before the lead.
+    filler = " ".join(f"word{index}" for index in range(30))
+    text = f"{filler} the Otter swims"
+    shown = snippet([], text, ["missing", "otter"])
+    assert shown.startswith("…") and shown.endswith("the Otter swims")
+    assert text.endswith(shown[1:])
+    assert len(shown) - len("… the Otter swims") <= 60 + len("word29")
+    # A word near the start, or no word at all, keeps the start.
+    assert snippet([], "Otter first", ["otter"]) == "Otter first"
+    assert snippet([], "  a  b\n\nc ", []) == "a b c"
+    long = snippet([], "x" * 1_000, ["x"])
+    assert len(long) == LIBRARY_SEARCH_SNIPPET_MAX_CHARS and long.endswith("…")
+
+
+def test_a_snippet_keeps_a_match_that_has_no_space_near_it() -> None:
+    """In text with few spaces, such as minified JSON, the snippet starts
+    inside the lead rather than at a word so far back that the cut drops
+    the match."""
+    snippet = artifact_operations.search_snippet
+    record = json.dumps({"id": 1, "tags": ["a", "b"]}, separators=(",", ":"))
+    for text in (
+        f'[{",".join([record] * 40)},"otter"]',
+        f'intro [{",".join([record] * 40)},"otter"]',
+    ):
+        shown = snippet([], text, ["otter"])
+        assert "otter" in shown, shown
+        assert len(shown) <= LIBRARY_SEARCH_SNIPPET_MAX_CHARS
+        assert shown.startswith("…") and text.endswith(shown[1:])
+    # A space near enough still starts the snippet at its word.
+    spaced = "alpha " + "y" * 100 + " the otter"
+    assert snippet([], spaced, ["otter"]) == "…" + "y" * 100 + " the otter"
+
+
+def test_a_snippet_finds_its_match_where_lowercase_changes_the_length() -> None:
+    # "İ".lower() is two characters long.
+    text = "İ" * 200 + " the otter swims"
+    shown = artifact_operations.search_snippet([], text, ["OTTER"])
+    assert shown.startswith("…") and shown.endswith("the otter swims")
+    assert text.endswith(shown[1:])
+
+
+def test_a_snippet_shows_the_words_of_the_query_that_found_its_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Another query's word near the start does not push the match out."""
+    file = _entry(0)[0]
+    filler = " ".join(f"word{index}" for index in range(80))
+
+    @contextmanager
+    def session() -> Iterator[MagicMock]:
+        yield MagicMock()
+
+    def search_chunks(request: ChunkIndexRequest, *_args: object) -> list[MagicMock]:
+        if request.query != "otter":
+            return []
+        found = MagicMock(spec=InferenceChunk)
+        found.document_id = str(file.library_file_id)
+        found.match_highlights = []
+        found.content = f"beaver {filler} the otter swims"
+        return [found]
+
+    monkeypatch.setattr(artifact_operations, "get_session_with_current_tenant", session)
+    monkeypatch.setattr(
+        artifact_operations,
+        "get_user_artifact_search_candidates",
+        lambda *_args, **_kwargs: [(file.library_file_id, (False, False))],
+    )
+    for name in ("get_current_search_settings", "get_default_document_index"):
+        monkeypatch.setattr(artifact_operations, name, MagicMock())
+    monkeypatch.setattr(artifact_operations, "EmbeddingModel", MagicMock())
+    monkeypatch.setattr(artifact_operations, "search_chunks", search_chunks)
+    monkeypatch.setattr(
+        artifact_operations,
+        "get_user_published_files_by_id",
+        lambda *_args, **_kwargs: {file.library_file_id: (file, True)},
+    )
+
+    found = artifact_operations.search_artifacts(
+        uuid4(),
+        CancellationSignal(),
+        LibrarySearchArguments.model_validate(
+            {"search_query": [{"q": "otter"}, {"q": "beaver"}]}
+        ),
+    )
+
+    (snippet,) = found.results[0].snippets or []
+    assert snippet.endswith("the otter swims")
+
+
+def test_each_query_gets_a_snippet_before_any_query_gets_another(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A query that matches many chunks of a file leaves a slot for the
+    snippet of the next query."""
+    file = _entry(0)[0]
+
+    @contextmanager
+    def session() -> Iterator[MagicMock]:
+        yield MagicMock()
+
+    def chunk(content: str) -> MagicMock:
+        found = MagicMock(spec=InferenceChunk)
+        found.document_id = str(file.library_file_id)
+        found.match_highlights = []
+        found.content = content
+        return found
+
+    def search_chunks(request: ChunkIndexRequest, *_args: object) -> list[MagicMock]:
+        if request.query == "otter":
+            return [
+                chunk(f"otter part {index}")
+                for index in range(LIBRARY_SEARCH_MAX_SNIPPETS + 1)
+            ]
+        return [chunk("the beaver dam")]
+
+    monkeypatch.setattr(artifact_operations, "get_session_with_current_tenant", session)
+    monkeypatch.setattr(
+        artifact_operations,
+        "get_user_artifact_search_candidates",
+        lambda *_args, **_kwargs: [(file.library_file_id, (False, False))],
+    )
+    for name in ("get_current_search_settings", "get_default_document_index"):
+        monkeypatch.setattr(artifact_operations, name, MagicMock())
+    monkeypatch.setattr(artifact_operations, "EmbeddingModel", MagicMock())
+    monkeypatch.setattr(artifact_operations, "search_chunks", search_chunks)
+    monkeypatch.setattr(
+        artifact_operations,
+        "get_user_published_files_by_id",
+        lambda *_args, **_kwargs: {file.library_file_id: (file, True)},
+    )
+
+    found = artifact_operations.search_artifacts(
+        uuid4(),
+        CancellationSignal(),
+        LibrarySearchArguments.model_validate(
+            {"search_query": [{"q": "otter"}, {"q": "beaver"}]}
+        ),
+    )
+
+    snippets = found.results[0].snippets or []
+    assert len(snippets) == LIBRARY_SEARCH_MAX_SNIPPETS
+    assert snippets[:2] == ["otter part 0", "the beaver dam"]
+
+
+@pytest.mark.parametrize("sort", ["relevance", "created_at", "name"])
+def test_only_a_relevance_search_builds_the_embedding_model(
+    monkeypatch: pytest.MonkeyPatch, sort: str
+) -> None:
+    """The other sorts search by keyword only and embed no query."""
+    file = _entry(0)[0]
+
+    @contextmanager
+    def session() -> Iterator[MagicMock]:
+        yield MagicMock()
+
+    monkeypatch.setattr(artifact_operations, "get_session_with_current_tenant", session)
+    monkeypatch.setattr(
+        artifact_operations,
+        "get_user_artifact_search_candidates",
+        lambda *_args, **_kwargs: [(file.library_file_id, (False,))],
+    )
+    for name in ("get_current_search_settings", "get_default_document_index"):
+        monkeypatch.setattr(artifact_operations, name, MagicMock())
+    embedding_model = MagicMock()
+    monkeypatch.setattr(artifact_operations, "EmbeddingModel", embedding_model)
+    searched: list[object] = []
+    monkeypatch.setattr(
+        artifact_operations,
+        "search_chunks",
+        lambda *args: searched.append(args[4]) or [],
+    )
+
+    artifact_operations.search_artifacts(
+        uuid4(),
+        CancellationSignal(),
+        LibrarySearchArguments.model_validate(
+            {"search_query": [{"q": "otter"}], "sort": sort}
+        ),
+    )
+
+    built = sort == "relevance"
+    assert embedding_model.from_db_model.called == built
+    assert searched == [embedding_model.from_db_model.return_value if built else None]
+
+
+def test_a_full_retrieval_that_drops_no_chunk_is_the_only_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Another retrieval only helps when the per-file cap dropped chunks."""
+    document_ids = [str(uuid4()) for _ in range(LIBRARY_SEARCH_CHUNKS_PER_QUERY // 2)]
+    searches: list[ChunkIndexRequest] = []
+
+    def search_chunks(request: ChunkIndexRequest, *_args: object) -> list[MagicMock]:
+        searches.append(request)
+        chunks = []
+        for document_id in document_ids:
+            for _ in range(2):
+                found = MagicMock(spec=InferenceChunk)
+                found.document_id = document_id
+                chunks.append(found)
+        return chunks
+
+    monkeypatch.setattr(artifact_operations, "search_chunks", search_chunks)
+
+    chunks = artifact_operations._search_file_chunks(
+        uuid4(),
+        CancellationSignal(),
+        MagicMock(),
+        MagicMock(),
+        "x",
+        [*document_ids, str(uuid4())],
+    )
+
+    assert len(searches) == 1
+    assert [chunk.document_id for chunk in chunks] == [
+        document_id for document_id in document_ids for _ in range(2)
+    ]
+
+
+def test_a_stop_after_a_retrieval_ends_the_search_before_the_next(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A full retrieval that dropped chunks would search again, but a Stop
+    that came during it ends the search first."""
+    document_id = str(uuid4())
+    signal = CancellationSignal()
+    searches: list[ChunkIndexRequest] = []
+
+    def search_chunks(request: ChunkIndexRequest, *_args: object) -> list[MagicMock]:
+        searches.append(request)
+        signal.cancel("user")
+        chunks = []
+        for _ in range(LIBRARY_SEARCH_CHUNKS_PER_QUERY):
+            found = MagicMock(spec=InferenceChunk)
+            found.document_id = document_id
+            chunks.append(found)
+        return chunks
+
+    monkeypatch.setattr(artifact_operations, "search_chunks", search_chunks)
+
+    with pytest.raises(AgentCancelled):
+        artifact_operations._search_file_chunks(
+            uuid4(), signal, MagicMock(), MagicMock(), "x", [document_id, str(uuid4())]
+        )
+
+    assert len(searches) == 1
+
+
+def test_a_full_search_page_never_spills_and_its_cursor_continues_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every text at its longest: the page drops its last results to fit,
+    and the cursor starts the next page after the last result shown."""
+    files = [_entry(index)[0] for index in range(LIBRARY_SEARCH_MAX_TOP_K + 5)]
+
+    @contextmanager
+    def session() -> Iterator[MagicMock]:
+        yield MagicMock()
+
+    def chunk(artifact_id: UUID, index: int) -> InferenceChunk:
+        found = MagicMock(spec=InferenceChunk)
+        found.document_id = str(artifact_id)
+        found.match_highlights = [str(index) + '"' * 400]
+        found.content = ""
+        return found
+
+    monkeypatch.setattr(artifact_operations, "get_session_with_current_tenant", session)
+    monkeypatch.setattr(
+        artifact_operations,
+        "get_user_artifact_search_candidates",
+        lambda *_args, **_kwargs: [(file.library_file_id, (False,)) for file in files],
+    )
+    for name in ("get_current_search_settings", "get_default_document_index"):
+        monkeypatch.setattr(artifact_operations, name, MagicMock())
+    monkeypatch.setattr(artifact_operations, "EmbeddingModel", MagicMock())
+    monkeypatch.setattr(
+        artifact_operations,
+        "search_chunks",
+        lambda *_args: [
+            chunk(file.library_file_id, index) for file in files for index in range(3)
+        ],
+    )
+    monkeypatch.setattr(
+        artifact_operations,
+        "get_user_published_files_by_id",
+        lambda _db_session, _user_id, artifact_ids, **_kwargs: {
+            file.library_file_id: (file, True)
+            for file in files
+            if file.library_file_id in artifact_ids
+        },
+    )
+
+    def search(arguments: dict[str, JsonValue]) -> ToolResult:
+        turn = MagicMock(spec=SandboxTurn)
+        outcome = LibrarySearchTool(turn).run(
+            ToolInvocation(
+                call_id="search",
+                arguments=arguments,
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+        assert isinstance(outcome, ToolResult)
+        turn.start_call.assert_not_called()
+        return outcome
+
+    first = search({"search_query": [{"q": "x"}], "top_k": 500})
+    assert len(first.content) <= ARTIFACT_RESULT_MAX_CHARS
+    page = LibrarySearchResult.model_validate_json(first.content)
+    shown = len(page.results)
+    assert 0 < shown < LIBRARY_SEARCH_MAX_TOP_K
+    assert [hit.file for hit in page.results] == files[:shown]
+    assert all(len(hit.snippets or []) == 3 for hit in page.results)
+    assert page.next_cursor is not None
+    assert LibrarySearchCursor.model_validate_json(
+        base64.urlsafe_b64decode(page.next_cursor)
+    ) == LibrarySearchCursor(offset=shown)
+
+    following = LibrarySearchResult.model_validate_json(
+        search(
+            {"search_query": [{"q": "x"}], "top_k": 2, "cursor": page.next_cursor}
+        ).content
+    )
+    assert [hit.file for hit in following.results] == files[shown : shown + 2]
+
+    negative = base64.urlsafe_b64encode(b'{"offset":-1}').decode()
+    for cursor in ("%%%", "bm90IGpzb24=", negative):
+        bad = search({"search_query": [{"q": "x"}], "cursor": cursor})
+        assert bad.is_error
+        assert bad.content.startswith("The cursor is not a next_cursor")

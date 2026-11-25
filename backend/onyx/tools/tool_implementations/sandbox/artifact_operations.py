@@ -7,26 +7,37 @@ on are ToolCallExceptions (errors.py:artifact_errors)."""
 import base64
 import posixpath
 import time
+from collections import defaultdict
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
+from datetime import datetime
 from functools import partial
-from itertools import count
+from itertools import chain, count, zip_longest
 from uuid import UUID
 
 import regex
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import ChunkIndexRequest, IndexFilters, InferenceChunk
+from onyx.context.search.retrieval.search_runner import search_chunks
 from onyx.db.chat import (
     append_copied_artifact_version,
     delete_chat_artifact,
     delete_unpublished_chat_artifacts,
+    get_user_artifact_search_candidates,
     get_user_published_file,
     get_user_published_files,
+    get_user_published_files_by_id,
     rename_chat_artifact,
     save_chat_artifact,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.file_store.constants import ARTIFACT_TEXT_MAX_FILE_BYTES
 from onyx.file_store.models import ArtifactText
 from onyx.file_store.utils import (
@@ -39,6 +50,8 @@ from onyx.indexing.chat_artifact_index import (
 )
 from onyx.llm.cancellation import CancellationSignal, wait_for_future
 from onyx.microvm.models import FileType
+from onyx.natural_language_processing.english_stopwords import strip_stopwords
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.features.build.sandbox.harness_base import (
     ARTIFACT_FILES_DIR,
     CHAT_FILES_DIR,
@@ -63,9 +76,15 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
     ARTIFACT_RESULT_MAX_CHARS,
     ARTIFACTS_LIST_MAX_LIMIT,
-    ARTIFACTS_QUERY_MAX_CHARS,
     DELETE_OF_A_VERSION,
     FIND_TIMEOUT_SECONDS,
+    LIBRARY_SEARCH_CHUNKS_PER_QUERY,
+    LIBRARY_SEARCH_MAX_CANDIDATES,
+    LIBRARY_SEARCH_MAX_SNIPPETS,
+    LIBRARY_SEARCH_MAX_TOP_K,
+    LIBRARY_SEARCH_RETRIEVALS_PER_QUERY,
+    LIBRARY_SEARCH_SNIPPET_MAX_CHARS,
+    LIBRARY_SEARCH_WINDOW,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_TITLE_CHARS,
     VERSION_REASON_MAX_CHARS,
@@ -88,6 +107,10 @@ from onyx.tools.tool_implementations.sandbox.models import (
     LibraryPrepareMaterializeArguments,
     LibraryReadArguments,
     LibraryReplaceLibraryFileArguments,
+    LibrarySearchArguments,
+    LibrarySearchCursor,
+    LibrarySearchHit,
+    LibrarySearchResult,
     ListedArtifact,
     ManageLibraryArguments,
     ManageResult,
@@ -107,8 +130,13 @@ from onyx.tools.tool_implementations.sandbox.models import (
     shown_artifact,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from onyx.tools.tool_implementations.search.search_utils import (
+    weighted_reciprocal_rank_fusion_with_scores,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from shared_configs.configs import MODEL_SERVER_HOST, MODEL_SERVER_PORT
 
 logger = setup_logger()
 
@@ -364,17 +392,23 @@ def replace_file(
     return published
 
 
+def _chat_id(chat_id: str | None) -> UUID | None:
+    """The chat that a list or search keeps to; a tool error for an ID that
+    names no chat."""
+    if chat_id is None:
+        return None
+    try:
+        return UUID(chat_id)
+    except ValueError as error:
+        raise tool_error(f"No chat {chat_id} of yours") from error
+
+
 def list_artifacts(user_id: UUID, arguments: LibraryListArguments) -> ArtifactList:
     """A page of the published files in the user's listable chats, from the
     database only; it never starts the VM. A page keeps to
     ARTIFACT_RESULT_MAX_CHARS, under the spill limit of one result, and the
     step's budget does not spill it."""
-    chat_id: UUID | None = None
-    if arguments.chat_id is not None:
-        try:
-            chat_id = UUID(arguments.chat_id)
-        except ValueError as error:
-            raise tool_error(f"No chat {arguments.chat_id} of yours") from error
+    chat_id = _chat_id(arguments.chat_id)
     cursor: ArtifactCursor | None = None
     if arguments.cursor is not None:
         try:
@@ -394,18 +428,12 @@ def list_artifacts(user_id: UUID, arguments: LibraryListArguments) -> ArtifactLi
                 f"sort_order {cursor.sort_order}; send those, or list again "
                 "without the cursor"
             )
-    query = (arguments.query or "").strip()
-    if len(query) > ARTIFACTS_QUERY_MAX_CHARS:
-        raise tool_error(
-            f"The query is longer than {ARTIFACTS_QUERY_MAX_CHARS} characters"
-        )
     limit = min(max(arguments.limit, 1), ARTIFACTS_LIST_MAX_LIMIT)
     with artifact_errors("The listing"):
         with get_session_with_current_tenant() as db_session:
             rows = get_user_published_files(
                 db_session,
                 user_id,
-                query=query or None,
                 chat_session_id=chat_id,
                 filters=arguments.filters or LibraryListFilters(),
                 sort=arguments.sort,
@@ -1155,3 +1183,323 @@ def find(user_id: UUID, arguments: LibraryFindArguments) -> ArtifactsFound:
         found.next_match_offset = shown if found.total_matches_seen > shown else None
         found.timed_out = found.reached_line is not None
     return result
+
+
+# How much text a snippet keeps before the first query word that it shows.
+_SNIPPET_LEAD_CHARS = 60
+
+
+def search_snippet(
+    match_highlights: Sequence[str], content: str, words: Sequence[str]
+) -> str:
+    """The snippet of a matching chunk: its first match highlight without
+    the <hi> tags, or else its content from _SNIPPET_LEAD_CHARS before the
+    first of `words` that it contains (any case), or from its start. The
+    lead starts at a word when one starts early enough to keep the match in
+    the snippet. Runs of white space become one space, and a cut shows as
+    "…"; at most LIBRARY_SEARCH_SNIPPET_MAX_CHARS."""
+    highlight = next((text for text in match_highlights if text.strip()), None)
+    text = " ".join(
+        (
+            content
+            if highlight is None
+            else highlight.replace("<hi>", "").replace("</hi>", "")
+        ).split()
+    )
+    if highlight is None:
+        found = [
+            match.span()
+            for word in words
+            if word
+            and (match := regex.search(regex.escape(word), text, regex.IGNORECASE))
+        ]
+        if found and min(found)[0] > _SNIPPET_LEAD_CHARS:
+            match_start, match_end = min(found)
+            start = match_start - _SNIPPET_LEAD_CHARS
+            word_start = text.rfind(" ", 0, start) + 1
+            # "…" and the text up to the match's end fit before the cut.
+            if word_start and 1 + match_end - word_start < (
+                LIBRARY_SEARCH_SNIPPET_MAX_CHARS
+            ):
+                start = word_start
+            text = "…" + text[start:]
+    if len(text) > LIBRARY_SEARCH_SNIPPET_MAX_CHARS:
+        text = text[: LIBRARY_SEARCH_SNIPPET_MAX_CHARS - 1] + "…"
+    return text
+
+
+def _search_file_chunks(
+    user_id: UUID,
+    cancellation: CancellationSignal,
+    document_index: DocumentIndex,
+    embedding_model: EmbeddingModel | None,
+    query: str,
+    document_ids: list[str],
+) -> list[InferenceChunk]:
+    """The chunks of the documents that match the query, at most
+    LIBRARY_SEARCH_MAX_SNIPPETS of each, by document from its best chunk.
+    Hybrid search with an embedding model, keyword search without one. A
+    full retrieval can hold the chunks of a few long documents only: when
+    the per-document cap dropped chunks of a full retrieval, the next one
+    searches the documents that no retrieval found, up to
+    LIBRARY_SEARCH_RETRIEVALS_PER_QUERY. A Stop ends the search before its
+    next retrieval."""
+    kept: dict[str, list[InferenceChunk]] = {}
+    for _ in range(LIBRARY_SEARCH_RETRIEVALS_PER_QUERY):
+        unfound = [
+            document_id for document_id in document_ids if document_id not in kept
+        ]
+        if not unfound:
+            break
+        cancellation.check()
+        chunks = search_chunks(
+            ChunkIndexRequest(
+                query=query,
+                query_keywords=strip_stopwords(query),
+                filters=IndexFilters(
+                    source_type=[DocumentSource.CHAT_ARTIFACT],
+                    attached_document_ids=unfound,
+                    access_control_list=None,
+                ),
+                limit=LIBRARY_SEARCH_CHUNKS_PER_QUERY,
+                hybrid_alpha=None if embedding_model is not None else 0.0,
+            ),
+            user_id,
+            document_index,
+            None,
+            embedding_model,
+            [],
+        )
+        dropped = False
+        for chunk in chunks:
+            document_chunks = kept.setdefault(chunk.document_id, [])
+            if len(document_chunks) < LIBRARY_SEARCH_MAX_SNIPPETS:
+                document_chunks.append(chunk)
+            else:
+                dropped = True
+        if (
+            not dropped
+            or len(chunks) < LIBRARY_SEARCH_CHUNKS_PER_QUERY
+            or len(kept) >= LIBRARY_SEARCH_WINDOW
+        ):
+            break
+    return [chunk for document_chunks in kept.values() for chunk in document_chunks]
+
+
+def search_artifacts(
+    user_id: UUID,
+    cancellation: CancellationSignal,
+    arguments: LibrarySearchArguments,
+) -> LibrarySearchResult:
+    """The user's published files that match the queries, from the database
+    and the search index only; it never starts the VM.
+
+    The database gives the files in scope (`get_user_artifact_search_candidates`):
+    the newest LIBRARY_SEARCH_MAX_CANDIDATES that the scope, chat and
+    filters keep, and which of them have each query's words, without
+    stopwords and punctuation, in their name, title or chat title. Each
+    content query searches the chunks of exactly those files
+    (`search_chunks`), with no ACL: the database lookup is the access check.
+    A file gives a query at most LIBRARY_SEARCH_MAX_SNIPPETS chunks. Another
+    retrieval, over the files that no retrieval found, runs only when that
+    cap dropped chunks of a full retrieval, up to
+    LIBRARY_SEARCH_RETRIEVALS_PER_QUERY (`_search_file_chunks`), so a
+    matching file can stay out of the content ranking.
+    For relevance the search is hybrid; for the other sorts it is keyword
+    only, because vector search always returns the nearest chunks, which
+    would list unrelated files. Each query gives two rankings: its content
+    matches by their best chunk, and its name matches by latest change
+    (publish or rename), which covers files not indexed yet. A title-only query, and every query
+    without a search index (DISABLE_VECTOR_DB), gives the name ranking only.
+    The rankings fuse by reciprocal rank into the search's window of
+    LIBRARY_SEARCH_WINDOW files, and the other sorts reorder only the
+    window. A cursor is an offset into the window, and a page keeps to
+    ARTIFACT_RESULT_MAX_CHARS."""
+    chat_id = _chat_id(arguments.chat_id)
+    offset = 0
+    if arguments.cursor is not None:
+        try:
+            offset = LibrarySearchCursor.model_validate_json(
+                base64.urlsafe_b64decode(arguments.cursor)
+            ).offset
+        except ValueError as error:
+            raise tool_error(
+                "The cursor is not a next_cursor of this tool; search again without it"
+            ) from error
+    top_k = min(max(arguments.top_k, 1), LIBRARY_SEARCH_MAX_TOP_K)
+    filters = arguments.filters or LibraryListFilters()
+    queries = arguments.search_query
+    content = [
+        not DISABLE_VECTOR_DB and not query.search_title_only for query in queries
+    ]
+    # The words of each query that a name, a title and a snippet match.
+    # Stopwords go after the split, so "What's" leaves no stray "s". An
+    # underscore splits words, as a name's other separators do.
+    term_sets = [
+        strip_stopwords(" ".join(words)) or words
+        for words in (regex.findall(r"[^\W_]+", query.q) for query in queries)
+    ]
+    with artifact_errors("The search"):
+        with get_session_with_current_tenant() as db_session:
+            artifact_ids: list[UUID] | None = None
+            if arguments.scope is not None:
+                artifact_ids = []
+                for reference in arguments.scope.file_refs:
+                    file = _published_file(db_session, user_id, reference)
+                    if file.version_number != file.latest_version_number:
+                        raise tool_error(
+                            f"{reference.file_id or reference.library_file_id} is "
+                            f"version {file.version_number} of "
+                            f"{file.library_file_id}; only the newest version is "
+                            "searchable: find text in that version instead"
+                        )
+                    artifact_ids.append(file.library_file_id)
+            candidates = get_user_artifact_search_candidates(
+                db_session,
+                user_id,
+                chat_session_id=chat_id,
+                filters=filters,
+                artifact_ids=artifact_ids,
+                term_sets=term_sets,
+                limit=LIBRARY_SEARCH_MAX_CANDIDATES + 1,
+            )
+            if candidates is None:
+                raise tool_error(f"No chat {arguments.chat_id} of yours")
+            document_index: DocumentIndex | None = None
+            embedding_model: EmbeddingModel | None = None
+            if any(content) and candidates:
+                search_settings = get_current_search_settings(db_session)
+                document_index = get_default_document_index(search_settings, None)
+                # The other sorts search by keyword only and embed no query.
+                if arguments.sort == "relevance":
+                    embedding_model = EmbeddingModel.from_db_model(
+                        search_settings=search_settings,
+                        server_host=MODEL_SERVER_HOST,
+                        server_port=MODEL_SERVER_PORT,
+                    )
+        complete = len(candidates) <= LIBRARY_SEARCH_MAX_CANDIDATES
+        candidates = candidates[:LIBRARY_SEARCH_MAX_CANDIDATES]
+        by_document_id = {
+            str(artifact_id): artifact_id for artifact_id, _ in candidates
+        }
+
+        chunk_sets: list[list[InferenceChunk]] = (
+            run_functions_tuples_in_parallel(
+                [
+                    (
+                        _search_file_chunks,
+                        (
+                            user_id,
+                            cancellation,
+                            document_index,
+                            embedding_model,
+                            query.q,
+                            list(by_document_id),
+                        ),
+                    )
+                    for query, is_content in zip(queries, content, strict=True)
+                    if is_content
+                ]
+            )
+            if document_index is not None
+            else []
+        )
+    # Each file's chunks by the index of the query that found them, best
+    # first, with that query's words.
+    chunks_of: dict[UUID, dict[int, list[tuple[InferenceChunk, list[str]]]]] = (
+        defaultdict(dict)
+    )
+    rankings: list[list[UUID]] = []
+    found_chunks = iter(chunk_sets)
+    for index, is_content in enumerate(content):
+        if document_index is not None and is_content:
+            # The files that the query's chunks found, by their best chunk.
+            found: dict[UUID, None] = {}
+            for chunk in next(found_chunks):
+                artifact_id = by_document_id.get(chunk.document_id)
+                if artifact_id is not None:
+                    found[artifact_id] = None
+                    chunks_of[artifact_id].setdefault(index, []).append(
+                        (chunk, term_sets[index])
+                    )
+            rankings.append(list(found))
+        rankings.append(
+            [artifact_id for artifact_id, matched in candidates if matched[index]]
+        )
+    window = weighted_reciprocal_rank_fusion_with_scores(
+        rankings, [1.0] * len(rankings), str
+    )[:LIBRARY_SEARCH_WINDOW]
+    files: dict[UUID, tuple[ListedArtifact, bool]] = {}
+    if window:
+        with artifact_errors("The search"):
+            with get_session_with_current_tenant() as db_session:
+                files = get_user_published_files_by_id(
+                    db_session,
+                    user_id,
+                    [artifact_id for artifact_id, _ in window],
+                    chat_session_id=chat_id,
+                    filters=filters,
+                )
+    hits = [
+        LibrarySearchHit(
+            file=files[artifact_id][0],
+            score=score,
+            content_indexed=files[artifact_id][1],
+        )
+        for artifact_id, score in window
+        if artifact_id in files
+    ]
+    if arguments.sort != "relevance":
+        sort_key: Callable[[LibrarySearchHit], datetime | str | int] = {
+            "created_at": lambda hit: hit.file.created_at,
+            "modified_at": lambda hit: hit.file.modified_at,
+            "name": lambda hit: hit.file.file_name.casefold(),
+            "size": lambda hit: hit.file.file_size_bytes,
+        }[arguments.sort]
+        # Stable: equal keys keep their relevance order.
+        hits.sort(key=sort_key, reverse=arguments.sort_order == "desc")
+    shown = hits[offset : offset + top_k]
+    if arguments.result_format == "snippets":
+        for hit in shown:
+            # A snippet from each query in turn, so that one query cannot
+            # take every slot.
+            in_turn = chain.from_iterable(
+                zip_longest(
+                    *(
+                        (
+                            search_snippet(chunk.match_highlights, chunk.content, words)
+                            for chunk, words in query_chunks
+                        )
+                        for query_chunks in chunks_of.get(
+                            hit.file.library_file_id, {}
+                        ).values()
+                    )
+                )
+            )
+            hit.snippets = [
+                snippet for snippet in dict.fromkeys(in_turn) if snippet is not None
+            ][:LIBRARY_SEARCH_MAX_SNIPPETS]
+    logger.info(
+        "library_search queries=%d candidates=%d window=%d",
+        len(queries),
+        len(candidates),
+        len(hits),
+    )
+    while True:
+        end = offset + len(shown)
+        result = LibrarySearchResult(
+            results=shown,
+            next_cursor=base64.urlsafe_b64encode(
+                LibrarySearchCursor(offset=end).model_dump_json().encode()
+            ).decode()
+            if end < len(hits) and shown
+            else None,
+            complete=complete,
+            content_search="unavailable" if DISABLE_VECTOR_DB else None,
+        )
+        if (
+            len(result.model_dump_json()) <= ARTIFACT_RESULT_MAX_CHARS
+            or len(shown) <= 1
+        ):
+            return result
+        shown = shown[:-1]

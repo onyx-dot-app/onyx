@@ -12,6 +12,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_TEXT_MAX_ITEMS,
     ARTIFACTS_MATERIALIZE_MAX_ITEMS,
     FIND_MAX_MATCHES,
+    LIBRARY_SEARCH_MAX_QUERIES,
     MANAGE_LIBRARY_MAX_OPERATIONS,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_FILES,
@@ -155,9 +156,21 @@ LIBRARY_LIST_DESCRIPTION = """Lists the files published in the user's chats, thi
 
 Usage:
 - `sort` orders by first publish (created_at), latest change, a publish or rename (modified_at), file name or size; `sort_order` is asc or desc.
-- `filters` keeps files by first publish, by latest change (publish or rename), by extension, or by category. `chat_id` lists the files of one chat. `query` finds text in the file name, the file's title or the chat's title, in any case.
+- `filters` keeps files by first publish, by latest change (publish or rename), by extension, or by category. `chat_id` lists the files of one chat. To find files by their content, name or title, search them instead.
 - Each entry has the file's `library_file_id`, which stays the same across versions, and the `file_id` of its newest version, the path relative to its chat's working directory, and its chat. A version_number over 1 means that older versions exist.
 - When more files exist, the result has a `next_cursor`. Send it with the same other arguments to get the next page.
+"""
+
+LIBRARY_SEARCH_DESCRIPTION = f"""Searches the user's published files, from all their chats, by content, name and title. Gives the best matches first, with snippets of the matching text.
+
+Usage:
+- `search_query` takes 1 to {LIBRARY_SEARCH_MAX_QUERIES} queries; a file that matches more of them ranks higher. A query matches the content by words and meaning, and also matches a file whose name, title or chat title has every word of the query. `search_title_only` matches only the names and titles.
+- Only the newest version of each file is searched. A file or version published in the last minute may not be searchable by content yet; it still matches by name and title, and its result has `content_indexed` false. Its content matches and snippets can then come from its previous version.
+- `filters` keeps files by first publish, by latest change (publish or rename), by extension or by category. `chat_id` keeps the files of one chat. `scope.file_refs` searches only the files it names.
+- With `sort` relevance (the default), content matches by meaning too, so the last results can be only loosely related. The other sorts match content by its words only and order the best matches: by first publish (created_at), latest change, a publish or rename (modified_at), name or size.
+- A snippet has no line number. To find it in the file, find a phrase from the snippet in that file. `result_format` "metadata_only" leaves out the snippets.
+- When more results exist, the result has a `next_cursor`. Send it with the same other arguments to get the next page.
+- When the result has `content_search` "unavailable", this deployment matches names and titles only.
 """
 
 LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION = f"""Copies published files from the user's chats into this chat's working directory. The call ends when the copies are done, and gives each item's path and status.
@@ -213,13 +226,13 @@ Usage:
 
 # The artifact tool (sandbox_tools.ArtifactTool). tool_search matches its
 # first sentence.
-ARTIFACT_DESCRIPTION = f"""Publish, replace, list, read, find in, rename, restore and delete the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
+ARTIFACT_DESCRIPTION = f"""Publish, replace, list, search, read, find in, rename, restore and delete the user's published files (artifacts). A published file shows as a download card in your reply, and its url opens it for the user.
 
 Actions:
 - publish (the default): gives `file_path`, or up to {PUBLISH_FILES_MAX_FILES} `file_paths`, from the VM to the user; all are published, or none. Each file is at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Publishing the same path again adds a new version. Publish only finished deliverables, and do not paste their contents into your reply.
 - publish with `url` and `file_path`: adds a version to that published file, also one of another chat; it keeps its name and type, so `file_path` needs its extension. Use the url from your last result: if the file has a newer version than the url names, the call fails and changes nothing. `force` adds the version anyway; older versions stay. `label` is a short note on why the version exists.
 - publish with `url` and `path`: adds a copy of the published file that `path` names (a file ID or a url), of the same type, as the url's newest version, with the same version rule.
-- list: the user's published files from all their chats, newest first. `type` keeps one type (image, sheet, slides, report, other); `query` finds text in the name, the title or the chat's title; `after` takes the `next_cursor` of the previous page.
+- list: the user's published files from all their chats, newest first. `type` keeps one type (image, sheet, slides, report, other); `after` takes the `next_cursor` of the previous page. With `query`, list searches the content, names and titles of the files and gives the best matches first, with snippets of the matching text. A result with `content_indexed` false is not searchable by content yet, usually for a minute after its publish: it matches by name and title, and its content matches and snippets can come from its previous version.
 - read: shows the text of published files as numbered lines, without starting the VM. Name them with `url` (a url from an earlier result; one that ends in /v<N> names that version), or with `path` or `paths`, each a url or a file ID, up to {ARTIFACT_TEXT_MAX_ITEMS} files. `offset` is the first line and `limit` the most lines ({READ_DEFAULT_LINES} by default); a long result gives `next_start_line`. `offset` takes one file: page one file at a time. Images and files over {ARTIFACT_TEXT_MAX_FILE_BYTES >> 20} MiB have no text here.
 - read with `query`: finds the lines that contain the text, in any case, with their line and page numbers; `limit` caps the matches and `offset` skips matches (`next_match_offset`).
 - read with `out_dir`: copies up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} published files into `out_dir`, in the working directory, outside {CHAT_FILES_DIR}/ or in {ARTIFACT_FILES_DIR}/, to work with them in the VM. To change a file, read it into a directory outside {CHAT_FILES_DIR}/, change it there, and publish it with its url.
@@ -233,7 +246,9 @@ ARTIFACT_RESULTS = (
     "title, path, url}]}. list: {files: [{library_file_id, file_id, "
     "version_number, file_name, title, artifact_type, mime_type, "
     "file_size_bytes, created_at, modified_at, chat_id, chat_title, path, url}], "
-    "next_cursor}. read: {items: [{file: {...the list entry, "
+    "next_cursor}. list with query: {results: [{file: {the list entry keys}, "
+    "score, content_indexed, snippets}], next_cursor, complete}. read: "
+    "{items: [{file: {...the list entry, "
     "latest_version_number}, total_lines, total_pages, start_line, end_line, "
     "text, next_start_line, truncated}]}. read with query: {items: [{file, "
     "total_matches_seen, matches: [{line, page, text, before, after}], "

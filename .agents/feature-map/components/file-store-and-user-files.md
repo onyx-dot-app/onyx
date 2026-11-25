@@ -224,6 +224,10 @@ captions), ends each page with a form feed, and keeps at most 10 M characters
 of a file up to 50 MiB. A version's file never changes
 ([[#file-id-write-once]]), so its cached text never goes stale. The sandbox
 tools `library_read` and `library_find` ([[code-execution]]) read it.
+`library_search` (and the `artifact` tool's list with a
+query) searches these documents with `attached_document_ids` set to the
+artifacts that its database query keeps, with no ACL, and reports
+`content_indexed` from `index_status` ([[code-execution]]).
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and
