@@ -601,8 +601,21 @@ func TestStatus_notReadyWhileStartIsIncomplete(t *testing.T) {
 
 func TestRestart_holdsOneLock(t *testing.T) {
 	s := newTestStack(t, t.TempDir())
+	cache := filepath.Join(s.Root, "web", ".next")
+	if err := os.MkdirAll(cache, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cache, "stale"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
 	p := &fakeProvider{services: []string{"web"}}
 	first := mustUp(t, s, p)
+	if _, err := s.Start(context.Background(), p, testOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(cache, "stale")); err != nil {
+		t.Fatalf("up or start changed the cache: %v", err)
+	}
 
 	// Plan runs inside the locked restart, after the services were stopped:
 	// a competing lifecycle command must be refused at that point.
@@ -610,6 +623,9 @@ func TestRestart_holdsOneLock(t *testing.T) {
 	hooked := false
 	p.planHook = func() {
 		hooked = true
+		if _, err := os.Stat(cache); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("cache still present at service planning: %v", err)
+		}
 		var unlock func()
 		unlock, lockErr = s.Lock(context.Background(), "intruder", 100*time.Millisecond)
 		if lockErr == nil {

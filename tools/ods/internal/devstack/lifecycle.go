@@ -102,11 +102,11 @@ func (s *Stack) run(ctx context.Context, p Provider, opts Options, infra bool) (
 		return nil, err
 	}
 	defer unlock()
-	return s.runLocked(ctx, p, opts, infra)
+	return s.runLocked(ctx, p, opts, infra, false)
 }
 
 // runLocked is run with the lifecycle lock already held.
-func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra bool) (*Status, error) {
+func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, clearNextCache bool) (*Status, error) {
 	st, err := s.ReadState()
 	if err != nil {
 		return nil, err
@@ -152,6 +152,16 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra b
 	previewPort, err := s.stopFrontendPreview(ctx, opts)
 	if err != nil {
 		return nil, err
+	}
+	if clearNextCache {
+		root, err := os.OpenRoot(s.Root)
+		if err != nil {
+			return nil, fmt.Errorf("open worktree for Next.js cache cleanup: %w", err)
+		}
+		defer func() { _ = root.Close() }()
+		if err := root.RemoveAll(filepath.Join("web", ".next")); err != nil {
+			return nil, fmt.Errorf("clear Next.js cache: %w", err)
+		}
 	}
 	if st == nil {
 		if s.Mode == Shared {
@@ -643,8 +653,8 @@ func (s *Stack) Down(ctx context.Context, p Provider, opts Options) error {
 	return s.releaseLeases(st, true)
 }
 
-// Restart stops the services and starts them again against the running
-// infrastructure.
+// Restart stops the services, clears the Next.js cache, and starts the
+// services again against the running infrastructure.
 func (s *Stack) Restart(ctx context.Context, p Provider, opts Options) (*Status, error) {
 	if s.Mode == Frontend {
 		return nil, fmt.Errorf("use 'ods web dev' to launch the frontend")
@@ -661,7 +671,7 @@ func (s *Stack) Restart(ctx context.Context, p Provider, opts Options) (*Status,
 	if err := s.stopServices(opts.StopTimeout); err != nil {
 		return nil, err
 	}
-	return s.runLocked(ctx, p, opts, false)
+	return s.runLocked(ctx, p, opts, false, true)
 }
 
 // ServiceStatus is one service as reported by Status.
