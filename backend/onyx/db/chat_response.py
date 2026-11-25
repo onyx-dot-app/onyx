@@ -1,5 +1,6 @@
 import json
 from collections.abc import Collection, Mapping
+from functools import cached_property
 from uuid import UUID
 
 from sqlalchemy import Integer, column, delete, exists, func, inspect, select, values
@@ -625,10 +626,14 @@ class _ResponseWriter:
             raise ValueError("Content-free sessions cannot store response records")
         self.db_session = db_session
         self.response = response
-        self.branch_ids = visible_message_ids(db_session, response)
         self.tools: dict[tuple[str, str], ToolCall] = {}
         self.presentation = dict(presentation)
         self.seen_response_ids: set[int] = set()
+
+    @cached_property
+    def branch_ids(self) -> list[int]:
+        # Only child and parent checks read the ancestry.
+        return visible_message_ids(self.db_session, self.response)
 
     def store(
         self, record: ResponseRecord, parent: ChatMessage | None, depth: int = 0
