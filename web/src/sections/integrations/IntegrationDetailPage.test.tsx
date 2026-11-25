@@ -388,6 +388,40 @@ test("resolves a relative server of a spec imported from a URL", async () => {
   );
 });
 
+test("lists the operations that a reimported spec skipped", async () => {
+  const skipped = "POST /reports: the request body is not JSON";
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": {
+      ...OPENAPI_VIEW,
+      skipped: [skipped],
+    },
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.type(
+    await view.findByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://reports.example.com/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+  await u.click(
+    await view.findByRole("button", {
+      name: `Expand ${copy.add.detected.skippedTitle}`,
+    })
+  );
+  expect(await view.findByText(skipped)).toBeInTheDocument();
+});
+
 test("blocks Save while a spec import runs", async () => {
   let finishImport: (view: OpenApiConfigView) => void = () => undefined;
   mockFetch({

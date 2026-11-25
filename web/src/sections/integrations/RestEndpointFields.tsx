@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
+  Collapsible,
   InputSingleUpload,
   InputTextArea,
   InputTypeIn,
+  Text,
 } from "@opal/components";
 import { InputErrorText, InputVertical, Section, toast } from "@opal/layouts";
 import { importOpenApiSpec } from "@/lib/integrations/svc";
@@ -57,7 +59,10 @@ export default function RestEndpointFields({
   onImportingChange,
 }: RestEndpointFieldsProps) {
   const t = useTranslations("admin.integrations.add.rest");
+  const tAdd = useTranslations("admin.integrations.add");
   const [specUrl, setSpecUrl] = useState("");
+  // Save drops the actions of these operations, so show them before Save.
+  const [skipped, setSkipped] = useState<string[]>([]);
 
   async function runImport(
     body: { openapi_document: string } | { spec_url: string }
@@ -70,6 +75,7 @@ export default function RestEndpointFields({
         ...restDraftFrom(view),
         baseUrl: specBaseUrl(view.base_url, specUrl) ?? view.base_url,
       });
+      setSkipped(view.skipped);
       toast.success(t("import.done", { count: view.endpoints.length }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("import.failed"));
@@ -111,6 +117,20 @@ export default function RestEndpointFields({
               {t("import.submit")}
             </Button>
           </Section>
+          {skipped.length > 0 && (
+            <Collapsible
+              title={tAdd("detected.skippedTitle")}
+              defaultOpen={false}
+            >
+              <Section gap={1} alignItems="stretch" height="auto">
+                {skipped.map((line) => (
+                  <Text key={line} as="p" font="secondary-body" color="text-03">
+                    {line}
+                  </Text>
+                ))}
+              </Section>
+            </Collapsible>
+          )}
         </Section>
       </InputVertical>
       <InputVertical
