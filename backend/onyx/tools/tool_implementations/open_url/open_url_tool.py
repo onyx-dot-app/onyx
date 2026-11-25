@@ -747,8 +747,27 @@ class OpenURLTool(Tool):
             return ToolResult(content=failure_msg, is_error=True)
 
         # All the pages, also those that opened before the end. The display
-        # shows each page once.
-        _report_opened(invocation, inference_sections)
+        # shows each page once. Pages reported only now (a crawl that stood
+        # in for an empty indexed copy, a link fallback) name the requested
+        # URLs they answer, by document ID or by link.
+        opened_ids = {
+            section.center_chunk.document_id for section in inference_sections
+        }
+        opened_links = {
+            normalize_web_content_url(link)
+            for section in inference_sections
+            for link in (section.center_chunk.source_links or {}).values()
+        }
+        _report_opened(
+            invocation,
+            inference_sections,
+            [
+                url
+                for url in urls
+                if url_to_doc_id.get(url) in opened_ids
+                or normalize_web_content_url(url) in opened_links
+            ],
+        )
         search_docs = convert_inference_sections_to_search_docs(
             inference_sections, is_internet=False
         )
