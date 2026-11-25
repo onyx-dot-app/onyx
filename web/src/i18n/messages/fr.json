@@ -12594,12 +12594,6 @@
             "between": "du {start} au {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "Vous avez arrêté après {duration}"
-        },
-        "interruptedThinking": {
-          "label": "Vous avez arrêté cette réponse"
-        },
         "memory": {
           "default": {
             "status": "Mémoire"

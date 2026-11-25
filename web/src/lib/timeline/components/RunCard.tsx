@@ -10,7 +10,6 @@ import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
-import { STEP_ICONS } from "@/lib/timeline/icons";
 import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 import type {
   TimelineEntryStatus,
@@ -41,8 +40,6 @@ export interface RunCardProps<S extends RunCardStep> {
    * also work between steps, such as while it waits for an approval.
    */
   isActive?: boolean;
-  /** Whether the user stopped the run. Defaults to a stopped step. */
-  isStopped?: boolean;
   /** Fold the run closed once text follows it. */
   autoCollapse?: boolean;
   /** When the run started, for the live timer. Defaults to its first render. */
@@ -63,8 +60,8 @@ export interface RunCardProps<S extends RunCardStep> {
 
 /**
  * One run of steps as a card, the same in chat and Craft: the run header
- * across the top (working, finished or stopped), and the steps below it on
- * the rail. Every run folds; it is open while it works and folds once text
+ * across the top (working or finished), and the steps below it on the rail.
+ * A stopped run reads as finished: the answer already says it stopped. Every run folds; it is open while it works and folds once text
  * follows it.
  */
 export function RunCard<S extends RunCardStep>({
@@ -72,7 +69,6 @@ export function RunCard<S extends RunCardStep>({
   renderStep,
   workingText,
   isActive,
-  isStopped,
   autoCollapse = false,
   streamingStartTime,
   durationSeconds,
@@ -84,9 +80,6 @@ export function RunCard<S extends RunCardStep>({
   const t = useTranslations("chat.messages.timeline");
   const isRunning =
     isActive ?? steps.some((step) => step.status === "streaming");
-  const stopped =
-    !isRunning &&
-    (isStopped ?? steps.some((step) => step.status === "stopped"));
   const [isOpen, setIsOpen] = useState(isRunning && !startFolded);
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
@@ -151,13 +144,9 @@ export function RunCard<S extends RunCardStep>({
     : null;
   const headerTitle = isRunning
     ? workingText
-    : stopped
-      ? duration
-        ? t("stoppedDuration.label", { duration })
-        : t("interruptedThinking.label")
-      : duration
-        ? t("thoughtDuration.label", { duration })
-        : t("thoughtUnknownDuration.label");
+    : duration
+      ? t("thoughtDuration.label", { duration })
+      : t("thoughtUnknownDuration.label");
 
   return (
     <Presence show={visible} appear={arrivedLive} grow>
@@ -174,11 +163,7 @@ export function RunCard<S extends RunCardStep>({
                 {/* A saved memory's tag, on the right so it never swaps the
                     summary. Shown on a finished card while it is folded. */}
                 {summary?.memoryOperation && (
-                  <Presence
-                    show={!isRunning && !stopped && !isOpen}
-                    from="end"
-                    width="fit"
-                  >
+                  <Presence show={!isRunning && !isOpen} from="end" width="fit">
                     <MemoryTagWithTooltip
                       memoryText={summary.memoryText ?? null}
                       memoryOperation={summary.memoryOperation}
@@ -245,12 +230,12 @@ export function RunCard<S extends RunCardStep>({
             </Section>
           }
           // The card's own title, the same header a hoisted run card has.
-          // It swaps when the run's state changes (working, stopped, done);
+          // It swaps when the run's state changes (working, done);
           // while working, a new activity updates the text in place, so the
           // shimmer never restarts.
-          icon={stopped && !isRunning ? STEP_ICONS.stopped : icon}
+          icon={icon}
           title={headerTitle}
-          titleKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+          titleKey={isRunning ? "working" : "done"}
           shimmer={isRunning}
         />
       </TimelineRoot>

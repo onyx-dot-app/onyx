@@ -12594,12 +12594,6 @@
             "between": "从 {start} 到 {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "你在 {duration} 后停止了"
-        },
-        "interruptedThinking": {
-          "label": "你停止了此回复"
-        },
         "memory": {
           "default": {
             "status": "记忆"
