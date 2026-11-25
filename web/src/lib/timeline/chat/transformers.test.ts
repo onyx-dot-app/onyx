@@ -1,6 +1,7 @@
 import {
   expandCodeModeSteps,
   groupStepsByTurn,
+  toChatTimelineEntry,
   transformPacketGroups,
 } from "@/lib/timeline/chat/transformers";
 import {
@@ -9,9 +10,12 @@ import {
 } from "@/lib/timeline/chat/hooks/packetProcessor";
 import {
   CODE_MODE_TOOL_TYPE,
+  type CustomToolErrorInfo,
+  type ExecEnd,
   Packet,
   PacketType,
 } from "@/app/app/services/streamingModels";
+import type { TransformedStep } from "@/lib/timeline/chat/transformers";
 
 // Mobile's chat/timeline/__tests__/transformers.test.ts mirrors these cases;
 // keep the two in step.
@@ -223,4 +227,137 @@ test("direct parallel calls render as separate steps, in tab order", () => {
     ["0-0"],
     ["0-1"],
   ]);
+});
+
+describe("toChatTimelineEntry status", () => {
+  function execStep(end: Partial<ExecEnd>): TransformedStep {
+    const packets: Packet[] = [
+      {
+        placement: at(0),
+        obj: {
+          type: PacketType.EXEC_COMMAND_START,
+          cmd: "npm test",
+          workdir: "/workspace/app",
+        },
+      },
+      {
+        placement: at(0),
+        obj: {
+          type: PacketType.EXEC_END,
+          exit_code: 0,
+          completion: "exited",
+          session_id: null,
+          wall_time_seconds: 1,
+          truncated: false,
+          output: "",
+          error: null,
+          ...end,
+        },
+      },
+      { placement: at(0), obj: { type: PacketType.SECTION_END } },
+    ];
+    return {
+      key: "0-0",
+      groupKey: "0-0",
+      turnIndex: 0,
+      tabIndex: 0,
+      packets,
+      nestedCalls: [],
+      streamPackets: packets,
+      codeMode: null,
+    };
+  }
+
+  it.each<[string, Partial<ExecEnd>, "done" | "error"]>([
+    ["exit code 0", {}, "done"],
+    ["a non-zero exit code", { exit_code: 1 }, "error"],
+    ["a call error", { exit_code: null, output: null, error: "boom" }, "error"],
+    ["a kill", { exit_code: null, completion: "signaled" }, "error"],
+    ["a user stop", { exit_code: null, completion: "canceled" }, "done"],
+  ])("a command with %s is %s", (_, end, status) => {
+    expect(toChatTimelineEntry(execStep(end)).status).toBe(status);
+  });
+
+  function stdinStep(chars: string): TransformedStep {
+    const packets: Packet[] = [
+      {
+        placement: at(0),
+        obj: { type: PacketType.WRITE_STDIN_START, session_id: "pty-1", chars },
+      },
+      {
+        placement: at(0),
+        obj: {
+          type: PacketType.EXEC_END,
+          exit_code: 130,
+          completion: "exited",
+          session_id: null,
+          wall_time_seconds: 0.2,
+          truncated: false,
+          output: "^C\n",
+          error: null,
+        },
+      },
+      { placement: at(0), obj: { type: PacketType.SECTION_END } },
+    ];
+    return { ...execStep({}), packets, streamPackets: packets };
+  }
+
+  it("a Ctrl+C that stops a running process is not a failure", () => {
+    expect(toChatTimelineEntry(stdinStep("\u0003")).status).toBe("done");
+  });
+
+  it("a process that exits non-zero after other input still fails", () => {
+    expect(toChatTimelineEntry(stdinStep("q\n")).status).toBe("error");
+  });
+
+  function customToolStep(error: CustomToolErrorInfo | null): TransformedStep {
+    const packets: Packet[] = [
+      {
+        placement: at(0),
+        obj: {
+          type: PacketType.CUSTOM_TOOL_START,
+          tool_name: "salesforce_search",
+          display_name: "Search Salesforce",
+        },
+      },
+      {
+        placement: at(0),
+        obj: {
+          type: PacketType.CUSTOM_TOOL_DELTA,
+          tool_name: "salesforce_search",
+          response_type: "json",
+          data: error ? null : { records: 1 },
+          error,
+        },
+      },
+      { placement: at(0), obj: { type: PacketType.SECTION_END } },
+    ];
+    return { ...execStep({}), packets, streamPackets: packets };
+  }
+
+  it.each<[string, CustomToolErrorInfo | null, "done" | "error"]>([
+    ["a response", null, "done"],
+    [
+      "an auth error",
+      {
+        is_auth_error: true,
+        is_unreachable: false,
+        status_code: 401,
+        message: "Sign in again",
+      },
+      "error",
+    ],
+    [
+      "an unreachable server",
+      {
+        is_auth_error: false,
+        is_unreachable: true,
+        status_code: null,
+        message: "Connection refused",
+      },
+      "error",
+    ],
+  ])("an external tool with %s is %s", (_, error, status) => {
+    expect(toChatTimelineEntry(customToolStep(error)).status).toBe(status);
+  });
 });

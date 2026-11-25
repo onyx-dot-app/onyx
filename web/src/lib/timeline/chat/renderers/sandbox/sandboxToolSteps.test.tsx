@@ -202,6 +202,10 @@ test("a command shows its output while it runs and how it ended", async () => {
     expect(view.container).not.toHaveTextContent("test_9 ok");
     expect(screen.getByText("Exit code 2")).toBeInTheDocument();
     expect(screen.getByText("Output truncated")).toBeInTheDocument();
+    // A failed command is a failed step: red, as failed Python is.
+    expect(
+      screen.getByText("Ran command").closest(".opal-line")
+    ).toHaveAttribute("data-opal-line-status", "error");
   } finally {
     view.unmount();
   }
@@ -793,7 +797,7 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
     expect(screen.getByText("Ran command")).toBeInTheDocument();
     expect(view.container).toHaveTextContent("$ pytest");
     expect(screen.getByText("3 passed")).toBeInTheDocument();
-    expect(screen.getByText("Exit code 0")).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent(/Exit code/);
     expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
     expect(screen.getByText("D gone.py")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/await run/);
@@ -1103,6 +1107,42 @@ test("a publish_files call with invalid arguments still shows its step and error
     expect(
       screen.queryByRole("button", { name: /^Preview / })
     ).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a Ctrl+C that stops a running process is not a failure", async () => {
+  const stop = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      stop({
+        type: PacketType.WRITE_STDIN_START,
+        session_id: "4",
+        chars: "\u0003",
+      }),
+      stop({
+        type: PacketType.EXEC_END,
+        exit_code: 130,
+        completion: "exited",
+        session_id: null,
+        wall_time_seconds: 0.2,
+        truncated: false,
+        output: "^C\n",
+        error: null,
+      }),
+      stop(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getByText("Sent input to session 4");
+    expect(title.closest(".opal-line")).not.toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
+    expect(view.container).not.toHaveTextContent("Exit code 130");
   } finally {
     view.unmount();
   }

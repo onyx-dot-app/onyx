@@ -4,7 +4,7 @@ import {
   NestedCall,
   isGroupEndPacket,
 } from "@/lib/timeline/chat/packetHelpers";
-import { PacketType } from "@/app/app/services/streamingModels";
+import { type Packet, PacketType } from "@/app/app/services/streamingModels";
 import type {
   TimelineEntry,
   TimelineEntryStatus,
@@ -78,12 +78,56 @@ export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
     .map((step) => ({ turnIndex: step.turnIndex, steps: [step] }));
 }
 
-function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
-  // An error packet fails a step, and so does Python output on stderr.
-  const failed = step.packets.some(
+/**
+ * A packet that shows its step failed. A failed step is red (`RunStep`), so a
+ * new error packet only needs a case here.
+ */
+function isFailurePacket(packet: Packet, interrupted: boolean): boolean {
+  const obj = packet.obj;
+  switch (obj.type) {
+    case PacketType.ERROR:
+      return true;
+    case PacketType.PYTHON_TOOL_DELTA:
+      return !!obj.stderr;
+    case PacketType.EXEC_END:
+      // A user's stop ("canceled") is not a failure, and neither is the exit
+      // of a process that the step itself stopped with Ctrl+C.
+      if (obj.error !== null) return true;
+      if (interrupted) return false;
+      return (
+        (obj.exit_code !== null && obj.exit_code !== 0) ||
+        obj.completion === "signaled" ||
+        obj.completion === "deadline_exceeded"
+      );
+    case PacketType.APPLY_PATCH_END:
+    case PacketType.PUBLISH_FILES_END:
+      return obj.error !== null;
+    // Auth, unreachable, blocked and HTTP errors of an external tool.
+    case PacketType.CUSTOM_TOOL_DELTA:
+      return !!obj.error;
+    default:
+      return false;
+  }
+}
+
+/** Input that holds Ctrl+C, e.g. to stop a running dev server. */
+export function isInterruptInput(chars: string): boolean {
+  return chars.includes("\u0003");
+}
+
+/** The step sent Ctrl+C to a running process. */
+function sendsInterrupt(step: TransformedStep): boolean {
+  return step.packets.some(
     (packet) =>
-      packet.obj.type === PacketType.ERROR ||
-      (packet.obj.type === PacketType.PYTHON_TOOL_DELTA && !!packet.obj.stderr)
+      packet.obj.type === PacketType.WRITE_STDIN_START &&
+      isInterruptInput(packet.obj.chars)
+  );
+}
+
+function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
+  const interrupted = sendsInterrupt(step);
+  const failed = step.packets.some((packet) =>
+    isFailurePacket(packet, interrupted)
   );
   if (failed) return "error";
   return step.packets.some(isGroupEndPacket) ? "done" : "streaming";

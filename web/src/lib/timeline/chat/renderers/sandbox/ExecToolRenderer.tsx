@@ -11,6 +11,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { stripAnsi } from "@/lib/sandbox/ansi";
+import { isInterruptInput } from "@/lib/timeline/chat/transformers";
 import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import {
   SandboxCallContent,
@@ -110,8 +111,16 @@ export function ExecToolRenderer({
   // Output that streamed in keeps following through the final output, which
   // can add lines; a call that was already done when shown stays at its top.
   const [followOutput] = useState(!isComplete);
+  // The exit of a process this step stopped with Ctrl+C is expected.
+  const interrupted =
+    start.type === PacketType.WRITE_STDIN_START &&
+    isInterruptInput(start.chars);
+  // Only a failure names its exit code.
   const exitCode =
-    end !== null && end.exit_code !== null
+    end !== null &&
+    end.exit_code !== null &&
+    end.exit_code !== 0 &&
+    !interrupted
       ? t("sandbox.exitCode.label", { exitCode: end.exit_code })
       : undefined;
 
@@ -164,11 +173,20 @@ export function ExecToolRenderer({
         </CodePanel>
       )}
 
-      {end?.completion && end.completion !== "exited" && (
-        <Text font="secondary-body" color="status-warning-05">
-          {t("sandbox.completion.label", { completion: end.completion })}
-        </Text>
-      )}
+      {end?.completion &&
+        end.completion !== "exited" && (
+          // A kill or a time limit fails the step, so it reads as an error.
+          <Text
+            font="secondary-body"
+            color={
+              end.completion === "canceled" || interrupted
+                ? "status-warning-05"
+                : "status-error-05"
+            }
+          >
+            {t("sandbox.completion.label", { completion: end.completion })}
+          </Text>
+        )}
       {end?.session_id && (
         <Text font="secondary-body" color="text-03">
           {t("sandbox.stillRunning.label", { sessionId: end.session_id })}
