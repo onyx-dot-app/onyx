@@ -1068,7 +1068,6 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                         request_params=display.request_params,
                         response_record=record,
                         presentation=display.presentation,
-                        pre_answer_processing_time=display.pre_answer_processing_time,
                     )
         delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
 

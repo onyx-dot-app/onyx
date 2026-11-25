@@ -658,6 +658,8 @@ export class ChatPage {
    * skills, so that `@` opens the picker at once. */
   /** Stops one live agent, by its name, from the activity card. */
   async stopAgent(name: string): Promise<void> {
+    // The Stop takes the place of the run time while the row is hovered
+    await this.activityPanel.getByText(name, { exact: true }).hover();
     await this.activityPanel
       .getByRole("button", { name: `Stop ${name}`, exact: true })
       .click();

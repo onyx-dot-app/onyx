@@ -13576,10 +13576,8 @@
       },
       "agents": {
         "title": "Agents",
+        "titleRunning": "Agents · {count} en cours",
         "status": {
-          "starting": "Démarrage",
-          "running": "En cours",
-          "suspended": "En attente",
           "complete": "Terminé",
           "limit": "Limite d'étapes atteinte",
           "cancelled": "Annulé",
@@ -13588,6 +13586,7 @@
         },
         "finished": "Agents précédents",
         "stop": "Arrêter {name}",
+        "stopTooltip": "Arrêter l'agent",
         "stopFailed": "Impossible d'arrêter l'agent."
       },
       "files": {

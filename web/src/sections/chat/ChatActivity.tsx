@@ -1,27 +1,27 @@
 "use client";
 
+// Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
+
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, LineItemButton, Text } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import { Section } from "@opal/layouts";
 import {
   SvgActivity,
   SvgAlertCircle,
+  SvgBranch,
   SvgCheckCircle,
   SvgChevronDown,
   SvgChevronRight,
-  SvgCircle,
   SvgFiles,
   SvgHelpCircle,
-  SvgLoader,
-  SvgPauseCircle,
-  SvgStop,
+  SvgSquare,
   SvgStopCircle,
   SvgXCircle,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
-import { cn } from "@opal/utils";
 import { formatDurationSeconds } from "@opal/time";
 import {
   useCurrentChatState,
@@ -35,106 +35,133 @@ import {
   readWaitingToolRequests,
   useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
-import type { ChatSubagent } from "@/lib/chat/types";
+import type { ChatSubagent, RunStatus } from "@/lib/chat/types";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 
-function SpinningLoader({ className, ...props }: IconProps) {
+/** A live agent: the agent glyph with a small blue dot, as T3 Code's. */
+function LiveAgentIcon(props: IconProps) {
   return (
-    <SvgLoader
-      {...props}
-      className={cn(className, "motion-safe:animate-spin")}
-    />
+    <span className="relative inline-block">
+      <SvgBranch {...props} />
+      <span
+        aria-hidden
+        className="absolute -end-0.5 -top-0.5 size-1.5 rounded-full bg-status-info-05"
+      />
+    </span>
   );
 }
 
-const STATUS_ICONS = {
-  starting: SvgCircle,
-  running: SpinningLoader,
-  suspended: SvgPauseCircle,
+function FilledSquare(props: IconProps) {
+  return <SvgSquare {...props} fill="currentColor" />;
+}
+
+type FinishedState = Exclude<RunStatus, "running" | "suspended"> | "stopped";
+
+const FINISHED_ICONS = {
   complete: SvgCheckCircle,
   limit: SvgAlertCircle,
   cancelled: SvgStopCircle,
   stopped: SvgStopCircle,
   error: SvgXCircle,
-} satisfies Record<
-  NonNullable<ChatSubagent["status"]> | "starting" | "stopped",
-  IconFunctionComponent
->;
+} satisfies Record<FinishedState, IconFunctionComponent>;
+
+/** The agent's finished state, or null while it runs or starts. */
+function finishedState(agent: ChatSubagent): FinishedState | null {
+  if (agent.stopped_by_user) return "stopped";
+  if (
+    agent.status === null ||
+    agent.status === "running" ||
+    agent.status === "suspended"
+  )
+    return null;
+  return agent.status;
+}
 
 function isFinished(agent: ChatSubagent): boolean {
-  return (
-    agent.stopped_by_user ||
-    (agent.status !== null &&
-      agent.status !== "running" &&
-      agent.status !== "suspended")
-  );
+  return finishedState(agent) !== null;
 }
 
-function agentState(agent: ChatSubagent): keyof typeof STATUS_ICONS {
-  if (agent.stopped_by_user) return "stopped";
-  return agent.status ?? "starting";
-}
+// A row's run counts as new when it started this long before the card mounted
+const NEW_RUN_WINDOW_MS = 10_000;
 
 interface AgentRowProps {
   agent: ChatSubagent;
   onStop: (agentId: string) => Promise<void>;
 }
 
-/** One agent: its status, how long its run has worked, and a Stop while live. */
+/**
+ * One agent, as T3 Code's lineage rows: a live agent shows how long its run
+ * has worked, which hover or focus swaps for its Stop; a finished agent shows
+ * its outcome.
+ */
 function AgentRow({ agent, onStop }: AgentRowProps) {
   const t = useTranslations("chat.activity.agents");
-  const state = agentState(agent);
-  const live = !isFinished(agent);
+  const finished = finishedState(agent);
   const name = agent.path.replace(/^\/root\//, "");
   const parsed = agent.started_at ? Date.parse(agent.started_at) : NaN;
-  const startedAt = live && !Number.isNaN(parsed) ? parsed : undefined;
-  const elapsedSeconds = useStreamingDuration(live, startedAt);
-  // The server's clock can run ahead of the browser's
-  const seconds =
-    startedAt !== undefined
-      ? Math.max(1, elapsedSeconds)
-      : live
-        ? null
-        : agent.duration_seconds;
-  return (
+  const startedAt =
+    finished === null && !Number.isNaN(parsed) ? parsed : undefined;
+  const elapsedSeconds = useStreamingDuration(finished === null, startedAt);
+  const row = (
     <LineItemButton
       presentational
-      icon={STATUS_ICONS[state]}
+      icon={finished === null ? LiveAgentIcon : FINISHED_ICONS[finished]}
       title={name}
       titleMaxLines={1}
       rightChildren={
-        <Section flexDirection="row" width="fit" height="fit" gap={0.5}>
-          {/* Plain text: a button label animates its changes, so each tick
-              would flash */}
-          {seconds !== null && (
-            <Text
-              font="secondary-body"
-              color="text-03"
-              wordWrap="whitespace-nowrap"
-            >
-              {formatDurationSeconds(seconds)}
-            </Text>
-          )}
+        finished !== null ? (
           <Text
             font="secondary-body"
             color="text-03"
             wordWrap="whitespace-nowrap"
           >
-            {t(`status.${state}`)}
+            {t(`status.${finished}`)}
           </Text>
-          {live && (
-            <Button
-              icon={SvgStop}
-              prominence="tertiary"
-              size="xs"
-              tooltip={t("stop", { name })}
-              aria-label={t("stop", { name })}
-              onClick={() => void onStop(agent.id)}
-            />
-          )}
-        </Section>
+        ) : (
+          // The Stop sits over the time, so it stays in the tab order while
+          // hidden; on a touch screen it shows in place of the time
+          <div className="relative min-w-6">
+            <Hoverable.Item group="chatActivityAgent" variant="appear-on-rest">
+              <div className="text-end no-hover:invisible">
+                {/* Plain text: a button label animates its changes, so each
+                    tick would flash */}
+                {startedAt !== undefined && (
+                  <Text
+                    font="secondary-body"
+                    color="text-03"
+                    wordWrap="whitespace-nowrap"
+                  >
+                    {/* The server's clock can run ahead of the browser's */}
+                    {formatDurationSeconds(Math.max(1, elapsedSeconds))}
+                  </Text>
+                )}
+              </div>
+            </Hoverable.Item>
+            <div className="absolute end-0 top-1/2 -translate-y-1/2">
+              <Hoverable.Item
+                group="chatActivityAgent"
+                variant="appear-on-hover"
+              >
+                <Button
+                  icon={FilledSquare}
+                  variant="danger"
+                  prominence="tertiary"
+                  size="xs"
+                  tooltip={t("stopTooltip")}
+                  aria-label={t("stop", { name })}
+                  onClick={() => void onStop(agent.id)}
+                />
+              </Hoverable.Item>
+            </div>
+          </div>
+        )
       }
     />
+  );
+  return finished === null ? (
+    <Hoverable.Root group="chatActivityAgent">{row}</Hoverable.Root>
+  ) : (
+    row
   );
 }
 
@@ -144,11 +171,12 @@ interface ChatActivityProps {
 
 /**
  * The chat's activity card, toggled from its header: what waits for the user,
- * the background agents with their status, run time and Stop, and the
- * published files. Agents that start open it; it stays open until its header
- * button closes it, and shows only once the chat has any of them. A waiting
- * request scrolls to its card; files open in the right panel. The card pins to the chat region's top end, under its header, so the
- * header's buttons stay in place. With no output panel open and a workspace at
+ * the background agents with their run time and Stop, and the published
+ * files. Agents that start open it; it stays open until its header button
+ * closes it, and shows only once the chat has any of them. A waiting request
+ * scrolls to its card; files open in the right panel. The card pins to the
+ * chat region's top end, under its header, so the header's buttons stay in
+ * place. With no output panel open and a workspace at
  * least 64rem wide, the chat's content narrows for it; otherwise it floats
  * over the chat's end.
  */
@@ -183,16 +211,26 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
     <AgentRow key={agent.id} agent={agent} onStop={stopAgent} />
   );
   // Agents that start while the chat shows open the card, once per run of
-  // agents. Agents already live when an idle chat loads do not. A chat that
-  // mounts while its reply streams, such as a new chat, counts from zero:
-  // that reply can start agents before the first list arrives.
+  // agents. In the first list, only runs that started just before the card
+  // mounted count as new: a new chat's reply can start agents before that
+  // list arrives, while a chat opened later has older runs.
+  const [mountedAt] = useState(() => Date.now());
   const liveCount = loaded ? liveAgents.length : null;
-  const previousLiveCount = useRef<number | null>(streaming ? 0 : null);
+  const newAtLoad =
+    loaded &&
+    liveAgents.some(
+      (agent) =>
+        agent.started_at !== null &&
+        Date.parse(agent.started_at) > mountedAt - NEW_RUN_WINDOW_MS
+    );
+  const previousLiveCount = useRef<number | null>(null);
   useEffect(() => {
     if (liveCount === null) return;
-    if (previousLiveCount.current === 0 && liveCount > 0) setOpen(true);
+    const previous = previousLiveCount.current;
+    if ((previous === null ? newAtLoad : previous === 0) && liveCount > 0)
+      setOpen(true);
     previousLiveCount.current = liveCount;
-  }, [liveCount]);
+  }, [liveCount, newAtLoad]);
   const activitySlot = useContext(AppWorkspaceElementsContext)?.activitySlot;
   // Beside a closed output panel, the chat makes room for the card
   const docked = !useRightPanelShown();
@@ -257,7 +295,9 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
               {agents.length > 0 && (
                 <Section gap={0.5} alignItems="stretch" height="auto">
                   <Text as="p" font="secondary-action" color="text-03">
-                    {t("agents.title")}
+                    {liveAgents.length > 0
+                      ? t("agents.titleRunning", { count: liveAgents.length })
+                      : t("agents.title")}
                   </Text>
                   {liveAgents.map(agentRow)}
                   {finishedAgents.length > 0 && (

@@ -13576,10 +13576,8 @@
       },
       "agents": {
         "title": "智能体",
+        "titleRunning": "智能体 · {count} 个运行中",
         "status": {
-          "starting": "启动中",
-          "running": "运行中",
-          "suspended": "等待中",
           "complete": "已完成",
           "limit": "已达步骤上限",
           "cancelled": "已取消",
@@ -13588,6 +13586,7 @@
         },
         "finished": "之前的智能体",
         "stop": "停止 {name}",
+        "stopTooltip": "停止智能体",
         "stopFailed": "无法停止该智能体。"
       },
       "files": {

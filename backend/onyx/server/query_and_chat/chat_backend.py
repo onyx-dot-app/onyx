@@ -131,7 +131,10 @@ from onyx.db.chat_response import (
     waiting_approval_reply_ids,
 )
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.chat_subagents import load_run_times, load_session_agent_metadata
+from onyx.db.chat_subagents import (
+    load_run_start_times,
+    load_session_agent_metadata,
+)
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     ApprovalDecidedVia,
@@ -1590,29 +1593,21 @@ def get_chat_session_agents(
         # `spawn_agent` children; Deep Research workers run in the foreground
         if isinstance(agent.restoration_config, ChatConfiguration)
     ]
-    times = load_run_times(
+    started = load_run_start_times(
         [int(agent.latest_run_id) for agent in agents if agent.latest_run_id]
     )
-    subagents: list[ChatSubagent] = []
-    for agent in agents:
-        started_at, duration = (
-            times.get(int(agent.latest_run_id), (None, None))
+    return [
+        ChatSubagent(
+            id=UUID(agent.id),
+            path=agent.path,
+            status=agent.status,
+            stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
+            started_at=started.get(int(agent.latest_run_id))
             if agent.latest_run_id
-            else (None, None)
+            else None,
         )
-        subagents.append(
-            ChatSubagent(
-                id=UUID(agent.id),
-                path=agent.path,
-                status=agent.status,
-                stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
-                started_at=started_at,
-                duration_seconds=duration
-                if agent.status is not None and agent.status.is_terminal
-                else None,
-            )
-        )
-    return subagents
+        for agent in agents
+    ]
 
 
 @router.get("/chat-session/{session_id}/resume-stream", tags=PUBLIC_API_TAGS)

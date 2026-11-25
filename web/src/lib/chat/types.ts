@@ -112,8 +112,6 @@ export interface ChatSubagent {
   stopped_by_user: boolean;
   /** When its current or latest run started, as an ISO date. */
   started_at: string | null;
-  /** How long its latest run worked, once it finished, when known. */
-  duration_seconds: number | null;
 }
 
 /** The chat's background agents, as `useChatSubagents` gives them. */

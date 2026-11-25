@@ -13576,10 +13576,8 @@
       },
       "agents": {
         "title": "エージェント",
+        "titleRunning": "エージェント · {count} 件実行中",
         "status": {
-          "starting": "開始中",
-          "running": "実行中",
-          "suspended": "待機中",
           "complete": "完了",
           "limit": "ステップ上限に到達",
           "cancelled": "キャンセル済み",
@@ -13588,6 +13586,7 @@
         },
         "finished": "以前のエージェント",
         "stop": "{name} を停止",
+        "stopTooltip": "エージェントを停止",
         "stopFailed": "エージェントを停止できませんでした。"
       },
       "files": {
