@@ -148,8 +148,6 @@ class CommandApprovals:
         try:
             with get_session_with_tenant(tenant_id=self._tenant_id) as db:
                 return bool(self._waiting(db, command_id))
-        except AgentCancelled:
-            return False
         except Exception:
             logger.exception("command_approvals_read_failed command=%s", command_id)
             return False

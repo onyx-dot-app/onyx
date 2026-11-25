@@ -112,30 +112,28 @@ def decide_command_approval(
 
     approved_ids = [row.approval_id]
 
-    def covered(required: list[str]) -> bool:
-        """The command's grants, this one with the earlier ones, cover the
-        Ask actions of a waiting request, as the proxy checks them."""
-        if not required or integration_id is None:
-            return False
-        try:
-            return cache is not None and approval_cache.command_grants_cover(
-                command_id, integration_id, required, cache
-            )
-        except CACHE_TRANSIENT_ERRORS:
-            return False
-
-    if for_command and integration_id is not None:
+    # Saving the grant needed the cache, so `cache` is set here.
+    if for_command and integration_id is not None and cache is not None:
         for other in action_approval.list_pending_command_action_approvals(
             db_session,
             chat_session_id=row.chat_session_id,
             command_id=command_id,
             created_after=cutoff,
         ):
-            if other.integration_id != integration_id or not covered(
-                approval_cache.command_grant_actions(other.actions)
-            ):
-                continue
-            if action_approval.try_record_decision(
+            # This grant with the earlier ones, as the proxy checks them.
+            try:
+                covered = (
+                    other.integration_id == integration_id
+                    and approval_cache.command_grants_cover(
+                        command_id,
+                        integration_id,
+                        approval_cache.command_grant_actions(other.actions),
+                        cache,
+                    )
+                )
+            except CACHE_TRANSIENT_ERRORS:
+                covered = False
+            if covered and action_approval.try_record_decision(
                 db_session,
                 approval_id=other.approval_id,
                 decision=ApprovalDecision.APPROVED,
