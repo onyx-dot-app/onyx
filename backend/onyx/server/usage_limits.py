@@ -16,9 +16,7 @@ nothing is allowed (the trial API-call default), and an unset override means
 """
 
 from collections.abc import Callable
-from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
@@ -30,6 +28,15 @@ from onyx.configs.app_configs import (
 from onyx.db.usage import UsageLimitExceededError, UsageType, check_usage_limit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.models import (
+    Allowance,
+    LimitMeasure,
+    LimitPolicy,
+    LimitPolicyName,
+    LimitScope,
+    LimitWindow,
+    WindowAnchor,
+)
 from onyx.server.tenant_usage_limits import (
     TenantUsageLimitKeys,
     TenantUsageLimitOverrides,
@@ -66,79 +73,10 @@ for key in [
         _ONYX_MANAGED_API_KEYS.add(key)
 
 
-class LimitScope(str, Enum):
-    """Whose usage a limit counts."""
-
-    TENANT = "tenant"
-
-
-class LimitMeasure(str, Enum):
-    """Where a limit's current usage is read from."""
-
-    # A tenant_usage column. Checked before the call, added after it, so one
-    # call can pass the line; callers that need an exact stop pass the amount
-    # they are about to use as ``pending_amount``.
-    COUNTER = "counter"
-
-
-class WindowAnchor(str, Enum):
-    """Where a limit's windows are counted from."""
-
-    # A grid shared by every tenant, from ``onyx.db.usage.get_current_window_start``:
-    # with the default USAGE_LIMIT_WINDOW_SECONDS, the calendar week from Monday
-    # 00:00 UTC. Not counted from the tenant's sign-up.
-    CALENDAR = "calendar"
-
-
-class LimitWindow(BaseModel):
-    """The period a limit's usage is counted over before it starts from zero."""
-
-    model_config = ConfigDict(frozen=True)
-
-    anchor: WindowAnchor
-    # Length of one window. None means one window that never resets.
-    length_seconds: int | None = None
-
-    @model_validator(mode="after")
-    def _calendar_has_length(self) -> "LimitWindow":
-        if self.anchor == WindowAnchor.CALENDAR and self.length_seconds is None:
-            raise ValueError("A calendar window needs a length")
-        return self
-
-
 # Cloud's window today: the tenant_usage grid.
 CALENDAR_WEEK = LimitWindow(
     anchor=WindowAnchor.CALENDAR, length_seconds=USAGE_LIMIT_WINDOW_SECONDS
 )
-
-
-class LimitPolicyName(str, Enum):
-    """The plans a tenant can be held to. Fixed in code; one ``LimitPolicy`` each."""
-
-    CLOUD_TRIAL = "cloud_trial"
-    CLOUD_PAID = "cloud_paid"
-
-
-class Allowance(BaseModel):
-    """One usage type under one policy: how much, over what window, whose usage,
-    read from where, and which override field can replace the amount."""
-
-    model_config = ConfigDict(frozen=True)
-
-    # NO_LIMIT for unlimited, 0 for nothing allowed.
-    limit: int
-    scope: LimitScope = LimitScope.TENANT
-    measure: LimitMeasure = LimitMeasure.COUNTER
-    # Required for a COUNTER; it names the tenant_usage row the count lives in.
-    window: LimitWindow | None = None
-    # Field of cloud's override record that replaces ``limit`` for one tenant.
-    override_field: TenantUsageLimitKeys | None = None
-
-    @model_validator(mode="after")
-    def _counter_has_window(self) -> "Allowance":
-        if self.measure == LimitMeasure.COUNTER and self.window is None:
-            raise ValueError("A counter allowance needs a window")
-        return self
 
 
 def _weekly_tenant_counter(
@@ -151,15 +89,6 @@ def _weekly_tenant_counter(
         window=CALENDAR_WEEK,
         override_field=override_field,
     )
-
-
-class LimitPolicy(BaseModel):
-    """Everything one plan allows. A usage type with no allowance is unlimited."""
-
-    model_config = ConfigDict(frozen=True)
-
-    name: LimitPolicyName
-    allowances: dict[UsageType, Allowance]
 
 
 # One line per limited usage type. Adding a limit to a plan is one line here;
@@ -201,6 +130,33 @@ CLOUD_PAID = LimitPolicy(
         ),
     },
 )
+
+
+# TEMPORARY GUARD, replaced in the next PR of this stack (ENG-4479).
+# An allowance declares its window, but check_usage_limit and increment_usage in
+# onyx.db.usage do not read it yet: they always use the current CALENDAR_WEEK row.
+# A counter on any other window would be counted in the wrong row with no error,
+# so it is refused here until the counter takes its window_start from the
+# allowance on both the check and the increment side.
+def _counter_window_supported(allowance: Allowance) -> bool:
+    """The tenant_usage counter reads and writes only its own grid, so a
+    counter allowance must use exactly that window."""
+    return (
+        allowance.measure != LimitMeasure.COUNTER or allowance.window == CALENDAR_WEEK
+    )
+
+
+def _require_supported_windows(*policies: LimitPolicy) -> None:
+    for policy in policies:
+        for usage_type, allowance in policy.allowances.items():
+            if not _counter_window_supported(allowance):
+                raise ValueError(
+                    f"{policy.name.value}: {usage_type.value} uses a window the "
+                    "tenant_usage counter cannot read or write"
+                )
+
+
+_require_supported_windows(CLOUD_TRIAL, CLOUD_PAID)
 
 
 def policy_for_plan(is_trial: bool) -> LimitPolicy:
@@ -349,6 +305,11 @@ def _measure_and_check(
     """Read the usage the allowance points at and raise
     ``UsageLimitExceededError`` when usage plus ``pending_amount`` is over
     ``limit``."""
+    # Temporary, see _counter_window_supported.
+    if not _counter_window_supported(allowance):
+        raise RuntimeError(
+            f"Bug: {usage_type.value} uses a window the tenant_usage counter cannot read"
+        )
     if allowance.measure == LimitMeasure.COUNTER:
         check_usage_limit(
             db_session=db_session,

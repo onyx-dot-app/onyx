@@ -144,7 +144,9 @@ same bucket (`backend/ee/onyx/db/token_limit.py:replace_card_token_rate_limits`)
 amount, its window, whose usage counts, where the usage is read from, and the
 override-record field that replaces the amount for one tenant. Each of these can
 differ between policies, and a usage type a policy does not list is unlimited
-under it. Each check picks the plan from the trial status, reads a per-tenant
+under it. The types are in `backend/onyx/server/models.py`. A counter allowance
+must use `CALENDAR_WEEK`, the only window `tenant_usage` reads and writes for now
+([TECH-DEBT](../TECH-DEBT.md)); another window fails at import. Each check picks the plan from the trial status, reads a per-tenant
 override from the control plane
 (`backend/ee/onyx/server/tenant_usage_limits.py`, refreshed every 24 h), then
 falls back to the policy's amount. An override is an absolute value, not an

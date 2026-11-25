@@ -1,4 +1,4 @@
-"""Unit tests for the usage limit registry, the cloud policies and enforcement."""
+"""Unit tests for the cloud usage limit policies and their enforcement."""
 
 from unittest.mock import MagicMock, patch
 
@@ -8,12 +8,7 @@ from onyx.db.usage import UsageLimitExceededError, UsageType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server import usage_limits
-from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
-from onyx.server.usage_limits import (
-    CALENDAR_WEEK,
-    CLOUD_PAID,
-    CLOUD_TRIAL,
-    NO_LIMIT,
+from onyx.server.models import (
     Allowance,
     LimitMeasure,
     LimitPolicy,
@@ -21,6 +16,13 @@ from onyx.server.usage_limits import (
     LimitScope,
     LimitWindow,
     WindowAnchor,
+)
+from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
+from onyx.server.usage_limits import (
+    CALENDAR_WEEK,
+    CLOUD_PAID,
+    CLOUD_TRIAL,
+    NO_LIMIT,
     check_llm_cost_limit_for_provider,
     check_usage_and_raise,
     get_limit_for_usage_type,
@@ -61,6 +63,32 @@ class TestPolicies:
     def test_calendar_window_without_length_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="needs a length"):
             LimitWindow(anchor=WindowAnchor.CALENDAR)
+
+    def test_counter_on_another_window_is_rejected(self) -> None:
+        daily = LimitWindow(anchor=WindowAnchor.CALENDAR, length_seconds=86400)
+        policy = LimitPolicy(
+            name=LimitPolicyName.CLOUD_TRIAL,
+            allowances={UsageType.LLM_COST: Allowance(limit=100, window=daily)},
+        )
+        with pytest.raises(ValueError, match="cannot read or write"):
+            usage_limits._require_supported_windows(policy)
+
+    def test_counter_on_another_window_is_never_measured(self) -> None:
+        daily = LimitWindow(anchor=WindowAnchor.CALENDAR, length_seconds=86400)
+        policy = LimitPolicy(
+            name=LimitPolicyName.CLOUD_TRIAL,
+            allowances={UsageType.LLM_COST: Allowance(limit=100, window=daily)},
+        )
+        with (
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
+            patch.object(usage_limits, "is_tenant_on_trial_fn", return_value=True),
+            patch.object(usage_limits, "policy_for_plan", return_value=policy),
+            patch.object(usage_limits, "get_limit_for_usage_type", return_value=100),
+            patch.object(usage_limits, "check_usage_limit") as read,
+            pytest.raises(RuntimeError, match="cannot read"),
+        ):
+            check_usage_and_raise(MagicMock(), UsageType.LLM_COST, _TENANT)
+        read.assert_not_called()
 
     def test_counter_without_window_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="needs a window"):
