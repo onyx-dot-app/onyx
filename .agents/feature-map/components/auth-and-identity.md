@@ -120,6 +120,11 @@ workspace, by membership first and verified domain second, and returns a
 short-lived signed workspace token that pins the next authorize call to that
 tenant. Mobile SSO puts its parameters in the signed OAuth state and returns a
 one-time PKCE-bound code to the app (`auth/mobile_sso/`, [[mobile-app]]).
+The custom login's token refresh
+(`backend/ee/onyx/server/enterprise_settings/api.py:refresh_access_token`) sits
+in the enterprise settings router, but it is an identity rule: `_caller_owns_subject`
+binds the subject in the request body to the caller and to the current tenant
+before `oauth_callback` runs.
 
 **Magic link.** `MAGIC_LINK_ENABLED` mounts two public routes
 (`onyx/server/auth/magic_link_api.py`) and `GET /auth/type` reports
@@ -145,11 +150,6 @@ password, or signs the existing user in, and sets the session cookie. An account
 whose SSO session has expired (`oidc_expiry`) is sent to SSO with
 `MAGIC_LINK_USE_SSO`. A used or expired token is `MAGIC_LINK_INVALID`. The playground adds its sign-up rules
 through EE hooks; see [[multi-tenancy]].
-The custom login's token refresh
-(`backend/ee/onyx/server/enterprise_settings/api.py:refresh_access_token`) sits
-in the enterprise settings router, but it is an identity rule: `_caller_owns_subject`
-binds the subject in the request body to the caller and to the current tenant
-before `oauth_callback` runs.
 
 **OAuth provider.** The routes mount only when `WEB_DOMAIN` is HTTPS, or HTTP on
 a loopback host (`oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS`). The
