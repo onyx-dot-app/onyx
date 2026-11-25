@@ -11919,6 +11919,10 @@
       "closeButton": {
         "tooltip": "Seitenleiste schließen"
       },
+      "copyWithReferences": {
+        "label": "Mit Quellenangaben kopieren",
+        "unavailableSource": "Quellendetails nicht verfügbar"
+      },
       "foundSources": {
         "title": "Gefundene Quellen"
       },
