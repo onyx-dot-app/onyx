@@ -6,48 +6,48 @@ import { cn } from "@opal/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
+import type { GalleryImage } from "@/app/app/components/files/images/gallery";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 
 interface FullImageModalProps {
-  urls: string[];
+  images: GalleryImage[];
   initialIndex?: number;
-  alt?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCloseAutoFocus?: (event: Event) => void;
 }
 
 export function FullImageModal({
-  urls,
+  images,
   initialIndex = 0,
-  alt,
   open,
   onOpenChange,
   onCloseAutoFocus,
 }: FullImageModalProps) {
   const t = useTranslations("chat.files");
   const [offset, setOffset] = useState(0);
-  const count = urls.length;
+  const count = images.length;
   const index =
     count > 0 ? (((initialIndex + offset) % count) + count) % count : 0;
-  const src = urls[index];
+  const current = images[index];
 
   useEffect(() => {
-    for (const url of urls) {
+    for (const { url } of images) {
       const img = new Image();
       img.src = url;
     }
-  }, [urls]);
+  }, [images]);
 
-  if (!src) return null;
+  if (!current) return null;
 
   const step = (direction: -1 | 1) =>
     setOffset((current) => current + direction);
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (count <= 1) return;
-    if (event.key === "ArrowLeft") step(-1);
-    else if (event.key === "ArrowRight") step(1);
+    const rtl = document.documentElement.dir === "rtl";
+    if (event.key === "ArrowLeft") step(rtl ? 1 : -1);
+    else if (event.key === "ArrowRight") step(rtl ? -1 : 1);
     else return;
     event.preventDefault();
     event.stopPropagation();
@@ -70,8 +70,8 @@ export function FullImageModal({
             {t("inMessageImage.viewFullImage.label")}
           </Dialog.Title>
           <img
-            src={src}
-            alt={(count <= 1 && alt) || t("fullImageModal.image.alt")}
+            src={current.url}
+            alt={current.alt || t("fullImageModal.image.alt")}
             className="max-w-full max-h-[calc(100dvh-2rem)] object-contain"
           />
           {count > 1 && (
@@ -99,7 +99,7 @@ export function FullImageModal({
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <Text font="secondary-body" color="text-03">
+                <Text as="p" font="secondary-body" color="text-03">
                   {t("fullImageModal.position", {
                     current: index + 1,
                     total: count,
