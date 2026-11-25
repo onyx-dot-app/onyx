@@ -223,12 +223,22 @@ test("opening a row in an idle view at the end does not jump to the end after th
 });
 
 test("closing a step before its reveal keeps following the reply", async () => {
+  jest
+    .spyOn(window, "matchMedia")
+    .mockReturnValue({ matches: false } as MediaQueryList);
   const { container, grow, settleInput } = renderChat({
     children: <OpenableRow />,
   });
   settleInput();
-  fireEvent.click(screen.getByRole("button", { name: "Open" }));
-  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  const open = screen.getByRole("button", { name: "Open" });
+  fireEvent.pointerDown(open);
+  fireEvent.pointerUp(open);
+  fireEvent.click(open);
+  act(() => jest.advanceTimersByTime(1));
+  const close = screen.getByRole("button", { name: "Close" });
+  fireEvent.pointerDown(close);
+  fireEvent.pointerUp(close);
+  fireEvent.click(close);
   await grow(200);
   settleInput();
   expect(container.scrollTop).toBe(800);

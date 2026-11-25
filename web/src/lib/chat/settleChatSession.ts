@@ -379,13 +379,17 @@ export async function settleChatSession({
       sendError = await readerFinished;
       if (!ownsSettlement()) return;
     }
-    // A replay or refresh can take ownership before settlement completes.
-    if (sendError) {
-      useChatSessionStore.getState().setUncaughtError(sessionId, {
-        ...sendError,
-        affectsRunStatus: false,
-      });
-    }
+    // Keep the rejected send visible without marking the followed run failed.
+    const handoffError: SessionError | undefined = sendError
+      ? { ...sendError, affectsRunStatus: false }
+      : undefined;
+    const preserveHandoffError = () => {
+      if (handoffError) {
+        useChatSessionStore
+          .getState()
+          .setUncaughtError(sessionId, handoffError);
+      }
+    };
     // A reader that lost a running stream reattaches: from its saved cursor,
     // or from the start into reset rows. The received rows stay on screen
     // until the replay delivers its first batch.
@@ -421,9 +425,10 @@ export async function settleChatSession({
           useChatSessionStore.getState().updateSessionData(sessionId, {
             chatState: "streaming",
             uncaughtError:
-              current.uncaughtError?.error === errorMessage
+              handoffError ??
+              (current.uncaughtError?.error === errorMessage
                 ? null
-                : current.uncaughtError,
+                : current.uncaughtError),
           });
           void followChatSession({
             sessionId,
@@ -449,6 +454,7 @@ export async function settleChatSession({
         local.chatState !== "cancelling" &&
         streamResponses(local.messageTree, next)
       ) {
+        preserveHandoffError();
         followChatStream(sessionId, next, errorMessage);
         return;
       }
@@ -456,6 +462,7 @@ export async function settleChatSession({
       if (!ownsSettlement()) return;
     }
     if (next) {
+      preserveHandoffError();
       await refreshChatSession(sessionId, errorMessage);
       return;
     }
@@ -466,6 +473,7 @@ export async function settleChatSession({
         : await fetchSettledChatSession(sessionId);
       if (!ownsSettlement()) return;
       if (settled?.is_processing || settled?.current_stream) {
+        preserveHandoffError();
         await refreshChatSession(sessionId, errorMessage, {
           page: settled,
           loadSequence,

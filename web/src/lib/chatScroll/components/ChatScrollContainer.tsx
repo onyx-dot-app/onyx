@@ -213,6 +213,7 @@ const ChatScrollContainer = React.memo(
       // When the user last gave scroll input, and whether a pointer is held
       // on the view (a scrollbar drag). Only read, never acted on directly.
       const userInputAtRef = useRef(-Infinity);
+      const scrollInputRevisionRef = useRef(0);
       const pointerHeldRef = useRef(false);
       // A catch-up deferred until the user's scroll input settles.
       const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -507,10 +508,10 @@ const ChatScrollContainer = React.memo(
         }
         const modeAtOpen = modeRef.current;
         modeRef.current = "reading";
-        const inputAtOpen = userInputAtRef.current;
+        const inputAtOpen = scrollInputRevisionRef.current;
         return (cancelled = false) => {
           if (
-            userInputAtRef.current !== inputAtOpen ||
+            scrollInputRevisionRef.current !== inputAtOpen ||
             modeRef.current !== "reading"
           )
             return;
@@ -600,6 +601,7 @@ const ChatScrollContainer = React.memo(
           // A fling keeps moving past its last input; each step stays the
           // user's. It also ends a glide.
           userInputAtRef.current = performance.now();
+          scrollInputRevisionRef.current++;
           cancelGlide();
           modeRef.current = isAtScrollEnd(container, buttonThresholdPx)
             ? "following"
@@ -632,13 +634,17 @@ const ChatScrollContainer = React.memo(
         const markInput = () => {
           userInputAtRef.current = performance.now();
         };
+        const markScrollInput = () => {
+          markInput();
+          scrollInputRevisionRef.current++;
+        };
         const onKeyDown = (event: KeyboardEvent) => {
           // Keys typed into a field inside the view do not scroll it.
           const target = event.target;
           const typing =
             target instanceof HTMLElement &&
             (target.isContentEditable || target.closest("input, textarea"));
-          if (!typing && SCROLL_KEYS.has(event.key)) markInput();
+          if (!typing && SCROLL_KEYS.has(event.key)) markScrollInput();
         };
         const onPointerDown = () => {
           pointerHeldRef.current = true;
@@ -649,16 +655,18 @@ const ChatScrollContainer = React.memo(
           pointerHeldRef.current = false;
           markInput();
         };
-        container.addEventListener("wheel", markInput, { passive: true });
-        container.addEventListener("touchmove", markInput, { passive: true });
+        container.addEventListener("wheel", markScrollInput, { passive: true });
+        container.addEventListener("touchmove", markScrollInput, {
+          passive: true,
+        });
         container.addEventListener("keydown", onKeyDown);
         container.addEventListener("focusin", markInput);
         container.addEventListener("pointerdown", onPointerDown);
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", onPointerUp);
         return () => {
-          container.removeEventListener("wheel", markInput);
-          container.removeEventListener("touchmove", markInput);
+          container.removeEventListener("wheel", markScrollInput);
+          container.removeEventListener("touchmove", markScrollInput);
           container.removeEventListener("keydown", onKeyDown);
           container.removeEventListener("focusin", markInput);
           container.removeEventListener("pointerdown", onPointerDown);
