@@ -2051,6 +2051,13 @@ async def test_an_ask_from_a_chat_is_refused_and_names_the_app_tool(
             "custom__51__query_repository.",
         ),
         (("unspecified",), False, True, "call: app__51__request."),
+        # Chat offers only the connect tool while the user has no sign-in.
+        (
+            ("create_ticket",),
+            True,
+            True,
+            "If Tickets is not connected, call app__51__connect instead.",
+        ),
         # A URL-pattern app has no chat tools.
         (("unspecified",), False, False, "Tickets has no tool for this request."),
     ],

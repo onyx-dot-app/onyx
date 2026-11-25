@@ -1434,12 +1434,17 @@ def _app_tool_hint(matched_actions: AllMatchedActions) -> str:
     ]
     if not tools:
         return f"{target.app_name} has no tool for this request."
+    # Chat offers only the connect tool while the user has no sign-in.
+    connect = (
+        f" If {target.app_name} is not connected, call "
+        f"{app_action_tool_name(target.integration_id, 'connect')} instead."
+    )
     if len(tools) == 1:
-        return f"For {target.app_name}, call: {tools[0]}."
+        return f"For {target.app_name}, call: {tools[0]}.{connect}"
     # Each tool sends one action, e.g. one GraphQL root field.
     return (
         f"For {target.app_name}, split the request: one call of each of "
-        f"{', '.join(tools)}."
+        f"{', '.join(tools)}.{connect}"
     )
 
 
