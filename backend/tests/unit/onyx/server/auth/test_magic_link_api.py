@@ -61,7 +61,7 @@ def address_passes() -> Iterator[dict[str, MagicMock]]:
         patch(f"{_MODULE}.is_sso_only", return_value=False),
         patch(f"{_MODULE}.get_security_settings", return_value=settings),
         patch(f"{_MODULE}.verify_email_domain") as verify_domain,
-        patch(f"{_MODULE}.reserve_send", AsyncMock(return_value=True)) as reserve,
+        patch(f"{_MODULE}.reserve_send", AsyncMock(return_value="claim")) as reserve,
         patch(f"{_MODULE}.release_send", AsyncMock()) as release,
         patch(f"{_MODULE}.store_magic_link", AsyncMock(return_value="tok")) as store,
         patch(f"{_MODULE}.send_magic_link_email") as send,
@@ -138,7 +138,7 @@ class TestRequest:
             patch("onyx.auth.users.is_disposable_email", return_value=False),
             patch(f"{_MODULE}.get_security_settings", return_value=settings),
             patch(f"{_MODULE}.IS_PLAYGROUND", False),
-            patch(f"{_MODULE}.reserve_send", AsyncMock(return_value=True)),
+            patch(f"{_MODULE}.reserve_send", AsyncMock(return_value="claim")),
             patch(f"{_MODULE}.store_magic_link", AsyncMock(return_value="tok")),
             patch(f"{_MODULE}.send_magic_link_email") as send,
         ):
@@ -262,13 +262,15 @@ class TestRequest:
         assert response.status_code == OnyxErrorCode.SERVICE_UNAVAILABLE.status_code
         assert response.json()["detail"] == "Failed to send the sign-in email."
         # Nothing reached the inbox, so the address may ask again at once.
-        address_passes["release"].assert_awaited_once_with("someone@example.com")
+        address_passes["release"].assert_awaited_once_with(
+            "someone@example.com", "claim"
+        )
 
     @pytest.mark.usefixtures("mail_is_configured")
     def test_one_email_per_address_a_minute(
         self, client: TestClient, address_passes: dict[str, MagicMock]
     ) -> None:
-        address_passes["reserve"].return_value = False
+        address_passes["reserve"].return_value = None
 
         response = client.post("/auth/magic-link/request", json={"email": EMAIL})
 
@@ -513,3 +515,43 @@ def test_a_failed_settings_read_is_not_taken_as_passwords_on() -> None:
     ):
         with pytest.raises(RuntimeError):
             magic_link.is_sso_only()
+
+
+class _SlotCache:
+    """The two cache calls the send slot uses, with expiry done by hand."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, bytes] = {}
+
+    def set_if_absent(self, key: str, value: str, ex: int | None = None) -> bool:
+        del ex
+        if key in self.values:
+            return False
+        self.values[key] = value.encode("utf-8")
+        return True
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        if self.values.get(key) != expected:
+            return False
+        del self.values[key]
+        return True
+
+
+@pytest.mark.asyncio
+async def test_a_late_failure_leaves_a_newer_slot_alone() -> None:
+    """A send that fails after its slot expired must not clear the slot a newer
+    request took for the same address."""
+    cache = _SlotCache()
+    email = "someone@example.com"
+    with patch.object(magic_link, "get_shared_cache_backend", return_value=cache):
+        old_claim = await magic_link.reserve_send(email)
+        assert old_claim is not None
+        cache.values.clear()  # the old slot expires while its send hangs
+        new_claim = await magic_link.reserve_send(email)
+        assert new_claim is not None
+
+        await magic_link.release_send(email, old_claim)
+        assert await magic_link.reserve_send(email) is None
+
+        await magic_link.release_send(email, new_claim)
+        assert await magic_link.reserve_send(email) is not None

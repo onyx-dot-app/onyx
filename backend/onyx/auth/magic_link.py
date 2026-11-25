@@ -62,20 +62,30 @@ def _send_key(email: str) -> str:
     return f"{_SEND_KEY_PREFIX}{digest}"
 
 
-async def reserve_send(email: str) -> bool:
+async def reserve_send(email: str) -> str | None:
     """Take the one send this address gets per ``MAGIC_LINK_RESEND_SECONDS``.
-    False when a link went to it recently."""
-    return await asyncio.to_thread(
+
+    Returns this request's claim on the slot, for ``release_send``, or None
+    when a link went to the address recently.
+    """
+    claim = secrets.token_hex(16)
+    taken = await asyncio.to_thread(
         get_shared_cache_backend().set_if_absent,
         _send_key(email),
-        1,
+        claim,
         MAGIC_LINK_RESEND_SECONDS,
     )
+    return claim if taken else None
 
 
-async def release_send(email: str) -> None:
-    """Give the send back, for a send that failed."""
-    await asyncio.to_thread(get_shared_cache_backend().delete, _send_key(email))
+async def release_send(email: str, claim: str) -> None:
+    """Give the slot back after a failed send. Only while it still holds this
+    request's claim: once it has expired, a newer request may hold it."""
+    await asyncio.to_thread(
+        get_shared_cache_backend().delete_if_value,
+        _send_key(email),
+        claim.encode("utf-8"),
+    )
 
 
 def is_sso_only(*, allow_fallback: bool = False) -> bool:

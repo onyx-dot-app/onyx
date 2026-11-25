@@ -125,7 +125,8 @@ async def request_magic_link(
         )(email)
 
     # The same for every address, so it says nothing about accounts.
-    if not await reserve_send(email):
+    send_claim = await reserve_send(email)
+    if send_claim is None:
         raise OnyxError(
             OnyxErrorCode.RATE_LIMITED,
             "A sign-in link was sent to this address a moment ago. "
@@ -145,7 +146,7 @@ async def request_magic_link(
     except Exception as e:
         logger.exception("Failed to send the magic link email")
         # Nothing reached the inbox, so the address may ask again at once.
-        await release_send(email)
+        await release_send(email, send_claim)
         raise OnyxError(
             OnyxErrorCode.SERVICE_UNAVAILABLE, "Failed to send the sign-in email."
         ) from e

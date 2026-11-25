@@ -88,14 +88,18 @@ class TestSendLimit:
     @pytest.mark.asyncio
     async def test_one_send_per_address_until_released(self) -> None:
         email = f"limit_{uuid4().hex[:8]}@example.com"
-        try:
-            assert await reserve_send(email)
-            # The same address, in any case, waits for the window.
-            assert not await reserve_send(email.upper())
-            await release_send(email)
-            assert await reserve_send(email)
-        finally:
-            await release_send(email)
+        claim = await reserve_send(email)
+        assert claim is not None
+        # The same address, in any case, waits for the window.
+        assert await reserve_send(email.upper()) is None
+        # Someone else's claim does not free the slot.
+        await release_send(email, "not-this-requests-claim")
+        assert await reserve_send(email) is None
+
+        await release_send(email, claim)
+        again = await reserve_send(email)
+        assert again is not None
+        await release_send(email, again)
 
 
 @pytest.fixture
