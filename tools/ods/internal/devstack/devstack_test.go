@@ -601,11 +601,15 @@ func TestStatus_notReadyWhileStartIsIncomplete(t *testing.T) {
 
 func TestRestart_holdsOneLock(t *testing.T) {
 	s := newTestStack(t, t.TempDir())
-	cache := filepath.Join(s.Root, "web", ".next")
+	cache := filepath.Join(s.Root, "web", ".next", "dev")
 	if err := os.MkdirAll(cache, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(cache, "stale"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	build := filepath.Join(s.Root, "web", ".next", "BUILD_ID")
+	if err := os.WriteFile(build, []byte("production"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	p := &fakeProvider{services: []string{"web"}}
@@ -639,10 +643,52 @@ func TestRestart_holdsOneLock(t *testing.T) {
 	if !hooked {
 		t.Fatal("plan hook did not run")
 	}
+	if content, err := os.ReadFile(build); err != nil || string(content) != "production" {
+		t.Fatalf("restart changed the production build: %q, %v", content, err)
+	}
 	if !errors.Is(lockErr, ErrLocked) {
 		t.Errorf("another command could take the lock during restart: %v", lockErr)
 	}
 	if status.Ports["web"] != first.Ports["web"] {
 		t.Errorf("restart changed the port: %d -> %d", first.Ports["web"], status.Ports["web"])
+	}
+}
+
+func TestRestart_preservesCacheUsedByOtherStackMode(t *testing.T) {
+	for _, mode := range []Mode{Shared, Isolated} {
+		t.Run(string(mode), func(t *testing.T) {
+			local := newTestStack(t, t.TempDir())
+			shared, err := Open(local.Root, local.Project+"-shared", Shared)
+			if err != nil {
+				t.Fatal(err)
+			}
+			shared.Registry = local.Registry
+			t.Cleanup(func() { _ = shared.Stop(context.Background(), testOptions()) })
+
+			restarting, running := local, shared
+			if mode == Shared {
+				restarting, running = shared, local
+			}
+			p := &fakeProvider{services: []string{"web"}}
+			mustUp(t, running, p)
+			mustUp(t, restarting, p)
+			web := servicePID(t, running, "web")
+			cache := filepath.Join(local.Root, "web", ".next", "dev")
+			if err := os.MkdirAll(cache, 0700); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = restarting.Restart(context.Background(), p, testOptions())
+			if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%s stack runs web", running.Mode)) {
+				t.Fatalf("restart error = %v", err)
+			}
+			state, readErr := restarting.ReadState()
+			if readErr != nil || state == nil || state.Phase != PhaseFailed || len(state.Errors) != 1 || state.Errors[0] != err.Error() {
+				t.Fatalf("restart failure state = %+v, %v", state, readErr)
+			}
+			if _, err := os.Stat(cache); err != nil || !isCurrent(web) {
+				t.Fatalf("restart disrupted the running web server or its cache: %v", err)
+			}
+		})
 	}
 }

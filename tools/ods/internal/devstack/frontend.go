@@ -3,8 +3,43 @@ package devstack
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 )
+
+// The caller holds the checkout lock and has stopped its own web services.
+func (s *Stack) clearNextDevCache() error {
+	otherMode := Shared
+	if s.Mode == Shared {
+		otherMode = Isolated
+	}
+	other, err := Open(s.Root, "", otherMode)
+	if err != nil {
+		return err
+	}
+	st, err := other.ReadState()
+	if err != nil {
+		return err
+	}
+	if st != nil && st.Root == s.Root {
+		for _, rec := range st.Services {
+			if rec.Slug == "web" && isCurrent(rec) {
+				return fmt.Errorf("cannot clear Next.js development cache while the %s stack runs web in this checkout", otherMode)
+			}
+		}
+	}
+
+	root, err := os.OpenRoot(s.Root)
+	if err != nil {
+		return fmt.Errorf("open worktree for Next.js cache cleanup: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+	if err := root.RemoveAll(filepath.Join("web", ".next", "dev")); err != nil {
+		return fmt.Errorf("clear Next.js development cache: %w", err)
+	}
+	return nil
+}
 
 func (s *Stack) lockFrontendService(ctx context.Context, target Target, wait time.Duration) (func(), error) {
 	source := &Stack{Root: target.Root, Project: target.Project, StateDir: target.StateDir, Mode: target.Mode}

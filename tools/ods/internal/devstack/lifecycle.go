@@ -153,16 +153,6 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, 
 	if err != nil {
 		return nil, err
 	}
-	if clearNextCache {
-		root, err := os.OpenRoot(s.Root)
-		if err != nil {
-			return nil, fmt.Errorf("open worktree for Next.js cache cleanup: %w", err)
-		}
-		defer func() { _ = root.Close() }()
-		if err := root.RemoveAll(filepath.Join("web", ".next")); err != nil {
-			return nil, fmt.Errorf("clear Next.js cache: %w", err)
-		}
-	}
 	if st == nil {
 		if s.Mode == Shared {
 			lockedProject := s.Project
@@ -188,6 +178,11 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, 
 	st.Profile = opts.Profile
 	st.SettleTime = opts.SettleTime
 	st.Errors = nil
+	if clearNextCache {
+		if err := s.clearNextDevCache(); err != nil {
+			return nil, s.fail(st, err)
+		}
+	}
 	st.Phase = PhasePreparing
 	if err := s.WriteState(st); err != nil {
 		return nil, err

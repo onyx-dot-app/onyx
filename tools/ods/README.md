@@ -491,8 +491,10 @@ worktrees, so prune never stops them as idle. Idle stacks keep their volumes, al
 in the worktree starts the stack again with its data. To prune on a schedule,
 run `ods stack prune --idle 6h --yes` from cron or a systemd timer.
 
-`ods stack restart` clears the current worktree's `web/.next` cache after
+`ods stack restart` clears the current worktree's `web/.next/dev` cache after
 stopping the services. It then starts the services against the running infrastructure.
+If the other stack mode still runs a web server in this worktree, restart reports
+a cache cleanup error.
 
 **Examples:**
 
