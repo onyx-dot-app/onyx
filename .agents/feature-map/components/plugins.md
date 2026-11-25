@@ -120,13 +120,18 @@ Its neighbours own:
 
 **Admin flow.** `web/src/sections/integrations/IntegrationsPage.tsx` lists
 integrations. `web/src/lib/integrations/hooks.ts`, `web/src/lib/integrations/svc.ts`
-and `web/src/lib/integrations/types.ts` follow the integration API. The add page
-(`sections/integrations/AddIntegrationPage.tsx`, at `/admin/integrations/new`
-and `/app/customize/integrations/new`) probes an MCP URL
-through `POST /admin/mcp/probe` to suggest the sign-in, and opens
-`AddOpenAPIActionModal` for the schema. Its App type is the `preset` and
-`custom` shapes: a preset fills the name and sign-in, and "Custom app" sends
-`custom`. The Actions tab
+and `web/src/lib/integrations/types.ts` follow the integration API. The add modal
+(`sections/integrations/AddIntegrationModal.tsx`, opened by
+`sections/integrations/AddIntegrationMenu.tsx`) asks for a name and a URL, then detects the rest. An
+MCP URL goes through `POST /admin/mcp/probe` for the transport and the
+sign-in. A custom API URL or uploaded spec goes through
+`sections/integrations/detectApi.ts`: `POST /admin/integrations/openapi-import`,
+then `POST /admin/integrations/graphql-introspect`, else a REST base URL that
+takes endpoint lines (`EndpointLinesField`). An import `VALIDATION_ERROR` (a
+spec that Onyx cannot add) stops there and shows under the URL. Step 2 lists
+the endpoints that the import skipped. A catalog tile fills a preset or
+a suggested MCP server. Step 2 shows the sign-in mode; the method, OAuth
+client, header template, transport and owner are under Advanced. The Actions tab
 (`sections/integrations/IntegrationActionsTab.tsx`) is built from
 `PolicyEditor` and `PolicyToggle`, which take the API values
 `allow|ask|blocked`.
@@ -354,7 +359,7 @@ only the configuration of a chat that does not exist yet.
 - `integration-kind-form` **An add form for a new integration kind.** Add the
   shape to `IntegrationShape` in `web/src/lib/integrations/types.ts`, its
   `config` to `IntegrationConfig`, and a branch in
-  `web/src/sections/integrations/AddIntegrationPage.tsx:config`. Add its label under
+  `web/src/sections/integrations/AddIntegrationModal.tsx:config`. Add its label under
   `admin.integrations.shape` in all nine locales, and its icon to
   `INTEGRATION_SHAPE_ICONS` in `web/src/sections/integrations/integrationLabels.ts`.
 - `mcp-auth-type-ui` **The UI for a new MCP auth type.** Add the admin sign-in
