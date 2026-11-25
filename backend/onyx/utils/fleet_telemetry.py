@@ -22,6 +22,7 @@ import requests
 from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB, WEB_DOMAIN
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.connectors.models import DocumentTypeLabel
+from onyx.llm.constants import LlmProviderNames
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -179,6 +180,11 @@ _NESTED_FIELDS: dict[str, frozenset[str]] = {
     "tool_failures": _TOOL_KINDS,
     "login_failures": frozenset(failure.value for failure in LoginFailure),
     "mcp_failures": frozenset(failure.value for failure in MCPFailure),
+    # Standard accounts by their question count in 7 days.
+    "users_by_queries_7d": frozenset({"q1", "q2_5", "q6_20", "q21_50", "q51_plus"}),
+    "agent_messages_7d": frozenset({"builtin", "custom"}),
+    # Provider types; any other provider counts as custom, never by its name.
+    "llm_providers": frozenset({*(name.value for name in LlmProviderNames), "custom"}),
 }
 # The keys each event type may carry. The fleet service checks the values.
 _FIELDS: dict[str, frozenset[str]] = {
@@ -326,6 +332,36 @@ _FIELDS: dict[str, frozenset[str]] = {
     "runtime": frozenset({"service_instance_id", "reason"}),
     "version": frozenset({"version"}),
     "failure_counts": frozenset({"login_failures", "mcp_failures"}),
+    "usage": frozenset(
+        {
+            "active_users_1d",
+            "active_users_7d",
+            "active_users_30d",
+            "queries_7d",
+            "queries_30d",
+            "users_by_queries_7d",
+            "agent_messages_7d",
+            "agents_used_7d",
+            "uploads_7d",
+            "failed_uploads_7d",
+            "craft_sessions_7d",
+            "craft_sessions_total",
+        }
+    ),
+    "setup": frozenset(
+        {
+            "agents",
+            "llm_providers",
+            "mcp_servers",
+            "custom_actions",
+            "document_sets",
+            "slack_bots",
+            "sso_providers",
+            "sso_configured",
+        }
+    ),
+    # One completed ISO week; the service replaces the week on each send.
+    "usage_week": frozenset({"week_start", "queries", "sessions", "active_users"}),
     "heartbeat": frozenset(
         {
             "deployment_type",
@@ -338,6 +374,7 @@ _FIELDS: dict[str, frozenset[str]] = {
             "source_errors",
             "source_consecutive_errors",
             "last_source_success_at",
+            "usage_errors",
         }
     ),
 }

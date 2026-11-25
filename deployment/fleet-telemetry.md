@@ -40,6 +40,8 @@ inside the Cloud deployment.
 | `query` | Chat turns and search requests: channel, mode, outcome, timing, error category, chat tool usage, LLM cycles | At the end of server execution |
 | `attempt` counters | Indexing: documents fetched, chunks embedded and written, errors, durations | Summed for 30 seconds |
 | `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, permission and group sync times and cadence of permission-synced connectors, signup email domains, license presence, the number of standard user accounts and how many of them are active | Each item when it changes, and 6 hours after its own last send |
+| `usage`, `setup` | Collector: active users, questions, agent use, uploads and Craft sessions; what is configured | About once an hour |
+| `usage_week` | Collector: one completed week of chat history | A few weeks per read, from the first question; all again about every 30 days |
 | `feedback` | A thumbs up or down on an answer: the vote, the channel, and a digest of the answer id | When a user votes |
 | `failure_counts` | Each API server, Celery worker, and Slack bot process: failed logins by method, and MCP server discovery and setup check failures | With the heartbeat, every 5 minutes, only when a count is not zero |
 | `attempt`, `stage`, `job` | Collector: index attempts, stage timings, sync and migration jobs that changed | Every 5 minutes |
@@ -95,6 +97,36 @@ lists the tools of an MCP server, and `probe_unreachable` and `probe_blocked` wh
 reach a server. Each count stops at 100,000 for each window, so many failed logins never add events or
 bytes. Deploy the receiving server's `failure_counts` event type before this instrumentation.
 
+The collector also sends usage and setup counts for the deployment, never for a user. A question is a
+user chat message outside agent sub-sessions. An active user is a standard account that asked at least
+one question in the window.
+
+- `usage`: `active_users_1d`, `active_users_7d` and `active_users_30d`; `queries_7d` and `queries_30d`;
+  `users_by_queries_7d`, the number of active users by their question count in 7 days (`q1`, `q2_5`,
+  `q6_20`, `q21_50`, `q51_plus`); `agent_messages_7d`, questions to `builtin` and `custom` agents (a
+  chat without an agent counts as built-in); `agents_used_7d`, the distinct agents that got a question;
+  `uploads_7d` and `failed_uploads_7d`, user files and failed user files created in 7 days; and
+  `craft_sessions_7d` and `craft_sessions_total`.
+- `setup`: `agents` (custom, not deleted), `llm_providers` (providers per provider type; an unknown type
+  counts as `custom`), `mcp_servers`, `custom_actions` (OpenAPI tools), `document_sets`, `slack_bots`,
+  `sso_providers` (enabled SSO provider rows), and `sso_configured` (an enabled SSO provider, or Google
+  login by environment variables outside Onyx Cloud).
+- `usage_week`: `week_start` (a Monday, UTC), `queries`, `sessions` (chats with a question) and
+  `active_users` for one completed ISO week. The weeks start at the week of the first question, so the
+  usage curve starts at real first use, not at the telemetry upgrade.
+
+Each tenant reads usage and setup first after a random part of an hour, then about once an hour. The
+weekly history goes out 4 weeks per read, with 10 to 30 minutes between reads, until it reaches the last
+completed week. Then a new week goes out when it completes. About every 30 days the history starts again
+from the earliest week it has sent, so the fleet service corrects a week that it lost or that changed,
+and a week whose chats were deleted goes out again as zero. The service
+replaces a week each time it gets it, so a repeated week never adds up. These reads use aggregate SQL
+only. `chat_message` has no index on its send time, so each time window starts at a message ID that a
+binary search over the primary key finds. Each read runs in its own savepoint: a read that stops at the
+statement timeout adds one to `usage_errors` in the heartbeat and does not stop the other reads. Deploy
+the receiving server's `usage`, `setup` and `usage_week` event types and the `usage_errors` heartbeat
+field before this instrumentation.
+
 Connector document counts use the same query as the connector admin page. They count indexed
 document links for each connector and credential pair, excluding pending links. Counts follow
 indexing and deletion directly; they do not use the pair's legacy stored counter.
@@ -146,7 +178,7 @@ uv run pytest backend/tests/unit/onyx/utils/test_fleet_telemetry.py \
   backend/tests/unit/onyx/utils/test_fleet_failure_counts.py \
   backend/tests/unit/onyx/utils/test_fleet_telemetry_collector.py \
   backend/tests/unit/onyx/utils/test_fleet_enrollment.py
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/telemetry/test_fleet_collector.py
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/telemetry/
 ```
 
 The second command needs a migrated PostgreSQL. It copies the source tables into a temporary
