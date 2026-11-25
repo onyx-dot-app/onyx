@@ -1,0 +1,46 @@
+import { render, screen } from "@tests/setup/test-utils";
+import { DiffBody } from "@/lib/timeline/components/bodies/DiffBody";
+
+const lines = (count: number) =>
+  Array.from({ length: count }, (_, i) => `line ${i}`).join("\n");
+
+test("the view toggle has an accessible name, and the counts read in the singular", () => {
+  render(<DiffBody title="a.py" oldText="a\nb" newText="a\nc" />);
+  expect(
+    screen.getByRole("button", { name: "Switch to side-by-side" })
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("group", { name: "1 addition, 1 deletion" })
+  ).toBeInTheDocument();
+});
+
+test("a large pure addition stays unified, a large replace opens side by side", () => {
+  const view = render(
+    <DiffBody title="new.py" oldText="" newText={lines(30)} />
+  );
+  expect(
+    screen.getByRole("button", { name: "Switch to side-by-side" })
+  ).toBeInTheDocument();
+  view.unmount();
+
+  render(
+    <DiffBody
+      title="a.py"
+      oldText={lines(30)}
+      newText={lines(30).replaceAll("line", "row")}
+    />
+  );
+  expect(
+    screen.getByRole("button", { name: "Switch to unified" })
+  ).toBeInTheDocument();
+});
+
+test("a note-only panel has no view toggle", () => {
+  render(
+    <DiffBody
+      title="x"
+      lines={[{ type: "header", content: "500 more lines" }]}
+    />
+  );
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+});

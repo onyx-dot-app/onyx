@@ -15097,7 +15097,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added}줄 추가, {removed}줄 삭제"
+          "label": "{added, plural, other {#줄 추가}}, {removed, plural, other {#줄 삭제}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {변경되지 않은 줄 #개} other {변경되지 않은 줄 #개}}"
