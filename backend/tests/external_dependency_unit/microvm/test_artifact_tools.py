@@ -1502,6 +1502,7 @@ def test_a_program_finds_the_publish_tool_with_tool_search(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 "matches = await tool_search('publish a file for the user')\n"
                 "print([match['name'] for match in matches][:3])\n",
@@ -1514,7 +1515,7 @@ def test_a_program_finds_the_publish_tool_with_tool_search(
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "execute_code"
+        if tool["function"]["name"] == OPENAI_CODE_MODE.run_name
     ]
     assert "library__create_library_file" not in description
     # It is among the three best matches.
