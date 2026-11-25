@@ -189,6 +189,34 @@ def test_events_over_the_ingress_budget_wait_without_using_retries(
     assert (sender.sent, sender.dropped) == (2, 0)
 
 
+@pytest.mark.parametrize(
+    "header, seconds",
+    [
+        (None, 0.0),
+        ("", 0.0),
+        ("   ", 0.0),
+        ("soon", 0.0),
+        ("-5", 0.0),
+        ("nan", 0.0),
+        ("inf", 0.0),
+        ("Wed, 21 Oct 2026 07:28:00 GMT", 0.0),
+        ("0", 0.0),
+        ("12", 12.0),
+        ("2.5", 2.5),
+    ],
+)
+def test_retry_after_reads_only_finite_positive_seconds(
+    header: str | None, seconds: float
+) -> None:
+    assert fleet._retry_after_seconds(header) == seconds
+
+
+def test_retry_after_wait_is_capped_at_300_seconds(clock: list[float]) -> None:
+    sender = make_sender()
+    sender._back_off(100000.0)
+    assert sender._blocked_until == clock[0] + 300
+
+
 def test_backoff_jitter_stays_inside_the_window(
     clock: list[float], monkeypatch: pytest.MonkeyPatch
 ) -> None:

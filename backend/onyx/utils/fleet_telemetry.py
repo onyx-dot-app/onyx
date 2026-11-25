@@ -953,11 +953,13 @@ class BoundedTelemetry:
 
 
 def _retry_after_seconds(value: str | None) -> float:
-    """The delay of a `Retry-After` header in seconds. HTTP dates count as none."""
+    """The delay of a `Retry-After` header in seconds. HTTP dates, and values that are
+    not a finite positive number, count as none."""
     try:
-        return max(0.0, float(value or 0))
+        seconds: float = float(value or 0)
     except ValueError:
         return 0.0
+    return seconds if math.isfinite(seconds) and seconds > 0 else 0.0
 
 
 def poll_due(previous: float | None, now: float, interval: float) -> bool:
