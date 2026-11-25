@@ -87,6 +87,20 @@ def _answered(session_id: UUID, user: DATestUser, text: str) -> Callable[[], boo
     return answered
 
 
+def _use_model(session_id: UUID, provider: DATestLLMProvider, user: DATestUser) -> None:
+    """Make the provider's model the chat's model: turns that the server
+    starts, such as an agent result's follow-up, use it."""
+    client.put(
+        f"{API_SERVER_URL}/chat/update-chat-session-model",
+        json={
+            "chat_session_id": str(session_id),
+            "new_alternate_model": f"{provider.name}__{provider.provider}__"
+            f"{CLAUDE_MOCK_LLM_MODEL_NAME}__mc:{provider.model_configuration_ids[0]}",
+        },
+        headers=user.headers,
+    ).raise_for_status()
+
+
 def _definitions(request: RecordedRequest) -> dict[str, dict[str, Any]]:
     return {
         tool["function"]["name"]: tool["function"] for tool in request.body["tools"]
@@ -201,8 +215,8 @@ def test_each_family_calls_agents_skills_and_pages_by_its_own_shape(
         Reply(text=second_result, pause_after_first_chunk=second_task),
         conditions=RequestConditions(prompt_contains=[second_task]),
     )
+    session = ChatSessionManager.create(user_performing_action=admin_user)
     try:
-        session = ChatSessionManager.create(user_performing_action=admin_user)
         first = ChatSessionManager.send_message(
             session.id,
             f"Start the first agent. {nonce}",
@@ -217,17 +231,8 @@ def test_each_family_calls_agents_skills_and_pages_by_its_own_shape(
             _answered(session.id, admin_user, "The first agent finished."),
             "the first agent's result is answered",
         )
-        # Turns that the server starts, such as the second agent's
-        # follow-up, use the chat's model.
-        client.put(
-            f"{API_SERVER_URL}/chat/update-chat-session-model",
-            json={
-                "chat_session_id": str(session.id),
-                "new_alternate_model": f"{claude_mock_llm.name}__{claude_mock_llm.provider}__"
-                f"{CLAUDE_MOCK_LLM_MODEL_NAME}__mc:{claude_mock_llm.model_configuration_ids[0]}",
-            },
-            headers=admin_user.headers,
-        ).raise_for_status()
+        # The second agent's follow-up uses the chat's model.
+        _use_model(session.id, claude_mock_llm, admin_user)
         second = ChatSessionManager.send_message(
             session.id,
             f"Start the second agent. {nonce}",
@@ -250,10 +255,13 @@ def test_each_family_calls_agents_skills_and_pages_by_its_own_shape(
             cookies=admin_user.cookies,
         )
         packets.raise_for_status()
-        replayed = str(packets.json()["packets"])
+        replayed_packets = packets.json()["packets"]
+        replayed = str(replayed_packets)
     finally:
         mock_llm.release_gate(first_task)
         mock_llm.release_gate(second_task)
+        assert ChatSessionManager.delete(session, admin_user)
+        SkillManager.delete_custom(skill, admin_user)
 
     requests = mock_llm.requests_in(nonce)
     assert [request.body["model"] for request in requests] == [
@@ -304,8 +312,14 @@ def test_each_family_calls_agents_skills_and_pages_by_its_own_shape(
     assert instructions in (requests[6].tool_result("read-second") or "")
     assert skill_md.splitlines()[-1] in (requests[6].tool_result("read-second") or "")
 
-    # A reload replays both turns; the agents' runs show apart from the
-    # calls that started them.
+    # A reload replays both turns, with the card of each family's agent
+    # start; the agents' runs show apart from the calls that started them.
+    assert {"spawn_agent", "agent"} <= {
+        packet["obj"]["tool_name"]
+        for turn in replayed_packets
+        for packet in turn
+        if packet["obj"]["type"] == "custom_tool_start"
+    }
     assert "Started the first agent." in replayed
     assert "Started the second agent." in replayed
     assert first_result not in replayed
@@ -395,6 +409,9 @@ def test_each_family_answers_the_results_of_its_agents_as_its_shape_waits(
         )
     provider = mock_llm_of_family(family)
     session = ChatSessionManager.create(user_performing_action=admin_user)
+    if provider is not None:
+        # The follow-ups use the chat's model.
+        _use_model(session.id, provider, admin_user)
     try:
         started = ChatSessionManager.send_message(
             session.id,
@@ -434,15 +451,16 @@ def test_each_family_answers_the_results_of_its_agents_as_its_shape_waits(
             ),
             "the last follow-up is answered",
         )
+        answers = [
+            message.message
+            for message in _detail(session.id, admin_user).messages
+            if message.message_type == MessageType.ASSISTANT
+        ]
     finally:
         for task in tasks:
             mock_llm.release_gate(task)
+        assert ChatSessionManager.delete(session, admin_user)
 
-    answers = [
-        message.message
-        for message in _detail(session.id, admin_user).messages
-        if message.message_type == MessageType.ASSISTANT
-    ]
     assert answers == (
         ["Started three agents.", "All three finished."]
         if family is ToolFamily.CLAUDE
@@ -453,3 +471,7 @@ def test_each_family_answers_the_results_of_its_agents_as_its_shape_waits(
             "Agent 2 finished.",
         ]
     )
+    # Every turn of the chat used the family's model, the follow-ups too.
+    assert {request.body["model"] for request in mock_llm.requests_in(nonce)} == {
+        MOCK_LLM_MODEL_NAME if provider is None else CLAUDE_MOCK_LLM_MODEL_NAME
+    }

@@ -679,6 +679,13 @@ def test_each_file_tool_names_its_arguments() -> None:
             {"session_id": 7, "chars": "y", "timeout": 500},
             [WriteStdinStart(session_id="7", chars="y")],
         ),
+        # An argument of another shape that the tool ignores does not hide
+        # the write.
+        (
+            "write_stdin",
+            {"session_id": "7", "chars": "y", "yield_time_ms": "500ms"},
+            [WriteStdinStart(session_id="7", chars="y")],
+        ),
         (
             "open_url",
             {"urls": ["https://a.example"]},

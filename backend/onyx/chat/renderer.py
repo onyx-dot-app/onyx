@@ -116,7 +116,6 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
 from onyx.tools.tool_implementations.sandbox.shapes import (
     SHELL_SHAPES_BY_NAME,
     SHELL_TOOL_NAMES,
-    WriteStdinArguments,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -894,13 +893,17 @@ class ToolRenderer:
                 )
             ]
         elif name == WRITE_STDIN_TOOL_NAME:
-            # Interrupted arguments can lack the session ID. Every shape
-            # names the session ID and the characters alike.
-            write = parse_tool_arguments(
-                WriteStdinArguments, {"session_id": "", **args}
-            )
+            # Every shape names the session ID and the characters alike; the
+            # card reads only those. Interrupted arguments can lack them, and
+            # models may send the session ID as a number.
+            session_id = args.get("session_id", "")
             objects = [
-                packets.WriteStdinStart(session_id=write.session_id, chars=write.chars)
+                packets.WriteStdinStart(
+                    session_id=_STRING.validate_python(
+                        str(session_id) if isinstance(session_id, int) else session_id
+                    ),
+                    chars=_STRING.validate_python(args.get("chars", "")),
+                )
             ]
         elif is_file_tool(name):
             text_key, path_key = FILE_TOOL_ARGUMENTS[name]
