@@ -99,7 +99,7 @@ export function FullImageModal({
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <Text as="p" font="secondary-body" color="text-03">
+                <Text as="p" font="secondary-body" color="text-light-05">
                   {t("fullImageModal.position", {
                     current: index + 1,
                     total: count,
