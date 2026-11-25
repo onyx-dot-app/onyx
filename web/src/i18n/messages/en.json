@@ -12597,12 +12597,6 @@
             "between": "from {start} to {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "You stopped after {duration}"
-        },
-        "interruptedThinking": {
-          "label": "You stopped this response"
-        },
         "memory": {
           "default": {
             "status": "Memory"
@@ -13604,9 +13598,11 @@
       }
     },
     "find": {
+      "capped": "Searched the last {count, plural, one {# message} other {# messages}}",
       "close": "Close find",
       "count": "{current} of {total}",
       "label": "Find in session",
+      "loadingOlder": "Loading older messages…",
       "next": "Next match",
       "placeholder": "Find in session",
       "previous": "Previous match"

@@ -73,7 +73,11 @@
   callout titles are marked `data-chat-find-ignore`; footnotes are left out.
   It searches every answer of a multi-model turn and the user messages a
   reply shows in place. A match in a closed `<details>` opens it, and one
-  below a long question's fold unfolds the bubble (`data-chat-find-fold`). A search starts at the top row of the view.
+  below a long question's fold unfolds the bubble (`data-chat-find-fold`).
+  The first search in a paged chat loads its older pages with
+  `loadOlderChatMessages`, up to 20 (`lib/chatFind/olderPages.ts`); past the
+  cap the bar says how many messages it searched. A search starts at the top
+  row of the view.
   Enter and Shift+Enter step; Escape closes and returns focus.
 - **A user types or pastes with no field focused.** On the chat page, a
   printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and
@@ -795,8 +799,8 @@ A reasoning step shows the title of its latest section, a bold line or a
 heading (`reasoningPreview`), or "Thinking" before the first title. Its own
 step card also shows this title while it streams. The
 collapsed run card shows this header while it works. Once done, it reads
-"Worked for {duration}", or "You stopped after {duration}" when the stop
-ended its work. Only the response's first run uses the response's start and
+"Worked for {duration}", also after a stop: the answer's own notice says it
+stopped. Only the response's first run uses the response's start and
 duration (`isFirstRun`); a later run times itself. Before
 the first step, the response shows the cursor, not a run card. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
