@@ -28,6 +28,7 @@ import {
   SvgPieChart,
   SvgPlug,
   SvgSearchMenu,
+  SvgServer,
   SvgShield,
   SvgSliders,
   SvgTerminal,
@@ -540,6 +541,17 @@ export const ADMIN_ROUTES = {
     visibleWhen: (f: FeatureFlags) => !f.enableCloud,
   },
   // Cloud shares the search cluster across tenants, so it has no status page.
+  // The sandbox node registry is cluster-wide; not on multi-tenant cloud.
+  SANDBOX_STATUS: {
+    path: "/admin/sandbox",
+    icon: SvgServer,
+    title: "Sandbox Status",
+    sidebarLabel: "Sandbox Status",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => !f.enableCloud,
+  },
   SERVICE_STATUS: {
     path: "/admin/service-status",
     icon: SvgHardDrive,

@@ -10819,6 +10819,43 @@
         },
         "dismiss": "Dismiss"
       }
+    },
+    "sandboxStatus": {
+      "page": {
+        "description": "Shows where chat sandbox tools run, and why chats do not get them.",
+        "loadFailed": "Unable to load the sandbox status."
+      },
+      "summary": {
+        "toolsOffered": "Chat Sandbox Tools Are On",
+        "toolsOff": "Chat Sandbox Tools Are Off",
+        "toolsOfferedDescription": "At least one sandbox node is live and has the sandbox template.",
+        "runtime": "Runtime: {runtime}",
+        "template": "Template: {template}",
+        "noTemplate": "Template: not set"
+      },
+      "reasons": {
+        "runtimeWithoutFirecracker": "The sandbox runtime is not Firecracker. Set the runtime to auto or firecracker on a cluster with KVM nodes.",
+        "templateNotConfigured": "No sandbox template is set (SANDBOX_FC_TEMPLATE).",
+        "noRegisteredNode": "No sandbox node is registered. Add KVM nodes with the label onyx.app/kvm=true.",
+        "noLiveNodeWithTemplate": "No live sandbox node has the sandbox template. Check the host agent pods and their reports.",
+        "nodeStateUnreadable": "Unable to read the sandbox node state."
+      },
+      "nodes": {
+        "title": "Nodes",
+        "empty": "No sandbox node is registered.",
+        "live": "Live",
+        "stale": "Not Reporting",
+        "draining": "Draining",
+        "hasTemplate": "Template Ready",
+        "noTemplate": "No Template",
+        "neverReported": "No report yet",
+        "lastReport": "Last report {seconds, plural, one {# second} other {# seconds}} ago",
+        "agentVersion": "Agent version: {version}",
+        "vms": "{count, plural, one {# VM} other {# VMs}}",
+        "vmsOfCap": "{count, plural, one {# VM} other {# VMs}} of {cap}",
+        "templates": "Templates: {templates}",
+        "noTemplates": "No templates"
+      }
     }
   },
   "agents": {
@@ -16643,6 +16680,9 @@
         },
         "serviceStatus": {
           "label": "Service Status"
+        },
+        "sandboxStatus": {
+          "label": "Sandbox Status"
         }
       },
       "sections": {

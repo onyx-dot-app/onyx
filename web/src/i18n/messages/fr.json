@@ -10819,6 +10819,43 @@
         },
         "dismiss": "Ignorer"
       }
+    },
+    "sandboxStatus": {
+      "page": {
+        "description": "Indique où s'exécutent les outils sandbox du chat et pourquoi les chats ne les reçoivent pas.",
+        "loadFailed": "Impossible de charger l'état du sandbox."
+      },
+      "summary": {
+        "toolsOffered": "Les outils sandbox du chat sont activés",
+        "toolsOff": "Les outils sandbox du chat sont désactivés",
+        "toolsOfferedDescription": "Au moins un nœud sandbox est actif et possède le modèle du sandbox.",
+        "runtime": "Environnement : {runtime}",
+        "template": "Modèle : {template}",
+        "noTemplate": "Modèle : non défini"
+      },
+      "reasons": {
+        "runtimeWithoutFirecracker": "L'environnement du sandbox n'est pas Firecracker. Définissez l'environnement sur auto ou firecracker dans un cluster avec des nœuds KVM.",
+        "templateNotConfigured": "Aucun modèle de sandbox n'est défini (SANDBOX_FC_TEMPLATE).",
+        "noRegisteredNode": "Aucun nœud sandbox n'est enregistré. Ajoutez des nœuds KVM avec le label onyx.app/kvm=true.",
+        "noLiveNodeWithTemplate": "Aucun nœud sandbox actif ne possède le modèle du sandbox. Vérifiez les pods de l'agent hôte et leurs rapports.",
+        "nodeStateUnreadable": "Impossible de lire l'état des nœuds sandbox."
+      },
+      "nodes": {
+        "title": "Nœuds",
+        "empty": "Aucun nœud sandbox n'est enregistré.",
+        "live": "Actif",
+        "stale": "Aucun rapport",
+        "draining": "En vidage",
+        "hasTemplate": "Modèle prêt",
+        "noTemplate": "Aucun modèle",
+        "neverReported": "Aucun rapport pour l'instant",
+        "lastReport": "Dernier rapport il y a {seconds, plural, one {# seconde} other {# secondes}}",
+        "agentVersion": "Version de l'agent : {version}",
+        "vms": "{count, plural, one {# VM} other {# VM}}",
+        "vmsOfCap": "{count, plural, one {# VM} other {# VM}} sur {cap}",
+        "templates": "Modèles : {templates}",
+        "noTemplates": "Aucun modèle"
+      }
     }
   },
   "agents": {
@@ -16643,6 +16680,9 @@
         },
         "serviceStatus": {
           "label": "État du service"
+        },
+        "sandboxStatus": {
+          "label": "État du sandbox"
         }
       },
       "sections": {

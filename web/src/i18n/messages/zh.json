@@ -10819,6 +10819,43 @@
         },
         "dismiss": "忽略"
       }
+    },
+    "sandboxStatus": {
+      "page": {
+        "description": "显示聊天沙箱工具的运行位置，以及聊天无法使用这些工具的原因。",
+        "loadFailed": "无法加载沙箱状态。"
+      },
+      "summary": {
+        "toolsOffered": "聊天沙箱工具已开启",
+        "toolsOff": "聊天沙箱工具已关闭",
+        "toolsOfferedDescription": "至少有一个沙箱节点处于活动状态并具有沙箱模板。",
+        "runtime": "运行时：{runtime}",
+        "template": "模板：{template}",
+        "noTemplate": "模板：未设置"
+      },
+      "reasons": {
+        "runtimeWithoutFirecracker": "沙箱运行时不是 Firecracker。请在具有 KVM 节点的集群中将运行时设置为 auto 或 firecracker。",
+        "templateNotConfigured": "未设置沙箱模板（SANDBOX_FC_TEMPLATE）。",
+        "noRegisteredNode": "没有已注册的沙箱节点。请添加带有标签 onyx.app/kvm=true 的 KVM 节点。",
+        "noLiveNodeWithTemplate": "没有具有沙箱模板的活动沙箱节点。请检查主机代理 Pod 及其报告。",
+        "nodeStateUnreadable": "无法读取沙箱节点状态。"
+      },
+      "nodes": {
+        "title": "节点",
+        "empty": "没有已注册的沙箱节点。",
+        "live": "活动",
+        "stale": "无报告",
+        "draining": "正在排空",
+        "hasTemplate": "模板就绪",
+        "noTemplate": "无模板",
+        "neverReported": "尚无报告",
+        "lastReport": "上次报告：{seconds, plural, other {# 秒}}前",
+        "agentVersion": "代理版本：{version}",
+        "vms": "{count, plural, other {# 个虚拟机}}",
+        "vmsOfCap": "{count, plural, other {# 个虚拟机}}，上限 {cap}",
+        "templates": "模板：{templates}",
+        "noTemplates": "无模板"
+      }
     }
   },
   "agents": {
@@ -16643,6 +16680,9 @@
         },
         "serviceStatus": {
           "label": "服务状态"
+        },
+        "sandboxStatus": {
+          "label": "沙箱状态"
         }
       },
       "sections": {

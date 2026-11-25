@@ -10819,6 +10819,43 @@
         },
         "dismiss": "閉じる"
       }
+    },
+    "sandboxStatus": {
+      "page": {
+        "description": "チャットのサンドボックスツールが実行される場所と、チャットでツールを使えない理由を表示します。",
+        "loadFailed": "サンドボックスの状態を読み込めません。"
+      },
+      "summary": {
+        "toolsOffered": "チャットのサンドボックスツールはオンです",
+        "toolsOff": "チャットのサンドボックスツールはオフです",
+        "toolsOfferedDescription": "1 つ以上のサンドボックスノードが稼働中で、サンドボックステンプレートがあります。",
+        "runtime": "ランタイム: {runtime}",
+        "template": "テンプレート: {template}",
+        "noTemplate": "テンプレート: 未設定"
+      },
+      "reasons": {
+        "runtimeWithoutFirecracker": "サンドボックスランタイムが Firecracker ではありません。KVM ノードがあるクラスタでランタイムを auto または firecracker に設定してください。",
+        "templateNotConfigured": "サンドボックステンプレートが設定されていません (SANDBOX_FC_TEMPLATE)。",
+        "noRegisteredNode": "登録済みのサンドボックスノードがありません。ラベル onyx.app/kvm=true を付けた KVM ノードを追加してください。",
+        "noLiveNodeWithTemplate": "サンドボックステンプレートを持つ稼働中のノードがありません。ホストエージェントの Pod とそのレポートを確認してください。",
+        "nodeStateUnreadable": "サンドボックスノードの状態を読み取れません。"
+      },
+      "nodes": {
+        "title": "ノード",
+        "empty": "登録済みのサンドボックスノードがありません。",
+        "live": "稼働中",
+        "stale": "レポートなし",
+        "draining": "ドレイン中",
+        "hasTemplate": "テンプレート準備完了",
+        "noTemplate": "テンプレートなし",
+        "neverReported": "まだレポートがありません",
+        "lastReport": "最終レポート: {seconds, plural, other {# 秒}}前",
+        "agentVersion": "エージェントのバージョン: {version}",
+        "vms": "{count, plural, other {# 台の VM}}",
+        "vmsOfCap": "{count, plural, other {# 台の VM}} / {cap}",
+        "templates": "テンプレート: {templates}",
+        "noTemplates": "テンプレートなし"
+      }
     }
   },
   "agents": {
@@ -16643,6 +16680,9 @@
         },
         "serviceStatus": {
           "label": "サービスステータス"
+        },
+        "sandboxStatus": {
+          "label": "サンドボックスの状態"
         }
       },
       "sections": {

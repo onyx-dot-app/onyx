@@ -10819,6 +10819,43 @@
         },
         "dismiss": "Ausblenden"
       }
+    },
+    "sandboxStatus": {
+      "page": {
+        "description": "Zeigt, wo die Sandbox-Werkzeuge im Chat laufen und warum Chats sie nicht erhalten.",
+        "loadFailed": "Der Sandbox-Status konnte nicht geladen werden."
+      },
+      "summary": {
+        "toolsOffered": "Sandbox-Werkzeuge im Chat sind an",
+        "toolsOff": "Sandbox-Werkzeuge im Chat sind aus",
+        "toolsOfferedDescription": "Mindestens ein Sandbox-Knoten ist aktiv und hat die Sandbox-Vorlage.",
+        "runtime": "Laufzeit: {runtime}",
+        "template": "Vorlage: {template}",
+        "noTemplate": "Vorlage: nicht gesetzt"
+      },
+      "reasons": {
+        "runtimeWithoutFirecracker": "Die Sandbox-Laufzeit ist nicht Firecracker. Setzen Sie die Laufzeit auf auto oder firecracker in einem Cluster mit KVM-Knoten.",
+        "templateNotConfigured": "Keine Sandbox-Vorlage ist gesetzt (SANDBOX_FC_TEMPLATE).",
+        "noRegisteredNode": "Kein Sandbox-Knoten ist registriert. Fügen Sie KVM-Knoten mit dem Label onyx.app/kvm=true hinzu.",
+        "noLiveNodeWithTemplate": "Kein aktiver Sandbox-Knoten hat die Sandbox-Vorlage. Prüfen Sie die Host-Agent-Pods und ihre Berichte.",
+        "nodeStateUnreadable": "Der Zustand der Sandbox-Knoten konnte nicht gelesen werden."
+      },
+      "nodes": {
+        "title": "Knoten",
+        "empty": "Kein Sandbox-Knoten ist registriert.",
+        "live": "Aktiv",
+        "stale": "Kein Bericht",
+        "draining": "Wird geleert",
+        "hasTemplate": "Vorlage bereit",
+        "noTemplate": "Keine Vorlage",
+        "neverReported": "Noch kein Bericht",
+        "lastReport": "Letzter Bericht vor {seconds, plural, one {# Sekunde} other {# Sekunden}}",
+        "agentVersion": "Agent-Version: {version}",
+        "vms": "{count, plural, one {# VM} other {# VMs}}",
+        "vmsOfCap": "{count, plural, one {# VM} other {# VMs}} von {cap}",
+        "templates": "Vorlagen: {templates}",
+        "noTemplates": "Keine Vorlagen"
+      }
     }
   },
   "agents": {
@@ -16643,6 +16680,9 @@
         },
         "serviceStatus": {
           "label": "Dienststatus"
+        },
+        "sandboxStatus": {
+          "label": "Sandbox-Status"
         }
       },
       "sections": {

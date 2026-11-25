@@ -38,7 +38,9 @@ A third runtime is in development: Firecracker micro-VMs on KVM nodes, with
 chats get the tools only while a live registered node reports the template
 (`backend/onyx/microvm/availability.py`). Admins see the runtime, the nodes and
 why tools are off at `GET /admin/sandbox/status`
-(`backend/onyx/server/features/microvm/admin_api.py`, single tenant only). The
+(`backend/onyx/server/features/microvm/admin_api.py`, single tenant only) and
+on the admin page `/admin/sandbox` (`web/src/views/admin/SandboxStatusPage/`,
+hidden on cloud). The
 Kubernetes and Docker paths do not change.
 
 In this document "session workspace" is the directory of one session under
