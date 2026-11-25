@@ -159,6 +159,8 @@ Browser (`internal/guestd/browser`):
   first or does not answer in time, the call fails with `BROWSER_START_FAILED`, with the end of Chrome's
   stderr. Two calls at the same time start one Chrome.
 - Chrome runs with `--no-sandbox`: the guest kernel has no user namespaces.
+- A VM stop kills the VM, so Chrome gets no clean close and loses the cookies it has not written yet.
+  A caller that must keep the profile (for example a profile save) calls `BrowserStop` first.
 - When the daemon exits, the pipe closes and Chrome exits cleanly. Daemon start-up kills every process
   left in `guestd-browser`. The next `BrowserStart` starts Chrome again.
 
