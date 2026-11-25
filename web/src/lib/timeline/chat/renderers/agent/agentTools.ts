@@ -58,42 +58,41 @@ export interface AgentToolCall {
   isComplete: boolean;
 }
 
-/** Each agent tool call in the packets, by its tab, in order. */
+/** Each agent tool call in the packets, by its turn and tab, in stream order. */
 export function agentToolCalls(packets: readonly Packet[]): AgentToolCall[] {
-  const byTab = new Map<number, Packet[]>();
+  const byCall = new Map<string, Packet[]>();
   for (const packet of packets) {
-    const tab = packet.placement.tab_index ?? 0;
-    byTab.set(tab, [...(byTab.get(tab) ?? []), packet]);
+    const { turn_index, tab_index } = packet.placement;
+    const call = `${turn_index}-${tab_index ?? 0}`;
+    byCall.set(call, [...(byCall.get(call) ?? []), packet]);
   }
-  return [...byTab.entries()]
-    .sort(([a], [b]) => a - b)
-    .flatMap(([, tabPackets]) => {
-      const tool = agentTool(tabPackets);
-      if (!tool) return [];
-      const call: AgentToolCall = {
-        action: tool.action,
-        name: "",
-        message: "",
-        failed: false,
-        isComplete: false,
-      };
-      for (const { obj } of tabPackets) {
-        if (obj.type === PacketType.CUSTOM_TOOL_ARGS) {
-          call.name =
-            stringArg(obj.tool_args, tool.nameArg) ||
-            // The Claude family names the target `to`.
-            (tool.action === "send" ? stringArg(obj.tool_args, "to") : "");
-          if (tool.messageArg)
-            call.message = stringArg(obj.tool_args, tool.messageArg);
-        } else if (obj.type === PacketType.CUSTOM_TOOL_DELTA && obj.error) {
-          call.failed = true;
-        } else if (obj.type === PacketType.ERROR) {
-          call.failed = true;
-          call.isComplete = true;
-        } else if (obj.type === PacketType.SECTION_END) {
-          call.isComplete = true;
-        }
+  return [...byCall.values()].flatMap((tabPackets) => {
+    const tool = agentTool(tabPackets);
+    if (!tool) return [];
+    const call: AgentToolCall = {
+      action: tool.action,
+      name: "",
+      message: "",
+      failed: false,
+      isComplete: false,
+    };
+    for (const { obj } of tabPackets) {
+      if (obj.type === PacketType.CUSTOM_TOOL_ARGS) {
+        call.name =
+          stringArg(obj.tool_args, tool.nameArg) ||
+          // The Claude family names the target `to`.
+          (tool.action === "send" ? stringArg(obj.tool_args, "to") : "");
+        if (tool.messageArg)
+          call.message = stringArg(obj.tool_args, tool.messageArg);
+      } else if (obj.type === PacketType.CUSTOM_TOOL_DELTA && obj.error) {
+        call.failed = true;
+      } else if (obj.type === PacketType.ERROR) {
+        call.failed = true;
+        call.isComplete = true;
+      } else if (obj.type === PacketType.SECTION_END) {
+        call.isComplete = true;
       }
-      return [call];
-    });
+    }
+    return [call];
+  });
 }

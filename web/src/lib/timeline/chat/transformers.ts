@@ -297,8 +297,9 @@ export function expandCodeModeSteps(
 }
 
 /**
- * Consecutive subagent spawns of one turn as one step, which renders as one
- * subagent card, as T3 Code groups them. A lone spawn keeps its own step.
+ * Consecutive subagent spawns of a run as one step, which renders as one
+ * subagent card, as T3 Code groups them. Parallel calls can take their own
+ * turns, so the turn does not split them. A lone spawn keeps its own step.
  */
 export function groupSpawnSteps(steps: TransformedStep[]): TransformedStep[] {
   const grouped: TransformedStep[] = [];

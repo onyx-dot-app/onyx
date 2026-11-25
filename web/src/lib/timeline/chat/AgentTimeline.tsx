@@ -157,13 +157,13 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   const steps = useMemo<ChatRunStep[]>(
     () =>
-      turnGroups
-        .flatMap((group) => groupSpawnSteps(group.steps))
-        .map((step) => ({
+      groupSpawnSteps(turnGroups.flatMap((group) => group.steps)).map(
+        (step) => ({
           id: step.key,
           status: runStatus(step, stopPacketSeen, userStopped),
           step,
-        })),
+        })
+      ),
     [turnGroups, stopPacketSeen, userStopped]
   );
   // The run works until the stream ends or text follows it; a wait for an

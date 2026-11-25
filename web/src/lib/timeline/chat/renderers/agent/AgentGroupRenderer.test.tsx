@@ -13,10 +13,16 @@ import {
   type TransformedStep,
 } from "@/lib/timeline/chat/transformers";
 import AgentGroupRenderer from "@/lib/timeline/chat/renderers/agent/AgentGroupRenderer";
+import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";
 import { AgentToolRenderer } from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
 
-function spawn(tab: number, name: string, task: string): CustomToolPacket[] {
-  const placement = { turn_index: 1, tab_index: tab };
+function spawn(
+  tab: number,
+  name: string,
+  task: string,
+  turn = 1
+): CustomToolPacket[] {
+  const placement = { turn_index: turn, tab_index: tab };
   return [
     {
       placement,
@@ -104,6 +110,13 @@ test("consecutive spawns of a turn form one step, which the group card renders",
   );
   // A lone spawn keeps its own step
   expect(groupSpawnSteps([step(0, alpha)])).toEqual([step(0, alpha)]);
+  // Parallel calls can take their own turns: they still form one card, with
+  // one row per call
+  const gamma = spawn(0, "gamma", "Draft", 2);
+  const [acrossTurns] = groupSpawnSteps([step(0, alpha), step(0, gamma)]);
+  expect(agentToolCalls(acrossTurns?.packets ?? []).map((c) => c.name)).toEqual(
+    ["alpha", "gamma"]
+  );
   expect(findRenderer({ packets: alpha })).toBe(AgentToolRenderer);
 });
 
