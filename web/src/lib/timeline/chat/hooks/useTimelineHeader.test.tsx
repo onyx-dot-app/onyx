@@ -120,6 +120,36 @@ describe("useTimelineHeader", () => {
     expect(result.current.headerText).toBe("header.working.label");
   });
 
+  it("names a step by the tool whose arguments stream first", () => {
+    const delta = (toolType: string): Packet => ({
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.TOOL_CALL_ARGUMENT_DELTA,
+        tool_type: toolType,
+        tool_id: "call",
+        argument_deltas: {},
+      },
+    });
+    const { result, rerender } = renderHook(
+      ({ packets }: { packets: Packet[] }) => useTimelineHeader(group(packets)),
+      {
+        initialProps: {
+          packets: [
+            delta("python"),
+            {
+              placement: { turn_index: 0 },
+              obj: { type: PacketType.PYTHON_TOOL_START, code: "print(1)" },
+            },
+          ],
+        },
+      }
+    );
+    expect(result.current.headerText).toBe("header.executingCode.label");
+
+    rerender({ packets: [delta("generate_image")] });
+    expect(result.current.headerText).toBe("header.generatingImages.label");
+  });
+
   it("names the program a command runs", () => {
     const { result } = renderHook(() =>
       useTimelineHeader(
