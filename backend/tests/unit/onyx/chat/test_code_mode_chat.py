@@ -86,6 +86,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     ApplyPatchTool,
     ExecCommandTool,
     WriteStdinTool,
@@ -473,8 +474,8 @@ def test_tool_guidance_follows_the_tool_order_in_both_prompt_variants() -> None:
         *with_code_mode([MemoryTool(tool_id=1, llm=MagicMock())], OPENAI_CODE_MODE)[0],
     ]
     expected = [
-        EXEC_TOOL_NAME,
         "search",
+        EXEC_TOOL_NAME,
         SearchTool.NAME,
         "Sandbox",
         WebSearchTool.NAME,
@@ -504,6 +505,49 @@ def test_tool_guidance_follows_the_tool_order_in_both_prompt_variants() -> None:
         "Run commands with `exec_command`, use `write_stdin` for commands that "
         "are still running and edit files with `apply_patch`."
     ) in offered_prompt
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+@pytest.mark.parametrize("code_mode", [False, True])
+@pytest.mark.parametrize("with_sandbox", [False, True])
+def test_the_search_guidance_opens_the_tools_section(
+    family: ToolFamily, code_mode: bool, with_sandbox: bool
+) -> None:
+    """The search guidance has no heading, so it comes before every tool's
+    section and never reads as part of one, also when web search, which
+    ranks after the code mode and sandbox tools, is the only search tool."""
+    sandbox = SANDBOX_TOOLS[family]
+    turn = SandboxTurn(
+        tenant_id="t",
+        user_id=uuid4(),
+        chat_session_id=uuid4(),
+        vm_chat_files=[],
+        copy_vm_chat_files=False,
+        shell=sandbox.shell,
+    )
+    functions: list[Tool] = [
+        MemoryTool(tool_id=1, llm=MagicMock()),
+        *([tool(turn) for tool in sandbox.tools] if with_sandbox else []),
+    ]
+    offered = [
+        _guided(WebSearchTool, WebSearchTool.NAME),
+        *(
+            with_code_mode(functions, CODE_MODE_SHAPES[family])[0]
+            if code_mode
+            else functions
+        ),
+    ]
+    estimate = build_system_prompt(
+        "base",
+        include_user_info=False,
+        all_guidance_family=family,
+        all_guidance_sandbox=with_sandbox,
+    )
+
+    for prompt in (_code_mode_prompt(offered), estimate):
+        assert prompt.split(TOOL_SECTION_HEADER, 1)[1].startswith(
+            TOOL_DESCRIPTION_SEARCH_GUIDANCE
+        )
 
 
 class _DirectOnlyTool(EchoTool):

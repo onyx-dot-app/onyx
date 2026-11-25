@@ -618,22 +618,9 @@ def build_system_prompt(
             )
             sandbox_rank = sandbox_tools[0].rank
 
-    # Each guidance section has the rank of its tool, and the sections follow
-    # the tool order (onyx/tools/ordering.py). The search guidance precedes
-    # the first search tool's section.
-    search_ranks = [
-        rank
-        for tool_type, rank, _ in guided
-        if tool_type in (SearchTool, WebSearchTool)
-    ]
-    sections: list[tuple[ToolRank, str]] = [
-        *(
-            [(min(search_ranks), TOOL_DESCRIPTION_SEARCH_GUIDANCE)]
-            if search_ranks
-            else []
-        ),
-        *((rank, text) for _, rank, text in guided),
-    ]
+    # Each tool's section has the rank of its tool, and the sections follow
+    # the tool order (onyx/tools/ordering.py).
+    sections: list[tuple[ToolRank, str]] = [(rank, text) for _, rank, text in guided]
     if code_mode_run_name is not None:
         sections.append(
             (ToolRank.CODE_MODE_RUN, CODE_MODE_GUIDANCE.format(name=code_mode_run_name))
@@ -642,8 +629,16 @@ def build_system_prompt(
         sections.append((sandbox_rank, sandbox_section))
 
     if sections:
+        # The search guidance is about all search tools, so it has no heading
+        # and opens the tools section, before every tool's own section.
+        has_search = any(
+            tool_type in (SearchTool, WebSearchTool) for tool_type, _, _ in guided
+        )
         system_prompt += TOOL_SECTION_HEADER + "\n".join(
-            section for _, section in sorted(sections, key=lambda item: item[0])
+            [
+                *([TOOL_DESCRIPTION_SEARCH_GUIDANCE] if has_search else []),
+                *(section for _, section in sorted(sections, key=lambda item: item[0])),
+            ]
         )
     return system_prompt
 
