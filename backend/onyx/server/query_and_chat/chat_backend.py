@@ -1579,20 +1579,20 @@ def get_chat_session_agents(
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
         selected, branch = get_selected_branch(db_session, session_id)
-        if selected is None:
-            return []
-        agents = [
-            agent
-            for agent in load_session_agent_metadata(
-                selected.id, branch=branch, include_root=False
-            )
-            # `spawn_agent` children; Deep Research workers run in the foreground
-            if isinstance(agent.restoration_config, ChatConfiguration)
-        ]
-        times = load_run_times(
-            db_session,
-            [int(agent.latest_run_id) for agent in agents if agent.latest_run_id],
+    if selected is None:
+        return []
+    # Each loader opens its own session, so this one is closed first
+    agents = [
+        agent
+        for agent in load_session_agent_metadata(
+            selected.id, branch=branch, include_root=False
         )
+        # `spawn_agent` children; Deep Research workers run in the foreground
+        if isinstance(agent.restoration_config, ChatConfiguration)
+    ]
+    times = load_run_times(
+        [int(agent.latest_run_id) for agent in agents if agent.latest_run_id]
+    )
     subagents: list[ChatSubagent] = []
     for agent in agents:
         started_at, duration = (

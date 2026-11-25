@@ -575,18 +575,19 @@ def agent_metadata(
 
 
 def load_run_times(
-    db_session: Session, run_ids: Collection[int]
+    run_ids: Collection[int],
 ) -> dict[int, tuple[datetime, float | None]]:
     """Each run's start time and its saved duration, by response id."""
     if not run_ids:
         return {}
-    rows = db_session.execute(
-        select(
-            ChatMessage.id,
-            ChatMessage.time_sent,
-            ChatMessage.processing_duration_seconds,
-        ).where(ChatMessage.id.in_(run_ids))
-    )
+    with get_session_with_current_tenant() as db_session:
+        rows = db_session.execute(
+            select(
+                ChatMessage.id,
+                ChatMessage.time_sent,
+                ChatMessage.processing_duration_seconds,
+            ).where(ChatMessage.id.in_(run_ids))
+        ).all()
     return {row_id: (started, duration) for row_id, started, duration in rows}
 
 
