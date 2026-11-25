@@ -399,7 +399,7 @@ A new message to the session gets a `409` with `APPROVAL_PENDING` while the answ
 
 ## Questions
 
-The agent can ask the user 1-3 multiple-choice questions when the reply changes its work.
+The agent can ask the user 1-4 multiple-choice questions when the reply changes its work.
 The response then waits for the user, as it does for an approval. A question has no time limit.
 A question can pause any API turn, so read `tool_question_request` packets,
 or `pending_tool_questions` with `stream=false`. The Slack and Discord bots, anonymous users,
@@ -411,7 +411,7 @@ The stream sends a `tool_question_request` packet at the call's placement, with 
 |-------|-------------|
 | `question_request_id` | The ID to send with the answers. |
 | `tool_call_id` | The ID of the tool call that asks. |
-| `questions` | The questions. Each has an `id`, a short `header`, the `question` text, and 2-3 `options` with a `label` and a `description`. |
+| `questions` | The questions. Each has an `id`, a short `header`, the `question` text, 2-4 `options` with a `label` and a `description`, and `multi_select`. When `multi_select` is `true`, the user can choose more than one option. |
 
 When only approval requests and questions remain,
 the stream ends with a `stop` packet whose `stop_reason` is `awaiting_user`. With `stream=false`,
@@ -419,8 +419,9 @@ the response lists the questions that wait in `pending_tool_questions`, with the
 
 Send the answers with `POST /chat/question-requests/{question_request_id}/answers`. Use one of these bodies:
 
-- Answers from a card: `{"answers": [{"question_id": "scope", "option_label": "Company", "user_note": "EU only"}]}`.
-  Answer each question once, with one of its option labels, a note, or both.
+- Answers from a card: `{"answers": [{"question_id": "scope", "option_labels": ["Company"], "user_note": "EU only"}]}`.
+  Answer each question once, with its option labels, a note, or both. Give one option label at most,
+  or more than one for a question with `multi_select`.
 - A message that the user typed instead: `{"message": "Only Ana and Raj"}`.
   It answers every question of the response that waits, and the agent reads it as the user typed it.
   While an approval request of the same response waits, a message gets a `409` with `APPROVAL_PENDING`.

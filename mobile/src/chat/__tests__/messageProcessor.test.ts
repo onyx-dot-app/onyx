@@ -94,6 +94,7 @@ describe("messageProcessor", () => {
               { label: "Small", description: "One file." },
               { label: "Large", description: "The whole app." },
             ],
+            multi_select: false,
           },
         ],
       },

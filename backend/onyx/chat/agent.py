@@ -80,8 +80,11 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     with_code_mode,
 )
 from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
-from onyx.tools.tool_implementations.question.models import QUESTION_TOOL_NAME
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_SHAPES,
+    QuestionShape,
+)
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.tools.tool_implementations.sandbox.spill import spill_large_result
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -141,13 +144,13 @@ class ChatAgent(Agent, RestorableFeature):
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
         on_drained: Callable[[], None] | None = None,
-        question_tool: Callable[[str], QuestionTool] | None = None,
+        question_tool: Callable[[QuestionShape], QuestionTool] | None = None,
     ) -> None:
         """`on_drained`: see Agent; a root agent's runs end per-run tool state
         there (subagents share the root's tools and pass none). Only a root
-        agent gets a question tool: `question_tool` builds it under the given
-        name. The model's tool family (LLMConfig.tool_family) selects the
-        shapes of the code mode tools and the question tool's name."""
+        agent gets a question tool: `question_tool` builds it in the given
+        shape. The model's tool family (LLMConfig.tool_family) selects the
+        shapes of the code mode tools and the question tool."""
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
         self.agent_instructions = (
@@ -267,7 +270,7 @@ class ChatAgent(Agent, RestorableFeature):
         if question_tool is not None and not is_subagent:
             self.application_tools = [
                 *self.application_tools,
-                question_tool(QUESTION_TOOL_NAME[tool_family]),
+                question_tool(QUESTION_SHAPES[tool_family]),
             ]
         # The root agent's sandbox and code mode results end with the file
         # copy status line when it changed. Subagents and the calls inside a
@@ -610,7 +613,7 @@ def build_chat_agent(
     is_subagent: bool = False,
     depth: int = 0,
     on_drained: Callable[[], None] | None = None,
-    question_tool: Callable[[str], QuestionTool] | None = None,
+    question_tool: Callable[[QuestionShape], QuestionTool] | None = None,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature.
 

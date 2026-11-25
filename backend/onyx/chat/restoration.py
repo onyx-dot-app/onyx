@@ -37,8 +37,11 @@ from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import AssistantMessage, Message, ToolResultFields
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
-from onyx.tools.tool_implementations.question.models import QUESTION_TOOL_NAMES
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_TOOL_NAMES,
+    QuestionShape,
+)
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.tools.tool_implementations.subagents.subagent_tools import ListAgentsTool
 
@@ -106,7 +109,7 @@ def restore_chat_agent(
     user_identity: LLMUserIdentity | None,
     subagent_factory: Callable[[int], Callable[[], Agent]],
     on_root_drained: Callable[[], None] | None = None,
-    question_tool: Callable[[int, str], QuestionTool] | None = None,
+    question_tool: Callable[[int, QuestionShape], QuestionTool] | None = None,
 ) -> Agent:
     """Build feature code and resources; Agent.resume restores saved execution state.
 
@@ -115,7 +118,7 @@ def restore_chat_agent(
     declared them. Its children are one level deeper (`subagent_factory`); an
     agent at `MAX_CHILD_DEPTH` cannot start agents. A root chat agent gets
     `on_root_drained` as its on_drained hook, and the question tool
-    (`question_tool(response_id, name)`) when its saved step declared one.
+    (`question_tool(response_id, shape)`) when its saved step declared one.
 
     The agent gets the tool shapes of `llm`, the model that continues the
     run, as its restored children and sandbox tools do. A saved call of

@@ -12823,6 +12823,9 @@
           "placeholder": "Otra: escribe tu propia respuesta",
           "ariaLabel": "Otra respuesta para {header}"
         },
+        "multiSelect": {
+          "hint": "Elige todas las opciones que correspondan."
+        },
         "submit": "Enviar",
         "page": {
           "progress": "Pregunta {current} de {total}",

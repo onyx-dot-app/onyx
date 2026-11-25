@@ -12823,6 +12823,9 @@
           "placeholder": "기타: 직접 답변 입력",
           "ariaLabel": "{header}에 대한 기타 답변"
         },
+        "multiSelect": {
+          "hint": "해당하는 항목을 모두 선택하세요."
+        },
         "submit": "보내기",
         "page": {
           "progress": "질문 {current}/{total}",

@@ -132,7 +132,8 @@ decision → POST /chat/approvals/{id}/decision       widget.ts, services/approv
 answers  → POST /chat/question-requests/{id}/answers   widget.ts, services/questions.ts
   card: one question per page (Back/Next, page in widget.ts questionPages);
     per question, one option or "Other" with a typed answer in place of an
-    option (user_note, no option_label); Submit on the last page
+    option (user_note, empty option_labels), also for a multi_select
+    question; the record lists every chosen option; Submit on the last page
   typed: {message} answers every waiting question of the response; the
     input clears and the card record shows the text; 409
     APPROVAL_PENDING or another error (a query hook's refusal shows its

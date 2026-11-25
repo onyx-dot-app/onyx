@@ -222,7 +222,9 @@ with `awaiting_user`, and the timeline header reads "Waiting for your answer".
 `tool_question_request` and `tool_question_resolved` packets, which name no
 timeline step. `mobile/src/components/chat/ToolQuestionCard.tsx` shows one
 question per page with its options and an "Other" choice, one choice per
-question. Other answers with typed text in place of an option. A card with more than one question shows "Question N of M" and
+question. Other answers with typed text in place of an option. A question
+with `multi_select` shows checkboxes: the user toggles any options and
+Other, and the answer sends every chosen label and the note. A card with more than one question shows "Question N of M" and
 Back and Next buttons; choices and notes stay when the user changes pages.
 Submit replaces Next on the last page, is enabled when each question has an
 option or a note, and names the unanswered questions. The card

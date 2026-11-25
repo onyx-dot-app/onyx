@@ -1,26 +1,13 @@
-"""Names, arguments, answers and result details of the question tool
-(question_tool.py)."""
+"""The question tool's questions, answers and result details
+(question_tool.py). Each tool family's arguments (shapes.py) normalize into
+the same questions, which the card shows and the row saves."""
 
-from collections.abc import Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.db.enums import QuestionAnsweredVia, QuestionOutcome
-from onyx.llm.model_capabilities import ToolFamily
-from onyx.tools.constants import (
-    ASK_USER_QUESTION_TOOL_NAME,
-    REQUEST_USER_INPUT_TOOL_NAME,
-)
 
-# The question tool's name in each tool family.
-QUESTION_TOOL_NAME: Mapping[ToolFamily, str] = {
-    ToolFamily.CLAUDE: ASK_USER_QUESTION_TOOL_NAME,
-    ToolFamily.OPENAI: REQUEST_USER_INPUT_TOOL_NAME,
-}
-QUESTION_TOOL_NAMES = frozenset(QUESTION_TOOL_NAME.values())
-
-MAX_QUESTIONS = 3
 MAX_QUESTIONS_BYTES = 8 * 1024
 MAX_QUESTION_HEADER_CHARS = 12
 
@@ -35,38 +22,28 @@ class ToolQuestionOption(BaseModel):
 
 
 class ToolQuestion(BaseModel):
+    """One question as the card shows it and the row saves it, whatever
+    shape asked it. Each shape limits its questions within these bounds. `id`
+    names the question in the answers and in the result that the model
+    reads: a snake_case ID, or the question text for Claude's shape."""
+
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(
-        pattern=r"^[a-z][a-z0-9_]*$",
-        description="Unique snake_case ID that the answers use.",
-    )
-    header: str = Field(
-        min_length=1,
-        max_length=MAX_QUESTION_HEADER_CHARS,
-        description=f"Short label, at most {MAX_QUESTION_HEADER_CHARS} characters.",
-    )
-    question: str = Field(min_length=1, description="One sentence for the user.")
-    options: list[ToolQuestionOption] = Field(
-        min_length=2,
-        max_length=3,
-        description="2-3 exclusive choices; put the recommended one first.",
-    )
-
-
-class QuestionArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    questions: list[ToolQuestion] = Field(min_length=1, max_length=MAX_QUESTIONS)
+    id: str = Field(min_length=1)
+    header: str = Field(min_length=1, max_length=MAX_QUESTION_HEADER_CHARS)
+    question: str = Field(min_length=1)
+    options: list[ToolQuestionOption] = Field(min_length=2, max_length=4)
+    multi_select: bool = False
 
 
 class ToolQuestionAnswer(BaseModel):
-    """The user's answer to one question: a listed option, a note, or both."""
+    """The user's answer to one question: its chosen options, a note, or
+    both. A single-select question has at most one chosen option."""
 
     model_config = ConfigDict(extra="forbid")
 
     question_id: str
-    option_label: str | None = None
+    option_labels: list[str] = Field(default_factory=list)
     user_note: str | None = None
 
 

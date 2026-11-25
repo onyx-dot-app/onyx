@@ -72,7 +72,8 @@ def card_answers(
     questions: list[ToolQuestion], answers: list[ToolQuestionAnswer]
 ) -> list[ToolQuestionAnswer]:
     """The card's answers in question order: each question answered once,
-    with one of its options, a note, or both."""
+    with its options, a note, or both. A single-select question takes at
+    most one option; chosen options are kept in the question's order."""
     given = {answer.question_id: answer for answer in answers}
     if len(given) != len(answers) or set(given) != {
         question.id for question in questions
@@ -80,19 +81,29 @@ def card_answers(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "Answer each question exactly once"
         )
-    ordered = [given[question.id] for question in questions]
-    for question, answer in zip(questions, ordered, strict=True):
+    ordered: list[ToolQuestionAnswer] = []
+    for question in questions:
+        answer = given[question.id]
+        labels = [option.label for option in question.options]
+        chosen = set(answer.option_labels)
         # A note counts by the text that the answer saves.
-        if not (
-            answer.option_label or sanitize_string(answer.user_note or "").strip()
-        ) or (
-            answer.option_label is not None
-            and answer.option_label not in {option.label for option in question.options}
+        if (
+            not (chosen or sanitize_string(answer.user_note or "").strip())
+            or len(chosen) != len(answer.option_labels)
+            or not chosen <= set(labels)
+            or (len(chosen) > 1 and not question.multi_select)
         ):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
-                f"Answer {question.id!r} with one of its options or a note",
+                f"Answer {question.id!r} with "
+                f"{'any of' if question.multi_select else 'one of'} "
+                "its options or a note",
             )
+        ordered.append(
+            answer.model_copy(
+                update={"option_labels": [label for label in labels if label in chosen]}
+            )
+        )
     return ordered
 
 
@@ -125,7 +136,7 @@ def question_answer(
                 "answers": {
                     answer.question_id: {
                         "answers": [
-                            *([answer.option_label] if answer.option_label else []),
+                            *answer.option_labels,
                             *(
                                 [f"user_note: {answer.user_note}"]
                                 if answer.user_note

@@ -452,9 +452,9 @@ func TestToolQuestionResolved(t *testing.T) {
 	}{
 		"card": {
 			obj: map[string]interface{}{"answered_via": "card", "answers": []interface{}{
-				map[string]interface{}{"question_id": "scope", "option_label": "Team", "user_note": nil},
+				map[string]interface{}{"question_id": "scope", "option_labels": []any{"Team"}, "user_note": nil},
 			}, "message": nil},
-			want: models.ToolQuestionResolvedEvent{AnsweredVia: "card", Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Team"}}},
+			want: models.ToolQuestionResolvedEvent{AnsweredVia: "card", Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabels: []string{"Team"}}}},
 		},
 		"message": {
 			obj:  map[string]interface{}{"answered_via": "message", "answers": nil, "message": "Only Ana"},

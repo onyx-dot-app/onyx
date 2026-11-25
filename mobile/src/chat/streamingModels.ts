@@ -391,12 +391,14 @@ export interface ToolQuestionItem {
   header: string;
   question: string;
   options: ToolQuestionOption[];
+  // The user can choose several options; otherwise at most one.
+  multi_select: boolean;
 }
 
 export interface ToolQuestionAnswer {
   question_id: string;
-  // A listed option, a note, or both.
-  option_label?: string | null;
+  // The chosen options in the question's order, a note, or both.
+  option_labels: string[];
   user_note?: string | null;
 }
 

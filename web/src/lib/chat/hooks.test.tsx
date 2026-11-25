@@ -99,6 +99,7 @@ function question(questionRequestId: string, turnIndex: number): Packet {
             { label: "All", description: "Every file." },
             { label: "Some", description: "Some files." },
           ],
+          multi_select: false,
         },
       ],
     },
