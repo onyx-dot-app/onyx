@@ -307,10 +307,10 @@ Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
 {{- $runtime -}}
 {{- end }}
 
-{{/* "true" when global.version is a release tag before v6.0.0. */}}
+{{/* "true" when global.version is a release tag before v6.0.0, also a short one such as 5 or 5.1. */}}
 {{- define "onyx.craftPreV6App" -}}
 {{- $v := trimSuffix "-dev" (toString .Values.global.version) -}}
-{{- if and (regexMatch "^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" $v) (semverCompare "<6.0.0-0" $v) -}}true{{- end -}}
+{{- if and (regexMatch "^v?[0-9]+(\\.[0-9]+){0,2}(-[0-9A-Za-z.-]+)?$" $v) (semverCompare "<6.0.0-0" $v) -}}true{{- end -}}
 {{- end }}
 
 {{/*
@@ -339,7 +339,10 @@ true
 {{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict -}}
 {{- $agentTag := dig "image" "tag" "" $agent | default (include "onyx.craftFcReleaseTag" .) -}}
 {{- $rootfsTag := dig "rootfs" "image" "tag" "" $agent | default (dig "rootfs" "version" "" $agent) | default (include "onyx.craftFcReleaseTag" .) -}}
-{{- if and (include "onyx.craftFcPinned" $agentTag) (include "onyx.craftFcPinned" $rootfsTag) (eq (toString $reg.enabled) "true") -}}true{{- end -}}
+{{- /* The agent needs its own copy of the credential (craft-fc-host-agent.yaml). */}}
+{{- $regKey := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg -}}
+{{- $agentReg := or $agent.registrationExistingSecret (and (not $reg.existingSecret) (dig "values" $regKey "" $reg)) -}}
+{{- if and (include "onyx.craftFcPinned" $agentTag) (include "onyx.craftFcPinned" $rootfsTag) (eq (toString $reg.enabled) "true") $agentReg -}}true{{- end -}}
 {{- end -}}
 {{- end }}
 
@@ -433,8 +436,22 @@ chart appVersion when it is pinned, else empty. Releases publish the agent
 and the root drive only under pinned tags (craft-runtime-release.yml).
 */}}
 {{- define "onyx.craftFcReleaseTag" -}}
-{{- $global := include "onyx.craftFcPinned" (trimSuffix "-dev" (toString .Values.global.version)) -}}
-{{- $global | default (include "onyx.craftFcPinned" (trimSuffix "-dev" (toString .Chart.AppVersion))) -}}
+{{- include "onyx.craftFcReleaseTagOf" (toString .Values.global.version) | default (include "onyx.craftFcReleaseTagOf" (toString .Chart.AppVersion)) -}}
+{{- end }}
+
+{{/*
+The Firecracker release tag of one Onyx image tag, or empty. The releases
+publish it only as the git tag (v6.0.0, nightly-latest-20261125), so
+6.0.0 maps to v6.0.0, and the short tags (6, 6.0) float.
+*/}}
+{{- define "onyx.craftFcReleaseTagOf" -}}
+{{- $v := trimSuffix "-dev" . -}}
+{{- if regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+" $v -}}
+{{- $v = printf "v%s" $v -}}
+{{- end -}}
+{{- if not (regexMatch "^v?[0-9]+(\\.[0-9]+)?$" $v) -}}
+{{- include "onyx.craftFcPinned" $v -}}
+{{- end -}}
 {{- end }}
 
 {{/* The tag, or empty when it is empty or floating. */}}
@@ -1109,7 +1126,7 @@ it is the FQDN; otherwise the short name.
 */}}
 {{- define "onyx.bundledStoreHost" -}}
 {{- $ctx := index . 0 -}}
-{{- if eq (include "onyx.craftSandboxRuntime" $ctx) "firecracker" -}}
+{{- if include "onyx.craftFcEnabled" $ctx -}}
 {{- include "onyx.serviceFqdn" (list $ctx (index . 1)) -}}
 {{- else -}}
 {{- index . 1 -}}
