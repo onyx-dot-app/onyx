@@ -354,9 +354,7 @@ class ApiKindHandler(IntegrationKindHandler):
                 for action in actions
                 if action.key in keys
             ]
-        if (
-            config.shape is not ApiShape.OPENAPI or config.openapi_spec is None
-        ):
+        if config.shape is not ApiShape.OPENAPI or config.openapi_spec is None:
             return []
         keys = {action.key for action in actions}
         tools = build_custom_tools_from_openapi_schema_and_headers(

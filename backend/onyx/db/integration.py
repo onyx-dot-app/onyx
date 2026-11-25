@@ -125,9 +125,7 @@ def list_enabled_openapi_documents(
         db_session.execute(
             select(
                 Integration.id,
-                func.coalesce(
-                    ApiApp.openapi_document, cast(Tool.openapi_schema, Text)
-                ),
+                func.coalesce(ApiApp.openapi_document, cast(Tool.openapi_schema, Text)),
             )
             .outerjoin(ApiApp, ApiApp.id == Integration.api_app_id)
             .outerjoin(Tool, Tool.id == Integration.tool_id)

@@ -254,7 +254,12 @@ def test_lines_show_and_keep_shared_query_parameters() -> None:
     )
     assert added["paths"]["/pets"]["get"]["parameters"] == [
         {"$ref": "#/components/parameters/limit"},
-        {"name": "name", "in": "query", "required": False, "schema": {"type": "string"}},
+        {
+            "name": "name",
+            "in": "query",
+            "required": False,
+            "schema": {"type": "string"},
+        },
     ]
     # The path item defines petId, so the new operation adds no string copy.
     assert "parameters" not in added["paths"]["/pets/{petId}"]["put"]
