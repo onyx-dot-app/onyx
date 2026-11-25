@@ -335,6 +335,8 @@ const OPTION_KEYS = new Set([
   "Home",
   "End",
 ]);
+// The keys that toggle a checkbox option.
+const TOGGLE_KEYS = new Set([" ", "Enter"]);
 
 interface QuestionOptionsProps {
   question: ToolQuestion;
@@ -410,6 +412,11 @@ function QuestionOptions({
               rounding={2}
               onClick={() => onSelect(option.label)}
               onKeyDown={(event) => {
+                // A held key toggles a checkbox once.
+                if (multiSelect && event.repeat && TOGGLE_KEYS.has(event.key)) {
+                  event.preventDefault();
+                  return;
+                }
                 if (multiSelect || !OPTION_KEYS.has(event.key)) return;
                 event.preventDefault();
                 move(index, event.key);
