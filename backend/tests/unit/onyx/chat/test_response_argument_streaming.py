@@ -686,6 +686,12 @@ def test_each_file_tool_names_its_arguments() -> None:
             {"session_id": "7", "chars": "y", "yield_time_ms": "500ms"},
             [WriteStdinStart(session_id="7", chars="y")],
         ),
+        # Null characters are a poll, as the tool reads them.
+        (
+            "write_stdin",
+            {"session_id": 7, "chars": None},
+            [WriteStdinStart(session_id="7", chars="")],
+        ),
         (
             "open_url",
             {"urls": ["https://a.example"]},

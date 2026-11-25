@@ -894,15 +894,17 @@ class ToolRenderer:
             ]
         elif name == WRITE_STDIN_TOOL_NAME:
             # Every shape names the session ID and the characters alike; the
-            # card reads only those. Interrupted arguments can lack them, and
-            # models may send the session ID as a number.
-            session_id = args.get("session_id", "")
+            # card reads only those. Interrupted arguments can lack them,
+            # null selects the default as the tool reads it, and models may
+            # send the session ID as a number.
+            session_id = args.get("session_id")
             objects = [
                 packets.WriteStdinStart(
-                    session_id=_STRING.validate_python(
+                    session_id=_OPTIONAL_STRING.validate_python(
                         str(session_id) if isinstance(session_id, int) else session_id
-                    ),
-                    chars=_STRING.validate_python(args.get("chars", "")),
+                    )
+                    or "",
+                    chars=_OPTIONAL_STRING.validate_python(args.get("chars")) or "",
                 )
             ]
         elif is_file_tool(name):
