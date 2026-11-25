@@ -204,6 +204,10 @@
       "src": "logos/slack"
     },
     {
+      "out": "assets/overview/core_features/connectors/smb.svg",
+      "src": "logos/file-share"
+    },
+    {
       "out": "assets/overview/core_features/connectors/teams.svg",
       "src": "logos/teams"
     },

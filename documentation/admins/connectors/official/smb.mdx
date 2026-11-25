@@ -1,0 +1,186 @@
+---
+title: "Windows File Share (SMB)"
+description: "Index the files of a share on a Windows file server"
+---
+
+The Windows File Share (SMB) connector indexes the files of one share on a file server in your network.
+The connector reads the share over SMB with a service account.
+
+<Note>
+  The Windows File Share (SMB) connector is available on self-hosted Onyx only.
+  Onyx Cloud cannot reach a file server inside your network.
+</Note>
+
+## What gets indexed
+
+The connector indexes the files in one share, or in one folder of the share with **Path Prefix**.
+Each file becomes one document. Each refresh reads only the files that changed,
+and the prune job removes the documents of deleted files. Onyx keeps the folder hierarchy for browsing and filtering.
+
+The service account defines the scope. Onyx leaves out a folder that the account cannot list.
+
+A document from a file share has no link, because browsers block links to files on a share.
+Search results and citations show the name of the file. The document's `path` metadata holds the UNC path,
+for example `\\fs01.corp.example.com\Plans\Projects\2026\site.pdf`.
+
+When you rename or move a folder, Onyx indexes the files below it again under the new path.
+
+<Accordion title="Supported file types">
+  Onyx indexes files with the following extensions:
+
+  | Kind         | Extensions                                                                       |
+  | ------------ | -------------------------------------------------------------------------------- |
+  | Documents    | `.pdf`, `.docx`, `.pptx`, `.eml`, `.epub`, `.html`                               |
+  | Spreadsheets | `.xlsx`, `.xlsm`, `.csv`, `.tsv`                                                 |
+  | Text         | `.txt`, `.md`, `.mdx`, `.conf`, `.log`, `.json`, `.xml`, `.yml`, `.yaml`, `.sql` |
+  | Images       | `.png`, `.jpg`, `.jpeg`, `.webp`                                                 |
+
+  Onyx indexes image files only when **Extract & Caption Images** is on.
+  See [Image Processing](/admins/advanced_configs/search_configs#image-processing).
+</Accordion>
+
+The connector skips these items:
+
+- Files of other types, such as CAD files (`.dwg`, `.rvt`) and TIFF images
+- Files larger than the size limit. See [Limits](#limits).
+- Junctions, symbolic links, and DFS links inside the share
+- Files in offline or tiered storage, unless **Index Offline Files** is on
+- Office lock files (names that start with `~$`), `Thumbs.db`, and `desktop.ini`
+- The folders in **Excluded Folders**
+
+Onyx does not run optical character recognition (OCR). A scanned PDF has no text,
+so Onyx indexes only its name and metadata. With **Extract & Caption Images** on,
+Onyx also describes the images in the PDF.
+
+## Before you begin
+
+You need the following:
+
+- A self-hosted Onyx deployment that can reach the file server on TCP port 445.
+- A file server that supports SMB 2.1 or later with SMB signing. Onyx never uses SMB 1.
+- SMB 3 encryption on the file server. Each version of Windows Server since 2012 supports SMB 3 encryption.
+  For an older server, see [Connection options](#connection-options).
+- A domain service account that signs in with NTLMv2. A local account of the file server also works.
+
+Give the service account read access in two places:
+
+| Permission        | Where to set it                                            | Access                                |
+| ----------------- | ---------------------------------------------------------- | ------------------------------------- |
+| Share permissions | The **Sharing** tab of the shared folder, **Permissions**  | **Read**                              |
+| NTFS permissions  | The **Security** tab of the shared folder and its contents | **Read** and **List folder contents** |
+
+## Let Onyx reach the file server
+
+Do this section only if the file server has a private address, which is the usual case.
+
+At the default [SSRF protection level](/admins/advanced_configs/security_hardening#ssrf-protection),
+connectors cannot connect to private addresses.
+
+<Steps>
+  <Step title="Lower the SSRF protection level">
+    Go to **Admin Panel → Security & Hardening**. Set **SSRF Protection** to **Validate LLM Requests** or lower.
+    At that level, connectors that an admin configured can reach private addresses.
+    Onyx continues to validate fetches that the LLM starts.
+  </Step>
+
+  <Step title="Open the SMB port">
+    Make sure that the firewalls between Onyx and the file server allow TCP port 445 from Onyx to the server.
+  </Step>
+</Steps>
+
+## Configure the connector in Onyx
+
+<Steps>
+  <Step title="Enter the file server">
+    Go to **Admin Panel → Connectors** and select **Windows File Share (SMB)**. In **File Server**,
+    enter the DNS name or the IPv4 address of the file server, for example `fs01.corp.example.com`.
+    Do not add the share name.
+  </Step>
+
+  <Step title="Select or create an authentication account">
+    Under **Authentication Account**, select a saved account. To create an account,
+    select **New Windows File Share (SMB) Account** and fill in these fields:
+
+    | Field                           | Value                                                                                    |
+    | ------------------------------- | ---------------------------------------------------------------------------------------- |
+    | **Account Domain**              | The NetBIOS or DNS name of the Active Directory domain. Leave empty for a local account. |
+    | **Windows File Share Username** | The name of the service account.                                                         |
+    | **Windows File Share Password** | The password of the service account.                                                     |
+  </Step>
+
+  <Step title="Choose the content">
+    In **Share Name**, enter the share name alone, for example `Plans` for `\\fs01.corp.example.com\Plans`.
+    To index one folder only, enter its path in **Path Prefix**, for example `Projects/2026`.
+  </Step>
+
+  <Step title="Run the checks and create the connector">
+    Select **Start Checks**. Onyx does these checks:
+
+    - The file server answers on the SMB port.
+    - The service account can sign in.
+    - The session is signed or encrypted.
+    - The share is readable.
+    - The path prefix exists.
+    - Files are readable.
+
+    A failed check says what to fix. Select **Create Connector**.
+  </Step>
+</Steps>
+
+## Connection options
+
+The connector form also has these optional fields.
+
+| Option                  | Default | What it does                                                                                                                                         |
+| ----------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Excluded Folders**    | Empty   | Folders to skip, as paths from the share root, for example `Archive/2019`. Onyx skips these folders and the folders below them.                         |
+| **Require Encryption**  | On      | Onyx connects only with SMB 3 encryption. Turn off only for a server that does not support SMB 3 encryption. Onyx continues to require SMB signing. |
+| **Index Offline Files** | Off     | Onyx also reads files in tiered or archive storage. Each read recalls the file from that storage.                                                     |
+| **Port**                | `445`   | The SMB port of the file server.                                                                                                                      |
+
+<Warning>
+  With **Require Encryption** off, file content crosses the network without encryption.
+</Warning>
+
+## Limits
+
+| Limit     | Value                   | Notes                                                                                                          |
+| --------- | ----------------------- | -------------------------------------------------------------------------------------------------------------- |
+| File size | 20 MB                   | Onyx skips larger files. Self-hosted deployments can change this with `BLOB_STORAGE_SIZE_THRESHOLD`, in bytes. |
+| Scope     | One share per connector | Create one connector for each share.                                                                           |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Onyx may not connect to the file server">
+    The SSRF protection level blocks private addresses.
+    See [Let Onyx reach the file server](#let-onyx-reach-the-file-server).
+  </Accordion>
+
+  <Accordion title="Onyx cannot reach the file server">
+    Check **File Server** and **Port**. Make sure that a firewall lets Onyx reach TCP port 445 on the server.
+  </Accordion>
+
+  <Accordion title="The file server rejected the service account">
+    Check the domain, the username, and the password of the service account.
+    Make sure that the server accepts NTLMv2 sign-in.
+  </Accordion>
+
+  <Accordion title="The file server does not support SMB 3 encryption">
+    Upgrade the file server. If you cannot, turn off **Require Encryption**.
+  </Accordion>
+
+  <Accordion title="The file server offers only SMB 1 or SMB 2.0">
+    Onyx needs SMB 2.1 or later. Turn on a later SMB version on the file server.
+  </Accordion>
+
+  <Accordion title="The service account may not read a file or folder">
+    Give the service account **Read** access in the share permissions and in the NTFS permissions.
+  </Accordion>
+
+  <Accordion title="A folder is not in Onyx">
+    Make sure that the service account can list the folder, and that the folder is not in **Excluded Folders**.
+    Onyx does not follow a junction, a symbolic link, or a DFS link.
+    Create a connector for the share that the link points to.
+  </Accordion>
+</AccordionGroup>

@@ -533,6 +533,9 @@
         "azureDatalake": {
           "description": "Fichiers dans des conteneurs Azure Data Lake Storage"
         },
+        "smb": {
+          "description": "Fichiers sur des partages de fichiers Windows"
+        },
         "r2": {
           "description": "Buckets de stockage cloud"
         },
@@ -3714,6 +3717,39 @@
             }
           }
         },
+        "smb": {
+          "description": "Configurer le connecteur de partage de fichiers Windows (SMB)",
+          "fields": {
+            "host": {
+              "label": "Serveur de Fichiers",
+              "description": "Le nom DNS ou l'adresse IPv4 du serveur de fichiers, par ex. fs01.corp.example.com. N'ajoutez pas le nom du partage."
+            },
+            "share": {
+              "label": "Nom du Partage",
+              "description": "Le nom du partage seul, par ex. `Plans` pour `\\\\server\\Plans`."
+            },
+            "path_prefix": {
+              "label": "Préfixe de Chemin",
+              "description": "Un dossier du partage, par ex. Projects/2026. Laissez vide pour indexer tout le partage."
+            },
+            "excluded_paths": {
+              "label": "Dossiers Exclus",
+              "description": "Les dossiers à ignorer, sous forme de chemins depuis la racine du partage, par ex. Archive/2019. Onyx n'indexe ni ces dossiers ni leurs sous-dossiers."
+            },
+            "require_encryption": {
+              "label": "Exiger le Chiffrement",
+              "description": "Désactivez uniquement pour un ancien serveur sans chiffrement SMB 3. La signature reste obligatoire."
+            },
+            "index_offline_files": {
+              "label": "Indexer les Fichiers Hors Connexion",
+              "description": "Lit aussi les fichiers placés dans un stockage hiérarchisé ou d'archivage. Chaque lecture rappelle le fichier depuis ce stockage."
+            },
+            "port": {
+              "label": "Port",
+              "description": "Le port SMB du serveur de fichiers. La valeur par défaut est 445."
+            }
+          }
+        },
         "r2": {
           "description": "Configurer le connecteur R2",
           "fields": {
@@ -4350,6 +4386,7 @@
         "password": "Mot de passe {source}",
         "subdomain": "Sous-domaine {source}",
         "domain": "Domaine {source}",
+        "accountDomain": "Domaine du Compte",
         "enterpriseId": "ID d'entreprise {source}",
         "teamId": "ID d'équipe {source}",
         "applicationId": "ID d'application {source}",
@@ -4383,6 +4420,7 @@
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "youtrackToken": "Un jeton permanent d'un utilisateur YouTrack qui peut lire tous les projets à indexer. Créez-le dans votre profil YouTrack, sous Sécurité du compte.",
         "azureDatalakeAccountKey": "Dans le portail Azure, ouvrez le compte de stockage, puis Sécurité + mise en réseau, puis Clés d'accès.",
+        "smbDomain": "Facultatif. Le nom NetBIOS ou DNS du domaine Active Directory. Laissez vide pour un compte local du serveur de fichiers.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",

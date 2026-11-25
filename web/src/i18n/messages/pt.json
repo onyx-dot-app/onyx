@@ -533,6 +533,9 @@
         "azureDatalake": {
           "description": "Arquivos em contêineres do Azure Data Lake Storage"
         },
+        "smb": {
+          "description": "Arquivos em compartilhamentos de arquivos do Windows"
+        },
         "r2": {
           "description": "Buckets de armazenamento em nuvem"
         },
@@ -3714,6 +3717,39 @@
             }
           }
         },
+        "smb": {
+          "description": "Configurar o conector de compartilhamento de arquivos do Windows (SMB)",
+          "fields": {
+            "host": {
+              "label": "Servidor de Arquivos",
+              "description": "O nome DNS ou o endereço IPv4 do servidor de arquivos, por ex. fs01.corp.example.com. Não adicione o nome do compartilhamento."
+            },
+            "share": {
+              "label": "Nome do Compartilhamento",
+              "description": "Apenas o nome do compartilhamento, por ex. `Plans` para `\\\\server\\Plans`."
+            },
+            "path_prefix": {
+              "label": "Prefixo de Caminho",
+              "description": "Uma pasta no compartilhamento, por ex. Projects/2026. Deixe vazio para indexar todo o compartilhamento."
+            },
+            "excluded_paths": {
+              "label": "Pastas Excluídas",
+              "description": "Pastas a ignorar, como caminhos a partir da raiz do compartilhamento, por ex. Archive/2019. O Onyx não indexa essas pastas nem as pastas dentro delas."
+            },
+            "require_encryption": {
+              "label": "Exigir Criptografia",
+              "description": "Desative apenas para um servidor antigo sem criptografia SMB 3. A assinatura continua obrigatória."
+            },
+            "index_offline_files": {
+              "label": "Indexar Arquivos Offline",
+              "description": "Lê também os arquivos em armazenamento em camadas ou de arquivamento. Cada leitura recupera o arquivo desse armazenamento."
+            },
+            "port": {
+              "label": "Porta",
+              "description": "A porta SMB do servidor de arquivos. O padrão é 445."
+            }
+          }
+        },
         "r2": {
           "description": "Configurar conector do R2",
           "fields": {
@@ -4350,6 +4386,7 @@
         "password": "Senha do {source}",
         "subdomain": "Subdomínio do {source}",
         "domain": "Domínio do {source}",
+        "accountDomain": "Domínio da Conta",
         "enterpriseId": "ID da empresa do {source}",
         "teamId": "ID da equipe do {source}",
         "applicationId": "ID do aplicativo do {source}",
@@ -4383,6 +4420,7 @@
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
         "youtrackToken": "Um token permanente de um usuário do YouTrack que pode ler todos os projetos a indexar. Crie-o no seu perfil do YouTrack, em Segurança da conta.",
         "azureDatalakeAccountKey": "No portal do Azure, abra a conta de armazenamento, depois Segurança + rede, depois Chaves de acesso.",
+        "smbDomain": "Opcional. O nome NetBIOS ou DNS do domínio do Active Directory. Deixe vazio para uma conta local do servidor de arquivos.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",

@@ -13,6 +13,7 @@ import {
   getSourceDisplayName,
   getSourceDocLink,
   getSourceMetadata,
+  isSourceAvailable,
   isValidSource,
   connectorConfigFromForm,
   connectorFormControlFieldNames,
@@ -1243,7 +1244,7 @@ export default function AddConnectorWrapper({
     },
   });
 
-  if (!isValidSource(connector)) {
+  if (!isValidSource(connector) || !isSourceAvailable(connector)) {
     return (
       <SettingsLayouts.Root width="sm">
         <SettingsLayouts.Header

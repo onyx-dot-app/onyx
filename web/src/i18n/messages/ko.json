@@ -533,6 +533,9 @@
         "azureDatalake": {
           "description": "Azure Data Lake Storage 컨테이너의 파일"
         },
+        "smb": {
+          "description": "Windows 파일 공유의 파일"
+        },
         "r2": {
           "description": "클라우드 스토리지 버킷"
         },
@@ -3714,6 +3717,39 @@
             }
           }
         },
+        "smb": {
+          "description": "Windows 파일 공유(SMB) 커넥터 구성",
+          "fields": {
+            "host": {
+              "label": "파일 서버",
+              "description": "파일 서버의 DNS 이름 또는 IPv4 주소(예: fs01.corp.example.com). 공유 이름은 넣지 마세요."
+            },
+            "share": {
+              "label": "공유 이름",
+              "description": "공유 이름만 입력합니다(예: `\\\\server\\Plans`의 경우 `Plans`)."
+            },
+            "path_prefix": {
+              "label": "경로 접두사",
+              "description": "공유의 폴더(예: Projects/2026). 전체 공유를 인덱싱하려면 비워 두세요."
+            },
+            "excluded_paths": {
+              "label": "제외할 폴더",
+              "description": "건너뛸 폴더를 공유 루트부터의 경로로 입력합니다(예: Archive/2019). Onyx는 이 폴더와 그 하위 폴더를 인덱싱하지 않습니다."
+            },
+            "require_encryption": {
+              "label": "암호화 필수",
+              "description": "SMB 3 암호화를 지원하지 않는 오래된 서버에서만 끄세요. 서명은 계속 필수입니다."
+            },
+            "index_offline_files": {
+              "label": "오프라인 파일 인덱싱",
+              "description": "계층형 스토리지나 보관 스토리지에 있는 파일도 읽습니다. 읽을 때마다 해당 스토리지에서 파일을 다시 불러옵니다."
+            },
+            "port": {
+              "label": "포트",
+              "description": "파일 서버의 SMB 포트입니다. 기본값은 445입니다."
+            }
+          }
+        },
         "r2": {
           "description": "R2 커넥터 구성",
           "fields": {
@@ -4350,6 +4386,7 @@
         "password": "{source} 비밀번호",
         "subdomain": "{source} 서브도메인",
         "domain": "{source} 도메인",
+        "accountDomain": "계정 도메인",
         "enterpriseId": "{source} 엔터프라이즈 ID",
         "teamId": "{source} 팀 ID",
         "applicationId": "{source} 애플리케이션 ID",
@@ -4383,6 +4420,7 @@
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
         "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
         "azureDatalakeAccountKey": "Azure Portal에서 스토리지 계정을 열고 보안 + 네트워킹, 액세스 키를 차례로 엽니다.",
+        "smbDomain": "선택 사항입니다. Active Directory 도메인의 NetBIOS 또는 DNS 이름입니다. 파일 서버의 로컬 계정이면 비워 두세요.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",

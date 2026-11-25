@@ -42,6 +42,14 @@ export default function SearchCard({
       window.open(document.link, "_blank", "noopener,noreferrer");
       return;
     }
+    // Only an uploaded file has a preview. Another document without a link,
+    // such as a file on a Windows file share, has nothing to open.
+    if (
+      document.source_type !== ValidSources.File &&
+      document.source_type !== ValidSources.UserFile
+    ) {
+      return;
+    }
     onDocumentClick({
       document_id: document.document_id,
       semantic_identifier: document.semantic_identifier,

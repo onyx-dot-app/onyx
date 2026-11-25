@@ -320,6 +320,7 @@
                     ]
                   },
                   "admins/connectors/official/slab",
+                  "admins/connectors/official/smb",
                   "admins/connectors/official/testrail",
                   "admins/connectors/official/web",
                   "admins/connectors/official/wikipedia",

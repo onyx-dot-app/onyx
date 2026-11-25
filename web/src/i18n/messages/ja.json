@@ -533,6 +533,9 @@
         "azureDatalake": {
           "description": "Azure Data Lake Storage コンテナー内のファイル"
         },
+        "smb": {
+          "description": "Windows ファイル共有上のファイル"
+        },
         "r2": {
           "description": "クラウドストレージバケット"
         },
@@ -3714,6 +3717,39 @@
             }
           }
         },
+        "smb": {
+          "description": "Windows ファイル共有 (SMB) コネクターを構成",
+          "fields": {
+            "host": {
+              "label": "ファイルサーバー",
+              "description": "ファイルサーバーの DNS 名または IPv4 アドレス（例: fs01.corp.example.com）。共有名は含めないでください。"
+            },
+            "share": {
+              "label": "共有名",
+              "description": "共有名のみ（例: `\\\\server\\Plans` の場合は `Plans`）。"
+            },
+            "path_prefix": {
+              "label": "パスプレフィックス",
+              "description": "共有内のフォルダー（例: Projects/2026）。共有全体をインデックスする場合は空のままにします。"
+            },
+            "excluded_paths": {
+              "label": "除外フォルダー",
+              "description": "スキップするフォルダー。共有のルートからのパスで指定します（例: Archive/2019）。Onyx はこれらのフォルダーとその配下のフォルダーをインデックスしません。"
+            },
+            "require_encryption": {
+              "label": "暗号化を必須にする",
+              "description": "SMB 3 暗号化に対応していない古いサーバーの場合にのみオフにします。署名は引き続き必須です。"
+            },
+            "index_offline_files": {
+              "label": "オフラインファイルをインデックス",
+              "description": "階層化ストレージやアーカイブストレージにあるファイルも読み取ります。読み取るたびに、ファイルがそのストレージから呼び戻されます。"
+            },
+            "port": {
+              "label": "ポート",
+              "description": "ファイルサーバーの SMB ポート。既定値は 445 です。"
+            }
+          }
+        },
         "r2": {
           "description": "R2 コネクターを設定",
           "fields": {
@@ -4350,6 +4386,7 @@
         "password": "{source} パスワード",
         "subdomain": "{source} サブドメイン",
         "domain": "{source} ドメイン",
+        "accountDomain": "アカウントのドメイン",
         "enterpriseId": "{source} エンタープライズ ID",
         "teamId": "{source} チーム ID",
         "applicationId": "{source} アプリケーション ID",
@@ -4383,6 +4420,7 @@
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
         "azureDatalakeAccountKey": "Azure portal でストレージアカウントを開き、[セキュリティとネットワーク]、[アクセスキー] の順に開きます。",
+        "smbDomain": "任意。Active Directory ドメインの NetBIOS 名または DNS 名。ファイルサーバーのローカルアカウントの場合は空のままにします。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",

@@ -533,6 +533,9 @@
         "azureDatalake": {
           "description": "Files in Azure Data Lake Storage containers"
         },
+        "smb": {
+          "description": "Files on Windows file shares"
+        },
         "r2": {
           "description": "Cloud storage buckets"
         },
@@ -3714,6 +3717,39 @@
             }
           }
         },
+        "smb": {
+          "description": "Configure Windows File Share (SMB) connector",
+          "fields": {
+            "host": {
+              "label": "File Server",
+              "description": "The DNS name or IPv4 address of the file server, e.g. fs01.corp.example.com. Do not add the share name."
+            },
+            "share": {
+              "label": "Share Name",
+              "description": "The share name alone, e.g. `Plans` for `\\\\server\\Plans`."
+            },
+            "path_prefix": {
+              "label": "Path Prefix",
+              "description": "A folder in the share, e.g. Projects/2026. Leave empty to index the whole share."
+            },
+            "excluded_paths": {
+              "label": "Excluded Folders",
+              "description": "Folders to skip, as paths from the share root, e.g. Archive/2019. Onyx does not index these folders or the folders below them."
+            },
+            "require_encryption": {
+              "label": "Require Encryption",
+              "description": "Turn off only for an old server without SMB 3 encryption. Signing stays required."
+            },
+            "index_offline_files": {
+              "label": "Index Offline Files",
+              "description": "Also read files in tiered or archive storage. Each read recalls the file from that storage."
+            },
+            "port": {
+              "label": "Port",
+              "description": "The SMB port of the file server. The default is 445."
+            }
+          }
+        },
         "r2": {
           "description": "Configure R2 connector",
           "fields": {
@@ -4350,6 +4386,7 @@
         "password": "{source} Password",
         "subdomain": "{source} Subdomain",
         "domain": "{source} Domain",
+        "accountDomain": "Account Domain",
         "enterpriseId": "{source} Enterprise ID",
         "teamId": "{source} Team ID",
         "applicationId": "{source} Application ID",
@@ -4383,6 +4420,7 @@
         "lumappsServiceUser": "The user to index on behalf of.",
         "youtrackToken": "A permanent token for a YouTrack user that can read every project to index. Create it in your YouTrack profile under Account Security.",
         "azureDatalakeAccountKey": "In the Azure portal, open the storage account, then Security + networking, then Access keys.",
+        "smbDomain": "Optional. The NetBIOS or DNS name of the Active Directory domain. Leave empty for a local account of the file server.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
         "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
