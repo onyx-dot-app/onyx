@@ -30,7 +30,7 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 | --- | --- | --- | --- |
 | [MCP](/admins/plugins/mcp) | A server that uses the [Model Context Protocol](https://modelcontextprotocol.io/) | Chat, custom agents, and Craft | The vendor publishes an MCP server, or you run your own. |
 | [OpenAPI](/admins/plugins/openapi) | A REST API that you describe with an OpenAPI schema | Chat and custom agents | You have an internal or third-party REST API and no MCP server. |
-| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Chat, custom agents, and Craft | An agent must act as each user in a supported application, with action-level approvals. Requires Craft, which is available on the **Business** and **Enterprise** plans. |
+| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Chat, custom agents, and Craft | An agent must act as each user in a supported application, with action-level approvals. |
 
 <Tip>
   You can add the same service more than once. For example, add the Slack Craft App and the Slack MCP server.
@@ -57,7 +57,6 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 
     For a built-in App, such as GitHub, or a suggested MCP server, such as Linear,
     go to **Browse the Catalog** at the bottom of the Integrations page and click **Browse**. Then select the item.
-    The built-in Apps show only when Craft is available on your plan.
   </Step>
 
   <Step title="Enter a name and a URL">
@@ -162,7 +161,7 @@ Click an integration to open its detail page.
 | Tab | Settings |
 | --- | --- |
 | **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Group Access**, **Enabled**, and **Delete** |
-| **Configuration** | Server URL, base URL and endpoints, OpenAPI schema, or GraphQL endpoint and schema, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
+| **Configuration** | Server URL, **Import a Spec** with the base URL and endpoints, or GraphQL endpoint and schema, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
 | **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
 
 If you change the sign-in method, the OAuth client, the URLs, or the scopes, each user must connect again.

@@ -17,10 +17,11 @@ Group or user restriction needs EE.
   Integrations (`/admin/integrations`) lists the MCP servers and apps from
   `GET /admin/integrations`, with Name (and the owner of a private one, or the
   "No access" reason for a manager with no access of its own), Type, Sign-in,
-  Install Setting and Status, a type filter, search and "Needs setup". "Add" opens `/admin/integrations/new`
-  (`/app/customize/integrations/new` from Customize): MCP Server, OpenAPI App
-  or App (only with Craft; Start From is a preset or Custom app), then posts
-  to `POST /admin/integrations`. Only a global
+  Install Setting and Status, a type filter, search and "Needs setup". "Add" opens the add
+  modal (also at `/admin/integrations/new` and `/app/customize/integrations/new`):
+  MCP Server or Custom API. "Browse the Catalog" opens it on the presets and
+  suggested MCP servers, with or without Craft. It posts to
+  `POST /admin/integrations`. Only a global
   action manager sees "For the organization"; everyone else adds "For me".
   The install setting select (`sections/integrations/IntegrationInstallSetting.tsx`,
   in the list and on the Overview tab) is the company setting; a global action
