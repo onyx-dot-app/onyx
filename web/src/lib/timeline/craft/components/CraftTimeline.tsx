@@ -53,18 +53,14 @@ function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
         status={entry.status === "streaming" ? "done" : entry.status}
         icon={STEP_ICONS.thinking}
         title={header}
-        loading={payload.isStreaming}
-        // No body until the first words arrive; the shimmer shows meanwhile.
         body={
-          payload.content ? (
-            <ThinkingBody
-              content={payload.content}
-              displayContent={normalizeThinking(
-                title ? remainingContent : payload.content
-              )}
-              isStreaming={payload.isStreaming}
-            />
-          ) : null
+          <ThinkingBody
+            content={payload.content}
+            displayContent={normalizeThinking(
+              title ? remainingContent : payload.content
+            )}
+            isStreaming={payload.isStreaming}
+          />
         }
       />
     );
