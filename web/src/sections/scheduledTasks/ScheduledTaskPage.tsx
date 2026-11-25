@@ -81,8 +81,7 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
           label: t("tabs.overview"),
           content: (
             <DetailOverview
-              descriptionLabel={t("overview.prompt")}
-              description={task.prompt}
+              description={{ label: t("overview.prompt"), text: task.prompt }}
               facts={[
                 { label: t("overview.schedule"), value: schedule ?? "" },
                 {

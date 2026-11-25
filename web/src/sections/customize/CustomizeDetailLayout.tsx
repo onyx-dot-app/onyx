@@ -149,15 +149,13 @@ export interface DetailFact {
 }
 
 interface DetailOverviewProps {
-  /** Omit both when the page header already shows the description. */
-  descriptionLabel?: string | RichStr;
-  description?: string | RichStr;
+  /** Omit when the page header already shows the description. */
+  description?: { label: string | RichStr; text: string | RichStr };
   facts: DetailFact[];
   footer?: ReactNode;
 }
 
 export function DetailOverview({
-  descriptionLabel,
   description,
   facts,
   footer,
@@ -166,13 +164,11 @@ export function DetailOverview({
     <Section flexDirection="row" alignItems="start" height="auto" gap={6} wrap>
       {description !== undefined && (
         <Section gap={1} alignItems="stretch" height="auto" grow={3} basis={20}>
-          {descriptionLabel !== undefined && (
-            <Text as="p" font="secondary-body" color="text-03">
-              {descriptionLabel}
-            </Text>
-          )}
+          <Text as="p" font="secondary-body" color="text-03">
+            {description.label}
+          </Text>
           <Text as="p" font="main-content-body" color="text-04">
-            {description}
+            {description.text}
           </Text>
         </Section>
       )}
@@ -180,13 +176,7 @@ export function DetailOverview({
         <Card padding={4}>
           <Section gap={3} alignItems="stretch" height="auto">
             {facts.map((fact, index) => (
-              <KeyValue
-                key={index}
-                label={fact.label}
-                value={fact.value}
-                mono={fact.mono}
-                oneLine={fact.oneLine}
-              />
+              <KeyValue key={index} {...fact} />
             ))}
             {footer}
           </Section>

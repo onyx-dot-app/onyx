@@ -47,8 +47,10 @@ export default function IntegrationOverviewTab({
         </Text>
       )}
       <DetailOverview
-        descriptionLabel={t("description")}
-        description={integration.description || t("noDescription")}
+        description={{
+          label: t("description"),
+          text: integration.description || t("noDescription"),
+        }}
         facts={[
           { label: t("signIn"), value: labels.signIn(integration) },
           ...(integration.created_by_email &&
