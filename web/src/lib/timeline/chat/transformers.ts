@@ -119,10 +119,8 @@ export function isExpectedInterrupt(
     sentInterrupt &&
     end !== null &&
     end.error === null &&
-    (end.completion === "exited" || end.completion === "signaled") &&
-    (end.exit_code === 130 ||
-      end.exit_code === -2 ||
-      (end.completion === "signaled" && end.exit_code === null))
+    end.completion === "exited" &&
+    (end.exit_code === 130 || end.exit_code === -2)
   );
 }
 

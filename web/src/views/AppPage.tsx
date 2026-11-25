@@ -235,6 +235,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     incognitoEnabled,
     incognitoEnabledRef,
     incognitoSessionId,
+    setIncognitoSessionId,
     setIncognitoEnabled,
     setIncognitoLocked,
   } = useIncognito();
@@ -378,13 +379,35 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useEffect(() => {
     const sessionId = currentChatSessionId ?? incognitoSessionId;
     if (!incognitoEnabled || !sessionId) return;
-    const handlePageHide = (event: PageTransitionEvent) => {
-      if (event.persisted) return;
+    const handlePageHide = () => {
       navigator.sendBeacon(`/api/chat/end-incognito-session/${sessionId}`);
     };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      prevSessionIdForIncognito.current = null;
+      const store = useChatSessionStore.getState();
+      store.sessions.get(sessionId)?.abortController?.abort();
+      store.setCurrentSession(null);
+      resetInputBar();
+      setIncognitoSessionId(crypto.randomUUID());
+      if (currentChatSessionId) {
+        navigation.go("/app", { replace: true });
+      }
+    };
     window.addEventListener("pagehide", handlePageHide);
-    return () => window.removeEventListener("pagehide", handlePageHide);
-  }, [incognitoEnabled, currentChatSessionId, incognitoSessionId]);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [
+    incognitoEnabled,
+    currentChatSessionId,
+    incognitoSessionId,
+    navigation,
+    resetInputBar,
+    setIncognitoSessionId,
+  ]);
 
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
