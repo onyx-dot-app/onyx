@@ -207,6 +207,21 @@ AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 )
 
 #####
+# Windows file share (SMB)
+#####
+
+# In seconds, default 1 hour. Each run reads the access list of every file
+# and folder in scope.
+SMB_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("SMB_PERMISSION_DOC_SYNC_FREQUENCY") or 60 * 60
+)
+# In seconds, default 30 minutes. Each run reads the members of every
+# security group of the domain.
+SMB_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("SMB_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
+
+#####
 # Zoom
 #####
 # In seconds, default is 5 minutes

@@ -23,6 +23,7 @@ from ee.onyx.external_permissions.linear.capability_checks import (
     build_linear_group_sync_checks,
 )
 from ee.onyx.external_permissions.smb.capability_checks import (
+    build_smb_doc_permission_sync_checks,
     build_smb_group_sync_checks,
 )
 from ee.onyx.external_permissions.youtrack.capability_checks import (
@@ -86,6 +87,7 @@ _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
     DocumentSource.YOUTRACK: build_youtrack_doc_permission_sync_checks(),
     DocumentSource.AZURE_DATALAKE: build_azure_datalake_doc_permission_sync_checks(),
     DocumentSource.EGNYTE: build_egnyte_doc_permission_sync_checks(),
+    DocumentSource.SMB: build_smb_doc_permission_sync_checks(),
 }
 
 # Slack registers nothing here by design: it has no group sync (channel access

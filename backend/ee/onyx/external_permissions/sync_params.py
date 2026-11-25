@@ -29,6 +29,8 @@ from ee.onyx.configs.app_configs import (
     SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY,
     SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY,
     SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
+    SMB_PERMISSION_DOC_SYNC_FREQUENCY,
+    SMB_PERMISSION_GROUP_SYNC_FREQUENCY,
     TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY,
     YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -103,6 +105,18 @@ def _lazy_censoring(load: Callable[[], CensoringFuncType]) -> CensoringFuncType:
         return load()(chunks, user_email)
 
     return run
+
+
+def _load_smb_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.smb.doc_sync import smb_doc_sync
+
+    return smb_doc_sync
+
+
+def _load_smb_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.smb.group_sync import smb_group_sync
+
+    return smb_group_sync
 
 
 def _load_azure_datalake_doc_sync() -> DocSyncFuncType:
@@ -534,6 +548,20 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=_lazy_group_sync(_load_azure_datalake_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.SMB: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=SMB_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_smb_doc_sync),
+            # Indexing carries no access, so a file stays private until the
+            # first doc sync lists it.
+            initial_index_should_sync=False,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=SMB_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_smb_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),

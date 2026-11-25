@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
+from onyx.access.models import ExternalAccess
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.models import (
@@ -14,6 +15,7 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.smb import connector as smb_connector
+from onyx.connectors.smb.access import SmbAccessWalker
 from onyx.connectors.smb.connector import PATH_METADATA_KEY, SmbConnector
 from onyx.connectors.smb.models import (
     FILE_ATTRIBUTE_DIRECTORY,
@@ -440,6 +442,70 @@ def test_reindex_reads_a_failed_file_again_and_rejects_other_shares() -> None:
         f"{ROOT_ID}/Projects",
         f"{ROOT_ID}/Projects/Alpha",
     ]
+
+
+class _RecordingWalker(SmbAccessWalker):
+    def __init__(self) -> None:
+        self.batches: list[list[str]] = []
+
+    def paths_access(self, paths: list[str]) -> dict[str, ExternalAccess]:
+        self.batches.append(paths)
+        return {
+            path: ExternalAccess(
+                external_user_emails={f"{path or 'root'}@example.com"},
+                external_user_group_ids=set(),
+                is_public=False,
+            )
+            for path in paths
+        }
+
+
+def test_perm_sync_walk_gives_every_file_and_folder_its_access() -> None:
+    connector, _ = _connector(
+        {
+            "Projects": [_folder("Alpha"), _file("old.txt", written=OLD)],
+            "Projects/Alpha": [_file("plan.txt")],
+        },
+        path_prefix="Projects",
+    )
+    walker = _RecordingWalker()
+
+    with patch.object(smb_connector, "build_access_walker", return_value=walker):
+        items = [
+            item
+            for batch in connector.retrieve_all_slim_docs_perm_sync()
+            for item in batch
+        ]
+
+    # The share root and the path prefix, then each folder's entries.
+    assert walker.batches == [
+        ["", "Projects"],
+        ["Projects/Alpha", "Projects/old.txt"],
+        ["Projects/Alpha/plan.txt"],
+    ]
+    assert len(items) == 5
+    for item in items:
+        assert item.external_access is not None
+        assert not item.external_access.is_public
+    plan = next(
+        item
+        for item in items
+        if isinstance(item, SlimDocument) and item.id.endswith("plan.txt")
+    )
+    assert plan.external_access is not None
+    assert plan.external_access.external_user_emails == {
+        "Projects/Alpha/plan.txt@example.com"
+    }
+
+
+def test_perm_sync_walk_needs_enterprise_edition() -> None:
+    connector, _ = _connector({"": []})
+
+    with (
+        patch.object(smb_connector, "build_access_walker", return_value=None),
+        pytest.raises(RuntimeError, match="Enterprise Edition"),
+    ):
+        list(connector.retrieve_all_slim_docs_perm_sync())
 
 
 def test_a_folder_loop_stops_at_the_depth_limit() -> None:

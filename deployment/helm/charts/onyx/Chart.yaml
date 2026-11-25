@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.61
+version: 0.9.62
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,9 +21,9 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: configMap value MAGIC_LINK_ENABLED turns on sign-in with a
-        link sent by email. Empty keeps it off. Sign-in links are not copied to
-        EMAIL_ARCHIVE_BCC_ADDRESSES.
+      description: configMap values SMB_PERMISSION_DOC_SYNC_FREQUENCY,
+        SMB_PERMISSION_GROUP_SYNC_FREQUENCY and SMB_ACL_READ_CONCURRENCY tune
+        permission sync for Windows file shares. Empty uses the defaults.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

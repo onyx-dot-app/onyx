@@ -1557,6 +1557,10 @@ AZURE_DATALAKE_ACL_READ_CONCURRENCY = int(
     os.environ.get("AZURE_DATALAKE_ACL_READ_CONCURRENCY") or 16
 )
 
+# Concurrent access list reads per folder during Windows file share
+# permission sync.
+SMB_ACL_READ_CONCURRENCY = int(os.environ.get("SMB_ACL_READ_CONCURRENCY") or 8)
+
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
