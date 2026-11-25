@@ -31,7 +31,7 @@ def build_storage_file_document(
     file_name: str,
     document_id: str,
     source: DocumentSource,
-    link: str,
+    link: str | None,
     last_modified: datetime,
     image_file_id: str,
     raw_file_callback: RawFileCallback | None,
@@ -42,7 +42,8 @@ def build_storage_file_document(
     Image files become one image section, tabular files become tabular
     sections, and every other file goes through text extraction. With
     ``include_embedded_images``, images inside a document are stored as image
-    sections under ``image_file_id``. Returns None
+    sections under ``image_file_id``. ``link`` is None for a source whose
+    files have no web address. Returns None
     when the file yields nothing to index. Raises on extraction and file-store
     errors, so the caller decides how a failed file is reported.
     """
@@ -83,7 +84,7 @@ def build_storage_file_document(
             file_name=file_name,
             content_type=mime_type or DEFAULT_CONTENT_TYPE,
             raw_file_callback=raw_file_callback,
-            link=link,
+            link=link or "",
             skip_content=SKIP_SPREADSHEET_CONTENT,
         )
         if not result.sections:

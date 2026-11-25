@@ -83,6 +83,11 @@ from onyx.connectors.slack.source_operations import (
     SlackTeamsPage,
     SlackUsersPage,
 )
+from onyx.connectors.smb.models import (
+    FILE_ATTRIBUTE_DIRECTORY,
+    SmbEntry,
+    SmbSessionInfo,
+)
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -443,6 +448,32 @@ def _configure_egnyte_spy(spy: MagicMock) -> None:
     spy.get_group.return_value = EgnyteGroup(id="g1", display_name="Team")
 
 
+def _configure_smb_spy(spy: MagicMock) -> None:
+    """A share holding one file, so the read check reaches the download."""
+    changed = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    spy.connect.return_value = SmbSessionInfo(
+        dialect="3.1.1", signing_required=True, encrypted=True
+    )
+    spy.stat.return_value = SmbEntry(
+        name="docs",
+        attributes=FILE_ATTRIBUTE_DIRECTORY,
+        creation_time=changed,
+        last_write_time=changed,
+        change_time=changed,
+        size=0,
+    )
+    spy.list_folder.return_value = [
+        SmbEntry(
+            name="readme.txt",
+            attributes=0,
+            creation_time=changed,
+            last_write_time=changed,
+            change_time=changed,
+            size=10,
+        )
+    ]
+
+
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
@@ -459,6 +490,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.YOUTRACK: [_configure_youtrack_spy],
     DocumentSource.AZURE_DATALAKE: [_configure_azure_datalake_spy],
     DocumentSource.EGNYTE: [_configure_egnyte_spy],
+    DocumentSource.SMB: [_configure_smb_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every
@@ -490,6 +522,9 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
         {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
     ],
     DocumentSource.EGNYTE: [{"folder_path": "/Shared/Docs"}],
+    DocumentSource.SMB: [
+        {"host": "files.example.com", "share": "Plans", "path_prefix": "docs"}
+    ],
 }
 
 

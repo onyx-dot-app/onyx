@@ -41,6 +41,7 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_indexing_checks,
 )
 from onyx.connectors.slack.capability_checks import build_slack_indexing_checks
+from onyx.connectors.smb.capability_checks import build_smb_indexing_checks
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.connectors.youtrack.capability_checks import (
     build_youtrack_indexing_checks,
@@ -66,6 +67,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.ASANA: build_asana_indexing_checks(),
     DocumentSource.AZURE_DATALAKE: build_azure_datalake_indexing_checks(),
     DocumentSource.EGNYTE: build_egnyte_indexing_checks(),
+    DocumentSource.SMB: build_smb_indexing_checks(),
 }
 
 

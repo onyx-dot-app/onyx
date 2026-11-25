@@ -261,6 +261,7 @@ _SIGN_IN_CHECK_IDS: dict[DocumentSource, frozenset[str]] = {
     DocumentSource.YOUTRACK: frozenset({"youtrack_token"}),
     DocumentSource.AZURE_DATALAKE: frozenset({"adls_sign_in"}),
     DocumentSource.EGNYTE: frozenset({"egnyte_token"}),
+    DocumentSource.SMB: frozenset({"smb_sign_in"}),
 }
 
 
