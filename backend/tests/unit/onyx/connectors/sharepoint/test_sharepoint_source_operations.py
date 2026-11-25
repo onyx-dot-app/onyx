@@ -90,6 +90,10 @@ def _odata_mapped_drive(
 
 
 class _Query:
+    # A real query has the client it runs on. This one has none, so it has
+    # no pacer.
+    context: object = None
+
     def __init__(self, result: Any, error: Exception | None = None) -> None:
         self._result = result
         self._error = error

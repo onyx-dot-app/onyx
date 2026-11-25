@@ -6,7 +6,7 @@ Drive. `gdrive_api.py read` gives you a Doc's text, but Docs edits need
 character **indices**, so fetch the structure first with `get-doc`. Note:
 `<document_id>` is the Drive file id of the Doc.
 
-    python /mnt/skills/google-drive/gdrive_api.py <command> [args]
+    python /var/lib/onyx/skills/google-drive/gdrive_api.py <command> [args]
 
 ## Get a Doc's structure (indices)
 

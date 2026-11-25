@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useCurrentMessageTree } from "@/app/app/stores/useChatSessionStore";
-import { messageModelName } from "@/app/app/message/multiModel";
+import { messageModelName } from "@/lib/timeline/chat/message/multiModel";
 
 // Distinct models that produced a response anywhere in the current session,
 // counting multi-model turns and model switches between turns. Surfaces that

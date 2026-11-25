@@ -39,6 +39,7 @@ This file is the only full statement of the map's rules. Other files link here.
 | [PATHS.md](PATHS.md) | Code path to component. The only record of ownership. |
 | [VERIFYING.md](VERIFYING.md) | How to review a PR with this map, and the shared test commands. |
 | [GLOSSARY.md](GLOSSARY.md) | Domain words and the words Onyx overloads. |
+| [TECH-DEBT.md](TECH-DEBT.md) | The register of temporary shapes and planned removals, each with what ends it. |
 | [components/](components/) | One document per component. A family of small components can share a subdirectory, such as the per-connector documents. Component names are unique across all directories. |
 
 ## Components
@@ -239,6 +240,9 @@ rewrite untouched parts, and do not add text only because the brief named the
 document. Rewrite a whole document only in a deliberate verify pass, the one that
 updates **Verified against**. **Known issues** holds real gaps, not rules that
 did not fit elsewhere.
+
+A change that leaves a temporary shape or a planned removal adds an entry to
+[TECH-DEBT.md](TECH-DEBT.md). The PR that pays it off deletes the entry.
 
 When you update a document:
 - Edit or delete the text that is wrong. Do not add a paragraph about your

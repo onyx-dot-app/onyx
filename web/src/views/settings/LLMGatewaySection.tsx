@@ -16,6 +16,8 @@ import { SvgCheck, SvgKey } from "@opal/icons";
 import { copyText } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
+import { usePlaygroundRestriction } from "@/lib/playground/hooks";
+import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers/utils";
@@ -244,12 +246,16 @@ function LLMGatewayDetails() {
 
 /**
  * The LLM Gateway section of the 3rd Party Access tab. Shows for the gateway tier when
- * the user can see at least one model.
+ * the user can see at least one model. On the playground it shows the playground
+ * notice instead, whatever the tier and the model list say.
  */
 export default function LLMGatewaySection() {
   const t = useTranslations("settings.gateway");
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const settings = useSettings();
+  const gatewayRestriction = usePlaygroundRestriction(
+    PlaygroundRestrictedFeature.LLM_GATEWAY
+  );
   const { llmProviders, isLoading, error } = useLanguageModels();
 
   useEffect(() => {
@@ -257,6 +263,24 @@ export default function LLMGatewaySection() {
       console.error("Failed to load LLM Gateway models", error);
     }
   }, [error]);
+
+  // On the playground the gateway reads as off, but the reason is the
+  // playground, not an admin. Settings alone decide this, so the tier, a
+  // pending model request or a failed one do not hide the notice.
+  if (gatewayRestriction.restricted) {
+    return (
+      <SettingsSection title={t("title")}>
+        <Section height="fit">
+          <IllustrationContent
+            size="sm"
+            illustration={SvgUnPlugged}
+            title={gatewayRestriction.title}
+            description={gatewayRestriction.description}
+          />
+        </Section>
+      </SettingsSection>
+    );
+  }
 
   if (!gatewayTier) {
     return null;

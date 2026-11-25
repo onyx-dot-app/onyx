@@ -471,7 +471,7 @@ func TestLayout5ManagedMounts(t *testing.T) {
 		t.Errorf("older guest: %v", got)
 	}
 	some := &Template{Manifest: Manifest{Key: Key{LayoutVersion: 5}, GuestMounts: []string{"spaces"}}}
-	if got := some.ManagedMounts(); !slices.Equal(got, []string{SkillsMount, "spaces"}) {
+	if got := some.ManagedMounts(); !slices.Equal(got, []string{"spaces"}) {
 		t.Errorf("guest with spaces: %v", got)
 	}
 

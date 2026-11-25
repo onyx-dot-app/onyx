@@ -63,11 +63,17 @@ from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
 )
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-admin_router = APIRouter(prefix="/admin/image-generation")
+admin_router = APIRouter(
+    prefix="/admin/image-generation",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.LLM_PROVIDERS))
+    ],
+)
 
 
 def _get_test_quality_for_model(model_name: str) -> str | None:

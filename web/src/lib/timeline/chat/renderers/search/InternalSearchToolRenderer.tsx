@@ -4,8 +4,7 @@ import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { OnyxDocument } from "@/lib/search/types";
 import {
   SearchChipList,
@@ -45,9 +44,9 @@ const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
  * - FULL: Shows 1 combined timeline step (queries + results together).
  *         Used when step is expanded in timeline.
  * - COMPACT: Shows only results (no queries). Header passed as `status` prop.
- *            Used when step is collapsed in timeline, still wrapped in StepContainer.
+ *            Used when step is collapsed in timeline, still wrapped in RunStep.
  * - HIGHLIGHT: Shows only results with header embedded directly in content.
- *              No StepContainer wrapper. Used for parallel streaming preview.
+ *              No RunStep wrapper. Used for parallel streaming preview.
  * - INLINE: Phase-based (queries -> results) for collapsed streaming view.
  */
 export const InternalSearchToolRenderer: MessageRenderer<
@@ -93,14 +92,15 @@ export const InternalSearchToolRenderer: MessageRenderer<
         icon: STEP_ICONS.search,
         status: queriesHeader,
         doneStatus: queriesDoneHeader,
-        content: <></>,
+        // Nothing to open until the first query arrives.
+        content: null,
         supportsCollapsible: true,
         timelineLayout: "timeline",
       },
     ]);
   }
 
-  // HIGHLIGHT mode: header embedded in content, no StepContainer
+  // HIGHLIGHT mode: header embedded in content, no RunStep
   if (isHighlight) {
     return children([
       {
@@ -129,13 +129,11 @@ export const InternalSearchToolRenderer: MessageRenderer<
                 }
               }}
               emptyState={
-                !isComplete ? (
-                  <BlinkingBar />
-                ) : (
+                isComplete ? (
                   <Text as="p" font="main-ui-muted" color="text-04">
                     {t("internalSearch.noResults.text")}
                   </Text>
-                )
+                ) : undefined
               }
             />
           </div>
@@ -161,7 +159,6 @@ export const InternalSearchToolRenderer: MessageRenderer<
               expansionCount={QUERIES_PER_EXPANSION}
               getKey={(_, index) => index}
               toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               showDetailsCard={false}
               isQuery={true}
             />
@@ -192,13 +189,11 @@ export const InternalSearchToolRenderer: MessageRenderer<
               }
             }}
             emptyState={
-              !isComplete ? (
-                <BlinkingBar />
-              ) : (
+              isComplete ? (
                 <Text as="p" font="main-ui-muted" color="text-04">
                   {t("internalSearch.noResults.text")}
                 </Text>
-              )
+              ) : undefined
             }
           />
         ),

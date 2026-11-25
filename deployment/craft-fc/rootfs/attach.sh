@@ -10,7 +10,7 @@
 #    in OVERLAY_DIRS gets an overlay: the read-only root is the lower layer,
 #    the upper layer is on the scratch disk. A saved scratch disk therefore
 #    holds only the user's changes, and can go on top of a new template.
-# 2. Managed mounts (MANAGED_MOUNTS: skills, user-uploads, spaces): slot A
+# 2. Managed mounts (MANAGED_MOUNTS: user-uploads, spaces): slot A
 #    of each (ext4, Firecracker is_read_only) is mounted read-only and noexec
 #    on /mnt/<name>, with private propagation. The device itself is
 #    read-only, so root in the guest cannot write to it, also not after a
@@ -28,7 +28,7 @@ set -euo pipefail
 PATH=/nonexistent
 
 SCRATCH_DEV=/dev/vdb
-MANAGED_MOUNTS="skills:/mnt/skills:/dev/vdc:/dev/vdf"
+MANAGED_MOUNTS=""
 SCRATCH_MNT=/mnt/scratch
 OVERLAY_DIRS="/etc /home /root /opt /srv /usr /var /workspace"
 LAYOUT_VERSION=1

@@ -180,7 +180,9 @@ def test_a_published_file_follows_its_artifacts_chat(
     # Unlike an unstamped generated image, a published file without an
     # artifact is denied.
     assert not user_can_access_chat_file(file_id, users.owner, db_session)
-    artifact = ChatArtifact(chat_session_id=session.id, path="/w/a.md")
+    artifact = ChatArtifact(
+        chat_session_id=session.id, user_id=users.owner.id, path="/w/a.md"
+    )
     db_session.add(artifact)
     db_session.flush()
     db_session.add(

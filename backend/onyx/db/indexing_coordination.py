@@ -31,6 +31,17 @@ class CoordinationStatus(BaseModel):
     cancellation_requested: bool = False
 
 
+class StubBatchProgress(BaseModel):
+    """The stub batch counters of an attempt. ``stored`` and ``converted``
+    count from the attempt's first batch number and include batches taken
+    over from an earlier attempt. ``stored_documents`` counts only the
+    documents in the batches that this attempt's listing stored."""
+
+    stored: int = 0
+    converted: int = 0
+    stored_documents: int = 0
+
+
 class IndexingCoordination:
     """Database-based coordination for indexing tasks, replacing Redis fencing."""
 
@@ -427,6 +438,28 @@ class IndexingCoordination:
             .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
         )
         db_session.commit()
+
+    @staticmethod
+    def get_stub_batch_progress(
+        db_session: Session, index_attempt_id: int
+    ) -> StubBatchProgress:
+        """The attempt's stub batch progress. All zero when the attempt does
+        not exist."""
+        row = db_session.execute(
+            select(
+                IndexAttempt.stub_batches_stored,
+                IndexAttempt.stub_batches_converted,
+                IndexAttempt.stubs_listed - IndexAttempt.stubs_skipped,
+            ).where(IndexAttempt.id == index_attempt_id)
+        ).one_or_none()
+        if row is None:
+            return StubBatchProgress()
+        # A batch is stored only when stubs are left after the unchanged
+        # ones are dropped, so the stored documents are the ones that this
+        # attempt listed and did not drop.
+        return StubBatchProgress(
+            stored=row[0], converted=row[1], stored_documents=row[2]
+        )
 
     @staticmethod
     def _get_stub_batches_converted(db_session: Session, index_attempt_id: int) -> int:

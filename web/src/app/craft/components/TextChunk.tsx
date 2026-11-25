@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, type ComponentPropsWithoutRef } from "react";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import { MemoizedLink } from "@/app/app/message/MemoizedTextComponents";
+import { AnswerMarkdown } from "@/lib/answerText/components";
+import { MemoizedLink } from "@/lib/timeline/chat/message/MemoizedTextComponents";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { buildArtifactUrl } from "@/app/craft/services/apiServices";
 import { parseOutputLink } from "@/app/craft/utils/pathSanitizer";
@@ -65,12 +65,10 @@ export default function TextChunk({
 
   return (
     <div className="py-1">
-      <MinimalMarkdown
-        // As in chat, `[*]()` renders as the cursor, inline after the last
-        // character (the link renderer hands it to MemoizedLink).
-        content={isStreaming ? `${visible} [*]() ` : visible}
-        className="text-text-05"
-        streaming={isStreaming}
+      <AnswerMarkdown
+        content={visible}
+        streaming={isStreaming || visible.length < content.length}
+        cursor={isStreaming}
         components={components}
       />
     </div>

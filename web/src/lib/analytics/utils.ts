@@ -36,6 +36,7 @@ export enum AnalyticsEvent {
   CLICKED_CRAFT_IN_SIDEBAR = "clicked_craft_in_sidebar",
   RELEASE_NOTIFICATION_CLICKED = "release_notification_clicked",
   EXTENSION_CHAT_QUERY = "extension_chat_query",
+  CLICKED_SUGGESTED_QUESTION = "clicked_suggested_question",
 }
 
 // ─── Shared Enums ──────────────────────────────────────────────────────────
@@ -87,6 +88,12 @@ interface AnalyticsEventProperties {
     has_files: boolean;
     /** Whether deep research mode was active. */
     deep_research: boolean;
+  };
+  [AnalyticsEvent.CLICKED_SUGGESTED_QUESTION]: {
+    /** 0-based place among the buttons shown. */
+    position: number;
+    /** From the person's own documents rather than company-wide ones. */
+    private: boolean;
   };
 }
 

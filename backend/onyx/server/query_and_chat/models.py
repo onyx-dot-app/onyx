@@ -512,6 +512,17 @@ class ChatSessionProcessingStatus(BaseModel):
     approvals_version: str = ""
 
 
+class ChatSubagent(BaseModel):
+    """A background agent that the chat's selected branch started."""
+
+    id: UUID
+    # The agent tree path, such as `/root/researcher`
+    path: str
+    # None before its first run starts
+    status: RunStatus | None
+    stopped_by_user: bool
+
+
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
     description: str | None

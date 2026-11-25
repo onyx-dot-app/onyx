@@ -123,7 +123,7 @@ def library(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         yield from seen["files"]
 
     def extract(item: DriveItemData, **kwargs: Any) -> DriveItemContent | None:
-        seen["extracted"].append((item.id, kwargs["access_token"]))
+        seen["extracted"].append((item.id, kwargs["get_access_token"]()))
         if item.name.endswith(".skip"):
             return None
         if item.name.endswith(".bad"):

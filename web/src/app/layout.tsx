@@ -21,7 +21,6 @@ import localFont from "next/font/local";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
-import { OpenSearchResourcePopup } from "@/sections/banners/OpenSearchResourceWarning";
 import AppHealthBanner from "@/sections/banners/HealthBanner";
 import BannerQueue from "@/sections/banners/BannerQueue";
 import { AuthenticationShell } from "@/lib/auth/components";
@@ -237,7 +236,6 @@ export default async function Layout({ children }: LayoutProps) {
                         <BannerQueue />
                         <AuthenticationShell>
                           <AppProvider>
-                            <OpenSearchResourcePopup />
                             <PostHogRuntimeInitializer />
                             <CustomAnalyticsScript />
                             <PostHogPageTracker />

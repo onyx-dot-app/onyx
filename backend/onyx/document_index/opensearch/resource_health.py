@@ -11,7 +11,6 @@ from onyx.document_index.opensearch.constants import (
 )
 from onyx.document_index.opensearch.models import (
     NodesResourceStats,
-    ResourceHealth,
     ResourceIssue,
     ResourceSnapshot,
     VectorResourceStats,
@@ -90,21 +89,6 @@ def evaluate_resource_health(
         issues=issues,
         heap_high_nodes=heap_high_nodes,
         vector_high_nodes=vector_high_nodes,
-    )
-
-
-def get_resource_health() -> ResourceHealth:
-    if DISABLE_VECTOR_DB:
-        return ResourceHealth()
-    raw: bytes | None = get_shared_cache_backend().get(RESOURCE_SNAPSHOT_KEY)
-    if raw is None:
-        return ResourceHealth()
-    snapshot: ResourceSnapshot = ResourceSnapshot.model_validate_json(raw)
-    return ResourceHealth(
-        checked_at=snapshot.checked_at,
-        issues=snapshot.issues,
-        stale=(datetime.now(timezone.utc) - snapshot.checked_at).total_seconds()
-        > RESOURCE_STALE_SECONDS,
     )
 
 

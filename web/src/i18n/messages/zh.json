@@ -4007,6 +4007,18 @@
               "description": "指定要索引的邮箱（例如 INBOX、Sent、Drafts）。留空则索引所有邮箱。"
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "每分钟 RU",
+              "description": "此连接器可使用的 Microsoft 应用注册速率限制份额，单位为每分钟资源单位 (RU)。Microsoft 按许可证层级设置应用的限制，为每分钟 1,250 至 6,250 RU。留空则由 Onyx 学习该限制。[如何查找您的层级](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "此应用注册上的其他连接器：{connectors}。合计：每分钟 {total} RU。",
+              "none": "此应用注册上没有其他连接器设置每分钟 RU。",
+              "hidden": "{count, plural, other {# 个您无法查看的连接器}}",
+              "unavailable": "无法加载此应用注册上其他连接器的每分钟 RU。"
+            }
+          }
         }
       }
     },
@@ -12199,7 +12211,7 @@
           "text": "{toolName} 已被阻止"
         },
         "completedStatus": {
-          "text": "{toolName} 已完成"
+          "text": "已执行 {toolName}"
         },
         "downloadFileLink": {
           "label": "下载"
@@ -12229,13 +12241,10 @@
           "label": "响应"
         },
         "runningStatus": {
-          "text": "{toolName} 正在运行..."
+          "text": "正在执行 {toolName}..."
         },
         "unreachableStatus": {
           "text": "{toolName} 无法连接到其服务器"
-        },
-        "waitingIndicator": {
-          "text": "正在等待响应..."
         }
       },
       "customToolAuth": {
@@ -12413,7 +12422,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "思考中"
+          "text": "思考中..."
         }
       },
       "timeline": {
@@ -12428,7 +12437,7 @@
             "status": "已生成计划"
           },
           "generating": {
-            "status": "正在生成计划"
+            "status": "正在生成计划..."
           }
         },
         "expandButton": {
@@ -12436,10 +12445,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "正在读取"
+            "status": "正在浏览网页..."
           },
           "read": {
-            "status": "已读取"
+            "status": "{count, plural, =0 {已浏览网页} other {已浏览 # 个网页}}"
           }
         },
         "fileReader": {
@@ -12447,69 +12456,108 @@
             "status": "已读取 {fileName}（第 {start, number}–{end, number} 个字符，共 {total, number} 个）"
           },
           "reading": {
-            "status": "正在读取文件"
+            "status": "正在读取文件..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {已生成 # 张图片} other {已生成 # 张图片}}"
         },
         "header": {
           "executingCode": {
-            "label": "正在执行代码"
+            "label": "正在执行代码..."
           },
           "executingNamedTool": {
-            "label": "正在执行 {toolName}"
+            "label": "正在执行 {toolName}..."
           },
           "executingTool": {
-            "label": "正在执行工具"
+            "label": "正在执行工具..."
           },
           "generatingImages": {
-            "label": "正在生成图片"
+            "label": "正在生成图片..."
           },
           "generatingPlan": {
-            "label": "正在生成计划"
+            "label": "正在生成计划..."
           },
           "queryingKnowledgeBase": {
-            "label": "正在查询知识库"
+            "label": "正在查询知识库..."
           },
           "reading": {
-            "label": "正在读取"
+            "label": "正在读取..."
           },
           "readingFile": {
-            "label": "正在读取文件"
+            "label": "正在读取文件..."
           },
           "researching": {
-            "label": "正在研究"
+            "label": "正在研究..."
           },
           "searchingWeb": {
-            "label": "正在搜索网页"
+            "label": "正在搜索网页..."
           },
           "thinking": {
-            "label": "思考中"
-          },
-          "thinkingEllipsis": {
             "label": "思考中..."
           },
           "updatingMemory": {
             "label": "正在更新记忆..."
           },
           "working": {
-            "label": "处理中"
+            "label": "处理中..."
           },
           "waitingForApproval": {
-            "label": "正在等待你的批准"
+            "label": "正在等待你的批准..."
           },
           "waitingForAnswer": {
-            "label": "正在等待你的回答"
+            "label": "正在等待你的回答..."
           },
           "runningCommand": {
-            "label": "正在运行命令"
+            "label": "正在运行命令..."
           },
           "editingFiles": {
-            "label": "正在编辑文件"
+            "label": "正在编辑文件..."
           },
           "publishingFiles": {
-            "label": "正在发布文件"
+            "label": "正在发布文件..."
+          },
+          "browsing": {
+            "label": "正在浏览网页..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "正在处理...",
+              "done": "已完成处理"
+            },
+            "crunchingDetails": {
+              "working": "正在梳理细节...",
+              "done": "已梳理细节"
+            },
+            "connectingDots": {
+              "working": "正在串联线索...",
+              "done": "已串联线索"
+            },
+            "runningNumbers": {
+              "working": "正在计算数据...",
+              "done": "已计算数据"
+            },
+            "fillingGaps": {
+              "working": "正在填补空白...",
+              "done": "已填补空白"
+            },
+            "sortingThingsOut": {
+              "working": "正在整理思路...",
+              "done": "已整理思路"
+            },
+            "gatheringPieces": {
+              "working": "正在拼凑信息...",
+              "done": "已拼凑信息"
+            },
+            "workingThroughIt": {
+              "working": "正在逐步解决...",
+              "done": "已逐步解决"
+            },
+            "ironingOutDetails": {
+              "working": "正在完善细节...",
+              "done": "已完善细节"
+            },
+            "roundingThingsOut": {
+              "working": "正在收尾...",
+              "done": "已收尾"
+            }
           }
         },
         "internalSearch": {
@@ -12517,10 +12565,10 @@
             "text": "未找到结果"
           },
           "reading": {
-            "status": "正在读取"
+            "status": "正在读取..."
           },
           "read": {
-            "label": "已读取"
+            "label": "已读文档"
           },
           "header": {
             "default": "正在搜索内部文档",
@@ -12528,7 +12576,8 @@
             "sources": "正在搜索 {sources}",
             "doneSources": "已搜索 {sources}",
             "sourcesOverflow": "{sources} 及另外 {count} 个",
-            "withTimeWindow": "{header}({timeWindow})"
+            "withTimeWindow": "{header}({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "自 {date} 起",
@@ -12547,7 +12596,7 @@
             "text": "记忆工具已禁用"
           },
           "updating": {
-            "status": "正在更新记忆"
+            "status": "正在更新记忆..."
           },
           "updated": {
             "status": "已更新记忆"
@@ -12569,10 +12618,7 @@
             "status": "已查询知识库"
           },
           "querying": {
-            "status": "正在查询知识库"
-          },
-          "listed": {
-            "label": "{count, plural, one {已列出 # 个文档} other {已列出 # 个文档}}"
+            "status": "正在查询知识库..."
           },
           "query": {
             "table": {
@@ -12629,21 +12675,15 @@
             "label": "输出："
           },
           "running": {
-            "status": "正在运行 Python"
+            "status": "正在运行 Python..."
           },
           "ran": {
             "status": "已运行 Python"
-          },
-          "runningCode": {
-            "label": "正在运行代码..."
-          },
-          "writingCode": {
-            "status": "正在编写代码..."
           }
         },
         "reasoning": {
           "thinking": {
-            "status": "思考中"
+            "status": "思考中..."
           },
           "thought": {
             "status": "已思考"
@@ -12679,7 +12719,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "正在搜索网页"
+            "status": "正在搜索网页..."
           },
           "searched": {
             "status": "已搜索网络"
@@ -12687,19 +12727,16 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {正在运行命令} started {已启动命令} failed {命令失败} canceled {已取消} done {已运行命令} other {已运行命令}}",
+            "status": "{phase, select, running {正在运行命令...} started {已启动命令} failed {命令失败} canceled {已取消} done {已运行命令} other {已运行命令}}",
             "workdir": {
               "label": "位于 {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {正在向会话 {sessionId} 发送输入} failed {无法向会话 {sessionId} 发送输入} canceled {已取消} done {已向会话 {sessionId} 发送输入} other {已向会话 {sessionId} 发送输入}}} check {{phase, select, running {正在检查会话 {sessionId}} failed {无法检查会话 {sessionId}} canceled {已取消} done {已检查会话 {sessionId}} other {已检查会话 {sessionId}}}} other {会话 {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {正在向会话 {sessionId} 发送输入...} failed {无法向会话 {sessionId} 发送输入} canceled {已取消} done {已向会话 {sessionId} 发送输入} other {已向会话 {sessionId} 发送输入}}} check {{phase, select, running {正在检查会话 {sessionId}...} failed {无法检查会话 {sessionId}} canceled {已取消} done {已检查会话 {sessionId}} other {已检查会话 {sessionId}}}} other {会话 {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {正在向会话发送输入} failed {无法向会话发送输入} canceled {已取消} done {已向会话发送输入} other {已向会话发送输入}}} check {{phase, select, running {正在检查会话} failed {无法检查会话} canceled {已取消} done {已检查会话} other {已检查会话}}} other {会话}}"
+              "status": "{kind, select, send {{phase, select, running {正在向会话发送输入...} failed {无法向会话发送输入} canceled {已取消} done {已向会话发送输入} other {已向会话发送输入}}} check {{phase, select, running {正在检查会话...} failed {无法检查会话} canceled {已取消} done {已检查会话} other {已检查会话}}} other {会话}}"
             }
-          },
-          "output": {
-            "title": "输出"
           },
           "exitCode": {
             "label": "退出代码 {exitCode}"
@@ -13018,6 +13055,12 @@
       },
       "copyButton": {
         "tooltip": "复制内容"
+      },
+      "sourceButton": {
+        "tooltip": "显示源代码"
+      },
+      "previewButton": {
+        "tooltip": "显示预览"
       },
       "downloadButton": {
         "label": "下载文件",
@@ -13480,10 +13523,6 @@
       "toggleButton": {
         "label": "显示或隐藏面板"
       },
-      "downloadButton": {
-        "label": "下载",
-        "tooltip": "下载文件"
-      },
       "reloadButton": {
         "label": "刷新文件",
         "error": "无法重新加载文件。请重试。"
@@ -13516,6 +13555,34 @@
       },
       "menu": {
         "label": "导出为…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "活动"
+      },
+      "needsYou": {
+        "title": "需要你处理",
+        "approval": "批准 {tool}",
+        "question": "回答问题"
+      },
+      "agents": {
+        "title": "智能体",
+        "status": {
+          "starting": "启动中",
+          "running": "运行中",
+          "suspended": "等待中",
+          "complete": "已完成",
+          "limit": "已达步骤上限",
+          "cancelled": "已取消",
+          "stopped": "已停止",
+          "error": "失败"
+        },
+        "finished": "之前的智能体"
+      },
+      "files": {
+        "title": "文件",
+        "viewAll": "{count, plural, other {查看全部 # 个文件}}"
       }
     }
   },
@@ -14047,6 +14114,21 @@
         "label": "升级方案"
       },
       "availableFor": "{plan}可用"
+    },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "这是企业版功能，在 Playground 中不可用。您自己的 Onyx 包含此功能。[联系销售]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "我们已配置自己的模型密钥，方便您试用这些功能。您自己的 Onyx 使用您的密钥运行。[联系销售]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "此功能在 Playground 中已关闭。您自己的 Onyx 包含此功能。[联系销售]({salesUrl})"
+        },
+        "title": "Playground 限制",
+        "tooltip": "在 Playground 中不可用。您自己的 Onyx 包含此功能。"
+      }
     },
     "placeholders": {
       "email": "youxiang@nide-gongsi.com",
@@ -15004,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "处理中"
+          "label": "处理中..."
         }
       },
       "read": {
@@ -17213,18 +17295,6 @@
       "select": "选择 {name}"
     }
   },
-  "opensearchHealth": {
-    "title": "OpenSearch 需要更多资源",
-    "disk": "OpenSearch 数据节点的磁盘使用率至少为 85%。磁盘空间耗尽时，索引可能停止。",
-    "jvmMemory": "多次检查显示 OpenSearch JVM 内存使用率持续超过 85%。搜索和索引可能失败。",
-    "vectorMemory": "OpenSearch 向量内存接近满载或已达到上限。搜索会变慢，搜索和索引可能失败。",
-    "stale": "最新检查不可用。此警告反映上次成功检查的结果，尚未确认恢复。",
-    "dismiss": "关闭",
-    "diskTitle": "磁盘空间",
-    "jvmMemoryTitle": "JVM 内存",
-    "vectorMemoryTitle": "向量内存",
-    "viewDetails": "查看详情"
-  },
   "plugins": {
     "member": {
       "sections": {
@@ -17818,7 +17888,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {1 个技能} other {{skills} 个技能}}",
       "loadFailed": "无法加载你的插件。",
       "filter": {
         "all": "所有插件"

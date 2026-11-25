@@ -60,7 +60,8 @@ func main() {
 	var fc files.Config
 	flag.StringVar(&fc.SessionsRoot, "sessions-root", files.DefaultSessionsRoot, "directory with one directory per session (file calls, capture, restore)")
 	flag.StringVar(&fc.OnyxRoot, "onyx-root", files.DefaultOnyxRoot, "directory of the files Onyx writes outside every session; file calls with no session ID never follow a link out of it")
-	readLinks := flag.String("read-link-roots", "/mnt/skills,/mnt/user-uploads,/mnt/spaces", "comma-separated directories that a top-level session link may point into for ReadFile, ListFiles and ZipFiles")
+	flag.StringVar(&fc.SkillsRoot, "skills-root", files.DefaultSkillsRoot, "root-owned folder where InstallSkill puts each skill")
+	readLinks := flag.String("read-link-roots", files.DefaultSkillsRoot+",/mnt/user-uploads,/mnt/spaces", "comma-separated directories that a top-level session link may point into for ReadFile, ListFiles and ZipFiles")
 	flag.Int64Var(&fc.MaxFileBytes, "max-file-bytes", files.GiB, "largest ReadFile, WriteFile or UploadFile")
 	flag.Int64Var(&fc.MaxZipBytes, "max-zip-bytes", files.GiB, "largest total file size of one ZipFiles")
 	captureDirs := flag.String("capture-dirs", strings.Join(files.DefaultCaptureRoots, ","), "comma-separated session directories that CaptureSession saves")

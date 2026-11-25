@@ -12,6 +12,7 @@ from onyx.db.llm import (
     can_user_access_llm_provider,
     fetch_default_model,
     fetch_existing_llm_provider,
+    fetch_first_llm_provider,
     fetch_model_configuration_by_id,
     fetch_user_group_ids,
 )
@@ -445,6 +446,24 @@ def get_default_llm(
         )
 
 
+def _provider_view_within_cost_limit(
+    db_session: Session,
+    llm_provider: LLMProviderModel,
+    model_configurations: list[ModelConfiguration] | None = None,
+) -> LLMProviderView:
+    """The provider as a view an LLM can be built from. Raises when the tenant
+    is over its LLM cost limit on this provider's key."""
+    provider_view = LLMProviderView.from_model(
+        llm_provider, model_configurations=model_configurations
+    )
+    check_llm_cost_limit_for_provider(
+        db_session=db_session,
+        tenant_id=get_current_tenant_id(),
+        llm_provider_api_key=provider_view.api_key,
+    )
+    return provider_view
+
+
 def get_default_utility_llm(
     flow_type: LLMModelFlowType,
     additional_headers: dict[str, str] | None = None,
@@ -454,15 +473,10 @@ def get_default_utility_llm(
         model = fetch_default_model(db_session, flow_type)
         if model is None:
             return None
-        provider = LLMProviderView.from_model(
-            model.llm_provider, model_configurations=[model]
+        provider = _provider_view_within_cost_limit(
+            db_session, model.llm_provider, model_configurations=[model]
         )
         model_name = model.name
-        check_llm_cost_limit_for_provider(
-            db_session=db_session,
-            tenant_id=get_current_tenant_id(),
-            llm_provider_api_key=provider.api_key,
-        )
 
     return llm_from_provider(
         model_name=model_name,
@@ -504,6 +518,17 @@ def get_decision_client(
             model_configuration_id=model.id,
             timeout=timeout,
         )
+
+
+def get_llm_for_provider(provider: str, model_name: str) -> LLM | None:
+    """An LLM on the tenant's setup of this provider (e.g. "openai"), with a
+    model the caller fixes in code instead of the admin's flow settings."""
+    with get_session_with_current_tenant() as db_session:
+        llm_provider = fetch_first_llm_provider(db_session, provider)
+        if llm_provider is None:
+            return None
+        provider_view = _provider_view_within_cost_limit(db_session, llm_provider)
+    return llm_from_provider(model_name=model_name, llm_provider=provider_view)
 
 
 def get_search_selection_llm(

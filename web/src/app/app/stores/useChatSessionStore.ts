@@ -827,6 +827,18 @@ export const useSourcesShown = () =>
     return currentSession ? showsSources(currentSession.rightPanel) : false;
   });
 
+/** Whether the open chat's right panel is open, on any tab. */
+export const useRightPanelShown = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return (
+      (currentSession?.rightPanel ?? INITIAL_RIGHT_PANEL).mode !== "closed"
+    );
+  });
+
 /** Whether the open chat's right panel shows the Files list or a file. */
 export const useFilesShown = () =>
   useChatSessionStore((state) => {

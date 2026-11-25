@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 import urllib3
@@ -282,6 +282,16 @@ class OnyxWebCrawler(WebContentProvider):
         max_workers = min(DEFAULT_MAX_WORKERS, len(urls))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             return list(executor.map(self._fetch_url_safe, urls))
+
+    def iter_contents(self, urls: Sequence[str]) -> Iterator[WebContent]:
+        if not urls:
+            return
+
+        max_workers = min(DEFAULT_MAX_WORKERS, len(urls))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(self._fetch_url_safe, url) for url in urls]
+            for future in as_completed(futures):
+                yield future.result()
 
     def _fetch_url_safe(self, url: str) -> WebContent:
         """Wrapper that catches all exceptions so one bad URL doesn't kill the batch."""

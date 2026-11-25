@@ -48,6 +48,7 @@ import { requestMentions } from "@/lib/chat/mentions";
 import type {
   ChatSessionQueue,
   ChatSessionStatus,
+  ChatSubagent,
   ComposedMessage,
   Mention,
   PendingChatMessage,
@@ -57,7 +58,7 @@ import {
   getMessageByMessageId,
   type MessageTreeState,
 } from "@/app/app/services/messageTree";
-import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
+import { getUnresolvedMultiModelTurn } from "@/lib/timeline/chat/message/multiModel";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useChatSessionStore,
@@ -416,6 +417,19 @@ export function useAnswerWithMessage(): (
 }
 
 /**
+ * How often a chat's status reloads. Pending input and background work can
+ * start a turn this client did not send; a decided agent request counts as
+ * background work until its agent settles. Pass it in a new arrow on each
+ * render: SWR reschedules its poll only when `refreshInterval` changes, so a
+ * stable function reads only the data from before the first load.
+ */
+function statusPollInterval(current: ChatSessionStatus | undefined): number {
+  return current?.has_startable_input || current?.has_active_subagents
+    ? SERVER_WORK_POLL_MS
+    : 0;
+}
+
+/**
  * Server-owned pending messages and background activity of the current chat.
  * Mount once per chat surface; the composer only renders the result.
  */
@@ -464,13 +478,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     statusKey,
     errorHandlingFetcher,
     {
-      // Pending input and background work can start a turn this client did
-      // not send. A decided agent request counts as background work until
-      // its agent settles.
-      refreshInterval: (current) =>
-        current?.has_startable_input || current?.has_active_subagents
-          ? SERVER_WORK_POLL_MS
-          : 0,
+      refreshInterval: (current) => statusPollInterval(current),
       onErrorRetry: skipRetryOnAuthError,
     }
   );
@@ -648,6 +656,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
         } catch (failure) {
           toast.error(fetchErrorDetail(failure) ?? t("stopSubagentsFailed"));
         } finally {
+          // A status change also reloads the agents list (`useChatSubagents`)
           void mutate(status);
         }
       },
@@ -792,7 +801,11 @@ export function useSendChatMessageFromURL({
   // The extension navigating the embedded page without a reload.
   useEffect(() => {
     function onPageChange(event: MessageEvent) {
-      if (event.data.type !== SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) return;
+      // Only the extension that embeds the page may send prompts: a frame
+      // inside it, such as an HTML file preview, must not
+      if (window.parent === window || event.source !== window.parent) return;
+      if (!/^(chrome|moz)-extension:\/\//.test(event.origin)) return;
+      if (event.data?.type !== SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) return;
       try {
         setQueuedQuery(new URL(event.data.href).searchParams.toString());
       } catch (error) {
@@ -928,6 +941,43 @@ export function publishedFilesOf(
   const files = chatPublishedFiles(loaded, messageTree);
   publishedFilesByTree.set(messageTree, { loaded, files });
   return files;
+}
+
+/**
+ * The chat's background agents, by the newest response that started them.
+ * They load once the chat's status does, again when it changes whether agents
+ * are active or which response is newest, and poll while agents are active.
+ * The status polls as the queue's does, also for chats without a queue, and
+ * while a reply streams (`streaming`), which can start agents.
+ */
+export function useChatSubagents(
+  sessionId: string,
+  streaming: boolean
+): ChatSubagent[] {
+  const { data: status } = useSWR<ChatSessionStatus, Error>(
+    SWR_KEYS.chatSessionStatus(sessionId),
+    errorHandlingFetcher,
+    {
+      // A number while a reply streams: each streamed packet renders the
+      // caller again, and a new function would restart SWR's timer
+      refreshInterval: streaming
+        ? SERVER_WORK_POLL_MS
+        : (current) => statusPollInterval(current),
+      onErrorRetry: skipRetryOnAuthError,
+    }
+  );
+  const active = status?.has_active_subagents ?? false;
+  const url = SWR_KEYS.chatSessionAgents(sessionId);
+  const { data } = useSWR<ChatSubagent[], Error>(
+    status ? [url, active, status.latest_response_id] : null,
+    () => errorHandlingFetcher<ChatSubagent[]>(url),
+    {
+      refreshInterval: active ? SERVER_WORK_POLL_MS : 0,
+      keepPreviousData: true,
+      onErrorRetry: skipRetryOnAuthError,
+    }
+  );
+  return data ?? [];
 }
 
 /**

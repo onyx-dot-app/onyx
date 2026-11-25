@@ -273,7 +273,6 @@ class WebSearchTool(Tool):
                 top_sections=inference_sections,
                 citation_start=context.next_citation_num
                 + CITATIONS_PER_TOOL_CALL * invocation.call_index,
-                limit=None,  # Already truncated
                 include_source_type=False,
                 include_link=True,
             )

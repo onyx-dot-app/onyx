@@ -43,7 +43,10 @@ from onyx.server.features.skill.models import (
 )
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.push import build_user_skills_payload
+from onyx.skills.push import (
+    build_chat_skill_files,
+    build_user_skills_payload,
+)
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
     skills_catalog_message,
@@ -203,7 +206,7 @@ def test_three_skills_load_as_three_run_time_and_chat_skills(
     ]
     chat = [
         (skill.name, skill.path)
-        for skill in list_chat_skills(db_session, author, built_ins=False)
+        for skill in list_chat_skills(db_session, author, with_sandbox=False)
         if skill.name in {"alpha", "beta", "gamma"}
     ]
     assert chat == [
@@ -224,6 +227,15 @@ def test_three_skills_load_as_three_run_time_and_chat_skills(
     ]
     assert files["beta/notes.md"] == b"beta notes"
     assert not any(path.startswith((".claude-plugin", "skills/")) for path in files)
+
+    beta = next(
+        skill
+        for skill in list_chat_skills(db_session, author, with_sandbox=True)
+        if skill.name == "beta"
+    )
+    copied = build_chat_skill_files(beta, author, db_session)
+    assert copied is not None
+    assert sorted(copied.files) == ["beta/SKILL.md", "beta/notes.md"]
 
 
 def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
@@ -460,7 +472,9 @@ def test_chat_names_the_integrations_a_loaded_plugin_cannot_use(
         db_session,
     )
 
-    message = skills_catalog_message([SkillsListTool(author, built_ins=False)], 200_000)
+    message = skills_catalog_message(
+        [SkillsListTool(author, with_sandbox=False)], 200_000
+    )
 
     assert message is not None
     assert message.content.endswith(

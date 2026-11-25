@@ -760,6 +760,13 @@ def select_cc_pair_ids_for_user(
     return _add_user_filters(select(ConnectorCredentialPair.id), user, access_level)
 
 
+def get_cc_pair_ids_for_user(
+    db_session: Session, user: User, access_level: CCPairAccessLevel
+) -> set[int]:
+    """The ids of the pairs the user holds ``access_level`` on."""
+    return set(db_session.scalars(select_cc_pair_ids_for_user(user, access_level)))
+
+
 def get_managed_cc_pair_ids(
     cc_pair_ids: set[int],
     db_session: Session,

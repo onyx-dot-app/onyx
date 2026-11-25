@@ -16,6 +16,8 @@ export interface Prefs {
   // Settings that managed policy (MDM or Group Policy) sets.
   serverManaged: boolean;
   serverLocked: boolean;
+  // Policy locks another server, which Onyx uses after a restart.
+  serverNextLaunch: boolean;
   hotkeyManaged: boolean;
   launcherDisabled: boolean;
   launchAtLoginManaged: boolean;

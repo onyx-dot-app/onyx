@@ -308,3 +308,39 @@ func (s *Server) RestoreSession(stream pb.Sandboxd_RestoreSessionServer) error {
 		Files: sum.Files, Directories: sum.Directories, ExpandedBytes: sum.ExpandedBytes, Roots: sum.Roots,
 	})
 }
+
+// InstallSkill implements pb.SandboxdServer.
+func (s *Server) InstallSkill(stream pb.Sandboxd_InstallSkillServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	h := first.GetHeader()
+	if h == nil {
+		return apiError(pb.ErrorReason_INVALID_ARGUMENT, "the first message must be the header")
+	}
+	data := &dataReader{recv: func() ([]byte, bool, error) {
+		m, err := stream.Recv()
+		if err != nil {
+			return nil, false, err
+		}
+		_, isData := m.GetPart().(*pb.InstallSkillRequest_Data)
+		return m.GetData(), isData, nil
+	}}
+	start := time.Now()
+	sum, err := s.files.InstallSkill(stream.Context(), files.SkillSpec{
+		Name: h.GetName(), Version: h.GetVersion(), Size: h.GetSizeBytes(), SHA256: h.GetSha256(),
+		Limits: toLimits(h.GetLimits()),
+	}, io.Reader(data))
+	if err != nil {
+		s.cfg.Log.Warn("install skill failed", "name", h.GetName(), "err", err)
+		return fileError(err)
+	}
+	if sum.Installed {
+		s.cfg.Log.Info("install skill", "name", h.GetName(), "files", sum.Files, "expanded_bytes", sum.ExpandedBytes,
+			"ms", time.Since(start).Milliseconds())
+	}
+	return stream.SendAndClose(&pb.InstallSkillResponse{
+		Installed: sum.Installed, Files: sum.Files, ExpandedBytes: sum.ExpandedBytes,
+	})
+}

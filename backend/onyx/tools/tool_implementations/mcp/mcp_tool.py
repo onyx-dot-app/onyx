@@ -105,6 +105,7 @@ class MCPTool(Tool):
         *,
         integration_id: int,
         integration_name: str,
+        integration_description: str | None,
         server_url: str,
         transport: MCPTransport | None,
         tool_name: str,
@@ -123,6 +124,7 @@ class MCPTool(Tool):
         )
         self._integration_id = integration_id
         self._integration_name = integration_name
+        self._integration_description = integration_description
         self._server_url = server_url
         self._transport = transport
         self._acting_user_id = acting_user_id
@@ -164,6 +166,7 @@ class MCPTool(Tool):
         return CodeModeFunctionName(
             name=self._mcp_tool_name,
             namespace=f"mcp__{self._integration_id}__{sanitize_tool_name(self._integration_name)}",
+            namespace_description=self._integration_description,
         )
 
     @property

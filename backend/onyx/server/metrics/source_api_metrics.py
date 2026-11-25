@@ -92,6 +92,26 @@ LIMITER_WAIT_SECONDS = Counter(
     ["source", "api"],
 )
 
+LIMITER_UNITS = Counter(
+    "onyx_source_api_limiter_units_total",
+    "Units that callers took from the shared limiter. For Microsoft Graph, "
+    "the resource units of the calls.",
+    ["source", "api"],
+)
+
+LIMITER_PAUSES = Counter(
+    "onyx_source_api_limiter_pauses_total",
+    "Times the source asked its callers to wait (Retry-After) and the shared "
+    "limiter paused every caller",
+    ["source", "api"],
+)
+
+LIMITER_PAUSED_SECONDS = Counter(
+    "onyx_source_api_limiter_paused_seconds_total",
+    "Time that callers waited for a pause that the source asked for",
+    ["source", "api"],
+)
+
 LIMITER_LOCAL_WAITERS = Gauge(
     "onyx_source_api_limiter_local_waiters",
     "Calls of this process in the shared limiter: the call at the head of "
@@ -142,6 +162,20 @@ def set_project_ceiling(source: str, api: str, allowed: int) -> None:
 def record_limiter_wait(source: str, api: str, seconds: float) -> None:
     if seconds > 0:
         LIMITER_WAIT_SECONDS.labels(source=source, api=api).inc(seconds)
+
+
+def record_limiter_units(source: str, api: str, units: int) -> None:
+    if units > 0:
+        LIMITER_UNITS.labels(source=source, api=api).inc(units)
+
+
+def record_limiter_pause(source: str, api: str) -> None:
+    LIMITER_PAUSES.labels(source=source, api=api).inc()
+
+
+def record_limiter_paused_seconds(source: str, api: str, seconds: float) -> None:
+    if seconds > 0:
+        LIMITER_PAUSED_SECONDS.labels(source=source, api=api).inc(seconds)
 
 
 def add_local_waiters(source: str, api: str, count: int) -> None:

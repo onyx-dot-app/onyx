@@ -117,7 +117,9 @@ GET /chat/get-chat-session/{id}
                                            which subagents share) joined to
                                            their versions and file records: the
                                            latest version of each artifact
-                                           (DISTINCT ON the artifact), by first
+                                           (a LATERAL newest-version subquery,
+                                           db/chat.py:_newest_available_version,
+                                           which artifacts_list shares), by first
                                            publish (ChatArtifact.created_at,
                                            then ID), with its artifact_id and
                                            version. The path comes from the

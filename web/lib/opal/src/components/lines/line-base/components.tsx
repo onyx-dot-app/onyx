@@ -27,7 +27,7 @@ type LineVariant =
   | "default"
   | `${Exclude<LineStatus, "default">}-${LineWeight}`;
 
-/** The props every line shares: `Line` and `Log`. */
+/** The props of a log line (`LogLine`). */
 type LineBaseProps = {
   /** Colours the icon; a heavy variant also tints the line and its body. */
   variant?: LineVariant;
@@ -81,8 +81,8 @@ const VARIANTS: Record<
 interface LineRootProps {
   variant: LineVariant;
   padding: 0 | 1;
-  /** `card`: rounded and padded as a card, with a neutral fill. */
-  flavour?: "step" | "card";
+  /** Rounded and padded as a card (`Line`), with a neutral fill. */
+  card?: boolean;
   /** Card only: fills it with `background-tint-00`. */
   filled?: boolean;
   /** Card only: a folded card fills on hover, since its header toggles it. */
@@ -94,7 +94,7 @@ interface LineRootProps {
 function LineRoot({
   variant,
   padding,
-  flavour = "step",
+  card = false,
   filled = false,
   clickable = false,
   children,
@@ -111,7 +111,7 @@ function LineRoot({
       data-opal-line-weight={weight}
       data-opal-line-padding={padding}
       style={style}
-      data-opal-line-flavour={flavour}
+      data-opal-line-flavour={card ? "card" : undefined}
       data-opal-line-filled={filled}
       data-opal-line-clickable={clickable}
     >

@@ -40,6 +40,12 @@ from onyx.server.features.build.utils import (
 )
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
+from onyx.server.playground import (
+    PLAYGROUND_RESTRICTED_MESSAGE,
+    PlaygroundRestrictedFeature,
+    is_restricted_in_playground,
+    playground_restrictions,
+)
 from onyx.server.settings.build_info import get_build_info
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
@@ -108,6 +114,28 @@ def admin_patch_settings(
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
+            )
+
+        # A restricted switch reads as off from load_settings, so any True here
+        # is an attempt to turn it on. Checked before the tier gates, so the
+        # playground answers with its own code whatever the tier.
+        if (
+            is_restricted_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS)
+            and merged.anonymous_user_enabled
+        ):
+            raise OnyxError(
+                OnyxErrorCode.PLAYGROUND_RESTRICTED,
+                "Anonymous access is off on the playground. "
+                + PLAYGROUND_RESTRICTED_MESSAGE,
+            )
+        if (
+            is_restricted_in_playground(PlaygroundRestrictedFeature.LLM_GATEWAY)
+            and merged.llm_gateway_enabled
+        ):
+            raise OnyxError(
+                OnyxErrorCode.PLAYGROUND_RESTRICTED,
+                "The LLM gateway is off on the playground. "
+                + PLAYGROUND_RESTRICTED_MESSAGE,
             )
 
         # Search Mode is Business+, Chat Retention is Enterprise-only. Same error
@@ -259,6 +287,7 @@ def fetch_settings(
         and tier_at_least(resolved_tier, Tier.ENTERPRISE),
         hooks_enabled=not MULTI_TENANT,
         is_playground=IS_PLAYGROUND,
+        playground_restrictions=playground_restrictions(),
         version=onyx_version,
         commit=build_info.commit,
         commit_date=build_info.commit_date,

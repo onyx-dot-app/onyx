@@ -57,6 +57,7 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.users import finish_user_delete
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
@@ -318,8 +319,9 @@ def downgrade_to_community(
     # that is part way to Community, which a retry finishes.
     cc_pair_ids: list[int] = make_all_cc_pairs_public__no_commit(db_session)
     user_groups_removed: int = remove_custom_user_groups__no_commit(db_session)
-    disable_paid_features__no_commit(db_session)
+    user_delete_cleanup = disable_paid_features__no_commit(db_session)
     db_session.commit()
+    finish_user_delete(user_delete_cleanup, db_session)
     # Listings are cached per group set, so a provider that just became public
     # would stay hidden from users outside its old groups until the TTL.
     invalidate_provider_listing_cache()

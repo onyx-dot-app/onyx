@@ -176,12 +176,17 @@
   accepted, at the version the user ran. A SKILL.md over 8,000 bytes is cut
   there, with a note that tells the model to continue with `skills_read`. History keeps that text, so a later edit, a deletion or lost access
   does not change what earlier turns see. A skill that cannot be read when
-  the message is accepted is not applied. A chat built-in's SKILL.md
-  starts with a `Skill files:` line that names its folder in the chat VM
-  (`/mnt/skills/<name>/`, read-only and noexec), where the model reads its
-  other files and runs its scripts through their interpreter with the
-  sandbox tools ([[craft-sandboxes]]). Chat cannot open the other files of a
-  custom skill or run its scripts. App built-ins, company-search,
+  the message is accepted is not applied. In a turn with the sandbox tools,
+  the SKILL.md (from `skills_read` or a pick) of a skill with other files
+  starts with a `Skill files: /var/lib/onyx/skills/<name>/ (read-only)` line that tells
+  the model to call `load_skill` first (`skills/content.py:read_chat_skills_md`;
+  a custom version with no `file_manifest` keeps the line).
+  `load_skill` copies the skill's files, built-in or custom, at the version
+  the user runs then, into that folder; reads and picks copy nothing. The
+  folder is shared by the user's chats on the VM, one copy per skill; a new
+  version replaces it. To change a file, the agent copies the skill into its
+  working directory. Without the sandbox tools, chat cannot open a custom
+  skill's other files. App built-ins, company-search,
   image-generation and craft-documentation stay out of chat.
   A built-in is a built-in plugin in code (`BuiltInSkillDefinition.skills`):
   one skill with SKILL.md at its root, or one skill per
@@ -365,8 +370,8 @@ chat gets: the custom skills the sandbox loads for the user
 `list_runtime_skills_for_user`: install settings, the user's choice, the name
 order and a version that is not invalid), with the name, description,
 `metadata.short-description` and id of the version the user runs. With
-`built_ins`, it also lists `list_chat_built_in_skills`, the same rows the
-sandbox mounts; they do not depend on the user. Anonymous users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
+`with_sandbox`, it also lists `list_chat_built_in_skills`, the built-ins that
+`load_skill` copies into the VM; they do not depend on the user. Anonymous users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
 turn's picks and reservation, each agent reads it once when it is built (for
 its catalog), each skill tool call reads it, and so does each accepted
 mid-run message with picks. The `@` picker reads it through
@@ -681,7 +686,10 @@ the app from the same rule
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
 15. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dir` replaces each `${CLAUDE_SKILL_DIR}` in
-    a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
+    a skill's root SKILL.md with `<root>/<name>`: `/workspace/managed/skills`
+    for Craft, `/var/lib/onyx/skills` (`CHAT_SKILLS_PATH`) for a chat VM copy. In a turn
+    with the sandbox tools, `skills/content.py:read_chat_skills_md` resolves
+    it to the same chat folder in the text the model reads. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
     placeholder. A resolved SKILL.md over the per-file limit skips that whole
     Skill with a warning. The resolved bytes count in the run-time total

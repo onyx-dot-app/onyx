@@ -126,6 +126,7 @@ def _make_tool(
     return MCPTool(
         integration_id=server_id,
         integration_name=server_name,
+        integration_description=None,
         server_url="http://mcp.example",
         transport=None,
         tool_name=tool_name,

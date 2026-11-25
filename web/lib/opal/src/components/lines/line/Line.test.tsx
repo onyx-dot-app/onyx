@@ -21,19 +21,28 @@ afterEach(() => motion.mockRestore());
 
 test("a new title with the same key updates in place", async () => {
   const view = render(
-    <Line icon={SvgEdit} title="Writing a file" titleKey="live" />
+    <Line
+      icon={SvgEdit}
+      title="Writing a file"
+      titleKey="live"
+      filled={false}
+    />
   );
   const title = screen.getByText("Writing a file");
-  view.rerender(<Line icon={SvgEdit} title="Writing a.py" titleKey="live" />);
+  view.rerender(
+    <Line icon={SvgEdit} title="Writing a.py" titleKey="live" filled={false} />
+  );
   await waitFor(() => expect(title).toHaveTextContent("Writing a.py"));
   expect(title).toBeInTheDocument();
 });
 
 test("a new key swaps the title", () => {
   const view = render(
-    <Line icon={SvgEdit} title="Writing a.py" titleKey="live" />
+    <Line icon={SvgEdit} title="Writing a.py" titleKey="live" filled={false} />
   );
-  view.rerender(<Line icon={SvgEdit} title="Edited 1 file" titleKey="done" />);
+  view.rerender(
+    <Line icon={SvgEdit} title="Edited 1 file" titleKey="done" filled={false} />
+  );
   // The old title leaves through the swap's exit first.
   expect(screen.getByText("Writing a.py")).toBeInTheDocument();
   expect(screen.queryByText("Edited 1 file")).not.toBeInTheDocument();

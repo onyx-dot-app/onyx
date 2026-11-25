@@ -276,6 +276,7 @@ def _run_hierarchy_extraction(
         input_type=connector.input_type,
         connector_specific_config=connector.connector_specific_config,
         credential=credential,
+        cc_pair_id=cc_pair.id,
     )
 
     # Check if the connector supports hierarchy fetching

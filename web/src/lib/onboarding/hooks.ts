@@ -31,6 +31,14 @@ function getOnboardingProgressKey(userId: string): string {
   return `onyx:onboardingProgress:${userId}`;
 }
 
+function readOnboardingCompleted(userId: string): boolean {
+  try {
+    return localStorage.getItem(getOnboardingCompletedKey(userId)) === "true";
+  } catch {
+    return false;
+  }
+}
+
 function isOnboardingStep(value: string | null): value is OnboardingStep {
   return Object.values(OnboardingStep).some((step) => step === value);
 }
@@ -376,15 +384,25 @@ export function useShowOnboarding({
   userId,
 }: UseShowOnboardingParams) {
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  // Keyed by user, so an account switch cannot carry one user's dismissal or
+  // decision over to the next user.
+  const [dismissedUserId, setDismissedUserId] = useState<string | undefined>(
+    undefined
+  );
+  const onboardingDismissed =
+    userId !== undefined && dismissedUserId === userId;
+  // The user whose onboarding decision is final. Until it matches `userId`,
+  // `showOnboarding` and `onboardingDismissed` can still change.
+  const [resolvedUserId, setResolvedUserId] = useState<string | undefined>(
+    undefined
+  );
   const { isAdmin } = useUser();
 
   // Read localStorage once userId is available to check if onboarding was dismissed
   useEffect(() => {
-    if (userId === undefined) return;
-    const dismissed =
-      localStorage.getItem(getOnboardingCompletedKey(userId)) === "true";
-    setOnboardingDismissed(dismissed);
+    if (userId !== undefined && readOnboardingCompleted(userId)) {
+      setDismissedUserId(userId);
+    }
   }, [userId]);
 
   // Initialize onboarding state — single source of truth for provider data
@@ -405,14 +423,19 @@ export function useShowOnboarding({
   // Show onboarding only if no LLM providers are configured.
   // Skip entirely if user has existing chat sessions.
   useEffect(() => {
-    // If onboarding was previously dismissed, never show it again
-    if (onboardingDismissed) {
+    if (userId === undefined) return;
+
+    // If onboarding was previously dismissed, never show it again. Storage is
+    // read here too: the effect above sets the state one render later.
+    if (onboardingDismissed || readOnboardingCompleted(userId)) {
+      hasCheckedOnboardingForUserId.current = userId;
       setShowOnboarding(false);
+      setResolvedUserId(userId);
       return;
     }
 
     // Wait for data to load
-    if (isLoadingProviders || isLoadingChatSessions || userId === undefined) {
+    if (isLoadingProviders || isLoadingChatSessions) {
       return;
     }
 
@@ -433,6 +456,7 @@ export function useShowOnboarding({
       return;
     }
     hasCheckedOnboardingForUserId.current = userId;
+    setResolvedUserId(userId);
 
     if (hasSavedProgress) {
       setShowOnboarding(true);
@@ -484,7 +508,7 @@ export function useShowOnboarding({
   const dismissOnboarding = useCallback(() => {
     if (userId === undefined) return;
     setShowOnboarding(false);
-    setOnboardingDismissed(true);
+    setDismissedUserId(userId);
     // Clear first: a failed write below must not leave progress that brings
     // onboarding back.
     clearOnboardingProgress(userId);
@@ -504,6 +528,10 @@ export function useShowOnboarding({
     onboardingState,
     onboardingActions,
     isLoadingOnboarding,
+    // The onboarding decision for the current user is final: the user is
+    // known, and either onboarding was dismissed or the provider and chat
+    // session requests have settled.
+    isOnboardingResolved: userId !== undefined && resolvedUserId === userId,
     hideOnboarding,
     finishOnboarding,
   };

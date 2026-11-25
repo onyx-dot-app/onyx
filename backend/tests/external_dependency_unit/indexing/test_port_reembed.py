@@ -207,6 +207,7 @@ def _vector_ss(
         passage_prefix=None,
         provider_type=None,
         reduced_dimension=None,
+        multipass_indexing=False,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=contextual_rag_model_configuration_id,
         vector_quantization=vector_quantization,
@@ -224,6 +225,26 @@ def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() ->
     assert (
         select_reembed_strategy(_vector_ss(one_bit), _vector_ss(none))
         is ReembedStrategy.COPY_VECTORS
+    )
+    # Quantization plus a multipass change -> the full chunk vector is unchanged.
+    multipass_present: SearchSettings = _vector_ss(none)
+    multipass_present.multipass_indexing = True
+    multipass_future: SearchSettings = _vector_ss(one_bit)
+    multipass_future.multipass_indexing = False
+    assert (
+        select_reembed_strategy(multipass_present, multipass_future)
+        is ReembedStrategy.COPY_VECTORS
+    )
+    # A Nomic index with multipass also embeds large chunks, which raise the
+    # trim limit of the whole batch -> turning it off changes the vector.
+    nomic_model: str = "nomic-ai/nomic-embed-text-v1"
+    nomic_present: SearchSettings = _vector_ss(none, model_name=nomic_model)
+    nomic_present.multipass_indexing = True
+    nomic_future: SearchSettings = _vector_ss(one_bit, model_name=nomic_model)
+    nomic_future.multipass_indexing = False
+    assert (
+        select_reembed_strategy(nomic_present, nomic_future)
+        is ReembedStrategy.MODEL_ONLY
     )
     # Quantization plus a model change -> the vector changes -> re-embed.
     assert (

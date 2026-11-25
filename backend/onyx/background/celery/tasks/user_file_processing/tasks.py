@@ -81,6 +81,9 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.server.features.suggested_questions.scheduling import (
+    request_refresh_for_new_documents,
+)
 from onyx.utils.variable_functionality import global_version
 
 
@@ -453,6 +456,7 @@ def _process_user_file_with_indexing(
                 db_session.commit()
         raise RuntimeError(f"Indexing pipeline failed for user file {user_file_id}")
 
+    request_refresh_for_new_documents(tenant_id)
     _dual_write_new_file_to_secondary(user_file_id, documents, tenant_id)
 
 
