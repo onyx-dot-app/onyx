@@ -181,7 +181,8 @@ export interface ToolApprovalRequest {
 export interface ToolApprovalResolved {
   type: "tool_approval_resolved";
   approval_id: string;
-  // approved | approved_for_chat | rejected | disabled | cancelled;
+  // approved | approved_for_chat | approved_for_command | rejected | disabled |
+  // cancelled;
   // anything else is ignored
   outcome: string;
 }

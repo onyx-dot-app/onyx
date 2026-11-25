@@ -136,6 +136,9 @@ describe("approval status", () => {
     expect(approvalStatus(entry("a", "approved_for_chat"), undefined)).toBe(
       "approvedForSession"
     );
+    expect(
+      approvalStatus(entry("a", "approved_for_command"), undefined)
+    ).toBe("approved");
     expect(approvalStatus(entry("a"), "rejected")).toBe("rejected");
     expect(approvalStatus(entry("a"), "submitting")).toBe("pending");
     expect(approvalStatus(entry("a"), undefined)).toBe("pending");
