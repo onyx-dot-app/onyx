@@ -60,7 +60,7 @@ from onyx.db.search_settings import (
     get_search_settings_by_id,
     lock_search_settings_for_share,
 )
-from onyx.db.tag import upsert_document_tags
+from onyx.db.tag import DocumentTagInput, upsert_document_tags_batch
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.document_index.interfaces import (
@@ -262,13 +262,15 @@ def _upsert_documents_in_db(
     )
 
     # Insert document content metadata
-    for doc in documents:
-        upsert_document_tags(
-            document_id=doc.id,
-            source=doc.source,
-            metadata=doc.metadata,
-            db_session=db_session,
-        )
+    upsert_document_tags_batch(
+        documents=[
+            DocumentTagInput(
+                document_id=doc.id, source=doc.source, metadata=doc.metadata
+            )
+            for doc in documents
+        ],
+        db_session=db_session,
+    )
 
 
 def _get_failed_doc_ids(failures: list[ConnectorFailure]) -> set[str]:
