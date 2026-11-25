@@ -92,7 +92,7 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
         if (!incognitoEnabledRef.current) return;
         setIncognitoSessionId(crypto.randomUUID());
         if (incognitoSessionId) {
-          void endIncognitoSession(incognitoSessionId).catch((error) =>
+          void endIncognitoSession(incognitoSessionId).catch((error: unknown) =>
             console.error("Failed to end discarded incognito session:", error)
           );
         }
