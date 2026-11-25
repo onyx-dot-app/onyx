@@ -55,6 +55,8 @@ from onyx.server.query_and_chat.streaming_models import (
     ApplyPatchStart,
     ExecCommandStart,
     FileToolProgress,
+    OpenUrlStart,
+    OpenUrlUrls,
     Packet,
     PacketObj,
     PublishFilesStart,
@@ -660,3 +662,41 @@ def test_a_call_with_unusable_arguments_keeps_its_own_card(
 
 def test_each_file_tool_names_its_arguments() -> None:
     assert set(FILE_TOOL_ARGUMENTS) == set(get_args(FileToolName))
+
+
+@pytest.mark.parametrize(
+    "name,arguments,start",
+    [
+        (
+            "exec_command",
+            {"cmd": "ls", "workdir": "src"},
+            [ExecCommandStart(cmd="ls", workdir="src")],
+        ),
+        # bash has no working directory; an extra one is not shown.
+        ("bash", {"command": "ls", "workdir": "src"}, [ExecCommandStart(cmd="ls")]),
+        (
+            "write_stdin",
+            {"session_id": 7, "chars": "y", "timeout": 500},
+            [WriteStdinStart(session_id="7", chars="y")],
+        ),
+        (
+            "open_url",
+            {"urls": ["https://a.example"]},
+            [OpenUrlStart(), OpenUrlUrls(urls=["https://a.example"])],
+        ),
+        (
+            "web_fetch",
+            {"urls": ["https://a.example"]},
+            [OpenUrlStart(), OpenUrlUrls(urls=["https://a.example"])],
+        ),
+    ],
+)
+def test_each_family_s_shell_and_url_calls_start_their_own_cards(
+    name: str, arguments: dict[str, JsonValue], start: list[PacketObj]
+) -> None:
+    """Saved chats hold the calls of both tool families: each starts its
+    card from the arguments of its own shape."""
+    call = ToolCall(id="c", name=name, arguments=arguments)
+    assert [
+        packet.obj for packet in tool_renderer(call, Placement(turn_index=0)).start()
+    ] == start

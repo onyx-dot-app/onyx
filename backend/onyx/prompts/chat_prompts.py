@@ -82,8 +82,8 @@ You are on your last cycle and no longer have any tool calls available. You must
 
 # Reminder message that replaces the usual reminder if web_search was the last tool call
 OPEN_URL_REMINDER = """
-Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
-Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs. Open as many as you want.
+Remember that after using {web_search}, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
+Open the pages that look the most promising and high quality by calling the {open_url} tool with an array of URLs. Open as many as you want.
 
 If you do have enough to answer, remember to provide INLINE citations using the "document" field in the format [1], [2], [3], etc.
 """.strip()
@@ -167,5 +167,10 @@ SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent age
 You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
 
 
+# The root agent's block when the tool shape has a wait tool, `{name}`.
 ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results from your agents arrive automatically as messages.
-To answer with the combined results of your agents, call wait_agents. To answer now, end your response; later results start a new response."""
+To answer with the combined results of your agents, call {name}. To answer now, end your response; later results start a new response."""
+# The root agent's block when the tool shape has no wait tool: a response
+# that ends while its agents run waits for them by itself.
+ROOT_AGENT_IMPLICIT_WAIT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results of agents that finish while you work arrive as messages.
+When you end your response while agents that you created in it still run, their results are held until all of them finish, then arrive together in one new response. End your response to answer now, or to wait for those agents."""

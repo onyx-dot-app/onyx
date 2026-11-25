@@ -8,20 +8,20 @@ sandbox is the isolation, so calls need no approval; only a delete of a
 published file asks (ARTIFACTS_DELETE_APPROVAL).
 """
 
+import abc
 import posixpath
 from collections.abc import Callable, Generator, Hashable, Mapping, Sequence
 from contextlib import closing
 from functools import partial
-from typing import Literal
+from typing import Literal, NamedTuple
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.agents.tools import (
     ToolExecutionMode,
     ToolInvocation,
     ToolProgress,
 )
-from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
@@ -65,7 +65,10 @@ from onyx.server.features.build.sandbox.models import (
     chat_skill_folder,
 )
 from onyx.skills.chat import SkillLoadError, load_chat_skill_files
-from onyx.tools.constants import LOAD_SKILL_TOOL_NAME
+from onyx.tools.constants import (
+    LOAD_SKILL_TOOL_NAME,
+    WRITE_STDIN_TOOL_NAME,
+)
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -88,43 +91,31 @@ from onyx.tools.tool_implementations.sandbox.errors import (
     tool_error,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
-    ARTIFACTS_MATERIALIZE_MAX_ITEMS,
-    PUBLISH_FILES_MAX_FILES,
     ApplyPatchArguments,
     ApplyPatchFileChange,
     ApplyPatchResult,
-    ArtifactArguments,
     ArtifactList,
     ArtifactPublished,
     ArtifactsFound,
     ArtifactsRead,
     ArtifactVersionConflict,
-    DeleteOperation,
     EditArguments,
-    ExecCommandArguments,
     ExecCommandOutput,
     FileToolName,
     LibraryCreateLibraryFileArguments,
-    LibraryFileTarget,
     LibraryFindArguments,
     LibraryListArguments,
     LibraryPrepareMaterializeArguments,
     LibraryReadArguments,
     LibraryReplaceLibraryFileArguments,
+    LibraryRequest,
     LibrarySearchArguments,
     LibrarySearchResult,
     ManageLibraryArguments,
     ManageResults,
-    MaterializeDestination,
     MaterializedItems,
-    MaterializeItem,
-    PublishedFiles,
-    PublishFileArgument,
     SandboxExecResult,
     WriteArguments,
-    WriteStdinArguments,
-    parse_artifact_url,
-    parse_file_reference,
 )
 from onyx.tools.tool_implementations.sandbox.patch import (
     APPLY_PATCH_MAX_STAGED_BYTES,
@@ -142,18 +133,24 @@ from onyx.tools.tool_implementations.sandbox.patch import (
     summarize,
     update_contents,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import (
+    SHELL_SHAPES,
+    ArtifactArguments,
+    ShellShape,
+)
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
-from onyx.tools.tool_implementations.utils import cut_middle, output_chars
+from onyx.tools.tool_implementations.utils import cut_middle
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 # The saved result of a call that a lost server left running; it is not run
-# again because its command or edit may have taken effect.
-INTERRUPTED_SANDBOX_RESULT = ToolResult(
-    content="The call was interrupted before it returned and was not run again. "
-    "Check the sandbox state with exec_command before you retry.",
-    is_error=True,
+# again because its command or edit may have taken effect. `{shell}` is the
+# shape's command tool, by its tool name: only a direct call gets this result,
+# since code mode never reruns a program's calls on their own.
+INTERRUPTED_SANDBOX_MESSAGE = (
+    "The call was interrupted before it returned and was not run again. "
+    "Check the sandbox state with {shell} before you retry."
 )
 
 _CHANGES: dict[type[PatchHunk], Literal["add", "update", "delete"]] = {
@@ -259,32 +256,65 @@ def _exec_result(result: ExecCommandResult, max_chars: int) -> ToolResult:
 
 
 class SandboxTool(Tool):
-    """What the sandbox tools share: the turn, the crash rule, and the name,
-    description and arguments that each declares as class attributes."""
+    """What the sandbox tools share: the turn, whose shell shape names the
+    command tool, the crash rule, the name (`tool_name`: the NAME class
+    attribute, except for the command tool) and description that each
+    declares, and its arguments model. A description names other tools by
+    `{shell}` and the other fields of `describe`."""
 
     id = None
-    interrupted_result = INTERRUPTED_SANDBOX_RESULT
     NAME: str
     DESCRIPTION: str
-    ARGUMENTS: type[BaseModel]
     # The tool's use in the system prompt's sandbox section; `{name}` is the
     # name that the model calls. None: only the tool description names it.
     USE: str | None
+    # True: a call that a lost server left running runs again, because it
+    # changes nothing.
+    RUNS_AGAIN = False
 
     def __init__(self, turn: SandboxTurn) -> None:
         self._turn = turn
+        self.interrupted_result = (
+            None
+            if self.RUNS_AGAIN
+            else ToolResult(
+                content=INTERRUPTED_SANDBOX_MESSAGE.format(shell=turn.shell.name),
+                is_error=True,
+            )
+        )
 
     @property
     def turn(self) -> SandboxTurn:
         return self._turn
 
     @property
+    @abc.abstractmethod
+    def arguments(self) -> type[BaseModel]:
+        """The model of the tool's arguments, which its definition shows."""
+        raise NotImplementedError
+
+    @classmethod
+    def tool_name(cls, shell: ShellShape) -> str:  # noqa: ARG003
+        """The tool's name in a turn of the given shell shape."""
+        return cls.NAME
+
+    @property
     def name(self) -> str:
-        return self.NAME
+        return self.tool_name(self._turn.shell)
 
     @property
     def description(self) -> str:
-        return self.DESCRIPTION
+        return self.describe(str)
+
+    def describe(self, called_name: Callable[[str], str]) -> str:
+        return self.DESCRIPTION.format(
+            shell=called_name(self._turn.shell.name),
+            edit=called_name(EditTool.NAME),
+            create=called_name(LibraryCreateLibraryFileTool.NAME),
+            list=called_name(LibraryListTool.NAME),
+            materialize=called_name(LibraryPrepareMaterializeTool.NAME),
+            replace=called_name(LibraryReplaceLibraryFileTool.NAME),
+        )
 
     @property
     def code_mode_exposure(self) -> CodeModeExposure:
@@ -292,67 +322,81 @@ class SandboxTool(Tool):
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
-            self.name, self.description, self.ARGUMENTS, strict=True
+            self.name, self.description, self.arguments, strict=True
         )
 
 
 class ExecCommandTool(SandboxTool):
-    NAME = "exec_command"
+    """Runs a command; the turn's shell shape names it and takes its
+    arguments."""
+
     USE = EXEC_COMMAND_USE
     DESCRIPTION = EXEC_COMMAND_DESCRIPTION
-    ARGUMENTS = ExecCommandArguments
     # Matches the web card title.
     display_name = "Terminal"
 
-    @property
-    def description(self) -> str:
+    @classmethod
+    def tool_name(cls, shell: ShellShape) -> str:
+        return shell.name
+
+    def describe(self, called_name: Callable[[str], str]) -> str:
+        description = super().describe(called_name)
         if self._turn.vm_chat_files:
-            return f"{self.DESCRIPTION} {CHAT_FILES_LAYOUT}"
-        return self.DESCRIPTION
+            return f"{description} {CHAT_FILES_LAYOUT}"
+        return description
+
+    @property
+    def arguments(self) -> type[BaseModel]:
+        return self._turn.shell.arguments
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:
         return _EXEC_RESULT
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(ExecCommandArguments, invocation.arguments)
-        max_chars = output_chars(arguments.max_output_chars)
+        request = parse_tool_arguments(
+            self._turn.shell.arguments, invocation.arguments
+        ).request()
         return _exec_tool_result(
             self._turn.sandbox.exec_command(
                 self._turn.start_call(),
-                arguments.cmd,
-                workdir=arguments.workdir,
-                yield_time_ms=arguments.yield_time_ms,
+                request.cmd,
+                workdir=request.workdir,
+                yield_time_ms=request.yield_time_ms,
             ),
             invocation,
-            max_chars,
+            request.max_chars,
         )
 
 
 class WriteStdinTool(SandboxTool):
-    NAME = "write_stdin"
+    NAME = WRITE_STDIN_TOOL_NAME
     USE = WRITE_STDIN_USE
     DESCRIPTION = WRITE_STDIN_DESCRIPTION
-    ARGUMENTS = WriteStdinArguments
     # Matches the web card title.
     display_name = "Terminal"
+
+    @property
+    def arguments(self) -> type[BaseModel]:
+        return self._turn.shell.write_stdin_arguments
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:
         return _EXEC_RESULT
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(WriteStdinArguments, invocation.arguments)
-        max_chars = output_chars(arguments.max_output_chars)
+        request = parse_tool_arguments(
+            self._turn.shell.write_stdin_arguments, invocation.arguments
+        ).request()
         return _exec_tool_result(
             self._turn.sandbox.write_stdin(
                 self._turn.start_call(),
-                arguments.session_id,
-                arguments.chars,
-                yield_time_ms=arguments.yield_time_ms,
+                request.session_id,
+                request.chars,
+                yield_time_ms=request.yield_time_ms,
             ),
             invocation,
-            max_chars,
+            request.max_chars,
         )
 
 
@@ -380,7 +424,7 @@ def _check_patchable(path: str, info: SandboxPathInfo) -> None:
         raise PatchError(
             f"{path} goes through a link with an absolute target or one that "
             "leads outside the session directory; use a path inside the "
-            "session, or change the file with exec_command"
+            "session, or change the file with a shell command"
         )
     if info.error == "loop":
         raise PatchError(f"{path} goes through too many symbolic links")
@@ -495,7 +539,7 @@ class ApplyPatchTool(_FileTool):
     NAME: FileToolName = "apply_patch"
     USE = APPLY_PATCH_USE
     DESCRIPTION = APPLY_PATCH_DESCRIPTION
-    ARGUMENTS = ApplyPatchArguments
+    arguments = ApplyPatchArguments
     # Matches the web card title.
     display_name = "Apply Patch"
 
@@ -688,7 +732,7 @@ class EditTool(_FileTool):
     NAME: FileToolName = "edit"
     USE = EDIT_USE
     DESCRIPTION = EDIT_DESCRIPTION
-    ARGUMENTS = EditArguments
+    arguments = EditArguments
     # Matches the web card title.
     display_name = "Edit File"
 
@@ -730,7 +774,7 @@ class WriteTool(_FileTool):
     NAME: FileToolName = "write"
     USE = WRITE_USE
     DESCRIPTION = WRITE_DESCRIPTION
-    ARGUMENTS = WriteArguments
+    arguments = WriteArguments
     # Matches the web card title.
     display_name = "Write File"
 
@@ -760,8 +804,8 @@ class WriteTool(_FileTool):
 
 class _LibraryTool(SandboxTool):
     """What the tools over the user's published files share. They run the
-    artifact operations (artifact_operations.py), which reach only the files
-    published in the user's own root chats that are not deleted
+    artifact operations (artifact_operations.run_operation), which reach only
+    the files published in the user's own root chats that are not deleted
     (`db/chat.py:get_user_published_files`), this chat included. In code mode
     each is a deferred function of its group, which the program search
     finds; the group's line in the run tool's description says what the group
@@ -770,7 +814,7 @@ class _LibraryTool(SandboxTool):
     runs again; the tools that publish say otherwise."""
 
     USE = None
-    interrupted_result = None
+    RUNS_AGAIN = True
     CODE_MODE_NAMESPACE = "library"
     # The group's line in the run tool's description.
     CODE_MODE_NAMESPACE_DESCRIPTION = (
@@ -802,7 +846,42 @@ class _LibraryTool(SandboxTool):
     def tool_definition(self) -> ToolDefinition:
         # Not strict: the arguments have nested models.
         return tool_definition_from_arguments(
-            self.name, self.description, self.ARGUMENTS
+            self.name, self.description, self.arguments
+        )
+
+    def operation_request(self, arguments: dict[str, JsonValue]) -> LibraryRequest:
+        """The operation's arguments of a call with `arguments`; a library
+        tool's arguments are its operation's. Raises ToolCallException when
+        they do not fit."""
+        request = parse_tool_arguments(self.arguments, arguments)
+        if not isinstance(request, LibraryRequest):
+            raise TypeError(f"{self.name} takes no library operation's arguments")
+        return request
+
+    def conflict_message(self, error: ArtifactVersionConflict) -> str:
+        """The tool's words for a new version whose expected version is not
+        the newest."""
+        return (
+            f"Current version is {error.current_version}, not the one you "
+            "named; nothing changed. Copy the newest version, merge your change "
+            "and try again, or omit expected_current_version"
+        )
+
+    def approval_details(
+        self, arguments: dict[str, JsonValue]
+    ) -> ToolApprovalDetails | None:
+        try:
+            request = self.operation_request(arguments)
+        except ToolCallException:
+            return None
+        return artifact_operations.delete_approval_details(self._turn.user_id, request)
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        return artifact_operations.run_operation(
+            self._turn,
+            invocation.cancellation,
+            self.operation_request(invocation.arguments),
+            conflict_message=self.conflict_message,
         )
 
 
@@ -810,71 +889,36 @@ class LibraryListTool(_LibraryTool):
     NAME = "library_list"
     CODE_MODE_NAME = "list"
     DESCRIPTION = LIBRARY_LIST_DESCRIPTION
-    ARGUMENTS = LibraryListArguments
+    arguments = LibraryListArguments
     RESULT = ArtifactList
     display_name = "Find Published Files"
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        return ToolResult(
-            content=artifact_operations.list_artifacts(
-                self._turn.user_id,
-                parse_tool_arguments(LibraryListArguments, invocation.arguments),
-            ).model_dump_json()
-        )
 
 
 class LibraryPrepareMaterializeTool(_LibraryTool):
     NAME = "library_prepare_materialize"
     CODE_MODE_NAME = "prepare_materialize"
     DESCRIPTION = LIBRARY_PREPARE_MATERIALIZE_DESCRIPTION
-    ARGUMENTS = LibraryPrepareMaterializeArguments
+    arguments = LibraryPrepareMaterializeArguments
     RESULT = MaterializedItems
     display_name = "Copy Published Files"
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        return ToolResult(
-            content=artifact_operations.materialize(
-                self._turn,
-                invocation.cancellation,
-                parse_tool_arguments(
-                    LibraryPrepareMaterializeArguments, invocation.arguments
-                ),
-            ).model_dump_json()
-        )
 
 
 class LibraryReadTool(_LibraryTool):
     NAME = "library_read"
     CODE_MODE_NAME = "read"
     DESCRIPTION = LIBRARY_READ_DESCRIPTION
-    ARGUMENTS = LibraryReadArguments
+    arguments = LibraryReadArguments
     RESULT = ArtifactsRead
     display_name = "Read Published Files"
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        return ToolResult(
-            content=artifact_operations.read(
-                self._turn.user_id,
-                parse_tool_arguments(LibraryReadArguments, invocation.arguments),
-            ).model_dump_json()
-        )
 
 
 class LibraryFindTool(_LibraryTool):
     NAME = "library_find"
     CODE_MODE_NAME = "find"
     DESCRIPTION = LIBRARY_FIND_DESCRIPTION
-    ARGUMENTS = LibraryFindArguments
+    arguments = LibraryFindArguments
     RESULT = ArtifactsFound
     display_name = "Find in Published Files"
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        return ToolResult(
-            content=artifact_operations.find(
-                self._turn.user_id,
-                parse_tool_arguments(LibraryFindArguments, invocation.arguments),
-            ).model_dump_json()
-        )
 
 
 class LibraryCreateLibraryFileTool(_LibraryTool, _FileTool):
@@ -886,36 +930,10 @@ class LibraryCreateLibraryFileTool(_LibraryTool, _FileTool):
     NAME = "library_create_library_file"
     CODE_MODE_NAME = "create_library_file"
     DESCRIPTION = LIBRARY_CREATE_LIBRARY_FILE_DESCRIPTION
-    ARGUMENTS = LibraryCreateLibraryFileArguments
+    arguments = LibraryCreateLibraryFileArguments
     RESULT = ArtifactPublished
     display_name = "Publish Files"
-    interrupted_result = INTERRUPTED_SANDBOX_RESULT
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(
-            LibraryCreateLibraryFileArguments, invocation.arguments
-        )
-        published = artifact_operations.publish(
-            self._turn,
-            invocation.cancellation,
-            [PublishFileArgument(path=arguments.file, title=arguments.title)]
-            if arguments.file is not None
-            else [PublishFileArgument(path=path) for path in arguments.files or []],
-        )
-        return ToolResult(
-            content=ArtifactPublished.of(published).model_dump_json(),
-            details=PublishedFiles(files=published),
-        )
-
-
-def _library_conflict_message(error: ArtifactVersionConflict) -> str:
-    """The library tools' words for a new version whose
-    expected_current_version is not the newest."""
-    return (
-        f"Current version is {error.current_version}, not the one you "
-        "named; nothing changed. Copy the newest version, merge your change "
-        "and try again, or omit expected_current_version"
-    )
+    RUNS_AGAIN = False
 
 
 class LibraryReplaceLibraryFileTool(_LibraryTool, _FileTool):
@@ -928,25 +946,10 @@ class LibraryReplaceLibraryFileTool(_LibraryTool, _FileTool):
     NAME = "library_replace_library_file"
     CODE_MODE_NAME = "replace_library_file"
     DESCRIPTION = LIBRARY_REPLACE_LIBRARY_FILE_DESCRIPTION
-    ARGUMENTS = LibraryReplaceLibraryFileArguments
+    arguments = LibraryReplaceLibraryFileArguments
     RESULT = ArtifactPublished
     display_name = "Replace Published File"
-    interrupted_result = INTERRUPTED_SANDBOX_RESULT
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(
-            LibraryReplaceLibraryFileArguments, invocation.arguments
-        )
-        try:
-            published = artifact_operations.replace_file(
-                self._turn, invocation.cancellation, arguments
-            )
-        except ArtifactVersionConflict as error:
-            raise tool_error(_library_conflict_message(error)) from error
-        return ToolResult(
-            content=ArtifactPublished.of([published]).model_dump_json(),
-            details=PublishedFiles(files=[published]),
-        )
+    RUNS_AGAIN = False
 
 
 class LibraryManageLibraryTool(_LibraryTool, _FileTool):
@@ -960,72 +963,31 @@ class LibraryManageLibraryTool(_LibraryTool, _FileTool):
     NAME = "library_manage_library"
     CODE_MODE_NAME = "manage_library"
     DESCRIPTION = LIBRARY_MANAGE_LIBRARY_DESCRIPTION
-    ARGUMENTS = ManageLibraryArguments
+    arguments = ManageLibraryArguments
     RESULT = ManageResults
     display_name = "Manage Published Files"
-    interrupted_result = INTERRUPTED_SANDBOX_RESULT
+    RUNS_AGAIN = False
     approval = ARTIFACTS_DELETE_APPROVAL
-
-    def approval_details(
-        self, arguments: dict[str, JsonValue]
-    ) -> ToolApprovalDetails | None:
-        try:
-            parsed = parse_tool_arguments(ManageLibraryArguments, arguments)
-        except ToolCallException:
-            return None
-        return artifact_operations.delete_approval_details(
-            self._turn.user_id, parsed.operations
-        )
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        return ToolResult(
-            content=artifact_operations.manage(
-                self._turn.user_id,
-                invocation.cancellation,
-                parse_tool_arguments(ManageLibraryArguments, invocation.arguments),
-                conflict_message=_library_conflict_message,
-            ).model_dump_json()
-        )
 
 
 class LibrarySearchTool(_LibraryTool):
     NAME = "library_search"
     CODE_MODE_NAME = "search"
     DESCRIPTION = LIBRARY_SEARCH_DESCRIPTION
-    ARGUMENTS = LibrarySearchArguments
+    arguments = LibrarySearchArguments
     RESULT = LibrarySearchResult
     display_name = "Search Published Files"
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        return ToolResult(
-            content=artifact_operations.search_artifacts(
-                self._turn.user_id,
-                invocation.cancellation,
-                parse_tool_arguments(LibrarySearchArguments, invocation.arguments),
-            ).model_dump_json()
-        )
-
-
-def _artifact_conflict_message(error: ArtifactVersionConflict) -> str:
-    """The artifact tool's words for a new version whose url names a version
-    that is not the newest."""
-    return (
-        f"Current version is {error.current_version}; read it with out_dir, "
-        "merge your change, then publish with the url from that result, or "
-        "pass force:true"
-    )
-
 
 class ArtifactTool(_LibraryTool, _FileTool):
-    """One tool with an action for each artifact operation
-    (artifact_operations.py), which Claude models get instead of the
-    library tools (SANDBOX_TOOLS), for
-    compatibility with how they work with artifacts. Each action builds the
-    library tools' arguments of its operation, so both families publish,
-    list and copy alike, and a publish gives the same PublishedFiles card.
-    Execution settings are per tool, so the tool takes turns with the file
-    tools and keeps the interrupted result, as publish needs; its list and
-    read calls take turns too. In code mode it is the deferred function
+    """One tool with an action for each artifact operation, which Claude
+    models get instead of the library tools (SANDBOX_TOOLS), in
+    the shape they are trained on. Each action gives the arguments of a
+    library tool's operation (ArtifactArguments.request), so both families
+    publish, list and copy alike, and a publish gives the same PublishedFiles
+    card. Execution settings are per tool, so the tool takes turns with the
+    file tools and keeps the interrupted result, as publish needs; its list
+    and read calls take turns too. In code mode it is the deferred function
     `artifact.artifact`, in its own group."""
 
     NAME = "artifact"
@@ -1036,36 +998,20 @@ class ArtifactTool(_LibraryTool, _FileTool):
     )
     CODE_MODE_NAME = "artifact"
     DESCRIPTION = ARTIFACT_DESCRIPTION
-    ARGUMENTS = ArtifactArguments
+    arguments = ArtifactArguments
     # The generic card of list and read; publish has the publish card.
     display_name = "Published Files"
-    interrupted_result = INTERRUPTED_SANDBOX_RESULT
-
+    RUNS_AGAIN = False
     approval = ARTIFACTS_DELETE_APPROVAL
 
-    def approval_details(
-        self, arguments: dict[str, JsonValue]
-    ) -> ToolApprovalDetails | None:
-        try:
-            parsed = parse_tool_arguments(ArtifactArguments, arguments)
-        except ToolCallException:
-            return None
-        if parsed.action != "delete" or parsed.url is None:
-            return None
-        try:
-            artifact_id, version = parse_artifact_url(parsed.url)
-        except ValueError:
-            return None
-        return artifact_operations.delete_approval_details(
-            self._turn.user_id,
-            [
-                DeleteOperation(
-                    operation="delete",
-                    target=LibraryFileTarget(
-                        library_file_id=artifact_id, version_number=version
-                    ),
-                )
-            ],
+    def operation_request(self, arguments: dict[str, JsonValue]) -> LibraryRequest:
+        return parse_tool_arguments(ArtifactArguments, arguments).request()
+
+    def conflict_message(self, error: ArtifactVersionConflict) -> str:
+        return (
+            f"Current version is {error.current_version}; read it with out_dir, "
+            "merge your change, then publish with the url from that result, or "
+            "pass force:true"
         )
 
     @property
@@ -1074,231 +1020,8 @@ class ArtifactTool(_LibraryTool, _FileTool):
             kind=CodeModeResultKind.JSON_OBJECT, returns=ARTIFACT_RESULTS
         )
 
-    def _manage(
-        self, cancellation: CancellationSignal, operation: dict[str, JsonValue]
-    ) -> ToolResult:
-        """The result of one library_manage_library operation."""
-        return ToolResult(
-            content=artifact_operations.manage(
-                self._turn.user_id,
-                cancellation,
-                parse_tool_arguments(
-                    ManageLibraryArguments, {"operations": [operation]}
-                ),
-                conflict_message=_artifact_conflict_message,
-            ).model_dump_json()
-        )
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        arguments = parse_tool_arguments(ArtifactArguments, invocation.arguments)
-        action = arguments.action
-        try:
-            reference = (
-                None if arguments.url is None else parse_artifact_url(arguments.url)
-            )
-        except ValueError as error:
-            raise tool_error(str(error)) from error
-        if action == "publish":
-            if reference is None and (arguments.force, arguments.label) != (None, None):
-                raise tool_error("force and label go with url")
-            if reference is not None and reference[1] is None and not arguments.force:
-                raise tool_error(
-                    "Pass the url from your last result, which names the "
-                    "version you saw, or force:true"
-                )
-            expected_version = (
-                None if reference is None or arguments.force else reference[1]
-            )
-            if reference is not None and arguments.path is not None:
-                return self._manage(
-                    invocation.cancellation,
-                    {
-                        "operation": "update",
-                        "library_file_id": str(reference[0]),
-                        "file_uri": {"file_id": arguments.path},
-                        "expected_current_version": expected_version,
-                        "version_reason": arguments.label,
-                    },
-                )
-            paths = (
-                [arguments.file_path]
-                if arguments.file_path is not None
-                else arguments.file_paths or []
-            )
-            if not paths or (
-                arguments.file_path is not None and arguments.file_paths is not None
-            ):
-                raise tool_error("publish takes file_path or file_paths")
-            if len(paths) > PUBLISH_FILES_MAX_FILES:
-                raise tool_error(
-                    f"publish takes at most {PUBLISH_FILES_MAX_FILES} file_paths"
-                )
-            if arguments.file_path is None and (
-                arguments.title is not None or reference is not None
-            ):
-                raise tool_error("title and url go with file_path")
-            if reference is None:
-                published = artifact_operations.publish(
-                    self._turn,
-                    invocation.cancellation,
-                    [
-                        PublishFileArgument(path=path, title=arguments.title)
-                        for path in paths
-                    ],
-                )
-            else:
-                try:
-                    published = [
-                        artifact_operations.replace_file(
-                            self._turn,
-                            invocation.cancellation,
-                            LibraryReplaceLibraryFileArguments(
-                                library_file_id=reference[0],
-                                file=paths[0],
-                                expected_current_version=expected_version,
-                                title=arguments.title,
-                                version_reason=arguments.label,
-                            ),
-                        )
-                    ]
-                except ArtifactVersionConflict as error:
-                    raise tool_error(_artifact_conflict_message(error)) from error
-            return ToolResult(
-                content=ArtifactPublished.of(published).model_dump_json(),
-                details=PublishedFiles(files=published),
-            )
-        if reference is not None and action in ("delete", "rename", "restore"):
-            artifact_id, version = reference
-            if action != "restore":
-                return self._manage(
-                    invocation.cancellation,
-                    {
-                        "operation": "delete",
-                        "target": {
-                            "library_file_id": str(artifact_id),
-                            "version_number": version,
-                        },
-                    }
-                    if action == "delete"
-                    else {
-                        "operation": "rename",
-                        "target": {"library_file_id": str(artifact_id)},
-                        "new_name": arguments.name,
-                    },
-                )
-            if version is None:
-                raise tool_error(
-                    "restore takes the url of the version to restore, ending in /v<N>"
-                )
-            return self._manage(
-                invocation.cancellation,
-                {
-                    "operation": "restore_version",
-                    "library_file_id": str(artifact_id),
-                    "version_number": version,
-                    "version_reason": arguments.label,
-                },
-            )
-        if action == "list" and (arguments.query or "").strip():
-            return ToolResult(
-                content=artifact_operations.search_artifacts(
-                    self._turn.user_id,
-                    invocation.cancellation,
-                    parse_tool_arguments(
-                        LibrarySearchArguments,
-                        {
-                            "search_query": [{"q": arguments.query}],
-                            "filters": {"category": arguments.type},
-                            "top_k": arguments.limit,
-                            "cursor": arguments.after,
-                        },
-                    ),
-                ).model_dump_json()
-            )
-        if action == "list":
-            return ToolResult(
-                content=artifact_operations.list_artifacts(
-                    self._turn.user_id,
-                    parse_tool_arguments(
-                        LibraryListArguments,
-                        {
-                            "limit": arguments.limit,
-                            "cursor": arguments.after,
-                            "filters": {"category": arguments.type},
-                        },
-                    ),
-                ).model_dump_json()
-            )
-        targets = [
-            *([] if arguments.url is None else [arguments.url]),
-            *([] if arguments.path is None else [arguments.path]),
-            *(arguments.paths or []),
-        ]
-        if not targets:
-            raise tool_error("read takes url, path or paths")
-        # The url parsed above, so a target that is not a url is a file ID.
-        references = [
-            parse_file_reference(target).model_dump(mode="json", exclude_none=True)
-            for target in targets
-        ]
-        if arguments.out_dir is None:
-            # read shows the text; with query, it finds the query's lines.
-            options: dict[str, JsonValue] = (
-                {"start_line": arguments.offset, "max_lines": arguments.limit}
-                if arguments.query is None
-                else {
-                    "pattern": arguments.query,
-                    "match_offset": arguments.offset,
-                    "max_matches": arguments.limit,
-                }
-            )
-            text_items: list[JsonValue] = [
-                reference
-                | {key: value for key, value in options.items() if value is not None}
-                for reference in references
-            ]
-            return ToolResult(
-                content=(
-                    artifact_operations.read(
-                        self._turn.user_id,
-                        parse_tool_arguments(
-                            LibraryReadArguments, {"read": text_items}
-                        ),
-                    )
-                    if arguments.query is None
-                    else artifact_operations.find(
-                        self._turn.user_id,
-                        parse_tool_arguments(
-                            LibraryFindArguments, {"find": text_items}
-                        ),
-                    )
-                ).model_dump_json()
-            )
-        if (arguments.query, arguments.offset, arguments.limit) != (None, None, None):
-            raise tool_error(
-                "out_dir copies files; query, offset and limit go with a read "
-                "of their text, without out_dir"
-            )
-        if len(references) > ARTIFACTS_MATERIALIZE_MAX_ITEMS:
-            raise tool_error(
-                f"read copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files; "
-                "pass fewer paths"
-            )
-        return ToolResult(
-            content=artifact_operations.materialize(
-                self._turn,
-                invocation.cancellation,
-                LibraryPrepareMaterializeArguments(
-                    items=[MaterializeItem(**reference) for reference in references],
-                    destination=MaterializeDestination(directory=arguments.out_dir),
-                ),
-            ).model_dump_json()
-        )
-
 
 class LoadSkillArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
     name: str = Field(min_length=1, description="Skill name.")
 
 
@@ -1312,7 +1035,7 @@ class LoadSkillTool(SandboxTool):
         f"{CHAT_SKILLS_PATH}/<name>/. Call it before you run the skill's "
         "scripts or open its other files. It returns when the copy is done."
     )
-    ARGUMENTS = LoadSkillArguments
+    arguments = LoadSkillArguments
     display_name = "Load skill"
 
     @property
@@ -1338,47 +1061,62 @@ class LoadSkillTool(SandboxTool):
         )
 
 
-# The sandbox tools of a chat turn by the tool family of its model, in the
-# order the prompt names them. Claude models get the tools they work with:
-# edit and write for files, and the artifact tool for published files. The
-# others get apply_patch and the library tools. No turn gets both sets. The
-# turn builds them, and its prompt and token estimate name them.
-SANDBOX_TOOLS: Mapping[ToolFamily, tuple[type[SandboxTool], ...]] = {
-    ToolFamily.CLAUDE: (
-        ExecCommandTool,
-        WriteStdinTool,
-        EditTool,
-        WriteTool,
-        ArtifactTool,
+class SandboxToolset(NamedTuple):
+    """The sandbox tools of one tool family: the shell shape that its turns
+    carry, and the tool classes in the order the prompt names them."""
+
+    shell: ShellShape
+    tools: tuple[type[SandboxTool], ...]
+
+
+# The sandbox tools of a chat turn by the tool family of its model. Claude
+# models get the tools they work with: edit and write for files, and the
+# artifact tool for published files. The others get apply_patch and the
+# library tools. No turn gets both sets. The turn builds them, and its prompt
+# and token estimate name them.
+SANDBOX_TOOLS: Mapping[ToolFamily, SandboxToolset] = {
+    ToolFamily.CLAUDE: SandboxToolset(
+        shell=SHELL_SHAPES[ToolFamily.CLAUDE],
+        tools=(
+            ExecCommandTool,
+            WriteStdinTool,
+            EditTool,
+            WriteTool,
+            ArtifactTool,
+        ),
     ),
-    ToolFamily.OPENAI: (
-        ExecCommandTool,
-        WriteStdinTool,
-        ApplyPatchTool,
-        LibraryCreateLibraryFileTool,
-        LibraryListTool,
-        LibraryPrepareMaterializeTool,
-        LibraryReadTool,
-        LibraryFindTool,
-        LibraryReplaceLibraryFileTool,
-        LibraryManageLibraryTool,
-        LibrarySearchTool,
+    ToolFamily.OPENAI: SandboxToolset(
+        shell=SHELL_SHAPES[ToolFamily.OPENAI],
+        tools=(
+            ExecCommandTool,
+            WriteStdinTool,
+            ApplyPatchTool,
+            LibraryCreateLibraryFileTool,
+            LibraryListTool,
+            LibraryPrepareMaterializeTool,
+            LibraryReadTool,
+            LibraryFindTool,
+            LibraryReplaceLibraryFileTool,
+            LibraryManageLibraryTool,
+            LibrarySearchTool,
+        ),
     ),
 }
 
 
 def sandbox_guidance(
-    tools: Sequence[SandboxTool | type[SandboxTool]],
+    tools: Sequence[type[SandboxTool]],
+    shell: ShellShape,
     called_name: Callable[[str], str],
     *,
     code_mode_run_name: str | None,
 ) -> str | None:
     """The system prompt's sandbox section: the use of each of `tools`, in
-    order, by the name that `called_name` gives for its tool name; None
-    without any. `code_mode_run_name` is the code mode run tool's name, when
-    code mode applies."""
+    order, by the name that `called_name` gives for its name in a turn of
+    the `shell` shape; None without any. `code_mode_run_name` is the code
+    mode run tool's name, when code mode applies."""
     uses = [
-        tool.USE.format(name=f"`{called_name(tool.NAME)}`")
+        tool.USE.format(name=f"`{called_name(tool.tool_name(shell))}`")
         for tool in tools
         if tool.USE is not None
     ]

@@ -7,10 +7,13 @@ in text to use the smallest possible numbers while respecting existing mappings.
 
 from datetime import datetime
 
+import pytest
+
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     collapse_citations,
     message_citation_sources,
+    result_cites_documents,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
@@ -503,3 +506,9 @@ def test_research_results_restore_sources_and_reserve_citation_numbers() -> None
     processor.update_citation_mapping(message_citation_sources(result))
     assert processor.citation_to_doc == {4: document}
     assert processor.get_next_citation_number() == 5
+
+
+@pytest.mark.parametrize("tool_name", ["open_url", "web_fetch"])
+def test_the_pages_of_each_family_s_url_tool_are_citeable(tool_name: str) -> None:
+    result = ToolResultMessage(tool_call_id="c", tool_name=tool_name, content="Page")
+    assert result_cites_documents(result)

@@ -20,18 +20,8 @@ from pydantic import (
     computed_field,
     model_validator,
 )
-from pydantic_core import PydanticCustomError
 
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.server.features.build.sandbox.exec_output import (
-    EXEC_DEFAULT_YIELD_MS,
-    EXEC_MAX_YIELD_MS,
-    EXEC_MIN_YIELD_MS,
-    POLL_MAX_YIELD_MS,
-    POLL_MIN_YIELD_MS,
-    WRITE_STDIN_DEFAULT_YIELD_MS,
-    WRITE_STDIN_MAX_YIELD_MS,
-)
 from onyx.server.features.build.sandbox.harness_base import (
     ARTIFACT_FILES_DIR,
     CHAT_FILES_DIR,
@@ -40,7 +30,6 @@ from onyx.server.features.build.sandbox.models import (
     SESSION_WORKSPACE_ROOT,
     ExecCompletionName,
 )
-from onyx.tools.constants import DEFAULT_MAX_OUTPUT_CHARS, MAX_OUTPUT_CHARS_DESCRIPTION
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
@@ -80,45 +69,6 @@ class SearchResultFile(BaseModel):
 SearchFileOffer = Callable[[Mapping[str, SearchResultFile]], dict[str, str]]
 
 
-class ExecCommandArguments(BaseModel):
-    cmd: str = Field(description="Shell command to execute.")
-    workdir: str | None = Field(
-        default=None,
-        description="Working directory for the command. Defaults to the chat "
-        "session directory.",
-    )
-    yield_time_ms: int | None = Field(
-        default=None,
-        description=f"Wait before yielding output. Defaults to "
-        f"{EXEC_DEFAULT_YIELD_MS} ms; effective range is "
-        f"{EXEC_MIN_YIELD_MS}-{EXEC_MAX_YIELD_MS} ms.",
-    )
-    max_output_chars: int = Field(
-        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
-    )
-
-
-class WriteStdinArguments(BaseModel):
-    # Models may send the session ID as a number.
-    model_config = ConfigDict(coerce_numbers_to_str=True)
-
-    session_id: str = Field(description="Identifier of the running command.")
-    chars: str = Field(
-        default="",
-        description="Characters to write to stdin. Defaults to empty, which polls "
-        'without writing. "\\u0003" interrupts the command.',
-    )
-    yield_time_ms: int | None = Field(
-        default=None,
-        description=f"Wait before yielding output. Non-empty writes default to "
-        f"{WRITE_STDIN_DEFAULT_YIELD_MS} ms and cap at {WRITE_STDIN_MAX_YIELD_MS} "
-        f"ms; empty polls wait {POLL_MIN_YIELD_MS}-{POLL_MAX_YIELD_MS} ms.",
-    )
-    max_output_chars: int = Field(
-        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
-    )
-
-
 class ApplyPatchArguments(BaseModel):
     input: str = Field(description="The full patch text.")
 
@@ -150,7 +100,7 @@ class WriteArguments(BaseModel):
 
 
 class ExecCommandOutput(BaseModel):
-    """What a code mode program receives from exec_command and write_stdin."""
+    """What a code mode program receives from the shell tools (SHELL_SHAPES)."""
 
     output: str = Field(description="Command output text, possibly truncated.")
     wall_time_seconds: float
@@ -176,10 +126,10 @@ class SpilledOutput(BaseModel):
 
 
 class SandboxExecResult(ExecCommandOutput):
-    """Saved details of an exec_command or write_stdin call."""
+    """Saved details of a call of a shell tool (SHELL_SHAPES)."""
 
     type: Literal["sandbox_exec"] = "sandbox_exec"
-    # `output` is not all of the output: the call's max_output_chars cut it,
+    # `output` is not all of the output: the call's output budget cut it,
     # the byte cap (EXEC_CALL_OUTPUT_MAX_BYTES) dropped some, or the daemon
     # lost some. In the full value, only the last two.
     truncated: bool = False
@@ -207,8 +157,8 @@ class ApplyPatchResult(BaseModel):
 
 # Largest file that a publish copies to the file store.
 PUBLISH_FILES_MAX_BYTES = 100 << 20
-# Most files that one library_create_library_file call publishes.
-PUBLISH_FILES_MAX_FILES = 20
+# Most files that one publish call publishes.
+PUBLISH_FILES_MAX_FILES = 25
 # Longest title that a publish keeps; it cuts a longer one.
 PUBLISH_FILES_MAX_TITLE_CHARS = 200
 # Longest version_reason that a save keeps; it cuts a longer one.
@@ -246,7 +196,8 @@ class LibraryCreateLibraryFileArguments(BaseModel):
         description="With file: a short title for the user. Defaults to the file name.",
     )
     description: str | None = Field(
-        default=None, description="One sentence about the files, for the user."
+        default=None,
+        description="One sentence about the files. Accepted, not shown.",
     )
 
     @model_validator(mode="after")
@@ -333,7 +284,7 @@ ARTIFACTS_MAX_FILE_TYPES = 50
 ARTIFACT_RESULT_MAX_CHARS = 40_000
 # Model text that a result or its error can echo. Such a result may never
 # spill, so the text has a cap.
-_EchoedText = Annotated[str, Field(max_length=ARTIFACTS_PATH_MAX_CHARS)]
+EchoedText = Annotated[str, Field(max_length=ARTIFACTS_PATH_MAX_CHARS)]
 
 # The kind of a published file, from the extension of its name. Image tool
 # outputs are not artifacts, so no type is kept for them.
@@ -486,7 +437,7 @@ class LibraryListArguments(BaseModel):
     )
     sort_order: SortOrder = "desc"
     filters: LibraryListFilters | None = None
-    chat_id: _EchoedText | None = Field(
+    chat_id: EchoedText | None = Field(
         default=None,
         description="List only the files of this chat (a chat_id of an entry).",
     )
@@ -658,7 +609,7 @@ class ArtifactFileReference(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    file_id: _EchoedText | None = Field(
+    file_id: EchoedText | None = Field(
         default=None,
         description="A version's file ID. Give this or library_file_id.",
     )
@@ -693,11 +644,11 @@ def parse_file_reference(text: str) -> ArtifactFileReference:
 class MaterializeItem(ArtifactFileReference):
     """One file to copy, and the name and directory of the copy."""
 
-    file_name: _EchoedText | None = Field(
+    file_name: EchoedText | None = Field(
         default=None,
         description="The name of the copy, not a path. Defaults to the file's name.",
     )
-    relative_directory: _EchoedText | None = Field(
+    relative_directory: EchoedText | None = Field(
         default=None,
         description="A directory relative to the destination directory, "
         f"{_DIRECTORY_RULE}. `..` is allowed while the path stays there.",
@@ -710,7 +661,7 @@ ConflictPolicy = Literal["dedupe", "overwrite", "error"]
 class MaterializeDestination(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    directory: _EchoedText | None = Field(
+    directory: EchoedText | None = Field(
         default=None,
         description=f"Where the copies go, {_DIRECTORY_RULE}. Defaults to "
         f"{ARTIFACT_FILES_DIR}.",
@@ -798,7 +749,7 @@ class RenameOperation(BaseModel):
 
     operation: Literal["rename"]
     target: LibraryFileTarget
-    new_name: _EchoedText = Field(
+    new_name: EchoedText = Field(
         description="The new file name, not a path, with the current extension."
     )
 
@@ -823,7 +774,7 @@ class RestoreVersionOperation(BaseModel):
     expected_current_version: int | None = Field(
         default=None, description=_EXPECTED_CURRENT_VERSION
     )
-    file_name: _EchoedText | None = Field(default=None, description=_NEW_FILE_NAME)
+    file_name: EchoedText | None = Field(default=None, description=_NEW_FILE_NAME)
     version_reason: str | None = Field(default=None, description=_VERSION_REASON)
 
 
@@ -832,7 +783,7 @@ class RestoreVersionOperation(BaseModel):
 class FileUri(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    file_id: _EchoedText = Field(
+    file_id: EchoedText = Field(
         description="The file ID of a version of any of your published files, "
         "or its url."
     )
@@ -850,7 +801,7 @@ class UpdateOperation(BaseModel):
     operation: Literal["update"]
     library_file_id: UUID
     file_uri: FileUri
-    file_name: _EchoedText | None = Field(default=None, description=_NEW_FILE_NAME)
+    file_name: EchoedText | None = Field(default=None, description=_NEW_FILE_NAME)
     expected_current_version: int | None = Field(
         default=None, description=_EXPECTED_CURRENT_VERSION
     )
@@ -1147,7 +1098,7 @@ class LibrarySearchArguments(BaseModel):
     )
     filters: LibraryListFilters | None = None
     scope: LibrarySearchScope | None = None
-    chat_id: _EchoedText | None = Field(
+    chat_id: EchoedText | None = Field(
         default=None,
         description="Search only the files of this chat (a chat_id of a result).",
     )
@@ -1211,155 +1162,19 @@ class LibrarySearchResult(BaseModel):
     content_search: Annotated[Literal["unavailable"] | None, OMITTED_WHEN_NONE] = None
 
 
-# The arguments that each action of the artifact tool takes.
-ArtifactAction = Literal["publish", "list", "read", "delete", "rename", "restore"]
-ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
-    "publish": frozenset(
-        {*ARTIFACT_PUBLISH_PATHS, "title", "url", "path", "force", "label"}
-    ),
-    "list": frozenset({"scope", "type", "query", "limit", "after"}),
-    "read": frozenset({"url", "path", "paths", "out_dir", "query", "offset", "limit"}),
-    "delete": frozenset({"url"}),
-    "rename": frozenset({"url", "name"}),
-    "restore": frozenset({"url", "label"}),
-}
-
-
-class ArtifactArguments(BaseModel):
-    """The arguments of the artifact tool: an action and the arguments of
-    each action. Each action takes only its own arguments
-    (ARTIFACT_ACTION_ARGUMENTS)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    action: ArtifactAction = Field(
-        default="publish",
-        description="publish (the default) gives files from the VM to the user; "
-        "list finds published files, by content with query; read shows their text, finds text in them "
-        "with query, or copies them into the VM with out_dir; delete deletes a "
-        "published file, after the user approves; rename renames a published "
-        "file; restore makes an older version the newest.",
-    )
-    file_path: _EchoedText | None = Field(
-        default=None,
-        description="publish: a file in the VM, relative to the working "
-        "directory or absolute.",
-    )
-    file_paths: list[_EchoedText] | None = Field(
-        default=None,
-        description=f"publish: up to {PUBLISH_FILES_MAX_FILES} files instead of "
-        "file_path; all are published, or none.",
-    )
-    title: str | None = Field(
-        default=None, description="publish with file_path: a short title."
-    )
-    url: _EchoedText | None = Field(
-        default=None,
-        description="read: the url of a published file from an earlier result; "
-        "one that ends in /v<N> names that version. publish with file_path: "
-        "the file to add a version to, by the url of the version you last saw. "
-        "delete: the file to delete, with all its versions, by the url of its "
-        "newest version. rename: the file to rename. restore: the version to "
-        "restore, ending in /v<N>.",
-    )
-    name: _EchoedText | None = Field(
-        default=None,
-        description="rename: the new file name, not a path, with the current "
-        "extension.",
-    )
-    force: bool | None = Field(
-        default=None,
-        description="publish with url: add the version even when the file has a "
-        "newer version than the url names. Older versions stay.",
-    )
-    label: str | None = Field(
-        default=None,
-        description="publish with url, restore: a short note on why this "
-        "version exists.",
-    )
-    path: _EchoedText | None = Field(
-        default=None,
-        description="read: a file ID, or the url of a published file. publish "
-        "with url: a file ID of any published file, whose copy becomes the "
-        "url's newest version.",
-    )
-    paths: list[_EchoedText] | None = Field(
-        default=None,
-        description=f"read: up to {ARTIFACTS_MATERIALIZE_MAX_ITEMS} file IDs or urls.",
-    )
-    out_dir: _EchoedText | None = Field(
-        default=None,
-        description="read: copy the files into this directory, relative to the "
-        "working directory, instead of showing their text.",
-    )
-    offset: int | None = Field(
-        default=None,
-        description="read: the line number to start reading from; with query, "
-        "the matches to skip. Only with one file.",
-    )
-    scope: Literal["mine"] | None = Field(
-        default=None, description="list: only mine, the user's own files."
-    )
-    type: ArtifactType | None = Field(
-        default=None, description="list: only files of this type."
-    )
-    query: str | None = Field(
-        default=None,
-        description="list: search the files' content, names and titles; best "
-        "matches first. read: text to find in the files' lines, in any case.",
-    )
-    limit: int | None = Field(
-        default=None,
-        description=f"list: the most files, from 1 to {ARTIFACTS_LIST_MAX_LIMIT}; "
-        f"with query, to {LIBRARY_SEARCH_MAX_TOP_K}. "
-        f"read: the most lines, at most {READ_MAX_LINES}; with query, the most "
-        f"matches, at most {FIND_MAX_MATCHES}.",
-    )
-    after: str | None = Field(
-        default=None, description="list: the next_cursor of the previous page."
-    )
-
-    @model_validator(mode="after")
-    def _action_arguments(self) -> "ArtifactArguments":
-        takes = ARTIFACT_ACTION_ARGUMENTS[self.action]
-        extra = sorted(
-            name
-            for name, value in self
-            if value is not None and name != "action" and name not in takes
-        )
-        if extra:
-            raise PydanticCustomError(
-                "action_arguments",
-                "Action {action} does not take {extra}; it takes {takes}",
-                {
-                    "action": self.action,
-                    "extra": ", ".join(extra),
-                    "takes": ", ".join(sorted(takes)),
-                },
-            )
-        if self.action in ("delete", "rename", "restore") and self.url is None:
-            raise PydanticCustomError(
-                "action_arguments", "{action} takes url", {"action": self.action}
-            )
-        if self.action == "rename" and self.name is None:
-            raise PydanticCustomError("action_arguments", "rename takes url and name")
-        # One offset holds for one file's lines or matches.
-        targets = [self.url, self.path, *(self.paths or [])]
-        if self.offset is not None and len(targets) - targets.count(None) > 1:
-            raise PydanticCustomError(
-                "action_arguments",
-                "offset pages one file; read one file at a time to page",
-            )
-        if self.path is not None and (
-            self.action == "publish"
-            and (self.url is None or (self.file_path, self.file_paths, self.title))
-            != (None, None, None)
-        ):
-            raise PydanticCustomError(
-                "action_arguments",
-                "path goes with url, without file_path, file_paths or title",
-            )
-        return self
+# The arguments of each operation over the user's published files
+# (artifact_operations.run_operation): each library tool takes one, and the
+# artifact tool's arguments give one (ArtifactArguments.request).
+LibraryRequest = (
+    LibraryCreateLibraryFileArguments
+    | LibraryReplaceLibraryFileArguments
+    | ManageLibraryArguments
+    | LibraryListArguments
+    | LibrarySearchArguments
+    | LibraryReadArguments
+    | LibraryFindArguments
+    | LibraryPrepareMaterializeArguments
+)
 
 
 class PublishedArtifact(BaseModel):

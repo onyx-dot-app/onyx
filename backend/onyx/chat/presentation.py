@@ -76,7 +76,6 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolQuestionRequest,
     UserMessagePacket,
 )
-from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
@@ -85,6 +84,9 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.sandbox.models import PublishedFiles
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_START_TOOL_NAMES,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -674,7 +676,7 @@ def replay_response(
             for child in response.child_runs:
                 # Agent tools start background runs, whose output arrives separately.
                 if (
-                    call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+                    call.name in AGENT_START_TOOL_NAMES
                     or child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):

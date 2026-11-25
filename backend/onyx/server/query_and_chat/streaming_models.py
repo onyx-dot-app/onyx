@@ -530,7 +530,7 @@ class WriteStdinStart(BaseObj):
     chars: str
 
 
-# Live output of exec_command and write_stdin (stdout and stderr in arrival
+# Live output of the shell tools (stdout and stderr in arrival
 # order): a preview that exec_end's output replaces.
 class ExecOutputDelta(BaseObj):
     type: Literal["exec_output_delta"] = StreamingType.EXEC_OUTPUT_DELTA.value

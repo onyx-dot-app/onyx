@@ -34,7 +34,10 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.postgres.scope import build_document_scope
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
@@ -344,6 +347,7 @@ def _construct_tools_impl(
                             document_index=document_index,
                             user=user,
                             web_fetch_disabled=open_url_web_fetch_disabled,
+                            shape=OPEN_URL_SHAPES[llm.config.tool_family],
                         )
                     )
                 except RuntimeError as e:

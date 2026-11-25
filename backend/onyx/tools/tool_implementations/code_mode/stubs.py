@@ -152,6 +152,8 @@ class ToolStubs(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     functions: Mapping[str, ToolFunction]
+    # The name that programs call each function's tool by, by its tool name.
+    called_names: Mapping[str, str]
     shape: CodeModeShape
     # The imports, store()/load(), yield_control() and the shape's search
     # (with deferred functions) and describe functions of every stub module.
@@ -761,16 +763,21 @@ def _schema_result_type(
 
 
 def tool_function(
-    function_name: str, tool: Tool, result_type: StubResultType
+    function_name: str,
+    tool: Tool,
+    result_type: StubResultType,
+    called_name: Callable[[str], str],
 ) -> ToolFunction:
     """Render one tool's stub and result declarations within MAX_STUB_CHARS.
+    Its description names other tools as `called_name` gives their names.
 
     Past the limit the result becomes Any, then the arguments, and last the
     signature takes any keyword arguments.
     """
     definition = tool.tool_definition()
     description = _clip(
-        definition.description or tool.description, MAX_TOOL_DESCRIPTION_CHARS
+        tool.describe(called_name) or definition.description or tool.description,
+        MAX_TOOL_DESCRIPTION_CHARS,
     )
     spec = tool.code_mode_result
     any_result = StubResultType(annotation=ANY, declarations=())
@@ -887,6 +894,9 @@ def build_tool_stubs(shape: CodeModeShape, tools: Sequence[Tool]) -> ToolStubs:
         lambda name: function_name(name, declared_types),
     )
     taken = {*declared_types, *named, *_RESERVED_TYPE_NAMES}
+    called_names = {
+        tool.name: f"{TOOLS_NAMESPACE}.{name}" for name, tool in named.items()
+    }
     functions: dict[str, ToolFunction] = {}
     for name, tool in named.items():
         schema = tool.code_mode_result.output_schema
@@ -896,6 +906,7 @@ def build_tool_stubs(shape: CodeModeShape, tools: Sequence[Tool]) -> ToolStubs:
             _schema_result_type(name, schema, taken)
             if schema is not None
             else model_types[id(tool)],
+            lambda tool_name: called_names.get(tool_name, tool_name),
         )
     deferred = [function for function in functions.values() if function.deferred]
     search_stubs = [
@@ -908,6 +919,7 @@ def build_tool_stubs(shape: CodeModeShape, tools: Sequence[Tool]) -> ToolStubs:
     )
     return ToolStubs(
         functions=functions,
+        called_names=called_names,
         shape=shape,
         header=header,
         listed_text=_module(

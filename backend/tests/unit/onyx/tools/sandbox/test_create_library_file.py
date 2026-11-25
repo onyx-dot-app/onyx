@@ -6,6 +6,7 @@ import pytest
 
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.server.features.build.sandbox.harness_base import HarnessSandboxError
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.tools.models import ToolCallException
@@ -19,6 +20,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibraryCreateLibraryFileTool,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 
 
@@ -50,6 +52,7 @@ def test_a_title_is_stored_trimmed_without_nul_and_within_its_limit(
 
     monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
     turn = MagicMock(spec=SandboxTurn)
+    turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
     turn.start_call.return_value = HarnessSandboxRef(
         tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
     )
@@ -110,6 +113,7 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
     monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
     monkeypatch.setattr(artifact_operations, "RENDER_FIRST_PAGE_MAX_INPUT_BYTES", 4)
     turn = MagicMock(spec=SandboxTurn)
+    turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
     turn.start_call.return_value = HarnessSandboxRef(
         tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
     )
@@ -194,6 +198,7 @@ def test_the_renders_of_a_call_share_one_budget(
         return ref
 
     turn = MagicMock(spec=SandboxTurn)
+    turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
     turn.start_call.side_effect = start_call
     turn.sandbox.read_file.return_value = b"data"
     turn.sandbox.render_first_page.side_effect = render
@@ -257,6 +262,7 @@ def test_a_failed_clean_up_keeps_the_stop_or_the_error_of_the_call(
         artifact_operations, "delete_unpublished_chat_artifacts", clean_up
     )
     turn = MagicMock(spec=SandboxTurn)
+    turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
     turn.start_call.return_value = HarnessSandboxRef(
         tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
     )
@@ -309,6 +315,7 @@ def test_an_unexpected_save_failure_is_a_tool_error_and_cleans_up(
         lambda published: cleaned.append([file.file_id for file in published]),
     )
     turn = MagicMock(spec=SandboxTurn)
+    turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
     turn.start_call.return_value = HarnessSandboxRef(
         tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
     )

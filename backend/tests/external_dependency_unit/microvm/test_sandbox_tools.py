@@ -190,12 +190,14 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.tools.constants import (
+    EXEC_COMMAND_TOOL_NAME,
     EXEC_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
     LOAD_SKILL_TOOL_NAME,
     POSTGRES_TOOL_NAME,
     SKILLS_READ_TOOL_NAME,
     SPAWN_AGENT_TOOL_NAME,
+    WRITE_STDIN_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
@@ -217,6 +219,7 @@ from onyx.tools.tool_implementations.open_url import open_url_tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     MAX_CHARS_ACROSS_URLS,
     MAX_URLS_PER_CALL,
+    OPEN_URL_SHAPES,
     IndexedDocumentRequest,
     IndexedRetrievalResult,
     OpenedPage,
@@ -249,6 +252,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     WriteStdinTool,
     WriteTool,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.spill import (
     FULL_VALUE_NOTE,
     SPILL_FAILED_NOTE,
@@ -264,8 +268,8 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearch
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_chat_tool_approvals import ACTION
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
-from tests.external_dependency_unit.chat.test_wait_agents import (
-    ScriptedLLM as WaitAgentsLLM,
+from tests.external_dependency_unit.chat.test_wait_agent import (
+    ScriptedLLM as WaitAgentLLM,
 )
 from tests.external_dependency_unit.code_mode_helpers import (
     ChatLLM,
@@ -313,7 +317,7 @@ from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
 pytestmark = pytest.mark.usefixtures("tenant_context")
 
 SANDBOX_NAMES = frozenset(
-    {ExecCommandTool.NAME, WriteStdinTool.NAME, ApplyPatchTool.NAME}
+    {EXEC_COMMAND_TOOL_NAME, WRITE_STDIN_TOOL_NAME, ApplyPatchTool.NAME}
 )
 ADD_A = "*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"
 
@@ -328,6 +332,9 @@ class SandboxTools(BaseModel):
     ref: HarnessSandboxRef
     exec_command: ExecCommandTool
     write_stdin: WriteStdinTool
+    # The shell of the Claude shape.
+    bash: ExecCommandTool
+    bash_write_stdin: WriteStdinTool
     apply_patch: ApplyPatchTool
     edit: EditTool
     write: WriteTool
@@ -387,12 +394,17 @@ def user(
 def make_tools(db_session: Session, user: User) -> MakeTools:
     def make(chat_session_id: UUID | None = None) -> SandboxTools:
         session_id = chat_session_id or uuid4()
-        turn = SandboxTurn(
-            tenant_id=TENANT_ID,
-            user_id=user.id,
-            chat_session_id=session_id,
-            vm_chat_files=[],
-            copy_vm_chat_files=False,
+        # A turn of each shell shape, on the same sandbox session.
+        turn, claude_turn = (
+            SandboxTurn(
+                tenant_id=TENANT_ID,
+                user_id=user.id,
+                chat_session_id=session_id,
+                vm_chat_files=[],
+                copy_vm_chat_files=False,
+                shell=SHELL_SHAPES[family],
+            )
+            for family in (ToolFamily.OPENAI, ToolFamily.CLAUDE)
         )
         return SandboxTools(
             turn=turn,
@@ -403,9 +415,11 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
             ),
             exec_command=ExecCommandTool(turn),
             write_stdin=WriteStdinTool(turn),
+            bash=ExecCommandTool(claude_turn),
+            bash_write_stdin=WriteStdinTool(claude_turn),
             apply_patch=ApplyPatchTool(turn),
-            edit=EditTool(turn),
-            write=WriteTool(turn),
+            edit=EditTool(claude_turn),
+            write=WriteTool(claude_turn),
             create_file=LibraryCreateLibraryFileTool(turn),
         )
 
@@ -588,7 +602,7 @@ def test_a_chat_turn_streams_saves_and_replays_its_sandbox_calls(
     ended = _ended_turns(monkeypatch, sandbox)
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi there"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi there"}),
             tool_step(ApplyPatchTool.NAME, "patch", {"input": ADD_A}),
             Delta(content="Done."),
         ]
@@ -727,9 +741,9 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     monkeypatch.setattr("onyx.chat.execution.construct_tools", with_gated_tool)
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi"}),
             tool_step(gated.name, "send", {"value": "team"}),
-            tool_step(ExecCommandTool.NAME, "again", {"cmd": "echo again"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "again", {"cmd": "echo again"}),
             Delta(content="Done."),
         ]
     )
@@ -847,10 +861,10 @@ def test_a_stop_kills_the_command_that_its_call_waits_on(
         [
             # Its call returns while the command runs.
             tool_step(
-                ExecCommandTool.NAME, "earlier", {"cmd": "cat", "yield_time_ms": 250}
+                EXEC_COMMAND_TOOL_NAME, "earlier", {"cmd": "cat", "yield_time_ms": 250}
             ),
             tool_step(
-                ExecCommandTool.NAME,
+                EXEC_COMMAND_TOOL_NAME,
                 "exec",
                 {"cmd": "say partial", "yield_time_ms": 30_000},
             ),
@@ -1031,7 +1045,7 @@ def test_incognito_and_multi_model_turns_offer_no_sandbox(
         multi_model=True,
     )
     assert len(both) == 2
-    assert all(ExecCommandTool.NAME not in tools for tools in both)
+    assert all(EXEC_COMMAND_TOOL_NAME not in tools for tools in both)
 
     db_session.execute(
         update(ChatSession)
@@ -1041,7 +1055,7 @@ def test_incognito_and_multi_model_turns_offer_no_sandbox(
     db_session.commit()
     try:
         [tools] = offered(ChatLLM([Delta(content="No sandbox.")]), multi_model=False)
-        assert ExecCommandTool.NAME not in tools
+        assert EXEC_COMMAND_TOOL_NAME not in tools
     finally:
         teardown_incognito_session(chat.chat_session_id)
 
@@ -1067,7 +1081,7 @@ def test_a_bot_turn_offers_no_sandbox(
         approval_mode=ApprovalMode.NO_APPROVER,
     )
     [request] = llm.requests
-    assert ExecCommandTool.NAME not in str(request.get("tools"))
+    assert EXEC_COMMAND_TOOL_NAME not in str(request.get("tools"))
 
 
 @pytest.mark.usefixtures("sandbox", "node")
@@ -1098,7 +1112,7 @@ def test_an_anonymous_turn_offers_no_sandbox(
         ]
         assert errors == []
         [request] = llm.requests
-        assert ExecCommandTool.NAME not in str(request.get("tools"))
+        assert EXEC_COMMAND_TOOL_NAME not in str(request.get("tools"))
     finally:
         assert chat_turn_work.wait_idle(timeout=30)
         delete_chat_session(anonymous.id, chat_session_id, db_session, hard_delete=True)
@@ -1142,12 +1156,13 @@ def test_the_live_output_of_a_call_stops_at_its_character_budget(
     make_tools: MakeTools,
 ) -> None:
     """The final output replaces the live preview, so the preview streams no
-    more than max_output_chars characters."""
+    more than the call's character budget (max_output_tokens, 4 characters a
+    token)."""
     tools = make_tools()
     # The budget counts a multi-byte character as one and never splits it.
     text = "a" * 79 + "é" * 2 + "z" * 200
     result, progress = _run(
-        tools.exec_command, {"cmd": f"echo {text}", "max_output_chars": 80}
+        tools.exec_command, {"cmd": f"echo {text}", "max_output_tokens": 20}
     )
     streamed = "".join(
         update.details.text
@@ -1167,12 +1182,57 @@ def test_the_live_output_of_a_call_stops_at_its_character_budget(
     )
 
 
+@pytest.mark.usefixtures("sandbox", "node")
+def test_the_claude_shell_runs_commands_by_its_own_arguments(
+    monkeypatch: pytest.MonkeyPatch, make_tools: MakeTools
+) -> None:
+    """bash takes `command`; its `timeout` is how long the call waits, and
+    `run_in_background` returns at once with the session ID while the
+    command runs. write_stdin takes its wait as `timeout` too, and
+    `description` changes nothing."""
+    monkeypatch.setattr(harness_sandbox, "POLL_MIN_YIELD_MS", 250)
+    tools = make_tools()
+    assert tools.bash.name == "bash"
+    bash = tools.bash.tool_definition().parameters["properties"]
+    write = tools.bash_write_stdin.tool_definition().parameters["properties"]
+    assert isinstance(bash, dict) and isinstance(write, dict)
+    assert set(bash) == {"command", "timeout", "description", "run_in_background"}
+    assert set(write) == {"session_id", "chars", "timeout"}
+    done, _ = _run(tools.bash, {"command": "echo hi", "description": "Say hi"})
+    assert isinstance(done.details, SandboxExecResult)
+    assert done.details.exit_code == 0
+    assert done.content.endswith("Output:\nhi\n")
+
+    background, _ = _run(
+        tools.bash, {"command": "cat", "run_in_background": True, "timeout": 30_000}
+    )
+    running = background.details
+    assert isinstance(running, SandboxExecResult)
+    assert running.session_id is not None and running.exit_code is None
+    assert running.wall_time_seconds < 5
+    echoed, _ = _run(
+        tools.bash_write_stdin,
+        {"session_id": running.session_id, "chars": "hello", "timeout": 250},
+    )
+    assert echoed.content.endswith("Output:\nhello")
+    _run(tools.bash_write_stdin, {"session_id": running.session_id, "chars": "\u0003"})
+
+    waited, _ = _run(tools.bash, {"command": "sleep 30", "timeout": 500})
+    assert isinstance(waited.details, SandboxExecResult)
+    assert waited.details.session_id is not None
+    assert waited.details.wall_time_seconds < 5
+    _run(
+        tools.bash_write_stdin,
+        {"session_id": waited.details.session_id, "chars": "\u0003"},
+    )
+
+
 @pytest.mark.usefixtures("node")
 def test_a_numeric_session_id_keeps_the_exec_card(chat: SandboxChat) -> None:
     # Models may send the session ID as a number.
     llm = ChatLLM(
         [
-            tool_step(WriteStdinTool.NAME, "poll", {"session_id": 123}),
+            tool_step(WRITE_STDIN_TOOL_NAME, "poll", {"session_id": 123}),
             Delta(content="Done."),
         ]
     )
@@ -1984,11 +2044,11 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "helper", "instruction": "Task helper"},
+                    arguments={"task_name": "helper", "message": "Task helper"},
                 ),
                 ToolCall(
                     id="exec",
-                    name=EXEC_TOOL_NAME if code_mode else ExecCommandTool.NAME,
+                    name=EXEC_TOOL_NAME if code_mode else EXEC_COMMAND_TOOL_NAME,
                     arguments={"code": "await tools.exec_command(cmd='echo hi')"}
                     if code_mode
                     else {"cmd": "echo hi"},
@@ -1996,7 +2056,7 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
             ]
         )
 
-    model = WaitAgentsLLM(generate)
+    model = WaitAgentLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
@@ -3478,7 +3538,8 @@ def _spills(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
 
 def _note(path: str, size: int, body: str, *, code_mode: bool = False) -> str:
     """The model's note of a spilled result."""
-    read_with = "exec_command in exec programs" if code_mode else "exec_command"
+    # In code mode the shell is a function of programs.
+    read_with = "tools.exec_command in exec programs" if code_mode else "exec_command"
     return (
         f'<persisted-output path="{path}" bytes={size}>\n{body}\n'
         f"Read the file with {read_with} (grep, sed, head, tail). It lasts while "
@@ -3804,8 +3865,8 @@ def test_root_sandbox_results_end_with_the_file_status_and_errors_do_not(
     given = _scripted_status(monkeypatch)
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "ok", {"cmd": "echo hi"}),
-            tool_step(WriteStdinTool.NAME, "bad", {"session_id": "nope"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "ok", {"cmd": "echo hi"}),
+            tool_step(WRITE_STDIN_TOOL_NAME, "bad", {"session_id": "nope"}),
             tool_step(ApplyPatchTool.NAME, "patch", {"input": "not a patch"}),
             Delta(content="Done."),
         ]
@@ -3850,7 +3911,7 @@ def test_the_file_status_follows_a_spilled_exec_result(
     given = _scripted_status(monkeypatch)
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "seq", {"cmd": "seq 20000"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "seq", {"cmd": "seq 20000"}),
             Delta(content="Done."),
         ]
     )
@@ -3953,7 +4014,7 @@ def test_subagent_sandbox_results_do_not_read_the_file_status(
                 content=[
                     ToolCall(
                         id="child-exec",
-                        name=ExecCommandTool.NAME,
+                        name=EXEC_COMMAND_TOOL_NAME,
                         arguments={"cmd": "echo child"},
                     )
                 ]
@@ -3965,12 +4026,12 @@ def test_subagent_sandbox_results_do_not_read_the_file_status(
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "helper", "instruction": "Task helper"},
+                    arguments={"task_name": "helper", "message": "Task helper"},
                 )
             ]
         )
 
-    model = WaitAgentsLLM(generate)
+    model = WaitAgentLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
@@ -4005,7 +4066,7 @@ def test_a_chat_without_a_sandbox_keeps_a_large_result_whole(
     chat.send(llm)
 
     value = {"tool_result": _big("big")}
-    assert ExecCommandTool.NAME not in str(llm.requests[0].get("tools"))
+    assert EXEC_COMMAND_TOOL_NAME not in str(llm.requests[0].get("tools"))
     assert last_tool_text(llm, "big") == json.dumps(value)
     [saved] = _saved_results(db_session, chat.chat_session_id)
     assert isinstance(saved.details, CustomToolCallSummary)
@@ -4067,7 +4128,7 @@ def test_parallel_cells_over_their_limit_spill_in_one_step_past_the_budget(
     "steps",
     [
         pytest.param(
-            [tool_step(ExecCommandTool.NAME, "echo", {"cmd": "echo hi"})],
+            [tool_step(EXEC_COMMAND_TOOL_NAME, "echo", {"cmd": "echo hi"})],
             id="after_a_command",
         ),
         # The spill alone sets up no session on the VM.
@@ -4196,7 +4257,7 @@ def test_the_model_gets_its_cut_of_large_command_output_and_the_file_the_rest(
 ) -> None:
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "seq", {"cmd": f"seq {count}"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "seq", {"cmd": f"seq {count}"}),
             Delta(content="Done."),
         ]
     )
@@ -4243,13 +4304,15 @@ def test_command_output_that_its_cut_barely_shortens_still_spills(
     chat: SandboxChat,
 ) -> None:
     output = _seq(20_000)
-    max_chars = len(output) - 1
+    # The largest budget, in tokens of 4 characters, that cuts the output.
+    max_tokens = (len(output) - 1) // 4
+    max_chars = max_tokens * 4
     llm = ChatLLM(
         [
             tool_step(
-                ExecCommandTool.NAME,
+                EXEC_COMMAND_TOOL_NAME,
                 "seq",
-                {"cmd": "seq 20000", "max_output_chars": max_chars},
+                {"cmd": "seq 20000", "max_output_tokens": max_tokens},
             ),
             Delta(content="Done."),
         ]
@@ -4274,7 +4337,7 @@ def test_command_output_that_the_vm_cannot_take_keeps_its_cut(
     )
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "seq", {"cmd": "seq 20000"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "seq", {"cmd": "seq 20000"}),
             Delta(content="Done."),
         ]
     )
@@ -4303,7 +4366,7 @@ def test_exec_results_are_exempt_from_the_step_budget(
                 id=call_id,
                 index=index,
                 function=ResponseFunctionCall(
-                    name=ExecCommandTool.NAME, arguments='{"cmd": "seq 5000"}'
+                    name=EXEC_COMMAND_TOOL_NAME, arguments='{"cmd": "seq 5000"}'
                 ),
             )
             for index, call_id in enumerate(call_ids)
@@ -4429,7 +4492,7 @@ def attach(db_session: Session, user: User) -> Attach:
 def _exec_turn() -> ChatLLM:
     return ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi"}),
             Delta(content="Done."),
         ]
     )
@@ -4675,7 +4738,7 @@ def test_a_hosted_agent_run_copies_the_chat_files(
         [description] = [
             tool.description
             for tool in request.tools
-            if tool.name == ExecCommandTool.NAME
+            if tool.name == EXEC_COMMAND_TOOL_NAME
         ]
         if "Initial task" in texts:
             if "Follow up" in texts and "hosted" not in exec_descriptions:
@@ -4684,7 +4747,7 @@ def test_a_hosted_agent_run_copies_the_chat_files(
                     content=[
                         ToolCall(
                             id="hosted-exec",
-                            name=ExecCommandTool.NAME,
+                            name=EXEC_COMMAND_TOOL_NAME,
                             arguments={"cmd": "echo hosted"},
                         )
                     ]
@@ -4700,18 +4763,18 @@ def test_a_hosted_agent_run_copies_the_chat_files(
             content=[
                 ToolCall(
                     id="root-exec",
-                    name=ExecCommandTool.NAME,
+                    name=EXEC_COMMAND_TOOL_NAME,
                     arguments={"cmd": "echo root"},
                 ),
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "worker", "instruction": "Initial task"},
+                    arguments={"task_name": "worker", "message": "Initial task"},
                 ),
             ]
         )
 
-    model = WaitAgentsLLM(generate)
+    model = WaitAgentLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
@@ -4881,7 +4944,11 @@ def _search_and_open(pages: Sequence[MockWebContent], answer: str) -> ChatLLM:
     return ChatLLM(
         [
             tool_step(WebSearchTool.NAME, "search", {"queries": ["guide"]}),
-            tool_step(OpenURLTool.NAME, "open", {"urls": [p.url for p in pages]}),
+            tool_step(
+                OPEN_URL_SHAPES[ToolFamily.OPENAI].name,
+                "open",
+                {"urls": [p.url for p in pages]},
+            ),
             Delta(content=answer),
         ]
     )
@@ -5231,7 +5298,11 @@ def test_a_spilled_page_keeps_the_citation_number_of_an_earlier_turn(
     pages = [_web_page(index, 40_000) for index in range(1, 4)]
     first = ChatLLM(
         [
-            tool_step(OpenURLTool.NAME, "first", {"urls": [pages[1].url]}),
+            tool_step(
+                OPEN_URL_SHAPES[ToolFamily.OPENAI].name,
+                "first",
+                {"urls": [pages[1].url]},
+            ),
             Delta(content="Read."),
         ]
     )
@@ -5241,7 +5312,11 @@ def test_a_spilled_page_keeps_the_citation_number_of_an_earlier_turn(
     ).results[0]
     second = ChatLLM(
         [
-            tool_step(OpenURLTool.NAME, "again", {"urls": [p.url for p in pages]}),
+            tool_step(
+                OPEN_URL_SHAPES[ToolFamily.OPENAI].name,
+                "again",
+                {"urls": [p.url for p in pages]},
+            ),
             Delta(content=f"As before [{earlier.document}]."),
         ]
     )
@@ -5307,7 +5382,9 @@ def _open_pages(
     llm = ChatLLM(
         [
             tool_step(
-                OpenURLTool.NAME, "open", {"urls": ["https://docs.example.com/page"]}
+                OPEN_URL_SHAPES[ToolFamily.OPENAI].name,
+                "open",
+                {"urls": ["https://docs.example.com/page"]},
             ),
             Delta(content="Done."),
         ]
@@ -5403,7 +5480,10 @@ def test_an_indexed_document_spills_whole(
     text = "i" * 200_000
     _index_document(monkeypatch, url, text)
     llm = ChatLLM(
-        [tool_step(OpenURLTool.NAME, "open", {"urls": [url]}), Delta(content="Done.")]
+        [
+            tool_step(OPEN_URL_SHAPES[ToolFamily.OPENAI].name, "open", {"urls": [url]}),
+            Delta(content="Done."),
+        ]
     )
     with use_mock_content_provider():
         chat.send(llm, tool_ids=[get_builtin_tool(db_session, OpenURLTool).id])
@@ -5447,7 +5527,10 @@ def test_an_indexed_document_past_the_call_limit_keeps_more_than_its_excerpt(
         assert cut and MAX_CHARS_ACROSS_URLS < length < len(text)
         return
     llm = ChatLLM(
-        [tool_step(OpenURLTool.NAME, "open", {"urls": [url]}), Delta(content="Done.")]
+        [
+            tool_step(OPEN_URL_SHAPES[ToolFamily.OPENAI].name, "open", {"urls": [url]}),
+            Delta(content="Done."),
+        ]
     )
     with use_mock_content_provider():
         chat.send(llm, tool_ids=tool_ids)
@@ -5491,7 +5574,7 @@ def test_only_load_skill_puts_the_skill_files_in_the_vm(
     llm = ChatLLM(
         [
             tool_step(SKILLS_READ_TOOL_NAME, "read", {"name": "pptx"}),
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi"}),
             tool_step(LOAD_SKILL_TOOL_NAME, "load", {"name": "pptx"}),
             tool_step(LOAD_SKILL_TOOL_NAME, "again", {"name": "pptx"}),
             tool_step(LOAD_SKILL_TOOL_NAME, "custom", {"name": custom}),

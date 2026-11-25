@@ -14,7 +14,7 @@
 3 backend/tests/external_dependency_unit/cache/test_cache_backend_parity.py
 6 backend/tests/external_dependency_unit/cache/test_postgres_cache_backend.py
 1 backend/tests/external_dependency_unit/celery/test_pause_serializes_with_attempt_creation.py
-1 backend/tests/external_dependency_unit/chat/test_wait_agents.py
+1 backend/tests/external_dependency_unit/chat/test_wait_agent.py
 2 backend/tests/external_dependency_unit/code_mode_helpers.py
 1 backend/tests/external_dependency_unit/connectors/capability_checks/test_named_checks_at_creation.py
 4 backend/tests/external_dependency_unit/connectors/google_drive/test_drive_entry_points.py

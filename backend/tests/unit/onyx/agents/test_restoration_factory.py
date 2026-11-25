@@ -63,6 +63,7 @@ from onyx.tools.tool_implementations.question.shapes import (
     QuestionShape,
 )
 from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
     SkillsListTool,
     SkillsReadTool,
 )
@@ -435,7 +436,7 @@ def test_restored_chat_keeps_the_saved_code_mode(
         "list_agents",
         "interrupt_agent",
         "send_message",
-        "wait_agents",
+        "wait_agent",
     ]
     assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text
@@ -577,8 +578,12 @@ def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
         llm,
         tools=[
             EchoTool(),
-            SkillsListTool(_user_skills, with_sandbox=False),
-            SkillsReadTool(_user_skills, with_sandbox=False),
+            SkillsListTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
+            SkillsReadTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
         ],
     )
     state = original.capture_state().model_dump(mode="json")
@@ -607,8 +612,12 @@ def test_code_mode_offers_the_skill_tools_as_program_functions(
         llm,
         code_mode=True,
         tools=[
-            SkillsListTool(_user_skills, with_sandbox=False),
-            SkillsReadTool(_user_skills, with_sandbox=False),
+            SkillsListTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
+            SkillsReadTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
         ],
     )
     run_agent(agent, max_steps=3, messages=[UserMessage(content="Go")])
@@ -628,8 +637,12 @@ def test_restored_deep_research_offers_the_skill_tools_like_the_original(
     original = DeepResearchAgent(
         messages=[],
         allowed_tools=[
-            SkillsListTool(_user_skills, with_sandbox=False),
-            SkillsReadTool(_user_skills, with_sandbox=False),
+            SkillsListTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
+            SkillsReadTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
         ],
         llm=llm,
         token_counter=len,

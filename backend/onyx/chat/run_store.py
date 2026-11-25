@@ -136,11 +136,13 @@ from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
-from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolApprovalScope, ToolOptions
 from onyx.tools.tool_implementations.question.shapes import QUESTION_TOOL_NAMES
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
+from onyx.tools.tool_implementations.subagents.shapes import (
+    SPAWN_TOOL_NAMES,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -1170,7 +1172,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._save_output(parent, parent_snapshot)
         # A spawned agent works in the background; foreground tools wait for their child.
         delivers_result = any(
-            call.id == parent_tool_call_id and call.name == SPAWN_AGENT_TOOL_NAME
+            call.id == parent_tool_call_id and call.name in SPAWN_TOOL_NAMES
             for step in parent_snapshot.steps
             if step.message.id == parent_message_id
             for call in step.message.tool_calls

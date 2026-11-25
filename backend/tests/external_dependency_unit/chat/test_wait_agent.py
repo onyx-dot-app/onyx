@@ -1,4 +1,5 @@
-"""The root waits for its agents with `wait_agents` and answers their results once.
+"""The root waits for its agents, with `wait_agent` or, in the Claude tool shape,
+by itself, and answers their results once.
 
 Each test runs real chat turns against Postgres with a scripted model. Child
 runs release through the run store, whose release event dispatches the root's
@@ -21,6 +22,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution, run_store
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
+from onyx.chat.models import AgentWait
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX, stop_response
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
@@ -42,6 +44,7 @@ from onyx.db.models import (
 from onyx.db.models import ToolCall as ToolCallRow
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -50,14 +53,19 @@ from onyx.llm.models import (
 )
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME, WAIT_AGENTS_TOOL_NAME
+from onyx.tools.constants import (
+    AGENT_TOOL_NAME,
+    SPAWN_AGENT_TOOL_NAME,
+    WAIT_AGENT_TOOL_NAME,
+)
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.unit.onyx.agents.fakes import FakeModelClient
+from tests.unit.onyx.agents.fakes import TEST_MODEL_NAMES, FakeModelClient
 
 WAIT_TIMEOUT_S = 30
 WAITING = "Waiting for the workers."
 QUESTION = "Ask the workers"
+LATER_QUESTION = "Ask more workers"
 # A status request without pass-through headers.
 _NO_HEADERS = Request({"type": "http", "headers": []})
 
@@ -68,7 +76,9 @@ class ScriptedLLM(FakeModelClient):
     def config(self) -> LLMConfig:
         return LLMConfig(
             model_provider="openai",
-            model_name="gpt-4o-mini",
+            model_name="gpt-4o-mini"
+            if self.family is ToolFamily.OPENAI
+            else TEST_MODEL_NAMES[self.family],
             max_input_tokens=32768,
             temperature=0,
         )
@@ -90,8 +100,16 @@ class Workers:
         spawn_and_wait: bool = False,
         before_wait: Callable[[], object] | None = None,
         wait: bool = True,
+        family: ToolFamily = ToolFamily.OPENAI,
+        later: tuple[str, ...] = (),
     ) -> None:
-        self.names = names
+        # `later` are workers that a later turn, LATER_QUESTION, starts.
+        self.names = names + later
+        self.later = later
+        self.later_requests = 0
+        # The root's tool family; the Claude shape has no wait tool, so its
+        # root ends its first turn with text.
+        self.family = family
         # None waits for all workers.
         self.wait_for = wait_for
         self.failing = failing
@@ -99,8 +117,8 @@ class Workers:
         self.before_wait = before_wait
         # False answers the first turn with text and no wait call.
         self.wait = wait
-        self.started = {name: Event() for name in names}
-        self.release = {name: Event() for name in names}
+        self.started = {name: Event() for name in self.names}
+        self.release = {name: Event() for name in self.names}
         self.root_requests: list[GenerationRequest] = []
         self.first_turn_done = False
 
@@ -118,14 +136,12 @@ class Workers:
                 raise RuntimeError(f"Worker {worker} failed")
             return _text(f"Result {worker}")
         self.root_requests.append(request)
-        spawns = [
-            ToolCall(
-                id=f"spawn-{name}",
-                name=SPAWN_AGENT_TOOL_NAME,
-                arguments={"name": name, "instruction": f"Task {name}"},
-            )
-            for name in self.names
-        ]
+        if LATER_QUESTION in texts:
+            self.later_requests += 1
+            if self.later_requests == 1:
+                return AssistantMessage(content=self._spawns(self.later))
+            return _text(WAITING)
+        spawns = self._spawns(tuple(n for n in self.names if n not in self.later))
         if len(self.root_requests) == 1:
             if self.spawn_and_wait:
                 return AssistantMessage(content=[*spawns, self._wait_call()])
@@ -136,7 +152,7 @@ class Workers:
                 return _text(WAITING)
             if self.before_wait is not None:
                 self.before_wait()
-            if not self.wait:
+            if not self.wait or self.family is ToolFamily.CLAUDE:
                 return _text(WAITING)
             return AssistantMessage(
                 content=[TextContent(text=WAITING), self._wait_call()]
@@ -144,12 +160,28 @@ class Workers:
         seen = [name for name in self.names if f"Result {name}" in str(texts)]
         return _text(f"Answer with {', '.join(seen) or 'nothing'}")
 
+    def _spawns(self, names: tuple[str, ...]) -> list[ToolCall]:
+        return [
+            ToolCall(
+                id=f"spawn-{name}",
+                name=SPAWN_AGENT_TOOL_NAME,
+                arguments={"task_name": name, "message": f"Task {name}"},
+            )
+            if self.family is ToolFamily.OPENAI
+            else ToolCall(
+                id=f"spawn-{name}",
+                name=AGENT_TOOL_NAME,
+                arguments={"description": name, "prompt": f"Task {name}"},
+            )
+            for name in names
+        ]
+
     def _wait_call(self) -> ToolCall:
         if self.wait_for is None:
-            return ToolCall(id="wait", name=WAIT_AGENTS_TOOL_NAME, arguments={})
+            return ToolCall(id="wait", name=WAIT_AGENT_TOOL_NAME, arguments={})
         return ToolCall(
             id="wait",
-            name=WAIT_AGENTS_TOOL_NAME,
+            name=WAIT_AGENT_TOOL_NAME,
             arguments={"targets": [f"/root/{name}" for name in self.wait_for]},
         )
 
@@ -200,13 +232,14 @@ def _start(
     """Run the root's first turn; it ends while every worker still runs."""
     # Agent tools come from the chat agent; persona tools play no part here.
     monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
-    model = ScriptedLLM(workers.generate)
+    model = ScriptedLLM(workers.generate, family=workers.family)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
     _send(chat, owner, QUESTION)
     for name in workers.names:
-        assert workers.started[name].wait(WAIT_TIMEOUT_S)
+        if name not in workers.later:
+            assert workers.started[name].wait(WAIT_TIMEOUT_S)
 
 
 def _send(chat: ChatSession, owner: User, message: str) -> None:
@@ -686,3 +719,195 @@ def test_agents_of_the_current_user_turn(
     assert current() == {"/root": True, "/root/alpha": False, "/root/beta": False}
     assert waiting.id < _root_answers(db_session, chat.id)[-1].id
     assert chat_turn_work.wait_idle(timeout=WAIT_TIMEOUT_S)
+
+
+# A Claude root has no wait tool: a response that ends while the agents that
+# it started run waits for them by itself (no AgentShape.wait_name).
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_claude_root_answers_its_staggered_agents_once(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Three agents finish at different times, one with an error; the root
+    answers all their results in one follow-up."""
+    names = ("alpha", "beta", "gamma")
+    workers = Workers(names, failing=frozenset({"beta"}), family=ToolFamily.CLAUDE)
+    _start(chat, owner, workers, monkeypatch)
+    [answer] = _root_answers(db_session, chat.id)
+    assert answer.message == WAITING
+    finished = [_finish(db_session, chat, workers, name) for name in names[:2]]
+    assert finished[1].response_status == RunStatus.ERROR
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+    assert _follow_ups(db_session, chat.id) == []
+    finished.append(_finish(db_session, chat, workers, names[2]))
+    _settled(db_session, chat.id, 2)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert _accepted_results(db_session, follow_up) == sorted(
+        response.id for response in finished
+    )
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_the_default_root_answers_each_agent_that_it_did_not_wait_for(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a wait call, a root of the default shape answers each result
+    on its own."""
+    names = ("alpha", "beta")
+    workers = Workers(names, wait=False)
+    _start(chat, owner, workers, monkeypatch)
+    _finish(db_session, chat, workers, "alpha")
+    _settled(db_session, chat.id, 2)
+    _finish(db_session, chat, workers, "beta")
+    _settled(db_session, chat.id, 3)
+    assert [answer.message for answer in _follow_ups(db_session, chat.id)] == [
+        "Answer with alpha",
+        "Answer with alpha, beta",
+    ]
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_claude_agent_that_finishes_before_the_response_ends_waits_with_the_rest(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workers = Workers(
+        ("alpha", "beta"),
+        family=ToolFamily.CLAUDE,
+        before_wait=lambda: _finish(db_session, chat, workers, "alpha"),
+    )
+    _start(chat, owner, workers, monkeypatch)
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+    assert _follow_ups(db_session, chat.id) == []
+    _finish(db_session, chat, workers, "beta")
+    _settled(db_session, chat.id, 2)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert follow_up.message == "Answer with alpha, beta"
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_user_turn_reads_the_results_that_a_claude_root_holds(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A user turn reads the held results at its first step; the wait on the
+    agent that still runs holds its result for one follow-up."""
+    workers = Workers(("alpha", "beta"), family=ToolFamily.CLAUDE)
+    _start(chat, owner, workers, monkeypatch)
+    _finish(db_session, chat, workers, "alpha")
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+    _send(chat, owner, "A question")
+    _settled(db_session, chat.id, 2)
+    assert _root_answers(db_session, chat.id)[-1].message == "Answer with alpha"
+    _finish(db_session, chat, workers, "beta")
+    _settled(db_session, chat.id, 3)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert follow_up.message == "Answer with alpha, beta"
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_an_interrupted_claude_agent_releases_the_wait(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An interrupted run leaves no result, so the wait holds only the other
+    agent, and its result alone starts the follow-up."""
+    workers = Workers(("alpha", "beta"), family=ToolFamily.CLAUDE)
+    _start(chat, owner, workers, monkeypatch)
+    beta = _finish(db_session, chat, workers, "beta")
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+    _interrupt(db_session, chat, "alpha")
+    _settled(db_session, chat.id, 2)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert _accepted_results(db_session, follow_up) == [beta.id]
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_running_claude_response_holds_none_of_its_agents_results(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A response reads its agents' results as they finish while it runs; its
+    wait on them starts when it ends."""
+    held_while_running: list[list[AgentWait]] = []
+
+    def finish_alpha_while_running() -> None:
+        _finish(db_session, chat, workers, "alpha")
+        db_session.expire_all()
+        held_while_running.append(
+            agent_waits(
+                db_session, chat.id, get_selected_branch(db_session, chat.id)[1]
+            )
+        )
+
+    workers = Workers(
+        ("alpha", "beta"),
+        family=ToolFamily.CLAUDE,
+        before_wait=finish_alpha_while_running,
+    )
+    _start(chat, owner, workers, monkeypatch)
+    assert held_while_running == [[]]
+    [answer] = _root_answers(db_session, chat.id)
+    [wait] = agent_waits(
+        db_session, chat.id, get_selected_branch(db_session, chat.id)[1]
+    )
+    assert wait.response_id == answer.id
+    assert wait.agent_ids == frozenset(
+        response.chat_session_id
+        for response in _worker_responses(db_session, chat.id).values()
+    )
+    # Alpha finished during the response's last model call, so the wait
+    # holds its result with beta's.
+    _finish(db_session, chat, workers, "beta")
+    _settled(db_session, chat.id, 2)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert follow_up.message == "Answer with alpha, beta"
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_each_claude_response_waits_for_its_own_agents(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later response starts more agents while the first response's agents
+    still run: each response's wait holds only its own agents, so each
+    gives one follow-up with its own results."""
+    workers = Workers(
+        ("alpha", "beta"), family=ToolFamily.CLAUDE, later=("gamma", "delta")
+    )
+    _start(chat, owner, workers, monkeypatch)
+    alpha = _finish(db_session, chat, workers, "alpha")
+    _send(chat, owner, LATER_QUESTION)
+    for name in ("gamma", "delta"):
+        assert workers.started[name].wait(WAIT_TIMEOUT_S)
+    _settled(db_session, chat.id, 2)
+    # The user turn read alpha's result; beta still holds the first wait.
+    gamma = _finish(db_session, chat, workers, "gamma")
+    beta = _finish(db_session, chat, workers, "beta")
+    _settled(db_session, chat.id, 3)
+    [first] = _follow_ups(db_session, chat.id)
+    assert _accepted_results(db_session, first) == [beta.id]
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+    delta = _finish(db_session, chat, workers, "delta")
+    _settled(db_session, chat.id, 4)
+    second = _follow_ups(db_session, chat.id)[1]
+    assert _accepted_results(db_session, second) == sorted([gamma.id, delta.id])
+    assert alpha.id not in _accepted_results(db_session, second)

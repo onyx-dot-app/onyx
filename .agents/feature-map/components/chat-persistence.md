@@ -202,7 +202,9 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 **Replay.** Neither path re-runs anything. A runtime response replays through
 `chat/presentation.py:replay_response`, which uses the same message and tool
 renderers as the live stream and reads typed results, not the tool catalog.
-It excludes background child output from the `spawn_agent` card. The parent
+It excludes background child output from the cards of the tools that start
+background agents (`tools/tool_implementations/subagents/shapes.py:AGENT_START_TOOL_NAMES`: the spawn tool
+of either family and `send_message`). The parent
 receives that output as a message before its next model call.
 `ChatInput` is the inbox: pending human and agent messages, and unread child
 results. Each message is in exactly
@@ -249,8 +251,14 @@ finished results wake a recipient only while its queue is not paused and its
 latest run did not fail; an agent's queue pauses when its latest run was
 stopped (`db/chat_inputs.py:wakes_for_results`).
 
-The root's `wait_agents` call ends its turn when it is the step's only call and a named
-agent, or any agent, still runs.
+The root's `wait_agent` call ends its turn when it is the step's only call and a named
+agent, or any agent, still runs. A shape without a wait tool waits by itself
+(`AgentShape.wait_name` is None, the Claude shape): a root response's saved calls of
+that shape's spawn tool (`IMPLICIT_WAIT_SPAWN_TOOL_NAMES`) are its wait on the
+agents that they started. `db/chat_inputs.py:agent_waits` finds them from the
+response's saved generation (the call's name) and the child question that names
+the call's `tool_call` row, and adds them to the wait calls; the rest of the rule
+is the same, so results that finish after the response ends arrive together.
 Its saved `tool_call` result (`AgentWaitDetails`) is the only record of the wait. It holds
 the root's unread results from those agents' runs that belong to its root response or an
 earlier one. `wakes_for_results` applies one rule to an idle root: a finished result that no
@@ -277,7 +285,7 @@ message, for human and agent messages. The source check uses `IS TRUE`, so a
 row with a NULL required field fails it.
 Accepted result inputs reference their source response; reconstructed history
 retains that provenance across compaction. Reserving a child response that its
-caller marks as result-delivering (a `spawn_agent` child, or any run started from
+caller marks as result-delivering (a child of a spawn tool, `SPAWN_TOOL_NAMES`, or any run started from
 the inbox) adds an `agent_result` row for the child's spawner
 (`db/chat_response.py:reserve_child_response__no_commit`). A child reservation
 is a running response; `chat/run_store.py:ChatRunStore` commits it with its owner

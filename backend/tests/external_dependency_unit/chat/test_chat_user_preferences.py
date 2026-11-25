@@ -20,7 +20,7 @@ from onyx.llm.models import (
     UserChatDefaults,
 )
 from onyx.server.query_and_chat.models import SendMessageRequest
-from tests.external_dependency_unit.chat.test_wait_agents import ScriptedLLM
+from tests.external_dependency_unit.chat.test_wait_agent import ScriptedLLM
 from tests.external_dependency_unit.conftest import MakeTestUser
 
 INSTRUCTIONS = "Always answer in haiku."

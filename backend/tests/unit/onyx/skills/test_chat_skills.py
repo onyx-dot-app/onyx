@@ -1,10 +1,16 @@
+from collections.abc import Callable
+from functools import partial
 from unittest.mock import Mock, patch
 from uuid import uuid4
+
+import pytest
+from pydantic import JsonValue
 
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.mention_models import SkillMention
 from onyx.db.models import User
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.prompts.skill_prompts import SKILLS_OMITTED_LINE
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.skills.chat import (
@@ -14,8 +20,18 @@ from onyx.skills.chat import (
     render_skills_catalog,
 )
 from onyx.skills.models import ChatSkill
-from onyx.tools.models import ToolContext
-from onyx.tools.tool_implementations.skills.skill_tools import SkillsListTool
+from onyx.tools.constants import SKILLS_READ_TOOL_NAME
+from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
+    SkillsListTool,
+    SkillsReadTool,
+)
+
+# The catalog as a direct (not code mode) OpenAI agent's prompt names the tools.
+_catalog = partial(
+    render_skills_catalog, read_tool_name=SKILLS_READ_TOOL_NAME, called_name=str
+)
 
 
 def _skill(
@@ -35,7 +51,7 @@ def _catalog_lines(catalog: str) -> list[str]:
 
 
 def test_catalog_lists_every_skill_within_budget() -> None:
-    catalog = render_skills_catalog(
+    catalog = _catalog(
         [
             _skill("pdf-report", "Build a PDF\nreport."),
             _skill("triage", ""),
@@ -54,11 +70,11 @@ def test_catalog_lists_every_skill_within_budget() -> None:
 
 
 def test_catalog_is_empty_without_skills() -> None:
-    assert render_skills_catalog([], 200_000) is None
+    assert _catalog([], 200_000) is None
 
 
 def test_catalog_caps_one_description() -> None:
-    catalog = render_skills_catalog([_skill("long", "x" * 5000)], 1_000_000)
+    catalog = _catalog([_skill("long", "x" * 5000)], 1_000_000)
 
     assert catalog is not None
     (line,) = _catalog_lines(catalog)
@@ -75,7 +91,7 @@ def test_catalog_gives_description_characters_to_each_skill_in_turn() -> None:
     skills = [_skill(f"skill-{index}", "y" * 400) for index in range(10)]
     skills.append(_skill("short", "Fits."))
     # 2% of 20,000 tokens is 400 tokens.
-    catalog = render_skills_catalog(skills, 20_000)
+    catalog = _catalog(skills, 20_000)
 
     assert catalog is not None
     lines = _catalog_lines(catalog)
@@ -96,7 +112,7 @@ def test_catalog_budget_counts_utf8_bytes() -> None:
     # count does not.
     skills = [_skill(f"skill-{index}", "é" * 300) for index in range(10)]
 
-    catalog = render_skills_catalog(skills, 20_000)
+    catalog = _catalog(skills, 20_000)
 
     assert catalog is not None
     lines = _catalog_lines(catalog)
@@ -109,7 +125,7 @@ def test_catalog_budget_counts_utf8_bytes() -> None:
 def test_catalog_cut_below_the_cap_keeps_no_part_of_its_ellipsis() -> None:
     # 258 tokens fit the name and 1,023 description characters, but not the
     # capped 1,024-character description that ends in "...".
-    catalog = render_skills_catalog([_skill("long", "x" * 5000)], 12_900)
+    catalog = _catalog([_skill("long", "x" * 5000)], 12_900)
 
     assert catalog is not None
     assert _catalog_lines(catalog) == ["- long: " + "x" * 1023]
@@ -118,7 +134,7 @@ def test_catalog_cut_below_the_cap_keeps_no_part_of_its_ellipsis() -> None:
 def test_catalog_omits_skills_when_names_do_not_fit() -> None:
     skills = [_skill(f"skill-number-{index}") for index in range(100)]
     # 200 tokens; each name line costs 5.
-    catalog = render_skills_catalog(skills, 10_000)
+    catalog = _catalog(skills, 10_000)
 
     assert catalog is not None
     lines = _catalog_lines(catalog)
@@ -134,7 +150,7 @@ def test_catalog_lists_a_later_skill_that_fits_when_names_do_not() -> None:
     # 60 tokens: the second name does not fit after the first, the later
     # short names do.
     skills = [_skill("a" * 100), _skill("b" * 200), _skill("c"), _skill("d")]
-    catalog = render_skills_catalog(skills, 3_000)
+    catalog = _catalog(skills, 3_000)
 
     assert catalog is not None
     assert _catalog_lines(catalog) == [
@@ -147,7 +163,7 @@ def test_catalog_lists_a_later_skill_that_fits_when_names_do_not() -> None:
 
 def test_catalog_is_left_out_when_the_omitted_line_does_not_fit() -> None:
     # One token fits no skill and no omitted line.
-    assert render_skills_catalog([_skill("pdf-report")], 50) is None
+    assert _catalog([_skill("pdf-report")], 50) is None
 
 
 def test_skills_list_shows_the_full_description_capped() -> None:
@@ -165,7 +181,9 @@ def test_skills_list_shows_the_full_description_capped() -> None:
             return_value=skills,
         ),
     ):
-        result = SkillsListTool(User(id=uuid4()), with_sandbox=False)._run(
+        result = SkillsListTool(
+            User(id=uuid4()), SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+        )._run(
             ToolInvocation(
                 call_id="list",
                 arguments={},
@@ -256,7 +274,10 @@ def test_picked_skills_are_recorded_with_their_skill_messages_from_one_read() ->
     assert report_message.content.startswith(
         f"<skill>\n<name>report</name>\n{kept}\n\n[SKILL.md continues"
     )
-    assert f'name="report" and start_char={len(kept)}' in report_message.content
+    assert (
+        f'Read the rest of skill "report" from start_char={len(kept)}.'
+        in report_message.content
+    )
     assert triage_message.content == "<skill>\n<name>triage</name>\nSort.\n</skill>"
     assert [message.token_count for message in accepted[0].skill_messages] == [
         len(report_message.content),
@@ -275,3 +296,49 @@ def test_send_request_accepts_a_recorded_mention_on_resend() -> None:
     )
 
     assert request.mentions == [SkillMention(name="report")]
+
+
+@pytest.mark.parametrize(
+    ("family", "arguments", "called_name", "list_call"),
+    [
+        (ToolFamily.OPENAI, {"name": "nope"}, str, "skills_list"),
+        (ToolFamily.CLAUDE, {"skill": "nope"}, str, "skills_list"),
+        # In code mode the tools are functions of programs.
+        (
+            ToolFamily.CLAUDE,
+            {"skill": "nope"},
+            lambda name: f"tools.{name}",
+            "tools.skills_list",
+        ),
+    ],
+)
+def test_an_unknown_skill_names_the_list_tool_as_the_model_calls_it(
+    family: ToolFamily,
+    arguments: dict[str, JsonValue],
+    called_name: Callable[[str], str],
+    list_call: str,
+) -> None:
+    with (
+        patch(
+            "onyx.tools.tool_implementations.skills.skill_tools.get_session_with_current_tenant"
+        ),
+        patch(
+            "onyx.tools.tool_implementations.skills.skill_tools.list_chat_skills",
+            return_value=[_skill("notes", "Write release notes.")],
+        ),
+        pytest.raises(ToolCallException) as error,
+    ):
+        SkillsReadTool(
+            User(id=uuid4()), SKILL_READ_SHAPES[family], with_sandbox=False
+        )._run(
+            ToolInvocation(
+                call_id="read",
+                arguments=arguments,
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(called_name=called_name),
+        )
+    assert error.value.llm_facing_message == (
+        f"No skill is named 'nope'. Call {list_call} for the skills you can use."
+    )

@@ -28,6 +28,7 @@ from onyx.file_store.file_store import (
     get_default_file_store,
 )
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolResult
 from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.models import FileListing
@@ -54,6 +55,7 @@ from onyx.tools.tool_implementations.sandbox.file_copies import (
 )
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import ExecCommandTool
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.microvm.conftest import (
@@ -149,6 +151,7 @@ def new_turn(
             chat_session_id=chat or chat_session_id,
             vm_chat_files=chat_files or [],
             copy_vm_chat_files=chat_files is not None,
+            shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         refs.append(turn.start_call())
         return turn, refs[-1]

@@ -9,6 +9,7 @@ from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_DESCRIPTION,
     RESEARCH_AGENT_TOOL_DESCRIPTION,
 )
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolDefinition
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
@@ -20,7 +21,10 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
     KnowledgeGraphTool,
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -31,6 +35,7 @@ def _builtin_definition(tool_class: type[Tool]) -> ToolDefinition:
     tool = tool_class.__new__(tool_class)
     if isinstance(tool, OpenURLTool):
         tool._web_fetch_disabled = False
+        tool.shape = OPEN_URL_SHAPES[ToolFamily.OPENAI]
     return tool.tool_definition()
 
 

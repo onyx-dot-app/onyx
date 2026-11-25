@@ -453,6 +453,10 @@ class ToolContext(BaseModel):
     # In a sandbox chat: copies the files of a search's shown results into
     # the VM, and the result names them by their paths.
     sandbox_search_files: SearchFileOffer | None = None
+    # The name that the model calls a tool by, by its tool name: in code mode,
+    # its program function's (ChatAgent.called_name). Results that tell the
+    # model to call another tool name it so.
+    called_name: Callable[[str], str] = Field(default=str, exclude=True)
 
 
 class ToolCallInfo(BaseModel):
