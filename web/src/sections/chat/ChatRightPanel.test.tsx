@@ -137,7 +137,7 @@ function Chat({
     null
   );
   const elements = useMemo(
-    () => ({ workspace, page, panelToggleSlot }),
+    () => ({ workspace, page, panelToggleSlot, activitySlot: null }),
     [panelToggleSlot]
   );
   return (
@@ -517,21 +517,20 @@ test("only file tabs move, and the strip announces only real moves", async () =>
 
   // A drag cannot drop a file tab on a fixed tab. Every tab measures zero
   // here, so the drop lands on the first droppable tab.
-  const pointer = (type: string, target: EventTarget, clientX: number) => {
-    // jsdom has no PointerEvent; dnd-kit reads these mouse event fields
-    const event = new MouseEvent(type, { bubbles: true, button: 0, clientX });
-    Object.defineProperty(event, "isPrimary", { value: true });
+  const mouse = (type: string, target: EventTarget, clientX: number) => {
     act(() => {
-      target.dispatchEvent(event);
+      target.dispatchEvent(
+        new MouseEvent(type, { bubbles: true, button: 0, clientX })
+      );
     });
   };
   // After a drag, dnd-kit stops document clicks for 50ms. The fake clock ends
   // that here, not in the next test.
   jest.useFakeTimers();
   try {
-    pointer("pointerdown", screen.getByRole("tab", { name: "Q3 report" }), 0);
-    pointer("pointermove", document, -20);
-    pointer("pointerup", document, -20);
+    mouse("mousedown", screen.getByRole("tab", { name: "Q3 report" }), 0);
+    mouse("mousemove", document, -20);
+    mouse("mouseup", document, -20);
     act(() => jest.advanceTimersByTime(50));
   } finally {
     jest.useRealTimers();
@@ -835,7 +834,7 @@ function Chrome({
     null
   );
   const elements = useMemo(
-    () => ({ workspace, page, panelToggleSlot }),
+    () => ({ workspace, page, panelToggleSlot, activitySlot: null }),
     [panelToggleSlot]
   );
   onRender?.();
@@ -1205,22 +1204,23 @@ test("a reload that fails says so and keeps the list", async () => {
   expect(screen.getByRole("button", { name: "Open Q3 report" })).toBeVisible();
 });
 
-test("a file tab's URL bar shows its path and downloads it", async () => {
+test("a file tab's URL bar shows its path and the preview's actions", async () => {
   renderChat([[REPORT]]);
   await act(async () => {
     screen.getByRole("button", { name: "Preview report.md" }).click();
   });
-  expect(await preview("Q3 report")).toBeVisible();
+  const shown = await preview("Q3 report");
   expect(screen.getByTestId("url-bar-pill")).toHaveTextContent("report.md");
-  // The preview draws no download of its own: the URL bar has it
+  // The actions sit in the URL bar's row, not over the preview
+  const bar = screen.getByTestId("url-bar-pill").parentElement!;
   expect(
-    within(await preview("Q3 report")).queryByRole("link", {
-      name: "Download",
-    })
-  ).toBeNull();
-  const click = jest
-    .spyOn(HTMLAnchorElement.prototype, "click")
-    .mockImplementation(() => undefined);
-  act(() => screen.getByRole("button", { name: "Download file" }).click());
-  expect(click).toHaveBeenCalledTimes(1);
+    await within(bar).findByRole("link", { name: "Download" })
+  ).toBeVisible();
+  expect(
+    within(bar).getByRole("button", { name: "Copy content" })
+  ).toBeVisible();
+  expect(
+    within(bar).getByRole("button", { name: "Show source" })
+  ).toBeVisible();
+  expect(within(shown).queryByRole("link", { name: "Download" })).toBeNull();
 });

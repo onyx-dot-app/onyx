@@ -3,7 +3,7 @@ import { ResearchAgentRenderer } from "@/lib/timeline/chat/renderers/deepresearc
 import {
   FullChatState,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import {
   PacketType,
   ResearchAgentPacket,

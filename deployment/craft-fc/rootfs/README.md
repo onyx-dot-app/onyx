@@ -129,9 +129,13 @@ needs the network at boot.
     `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO` (all set to the bundle);
   - `/etc/profile.d/craft-guest-env.sh` for login shells;
   - `/etc/apt/apt.conf.d/80craft-egress-proxy`.
-- Makes the root-owned mount points `/mnt/scratch`, `/mnt/skills`,
-  `/mnt/user-uploads` and `/mnt/spaces`, and `/home/onyx/workspaces` (the
-  session directories), owned by the sandbox user.
+- Makes the root-owned mount points `/mnt/scratch`, `/mnt/user-uploads` and
+  `/mnt/spaces`, and `/home/onyx/workspaces` (the session directories), owned
+  by the sandbox user.
+- Makes the root-owned skills folder `/var/lib/onyx/skills` (mode 0755), on
+  the writable `/var` overlay. The guest daemon puts each skill there
+  (`InstallSkill`). The sandbox user can read and run the skills but not
+  change them.
 - Writes `/etc/hosts`, `/etc/hostname` and an empty `/etc/resolv.conf`. There is
   no DNS in the VM.
 - Makes an ext4 file system with no journal (the drive is always read-only).
@@ -220,16 +224,16 @@ Attach the drives in this order. The guest finds them by order:
 |---|---|---|---|---|
 | `rootfs` | `/dev/vda` | `true` (root device) | `rootfs.ext4` | `/` |
 | `scratch` | `/dev/vdb` | `false` | Per-VM ext4, made by the host (empty or a saved disk) | `/mnt/scratch` |
-| `managed` | `/dev/vdc` | `true` | Skills slot A: per-VM ext4 with the skills | `/mnt/skills` |
+| `managed` | `/dev/vdc` | `true` | Managed slot A of the template layout. No mount uses it | not by `attach` |
 | `upload_a`, `upload_b` | `/dev/vdd`, `/dev/vde` | `true` | Upload slots of the template layout | not by `attach` |
-| `managed_b` | `/dev/vdf` | `true` | Skills slot B: the spare for a skills update. Optional: older templates do not have it | not by `attach` |
+| `managed_b` | `/dev/vdf` | `true` | Managed slot B of the template layout. Optional: older templates do not have it | not by `attach` |
 | `user_uploads_a`, `user_uploads_b` | `/dev/vdg`, `/dev/vdh` | `true` | User uploads slots A and B (layout 5) | slot A on `/mnt/user-uploads` |
 | `spaces_a`, `spaces_b` | `/dev/vdi`, `/dev/vdj` | `true` | Spaces slots A and B (layout 5) | slot A on `/mnt/spaces` |
 
 New drives always go after the old ones, so the older device names do not
 move. `init.conf` sets the managed mounts in `MANAGED_MOUNTS`
 (`name:mount point:slot A:slot B`). The manifest lists them in
-`guest.managed_mounts` (and the skills slots in `guest.managed_slots`). The
+`guest.managed_mounts` (and the `managed` slots in `guest.managed_slots`). The
 guest daemon's `--managed-mounts` has the same list.
 
 Each session has its directory `/home/onyx/workspaces/<session-id>`
@@ -251,7 +255,7 @@ private mount propagation. It never mounts slot B. If slot B is there,
 
 ### Managed update without a new VM
 
-Each mount (skills, user uploads, spaces) updates the same way, with its own
+Each mount (user uploads, spaces) updates the same way, with its own
 two slots.
 
 The guest daemon and the node agent do the update, not `attach`:
@@ -289,7 +293,7 @@ At boot, init:
 1. Mounts `/proc`, `/sys`, `/dev`, `/dev/pts`, `/dev/shm`, cgroup2 on
    `/sys/fs/cgroup` (all controllers on in `cgroup.subtree_control`), and
    tmpfs on `/run` and `/tmp`. It makes the Onyx directories
-   `/tmp/onyx/tool-results`, `/tmp/onyx/search-files` and `/tmp/onyx/artifacts`,
+   `/tmp/onyx/tool-results` and `/tmp/onyx/artifacts`,
    owned by the sandbox user (uid 1000). The template boot makes them and the
    template snapshot keeps them, so every VM restored from it has them.
    Then it sets kernel sysctls: `io_uring_disabled=2`, `kptr_restrict=2`,
@@ -340,7 +344,7 @@ PID files: `/run/craft-fc/guest-daemon.pid` and `/run/craft-fc/egress-relay.pid`
    The read-only root is the lower layer. The upper layer is
    `/mnt/scratch/overlay/<name>/upper` (for example `overlay/usr/upper`).
 4. Mounts slot A of each managed mount read-only and `noexec`, with private
-   propagation, on `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces`, or
+   propagation, on `/mnt/user-uploads` and `/mnt/spaces`, or
    an empty read-only tmpfs if the template has no such drive. Slot B stays
    unmounted.
 
@@ -390,13 +394,13 @@ you change `craft-init`, `attach.sh` or the drive layout, boot the result on a
 KVM host (see `../README.md`, "Boot test") and check:
 
 - `/proc/mounts` has the overlays and the read-only managed drive;
-- `/tmp` is a tmpfs, and `/tmp/onyx` and its directories `tool-results`,
-  `search-files` and `artifacts` are owned by uid 1000. A command (uid 1000)
+- `/tmp` is a tmpfs, and `/tmp/onyx` and its directories `tool-results`
+  and `artifacts` are owned by uid 1000. A command (uid 1000)
   can make and delete files in them. `TestRootfsDeliveryKVM` (full KVM lane)
   checks this;
 - commands run as uid 1000; with `--daemon-cmd "/craft-fc/bin/guest-daemon --command-user="`
   (commands as root), `apt-get install`, `pip install` and `npm install -g` work;
-- writes to `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` fail, also
+- writes to `/mnt/user-uploads` and `/mnt/spaces` fail, also
   after `mount -o remount,rw`, and a program on them does not run (`noexec`);
 - with slot B attached: it is not mounted, and `MountManaged` of slot B
   leaves slot B on the mount point;

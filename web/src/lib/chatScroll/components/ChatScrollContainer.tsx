@@ -82,8 +82,9 @@ export interface ChatScrollContainerProps {
    *  the room. */
   wide?: boolean;
 
-  /** Rendered inside the scroll element, after the content (a sticky
-   *  composer). It is not content: "at the bottom" ignores it. */
+  /** Rendered inside the scroll element, after the content: a sticky
+   *  composer, or room for one laid over the view. It is not content: "at
+   *  the bottom" ignores it. */
   footer?: React.ReactNode;
 
   /** Fade content opacity at the top and bottom edges. */
@@ -775,7 +776,7 @@ const ChatScrollContainer = React.memo(
         <div
           className={
             className ??
-            "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-1"
+            "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden"
           }
         >
           <div
@@ -787,7 +788,9 @@ const ChatScrollContainer = React.memo(
               scrollClassName ??
               cn(
                 // A size container: the latest turn's min-height is in cqh.
-                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size]",
+                // Focus and scrollIntoView keep clear of a composer laid
+                // over the view.
+                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size] scroll-pb-(--app-composer-height)",
                 hideScrollbar ? "no-scrollbar" : "default-scrollbar",
                 // The wide width (and every width below md) drops the
                 // reserved gutters so content gets the room; the reading

@@ -4007,6 +4007,18 @@
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "1 分あたりの RU",
+              "description": "このコネクタが使用できる、Microsoft アプリ登録のレート制限の割り当てです。単位は 1 分あたりのリソース ユニット (RU) です。Microsoft はライセンス階層に応じて、アプリの制限を 1 分あたり 1,250〜6,250 RU に設定します。空欄にすると、Onyx が制限を学習します。[階層の確認方法](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "このアプリ登録を使用する他のコネクタ: {connectors}。合計: 1 分あたり {total} RU。",
+              "none": "このアプリ登録で 1 分あたりの RU を設定している他のコネクタはありません。",
+              "hidden": "{count, plural, other {表示できないコネクタ # 件}}",
+              "unavailable": "このアプリ登録を使用する他のコネクタの 1 分あたりの RU を読み込めませんでした。"
+            }
+          }
         }
       }
     },
@@ -12199,7 +12211,7 @@
           "text": "{toolName} はブロックされました"
         },
         "completedStatus": {
-          "text": "{toolName} が完了しました"
+          "text": "{toolName} を実行しました"
         },
         "downloadFileLink": {
           "label": "ダウンロード"
@@ -12233,9 +12245,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName} はサーバーに接続できませんでした"
-        },
-        "waitingIndicator": {
-          "text": "レスポンスを待っています..."
         }
       },
       "customToolAuth": {
@@ -12413,7 +12422,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "思考中"
+          "text": "思考中..."
         }
       },
       "timeline": {
@@ -12428,7 +12437,7 @@
             "status": "プランを生成しました"
           },
           "generating": {
-            "status": "プランを生成中"
+            "status": "プランを生成中..."
           }
         },
         "expandButton": {
@@ -12436,10 +12445,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "読み取り中"
+            "status": "ウェブページを閲覧中..."
           },
           "read": {
-            "status": "読み込みました"
+            "status": "{count, plural, =0 {ウェブページを閲覧しました} other {# 件のウェブページを閲覧しました}}"
           }
         },
         "fileReader": {
@@ -12447,69 +12456,108 @@
             "status": "{fileName} を読み取りました ({total, number} 文字中 {start, number}–{end, number} 文字目)"
           },
           "reading": {
-            "status": "ファイルを読み取り中"
+            "status": "ファイルを読み取り中..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
         },
         "header": {
           "executingCode": {
-            "label": "コードを実行中"
+            "label": "コードを実行中..."
           },
           "executingNamedTool": {
-            "label": "{toolName} を実行中"
+            "label": "{toolName} を実行中..."
           },
           "executingTool": {
-            "label": "ツールを実行中"
+            "label": "ツールを実行中..."
           },
           "generatingImages": {
-            "label": "画像を生成中"
+            "label": "画像を生成中..."
           },
           "generatingPlan": {
-            "label": "プランを生成中"
+            "label": "プランを生成中..."
           },
           "queryingKnowledgeBase": {
-            "label": "ナレッジベースを照会中"
+            "label": "ナレッジベースを照会中..."
           },
           "reading": {
-            "label": "読み取り中"
+            "label": "読み取り中..."
           },
           "readingFile": {
-            "label": "ファイルを読み取り中"
+            "label": "ファイルを読み取り中..."
           },
           "researching": {
-            "label": "リサーチ中"
+            "label": "リサーチ中..."
           },
           "searchingWeb": {
-            "label": "ウェブを検索中"
+            "label": "ウェブを検索中..."
           },
           "thinking": {
-            "label": "思考中"
-          },
-          "thinkingEllipsis": {
             "label": "思考中..."
           },
           "updatingMemory": {
             "label": "メモリを更新中..."
           },
           "working": {
-            "label": "作業中"
+            "label": "作業中..."
           },
           "waitingForApproval": {
-            "label": "承認を待っています"
+            "label": "承認を待っています..."
           },
           "waitingForAnswer": {
-            "label": "回答を待っています"
+            "label": "回答を待っています..."
           },
           "runningCommand": {
-            "label": "コマンドを実行中"
+            "label": "コマンドを実行中..."
           },
           "editingFiles": {
-            "label": "ファイルを編集中"
+            "label": "ファイルを編集中..."
           },
           "publishingFiles": {
-            "label": "ファイルを公開しています"
+            "label": "ファイルを公開しています..."
+          },
+          "browsing": {
+            "label": "ウェブページを閲覧中..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "作業中...",
+              "done": "作業しました"
+            },
+            "crunchingDetails": {
+              "working": "詳細を分析中...",
+              "done": "詳細を分析しました"
+            },
+            "connectingDots": {
+              "working": "点と点をつないでいます...",
+              "done": "点と点をつなぎました"
+            },
+            "runningNumbers": {
+              "working": "数字を計算中...",
+              "done": "数字を計算しました"
+            },
+            "fillingGaps": {
+              "working": "足りない部分を補っています...",
+              "done": "足りない部分を補いました"
+            },
+            "sortingThingsOut": {
+              "working": "整理しています...",
+              "done": "整理しました"
+            },
+            "gatheringPieces": {
+              "working": "ピースを集めています...",
+              "done": "ピースを集めました"
+            },
+            "workingThroughIt": {
+              "working": "取り組んでいます...",
+              "done": "取り組みました"
+            },
+            "ironingOutDetails": {
+              "working": "細部を詰めています...",
+              "done": "細部を詰めました"
+            },
+            "roundingThingsOut": {
+              "working": "仕上げています...",
+              "done": "仕上げました"
+            }
           }
         },
         "internalSearch": {
@@ -12517,10 +12565,10 @@
             "text": "結果が見つかりません"
           },
           "reading": {
-            "status": "読み取り中"
+            "status": "読み取り中..."
           },
           "read": {
-            "label": "読み込みました"
+            "label": "読んだドキュメント"
           },
           "header": {
             "default": "社内ドキュメントを検索中",
@@ -12528,7 +12576,8 @@
             "sources": "{sources}を検索中",
             "doneSources": "{sources}を検索しました",
             "sourcesOverflow": "{sources} 他{count}件",
-            "withTimeWindow": "{header}({timeWindow})"
+            "withTimeWindow": "{header}({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "{date}以降",
@@ -12547,7 +12596,7 @@
             "text": "メモリツールは無効です"
           },
           "updating": {
-            "status": "メモリを更新中"
+            "status": "メモリを更新中..."
           },
           "updated": {
             "status": "メモリを更新しました"
@@ -12569,10 +12618,7 @@
             "status": "ナレッジベースを照会しました"
           },
           "querying": {
-            "status": "ナレッジベースを照会中"
-          },
-          "listed": {
-            "label": "{count, plural, one {# 件のドキュメントを一覧表示} other {# 件のドキュメントを一覧表示}}"
+            "status": "ナレッジベースを照会中..."
           },
           "query": {
             "table": {
@@ -12629,21 +12675,15 @@
             "label": "出力:"
           },
           "running": {
-            "status": "Python を実行中"
+            "status": "Python を実行中..."
           },
           "ran": {
             "status": "Python を実行しました"
-          },
-          "runningCode": {
-            "label": "コードを実行中..."
-          },
-          "writingCode": {
-            "status": "コードを作成中..."
           }
         },
         "reasoning": {
           "thinking": {
-            "status": "思考中"
+            "status": "思考中..."
           },
           "thought": {
             "status": "思考しました"
@@ -12679,7 +12719,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "ウェブを検索中"
+            "status": "ウェブを検索中..."
           },
           "searched": {
             "status": "ウェブを検索しました"
@@ -12687,19 +12727,16 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {コマンドを実行中} started {コマンドを開始しました} failed {コマンドが失敗しました} canceled {キャンセルされました} done {コマンドを実行しました} other {コマンドを実行しました}}",
+            "status": "{phase, select, running {コマンドを実行中...} started {コマンドを開始しました} failed {コマンドが失敗しました} canceled {キャンセルされました} done {コマンドを実行しました} other {コマンドを実行しました}}",
             "workdir": {
               "label": "場所: {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中} failed {セッション {sessionId} に入力を送信できませんでした} canceled {キャンセルされました} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中} failed {セッション {sessionId} を確認できませんでした} canceled {キャンセルされました} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中...} failed {セッション {sessionId} に入力を送信できませんでした} canceled {キャンセルされました} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中...} failed {セッション {sessionId} を確認できませんでした} canceled {キャンセルされました} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {セッションに入力を送信中} failed {セッションに入力を送信できませんでした} canceled {キャンセルされました} done {セッションに入力を送信しました} other {セッションに入力を送信しました}}} check {{phase, select, running {セッションを確認中} failed {セッションを確認できませんでした} canceled {キャンセルされました} done {セッションを確認しました} other {セッションを確認しました}}} other {セッション}}"
+              "status": "{kind, select, send {{phase, select, running {セッションに入力を送信中...} failed {セッションに入力を送信できませんでした} canceled {キャンセルされました} done {セッションに入力を送信しました} other {セッションに入力を送信しました}}} check {{phase, select, running {セッションを確認中...} failed {セッションを確認できませんでした} canceled {キャンセルされました} done {セッションを確認しました} other {セッションを確認しました}}} other {セッション}}"
             }
-          },
-          "output": {
-            "title": "出力"
           },
           "exitCode": {
             "label": "終了コード {exitCode}"
@@ -13018,6 +13055,12 @@
       },
       "copyButton": {
         "tooltip": "内容をコピー"
+      },
+      "sourceButton": {
+        "tooltip": "ソースを表示"
+      },
+      "previewButton": {
+        "tooltip": "プレビューを表示"
       },
       "downloadButton": {
         "label": "ファイルをダウンロード",
@@ -13480,10 +13523,6 @@
       "toggleButton": {
         "label": "パネルの表示を切り替え"
       },
-      "downloadButton": {
-        "label": "ダウンロード",
-        "tooltip": "ファイルをダウンロード"
-      },
       "reloadButton": {
         "label": "ファイルを更新",
         "error": "ファイルを再読み込みできませんでした。もう一度お試しください。"
@@ -13516,6 +13555,34 @@
       },
       "menu": {
         "label": "形式を指定してエクスポート…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "アクティビティ"
+      },
+      "needsYou": {
+        "title": "対応が必要",
+        "approval": "{tool}を承認",
+        "question": "質問に回答"
+      },
+      "agents": {
+        "title": "エージェント",
+        "status": {
+          "starting": "開始中",
+          "running": "実行中",
+          "suspended": "待機中",
+          "complete": "完了",
+          "limit": "ステップ上限に到達",
+          "cancelled": "キャンセル済み",
+          "stopped": "停止済み",
+          "error": "失敗"
+        },
+        "finished": "以前のエージェント"
+      },
+      "files": {
+        "title": "ファイル",
+        "viewAll": "{count, plural, other {#件のファイルをすべて表示}}"
       }
     }
   },
@@ -14047,6 +14114,21 @@
         "label": "プランをアップグレード"
       },
       "availableFor": "{plan}で利用可能"
+    },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "これはEnterprise機能です。プレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "機能をお試しいただけるよう、当社のモデルキーを設定しています。ご自身のOnyxではご自身のキーで動作します。[営業に相談]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "この機能はプレイグラウンドでは無効になっています。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})"
+        },
+        "title": "プレイグラウンドの制限",
+        "tooltip": "プレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。"
+      }
     },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
@@ -15004,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "作業中"
+          "label": "作業中..."
         }
       },
       "read": {
@@ -17213,18 +17295,6 @@
       "select": "{name} を選択"
     }
   },
-  "opensearchHealth": {
-    "title": "OpenSearchのリソースが不足しています",
-    "disk": "OpenSearchのデータノードでディスク使用率が85%以上です。ディスクがいっぱいになるとインデックス作成が停止する可能性があります。",
-    "jvmMemory": "OpenSearchのJVMメモリ使用率が複数回のチェックで85%を超えています。検索やインデックス作成が失敗する可能性があります。",
-    "vectorMemory": "OpenSearchのベクトルメモリがほぼ満杯、または上限に達しています。検索が遅くなり、検索やインデックス作成が失敗する可能性があります。",
-    "stale": "最新のチェックを利用できません。この警告は最後に成功したチェックに基づいており、復旧は確認されていません。",
-    "dismiss": "閉じる",
-    "diskTitle": "ディスク容量",
-    "jvmMemoryTitle": "JVMメモリ",
-    "vectorMemoryTitle": "ベクトルメモリ",
-    "viewDetails": "詳細を表示"
-  },
   "plugins": {
     "member": {
       "sections": {
@@ -17818,7 +17888,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {スキル 1 件} other {スキル {skills} 件}}",
       "loadFailed": "プラグインを読み込めませんでした。",
       "filter": {
         "all": "すべてのプラグイン"

@@ -354,3 +354,13 @@ class UserPastWriteLimit(BaseModel):
     usage: SkillUsage
     # Plugins the last push left out of the user's sandbox.
     skills_not_loaded: int
+
+
+class ChatSkillFiles(BaseModel):
+    """One chat skill's files, each under `<name>/`, and the key of that
+    version of them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    version: str
+    files: dict[str, bytes]

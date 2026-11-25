@@ -27,7 +27,6 @@ type harnessMount struct {
 }
 
 var harnessMounts = []harnessMount{
-	{"skills", "managed", "managed_b"},
 	{"user-uploads", "user_uploads_a", "user_uploads_b"},
 	{"spaces", "spaces_a", "spaces_b"},
 }
@@ -55,8 +54,9 @@ func mkfsDir(t *testing.T, path, uuid, text string) uint64 {
 }
 
 // bootHarnessVM cold boots a VM with the ten drives of template layout 5:
-// rootfs, scratch, skills A, upload A/B, skills B, then the A and B slots of
-// user-uploads and spaces. Slot A of each mount has marker "a-<mount>".
+// rootfs, scratch, managed A, upload A/B, managed B, then the A and B slots
+// of user-uploads and spaces. Slot A of each mount has marker "a-<mount>".
+// The guest mounts neither managed slot.
 func bootHarnessVM(t *testing.T, e env, name string) *vm {
 	t.Helper()
 	dir := prepareDir(t, e, name)
@@ -68,7 +68,7 @@ func bootHarnessVM(t *testing.T, e env, name string) *vm {
 	ro := func(id string) map[string]any {
 		return map[string]any{"drive_id": id, "path_on_host": file(id), "is_root_device": false, "is_read_only": true}
 	}
-	for _, id := range []string{"upload_a", "upload_b", "managed_b", "user_uploads_b", "spaces_b"} {
+	for _, id := range []string{"managed", "upload_a", "upload_b", "managed_b", "user_uploads_b", "spaces_b"} {
 		if err := os.WriteFile(filepath.Join(dir, file(id)), make([]byte, 1<<20), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +92,7 @@ func bootHarnessVM(t *testing.T, e env, name string) *vm {
 // TestHarnessContractKVM checks the guest side of the harness contract on
 // the production root drive: the session directory and unscoped commands,
 // the command env, Cancel with SIGINT to the process group, the execution
-// cap, and a swap of each of the three managed mounts.
+// cap, and a swap of each managed mount.
 func TestHarnessContractKVM(t *testing.T) {
 	e := loadEnv(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -213,7 +213,7 @@ cd /etc && pwd`}, SessionId: "s1"})
 		}
 	})
 
-	t.Run("three_managed_mounts_swap", func(t *testing.T) {
+	t.Run("managed_mounts_swap", func(t *testing.T) {
 		check := func(want map[string]string) {
 			t.Helper()
 			var script strings.Builder

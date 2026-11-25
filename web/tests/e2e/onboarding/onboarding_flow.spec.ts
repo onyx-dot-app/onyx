@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser, apiLogin } from "@tests/e2e/utils/auth";
 import { OnboardingNamePromptPage } from "@tests/e2e/pages/OnboardingNamePromptPage";
+import { AppSidebarPage } from "@tests/e2e/pages/AppSidebarPage";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
@@ -146,6 +147,53 @@ test.describe("Onboarding Flow @exclusive", () => {
       await expectElementScreenshot(llmStep, {
         name: "onboarding-llm-step",
       });
+    });
+
+    test("the input lands in one place after a slow load and after leaving a chat", async ({
+      page,
+    }) => {
+      const client = new OnyxApiClient(page.request);
+      const namePromptPage = new OnboardingNamePromptPage(page);
+
+      const sessionId = await client.createChatSession("Onboarding return");
+      try {
+        // The user arrives after the first render
+        await namePromptPage.gotoBeforeUserLoads();
+        await expect(namePromptPage.namePrompt).toBeVisible();
+        const freshTop = await namePromptPage.settledChatInputTop();
+
+        await namePromptPage.gotoChat(sessionId);
+        // From the chat's layout, where the bottom row is empty
+        await new AppSidebarPage(page).newSession();
+        await expect(namePromptPage.namePrompt).toBeVisible();
+        await expect
+          .poll(async () =>
+            Math.abs((await namePromptPage.chatInputTop()) - freshTop)
+          )
+          .toBeLessThanOrEqual(2);
+        // Stops there instead of sliding through
+        expect(
+          Math.abs((await namePromptPage.settledChatInputTop()) - freshTop)
+        ).toBeLessThanOrEqual(2);
+      } finally {
+        await client.deleteChatSession(sessionId);
+      }
+    });
+
+    test("a new step keeps the input in place after the agents load late", async ({
+      page,
+    }) => {
+      const namePromptPage = new OnboardingNamePromptPage(page);
+      // The page mounts only after a retry of the agents request
+      await namePromptPage.gotoAfterAgentsFail();
+      await expect(namePromptPage.onboardingHeader).toBeVisible();
+      const welcomeTop = await namePromptPage.settledChatInputTop();
+
+      await namePromptPage.advanceOnboarding();
+      await expect(namePromptPage.nameStep).toBeVisible();
+      expect(
+        Math.abs((await namePromptPage.settledChatInputTop()) - welcomeTop)
+      ).toBeLessThanOrEqual(2);
     });
   });
 

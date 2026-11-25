@@ -5,6 +5,7 @@ import { Button, InputTypeIn, Text, Tooltip } from "@opal/components";
 import { SvgRevert } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { Section } from "@opal/layouts";
+import { cn } from "@opal/utils";
 
 interface PanelUrlBarProps {
   // The path or URL shown, left to right, when the bar has no search
@@ -34,13 +35,14 @@ export function PanelUrlBar({
   children,
 }: PanelUrlBarProps) {
   return (
-    <div className="h-11 shrink-0 px-3 pb-2">
-      <Section flexDirection="row" justifyContent="start" gap={2}>
+    <div className="h-9 shrink-0 px-3 pb-2">
+      <Section flexDirection="row" justifyContent="start" gap={1}>
         {refresh && (
           <Button
             icon={refresh.isUserRefreshing ? IconLoader : SvgRevert}
             prominence="tertiary"
-            size="sm"
+            // As tall as the pill, with a 16px icon, as a browser bar's
+            size="md"
             disabled={
               !refresh.onRefresh ||
               refresh.isRefreshing ||
@@ -52,15 +54,20 @@ export function PanelUrlBar({
             aria-busy={refresh.isRefreshing || refresh.isUserRefreshing}
           />
         )}
+        {/* As tall as the panel's tabs (28px). A search field brings its
+            own 8px inset, the one the location text gets from the pill. */}
         <div
           data-testid="url-bar-pill"
-          className="h-8 min-w-0 flex-1 overflow-hidden rounded-md bg-background-tint-02 px-2"
+          className={cn(
+            "h-7 min-w-0 flex-1 overflow-hidden rounded-08 bg-background-tint-02",
+            !onSearchChange && "px-2"
+          )}
         >
           <Section flexDirection="row" justifyContent="start" gap={0}>
             {onSearchChange ? (
               <InputTypeIn
                 variant="internal"
-                icon="search"
+                type="search"
                 value={searchValue ?? ""}
                 onChange={(event) => onSearchChange(event.target.value)}
                 placeholder={placeholder}
@@ -76,7 +83,8 @@ export function PanelUrlBar({
                     <Text
                       as="p"
                       dir="ltr"
-                      font="secondary-body"
+                      // A browser bar's 14px, as the search field's
+                      font="main-ui-body"
                       color="text-03"
                       maxLines={1}
                     >

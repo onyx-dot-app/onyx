@@ -1,9 +1,12 @@
 import {
   ADMIN_ROUTES,
   matchAdminRoute,
+  type AdminRouteEntry,
   type FeatureFlags,
 } from "@/lib/admin-routes";
 import { buildItems } from "@/lib/admin-sidebar-utils";
+import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
+import type { Settings } from "@/lib/settings/types";
 import { Permission } from "@/lib/types";
 import { Tier } from "@/lib/tiers/types";
 
@@ -150,4 +153,65 @@ test("shows Skills only to full admins when Craft is available", () => {
       (item) => item.link
     )
   ).not.toContain("/admin/skills");
+});
+
+test("a restricted page stays reachable and is marked on the playground", () => {
+  const playground: FeatureFlags = { ...flags, isPlayground: true };
+  // SAFETY: buildItems reads only the fields given here.
+  const settings = {
+    playground_restrictions: [
+      PlaygroundRestrictedFeature.SCIM,
+      PlaygroundRestrictedFeature.SSO,
+    ],
+  } as Settings;
+  const items = buildItems(
+    [Permission.FULL_ADMIN_PANEL_ACCESS],
+    playground,
+    settings
+  );
+  const scim = items.find((item) => item.link === ADMIN_ROUTES.SCIM.path);
+  // SCIM is Enterprise-only and the tier is Community, but the restriction
+  // wins: the page renders read-only under the notice, so it is not disabled.
+  expect(scim).toMatchObject({
+    disabled: false,
+    restrictedFeatureKey: PlaygroundRestrictedFeature.SCIM,
+  });
+  const sso = items.find(
+    (item) => item.link === ADMIN_ROUTES.SSO_PROVIDERS.path
+  );
+  expect(sso).toMatchObject({
+    disabled: false,
+    restrictedFeatureKey: PlaygroundRestrictedFeature.SSO,
+  });
+  const theme = items.find((item) => item.link === ADMIN_ROUTES.THEME.path);
+  expect(theme).toMatchObject({ disabled: true });
+  expect(theme?.restrictedFeatureKey).toBeUndefined();
+});
+
+test("off the playground the tier decides and nothing is restricted", () => {
+  const items = buildItems([Permission.FULL_ADMIN_PANEL_ACCESS], flags, null);
+  const scim = items.find((item) => item.link === ADMIN_ROUTES.SCIM.path);
+  expect(scim).toMatchObject({ disabled: true });
+  expect(items.every((item) => item.restrictedFeatureKey === undefined)).toBe(
+    true
+  );
+});
+
+test("every feature the server can restrict has a page or is a toggle", () => {
+  // SAFETY: ADMIN_ROUTES satisfies Record<string, AdminRouteEntry>.
+  const routes = Object.values(ADMIN_ROUTES) as AdminRouteEntry[];
+  const onPages = new Set(
+    routes
+      .map((route) => route.featureKey)
+      .filter((feature) => feature !== undefined)
+  );
+  // Contextual RAG lives on the Index Settings page under `embedding`, and
+  // anonymous access is a switch on the Security page.
+  const toggles = [
+    PlaygroundRestrictedFeature.CONTEXTUAL_RAG,
+    PlaygroundRestrictedFeature.ANONYMOUS_ACCESS,
+  ];
+  for (const feature of Object.values(PlaygroundRestrictedFeature)) {
+    expect(onPages.has(feature) || toggles.includes(feature)).toBe(true);
+  }
 });

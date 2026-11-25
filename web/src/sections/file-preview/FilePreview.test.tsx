@@ -83,7 +83,7 @@ const FILE_URL = "/api/chat/file/file-1";
 
 function PreviewOf({ name }: { name: string }) {
   const preview = useChatFilePreview("file-1", name);
-  return <FilePreviewBody preview={preview} fileName={name} actions />;
+  return <FilePreviewBody preview={preview} fileName={name} />;
 }
 
 function renderPreview(name: string) {
@@ -174,26 +174,102 @@ describe("loading and failure", () => {
 });
 
 describe("text formats", () => {
-  test("code shows highlighted source, its line count, copy and download", async () => {
+  test("code shows highlighted source, line numbers, its line count, copy and download", async () => {
     jest
       .mocked(fetchChatFile)
       .mockResolvedValue(
-        fileResponse('<h1 class="x">Report</h1>\n', "text/html", "page.html")
+        fileResponse("const a = 1;\n", "text/javascript", "main.js")
       );
+    const view = renderPreview("main.js");
+
+    expect(await screen.findByText("2 lines")).toBeVisible();
+    expect(view.container.querySelector("code")).toHaveTextContent(
+      "const a = 1;"
+    );
+    expect(view.container.querySelector("pre[aria-hidden]")?.textContent).toBe(
+      "1\n2"
+    );
+    expect(screen.getByRole("button", { name: "Copy content" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show source" })).toBeNull();
+    expectDownloadLink("Download", "main.js");
+    await waitFor(() =>
+      expect(view.container.querySelector("code .hljs-keyword")).not.toBeNull()
+    );
+  });
+
+  test("HTML renders in a sandboxed frame that sends no requests, and toggles to its source", async () => {
+    const html =
+      '<html><head><title>Q3</title></head><body><h1 class="x">Report</h1></body></html>\n';
+    jest
+      .mocked(fetchChatFile)
+      .mockResolvedValue(fileResponse(html, "text/html", "page.html"));
     const view = renderPreview("page.html");
 
-    // HTML shows as source, never as a rendered page
-    expect(await screen.findByText(/Report/)).toBeVisible();
-    expect(view.container.querySelector("pre")).toHaveTextContent(
+    const frame = await screen.findByTitle("page.html");
+    expect(frame).toHaveAttribute("sandbox", "");
+    // A fixed prologue carries the policy; the page follows unchanged
+    const srcdoc = frame.getAttribute("srcdoc") ?? "";
+    expect(srcdoc).toMatch(
+      /^<!DOCTYPE html><meta http-equiv="Content-Security-Policy" content="default-src 'none';[^"]*form-action 'none'">/
+    );
+    expect(srcdoc.replace(/^<!DOCTYPE html><meta [^>]*>/, "")).toBe(html);
+    // No script runs and nothing loads from the network, so the page cannot
+    // send its contents out
+    const prologue = srcdoc.match(/^<!DOCTYPE html><meta [^>]*>/)?.[0];
+    expect(prologue).toContain("script-src 'none'");
+    expect(prologue).not.toMatch(/https?:/);
+    // The parser applies the policy whatever head-like text the file has
+    const parsed = new DOMParser().parseFromString(
+      srcdoc.replace(html, "<!-- <head> --><script>fetch('/x')</script>"),
+      "text/html"
+    );
+    expect(
+      parsed.head.querySelector('meta[http-equiv="Content-Security-Policy"]')
+    ).not.toBeNull();
+    expectDownloadLink("Download", "page.html");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show source" }));
+    expect(view.container.querySelector("iframe")).toBeNull();
+    expect(view.container.querySelector("code")).toHaveTextContent(
       '<h1 class="x">Report</h1>'
     );
-    expect(view.container.querySelector("h1, iframe")).toBeNull();
     expect(screen.getByText("2 lines")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Copy content" })).toBeVisible();
-    expectDownloadLink("Download", "page.html");
-    await waitFor(() =>
-      expect(view.container.querySelector("pre .hljs-tag")).not.toBeNull()
+    expect(screen.queryByRole("button", { name: "Show source" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show preview" }));
+    expect(view.container.querySelector("iframe")).not.toBeNull();
+  });
+
+  test("SVG renders as an image and toggles to its source", async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
+    jest
+      .mocked(fetchChatFile)
+      .mockResolvedValue(fileResponse(svg, "image/svg+xml", "logo.svg"));
+    const view = renderPreview("logo.svg");
+
+    const image = await screen.findByRole("img", { name: "logo.svg" });
+    expect(image).toHaveAttribute(
+      "src",
+      `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Show source" }));
+    expect(screen.queryByRole("img", { name: "logo.svg" })).toBeNull();
+    expect(view.container.querySelector("code")).toHaveTextContent("<circle");
+  });
+
+  test("an SVG the browser cannot draw shows its source", async () => {
+    jest
+      .mocked(fetchChatFile)
+      .mockResolvedValue(
+        fileResponse("<svg><broken", "image/svg+xml", "bad.svg")
+      );
+    const view = renderPreview("bad.svg");
+
+    fireEvent.error(await screen.findByRole("img", { name: "bad.svg" }));
+    expect(view.container.querySelector("code")).toHaveTextContent(
+      "<svg><broken"
+    );
+    expect(screen.getByRole("button", { name: "Copy content" })).toBeVisible();
   });
 
   test("JSON indented past the highlight limit shows plain", async () => {
@@ -208,16 +284,16 @@ describe("text formats", () => {
     const view = renderPreview("big.json");
 
     await waitFor(() =>
-      expect(view.container.querySelector("pre")?.textContent).toContain(
+      expect(view.container.querySelector("code")?.textContent).toContain(
         '\n    "k": 0\n'
       )
     );
     // The small file loads the grammars, which the large one must not use
     const small = render(<CodeFilePreview text='{"a":1}' language="json" />);
     await waitFor(() =>
-      expect(small.container.querySelector("pre span")).not.toBeNull()
+      expect(small.container.querySelector("code span")).not.toBeNull()
     );
-    expect(view.container.querySelector("pre span")).toBeNull();
+    expect(view.container.querySelector("code span")).toBeNull();
   });
 
   test("JSON shows indented", async () => {
@@ -229,7 +305,7 @@ describe("text formats", () => {
     const view = renderPreview("data.json");
 
     await waitFor(() =>
-      expect(view.container.querySelector("pre")?.textContent).toBe(
+      expect(view.container.querySelector("code")?.textContent).toBe(
         '{\n  "a": {\n    "b": 1\n  }\n}'
       )
     );
@@ -256,6 +332,10 @@ describe("text formats", () => {
     );
     expect(view.container.querySelector("script")).toBeNull();
     expectDownloadLink("Download", "notes.md");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show source" }));
+    expect(screen.queryByRole("heading", { name: "Q3" })).toBeNull();
+    expect(view.container.querySelector("code")?.textContent).toMatch(/^# Q3/);
   });
 
   test("markdown highlights its tagged fenced code and leaves untagged code plain", async () => {
@@ -329,7 +409,9 @@ describe("text formats", () => {
     const view = renderPreview("big.md");
 
     await waitFor(() =>
-      expect(view.container.querySelector("pre")?.textContent).toMatch(/^# Big/)
+      expect(view.container.querySelector("code")?.textContent).toMatch(
+        /^# Big/
+      )
     );
     expect(screen.queryByRole("heading", { name: "Big" })).toBeNull();
   });
@@ -351,6 +433,10 @@ describe("text formats", () => {
     expect(within(table).getByText("Smith, Jane")).toBeInTheDocument();
     expect(within(table).getAllByRole("row")).toHaveLength(3);
     expectDownloadLink("Download", "sales.csv");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show source" }));
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText(/North,"Smith, Jane"/)).toBeInTheDocument();
   });
 
   test("a CSV keeps an empty last record and fills a short row with one cell", async () => {

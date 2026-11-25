@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 1b2c0a93d6512da95cdf6f8b9f65fb6c09d3147d)
-# at commit cfd3659a06 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob d5316e2fe860e9c79c8fd58d56a7931a5be71bce)
+# at commit b2a8cf0221 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -742,6 +742,38 @@ class RestoreSessionResponse(_message.Message):
     expanded_bytes: int
     roots: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, files: _Optional[int] = ..., directories: _Optional[int] = ..., expanded_bytes: _Optional[int] = ..., roots: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class InstallSkillHeader(_message.Message):
+    __slots__ = ("name", "version", "size_bytes", "sha256", "limits")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    LIMITS_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    version: str
+    size_bytes: int
+    sha256: str
+    limits: ArchiveLimits
+    def __init__(self, name: _Optional[str] = ..., version: _Optional[str] = ..., size_bytes: _Optional[int] = ..., sha256: _Optional[str] = ..., limits: _Optional[_Union[ArchiveLimits, _Mapping]] = ...) -> None: ...
+
+class InstallSkillRequest(_message.Message):
+    __slots__ = ("header", "data")
+    HEADER_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    header: InstallSkillHeader
+    data: bytes
+    def __init__(self, header: _Optional[_Union[InstallSkillHeader, _Mapping]] = ..., data: _Optional[bytes] = ...) -> None: ...
+
+class InstallSkillResponse(_message.Message):
+    __slots__ = ("installed", "files", "expanded_bytes")
+    INSTALLED_FIELD_NUMBER: _ClassVar[int]
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    EXPANDED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    installed: bool
+    files: int
+    expanded_bytes: int
+    def __init__(self, installed: bool = ..., files: _Optional[int] = ..., expanded_bytes: _Optional[int] = ...) -> None: ...
 
 class BrowserStartRequest(_message.Message):
     __slots__ = ()

@@ -223,32 +223,23 @@ function renderDraggableTabs(
       );
     });
   }
-  function pointer(
-    type: string,
-    target: HTMLElement,
-    clientX: number,
-    pointerId = 1
-  ) {
-    const event = new MouseEvent(type, { bubbles: true, clientX, button: 0 });
-    Object.defineProperties(event, {
-      pointerId: { value: pointerId },
-      isPrimary: { value: true },
-      pointerType: { value: "mouse" },
-    });
-    fireEvent(target, event);
+  function mouse(type: string, target: HTMLElement, clientX: number) {
+    fireEvent(
+      target,
+      new MouseEvent(type, { bubbles: true, clientX, button: 0 })
+    );
   }
-  return { list, pointer, ...callbacks };
+  return { list, mouse, ...callbacks };
 }
 
 test.each([15, 85])(
   "previews and reverses a drag grabbed at %i px, committing only on release",
   async (grab) => {
-    const { list, pointer, onReorder, onSelect, onClose } =
-      renderDraggableTabs();
+    const { list, mouse, onReorder, onSelect, onClose } = renderDraggableTabs();
     const files = screen.getByRole("tab", { name: "All Files" });
-    pointer("pointerdown", files, grab);
-    pointer("pointermove", list, grab + 7);
-    pointer("pointermove", list, grab + 60);
+    mouse("mousedown", files, grab);
+    mouse("mousemove", list, grab + 7);
+    mouse("mousemove", list, grab + 60);
     await act(async () => {});
     expect(onReorder).not.toHaveBeenCalled();
     const notesPill = screen
@@ -257,15 +248,15 @@ test.each([15, 85])(
     expect(notesPill).toHaveStyle({
       transform: "translate3d(-100px, 0px, 0)",
     });
-    pointer("pointermove", list, grab);
+    mouse("mousemove", list, grab);
     await act(async () => {});
     expect(onReorder).not.toHaveBeenCalled();
     expect(notesPill).toHaveStyle({
       transform: "translate3d(0px, 0px, 0)",
     });
-    pointer("pointermove", list, grab + 60);
+    mouse("mousemove", list, grab + 60);
     await act(async () => {});
-    pointer("pointerup", list, grab + 60);
+    mouse("mouseup", list, grab + 60);
     expect(onReorder).toHaveBeenCalledTimes(1);
     expect(onReorder).toHaveBeenCalledWith("files", 1);
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
@@ -286,17 +277,17 @@ test.each([15, 85])(
 );
 
 test("outward dragging on a strip without overflow cannot scroll its tabs away", async () => {
-  const { list, pointer, onReorder } = renderDraggableTabs();
+  const { list, mouse, onReorder } = renderDraggableTabs();
   const apps = screen.getByRole("tab", { name: "Apps" });
-  pointer("pointerdown", apps, 285);
-  pointer("pointermove", list, 292);
-  pointer("pointermove", list, 800);
+  mouse("mousedown", apps, 285);
+  mouse("mousemove", list, 292);
+  mouse("mousemove", list, 800);
   await act(async () => {});
   expect(apps.closest(".group")).toHaveStyle({
     transform: "translate3d(0px, 0px, 0)",
   });
   expect(list.scrollLeft).toBe(0);
-  pointer("pointerup", list, 800);
+  mouse("mouseup", list, 800);
   expect(onReorder).not.toHaveBeenCalled();
 });
 
@@ -313,13 +304,13 @@ test("successive closes leave no sorting transforms on remaining tabs", async ()
 });
 
 test("cancelling a drag clears its preview and keeps the original order", async () => {
-  const { list, pointer, onReorder } = renderDraggableTabs();
+  const { list, mouse, onReorder } = renderDraggableTabs();
   const files = screen.getByRole("tab", { name: "All Files" });
-  pointer("pointerdown", files, 50);
-  pointer("pointermove", list, 57);
-  pointer("pointermove", list, 110);
+  mouse("mousedown", files, 50);
+  mouse("mousemove", list, 57);
+  mouse("mousemove", list, 110);
   await act(async () => {});
-  pointer("pointercancel", list, 110);
+  fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
   expect(onReorder).not.toHaveBeenCalled();
   expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
     "All Files",
@@ -331,38 +322,38 @@ test("cancelling a drag clears its preview and keeps the original order", async 
   }
 });
 
-test("pointer sorting in RTL moves neighbors right and commits the logical destination", async () => {
-  const { list, pointer, onReorder } = renderDraggableTabs("rtl");
+test("mouse sorting in RTL moves neighbors right and commits the logical destination", async () => {
+  const { list, mouse, onReorder } = renderDraggableTabs("rtl");
   const files = screen.getByRole("tab", { name: "All Files" });
-  pointer("pointerdown", files, 250);
-  pointer("pointermove", list, 243);
-  pointer("pointermove", list, 190);
+  mouse("mousedown", files, 250);
+  mouse("mousemove", list, 243);
+  mouse("mousemove", list, 190);
   await act(async () => {});
   expect(
     screen.getByRole("tab", { name: "notes.md" }).closest(".group")
   ).toHaveStyle({ transform: "translate3d(100px, 0px, 0)" });
-  pointer("pointerup", list, 190);
+  mouse("mouseup", list, 190);
   expect(onReorder).toHaveBeenCalledWith("files", 1);
 });
 
 test("sorting across unequal widths never scales the dragged pill or its neighbors", async () => {
-  const { list, pointer, onReorder } = renderDraggableTabs("ltr", 180);
+  const { list, mouse, onReorder } = renderDraggableTabs("ltr", 180);
   const files = screen.getByRole("tab", { name: "All Files" });
-  pointer("pointerdown", files, 50);
-  pointer("pointermove", list, 57);
-  pointer("pointermove", list, 130);
+  mouse("mousedown", files, 50);
+  mouse("mousemove", list, 57);
+  mouse("mousemove", list, 130);
   await act(async () => {});
   for (const tab of screen.getAllByRole("tab")) {
     expect(
       tab.closest<HTMLDivElement>(".group")?.style.transform
     ).not.toContain("scale");
   }
-  pointer("pointermove", list, 50);
+  mouse("mousemove", list, 50);
   await act(async () => {});
   expect(onReorder).not.toHaveBeenCalled();
-  pointer("pointermove", list, 130);
+  mouse("mousemove", list, 130);
   await act(async () => {});
-  pointer("pointerup", list, 130);
+  mouse("mouseup", list, 130);
   expect(onReorder).toHaveBeenCalledWith("files", 1);
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close notes.md" }));

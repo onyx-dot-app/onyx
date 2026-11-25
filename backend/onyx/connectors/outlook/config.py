@@ -9,7 +9,10 @@ from onyx.connectors.field_policy import (
     ScopeOpaque,
     ScopeToggle,
 )
-from onyx.connectors.microsoft_utils.config import MicrosoftCloudBinding
+from onyx.connectors.microsoft_utils.config import (
+    MicrosoftCloudBinding,
+    MicrosoftRateBudget,
+)
 from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 # The calendar view needs explicit bounds. Past meetings hold the decisions
@@ -33,7 +36,9 @@ def _window_direction(
     return ScopeDirection.WIDEN if new_days > old_days else ScopeDirection.NARROW
 
 
-class OutlookConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
+class OutlookConnectorConfig(
+    MicrosoftCloudBinding, MicrosoftRateBudget, ConnectorConfig
+):
     # The walked mailboxes and folders decide each thread document's builder,
     # content and readers (threads.py), so a change rebuilds every thread.
     mailboxes: Annotated[list[str] | None, _THREAD_ROSTER] = None

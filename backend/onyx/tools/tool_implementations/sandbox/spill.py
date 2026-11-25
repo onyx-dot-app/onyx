@@ -12,16 +12,14 @@ the file's path:
 
 import json
 import re
-import threading
 from concurrent.futures import Future
-from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import NamedTuple
 
 from pydantic_core import to_json
 
 from onyx.agents.models import ToolResultContext
-from onyx.llm.cancellation import current_cancellation
+from onyx.llm.cancellation import current_cancellation, wait_for_future
 from onyx.llm.models import ToolResult
 from onyx.microvm.models import FileListing, FileType
 from onyx.server.features.build.sandbox.harness_base import (
@@ -203,17 +201,9 @@ def _save(
             # The next write tries again; the files go when the VM stops.
             logger.exception("tool_result_spill_evict_failed path=%s", path)
 
-    done = threading.Event()
-    written.add_done_callback(lambda _: done.set())
     start_thread_future(write_then_evict, name="tool-result-spill")
-    with nullcontext() if signal is None else signal.on_cancel(done.set):
-        done.wait(SPILL_WRITE_TIMEOUT_SECONDS)
-    if not written.done():
-        if signal is not None:
-            signal.check()
-        # The write ends at its own timeout.
-        raise TimeoutError("the spill write did not end in time")
-    written.result()
+    # After a Stop or a timeout, the write ends at its own timeout.
+    wait_for_future(written, SPILL_WRITE_TIMEOUT_SECONDS, signal)
     return _Saved(path=path, size=sum(map(len, parts)), cut=cut)
 
 

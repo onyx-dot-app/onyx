@@ -43,6 +43,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.utils.logger import setup_logger
 from onyx.utils.platform_utils import is_running_in_kubernetes
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -50,7 +51,11 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.LOG_EXPORT))
+    ]
+)
 
 
 class _ExpiringLock:

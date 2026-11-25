@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { copyAll } from "@/app/app/message/copyingUtils";
+import { copyAll } from "@/lib/timeline/chat/message/copyingUtils";
 import { Modal } from "@opal/components";
 import { Button, CopyButton, InputTypeIn, SelectCard } from "@opal/components";
 import { ContentAction, toast, Section } from "@opal/layouts";

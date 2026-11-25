@@ -279,6 +279,8 @@ class OpenUrlDocuments(BaseObj):
     type: Literal["open_url_documents"] = StreamingType.OPEN_URL_DOCUMENTS.value
 
     documents: list[SearchDoc]
+    # The requested URLs (as in `open_url_urls`) that these documents answer.
+    urls: list[str] = Field(default_factory=list)
 
 
 # Image generation starting, needs to allocate a placeholder block for it on the UI

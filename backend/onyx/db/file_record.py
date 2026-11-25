@@ -301,6 +301,10 @@ def upsert_filerecord(
             "bucket_name": stmt.excluded.bucket_name,
             "object_key": stmt.excluded.object_key,
             "file_size": stmt.excluded.file_size,
+            # ON CONFLICT DO UPDATE skips the column's onupdate. The
+            # statement's time, not the transaction's start, follows the
+            # content write.
+            "updated_at": func.clock_timestamp(),
         },
     )
     db_session.execute(stmt)

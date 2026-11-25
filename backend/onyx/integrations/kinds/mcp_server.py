@@ -245,6 +245,7 @@ class McpServerKindHandler(IntegrationKindHandler):
             MCPTool(
                 integration_id=integration.id,
                 integration_name=integration.name,
+                integration_description=integration.description,
                 server_url=server.server_url,
                 transport=server.transport,
                 tool_name=action.key,

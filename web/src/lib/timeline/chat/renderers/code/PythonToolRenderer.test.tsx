@@ -1,7 +1,7 @@
 import hljs from "highlight.js/lib/core";
 import { render } from "@tests/setup/test-utils";
 import { PythonToolRenderer } from "@/lib/timeline/chat/renderers/code/PythonToolRenderer";
-import { RenderType } from "@/app/app/message/messageComponents/types";
+import { RenderType } from "@/lib/timeline/chat/message/messageComponents/types";
 import {
   PacketType,
   PythonToolPacket,

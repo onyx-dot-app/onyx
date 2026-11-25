@@ -13,6 +13,8 @@ import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers/utils";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
+import { usePlaygroundRestriction } from "@/lib/playground/hooks";
+import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -37,6 +39,9 @@ export default function Layout({ children }: LayoutProps) {
   const { oauth_provider_enabled } = useSettings();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const { llmProviders } = useLanguageModels();
+  const gatewayRestriction = usePlaygroundRestriction(
+    PlaygroundRestrictedFeature.LLM_GATEWAY
+  );
   const { connectors: federatedConnectors } = useFederatedOAuthStatus();
   const canCreatePAT = hasPermission(
     permissions,
@@ -50,11 +55,14 @@ export default function Layout({ children }: LayoutProps) {
   );
 
   // The 3rd Party Access tab shows when any of its sections has something to show.
+  // On the playground the gateway section shows the playground notice, so the
+  // tab shows whatever the tier and the model list say.
   const showThirdPartyAccessTab =
     canCreatePAT ||
     (pats?.length ?? 0) > 0 ||
     Boolean(oauth_provider_enabled) ||
     federatedConnectors.length > 0 ||
+    gatewayRestriction.restricted ||
     (gatewayTier && hasVisibleLLMModel(llmProviders));
 
   const tabs: SettingsTab[] = [

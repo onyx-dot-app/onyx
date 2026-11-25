@@ -17,8 +17,8 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   the image appears in the answer. The user can ask for changes to an image
   they attached or to one that the assistant made, and the model uses it as a
   reference. After an image call, the assistant can continue with other tools
-  or generate another image before answering. Generated images from all steps
-  appear once above the answer. With code mode on, a program can generate
+  or generate another image before answering. Each generated image appears
+  once, inline right after the step that made it, in stream order. With code mode on, a program can generate
   images too, and they show the same way.
 - **An admin** opens the image generation admin page. It lists the image
   models of each connected LLM provider. The recommended view, the default,
@@ -174,8 +174,9 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
 8. `frontend-packet-names` **Frontend packet names do not match the backend
    names.** The web enum calls the finished-image packet
    `IMAGE_GENERATION_TOOL_DELTA`, but its value is `"image_generation_final"`
-   (`web/src/app/app/services/streamingModels.ts`). The renderer treats "start
-   with no end" as running. An empty final packet shows "No images
+   (`web/src/app/app/services/streamingModels.ts`). The model's prompt streams
+   first as `tool_call_argument_delta` with `tool_type` `generate_image`, before
+   the start packet. The renderer treats a call with no end as running. An empty final packet shows "No images
    generated"; a call that ends with no final packet (Stop, or an interrupted
    code mode program) shows as stopped. Match packets by their string value.
 9. `one-image-per-chat-call` **The chat tool makes one image per call.**

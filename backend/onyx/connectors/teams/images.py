@@ -73,6 +73,7 @@ def harvest_message_images(
                 url,
                 TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
                 description=f"image of message {message.id}",
+                pacer=session.request_pacer,
             )
         except SizeCapExceeded:
             logger.warning("Skipping an oversized image of message %s", message.id)

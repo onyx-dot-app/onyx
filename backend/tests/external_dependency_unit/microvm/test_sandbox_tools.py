@@ -10,7 +10,6 @@ import io
 import json
 import threading
 import time
-import zipfile
 from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
@@ -95,6 +94,7 @@ from onyx.db.sandbox import (
     get_or_create_sandbox,
     get_sandbox_by_user_id,
 )
+from onyx.db.skill import delete_skill
 from onyx.db.tools import get_builtin_tool
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
@@ -151,6 +151,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     ExecSessionNotFoundError,
 )
 from onyx.server.features.build.sandbox.models import (
+    CHAT_SKILLS_PATH,
     ExecEvent,
     ExecOutputDelta,
     HarnessSandboxRef,
@@ -172,10 +173,13 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
+from onyx.skills.ingest import delete_bundle_blob
 from onyx.tools.constants import (
     CODE_MODE_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
+    LOAD_SKILL_TOOL_NAME,
     POSTGRES_TOOL_NAME,
+    SKILLS_READ_TOOL_NAME,
     SPAWN_AGENT_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
@@ -247,6 +251,7 @@ from tests.external_dependency_unit.code_mode_helpers import (
     wait_step,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.craft.db_helpers import make_chat_custom_skill
 from tests.external_dependency_unit.db.test_chat_tool_options import (
     ResearchCapableModel,
 )
@@ -4480,11 +4485,12 @@ def test_a_turn_without_a_sandbox_call_copies_nothing(
     chat.send(ChatLLM([Delta(content="Hi.")]), file_descriptors=[attach("a.txt", b"a")])
     assert chat_turn_work.wait_idle(timeout=30)
     assert str(chat.ref(db_session).sandbox_id) not in node.agent.vms
+    # The turn holds its copy generation from its start.
     assert (
         get_cache_backend(tenant_id=TENANT_ID).get(
             copy_generation_key(chat.chat_session_id)
         )
-        is None
+        == b"1"
     )
 
 
@@ -4735,18 +4741,26 @@ def _file_pages(data: bytes) -> list[SearchResult]:
 def _open_url_packets(parts: Sequence[object]) -> list[packets.PacketObj]:
     """The open_url card's packets and the citations of streamed parts or
     replayed packets. Replay sends saved documents, which add their row IDs;
-    the comparison keeps the fields that both have."""
+    the comparison keeps the fields that both have. A live call sends each
+    page as it opens, in no fixed order, and a replay sends them together, so
+    the pages are one packet, in document ID order."""
     objects: list[packets.PacketObj] = []
+    merged: packets.OpenUrlDocuments | None = None
     for part in parts:
         obj = part.obj if isinstance(part, packets.Packet) else part
         if isinstance(obj, packets.OpenUrlDocuments):
-            objects.append(
-                packets.OpenUrlDocuments(
-                    documents=[
+            if merged is None:
+                merged = packets.OpenUrlDocuments(documents=[])
+                objects.append(merged)
+            merged.documents = sorted(
+                [
+                    *merged.documents,
+                    *(
                         SearchDoc.model_validate(dict(document))
                         for document in obj.documents
-                    ]
-                )
+                    ),
+                ],
+                key=lambda document: document.document_id,
             )
         elif isinstance(
             obj, (packets.OpenUrlStart, packets.OpenUrlUrls, packets.CitationInfo)
@@ -4830,9 +4844,13 @@ def test_open_url_spills_whole_pages_and_the_model_keeps_excerpts_and_citations(
         for packet in live
         if isinstance(packet, packets.OpenUrlDocuments)
     ]
-    assert [document.match_highlights for document in documents] == [
-        [_excerpt(index, page)] for index, page in enumerate(pages, start=1)
-    ]
+    excerpts = {
+        WEB_SEARCH_PREFIX + page.url: [_excerpt(index, page)]
+        for index, page in enumerate(pages, start=1)
+    }
+    assert {
+        document.document_id: document.match_highlights for document in documents
+    } == excerpts
     [replayed] = chat.replayed(db_session)
     assert _open_url_packets(replayed) == live
 
@@ -5283,22 +5301,40 @@ def test_open_url_without_a_sandbox_keeps_its_page_excerpts(
     ]
 
 
-def test_a_turn_shows_its_built_ins_and_again_on_a_vm_that_replaced_a_stopped_one(
-    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, make_tools: MakeTools
+@pytest.mark.usefixtures("node")
+def test_only_load_skill_puts_the_skill_files_in_the_vm(
+    db_session: Session, chat: SandboxChat, node: RunningFakeAgent
 ) -> None:
-    tools = make_tools()
-    _run(tools.exec_command, {"cmd": "echo hi"})
-    _run(tools.exec_command, {"cmd": "echo hi"})
-    assert node.agent.swap_mounts == ["skills"]
-    [bundle] = node.agent.managed_images.values()
-    with zipfile.ZipFile(io.BytesIO(bundle)) as zf:
-        assert "pptx/scripts/lint.py" in zf.namelist()
-
-    vm = node.agent.vms[str(tools.ref.sandbox_id)]
-    sandbox._client_factory.client(node.address).stop(
-        sandbox_id=str(tools.ref.sandbox_id),
-        attempt=vm.attempt,
-        generation=vm.generation,
+    custom = f"tool-{chat.user.id.hex[:8]}"
+    _, plugin, _ = make_chat_custom_skill(
+        db_session,
+        chat.user,
+        {
+            "SKILL.md": f"---\nname: {custom}\ndescription: C\n---\n\nRun it.\n",
+            "scripts/run.py": "print(1)\n",
+        },
     )
-    _run(tools.exec_command, {"cmd": "echo hi"})
-    assert node.agent.swap_mounts == ["skills", "skills"]
+    llm = ChatLLM(
+        [
+            tool_step(SKILLS_READ_TOOL_NAME, "read", {"name": "pptx"}),
+            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(LOAD_SKILL_TOOL_NAME, "load", {"name": "pptx"}),
+            tool_step(LOAD_SKILL_TOOL_NAME, "again", {"name": "pptx"}),
+            tool_step(LOAD_SKILL_TOOL_NAME, "custom", {"name": custom}),
+            tool_step(LOAD_SKILL_TOOL_NAME, "missing", {"name": "nope"}),
+            Delta(content="Done."),
+        ]
+    )
+    try:
+        chat.send(llm)
+    finally:
+        db_session.refresh(plugin)
+        for bundle_id in delete_skill(plugin, db_session):
+            delete_bundle_blob(get_default_file_store(), bundle_id)
+        db_session.commit()
+    assert [name for _, name in node.agent.skill_installs] == ["pptx", custom]
+    files = {path for _, _, path in node.agent.files}
+    assert f"{CHAT_SKILLS_PATH}/pptx/scripts/lint.py" in files
+    assert f"{CHAT_SKILLS_PATH}/{custom}/scripts/run.py" in files
+    assert f"{CHAT_SKILLS_PATH}/pptx/" in last_tool_text(llm, "again")
+    assert "No skill is named 'nope'" in last_tool_text(llm, "missing")

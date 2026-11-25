@@ -404,12 +404,12 @@ func (t *Template) FileList() []string { return FilesFor(t.LayoutVersion) }
 const ManagedSlots = 2
 
 // ManagedMounts returns the managed mounts that the template's VMs can swap:
-// the layout must have their drives, and the guest daemon must serve them
-// (skills always).
+// the layout must have their drives, and the guest daemon must serve them.
+// A root drive that lists no managed mounts serves skills only.
 func (t *Template) ManagedMounts() []string {
 	var out []string
 	for _, m := range SwapMounts(t.LayoutVersion) {
-		if m == SkillsMount || slices.Contains(t.GuestMounts, m) {
+		if slices.Contains(t.GuestMounts, m) || (len(t.GuestMounts) == 0 && m == SkillsMount) {
 			out = append(out, m)
 		}
 	}

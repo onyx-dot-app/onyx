@@ -40,6 +40,7 @@ def _mcp_tool(credentials: CallCredentials = _NO_AUTH) -> MCPTool:
     return MCPTool(
         integration_id=1,
         integration_name="Customer MCP",
+        integration_description=None,
         server_url="https://mcp.example",
         transport=None,
         tool_name="lookup",

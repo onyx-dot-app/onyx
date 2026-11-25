@@ -128,8 +128,12 @@ does them ([[indexing-pipeline]]).
 (`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`)
 through `db/chat.py:save_chat_artifact`. Each file is a version of an
 artifact: `db/models.py:ChatArtifact` is one VM path in one root chat
-session, and `ChatArtifactVersion` numbers its files from 1 and holds each
-file's title. The save writes the file record, upserts the artifact (its row
+session, with the chat's owner (`user_id`, set from the chat when the
+artifact is created),
+and `ChatArtifactVersion` numbers its files from 1 and holds each
+file's title. The sandbox tools `artifacts_list` and `artifacts_download`
+([[code-execution]]) read these rows for the owner's chats that are not
+deleted, by the index on `(user_id, updated_at DESC)`. The save writes the file record, upserts the artifact (its row
 lock serializes concurrent publishes of one path) and adds the next version in
 one commit. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
 thumbnail: `HarnessSandbox.render_first_page` draws a JPEG of its first page in

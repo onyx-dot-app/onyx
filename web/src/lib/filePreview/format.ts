@@ -5,9 +5,12 @@ import {
   isMarkdownFile,
 } from "@/lib/languages";
 
-/** How a file previews. Code, text and data files share `code`. */
+/**
+ * How a file previews. Code, text and data files share `code`; HTML and SVG
+ * also render, with their source a toggle away.
+ */
 export type FilePreviewFormat =
-  | { kind: "code"; language: string }
+  | { kind: "code"; language: string; render?: "html" | "svg" }
   | { kind: "markdown" }
   | { kind: "csv" }
   | { kind: "spreadsheet" }
@@ -39,12 +42,17 @@ const TEXT_MIME_TYPES = [
 ];
 const TEXT_EXTENSIONS = /\.(txt|log|conf|tsv)$/i;
 
+/** An SVG's text as an image URL. */
+export function svgDataUrl(text: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`;
+}
+
 /**
  * Picks a file's preview from its name, then from its MIME type: a known
- * extension always wins over the MIME type, so HTML shows as code and
- * `config.json` shows as JSON whatever type it is served with. SVG shows as
- * XML source: the server sends it without an image type, so it cannot load in
- * an `<img>`. Other images show by MIME type only.
+ * extension always wins over the MIME type, so `config.json` shows as JSON
+ * whatever type it is served with. SVG loads as text: the server sends it
+ * without an image type, so it cannot load in an `<img>` from its URL. Other
+ * images show by MIME type only.
  */
 export function resolveFilePreviewFormat(
   fileName: string,
@@ -54,8 +62,11 @@ export function resolveFilePreviewFormat(
   const mime = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
 
   const codeLanguage = getCodeLanguage(name);
+  if (codeLanguage === "html")
+    return { kind: "code", language: "html", render: "html" };
   if (codeLanguage) return { kind: "code", language: codeLanguage };
-  if (name.endsWith(".svg")) return { kind: "code", language: "xml" };
+  if (name.endsWith(".svg"))
+    return { kind: "code", language: "xml", render: "svg" };
   if (name.endsWith(".pdf")) return { kind: "pdf" };
   if (name.endsWith(".csv")) return { kind: "csv" };
   if (/\.xls[xm]$/.test(name)) return { kind: "spreadsheet" };
@@ -67,7 +78,8 @@ export function resolveFilePreviewFormat(
   const dataLanguage = getDataLanguage(name);
   if (dataLanguage) return { kind: "code", language: dataLanguage };
 
-  if (mime === "image/svg+xml") return { kind: "code", language: "xml" };
+  if (mime === "image/svg+xml")
+    return { kind: "code", language: "xml", render: "svg" };
   if (mime.startsWith("image/")) return { kind: "image" };
   if (mime === "application/pdf") return { kind: "pdf" };
   if (mime === "text/csv") return { kind: "csv" };

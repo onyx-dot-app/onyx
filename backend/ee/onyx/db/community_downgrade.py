@@ -68,6 +68,7 @@ from onyx.db.plugin import (
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
     DEFAULT_BASIC_GROUP_NAME,
+    UserDeleteCleanup,
     fetch_default_group,
     lock_group_membership,
 )
@@ -448,10 +449,11 @@ def remove_custom_user_groups__no_commit(db_session: Session) -> int:
     return len(group_ids)
 
 
-def disable_paid_features__no_commit(db_session: Session) -> None:
+def disable_paid_features__no_commit(db_session: Session) -> UserDeleteCleanup:
     """Switches off the paid features whose leftover rows keep taking effect.
     Their admin routes are refused below their tier, so a row left active could
-    not be turned off afterwards. Each one gets what its own delete does."""
+    not be turned off afterwards. Each one gets what its own delete does. The
+    caller runs `finish_user_delete` on the result after the commit."""
     db_session.execute(delete(TokenRateLimit))
     db_session.execute(
         update(Hook)
@@ -466,4 +468,4 @@ def disable_paid_features__no_commit(db_session: Session) -> None:
     db_session.execute(
         update(ScimToken).where(ScimToken.is_active.is_(True)).values(is_active=False)
     )
-    remove_all_api_keys__no_commit(db_session)
+    return remove_all_api_keys__no_commit(db_session)

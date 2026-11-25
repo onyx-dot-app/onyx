@@ -38,6 +38,7 @@ const (
 	Sandboxd_ZipFiles_FullMethodName       = "/craft.sandboxd.v1.Sandboxd/ZipFiles"
 	Sandboxd_CaptureSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/CaptureSession"
 	Sandboxd_RestoreSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/RestoreSession"
+	Sandboxd_InstallSkill_FullMethodName   = "/craft.sandboxd.v1.Sandboxd/InstallSkill"
 	Sandboxd_BrowserStart_FullMethodName   = "/craft.sandboxd.v1.Sandboxd/BrowserStart"
 	Sandboxd_BrowserStop_FullMethodName    = "/craft.sandboxd.v1.Sandboxd/BrowserStop"
 	Sandboxd_ManagedStatus_FullMethodName  = "/craft.sandboxd.v1.Sandboxd/ManagedStatus"
@@ -157,6 +158,17 @@ type SandboxdClient interface {
 	// a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
 	// nothing. A capture and a restore of one session never run at once.
 	RestoreSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RestoreSessionRequest, RestoreSessionResponse], error)
+	// InstallSkill puts one skill in the skills folder (--skills-root), as
+	// <skills root>/<name>/. The first message is the header, the later ones
+	// carry a plain tar (no zstd) whose members are all under <name>/. If the
+	// folder already has the header's version in <name>/.version, the call
+	// reads no data and returns installed=false. Else the daemon extracts
+	// into a staging directory, checks size and SHA-256, writes .version,
+	// and then replaces the folder. The files are root's: directories 0755,
+	// files 0644 (0755 with an execute bit). A reader never sees a mix of
+	// old and new files. Bad archives fail as in RestoreSession and
+	// change nothing. Installs run one at a time.
+	InstallSkill(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[InstallSkillRequest, InstallSkillResponse], error)
 	// Reserved for the browser. They return UNIMPLEMENTED.
 	BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error)
 	BrowserStop(ctx context.Context, in *BrowserStopRequest, opts ...grpc.CallOption) (*BrowserStopResponse, error)
@@ -426,6 +438,19 @@ func (c *sandboxdClient) RestoreSession(ctx context.Context, opts ...grpc.CallOp
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Sandboxd_RestoreSessionClient = grpc.ClientStreamingClient[RestoreSessionRequest, RestoreSessionResponse]
 
+func (c *sandboxdClient) InstallSkill(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[InstallSkillRequest, InstallSkillResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[8], Sandboxd_InstallSkill_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[InstallSkillRequest, InstallSkillResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Sandboxd_InstallSkillClient = grpc.ClientStreamingClient[InstallSkillRequest, InstallSkillResponse]
+
 func (c *sandboxdClient) BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(BrowserStartResponse)
@@ -579,6 +604,17 @@ type SandboxdServer interface {
 	// a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
 	// nothing. A capture and a restore of one session never run at once.
 	RestoreSession(grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]) error
+	// InstallSkill puts one skill in the skills folder (--skills-root), as
+	// <skills root>/<name>/. The first message is the header, the later ones
+	// carry a plain tar (no zstd) whose members are all under <name>/. If the
+	// folder already has the header's version in <name>/.version, the call
+	// reads no data and returns installed=false. Else the daemon extracts
+	// into a staging directory, checks size and SHA-256, writes .version,
+	// and then replaces the folder. The files are root's: directories 0755,
+	// files 0644 (0755 with an execute bit). A reader never sees a mix of
+	// old and new files. Bad archives fail as in RestoreSession and
+	// change nothing. Installs run one at a time.
+	InstallSkill(grpc.ClientStreamingServer[InstallSkillRequest, InstallSkillResponse]) error
 	// Reserved for the browser. They return UNIMPLEMENTED.
 	BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error)
 	BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error)
@@ -660,6 +696,9 @@ func (UnimplementedSandboxdServer) CaptureSession(*CaptureSessionRequest, grpc.S
 }
 func (UnimplementedSandboxdServer) RestoreSession(grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]) error {
 	return status.Error(codes.Unimplemented, "method RestoreSession not implemented")
+}
+func (UnimplementedSandboxdServer) InstallSkill(grpc.ClientStreamingServer[InstallSkillRequest, InstallSkillResponse]) error {
+	return status.Error(codes.Unimplemented, "method InstallSkill not implemented")
 }
 func (UnimplementedSandboxdServer) BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BrowserStart not implemented")
@@ -968,6 +1007,13 @@ func _Sandboxd_RestoreSession_Handler(srv interface{}, stream grpc.ServerStream)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Sandboxd_RestoreSessionServer = grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]
 
+func _Sandboxd_InstallSkill_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SandboxdServer).InstallSkill(&grpc.GenericServerStream[InstallSkillRequest, InstallSkillResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Sandboxd_InstallSkillServer = grpc.ClientStreamingServer[InstallSkillRequest, InstallSkillResponse]
+
 func _Sandboxd_BrowserStart_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BrowserStartRequest)
 	if err := dec(in); err != nil {
@@ -1147,6 +1193,11 @@ var Sandboxd_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "RestoreSession",
 			Handler:       _Sandboxd_RestoreSession_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "InstallSkill",
+			Handler:       _Sandboxd_InstallSkill_Handler,
 			ClientStreams: true,
 		},
 	},

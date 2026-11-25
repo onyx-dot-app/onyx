@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { CodePanel } from "@opal/components";
-import { getLanguageFromPath } from "@/app/craft/utils/codeLanguage";
+import { getLanguageFromPath } from "@/lib/codeHighlight/language";
 import { getLanguageHint } from "@/lib/timeline/craft/components/tool-cards/helpers";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";

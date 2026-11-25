@@ -4007,6 +4007,18 @@
               "description": "Indiquez les boîtes aux lettres à indexer (par ex. INBOX, Sent, Drafts). Laissez vide pour indexer toutes les boîtes aux lettres."
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "RU par minute",
+              "description": "La part de la limite de débit de l’inscription d’application Microsoft que ce connecteur peut utiliser, en unités de ressources (RU) par minute. Microsoft fixe la limite de l’application selon le niveau de licences, de 1 250 à 6 250 RU par minute. Laissez vide pour qu’Onyx apprenne la limite. [Comment trouver votre niveau](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "Autres connecteurs sur cette inscription d’application : {connectors}. Total : {total} RU par minute.",
+              "none": "Aucun autre connecteur de cette inscription d’application ne définit de RU par minute.",
+              "hidden": "{count, plural, one {# connecteur que vous ne pouvez pas voir} other {# connecteurs que vous ne pouvez pas voir}}",
+              "unavailable": "Impossible de charger les RU par minute des autres connecteurs de cette inscription d’application."
+            }
+          }
         }
       }
     },
@@ -12199,7 +12211,7 @@
           "text": "{toolName} a été bloqué"
         },
         "completedStatus": {
-          "text": "{toolName} terminé"
+          "text": "{toolName} exécuté"
         },
         "downloadFileLink": {
           "label": "Télécharger"
@@ -12229,13 +12241,10 @@
           "label": "Réponse"
         },
         "runningStatus": {
-          "text": "{toolName} en cours d'exécution..."
+          "text": "Exécution de {toolName}..."
         },
         "unreachableStatus": {
           "text": "{toolName} n'a pas pu joindre son serveur"
-        },
-        "waitingIndicator": {
-          "text": "En attente de réponse..."
         }
       },
       "customToolAuth": {
@@ -12413,7 +12422,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "Réflexion"
+          "text": "Réflexion..."
         }
       },
       "timeline": {
@@ -12428,7 +12437,7 @@
             "status": "Plan généré"
           },
           "generating": {
-            "status": "Génération du plan"
+            "status": "Génération du plan..."
           }
         },
         "expandButton": {
@@ -12436,10 +12445,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Lecture"
+            "status": "Consultation de pages web..."
           },
           "read": {
-            "status": "Lu"
+            "status": "{count, plural, =0 {Pages web consultées} one {# page web consultée} other {# pages web consultées}}"
           }
         },
         "fileReader": {
@@ -12447,69 +12456,108 @@
             "status": "A lu {fileName} (caractères {start, number}–{end, number} sur {total, number})"
           },
           "reading": {
-            "status": "Lecture du fichier"
+            "status": "Lecture du fichier..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {# image générée} other {# images générées}}"
         },
         "header": {
           "executingCode": {
-            "label": "Exécution du code"
+            "label": "Exécution du code..."
           },
           "executingNamedTool": {
-            "label": "Exécution de {toolName}"
+            "label": "Exécution de {toolName}..."
           },
           "executingTool": {
-            "label": "Exécution de l'outil"
+            "label": "Exécution de l'outil..."
           },
           "generatingImages": {
-            "label": "Génération des images"
+            "label": "Génération des images..."
           },
           "generatingPlan": {
-            "label": "Génération du plan"
+            "label": "Génération du plan..."
           },
           "queryingKnowledgeBase": {
-            "label": "Interrogation de la base de connaissances"
+            "label": "Interrogation de la base de connaissances..."
           },
           "reading": {
-            "label": "Lecture"
+            "label": "Lecture..."
           },
           "readingFile": {
-            "label": "Lecture du fichier"
+            "label": "Lecture du fichier..."
           },
           "researching": {
-            "label": "Recherche en cours"
+            "label": "Recherche en cours..."
           },
           "searchingWeb": {
-            "label": "Recherche sur le web"
+            "label": "Recherche sur le web..."
           },
           "thinking": {
-            "label": "Réflexion"
-          },
-          "thinkingEllipsis": {
             "label": "Réflexion..."
           },
           "updatingMemory": {
             "label": "Mise à jour de la mémoire..."
           },
           "working": {
-            "label": "En cours"
+            "label": "En cours..."
           },
           "waitingForApproval": {
-            "label": "En attente de votre approbation"
+            "label": "En attente de votre approbation..."
           },
           "waitingForAnswer": {
-            "label": "En attente de votre réponse"
+            "label": "En attente de votre réponse..."
           },
           "runningCommand": {
-            "label": "Exécution de la commande"
+            "label": "Exécution de la commande..."
           },
           "editingFiles": {
-            "label": "Modification des fichiers"
+            "label": "Modification des fichiers..."
           },
           "publishingFiles": {
-            "label": "Publication des fichiers"
+            "label": "Publication des fichiers..."
+          },
+          "browsing": {
+            "label": "Consultation de pages web..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "Travail en cours...",
+              "done": "Travail effectué"
+            },
+            "crunchingDetails": {
+              "working": "Analyse des détails...",
+              "done": "Détails analysés"
+            },
+            "connectingDots": {
+              "working": "Recoupement des indices...",
+              "done": "Indices recoupés"
+            },
+            "runningNumbers": {
+              "working": "Calcul des chiffres...",
+              "done": "Chiffres calculés"
+            },
+            "fillingGaps": {
+              "working": "Comblement des lacunes...",
+              "done": "Lacunes comblées"
+            },
+            "sortingThingsOut": {
+              "working": "Mise en ordre...",
+              "done": "Mise en ordre terminée"
+            },
+            "gatheringPieces": {
+              "working": "Rassemblement des pièces...",
+              "done": "Pièces rassemblées"
+            },
+            "workingThroughIt": {
+              "working": "Travail en profondeur...",
+              "done": "Travail approfondi"
+            },
+            "ironingOutDetails": {
+              "working": "Peaufinage des détails...",
+              "done": "Détails peaufinés"
+            },
+            "roundingThingsOut": {
+              "working": "Finitions en cours...",
+              "done": "Finitions terminées"
+            }
           }
         },
         "internalSearch": {
@@ -12517,10 +12565,10 @@
             "text": "Aucun résultat trouvé"
           },
           "reading": {
-            "status": "Lecture"
+            "status": "Lecture..."
           },
           "read": {
-            "label": "Lu"
+            "label": "Documents lus"
           },
           "header": {
             "default": "Recherche dans les documents internes",
@@ -12528,7 +12576,8 @@
             "sources": "Recherche dans {sources}",
             "doneSources": "Recherche dans {sources} terminée",
             "sourcesOverflow": "{sources} +{count} autres",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "depuis le {date}",
@@ -12547,7 +12596,7 @@
             "text": "Outil de mémoire désactivé"
           },
           "updating": {
-            "status": "Mise à jour de la mémoire"
+            "status": "Mise à jour de la mémoire..."
           },
           "updated": {
             "status": "Mémoire mise à jour"
@@ -12569,10 +12618,7 @@
             "status": "Base de connaissances interrogée"
           },
           "querying": {
-            "status": "Interrogation de la base de connaissances"
-          },
-          "listed": {
-            "label": "{count, plural, one {# document listé} other {# documents listés}}"
+            "status": "Interrogation de la base de connaissances..."
           },
           "query": {
             "table": {
@@ -12629,21 +12675,15 @@
             "label": "Sortie :"
           },
           "running": {
-            "status": "Exécution de Python"
+            "status": "Exécution de Python..."
           },
           "ran": {
             "status": "Python exécuté"
-          },
-          "runningCode": {
-            "label": "Exécution du code..."
-          },
-          "writingCode": {
-            "status": "Écriture du code..."
           }
         },
         "reasoning": {
           "thinking": {
-            "status": "Réflexion"
+            "status": "Réflexion..."
           },
           "thought": {
             "status": "Réflexion terminée"
@@ -12679,7 +12719,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "Recherche sur le web"
+            "status": "Recherche sur le web..."
           },
           "searched": {
             "status": "Recherche sur le web terminée"
@@ -12687,19 +12727,16 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {Exécution de la commande} started {Commande lancée} failed {Échec de la commande} canceled {Annulé} done {Commande exécutée} other {Commande exécutée}}",
+            "status": "{phase, select, running {Exécution de la commande...} started {Commande lancée} failed {Échec de la commande} canceled {Annulé} done {Commande exécutée} other {Commande exécutée}}",
             "workdir": {
               "label": "Dans {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}...} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}...} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session} failed {Impossible d'envoyer la saisie à la session} canceled {Annulé} done {Saisie envoyée à la session} other {Saisie envoyée à la session}}} check {{phase, select, running {Vérification de la session} failed {Impossible de vérifier la session} canceled {Annulé} done {Session vérifiée} other {Session vérifiée}}} other {Session}}"
+              "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session...} failed {Impossible d'envoyer la saisie à la session} canceled {Annulé} done {Saisie envoyée à la session} other {Saisie envoyée à la session}}} check {{phase, select, running {Vérification de la session...} failed {Impossible de vérifier la session} canceled {Annulé} done {Session vérifiée} other {Session vérifiée}}} other {Session}}"
             }
-          },
-          "output": {
-            "title": "Sortie"
           },
           "exitCode": {
             "label": "Code de sortie {exitCode}"
@@ -13018,6 +13055,12 @@
       },
       "copyButton": {
         "tooltip": "Copier le contenu"
+      },
+      "sourceButton": {
+        "tooltip": "Afficher la source"
+      },
+      "previewButton": {
+        "tooltip": "Afficher l'aperçu"
       },
       "downloadButton": {
         "label": "Télécharger le fichier",
@@ -13480,10 +13523,6 @@
       "toggleButton": {
         "label": "Afficher ou masquer le panneau"
       },
-      "downloadButton": {
-        "label": "Télécharger",
-        "tooltip": "Télécharger le fichier"
-      },
       "reloadButton": {
         "label": "Actualiser les fichiers",
         "error": "Impossible de recharger les fichiers. Réessayez."
@@ -13516,6 +13555,34 @@
       },
       "menu": {
         "label": "Exporter sous…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "Activité"
+      },
+      "needsYou": {
+        "title": "Votre action requise",
+        "approval": "Approuver {tool}",
+        "question": "Répondre à une question"
+      },
+      "agents": {
+        "title": "Agents",
+        "status": {
+          "starting": "Démarrage",
+          "running": "En cours",
+          "suspended": "En attente",
+          "complete": "Terminé",
+          "limit": "Limite d'étapes atteinte",
+          "cancelled": "Annulé",
+          "stopped": "Arrêté",
+          "error": "Échec"
+        },
+        "finished": "Agents précédents"
+      },
+      "files": {
+        "title": "Fichiers",
+        "viewAll": "{count, plural, one {Voir # fichier} other {Voir les # fichiers}}"
       }
     }
   },
@@ -14047,6 +14114,21 @@
         "label": "Mettre à niveau l'offre"
       },
       "availableFor": "Disponible avec l’{plan}"
+    },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "Il s'agit d'une fonctionnalité Enterprise. Elle n'est pas disponible dans le playground. Votre propre Onyx l'inclut. [Parler aux ventes]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "Nous avons configuré nos propres clés de modèle pour que vous puissiez essayer les fonctionnalités. Votre propre Onyx fonctionne avec vos clés. [Parler aux ventes]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "Cette fonctionnalité est désactivée dans le playground. Votre propre Onyx l'inclut. [Parler aux ventes]({salesUrl})"
+        },
+        "title": "Limite du playground",
+        "tooltip": "Non disponible dans le playground. Votre propre Onyx l'inclut."
+      }
     },
     "placeholders": {
       "email": "e-mail@votreentreprise.com",
@@ -15004,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "En cours"
+          "label": "En cours..."
         }
       },
       "read": {
@@ -17213,18 +17295,6 @@
       "select": "Sélectionner {name}"
     }
   },
-  "opensearchHealth": {
-    "title": "OpenSearch a besoin de plus de ressources",
-    "disk": "L’utilisation du disque OpenSearch atteint au moins 85 % sur un nœud de données. L’indexation peut s’arrêter si le disque se remplit.",
-    "jvmMemory": "L’utilisation de la mémoire JVM d’OpenSearch est restée supérieure à 85 % lors de contrôles répétés. La recherche et l’indexation peuvent échouer.",
-    "vectorMemory": "La mémoire vectorielle d’OpenSearch est presque pleine ou a atteint sa limite. La recherche ralentit, et la recherche et l’indexation peuvent échouer.",
-    "stale": "Le dernier contrôle est indisponible. Cet avertissement reflète le dernier contrôle réussi ; le rétablissement n’a pas été confirmé.",
-    "dismiss": "Fermer",
-    "diskTitle": "Espace disque",
-    "jvmMemoryTitle": "Mémoire JVM",
-    "vectorMemoryTitle": "Mémoire vectorielle",
-    "viewDetails": "Voir les détails"
-  },
   "plugins": {
     "member": {
       "sections": {
@@ -17818,7 +17888,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {1 compétence} other {{skills} compétences}}",
       "loadFailed": "Impossible de charger vos plugins.",
       "filter": {
         "all": "Tous les plugins"

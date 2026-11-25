@@ -450,7 +450,8 @@ fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
     if trimmed.is_empty() {
         return Err("Enter a server URL.".into());
     }
-    let with_scheme = if trimmed.contains("://") {
+    let has_scheme = trimmed.contains("://");
+    let with_scheme = if has_scheme {
         trimmed.to_string()
     } else {
         format!("https://{trimmed}")
@@ -466,6 +467,13 @@ fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
     if !url.username().is_empty() || url.password().is_some() {
         return Err("Remove the user name and password from the server URL.".into());
     }
+    // A policy typo such as `garbage` must not become `https://garbage`.
+    if allow_any_http && !has_scheme && is_bare_word(trimmed) {
+        return Err(
+            "Use a full host name (onyx.example.com) or a scheme (https://onyx) for the server URL."
+                .into(),
+        );
+    }
     // Passwords and session tokens cross this connection: plain http is only
     // for a server on this computer.
     if url.scheme() == "http" && !allow_any_http && !is_loopback_host(host) {
@@ -475,6 +483,12 @@ fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
         );
     }
     Ok(url.origin().ascii_serialization())
+}
+
+/// A single word with no dot and no port, other than `localhost`.
+fn is_bare_word(input: &str) -> bool {
+    let authority = input.split(['/', '?', '#']).next().unwrap_or_default();
+    !authority.contains(['.', ':', '[']) && !authority.eq_ignore_ascii_case("localhost")
 }
 
 /// Windows, and Linux without nss-myhostname, can send `*.localhost` names to
@@ -643,7 +657,13 @@ impl Api {
     pub async fn version(&self, server: &str) -> Result<String, String> {
         self.backend_version(server, Duration::from_secs(15))
             .await
-            .map_err(|reason| reason.message(server))
+            .map_err(|reason| {
+                log::warn!(
+                    "server check failed for {} ({reason})",
+                    crate::main_window::log_safe(server)
+                );
+                reason.message(server)
+            })
     }
 
     async fn backend_version(
@@ -1597,6 +1617,30 @@ mod tests {
             assert!(normalize_server_url(with_credentials).is_err());
             assert!(normalize_managed_server_url(with_credentials).is_err());
         }
+    }
+
+    #[test]
+    fn a_managed_server_url_is_not_a_bare_word() {
+        for bare in ["garbage", "onyx", "Onyx/app", "1234"] {
+            assert!(normalize_managed_server_url(bare).is_err(), "{bare}");
+        }
+        for (input, server) in [
+            ("https://onyx", "https://onyx"),
+            ("http://onyx", "http://onyx"),
+            ("onyx:8443", "https://onyx:8443"),
+            ("onyx.corp", "https://onyx.corp"),
+            ("localhost", "https://localhost"),
+            ("10.0.0.5", "https://10.0.0.5"),
+            ("[::1]", "https://[::1]"),
+        ] {
+            assert_eq!(
+                normalize_managed_server_url(input).unwrap(),
+                server,
+                "{input}"
+            );
+        }
+        // Onboarding accepts an internal single-label host; the server check tests it.
+        assert_eq!(normalize_server_url("onyx").unwrap(), "https://onyx");
     }
 
     #[test]

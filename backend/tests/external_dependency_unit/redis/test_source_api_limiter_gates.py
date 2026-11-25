@@ -118,9 +118,36 @@ def test_the_window_stores_its_share_when_it_grows(
     time.sleep(0.15)  # test-flakes: allow the window reads the Redis clock
     grown = windows.try_acquire_with_shares([window], cost=0).shares[0]
 
-    assert grown == 0.3
+    assert grown == 0.255
     stored = get_redis_client(tenant_id=tenant_id).get(stored_share_key(window))
     assert stored is not None and float(stored) == grown
+
+
+def test_a_cold_window_grows_slowly_above_its_start_share(
+    tenant_id: str, windows: RedisRateWindows, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no stored share, the start share is the ceiling. A fast growth
+    from a cold start passed the rate of the service in a few minutes."""
+    monkeypatch.setattr(redis_rate_window, "GROW_INTERVAL_SECONDS", 0.1)
+    window = RateWindow(key="w", limit=1000, period_seconds=10, start_share=0.25)
+    cold = windows.try_acquire_with_shares([window], cost=0)
+    assert (cold.shares, cold.starts) == ([0.25], [WindowStart.COLD])
+    client = get_redis_client(tenant_id=tenant_id)
+    assert float(client.hget("w:meta", "ceiling") or 0) == 0.25
+
+    grown: list[float] = []
+    for _ in range(3):
+        time.sleep(0.12)  # test-flakes: allow the window reads the Redis clock
+        grown.append(windows.try_acquire_with_shares([window], cost=0).shares[0])
+
+    # The slow step each interval, and the ceiling moves up with the share.
+    assert grown == [0.255, 0.26, 0.265]
+    assert float(client.hget("w:meta", "ceiling") or 0) == 0.265
+
+    # A refusal storm can still cut the window below its start share.
+    windows.try_acquire_with_shares([window], cost=0, requests=100)
+    cut = windows.report_refusals(window, count=70)
+    assert cut.applied and cut.share < 0.25
 
 
 def test_the_google_budgets_start_the_project_window_at_a_quarter(

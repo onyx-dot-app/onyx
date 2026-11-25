@@ -295,6 +295,10 @@ function CollapsibleHeader({
         ? strings.collapsibleFoldSection(plainName)
         : strings.collapsibleExpandSection(plainName);
 
+  const hasEnd =
+    (rightChildren !== undefined && rightChildren !== false) ||
+    foldButton !== "none";
+
   return (
     // Pointer convenience only: the whole row toggles. The Button is the
     // keyboard control and toggles itself, as its wrapper stops clicks.
@@ -314,90 +318,100 @@ function CollapsibleHeader({
         height="fit"
       >
         <div className="opal-collapsible-header-content">{children}</div>
-        <Section
-          flexDirection="row"
-          width="fit"
-          height="fit"
-          gap={1}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Its own controls, so the fold button does not light up. */}
-          {rightChildren !== undefined && rightChildren !== false && (
-            <Section
-              flexDirection="row"
-              width="fit"
-              height="fit"
-              gap={1}
-              onPointerEnter={() => setHovered(false)}
-              onPointerLeave={() => setHovered(true)}
-            >
-              {rightChildren}
-            </Section>
-          )}
-          {/* The one control whose keyboard focus shows as hover. */}
-          {foldButton !== "none" && (
-            <Section width="fit" height="fit" className="opal-collapsible-fold">
-              {foldButton === "chevron" ? (
-                <FoldButton
-                  open={open}
-                  size={size}
-                  prominence="internal"
-                  disabled={disabled}
-                  interaction={
-                    !disabled && (focusVisible || hovered) ? "hover" : undefined
-                  }
-                  tooltip={label}
-                  aria-label={accessibleLabel}
-                  aria-controls={contentId}
-                  onClick={toggle}
-                  onFocus={(e) =>
-                    setFocusVisible(e.currentTarget.matches(":focus-visible"))
-                  }
-                  onBlur={() => setFocusVisible(false)}
-                />
-              ) : foldLabel !== undefined ? (
-                // A labelled fold button: its label is its name.
-                <Button
-                  rightIcon={open ? SvgFold : SvgExpand}
-                  prominence="internal"
-                  size={size}
-                  interaction={
-                    !disabled && (focusVisible || hovered) ? "hover" : "rest"
-                  }
-                  disabled={disabled}
-                  aria-expanded={open}
-                  aria-controls={contentId}
-                  onClick={toggle}
-                  onFocus={(e) =>
-                    setFocusVisible(e.currentTarget.matches(":focus-visible"))
-                  }
-                  onBlur={() => setFocusVisible(false)}
-                >
-                  {foldLabel}
-                </Button>
-              ) : (
-                <Button
-                  icon={open ? SvgFold : SvgExpand}
-                  prominence="tertiary"
-                  size={size}
-                  interaction={
-                    !disabled && (focusVisible || hovered) ? "hover" : "rest"
-                  }
-                  disabled={disabled}
-                  tooltip={label}
-                  aria-label={accessibleLabel}
-                  aria-expanded={open}
-                  aria-controls={contentId}
-                  onClick={toggle}
-                  onFocus={(e) =>
-                    setFocusVisible(e.currentTarget.matches(":focus-visible"))
-                  }
-                  onBlur={() => setFocusVisible(false)}
-                />
-              )}
-            </Section>
-          )}
-        </Section>
+        {/* Only when it holds something: an empty section would still take
+            the row's gap, short of the header's end. */}
+        {hasEnd && (
+          <Section
+            flexDirection="row"
+            width="fit"
+            height="fit"
+            gap={1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Its own controls, so the fold button does not light up. */}
+            {rightChildren !== undefined && rightChildren !== false && (
+              <Section
+                flexDirection="row"
+                width="fit"
+                height="fit"
+                gap={1}
+                onPointerEnter={() => setHovered(false)}
+                onPointerLeave={() => setHovered(true)}
+              >
+                {rightChildren}
+              </Section>
+            )}
+            {/* The one control whose keyboard focus shows as hover. */}
+            {foldButton !== "none" && (
+              <Section
+                width="fit"
+                height="fit"
+                className="opal-collapsible-fold"
+              >
+                {foldButton === "chevron" ? (
+                  <FoldButton
+                    open={open}
+                    size={size}
+                    prominence="internal"
+                    disabled={disabled}
+                    interaction={
+                      !disabled && (focusVisible || hovered)
+                        ? "hover"
+                        : undefined
+                    }
+                    tooltip={label}
+                    aria-label={accessibleLabel}
+                    aria-controls={contentId}
+                    onClick={toggle}
+                    onFocus={(e) =>
+                      setFocusVisible(e.currentTarget.matches(":focus-visible"))
+                    }
+                    onBlur={() => setFocusVisible(false)}
+                  />
+                ) : foldLabel !== undefined ? (
+                  // A labelled fold button: its label is its name.
+                  <Button
+                    rightIcon={open ? SvgFold : SvgExpand}
+                    prominence="internal"
+                    size={size}
+                    interaction={
+                      !disabled && (focusVisible || hovered) ? "hover" : "rest"
+                    }
+                    disabled={disabled}
+                    aria-expanded={open}
+                    aria-controls={contentId}
+                    onClick={toggle}
+                    onFocus={(e) =>
+                      setFocusVisible(e.currentTarget.matches(":focus-visible"))
+                    }
+                    onBlur={() => setFocusVisible(false)}
+                  >
+                    {foldLabel}
+                  </Button>
+                ) : (
+                  <Button
+                    icon={open ? SvgFold : SvgExpand}
+                    prominence="tertiary"
+                    size={size}
+                    interaction={
+                      !disabled && (focusVisible || hovered) ? "hover" : "rest"
+                    }
+                    disabled={disabled}
+                    tooltip={label}
+                    aria-label={accessibleLabel}
+                    aria-expanded={open}
+                    aria-controls={contentId}
+                    onClick={toggle}
+                    onFocus={(e) =>
+                      setFocusVisible(e.currentTarget.matches(":focus-visible"))
+                    }
+                    onBlur={() => setFocusVisible(false)}
+                  />
+                )}
+              </Section>
+            )}
+          </Section>
+        )}
       </Section>
     </div>
   );

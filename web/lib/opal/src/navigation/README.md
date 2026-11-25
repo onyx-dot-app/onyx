@@ -84,7 +84,9 @@ names its page.
 ```
 
 `base` is the path of the layout that renders it. `useRouteRendering(base)` is
-the check it uses, for a layout that needs it too.
+the check it uses, for a layout that needs it too. `useRenderedPathname(base)`
+names the page on screen while the URL is ahead of it, for a layout that wraps
+the page by route and must not change the wrapper under the page being left.
 
 ## clampedBack and history
 

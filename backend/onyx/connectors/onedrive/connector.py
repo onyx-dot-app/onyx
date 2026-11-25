@@ -1,7 +1,9 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
+
+from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -16,6 +18,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
@@ -42,10 +45,12 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -270,6 +275,8 @@ class OneDriveConnector(
         treat_organization_link_as_public: bool = False,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         normalized_users = normalize_configured_users(users)
         self.settings = OneDriveSettings(
@@ -312,6 +319,17 @@ class OneDriveConnector(
                 CONFIG_USERS: self.settings.users,
             },
         )
+        self._ops.request_pacer = self._request_pacer()
+
+    def _request_pacer(self) -> MicrosoftRequestPacer | None:
+        limiter = self.source_api_limiter
+        return MicrosoftRequestPacer(limiter) if limiter is not None else None
+
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        super().set_source_api_limiter(limiter)
+        if self._ops is not None:
+            self._ops.request_pacer = self._request_pacer()
 
     def validate_connector_settings(self) -> None:
         resolve_microsoft_environment(
@@ -522,6 +540,8 @@ class OneDriveConnector(
             content = self.ops.download_item(
                 item=drive_item, raw_file_callback=self.raw_file_callback
             )
+        except ConnectorStopSignal:
+            raise
         except Exception as error:
             return _document_failure(drive_item, error)
         if content is None:
@@ -541,6 +561,29 @@ class OneDriveConnector(
             and checkpoint.current_drive_delta_resync_attempted
         )
         return error.is_permanent_refusal or repeated_resync
+
+    def _read_item_access(
+        self,
+        user: OneDriveUser,
+        drive: OneDriveDrive,
+        item: DriveDeltaItem,
+        include_permissions: bool,
+        to_failure: Callable[[Exception], ConnectorFailure],
+    ) -> ExternalAccess | ConnectorFailure | None:
+        """The item's access, None without permission sync, or the failure
+        that ``to_failure`` makes when the read fails for this item only."""
+        if not include_permissions:
+            return None
+        try:
+            return self._item_access(user, drive, item)
+        except OneDriveGraphError as error:
+            if error.fails_the_attempt:
+                raise
+            return to_failure(error)
+        except ConnectorStopSignal:
+            raise
+        except Exception as error:
+            return to_failure(error)
 
     def _discover_delta_page(
         self,
@@ -607,41 +650,33 @@ class OneDriveConnector(
             if item.is_folder:
                 if not self._path_allowed(item):
                     continue
-                try:
-                    access = (
-                        self._item_access(user, drive, item)
-                        if include_permissions
-                        else None
-                    )
-                except OneDriveGraphError as error:
-                    if error.fails_the_attempt:
-                        raise
-                    yield _entity_failure(item.id, str(error), error)
+                folder_access = self._read_item_access(
+                    user,
+                    drive,
+                    item,
+                    include_permissions,
+                    lambda error, item_id=item.id: _entity_failure(
+                        item_id, str(error), error
+                    ),
+                )
+                if isinstance(folder_access, ConnectorFailure):
+                    yield folder_access
                     continue
-                except Exception as error:
-                    yield _entity_failure(item.id, str(error), error)
-                    continue
-                yield folder_node(drive, item, access)
+                yield folder_node(drive, item, folder_access)
                 continue
             if not item.is_file or not self._item_allowed(item, None, end_at):
                 continue
-            try:
-                access = (
-                    self._item_access(user, drive, item)
-                    if include_permissions
-                    else None
-                )
-            except OneDriveGraphError as error:
-                if error.fails_the_attempt:
-                    raise
-                yield _document_failure(
-                    DriveItemData.from_graph_json(item.to_graph_json()), error
-                )
-                continue
-            except Exception as error:
-                yield _document_failure(
-                    DriveItemData.from_graph_json(item.to_graph_json()), error
-                )
+            access = self._read_item_access(
+                user,
+                drive,
+                item,
+                include_permissions,
+                lambda error, file=item: _document_failure(
+                    DriveItemData.from_graph_json(file.to_graph_json()), error
+                ),
+            )
+            if isinstance(access, ConnectorFailure):
+                yield access
                 continue
             yield OneDriveDiscoveredFile(
                 drive=drive,
@@ -989,6 +1024,8 @@ class OneDriveConnector(
                     if graph_error.fails_the_attempt:
                         raise
                     yield _reindex_failure(failed, str(graph_error), graph_error)
+                except ConnectorStopSignal:
+                    raise
                 except Exception as target_error:
                     yield _reindex_failure(failed, str(target_error), target_error)
         finally:
