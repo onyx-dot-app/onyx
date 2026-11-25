@@ -7001,7 +7001,7 @@
         },
         "imageModels": {
           "title": "Image Models",
-          "description": "Turn on the models that this provider can use to generate images. A change applies at once.",
+          "description": "Turn on the models that this provider can use to generate images.",
           "error": "Could not change the image model"
         }
       }

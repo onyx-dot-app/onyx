@@ -7001,7 +7001,7 @@
         },
         "imageModels": {
           "title": "Bildmodelle",
-          "description": "Aktivieren Sie die Modelle, mit denen dieser Anbieter Bilder generieren kann. Eine Änderung gilt sofort.",
+          "description": "Aktivieren Sie die Modelle, mit denen dieser Anbieter Bilder generieren kann.",
           "error": "Das Bildmodell konnte nicht geändert werden"
         }
       }

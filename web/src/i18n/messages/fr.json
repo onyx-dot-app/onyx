@@ -7001,7 +7001,7 @@
         },
         "imageModels": {
           "title": "Modèles d'image",
-          "description": "Activez les modèles que ce fournisseur peut utiliser pour générer des images. Un changement s'applique immédiatement.",
+          "description": "Activez les modèles que ce fournisseur peut utiliser pour générer des images.",
           "error": "Impossible de modifier le modèle d'image"
         }
       }
