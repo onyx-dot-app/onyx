@@ -13,8 +13,6 @@ from onyx.connectors.google_utils.resources import (
 GOOGLE_SCOPES = {
     "google_drive": [
         "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/admin.directory.group",
-        "https://www.googleapis.com/auth/admin.directory.user",
     ],
 }
 
@@ -142,28 +140,29 @@ class GoogleDriveManager:
         ).execute()
 
     @staticmethod
-    def remove_file_permissions(
-        drive_service: Any,
-        file_id: str,
-        email: str,  # noqa: ARG004
-    ) -> None:
+    def remove_file_permissions(drive_service: Any, file_id: str, email: str) -> None:
         permissions = (
             drive_service.permissions()
-            .list(fileId=file_id, supportsAllDrives=True)
+            .list(
+                fileId=file_id,
+                supportsAllDrives=True,
+                fields="permissions(id,emailAddress)",
+            )
             .execute()
         )
-        # TODO: This is a hacky way to remove permissions. Removes anyone with reader role.
-        # Need to find a way to map a user's email to a permission id.
-        # The permissions.get returns a permissionID but email field is None,
-        # something to do with it being a group or domain wide delegation.
-        for permission in permissions.get("permissions", []):
-            if permission.get("role") == "reader":
-                drive_service.permissions().delete(
-                    fileId=file_id,
-                    permissionId=permission["id"],
-                    supportsAllDrives=True,
-                ).execute()
-                break
+        matching = [
+            permission["id"]
+            for permission in permissions.get("permissions", [])
+            if (permission.get("emailAddress") or "").lower() == email.lower()
+        ]
+        if not matching:
+            raise ValueError(f"{email} has no permission on {file_id}")
+        for permission_id in matching:
+            drive_service.permissions().delete(
+                fileId=file_id,
+                permissionId=permission_id,
+                supportsAllDrives=True,
+            ).execute()
 
     @staticmethod
     def make_file_public(drive_service: Any, file_id: str) -> None:
