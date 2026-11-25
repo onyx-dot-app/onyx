@@ -38,6 +38,10 @@ describe("splitMarkdownBlocks", () => {
     "- a\n\n  ```\n  x\n\ny\n\n  ```\n\nb",
     "```a``` is inline.\n\nprose\n\n```\none\n\ntwo\n```\n\nafter",
     "intro\n\n$$\na\n\nb\n$$\n\nafter $$x$$ inline\n\n$$ y $$\n\nend",
+    "intro\n\n$$$$\na\n\n$$\n\nb\n$$$$\n\nend",
+    "[ref]\n\n> [ref]: https://example.com\n\nend",
+    "[ref]\n\n- item\n\n  [ref]: https://example.com\n\nend",
+    "[multi line]\n\n[multi\nline]: https://example.com\n\nend",
   ])(
     "renders each block as the whole text renders it, at every streamed prefix: %j",
     (text) => {
@@ -75,6 +79,10 @@ describe("splitMarkdownBlocks", () => {
       "b",
     ]);
     expect(splitMarkdownBlocks("$$ x $$\n\nb")).toEqual(["$$ x $$\n\n", "b"]);
+    expect(splitMarkdownBlocks("$$$$\nx\n\n$$\n\ny\n$$$$\n\nb")).toEqual([
+      "$$$$\nx\n\n$$\n\ny\n$$$$\n\n",
+      "b",
+    ]);
   });
 
   it("keeps a list continuation after a blank line in the list", () => {
@@ -86,6 +94,9 @@ describe("splitMarkdownBlocks", () => {
 
   it.each([
     "[ref]\n\n[x]: https://example.com",
+    "[ref]\n\n> [ref]: https://example.com",
+    "[ref]\n\n- [ref]: https://example.com",
+    "[a b]\n\n[a\nb]: https://example.com",
     "a[^x]\n\n[^x]: note",
     "<details>\n\nbody\n\n</details>",
     ":::note\n\ncontent\n\n:::",

@@ -1,4 +1,4 @@
-import { render, screen } from "@tests/setup/test-utils";
+import { render, screen, setupUser } from "@tests/setup/test-utils";
 import { AnswerMarkdown } from "@/lib/answerText/components";
 
 test("a fenced code block opts out of the answer's prose styles", async () => {
@@ -36,4 +36,15 @@ test("a streaming answer renders the same text as a finished one", () => {
     (element.textContent ?? "").replace(/\s+/g, "");
   expect(text(streamed)).toBe(text(finished));
   expect(streamed.querySelectorAll(".prose")).toHaveLength(1);
+});
+
+test("a code block keeps its wrap choice when the answer finishes", async () => {
+  const user = setupUser();
+  const content = "Intro.\n\n```python\nprint(1)\n```\n\nThe end.";
+  const { rerender } = render(<AnswerMarkdown content={content} streaming />);
+
+  await user.click(screen.getByRole("button", { name: "Unwrap" }));
+  rerender(<AnswerMarkdown content={content} />);
+
+  expect(screen.getByRole("button", { name: "Wrap" })).toBeInTheDocument();
 });
