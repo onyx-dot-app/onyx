@@ -60,7 +60,11 @@ import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { useActiveProject, useProjects } from "@/lib/projects/hooks";
+import {
+  useActiveProject,
+  useHeldUploadsSettled,
+  useProjects,
+} from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import {
   cancelUpload,
@@ -559,6 +563,20 @@ const AppInputBar = React.memo(
       setCurrentMessageFiles(files);
       setCursorToEnd();
     }
+
+    // An upload of the set-aside draft that settles updates the draft, so the
+    // saved draft keeps the uploaded file.
+    const heldUploadsSettled = useHeldUploadsSettled();
+    useEffect(() => {
+      if (
+        !editing?.stash.files?.some(
+          (file) => file.status === UserFileStatus.UPLOADING
+        )
+      )
+        return;
+      const files = releaseUploads(editing.stash.files);
+      setEditing({ ...editing, stash: { ...editing.stash, files } });
+    }, [heldUploadsSettled]);
 
     function endEdit(stash: ChatDraft) {
       setHeldSendKey(null);
