@@ -321,9 +321,6 @@ class CustomToolCallSummary(BaseModel):
         union_mode="left_to_right"
     )
     error: CustomToolErrorInfo | None = None
-    # The integration of an app tool, which has no tool row. The chat reads
-    # it to open the sign-in of the integration after an auth error.
-    integration_id: Annotated[int | None, OMITTED_WHEN_NONE] = None
     # The server's structured content, which code mode programs receive in
     # place of `tool_result`. Live only: not saved or streamed.
     structured_result: dict[str, JsonValue] | None = Field(default=None, exclude=True)
