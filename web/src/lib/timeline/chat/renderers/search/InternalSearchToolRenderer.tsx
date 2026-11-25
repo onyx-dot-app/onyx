@@ -4,7 +4,7 @@ import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { OnyxDocument } from "@/lib/search/types";
 import {
   SearchChipList,

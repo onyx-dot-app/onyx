@@ -1,4 +1,4 @@
-import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import type { TimelineTranslate } from "@/lib/timeline/chat/message/messageComponents/toolDisplayHelpers";
 import { getSourceDisplayName, isValidSource } from "@/lib/connectors/utils";
 import {
   PacketType,

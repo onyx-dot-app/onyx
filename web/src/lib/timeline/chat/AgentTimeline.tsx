@@ -16,7 +16,7 @@ import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { constructCurrentMemoryState } from "@/lib/timeline/chat/renderers/memory/memoryStateUtils";
 import { isMemoryToolPackets } from "@/lib/timeline/chat/packetHelpers";
 import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
-import { FullChatState } from "@/app/app/message/messageComponents/types";
+import { FullChatState } from "@/lib/timeline/chat/message/messageComponents/types";
 import {
   TurnGroup,
   TransformedStep,

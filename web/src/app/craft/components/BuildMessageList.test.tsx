@@ -24,7 +24,7 @@ jest.mock("@/lib/answerText/components", () => ({
   ),
 }));
 
-jest.mock("@/app/app/message/BlinkingBar", () => ({
+jest.mock("@/lib/timeline/chat/message/BlinkingBar", () => ({
   BlinkingBar: () => <span data-testid="blinking-bar" />,
 }));
 

@@ -16,7 +16,7 @@ import {
 import {
   firstActivityPacket,
   type TimelineTranslate,
-} from "@/app/app/message/messageComponents/toolDisplayHelpers";
+} from "@/lib/timeline/chat/message/messageComponents/toolDisplayHelpers";
 
 /** Header text for the activity of one step, or null for no tool activity. */
 function stepHeaderText(

@@ -5,7 +5,7 @@ import { StopReason } from "@/app/app/services/streamingModels";
 import {
   FullChatState,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import type { TransformedStep } from "@/lib/timeline/chat/transformers";
 import {
   TimelineRendererComponent,

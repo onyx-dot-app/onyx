@@ -8,8 +8,8 @@ import {
   RenderType,
   RendererResult,
   RendererOutput,
-} from "@/app/app/message/messageComponents/types";
-import { findRenderer } from "@/app/app/message/messageComponents/renderMessageComponent";
+} from "@/lib/timeline/chat/message/messageComponents/types";
+import { findRenderer } from "@/lib/timeline/chat/message/messageComponents/renderMessageComponent";
 
 /** Extended result that includes collapse state */
 export interface TimelineRendererResult extends RendererResult {

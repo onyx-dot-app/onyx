@@ -1126,7 +1126,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   dependency unit tests take the `code_mode` fixture
   (`backend/tests/external_dependency_unit/conftest.py`) to run in both modes. Web:
   the code mode cases in
-  `web/src/app/app/message/messageComponents/AgentMessage.test.tsx`,
+  `web/src/lib/timeline/chat/message/messageComponents/AgentMessage.test.tsx`,
   `web/src/lib/timeline/chat/transformers.test.ts`,
   `web/src/lib/timeline/chat/hooks/useTimelineHeader.test.tsx`
   and the code mode block of

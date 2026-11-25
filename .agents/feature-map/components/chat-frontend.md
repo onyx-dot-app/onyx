@@ -301,7 +301,7 @@
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
   tab-separated text so a spreadsheet keeps the columns. Each answer table
   also has its own copy button, which writes HTML with links and full source
-  names (`app/app/message/tableCopyUtils.ts`). A share link opens a
+  names (`lib/timeline/chat/message/tableCopyUtils.ts`). A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
   sign-in.
 - **A user shares or exports a chat.** The header's share button opens a menu
@@ -453,10 +453,10 @@ session's `uncaughtError`, a `SessionError` with the error code and details,
 after settlement.
 An automatic follow-up response has a hidden `agent_results` question node as
 its parent. `ChatUI` and the shared chat view render that node with
-`web/src/app/app/message/AgentResultsDivider.tsx`, with no message controls. Checks that
+`web/src/lib/timeline/chat/message/AgentResultsDivider.tsx`, with no message controls. Checks that
 look for the last `user` node skip it, and export omits it. A multi-model turn
 is unresolved only while the chain tip's parent is its user message
-(`web/src/app/app/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
+(`web/src/lib/timeline/chat/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
 reopen response selection.
 
 **Packet processing.** `processPackets` is incremental. It processes only
@@ -468,7 +468,7 @@ that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group wi
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
 making their own step. Generated images accumulate across tool steps, unique
 by file ID, and render once, inline right after the step that made them
-(`web/src/app/app/message/messageComponents/AgentMessage.tsx:buildSectionSegments`), as soon as they arrive. An image
+(`web/src/lib/timeline/chat/message/messageComponents/AgentMessage.tsx:buildSectionSegments`), as soon as they arrive. An image
 ends its step's run, so a later step starts a new run card. Later tool
 calls do not hide them. An image call does not mark the answer as final;
 later search or image calls can continue the timeline. Published files work the same way: each
@@ -906,7 +906,7 @@ up its own branding.
    `nodeId` changes, the list gets shorter, or the packet at the last processed
    index is a different object, as after a replay or a reload. So append to the
    same packet objects, and give a rebuilt list new ones.
-   `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage` memoizes
+   `lib/timeline/chat/message/messageComponents/AgentMessage.tsx:AgentMessage` memoizes
    on `packetCount` and the array, because a send mutates its array in place.
 2. `packet-type-web-sets` **A new packet type needs more than an enum entry.**
    [[streaming-protocol]] lists the hand-mirrored places, including

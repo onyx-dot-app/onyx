@@ -1,7 +1,7 @@
 import { createTranslator } from "next-intl";
 import en from "@/i18n/messages/en.json";
 import ar from "@/i18n/messages/ar.json";
-import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import type { TimelineTranslate } from "@/lib/timeline/chat/message/messageComponents/toolDisplayHelpers";
 import {
   constructCurrentSearchState,
   formatSearchHeader,

@@ -12,7 +12,7 @@ import {
   chooseImplicitPreferred,
   getMostVisibleResponseId,
   getUnresolvedMultiModelTurn,
-} from "@/app/app/message/multiModel";
+} from "@/lib/timeline/chat/message/multiModel";
 import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";

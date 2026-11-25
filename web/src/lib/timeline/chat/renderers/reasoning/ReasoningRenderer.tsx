@@ -9,7 +9,7 @@ import {
 import {
   MessageRenderer,
   FullChatState,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import {
   ThinkingBody,
   splitThinkingTitle,

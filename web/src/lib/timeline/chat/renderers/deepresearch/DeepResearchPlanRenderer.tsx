@@ -9,7 +9,7 @@ import {
 import {
   MessageRenderer,
   FullChatState,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import {
