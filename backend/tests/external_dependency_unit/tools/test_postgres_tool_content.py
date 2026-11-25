@@ -561,6 +561,8 @@ def test_rejects_unsupported_content_queries(content_env: ContentEnv) -> None:
     assert "order by date only" in message
     message = _run_error(tool, table="document", content_contains="the and")
     assert "no searchable words" in message
+    # The index keeps "can", though the keyword stopword list drops it.
+    _run(tool, table="document", content_contains="can !")
 
 
 def test_rejects_content_when_unavailable(content_env: ContentEnv) -> None:

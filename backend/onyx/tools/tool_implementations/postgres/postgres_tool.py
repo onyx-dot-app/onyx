@@ -234,7 +234,7 @@ _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "created_after": _prop("string", "chat_session: ISO date lower bound."),
     "created_before": _prop("string", "chat_session: ISO date upper bound, exclusive."),
     "chat_session_id": _any_of_prop("string", "chat_message: only messages in this session (UUID)."),
-    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text. document: documents whose text contains this word or phrase (whole words, any case, word forms such as plurals match; the text includes the title and metadata; Salesforce is searched only under public connectors; each indexed section of a document is matched on its own, so a phrase that crosses two sections can be missed). Slow on documents: use it only when the user wants an exhaustive list or count by content, add date, source or folder filters when you can, and use search to answer questions about what documents say. Document listings with it order by date only."),
+    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text. document: documents whose text contains this word or phrase (whole words, any case, word forms such as plurals match; the text includes the title, the indexed metadata and any AI-generated summaries; Salesforce is searched only under public connectors; each indexed section of a document is matched on its own, so a phrase that crosses two sections can be missed). Slow on documents: use it only when the user wants an exhaustive list or count by content, add date, source or folder filters when you can, and use search to answer questions about what documents say. Document listings with it order by date only."),
     "message_type": _prop("string", "chat_message: filter by author.", ["user", "assistant"]),
     "sent_after": _prop("string", "chat_message: ISO date lower bound."),
     "sent_before": _prop("string", "chat_message: ISO date upper bound, exclusive."),
@@ -978,7 +978,7 @@ class PostgresTool(Tool):
             phrases=phrases,
         )
         for phrase in phrases:
-            if document_index.count_keyword_terms(phrase).total == 0:
+            if document_index.count_phrase_terms(phrase) == 0:
                 raise _reject(
                     f"'content_contains' value {phrase!r} has no searchable words "
                     "(only common words such as 'the' or 'and'). Use a more "
