@@ -108,7 +108,7 @@ export interface AdminRouteEntry {
 export const ADMIN_ROUTES = {
   // ── System Configuration (unlabeled section) ──────────────────────
   LLM_MODELS: {
-    path: "/admin/language-models",
+    path: "/admin/chat-image-models",
     featureKey: PlaygroundRestrictedFeature.LLM_PROVIDERS,
     icon: SvgCpu,
     title: "Chat & Image Models",

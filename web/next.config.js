@@ -249,7 +249,7 @@ const nextConfig = {
       },
       {
         source: "/admin/configuration/llm",
-        destination: "/admin/language-models",
+        destination: "/admin/chat-image-models",
         permanent: true,
       },
       // Legacy /admin/configuration/* → /admin/* redirects. The segment provided no additional value.
@@ -268,15 +268,20 @@ const nextConfig = {
         destination: "/admin/document-processing",
         permanent: true,
       },
-      // Image generation moved into the Chat & Image Models page.
+      // Language Models and Image Generation merged into Chat & Image Models.
+      {
+        source: "/admin/language-models",
+        destination: "/admin/chat-image-models",
+        permanent: true,
+      },
       {
         source: "/admin/configuration/image-generation",
-        destination: "/admin/language-models",
+        destination: "/admin/chat-image-models",
         permanent: true,
       },
       {
         source: "/admin/image-generation",
-        destination: "/admin/language-models",
+        destination: "/admin/chat-image-models",
         permanent: true,
       },
       {
@@ -286,7 +291,7 @@ const nextConfig = {
       },
       {
         source: "/admin/configuration/language-models",
-        destination: "/admin/language-models",
+        destination: "/admin/chat-image-models",
         permanent: true,
       },
       {

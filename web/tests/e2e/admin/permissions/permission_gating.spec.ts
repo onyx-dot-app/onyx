@@ -170,7 +170,7 @@ test.describe("Permission gating: MANAGE_AGENTS", () => {
 });
 
 test.describe("Permission gating: MANAGE_LLMS", () => {
-  test("Admin panel and /admin/language-models are gated behind MANAGE_LLMS", async ({
+  test("Admin panel and /admin/chat-image-models are gated behind MANAGE_LLMS", async ({
     page,
     adminClient,
     testUserContext,

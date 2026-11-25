@@ -16,7 +16,7 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
   useRouter: () => ({ back: jest.fn() }),
-  usePathname: () => "/admin/language-models",
+  usePathname: () => "/admin/chat-image-models",
 }));
 
 jest.mock("@/lib/adminNavLabels", () => ({

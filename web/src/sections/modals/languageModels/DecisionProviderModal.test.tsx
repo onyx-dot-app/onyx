@@ -94,7 +94,7 @@ it.each(["openai", "vercel_ai_gateway"])(
       screen.getByRole("link", {
         name: "Manage chat settings in Chat & Image Models",
       })
-    ).toHaveAttribute("href", "/admin/language-models");
+    ).toHaveAttribute("href", "/admin/chat-image-models");
     await user.clear(screen.getByLabelText(/display name/i));
     await user.type(
       screen.getByLabelText(/display name/i),
