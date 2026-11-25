@@ -21,7 +21,7 @@ from onyx.server.features.integrations.models import (
 )
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import CustomToolCreate
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.api_app.openapi_parsing import MethodSpec
 from tests.external_dependency_unit.conftest import MakeTestUser
 
 

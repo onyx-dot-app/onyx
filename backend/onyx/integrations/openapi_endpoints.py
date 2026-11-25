@@ -12,7 +12,7 @@ from urllib.parse import quote, unquote
 import yaml
 from pydantic import BaseModel
 
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     OPENAPI_METHODS,
     PATH_PARAM,
     TOOL_HTTP_METHODS,

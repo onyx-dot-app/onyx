@@ -23,7 +23,7 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     IntegrationMatchTarget,
     parse_target,
 )
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     openapi_to_url,
     parse_openapi_document,
 )

@@ -34,7 +34,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     inline_path_parameters,
     openapi_to_url,
 )

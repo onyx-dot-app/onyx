@@ -34,7 +34,7 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.ordering import ToolRank
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     REQUEST_BODY,
     MethodSpec,
     openapi_operations,
@@ -287,7 +287,7 @@ class ApiTool(Tool):
         return False
 
 
-class CustomTool(ApiTool):
+class RestTool(ApiTool):
     """One operation of an OpenAPI integration."""
 
     def __init__(
@@ -361,8 +361,8 @@ def build_custom_tools_from_openapi_schema_and_headers(
     credentials: CallCredentials,
     approval_for: Callable[[str], ToolApprovalScope | None] | None = None,
     acting_user_id: UUID | None = None,
-) -> list[CustomTool]:
-    """Build CustomTool instances from an OpenAPI schema.
+) -> list[RestTool]:
+    """Build RestTool instances from an OpenAPI schema.
 
     Placeholder substitution: the JSON-serialized schema is scanned for the following literal strings and
     each is replaced with the corresponding per-request value before the tool
@@ -405,7 +405,7 @@ def build_custom_tools_from_openapi_schema_and_headers(
     for method_spec in method_specs:
         action_key = action_keys[method_spec.spec.pop(_OPERATION_POSITION_KEY)]
         tools.append(
-            CustomTool(
+            RestTool(
                 integration_id=integration_id,
                 method_spec=method_spec,
                 base_url=url,

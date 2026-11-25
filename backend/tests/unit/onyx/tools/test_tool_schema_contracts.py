@@ -14,7 +14,7 @@ from onyx.deep_research.tool_definitions import (
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolDefinition
 from onyx.tools.interface import Tool
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.api_app.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,

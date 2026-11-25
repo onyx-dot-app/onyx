@@ -35,7 +35,7 @@ from onyx.tools.models import (
     IntegrationLinkConfiguration,
     ToolCallException,
 )
-from onyx.tools.tool_implementations.custom.graphql_tool import GraphQLTool
+from onyx.tools.tool_implementations.api_app.graphql_tool import GraphQLTool
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import give_access
 

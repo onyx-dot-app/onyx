@@ -19,20 +19,20 @@ from onyx.server.features.tool.api import ValidateToolRequest, validate_tool
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo, ToolContext
 from onyx.tools.tool_implementations import http_request
-from onyx.tools.tool_implementations.custom.custom_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
-    validate_custom_tool_url,
-)
-from onyx.tools.tool_implementations.custom.graphql_tool import (
+from onyx.tools.tool_implementations.api_app.graphql_tool import (
     GraphQLTool,
     graphql_action_parameters,
     graphql_root_fields,
     parse_graphql_schema,
 )
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     _MAX_INLINED_NODES,
     openapi_to_method_specs,
     validate_openapi_schema,
+)
+from onyx.tools.tool_implementations.api_app.rest_tool import (
+    build_custom_tools_from_openapi_schema_and_headers,
+    validate_custom_tool_url,
 )
 from onyx.tools.tool_implementations.http_request import (
     TOOL_REQUEST_TIMEOUT,
@@ -92,7 +92,7 @@ def _response(
 
 class TestCustomTool(unittest.TestCase):
     """
-    Test suite for CustomTool functionality.
+    Test suite for RestTool functionality.
     This class tests the creation, running, and result handling of custom tools
     based on OpenAPI schemas.
     """

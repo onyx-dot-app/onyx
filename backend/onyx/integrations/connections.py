@@ -96,7 +96,7 @@ from onyx.server.features.mcp.oauth import (
     oauth_token_from_secret,
 )
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     openapi_to_url,
     parse_openapi_document,
 )

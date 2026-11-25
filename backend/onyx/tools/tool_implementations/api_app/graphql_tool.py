@@ -38,8 +38,8 @@ from onyx.tools.models import (
     ToolApprovalScope,
     ToolCallException,
 )
-from onyx.tools.tool_implementations.custom.custom_tool import ApiTool
-from onyx.tools.tool_implementations.custom.openapi_parsing import InlineBudget
+from onyx.tools.tool_implementations.api_app.openapi_parsing import InlineBudget
+from onyx.tools.tool_implementations.api_app.rest_tool import ApiTool
 from onyx.tools.tool_name import custom_tool_name
 
 SELECTION = "selection"

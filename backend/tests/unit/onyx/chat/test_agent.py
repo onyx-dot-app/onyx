@@ -88,8 +88,8 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import CapabilityEntry, ChatFile, ToolContext
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.api_app.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.subagents.shapes import AGENT_SHAPES
@@ -1296,7 +1296,7 @@ def test_the_root_instructions_name_how_its_shape_waits(family: ToolFamily) -> N
 @pytest.mark.parametrize("custom", [False, True])
 def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) -> None:
     configured = (
-        CustomTool(
+        RestTool(
             integration_id=42,
             method_spec=MethodSpec(
                 name="list_agents",
