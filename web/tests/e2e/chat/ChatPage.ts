@@ -1020,7 +1020,7 @@ export class ChatPage {
     if ((await fold.getAttribute("aria-expanded")) === "false") {
       await fold.click();
     }
-    const status = this.scrollContainer.getByText(`${name} completed`, {
+    const status = this.scrollContainer.getByText(`Executed ${name}`, {
       exact: true,
     });
     await expect(status).toBeVisible();
