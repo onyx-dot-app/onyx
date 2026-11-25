@@ -623,3 +623,9 @@ def test_match_request_without_url_is_none(monkeypatch: pytest.MonkeyPatch) -> N
     )
     request = ProxiedRequest(method="GET", path="/a")
     assert HANDLER.match_request(integration, target, request, DB) is None
+
+
+def test_graphql_schema_with_no_query_root_is_refused() -> None:
+    """Each call would fail on it, so the save refuses it."""
+    with pytest.raises(OnyxError, match="Query root type must be provided"):
+        api_kind.graphql_action_specs("type Mutation { close(id: ID!): Boolean }")

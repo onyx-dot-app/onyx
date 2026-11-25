@@ -20,6 +20,7 @@ from graphql import (
     GraphQLSchema,
     IntrospectionQuery,
     Undefined,
+    assert_valid_schema,
     build_client_schema,
     build_schema,
     get_named_type,
@@ -50,9 +51,12 @@ _SCALARS: dict[str, dict[str, JsonValue]] = {
 
 
 def parse_graphql_schema(sdl: str) -> GraphQLSchema:
-    """Raises ``ValueError`` for text that is not a valid schema."""
+    """Raises ``ValueError`` for text that is not a valid schema, such as one
+    with no query root type."""
     try:
-        return build_schema(sdl)
+        schema = build_schema(sdl)
+        assert_valid_schema(schema)
+        return schema
     except (GraphQLError, TypeError) as e:
         raise ValueError(f"The GraphQL schema is not valid: {e}") from e
 
