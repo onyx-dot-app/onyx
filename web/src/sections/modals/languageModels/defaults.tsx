@@ -19,19 +19,19 @@ import type {
 import { useImageGenerationConfigs } from "@/lib/imageGeneration/hooks";
 import type { ImageGenerationConfigView } from "@/lib/imageGeneration/types";
 
-/** A deployment default: the backend's flow name, or the image default. */
-export type DefaultFlow =
+/** A deployment default: the backend's `ModelRole`. */
+export type DefaultRole =
   | "chat"
-  | "vision"
+  | "image_processing"
   | "chat_naming"
   | "search_selection"
   | "decision"
   | "craft"
-  | "image";
+  | "image_generation";
 
 /** A default the deployment holds now. */
 export interface CurrentDefault {
-  flow: DefaultFlow;
+  role: DefaultRole;
   providerId: number;
   modelName: string;
   /** The image default's config, to clear or replace it. */
@@ -40,12 +40,12 @@ export interface CurrentDefault {
 
 /** The chosen replacement per affected default: a model configuration id,
  *  or null when no model can take it over and it is cleared. */
-export type DefaultChoices = Partial<Record<DefaultFlow, number | null>>;
+export type DefaultChoices = Partial<Record<DefaultRole, number | null>>;
 
-const FLOW_ORDER: DefaultFlow[] = [
+const ROLE_ORDER: DefaultRole[] = [
   "chat",
-  "image",
-  "vision",
+  "image_generation",
+  "image_processing",
   "chat_naming",
   "search_selection",
   "decision",
@@ -65,20 +65,20 @@ export function useCurrentDefaults(): CurrentDefault[] {
   const { defaultConfig: imageDefault } = useImageGenerationConfigs();
 
   return useMemo(() => {
-    const byFlow: Partial<Record<DefaultFlow, DefaultModel | null>> = {
+    const byRole: Partial<Record<DefaultRole, DefaultModel | null>> = {
       chat: defaultText,
-      vision: defaultVision,
+      image_processing: defaultVision,
       chat_naming: defaultChatNaming,
       search_selection: defaultSearchSelection,
       decision,
       craft: defaultCraft,
     };
     const defaults: CurrentDefault[] = [];
-    for (const flow of FLOW_ORDER) {
-      if (flow === "image") {
+    for (const role of ROLE_ORDER) {
+      if (role === "image_generation") {
         if (imageDefault) {
           defaults.push({
-            flow,
+            role,
             providerId: imageDefault.llm_provider_id,
             modelName: imageDefault.model_name,
             imageProviderId: imageDefault.image_provider_id,
@@ -86,10 +86,10 @@ export function useCurrentDefaults(): CurrentDefault[] {
         }
         continue;
       }
-      const model = byFlow[flow];
+      const model = byRole[role];
       if (model) {
         defaults.push({
-          flow,
+          role,
           providerId: model.provider_id,
           modelName: model.model_name,
         });
@@ -107,13 +107,14 @@ export function useCurrentDefaults(): CurrentDefault[] {
   ]);
 }
 
-/** Whether a model can hold `flow`'s default. */
-function canHold(flow: DefaultFlow, model: ModelConfiguration): boolean {
-  if (flow === "image") return model.supports_image_generation === true;
+/** Whether a model can hold `role`'s default. */
+function canHold(role: DefaultRole, model: ModelConfiguration): boolean {
+  if (role === "image_generation")
+    return model.supports_image_generation === true;
   if (!model.is_visible || model.id == null) return false;
-  if (flow === "decision") return model.supports_decisions === true;
+  if (role === "decision") return model.supports_decisions === true;
   if (model.supports_chat === false) return false;
-  return flow !== "vision" || model.supports_image_input;
+  return role !== "image_processing" || model.supports_image_input;
 }
 
 /**
@@ -130,13 +131,13 @@ export function useDefaultCandidates({
   override?: LLMProviderView;
   /** Image models of `override` that the save disconnects. */
   disconnecting?: ReadonlySet<string>;
-}): (flow: DefaultFlow) => LLMProviderView[] {
+}): (role: DefaultRole) => LLMProviderView[] {
   const { llmProviders } = useAdminLanguageModelsWithImageModels();
   const { providers: decisionProviders } = useDecisionModel();
 
-  return (flow: DefaultFlow) => {
+  return (role: DefaultRole) => {
     const source =
-      flow === "decision" ? (decisionProviders ?? []) : (llmProviders ?? []);
+      role === "decision" ? (decisionProviders ?? []) : (llmProviders ?? []);
     return source
       .filter((provider) => provider.id !== exclude)
       .map((provider) =>
@@ -158,7 +159,7 @@ export function useDefaultCandidates({
       .map((provider) => ({
         ...provider,
         model_configurations: provider.model_configurations.filter((model) =>
-          canHold(flow, model)
+          canHold(role, model)
         ),
       }))
       .filter((provider) => provider.model_configurations.length > 0);
@@ -180,13 +181,13 @@ export function choiceToDefault(
 }
 
 /**
- * The backend's default changes for the chosen replacements, by flow (a
+ * The backend's role changes for the chosen replacements (a
  * model, or null to clear), and the image default's new config: its
  * `image_provider_id`, null when it is lost, or undefined when untouched.
  */
 export function buildDefaultChanges(
   affected: CurrentDefault[],
-  candidates: (flow: DefaultFlow) => LLMProviderView[],
+  candidates: (role: DefaultRole) => LLMProviderView[],
   choices: DefaultChoices,
   imageConfigs: ImageGenerationConfigView[]
 ): {
@@ -196,8 +197,8 @@ export function buildDefaultChanges(
   const defaultChanges: Record<string, DefaultModel | null> = {};
   let imageDefault: string | null | undefined;
   for (const current of affected) {
-    const choice = choices[current.flow] ?? null;
-    if (current.flow === "image") {
+    const choice = choices[current.role] ?? null;
+    if (current.role === "image_generation") {
       imageDefault =
         choice === null
           ? null
@@ -205,10 +206,10 @@ export function buildDefaultChanges(
               ?.image_provider_id ?? null);
       continue;
     }
-    defaultChanges[current.flow] =
+    defaultChanges[current.role] =
       choice === null
         ? null
-        : choiceToDefault(candidates(current.flow), choice);
+        : choiceToDefault(candidates(current.role), choice);
   }
   return { defaultChanges, imageDefault };
 }
@@ -216,21 +217,24 @@ export function buildDefaultChanges(
 /** Whether every affected default with a possible replacement has one. */
 export function choicesComplete(
   affected: CurrentDefault[],
-  candidates: (flow: DefaultFlow) => LLMProviderView[],
+  candidates: (role: DefaultRole) => LLMProviderView[],
   choices: DefaultChoices
 ): boolean {
   return affected.every(
-    (d) => candidates(d.flow).length === 0 || choices[d.flow] != null
+    (d) => candidates(d.role).length === 0 || choices[d.role] != null
   );
 }
 
 /** A default's row title and what happens when no model can take it over. */
-function useFlowCopy(): Record<DefaultFlow, { title: string; lost: string }> {
+function useRoleCopy(): Record<DefaultRole, { title: string; lost: string }> {
   const t = useTranslations("admin.languageModels.defaultChanges");
   return {
     chat: { title: t("flows.chat.title"), lost: t("flows.chat.lost") },
-    image: { title: t("flows.image.title"), lost: t("flows.image.lost") },
-    vision: { title: t("flows.vision.title"), lost: t("cleared") },
+    image_generation: {
+      title: t("flows.image.title"),
+      lost: t("flows.image.lost"),
+    },
+    image_processing: { title: t("flows.vision.title"), lost: t("cleared") },
     chat_naming: { title: t("flows.chatNaming.title"), lost: t("cleared") },
     search_selection: {
       title: t("flows.searchSelection.title"),
@@ -249,9 +253,9 @@ const CHAT_KINDS: readonly ModelKind[] = ["chat"];
 
 interface DefaultChoiceRowsProps {
   affected: CurrentDefault[];
-  candidates: (flow: DefaultFlow) => LLMProviderView[];
+  candidates: (role: DefaultRole) => LLMProviderView[];
   choices: DefaultChoices;
-  onChange: (flow: DefaultFlow, modelConfigurationId: number) => void;
+  onChange: (role: DefaultRole, modelConfigurationId: number) => void;
 }
 
 /**
@@ -265,30 +269,32 @@ export function DefaultChoiceRows({
   onChange,
 }: DefaultChoiceRowsProps) {
   const t = useTranslations("admin.languageModels.defaultChanges");
-  const copy = useFlowCopy();
+  const copy = useRoleCopy();
   return (
     <Section alignItems="stretch" gap={1} height="fit">
       {affected.map((current) => {
-        const options = candidates(current.flow);
+        const options = candidates(current.role);
         return (
           <InputHorizontal
-            key={current.flow}
-            title={copy[current.flow].title}
+            key={current.role}
+            title={copy[current.role].title}
             description={t("current", { model: current.modelName })}
             center
           >
             {options.length > 0 ? (
               <SimpleModelSelector
                 providers={options}
-                value={choices[current.flow] ?? null}
-                onChange={(id) => onChange(current.flow, id)}
-                modelKinds={current.flow === "image" ? IMAGE_KINDS : CHAT_KINDS}
-                includeDecisionOnly={current.flow === "decision"}
+                value={choices[current.role] ?? null}
+                onChange={(id) => onChange(current.role, id)}
+                modelKinds={
+                  current.role === "image_generation" ? IMAGE_KINDS : CHAT_KINDS
+                }
+                includeDecisionOnly={current.role === "decision"}
                 placeholder={t("placeholder")}
               />
             ) : (
               <Text as="p" font="secondary-body" color="status-warning-05">
-                {copy[current.flow].lost}
+                {copy[current.role].lost}
               </Text>
             )}
           </InputHorizontal>

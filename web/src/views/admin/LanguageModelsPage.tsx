@@ -244,8 +244,8 @@ function ExistingProviderCard({
                   affected={affectedDefaults}
                   candidates={defaultCandidates}
                   choices={defaultChoices}
-                  onChange={(flow, id) =>
-                    setDefaultChoices((prev) => ({ ...prev, [flow]: id }))
+                  onChange={(role, id) =>
+                    setDefaultChoices((prev) => ({ ...prev, [role]: id }))
                   }
                 />
               </>

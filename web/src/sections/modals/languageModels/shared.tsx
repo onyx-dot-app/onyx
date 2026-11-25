@@ -1341,7 +1341,7 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
     return currentDefaults.filter(
       (current) =>
         current.providerId === llmProvider.id &&
-        (current.flow === "image"
+        (current.role === "image_generation"
           ? values.image_model_changes?.[current.modelName]?.connect === false
           : wasChecked.has(current.modelName) &&
             !isChecked.has(current.modelName))
@@ -1432,8 +1432,8 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
               affected={pending.affected}
               candidates={candidates}
               choices={choices}
-              onChange={(flow, id) =>
-                setChoices((prev) => ({ ...prev, [flow]: id }))
+              onChange={(role, id) =>
+                setChoices((prev) => ({ ...prev, [role]: id }))
               }
             />
           )}

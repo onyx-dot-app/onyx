@@ -196,7 +196,7 @@ export async function deleteDefaultSearchSelectionModel(): Promise<void> {
 
 /**
  * Moves (a model) or clears (null) several deployment defaults at once, by
- * the backend's flow name, e.g. before deleting the provider that holds them.
+ * the backend's `ModelRole`, e.g. before deleting the provider that holds them.
  */
 export async function updateDefaults(
   defaultChanges: Record<string, DefaultModel | null>
