@@ -281,7 +281,7 @@ def test_lines_show_and_keep_shared_query_parameters() -> None:
     added = _apply(
         spec,
         [line.replace("/pets?limit", "/pets?limit&name") for line in lines]
-        + ["PUT /pets/{petId} Replace a pet"],
+        + ["PUT /pets/{petId}?verbose Replace a pet"],
     )
     assert added["paths"]["/pets"]["get"]["parameters"] == [
         {"$ref": "#/components/parameters/limit"},
@@ -300,6 +300,33 @@ def test_lines_show_and_keep_shared_query_parameters() -> None:
 
     with pytest.raises(EndpointLinesError, match="Each operation of /pets/{petId}"):
         _apply(spec, [line.replace("?verbose", "") for line in lines])
+    # A new operation also gets the query parameters of its path item.
+    with pytest.raises(EndpointLinesError, match="Each operation of /pets/{petId}"):
+        _apply(spec, [*lines, "PUT /pets/{petId} Replace a pet"])
+
+
+def test_a_replacing_operation_keeps_the_parameters_of_its_path() -> None:
+    spec = _callable_spec()
+    spec["paths"] = {
+        "/things/{id}": {
+            "parameters": [
+                {
+                    "name": "id",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "integer"},
+                }
+            ],
+            "get": {"operationId": "getThing", "summary": "Read a thing"},
+        }
+    }
+
+    replaced = _apply(spec, ["PUT /things/{id} Replace a thing"])
+
+    item = replaced["paths"]["/things/{id}"]
+    assert set(item) == {"parameters", "put"}
+    assert item["parameters"] == spec["paths"]["/things/{id}"]["parameters"]
+    validate_openapi_schema(replaced)
 
 
 def test_imported_lines_with_any_query_name_save_again() -> None:

@@ -157,6 +157,14 @@ def _operation(
     ``ValueError`` when the line leaves out a query parameter of the path
     item."""
     path_item = _path_item(spec, path)
+    old_query = None if old is None else _query_names(spec, path_item, old)
+    if query != old_query:
+        for inherited in _query_names(spec, path_item, {}):
+            if inherited not in query:
+                raise ValueError(
+                    f"Each operation of {path} has ?{inherited}. "
+                    "Remove it from the path in the spec."
+                )
     if old is None:
         defined = {
             (param.get("name"), param.get("in"))
@@ -190,14 +198,7 @@ def _operation(
     operation = copy.deepcopy(old)
     if name != _line_name(old):
         operation["summary"] = name
-    old_query = _query_names(spec, path_item, old)
-    if query != old_query:
-        for inherited in _query_names(spec, path_item, {}):
-            if inherited not in query:
-                raise ValueError(
-                    f"Each operation of {path} has ?{inherited}. "
-                    "Remove it from the path in the spec."
-                )
+    if old_query is not None and query != old_query:
         params = [
             param
             for param in operation.get("parameters") or []
@@ -276,14 +277,16 @@ def apply_endpoint_lines(
     if not isinstance(spec.get("paths"), dict):
         spec["paths"] = {}
     paths: dict[str, Any] = spec["paths"]
-    for method, path in existing:
-        if (method, path) not in wanted:
-            method_key = next(key for key in paths[path] if str(key).upper() == method)
-            _remove_operation(paths, path, method_key)
+    # Install first: a removal that empties a path drops the parameters of
+    # its path item, which a replacing operation can need.
     for (method, path), operation in wanted.items():
         item = paths.setdefault(path, {})
         stored_key = next((key for key in item if str(key).upper() == method), None)
         item[stored_key or method.lower()] = operation
+    for method, path in existing:
+        if (method, path) not in wanted:
+            method_key = next(key for key in paths[path] if str(key).upper() == method)
+            _remove_operation(paths, path, method_key)
     servers = spec.get("servers")
     if isinstance(servers, list) and servers and isinstance(servers[0], dict):
         # A tool calls one server: the base URL replaces the others.
