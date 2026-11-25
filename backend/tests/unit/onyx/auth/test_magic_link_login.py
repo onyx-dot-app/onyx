@@ -1,15 +1,17 @@
 """``UserManager.magic_link_login``: the tenant step decides first, and a race
-on the first insert. The plain user cases run against a real database in
+on the first insert, and an expired SSO session. The plain user cases run against a real database in
 ``tests/external_dependency_unit/auth/test_magic_link.py``."""
 
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from onyx.auth.magic_link import MAGIC_LINK_USE_SSO_CODE
 from onyx.auth.users import UserManager
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -140,3 +142,28 @@ async def test_an_integrity_error_with_no_row_is_raised(
 
     with pytest.raises(IntegrityError):
         await tenant_work.manager.magic_link_login(EMAIL, None)
+
+
+@pytest.mark.asyncio
+async def test_an_expired_sso_session_is_sent_to_sso(
+    tenant_work: _TenantWork,
+) -> None:
+    existing = MagicMock()
+    existing.oidc_expiry = datetime.now(timezone.utc) - timedelta(hours=1)
+    tenant_work.user_db.get_by_email.return_value = existing
+
+    with pytest.raises(OnyxError) as excinfo:
+        await tenant_work.manager.magic_link_login(EMAIL, None)
+
+    assert excinfo.value.detail == MAGIC_LINK_USE_SSO_CODE
+
+
+@pytest.mark.asyncio
+async def test_a_live_sso_session_signs_in(tenant_work: _TenantWork) -> None:
+    existing = MagicMock()
+    existing.oidc_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+    existing.account_type.is_web_login.return_value = True
+    existing.is_verified = True
+    tenant_work.user_db.get_by_email.return_value = existing
+
+    assert await tenant_work.manager.magic_link_login(EMAIL, None) is existing

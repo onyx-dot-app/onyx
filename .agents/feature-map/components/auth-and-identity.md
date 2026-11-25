@@ -140,8 +140,9 @@ it up. Nothing is created until the token is redeemed
 (`onyx/auth/users.py:UserManager.magic_link_login`). Redeeming resolves the
 tenant, runs the same gates as a password sign-up (invite-only, allowed
 domains, the seat limit), then creates the user, verified, with a random
-password, or signs the existing user in, and sets the session cookie. A used or
-expired token is `MAGIC_LINK_INVALID`. The playground adds its sign-up rules
+password, or signs the existing user in, and sets the session cookie. An account
+whose SSO session has expired (`oidc_expiry`) is sent to SSO with
+`MAGIC_LINK_USE_SSO`. A used or expired token is `MAGIC_LINK_INVALID`. The playground adds its sign-up rules
 through EE hooks; see [[multi-tenancy]].
 The custom login's token refresh
 (`backend/ee/onyx/server/enterprise_settings/api.py:refresh_access_token`) sits

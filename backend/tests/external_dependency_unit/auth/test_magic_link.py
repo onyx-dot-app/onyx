@@ -8,6 +8,7 @@ default schema.
 
 import hashlib
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 
 import onyx.auth.users as users_module
 from onyx.auth.magic_link import (
+    MAGIC_LINK_USE_SSO_CODE,
     MagicLinkRecord,
     consume_magic_link,
     release_send,
@@ -29,6 +31,7 @@ from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import AccountType
 from onyx.db.models import OAuthAccount, User
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import _build_env_defaults
 from tests.external_dependency_unit.conftest import (
     MakeTestUser,
@@ -184,3 +187,16 @@ class TestMagicLinkLogin:
         assert returned.id == placeholder.id
         assert user.account_type == AccountType.STANDARD
         assert user.is_verified
+
+    @pytest.mark.asyncio
+    async def test_an_expired_sso_session_is_sent_to_sso(
+        self, db_session: Session, make_test_user: MakeTestUser
+    ) -> None:
+        existing = make_test_user("magic_link_expired_sso")
+        existing.oidc_expiry = datetime.now(timezone.utc) - timedelta(hours=1)
+        db_session.commit()
+
+        with pytest.raises(OnyxError) as excinfo:
+            await _magic_link_login(existing.email)
+
+        assert excinfo.value.detail == MAGIC_LINK_USE_SSO_CODE

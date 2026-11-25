@@ -74,6 +74,7 @@ from onyx.auth.email_utils import (
 from onyx.auth.invited_users import get_invited_users, remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
 from onyx.auth.login_claims_capture import capture_oauth_login_claims
+from onyx.auth.magic_link import MAGIC_LINK_USE_SSO_CODE
 from onyx.auth.mobile_sso.sso_completion import (
     apply_mobile_state,
     complete_mobile_sso,
@@ -1445,6 +1446,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         db_session=db_session, user=user
                     )
                     await self.on_after_register(user, request)
+            elif user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
+                # The account's session follows its SSO provider, and that
+                # session has ended. A session from the link would be refused
+                # on the next request, so send the person to SSO now.
+                raise OnyxError(OnyxErrorCode.UNAUTHORIZED, MAGIC_LINK_USE_SSO_CODE)
             elif not user.account_type.is_web_login():
                 # A permission-sync placeholder for this address becomes the
                 # real account, the same way a first OAuth login claims it.
