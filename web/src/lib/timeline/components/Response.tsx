@@ -92,8 +92,12 @@ function useTurnCursor(
       // Hidden (e.g. while the turn waits for the user): fade out in place,
       // also where the turn would hold it, and keep checking so the cursor
       // returns once it may show again.
-      // The root's `data-cursor-hidden` says it may not show.
-      if (root.hasAttribute("data-cursor-hidden") && (anchor || placed)) {
+      // The root's `data-cursor-hidden`, or a last marker of kind "hidden"
+      // (text that streams into an open code block), says it may not show.
+      const hidden =
+        root.hasAttribute("data-cursor-hidden") ||
+        anchor?.getAttribute(RESPONSE_CURSOR_ANCHOR_ATTRIBUTE) === "hidden";
+      if (hidden && (anchor || placed)) {
         cursor.style.opacity = "0";
         visible = false;
         frame = requestAnimationFrame(place);

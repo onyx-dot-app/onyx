@@ -13,7 +13,8 @@ export const STREAMING_CURSOR_CLASS_NAME = cn(
 
 /**
  * Marks where a response's one cursor sits (see `Response`). The marker has
- * the cursor's box but is invisible.
+ * the cursor's box but is invisible. Its value is the kind: "text", "slot",
+ * or "hidden" for a marker where the cursor fades out instead.
  */
 export const RESPONSE_CURSOR_ANCHOR_ATTRIBUTE = "data-response-cursor";
 
