@@ -1,7 +1,6 @@
 import {
   computeDiff,
   countDiffLines,
-  formatDiffCount,
   parseApplyPatch,
 } from "@/lib/timeline/components/bodies/diffLines";
 
@@ -121,8 +120,18 @@ test("an empty side and a missing final newline add no phantom changes", () => {
   ]);
 });
 
-test("large counts are compact", () => {
-  expect(formatDiffCount(999)).toBe("999");
-  expect(formatDiffCount(1200)).toBe("1.2k");
-  expect(formatDiffCount(25000)).toBe("25k");
+test("a final newline and the end-of-file marker add no rows", () => {
+  const body =
+    "*** Begin Patch\n*** Update File: a.py\n@@\n-x\n+y\n*** End of File\n*** End Patch";
+  for (const patch of [body, `${body}\n`]) {
+    const { files, omittedLines } = parseApplyPatch(patch);
+    expect(files[0]?.lines.map((line) => line.type)).toEqual([
+      "removed",
+      "added",
+    ]);
+    expect(omittedLines).toBe(0);
+  }
+  const rows = Array.from({ length: 2000 }, (_, i) => `+l${i}`).join("\n");
+  const full = parseApplyPatch(`*** Add File: a.txt\n${rows}\n*** End Patch\n`);
+  expect(full.omittedLines).toBe(0);
 });

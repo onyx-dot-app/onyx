@@ -9,6 +9,10 @@ function olderPagesState(sessionId: string) {
   return {
     hasOlder: session?.hasOlderMessages ?? false,
     loading: session?.isLoadingOlderMessages ?? false,
+    // A failed page turns `hasOlder` off, but the messages are still missing.
+    missing:
+      (session?.hasOlderMessages ?? false) ||
+      (session?.olderMessagesFailed ?? false),
   };
 }
 
@@ -26,8 +30,8 @@ function pageLoadSettled(sessionId: string): Promise<void> {
 
 /**
  * Loads the chat's older pages one by one, so find searches the whole chat.
- * Stops after `maxPages`, when `cancelled` turns true, or when none are left.
- * Returns whether older messages are still not loaded.
+ * Stops after `maxPages`, when `cancelled` turns true, when none are left, or
+ * when a page fails to load. Returns whether older messages are still missing.
  */
 export async function loadOlderPagesForFind(
   sessionId: string,
@@ -37,9 +41,10 @@ export async function loadOlderPagesForFind(
   for (let page = 0; page < maxPages; page++) {
     // The scroll loader may be loading a page already.
     await pageLoadSettled(sessionId);
-    if (cancelled() || !olderPagesState(sessionId).hasOlder) return false;
+    if (cancelled()) return false;
+    if (!olderPagesState(sessionId).hasOlder) break;
     await loadOlderChatMessages(sessionId);
   }
   await pageLoadSettled(sessionId);
-  return olderPagesState(sessionId).hasOlder;
+  return olderPagesState(sessionId).missing;
 }

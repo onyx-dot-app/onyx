@@ -1,9 +1,7 @@
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import {
-  chatStepStatus,
-  type TurnGroup,
-} from "@/lib/timeline/chat/transformers";
+import type { TurnGroup } from "@/lib/timeline/chat/transformers";
+import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
 import type { AwaitingUser } from "@/lib/chat/toolApprovals";
 import {
   IMAGE_GENERATION_TOOL_TYPE,
@@ -153,7 +151,7 @@ export function useTimelineHeader(
     // step. A step with no activity of its own yet is working.
     const steps = turnGroups.flatMap((group) => group.steps);
     const current =
-      steps.findLast((step) => chatStepStatus(step) === "streaming") ??
+      steps.findLast((step) => !step.packets.some(isGroupEndPacket)) ??
       steps.at(-1);
     const packets = current?.packets;
     const headerText =
