@@ -85,6 +85,7 @@ export enum LLMProviderName {
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   PORTKEY = "portkey",
   VERCEL_AI_GATEWAY = "vercel_ai_gateway",
+  REQUESTY = "requesty",
   CUSTOM = "custom",
 }
 
@@ -345,6 +346,21 @@ export interface VercelAIGatewayFetchParams {
 export interface VercelAIGatewayModelResponse {
   supports_chat?: boolean;
   supports_decisions?: boolean;
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
+export interface RequestyFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface RequestyModelResponse {
   name: string;
   display_name: string;
   max_input_tokens: number | null;
