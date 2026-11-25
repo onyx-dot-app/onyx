@@ -65,7 +65,7 @@ from onyx.db.scheduled_task import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.models import ActionSettings, EffectivePolicy
-from onyx.integrations.policy import chat_integrations, resolve_chat_action_policy
+from onyx.integrations.policy import chat_integrations, resolve_chat_action_policies
 from onyx.scheduled_tasks.executor import _start_run, run_scheduled_task_logic
 from onyx.tools.models import IntegrationLinkConfiguration
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -419,13 +419,13 @@ def test_a_task_ask_ignores_the_owners_always_allow(
     assert chat_session_id is not None
 
     def policy() -> EffectivePolicy:
-        return resolve_chat_action_policy(
+        return resolve_chat_action_policies(
             db_session,
             integration=linked,
-            action_key="send_report",
+            action_keys=["send_report"],
             user_id=owner.id,
             chat_session_id=chat_session_id,
-        )
+        )["send_report"]
 
     assert policy() is EffectivePolicy.ASK
 

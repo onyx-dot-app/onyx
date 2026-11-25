@@ -6273,7 +6273,8 @@ class Integration(Base):
         # the enum makes each ORM read of the row raise.
         # Old code still writes the kind tables, so the database keeps each
         # integration tied to exactly one row of its kind. For one release a
-        # REST app has both tool_id and api_app_id.
+        # REST app has both tool_id and api_app_id; a GraphQL app has only
+        # api_app_id.
         CheckConstraint(
             "num_nonnulls(mcp_server_id, external_app_id, "
             "coalesce(tool_id, api_app_id)) = 1",
@@ -6313,7 +6314,7 @@ class ApiApp(Base):
         nullable=False,
     )
     base_url: Mapped[str] = mapped_column(Text, nullable=False)
-    # The spec as text.
+    # The spec as uploaded, JSON or YAML text.
     openapi_document: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The schema as SDL.
     graphql_schema: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -6333,8 +6334,9 @@ class ApiApp(Base):
 
 
 class IntegrationAction(Base):
-    """One action of an integration: an MCP tool, an OpenAPI operation, or an
-    entry of a built-in provider catalog. Policies key on ``key``."""
+    """One action of an integration: an MCP tool, an OpenAPI operation, a
+    GraphQL root field, or an entry of a built-in provider catalog. Policies
+    key on ``key``."""
 
     __tablename__ = "integration_action"
 
@@ -6342,7 +6344,8 @@ class IntegrationAction(Base):
     integration_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("integration.id", ondelete="CASCADE"), nullable=False
     )
-    # The MCP tool name, the OpenAPI operationId, or the provider action id.
+    # The MCP tool name, the OpenAPI operationId, ``query.<field>`` or
+    # ``mutation.<field>``, or the provider action id.
     key: Mapped[str] = mapped_column(String, nullable=False)
     source: Mapped[IntegrationActionSource] = mapped_column(
         Enum(

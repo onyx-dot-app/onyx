@@ -28,16 +28,41 @@ export function newSkillHref(
 
 export type PluginPageTab = "overview" | "skills" | "integrations" | "versions";
 
+/** Which panel a shared skill or plugin page sits in. */
+export type CustomizePanel = "customize" | "admin";
+
 export function pluginHref(
   pluginId: string,
-  tab?: PluginPageTab
-): `/app/customize/plugins/${string}` {
-  return tab && tab !== "overview"
-    ? `/app/customize/plugins/${pluginId}?tab=${tab}`
-    : `/app/customize/plugins/${pluginId}`;
+  tab?: PluginPageTab,
+  panel: CustomizePanel = "customize"
+): PluginPagePath {
+  const path: PluginPagePath =
+    panel === "admin"
+      ? `/admin/plugins/${pluginId}`
+      : `/app/customize/plugins/${pluginId}`;
+  return tab && tab !== "overview" ? `${path}?tab=${tab}` : path;
 }
 
-export const MARKETPLACES_PATH = "/app/customize/plugins/marketplaces";
+export function pluginsHref(
+  panel: CustomizePanel
+): "/admin/plugins" | "/app/customize/plugins" {
+  return panel === "admin" ? "/admin/plugins" : "/app/customize/plugins";
+}
+
+/** The Marketplaces section of a Plugins page. */
+export function marketplacesHref(
+  panel: CustomizePanel
+): `${ReturnType<typeof pluginsHref>}#marketplaces` {
+  return `${pluginsHref(panel)}#marketplaces`;
+}
+
+const PLUGIN_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A plugin id is a UUID. */
+export function isPluginId(value: string): boolean {
+  return PLUGIN_ID.test(value);
+}
 
 export function parsePluginPageTab(value: string | null): PluginPageTab {
   return value === "skills" || value === "integrations" || value === "versions"
@@ -58,10 +83,15 @@ export function integrationHref(
 
 export const NEW_INTEGRATION_PATH = "/app/customize/integrations/new";
 
-export type PluginPagePath = `/app/customize/plugins/${string}`;
+export type PluginPagePath =
+  | `/app/customize/plugins/${string}`
+  | `/admin/plugins/${string}`;
 
 export function isPluginPagePath(path: string): path is PluginPagePath {
-  return path.startsWith("/app/customize/plugins/");
+  return (
+    path.startsWith("/app/customize/plugins/") ||
+    path.startsWith("/admin/plugins/")
+  );
 }
 const ADMIN_NEW_INTEGRATION_PATH = "/admin/integrations/new";
 

@@ -1,18 +1,43 @@
+import json
 from collections.abc import Mapping
 from typing import Any, cast
 from urllib.parse import quote, urlencode
 
+import yaml
 from pydantic import BaseModel, JsonValue
 
 from onyx.llm.models import ToolDefinition
 from onyx.tools.tool_name import sanitize_tool_name
 
 REQUEST_BODY = "requestBody"
+# The operation keys of an OpenAPI path item. Its other keys, such as
+# `parameters` and `summary`, apply to the whole path.
+OPENAPI_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
 
 
-class PathSpec(BaseModel):
-    path: str
-    methods: dict[str, Any]
+class _OpenApiYamlLoader(yaml.SafeLoader):
+    """Keeps timestamps as text: the parsed spec must stay JSON."""
+
+
+def _construct_timestamp(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> str:
+    return str(loader.construct_scalar(node))
+
+
+_OpenApiYamlLoader.add_constructor("tag:yaml.org,2002:timestamp", _construct_timestamp)
+
+
+def parse_openapi_document(document: str) -> dict[str, Any]:
+    """An OpenAPI document stored as JSON or YAML text."""
+    try:
+        parsed = json.loads(document)
+    except json.JSONDecodeError:
+        try:
+            parsed = yaml.load(document, Loader=_OpenApiYamlLoader)  # noqa: S506
+        except yaml.YAMLError as e:
+            raise ValueError(f"The OpenAPI document is not JSON or YAML: {e}") from e
+    if not isinstance(parsed, dict):
+        raise ValueError("The OpenAPI document is not an object.")
+    return parsed
 
 
 class MethodSpec(BaseModel):
@@ -32,7 +57,7 @@ class MethodSpec(BaseModel):
 
         if content:
             raise ValueError(
-                f"Unsupported content type: '{list(content.keys())[0]}'. Only 'application/json' is supported."
+                f"the body is {', '.join(content)}, and only application/json is supported"
             )
 
         return {}
@@ -110,63 +135,109 @@ class MethodSpec(BaseModel):
             raise ValueError(f"HTTP method '{self.method}' is not supported.")
 
 
-"""Path-level utils"""
+def _resolve_ref(openapi_spec: dict[str, Any], value: Any) -> Any:
+    """What the local ``$ref`` (``#/components/...``) of ``value`` points to,
+    else ``value``."""
+    ref = value.get("$ref") if isinstance(value, dict) else None
+    if not isinstance(ref, str) or not ref.startswith("#/"):
+        return value
+    target: Any = openapi_spec
+    for part in ref[2:].split("/"):
+        key = part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(target, dict) or key not in target:
+            return value
+        target = target[key]
+    return target
 
 
-def openapi_to_path_specs(openapi_spec: dict[str, Any]) -> list[PathSpec]:
-    path_specs = []
+def _parameters(
+    openapi_spec: dict[str, Any], path_item: dict[str, Any], operation: dict[str, Any]
+) -> list[Any]:
+    """The path item's parameters and the operation's, with local references
+    resolved. An operation parameter replaces the path parameter with the same
+    name and location."""
+    merged: dict[tuple[Any, Any], Any] = {}
+    for source in (path_item, operation):
+        for param in source.get("parameters") or []:
+            resolved = _resolve_ref(openapi_spec, param)
+            key = (
+                (resolved.get("name"), resolved.get("in"))
+                if isinstance(resolved, dict)
+                else (id(resolved), None)
+            )
+            merged[key] = resolved
+    return list(merged.values())
 
-    for path, methods in openapi_spec.get("paths", {}).items():
-        path_specs.append(PathSpec(path=path, methods=methods))
 
-    return path_specs
+def openapi_to_method_spec(
+    openapi_spec: dict[str, Any],
+    path: str,
+    path_item: dict[str, Any],
+    method_name: str,
+    method: dict[str, Any],
+) -> MethodSpec:
+    raw_name = method.get("operationId")
+    if not raw_name:
+        raise ValueError(
+            f"Operation ID is not specified for {method_name.upper()} {path}"
+        )
+
+    summary = method.get("summary") or method.get("description")
+    if not summary:
+        raise ValueError(f"Summary is not specified for {method_name.upper()} {path}")
+
+    spec = dict(method)
+    if parameters := _parameters(openapi_spec, path_item, method):
+        spec["parameters"] = parameters
+    return MethodSpec(
+        name=sanitize_tool_name(raw_name),
+        raw_name=raw_name,
+        summary=summary,
+        path=path,
+        method=method_name,
+        spec=spec,
+    )
 
 
-"""Method-level utils"""
+def openapi_operations(
+    openapi_spec: dict[str, Any],
+) -> list[tuple[str, dict[str, Any], str, dict[str, Any]]]:
+    """Each operation as (path, path item, method, operation)."""
+    paths = openapi_spec.get("paths")
+    return [
+        (path, path_item, method_name, method)
+        for path, path_item in (paths.items() if isinstance(paths, dict) else [])
+        if isinstance(path_item, dict)
+        for method_name, method in path_item.items()
+        if str(method_name).lower() in OPENAPI_METHODS and isinstance(method, dict)
+    ]
+
+
+def check_unique_name(method_spec: MethodSpec, seen_names: dict[str, str]) -> None:
+    """Raise if another operation has the sanitized name of ``method_spec``;
+    else record it in ``seen_names``."""
+    prior_raw = seen_names.get(method_spec.name)
+    if prior_raw == method_spec.raw_name:
+        raise ValueError(
+            f"Duplicate operation ID '{method_spec.raw_name}'. Each operation must have a unique operationId."
+        )
+    if prior_raw is not None:
+        raise ValueError(
+            f"Operation IDs '{prior_raw}' and '{method_spec.raw_name}' both sanitize to "
+            f"'{method_spec.name}'. Rename one so the LLM-facing names stay distinct."
+        )
+    seen_names[method_spec.name] = method_spec.raw_name
 
 
 def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
-    path_specs = openapi_to_path_specs(openapi_spec)
-
     method_specs = []
     seen_names: dict[str, str] = {}
-    for path_spec in path_specs:
-        for method_name, method in path_spec.methods.items():
-            raw_name = method.get("operationId")
-            if not raw_name:
-                raise ValueError(
-                    f"Operation ID is not specified for {method_name.upper()} {path_spec.path}"
-                )
-
-            summary = method.get("summary") or method.get("description")
-            if not summary:
-                raise ValueError(
-                    f"Summary is not specified for {method_name.upper()} {path_spec.path}"
-                )
-
-            sanitized_name = sanitize_tool_name(raw_name)
-            if sanitized_name in seen_names:
-                prior_raw = seen_names[sanitized_name]
-                if prior_raw == raw_name:
-                    raise ValueError(
-                        f"Duplicate operation ID '{raw_name}'. Each operation must have a unique operationId."
-                    )
-                raise ValueError(
-                    f"Operation IDs '{prior_raw}' and '{raw_name}' both sanitize to "
-                    f"'{sanitized_name}'. Rename one so the LLM-facing names stay distinct."
-                )
-            seen_names[sanitized_name] = raw_name
-
-            method_specs.append(
-                MethodSpec(
-                    name=sanitized_name,
-                    raw_name=raw_name,
-                    summary=summary,
-                    path=path_spec.path,
-                    method=method_name,
-                    spec=method,
-                )
-            )
+    for path, path_item, method_name, method in openapi_operations(openapi_spec):
+        method_spec = openapi_to_method_spec(
+            openapi_spec, path, path_item, method_name, method
+        )
+        check_unique_name(method_spec, seen_names)
+        method_specs.append(method_spec)
 
     if not method_specs:
         raise ValueError("No methods found in OpenAPI schema")
@@ -202,16 +273,12 @@ def openapi_to_url(openapi_schema: dict[str, dict | str]) -> str:
     return urls[0]
 
 
-def validate_openapi_schema(schema: dict[str, Any]) -> None:
-    """
-    Validate the given JSON schema as an OpenAPI schema.
-
-    Parameters:
-    - schema (dict): The JSON schema to validate.
-
-    Returns:
-    - bool: True if the schema is valid, False otherwise.
-    """
+def validate_openapi_schema(
+    schema: dict[str, Any], *, check_server_url: bool = True
+) -> None:
+    """Raise ``ValueError`` if ``schema`` is not an OpenAPI 3 schema that the
+    custom tools can call. Without ``check_server_url``, the schema needs no
+    server URL."""
 
     # check basic structure
     if "info" not in schema:
@@ -220,11 +287,11 @@ def validate_openapi_schema(schema: dict[str, Any]) -> None:
     info = schema["info"]
     if "title" not in info:
         raise ValueError("`title` is required in `info` section of OpenAPI schema")
-    if "description" not in info:
-        raise ValueError(
-            "`description` is required in `info` section of OpenAPI schema"
-        )
 
+    if "openapi" not in schema and "swagger" in schema:
+        raise ValueError(
+            f"Swagger {schema['swagger']} is not supported. Convert the spec to OpenAPI 3."
+        )
     if "openapi" not in schema:
         raise ValueError(
             "`openapi` field which specifies OpenAPI schema version is required"
@@ -236,8 +303,7 @@ def validate_openapi_schema(schema: dict[str, Any]) -> None:
     if "paths" not in schema:
         raise ValueError("`paths` section is required in OpenAPI schema")
 
-    url = openapi_to_url(schema)
-    if not url:
+    if check_server_url and not openapi_to_url(schema):
         raise ValueError("OpenAPI schema does not contain a valid URL in `servers`")
 
     method_specs = openapi_to_method_specs(schema)

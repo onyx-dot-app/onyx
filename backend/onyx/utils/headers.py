@@ -27,14 +27,6 @@ def clean_header_list(headers_to_clean: list[HeaderItemDict]) -> dict[str, str]:
     return cleaned_headers
 
 
-def header_dict_to_header_list(header_dict: dict[str, str]) -> list[HeaderItemDict]:
-    return [{"key": key, "value": value} for key, value in header_dict.items()]
-
-
-def header_list_to_header_dict(header_list: list[HeaderItemDict]) -> dict[str, str]:
-    return {header["key"]: header["value"] for header in header_list}
-
-
 def get_relevant_headers(
     headers: dict[str, str] | Headers, desired_headers: list[str] | None
 ) -> dict[str, str]:

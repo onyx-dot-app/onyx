@@ -670,6 +670,7 @@ const AgentMessage = React.memo(function AgentMessage({
                                     key={`auth-error-${i}`}
                                     toolName={authError.toolName}
                                     toolId={authError.toolId}
+                                    integrationId={authError.integrationId}
                                   />
                                 ))}
                               </div>

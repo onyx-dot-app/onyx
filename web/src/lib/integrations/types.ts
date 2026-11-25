@@ -1,5 +1,10 @@
 export type IntegrationKind = "mcp" | "api";
-export type IntegrationShape = "mcp_server" | "openapi" | "preset" | "custom";
+export type IntegrationShape =
+  | "mcp_server"
+  | "openapi"
+  | "graphql"
+  | "preset"
+  | "custom";
 export type AuthMode = "none" | "shared" | "individual";
 export type AuthMethod = "oauth2" | "api_key" | "onyx_login" | "managed";
 export type ConnectionState =
@@ -127,19 +132,54 @@ export type OAuthClientView = Omit<OAuthClientInput, "client_secret"> & {
   has_client_secret: boolean;
 };
 
+/** A full OpenAPI document (JSON or YAML text), or a base URL and endpoint
+ * lines. With both, the lines edit the given document. */
+export interface OpenApiConfigInput {
+  shape: "openapi";
+  openapi_document?: string | null;
+  base_url?: string | null;
+  endpoints?: string[] | null;
+}
+
+export interface OpenApiConfigView {
+  shape: "openapi";
+  openapi_document: string;
+  base_url: string;
+  /** One `METHOD /path?query Name` line per operation. */
+  endpoints: string[];
+  /** On import, one `METHOD /path: reason` line per operation that no tool
+   * can call. The document leaves them out. */
+  skipped: string[];
+}
+
+/** A GraphQL endpoint and its schema as SDL. */
+export interface GraphQLConfig {
+  shape: "graphql";
+  endpoint_url: string;
+  graphql_schema: string;
+}
+
+/** A server error for one endpoint line; `line` is its index. */
+export interface EndpointLineError {
+  line: number;
+  message: string;
+}
+
 export type IntegrationConfig =
   | { shape: "mcp_server"; server_url: string; transport: McpTransport }
-  | { shape: "openapi"; openapi_spec: Record<string, unknown> }
+  | OpenApiConfigInput
+  | GraphQLConfig
   | {
       shape: "preset";
       preset_id: string;
       organization_credentials: Record<string, string> | null;
-    }
-  | { shape: "custom"; upstream_url_patterns: string[] };
+    };
 
 export type IntegrationConfigView =
-  | Exclude<IntegrationConfig, { shape: "preset" }>
-  | { shape: "preset"; preset_id: string };
+  | Exclude<IntegrationConfig, { shape: "preset" } | { shape: "openapi" }>
+  | OpenApiConfigView
+  | { shape: "preset"; preset_id: string }
+  | { shape: "custom"; upstream_url_patterns: string[] };
 
 export interface AdminIntegrationDetail extends AdminIntegration {
   config: IntegrationConfigView;
@@ -172,7 +212,12 @@ export interface IntegrationPreset {
   name: string;
   auth_methods: (AuthMethod | null)[];
   required_org_credential_fields: CredentialField[];
-  setup_instructions: string | null;
+  setup_steps: string[];
+  /** The vendor page where the admin creates the OAuth app. */
+  setup_url: string | null;
+  /** The redirect URI to register with the service. Null without OAuth. */
+  callback_url: string | null;
+  scopes: string[];
 }
 
 export interface IntegrationCreate {

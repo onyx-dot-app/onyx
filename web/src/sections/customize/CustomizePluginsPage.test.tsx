@@ -1,7 +1,14 @@
-import { render, screen } from "@tests/setup/test-utils";
+import {
+  render,
+  screen,
+  setupUser,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import { mockFetch } from "@tests/setup/integrationTestUtils";
 import CustomizePluginsPage from "@/sections/customize/CustomizePluginsPage";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
+import { summaryFixture } from "@/sections/marketplaces/__fixtures__/marketplace";
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -100,6 +107,31 @@ test("the empty list offers to upload a plugin", async () => {
   ).toBeInTheDocument();
 });
 
+test("the Marketplaces section lists marketplaces and Add marketplace opens the add dialog", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [] },
+    "/api/marketplaces": {
+      marketplaces: [summaryFixture({ scope: "company" })],
+    },
+  });
+  render(<CustomizePluginsPage />);
+
+  const table = await screen.findByRole("table", { name: "Marketplaces" });
+  expect(within(table).getAllByText("acme/plugins").length).toBeGreaterThan(0);
+  expect(table.closest("#marketplaces")).not.toBeNull();
+  expect(
+    screen.queryByRole("link", { name: "Marketplaces" })
+  ).not.toBeInTheDocument();
+
+  await setupUser().click(
+    screen.getByRole("button", { name: "Add marketplace" })
+  );
+  expect(
+    await screen.findByRole("dialog", { name: /^Add Marketplace\b/ })
+  ).toBeInTheDocument();
+});
+
 test("two copies of a plugin say which marketplace each comes from", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   const marketplace = {
@@ -129,4 +161,44 @@ test("two copies of a plugin say which marketplace each comes from", async () =>
   expect(
     screen.getByText(/^from anthropic-agent-skills \(personal\)/)
   ).toBeInTheDocument();
+});
+
+describe("admin page", () => {
+  test("lists every plugin, leaves skills out and opens plugins in the admin panel", async () => {
+    window.history.replaceState(null, "", "/admin/plugins");
+    mockFetch({
+      "/api/skills": {
+        builtins: [],
+        customs: [
+          plugin("11111111-1111-4111-8111-111111111111", "my-kit"),
+          plugin("theirs", "their-kit", {
+            owner: { id: "other", email: "other@example.com" },
+            member_visible: false,
+          }),
+          plugin("lone", "lone-skill", { kind: "skill" }),
+        ],
+      },
+      "/api/marketplaces": { marketplaces: [summaryFixture()] },
+    });
+    render(<CustomizePluginsPage />);
+
+    expect(await screen.findByText("my-kit")).toBeInTheDocument();
+    expect(screen.getByText("their-kit")).toBeInTheDocument();
+    expect(screen.queryByText("lone-skill")).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("table", { name: "Marketplaces" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add marketplace" })
+    ).toBeInTheDocument();
+
+    await setupUser().click(
+      screen.getByRole("button", { name: "Open my-kit" })
+    );
+    await waitFor(() =>
+      expect(window.location.pathname).toBe(
+        "/admin/plugins/11111111-1111-4111-8111-111111111111"
+      )
+    );
+  });
 });

@@ -108,7 +108,7 @@ Persona --persona__integration--> Integration resolve_call_credentials(integrati
    (action_settings)               |            once per integration; a problem
                                    +--integration_action (schemas, defaults)
                                    +--integration_connection / oauth_client
-                                   +--kind row: mcp_server | OpenAPI tool
+                                   +--kind row: mcp_server | api_app
 MCP server kind  -> one MCPTool per offered action (mcp__<integration id>__...)
 OpenAPI kind     -> one CustomTool per offered operation (custom__<integration id>__...)
 ```
@@ -277,9 +277,8 @@ then picks the integrations
   sign-in.
 - An integration that is Required for the user stays when the tool options
   leave its id out.
-- Only integrations with `enabled = true`. An API integration with no OpenAPI
-  tool (a preset or custom app) gives no chat tool, so it is skipped before its
-  credential resolves. An agent has one link for each integration.
+- Only integrations with `enabled = true`. An old URL-glob custom app (a CUSTOM
+  `external_app`) gives no chat tool. An agent has one link for each integration.
 
 For each integration, `integrations/call_credentials.py:resolve_call_credentials`
 calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
@@ -296,11 +295,27 @@ For OAuth2 on a non-SSE transport, construction reads the server settings
 (`mcp_oauth_server`), and each call passes `make_integration_oauth_provider` with
 `IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401 on
 an API key connection sets it to Needs reconnect (`mark_api_key_rejected`).
+`CustomTool`, `GraphQLTool` and `AppActionTool` do the same refresh and mark
+through `fresh_call_credentials` and `note_rejected_credential`
+(`tools/tool_implementations/http_request.py`).
 Request MCP headers do not stand in for a missing connection. The kind handler (`build_chat_tools`) builds the tools:
 `MCPTool` for an MCP server, one `CustomTool` per operation for an OpenAPI spec,
-and none for a preset or custom app. Tool names use the integration id
-(`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>`), and each tool has
-`id = None`.
+one `GraphQLTool` (`tools/tool_implementations/custom/graphql_tool.py`, a
+`CustomTool` that writes a one-root-field document with variables and an
+optional `selection`) per root field of a GraphQL app, and one `AppActionTool` (`tools/tool_implementations/app_action/app_action_tool.py`)
+per catalog action of a preset, plus `app__<id>__request` for the `unspecified`
+action. An app action tool sends a raw request only when the URL is in the
+preset's URL scope and the request matches only its own action. The
+`unspecified` action always asks (`integrations/policy.py:always_asks`): no
+setting, chat grant or run mode makes it Allow, it is Blocked with no person to
+answer, and its card offers no approval for the whole chat. `CustomTool` and
+`AppActionTool` send through `tools/tool_implementations/http_request.py:send_tool_request`,
+which refuses redirects and caps the response. A preset, REST or GraphQL app whose
+credential does not resolve gives one `AppConnectTool` (`app__<id>__connect`):
+a call tells the model to ask the user to connect, and its auth error opens the
+connect card for the integration. Tool names use the integration id
+(`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>` (or `custom__<id>__<query|mutation>.<field>`, sanitized),
+`app__<id>__<action>`), and each tool has `id = None`.
 
 **Integrations API.** One API serves every integration. Routes:
 `server/features/integrations/admin_api.py` (`/admin/integrations`: list,
@@ -311,10 +326,9 @@ presets, create, read, PATCH, DELETE, actions GET/PUT, `actions/refresh`,
 OAuth start and callback stay in
 `backend/onyx/server/features/integrations/connections_api.py`. The logic is in
 `integrations/service.py`; the queries are in `db/integration.py` and
-`db/integration_policy.py`. Only Craft runs a preset or custom app, so when
-`is_craft_available_for_deployment` is false, create refuses those shapes and
-the presets list is empty. A user cannot save Always allow on an action whose
-admin value is not Ask.
+`db/integration_policy.py`. Chat runs a preset, so an admin can add one when
+Craft is not available. Create refuses the `custom` (URL-pattern) shape. A user
+cannot save Always allow on an action whose admin value is not Ask.
 - The access routes take the integration id (logic in
   `integrations/access.py`):
   `PUT /integrations/{id}/enabled` writes the user's on/off choice (Required
@@ -335,12 +349,45 @@ admin value is not Ask.
   preset or URL patterns), then the `integration` row with exactly one of
   `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client
   and the actions. It writes no plugin row. An OpenAPI integration also gets
-  an `api_app` row (`integration.api_app_id`) with the spec as JSON text and
-  its server URL. For one release each create and spec change writes both
-  the `tool` row and the `api_app` row
-  (`db/integration.py:write_openapi_document__no_commit`); the readers still
-  read the `tool` row, and nothing reads `api_app` yet. Migration
-  `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
+  an `api_app` row (`integration.api_app_id`) with the spec text as the admin
+  gave it (YAML stays YAML) and its server URL. The `api_app` document is the
+  source: for one release each create and spec change also writes the parsed
+  object to the `tool` row, and a delete removes both
+  (`db/integration.py:write_openapi_document__no_commit`). The OpenAPI config
+  takes a document, or a base URL and endpoint lines
+  (`METHOD /path?query1&query2 Name`) that
+  `backend/onyx/integrations/openapi_endpoints.py:apply_endpoint_lines` applies to the
+  stored document: an unchanged line keeps its operation, a rename changes
+  only the `summary`, a removed line removes its operation, and a new line
+  adds a minimal one whose `operationId` comes from the method and path. A
+  line error names its line in `extra.line_errors`. The admin config view
+  gives the document, the base URL and the lines
+  (`backend/onyx/integrations/openapi_endpoints.py:endpoint_lines`). `POST /admin/integrations/openapi-import`
+  reads the base URL and lines of a pasted spec or of a spec URL, fetched with
+  `utils/url.py:ssrf_safe_get`. It drops each operation that no tool can call
+  (`backend/onyx/integrations/openapi_endpoints.py:drop_uncallable_operations`) and names it in
+  `skipped`, then runs the create checks except the server URL ones, so a
+  spec that imports also creates. A document that is not a spec is
+  `INVALID_INPUT`; a spec that fails is `VALIDATION_ERROR`, which stops the
+  add modal at step 1. `backend/onyx/tools/tool_implementations/custom/openapi_parsing.py:openapi_to_method_specs` merges
+  path-level `parameters` into each operation and resolves local parameter
+  `$ref`s. A create of a URL-pattern custom app is
+  refused; an existing one stays editable. The readers of the spec
+  (chat tools, the action sync, the admin config, the proxy match targets,
+  `sign_in_host` and the `/tool` snapshots) read `api_app.openapi_document`
+  through `tools/tool_implementations/custom/openapi_parsing.py:parse_openapi_document`, which takes JSON or
+  YAML. Only the writes, the shape (`integrations/service.py:_shapes`) and the `/tool`
+  route ids still use the `tool` row, so an integration that older code made
+  without an `api_app` row stays editable and its next spec save adds the
+  row. Migration `c2caf6a8285c` copied the existing rows. A GraphQL app
+  (`GraphQLConfigInput`: endpoint URL and SDL) is an `api_app` row with
+  `api_type = 'graphql'` and no `tool` row; `_shapes` reads an integration
+  with `api_app_id` and no `tool_id` as GRAPHQL. Its actions
+  (`integrations/kinds/api.py:graphql_action_specs`, source `graphql`) are
+  `query.<field>` (Allow) and `mutation.<field>` (Ask).
+  `POST /admin/integrations/graphql-introspect` sends an introspection query
+  with no credential through `send_tool_request` and returns the SDL.
+  The creator is the owner. "For the organization"
   sets the install setting AVAILABLE; else the integration is private and
   starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
@@ -393,7 +440,8 @@ admin value is not Ask.
   `list_persona_mcp_tools`), so the old tool ids round-trip.
 - The eight public `/tool` and `/admin/tool` routes
   (`server/features/tool/api.py`) are aliases on `api` integrations with an
-  OpenAPI schema and return the `tool` row id. Plain headers become a shared
+  OpenAPI schema and return the `tool` row id. The `definition` they return
+  comes from the `api_app` row. Plain headers become a shared
   API key connection; `passthrough_auth` is `onyx_login`; `oauth_config_id` is
   refused; `default_chat_enabled` is true when `integration.installation_policy`
   is DEFAULT or REQUIRED. A write of true sets DEFAULT unless it is one of
@@ -421,7 +469,7 @@ admin value is not Ask.
 checks every request the MCP SDK makes, redirects included, at the admin SSRF
 Protection level. `MCP_SERVER_ALLOW_PRIVATE_NETWORK` and
 `MCP_SERVER_ALLOW_LOOPBACK` only seed that level's default. OpenAPI tools use
-`tools/tool_implementations/custom/custom_tool.py:custom_tool_ssrf_params`:
+`tools/tool_implementations/http_request.py:tool_request_ssrf_params`:
 self-hosted allows private targets at every level and loopback only at
 `DISABLED`, cloud blocks all internal targets, and `ssrf_safe_request` does not
 follow redirects.
@@ -633,7 +681,8 @@ default agent, is Blocked.
     `MCPReauthenticationRequired`, or auth words in the message.
     `tools/tool_implementations/custom/custom_tool.py:CustomTool._run` returns a
     failed result for a blocked destination, a timeout, a connection error
-    or a redirect, and flags only 401 and 403. Both put a
+    or a redirect (`tools/tool_implementations/http_request.py:send_tool_request`,
+    which the app tools also use), and flags only 401 and 403. Both put a
     `CustomToolCallSummary` in `details`, which the chat renderer draws:
     `CustomTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
     object in `tool_result`. In a chat with a sandbox, a large output goes to
@@ -965,6 +1014,11 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   let a bot run it.
 - An MCP server or OpenAPI tool made through the admin MCP or tool routes has
   no integration, so chat offers none of its actions.
+- The temporary shapes of API apps are in the tech debt register:
+  [the dual write to `tool`](../TECH-DEBT.md#dual-write-of-openapi-apps-to-tool),
+  [the rolling-deploy gap](../TECH-DEBT.md#rolling-deploy-gap-of-api_app),
+  [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps) and
+  [request-body `$ref`s](../TECH-DEBT.md#request-body-ref-left-unresolved).
 
 - Schema placeholders are a plain string replace.
   `build_custom_tools_from_openapi_schema_and_headers` replaces

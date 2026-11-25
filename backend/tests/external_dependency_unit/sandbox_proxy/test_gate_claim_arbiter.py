@@ -121,6 +121,14 @@ class _UnusedResolver(SandboxIdentityResolver):
     ) -> UUID | None:
         raise AssertionError("identity.resolve_session_by_id unexpectedly used")
 
+    def resolve_chat_session(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
+        raise AssertionError("identity.resolve_chat_session unexpectedly used")
+
 
 class _UnusedMatcher(RequestEvaluator):
     def evaluate(

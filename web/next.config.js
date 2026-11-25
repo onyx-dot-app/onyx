@@ -179,11 +179,6 @@ const nextConfig = {
         permanent: false,
       },
       {
-        source: "/admin/plugins",
-        destination: "/admin/integrations",
-        permanent: false,
-      },
-      {
         source: "/admin/plugins/mcp/:id",
         destination: "/admin/integrations",
         permanent: false,
@@ -197,6 +192,12 @@ const nextConfig = {
         source: "/admin/plugins/external-app/:id",
         destination: "/admin/integrations",
         permanent: false,
+      },
+      // Marketplaces moved into a section of the Plugins page.
+      {
+        source: "/app/customize/plugins/marketplaces",
+        destination: "/app/customize/plugins#marketplaces",
+        permanent: true,
       },
       // The member plugin and skill pages moved to Customize. Next.js passes
       // the query of the old URL on to the new one.

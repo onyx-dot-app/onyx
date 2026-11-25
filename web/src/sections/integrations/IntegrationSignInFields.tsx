@@ -32,7 +32,54 @@ interface IntegrationSignInFieldsProps {
   disabled: boolean;
 }
 
-export default function IntegrationSignInFields({
+export default function IntegrationSignInFields(
+  props: IntegrationSignInFieldsProps
+) {
+  return (
+    <Section gap={4} alignItems="stretch" height="auto">
+      <SignInModeField {...props} />
+      <SignInMethodFields {...props} />
+    </Section>
+  );
+}
+
+/** Who signs in: no one, one account for the organization, or each user. */
+export function SignInModeField({
+  draft,
+  onChange,
+  methods,
+  disabled,
+}: IntegrationSignInFieldsProps) {
+  const authModes: readonly AuthMode[] = methods.length ? AUTH_MODES : ["none"];
+  const t = useTranslations("admin.integrations.signIn");
+  return (
+    <InputVertical title={t("mode.title")} description={t("mode.description")}>
+      <InputSingleSelect
+        placeholder={t("mode.title")}
+        value={draft.authMode}
+        disabled={disabled}
+        options={authModes.map((mode) => ({
+          value: mode,
+          title: t(`mode.${mode}`),
+        }))}
+        onValueChange={(value) => {
+          const mode = authModes.find((option) => option === value);
+          if (!mode) return;
+          onChange({
+            ...draft,
+            authMode: mode,
+            authMethod:
+              mode === "none" ? null : (draft.authMethod ?? methods[0] ?? null),
+          });
+        }}
+      />
+    </InputVertical>
+  );
+}
+
+/** The sign-in method and its fields: the header template or the OAuth
+ * client. Empty with no sign-in. */
+export function SignInMethodFields({
   draft,
   onChange,
   methods,
@@ -41,7 +88,6 @@ export default function IntegrationSignInFields({
   disabled,
 }: IntegrationSignInFieldsProps) {
   const providerModes = PROVIDER_MODES[shape];
-  const authModes: readonly AuthMode[] = methods.length ? AUTH_MODES : ["none"];
   const t = useTranslations("admin.integrations.signIn");
   const errors = showErrors ? signInErrors(draft) : [];
   const variant = disabled ? "disabled" : "primary";
@@ -72,32 +118,10 @@ export default function IntegrationSignInFields({
     managed: t("method.managed"),
   };
 
+  if (draft.authMode === "none") return null;
   return (
     <Section gap={4} alignItems="stretch" height="auto">
-      <InputVertical
-        title={t("mode.title")}
-        description={t("mode.description")}
-      >
-        <InputSingleSelect
-          placeholder={t("mode.title")}
-          value={draft.authMode}
-          disabled={disabled}
-          options={authModes.map((mode) => ({
-            value: mode,
-            title: t(`mode.${mode}`),
-          }))}
-          onValueChange={(value) => {
-            const mode = authModes.find((option) => option === value);
-            if (!mode) return;
-            update({
-              authMode: mode,
-              authMethod:
-                mode === "none" ? null : (draft.authMethod ?? methods[0]),
-            });
-          }}
-        />
-      </InputVertical>
-      {draft.authMode !== "none" && methods.length > 0 && (
+      {methods.length > 0 && (
         <InputVertical title={t("method.title")}>
           <InputSingleSelect
             placeholder={t("method.title")}
@@ -114,7 +138,7 @@ export default function IntegrationSignInFields({
           />
         </InputVertical>
       )}
-      {draft.authMode !== "none" && draft.authMethod === "api_key" && (
+      {draft.authMethod === "api_key" && (
         <>
           {draft.headers.map((header, index) => {
             const suffix = index === 0 ? "" : ` ${index + 1}`;
@@ -219,7 +243,7 @@ export default function IntegrationSignInFields({
           </Section>
         </>
       )}
-      {draft.authMode !== "none" && draft.authMethod === "oauth2" && (
+      {draft.authMethod === "oauth2" && (
         <>
           {providerModes.length > 1 && (
             <InputVertical title={t("oauth.providerMode.title")}>

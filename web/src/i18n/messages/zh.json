@@ -141,44 +141,6 @@
         "tooltip": "{description}\n在此聊天中优先使用此工具。智能体也可能不使用该工具直接回答。"
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "取消"
-      },
-      "copyButton": {
-        "tooltip": "复制定义"
-      },
-      "definition": {
-        "invalidJson": "JSON 格式无效",
-        "placeholder": "在此输入您的 OpenAPI 架构",
-        "required": "必须填写 OpenAPI 架构定义",
-        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此插件一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 插件]({docsUrl})。",
-        "title": "OpenAPI 架构定义"
-      },
-      "empty": {
-        "description": "提供 OpenAPI 架构后即可在此预览操作。",
-        "title": "未找到操作"
-      },
-      "formatButton": {
-        "tooltip": "格式化定义"
-      },
-      "method": {
-        "noSummary": "未提供摘要"
-      },
-      "toasts": {
-        "actionCreated": "OpenAPI 插件创建成功",
-        "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效"
-      },
-      "humanDescription": {
-        "title": "面向用户的描述",
-        "hint": "显示在插件卡片和插件详情中。"
-      },
-      "agentDescription": {
-        "title": "面向智能体的描述",
-        "hint": "编辑 OpenAPI 架构中的 info.description。",
-        "disabled": "请输入有效的架构以编辑此字段。"
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "（已断开连接）"
@@ -360,10 +322,8 @@
       "detectedTransport": "传输方式：{transport}",
       "authenticationUndetected": "在下一页选择身份验证方式。",
       "details": "详细信息",
-      "checking": "正在检查服务器…",
       "serverDetails": "服务器详情",
       "authentication": "身份验证",
-      "continue": "继续",
       "back": "返回"
     },
     "policyEditor": {
@@ -10395,45 +10355,16 @@
       "loadFailed": "无法加载集成。",
       "add": {
         "label": "添加",
-        "title": "添加集成",
-        "description": "连接服务，以便人们在对话和 Craft 中使用它。",
         "created": "已添加 {name}。",
         "createFailed": "无法添加集成。",
-        "openapi": {
-          "title": "添加 OpenAPI 应用",
-          "schema": {
-            "title": "架构",
-            "description": "添加定义操作的 OpenAPI 架构。",
-            "added": "{count, plural, other {该架构有 # 个路径。}}",
-            "required": "请添加架构。",
-            "add": "添加架构",
-            "edit": "编辑架构"
-          }
-        },
         "preset": {
-          "title": "起点",
           "loadFailed": "无法加载预设。",
-          "instructions": "设置说明",
-          "credentialRequired": "请填写此值。",
-          "description": "预设会填写内置应用的名称和登录方式。选择“自定义应用”可设置任意 HTTP 服务。",
-          "custom": "自定义应用"
+          "credentialRequired": "请填写此值。"
         },
         "name": {
           "title": "名称",
           "placeholder": "添加名称",
           "required": "请添加名称。"
-        },
-        "descriptionField": {
-          "title": "描述",
-          "placeholder": "添加描述"
-        },
-        "custom": {
-          "patterns": {
-            "title": "URL 模式",
-            "description": "每行填写一个 URL 模式，例如 https://api.example.com/*。",
-            "placeholder": "https://api.example.com/*",
-            "required": "请至少添加一个 URL 模式。"
-          }
         },
         "mcp": {
           "url": {
@@ -10453,8 +10384,7 @@
             "title": "传输方式",
             "streamableHttp": "可流式 HTTP",
             "sse": "服务器发送事件 (SSE)"
-          },
-          "suggested": "推荐的服务器"
+          }
         },
         "owner": {
           "title": "所有者",
@@ -10466,27 +10396,106 @@
         "submit": "添加",
         "adding": "正在添加…",
         "cancel": "取消",
-        "type": {
-          "title": "类型",
-          "description": "选择 Onyx 连接该服务的方式。",
-          "mcp_server": {
-            "title": "MCP 服务器",
-            "description": "通过 URL 连接远程 MCP 服务器。"
+        "rest": {
+          "import": {
+            "title": "导入规范",
+            "description": "上传或粘贴 JSON 或 YAML 格式的 OpenAPI 规范，或从 URL 导入。Onyx 会填写基础 URL，并为每个操作生成一个端点。",
+            "upload": "上传或粘贴规范",
+            "url": "规范 URL",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "导入",
+            "done": "{count, plural, other {已导入 # 个端点。}}",
+            "failed": "无法导入规范。"
           },
-          "openapi": {
-            "title": "OpenAPI 应用",
-            "description": "根据 OpenAPI 架构创建操作。"
+          "baseUrl": {
+            "title": "基础 URL",
+            "placeholder": "https://api.example.com",
+            "required": "请添加基础 URL。"
           },
-          "app": {
-            "title": "应用",
-            "description": "从 GitHub 等预设或自定义应用开始。"
+          "endpoints": {
+            "title": "端点",
+            "description": "每行一个端点：方法、路径、可选的查询参数和名称。每个端点都会成为一个操作。",
+            "placeholder": "GET /tickets?status&limit 列出工单",
+            "required": "请至少添加一个端点。",
+            "lineError": "第 {line} 行（{text}）：{message}"
           }
         },
-        "details": {
-          "title": "详细信息"
+        "graphql": {
+          "endpointUrl": {
+            "title": "端点 URL",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "请添加端点 URL。"
+          },
+          "schema": {
+            "title": "架构",
+            "description": "粘贴 GraphQL SDL 架构、上传 .graphql 文件，或从端点加载。每个查询和变更都会成为一个操作。",
+            "upload": "上传 .graphql 文件",
+            "required": "请添加架构。"
+          },
+          "introspect": {
+            "submit": "从端点加载",
+            "done": "已加载架构。",
+            "failed": "无法加载架构。"
+          }
         },
-        "signIn": {
-          "title": "登录"
+        "menu": {
+          "mcpServer": "MCP 服务器",
+          "customApi": "自定义 API"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "添加 MCP 服务器",
+            "description": "通过 URL 连接远程 MCP 服务器。"
+          },
+          "api": {
+            "title": "添加自定义 API",
+            "description": "连接 REST 或 GraphQL API。Onyx 会从 URL 或规范中找到端点。"
+          },
+          "catalog": {
+            "title": "从目录添加",
+            "description": "选择要设置的应用或 MCP 服务器。"
+          },
+          "namedTitle": "添加 {name}"
+        },
+        "catalog": {
+          "title": "浏览目录",
+          "description": "Onyx 已经知道如何连接的应用和托管 MCP 服务器。",
+          "browse": "浏览"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "OpenAPI 规范 URL、GraphQL 端点或基础 URL",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "请输入有效的 URL，或上传规范。",
+            "needed": "请添加 API 的 URL。规范中没有提供。"
+          },
+          "upload": {
+            "label": "上传 openapi.json、openapi.yaml 或 schema.graphql",
+            "chosen": "规范：{file}",
+            "remove": "移除规范"
+          },
+          "failed": "无法读取规范。",
+          "specError": "无法添加该规范：{detail}"
+        },
+        "detected": {
+          "openapi": "REST API，{count, plural, other {# 个端点}}",
+          "openapiSkipped": "REST API，{count, plural, other {# 个端点}}。已跳过 {skipped} 个。",
+          "skippedTitle": "已跳过的端点",
+          "rest": "没有规范的 REST API。请在下方添加端点。",
+          "graphql": "GraphQL API，{queries, plural, other {# 个查询}}和{mutations, plural, other {# 个变更}}",
+          "preset": "内置应用。Onyx 调用其 API。"
+        },
+        "continue": "继续",
+        "back": "返回",
+        "detecting": "正在检查 URL…",
+        "advanced": "高级",
+        "setup": {
+          "title": "设置 {name}",
+          "callbackUrl": "回调 URL",
+          "copyCallbackUrl": "复制回调 URL",
+          "scopes": "作用域",
+          "open": "打开 {name}"
         }
       },
       "filters": {
@@ -10512,7 +10521,8 @@
         "mcp_server": "MCP 服务器",
         "openapi": "OpenAPI 应用",
         "preset": "应用",
-        "custom": "自定义应用"
+        "custom": "自定义应用",
+        "graphql": "GraphQL 应用"
       },
       "signInSummary": "{mode, select, none {无需登录} shared {{method, select, oauth2 {组织账户 (OAuth)} api_key {组织 API 密钥} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {组织账户}}} individual {{method, select, oauth2 {每个用户 (OAuth)} api_key {每个用户 (API 密钥)} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {每个用户}}} other {未知}}",
       "status": {
@@ -10620,7 +10630,11 @@
           },
           "description": "描述",
           "menu": "更多操作",
-          "owner": "所有者"
+          "owner": "所有者",
+          "urlPatternApp": {
+            "title": "此应用使用 URL 模式",
+            "description": "Onyx 不再添加 URL 模式应用。请将此服务重新添加为自定义 REST 应用，然后删除此应用。"
+          }
         },
         "configuration": {
           "readOnly": "您可以查看此集成，但无法更改。",
@@ -10628,8 +10642,6 @@
             "title": "连接",
             "serverUrl": "服务器 URL",
             "serverUrlError": "请输入有效的服务器 URL。",
-            "urlPatterns": "URL 模式",
-            "urlPatternsDescription": "每行填写一个 URL 模式。",
             "schema": "OpenAPI 架构",
             "schemaDescription": "保存修改后的架构时，Onyx 会重新同步操作。",
             "schemaError": "请以 JSON 对象的形式输入架构。"
@@ -10700,7 +10712,7 @@
         "saved": "{name} 现在为 {policy}。",
         "saveFailed": "无法保存安装设置。",
         "title": "安装设置",
-        "description": "谁可以使用此集成。不可用会使其保持私有：只有所有者、共享对象以及拥有自身设置的群组可以使用。要将其限制为所有者和共享对象，请移除这些群组设置。",
+        "description": "组织中谁可以使用此集成。",
         "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。",
         "required": "使用自己账号登录的成员必须先连接它，才能使用聊天和 Craft。"
       },
@@ -10709,6 +10721,10 @@
         "saved": "已保存 {name} 的群组设置。",
         "saveFailed": "无法保存群组设置。"
       }
+    },
+    "plugins": {
+      "title": "插件",
+      "description": "上传 Claude Code 和 Codex 插件，并从 GitHub 同步市场。插件是一组技能，并列出这些技能需要的集成。"
     },
     "serviceStatus": {
       "page": {
@@ -16542,6 +16558,9 @@
         "integrations": {
           "label": "集成"
         },
+        "plugins": {
+          "label": "插件"
+        },
         "slackBot": {
           "label": "Slack 机器人"
         },
@@ -17067,10 +17086,6 @@
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
           "title": "上传技能"
-        },
-        "marketplace": {
-          "title": "添加市场",
-          "description": "从仓库添加并同步其插件。"
         }
       },
       "empty": {
@@ -17790,18 +17805,12 @@
         "on": "已开启",
         "off": "已关闭"
       },
-      "sort": {
-        "label": "排序",
-        "updated": "最近更新",
-        "name": "名称"
-      },
       "add": {
         "label": "添加",
         "upload": "上传技能",
         "create": "创建技能",
         "uploadPlugin": "上传插件",
-        "marketplace": "添加市场",
-        "manageMarketplaces": "管理市场"
+        "marketplace": "添加市场"
       },
       "groups": {
         "mine": "由你创建",
@@ -17857,11 +17866,6 @@
       "status": {
         "connected": "已连接"
       },
-      "add": {
-        "label": "添加",
-        "integration": "添加集成",
-        "manage": "管理集成"
-      },
       "open": "打开 {name}",
       "empty": {
         "title": "还没有集成",
@@ -17886,7 +17890,7 @@
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。根目录中仅有一个 SKILL.md 的插件显示在“技能”标签页中。",
+      "intro": "插件是一组技能，并列出这些技能需要的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。根目录中仅有一个 SKILL.md 的插件显示在“技能”标签页中。",
       "integrations": "{needed} 个集成中有 {available} 个可用",
       "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },

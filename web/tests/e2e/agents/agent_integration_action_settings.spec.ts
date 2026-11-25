@@ -74,7 +74,10 @@ test.describe("Agent integration action settings", () => {
       credential_fields: null,
       header_template: null,
       oauth_client: null,
-      config: { shape: "openapi", openapi_spec: openApiSpec(name) },
+      config: {
+        shape: "openapi",
+        openapi_document: JSON.stringify(openApiSpec(name)),
+      },
     });
     integrationId = integration.id;
     integrationName = integration.name;

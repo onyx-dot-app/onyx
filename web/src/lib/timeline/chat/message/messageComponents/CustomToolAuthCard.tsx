@@ -13,14 +13,20 @@ import { Button, MessageCard } from "@opal/components";
 interface CustomToolAuthCardProps {
   toolName: string;
   toolId: number | null;
+  /** The integration of an app tool, which has no tool ID. */
+  integrationId: number | null;
 }
 
 /** A tool call that needs the user's sign-in. Connect opens the tool's
- * integration, from the tool list: only that list sets `integration_id`. The
- * card
+ * integration: the one the call names (an app tool), else the one the tool
+ * list gives for the tool ID. The card
  * reads the integration statuses again, so the chat's connect prompt shows
  * the connection that failed. */
-function CustomToolAuthCard({ toolName, toolId }: CustomToolAuthCardProps) {
+function CustomToolAuthCard({
+  toolName,
+  toolId,
+  integrationId: appIntegrationId,
+}: CustomToolAuthCardProps) {
   const t = useTranslations("chat.messages");
   const navigation = useNavigation();
   const { tools } = useAvailableTools();
@@ -28,9 +34,9 @@ function CustomToolAuthCard({ toolName, toolId }: CustomToolAuthCardProps) {
   useEffect(() => {
     void mutate(SWR_KEYS.integrations);
   }, [mutate]);
-  const integrationId = tools.find(
-    (tool) => tool.id === toolId
-  )?.integration_id;
+  const integrationId =
+    appIntegrationId ??
+    tools.find((tool) => tool.id === toolId)?.integration_id;
   if (integrationId === undefined || integrationId === null) return null;
 
   return (

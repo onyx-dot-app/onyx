@@ -22,6 +22,7 @@ from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
+    IntegrationKind,
 )
 from onyx.db.integration import get_integration_by_id
 from onyx.db.notification import create_notification
@@ -33,8 +34,9 @@ from onyx.external_apps.matching.engine import (
     actions_requiring_approval,
 )
 from onyx.integrations.actions import integration_actions
-from onyx.integrations.craft import always_asks, resolve_craft_action_policies
+from onyx.integrations.craft import resolve_craft_action_policies
 from onyx.integrations.models import EffectivePolicy
+from onyx.integrations.policy import always_asks, resolve_chat_action_policies
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import (
@@ -82,6 +84,7 @@ from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
 )
+from onyx.tools.tool_name import app_action_tool_name, custom_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -108,20 +111,33 @@ def resolve_gate_policies(
     *,
     recognized_actions: AllMatchedActions,
     user_id: UUID,
+    chat_session_id: UUID | None = None,
 ) -> dict[str, ActionPolicy]:
-    """The stored policy of each recognized action, as the gate applies it."""
+    """The stored policy of each recognized action, as the gate applies it.
+    With ``chat_session_id``, the policies are those of the agent of the
+    chat, with no chat grant and no run mode: an Ask stays Ask."""
     integration = get_integration_by_id(
         recognized_actions.target.integration_id, db_session
     )
     if integration is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration no longer exists")
-    resolved = resolve_craft_action_policies(
-        db_session,
-        integration=integration,
-        actions=integration_actions(integration.id, db_session),
-        action_keys={action.action_type for action in recognized_actions.actions},
-        user_id=user_id,
-    )
+    action_keys = {action.action_type for action in recognized_actions.actions}
+    if chat_session_id is not None:
+        resolved = resolve_chat_action_policies(
+            db_session,
+            integration=integration,
+            action_keys=action_keys,
+            user_id=user_id,
+            chat_session_id=chat_session_id,
+        )
+    else:
+        resolved = resolve_craft_action_policies(
+            db_session,
+            integration=integration,
+            actions=integration_actions(integration.id, db_session),
+            action_keys=action_keys,
+            user_id=user_id,
+        )
     return {key: _GATE_POLICY[policy] for key, policy in resolved.items()}
 
 
@@ -616,7 +632,7 @@ class GateAddon:
             else "MCP protocol"
         )
         try:
-            session_id = self._resolve_gated_session(flow, sandbox)
+            session = self._resolve_gated_session(flow, sandbox)
         except Exception:
             logger.exception(
                 "session_lookup_error tenant=%s sandbox=%s host=%s app_name=%r "
@@ -629,7 +645,7 @@ class GateAddon:
             )
             flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
-        if session_id is None:
+        if session is None:
             logger.info(
                 "egress_block " + EGRESS_TARGET_FIELDS + " reason=%s",
                 *egress_target_args(flow, sandbox),
@@ -654,10 +670,11 @@ class GateAddon:
                 flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             return None
 
+        session_id, from_chat = session
         ctx = sandbox.with_session(session_id)
         try:
             matched_actions = await asyncio.to_thread(
-                self._resolve_request_policies, ctx, matched_actions
+                self._resolve_request_policies, ctx, matched_actions, from_chat
             )
         except Exception:
             logger.exception("request_policy_failed tenant=%s", sandbox.tenant_id)
@@ -665,6 +682,19 @@ class GateAddon:
             return None
         if matched_actions.governing_action.policy is ActionPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
+            return None
+        if from_chat and matched_actions.governing_action.policy is ActionPolicy.ASK:
+            # No run waits for a command of a chat, so a card here would
+            # have nobody to continue after the answer.
+            logger.info(
+                "egress_block " + EGRESS_TARGET_FIELDS + " reason=%s",
+                *egress_target_args(flow, sandbox),
+                SandboxProxyError.APPROVAL_NEEDS_TOOL.value,
+            )
+            flow.response = http_403(
+                SandboxProxyError.APPROVAL_NEEDS_TOOL,
+                detail=_app_tool_hint(matched_actions),
+            )
             return None
         logger.debug(
             "approval_match tenant=%s sandbox=%s session=%s host=%s "
@@ -687,20 +717,21 @@ class GateAddon:
         )
 
     def _resolve_request_policies(
-        self, ctx: SessionContext, recognized_actions: AllMatchedActions
+        self,
+        ctx: SessionContext,
+        recognized_actions: AllMatchedActions,
+        from_chat: bool = False,
     ) -> AllMatchedActions:
-        """Apply the current integration policies of the user."""
+        """Apply the current integration policies of the user. A request
+        from a chat takes the policies of the agent of that chat."""
         target = recognized_actions.target
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             effective_policies = resolve_gate_policies(
                 db,
                 recognized_actions=recognized_actions,
                 user_id=ctx.user_id,
+                chat_session_id=ctx.session_id if from_chat else None,
             )
-        # These are recognition boundaries, not user-configurable actions.
-        for action_key, policy in effective_policies.items():
-            if always_asks(target.kind, action_key) and policy is not ActionPolicy.DENY:
-                effective_policies[action_key] = ActionPolicy.ASK
         if MCP_UNCLASSIFIABLE_ACTION_TYPE in effective_policies:
             effective_policies[MCP_UNCLASSIFIABLE_ACTION_TYPE] = ActionPolicy.DENY
         return AllMatchedActions(
@@ -718,10 +749,7 @@ class GateAddon:
         self, db: Session, ctx: SessionContext, matched_actions: AllMatchedActions
     ) -> bool:
         """The user approved these identified actions for the session."""
-        if any(
-            always_asks(matched_actions.target.kind, action.action_type)
-            for action in matched_actions.actions
-        ):
+        if any(always_asks(action.action_type) for action in matched_actions.actions):
             return False
         action_types = actions_requiring_approval(matched_actions.actions)
         if not action_types:
@@ -1286,8 +1314,9 @@ class GateAddon:
 
     def _resolve_gated_session(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
-    ) -> UUID | None:
-        """Resolves the originating session from the Proxy-Authorization tag.
+    ) -> tuple[UUID, bool] | None:
+        """Resolves the originating session from the Proxy-Authorization tag:
+        the session id, and whether it is a chat (not a Craft session).
 
         Returns None (caller fails closed) if the tag is absent, malformed, or
         doesn't resolve to one of this user's sessions. DB errors propagate to
@@ -1315,6 +1344,11 @@ class GateAddon:
         exact = self._identity.resolve_session_by_id(
             tagged_id, sandbox.user_id, sandbox.tenant_id
         )
+        from_chat = exact is None
+        if exact is None:
+            exact = self._identity.resolve_chat_session(
+                tagged_id, sandbox.user_id, sandbox.tenant_id
+            )
         if exact is None:
             # Stale, foreign, or tampered tag. Fail closed — do not guess.
             logger.warning(
@@ -1326,13 +1360,14 @@ class GateAddon:
             )
             return None
         logger.debug(
-            "session_verified tenant=%s sandbox=%s session=%s host=%s",
+            "session_verified tenant=%s sandbox=%s session=%s chat=%s host=%s",
             sandbox.tenant_id,
             sandbox_log_label(sandbox),
             short_log_id(exact),
+            from_chat,
             flow.request.host,
         )
-        return exact
+        return exact, from_chat
 
     def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
         """The originating session tag, or None.
@@ -1369,6 +1404,23 @@ class GateAddon:
             short_log_id(tag),
         )
         return tag
+
+
+def _app_tool_hint(matched_actions: AllMatchedActions) -> str:
+    """Which chat tools send the refused request with an approval card."""
+    target = matched_actions.target
+    if target.kind is not IntegrationKind.API:
+        return f"Use the tool of {target.app_name} for this action."
+    tool_name = custom_tool_name if target.api_app else app_action_tool_name
+    tools = ", ".join(
+        tool_name(target.integration_id, action.action_type)
+        for action in matched_actions.actions
+        if action.policy is ActionPolicy.ASK
+        and not (target.api_app and always_asks(action.action_type))
+    )
+    if not tools:
+        return f"{target.app_name} has no tool for this request."
+    return f"For {target.app_name}, call: {tools}."
 
 
 # ------------------------------------------------------------------------------

@@ -6,6 +6,7 @@ CUSTOM apps author globs; built-in providers author regexes.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -193,11 +194,13 @@ def test_pick_takes_the_longest_mcp_prefix_and_an_api_over_mcp() -> None:
 
 
 def test_an_openapi_spec_that_does_not_parse_gives_a_load_error() -> None:
-    two_servers = {"servers": [{"url": "https://a.example.com"}, {"url": "https://b"}]}
-    for schema in (None, two_servers):
-        target = openapi_match_target(1, schema)
+    two_servers = json.dumps(
+        {"servers": [{"url": "https://a.example.com"}, {"url": "https://b"}]}
+    )
+    for document in (None, two_servers, "[1, 2]", "servers: [unclosed"):
+        target = openapi_match_target(1, document)
         assert target is not None and target.load_error is not None
-    parsed = openapi_match_target(1, {"servers": [{"url": "https://a.example.com/v1"}]})
+    parsed = openapi_match_target(1, "servers:\n  - url: https://a.example.com/v1\n")
     assert parsed is not None and parsed.endpoint is not None
     assert parsed.endpoint.path_prefix == "/v1"
 
@@ -210,10 +213,10 @@ def test_a_malformed_url_gives_a_load_error_and_keeps_the_valid_targets() -> Non
             return_value=[(1, "https://x:invalid/mcp"), (2, "https://ok.example/mcp")],
         ),
         patch(
-            f"{module}.list_enabled_openapi_schemas",
+            f"{module}.list_enabled_openapi_documents",
             return_value=[
-                (3, {"servers": [{"url": "https://y:invalid/v1"}]}),
-                (4, {"servers": [{"url": "https://api.example/v1"}]}),
+                (3, json.dumps({"servers": [{"url": "https://y:invalid/v1"}]})),
+                (4, json.dumps({"servers": [{"url": "https://api.example/v1"}]})),
             ],
         ),
         patch(f"{module}.list_enabled_external_apps", return_value=[]),

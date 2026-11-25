@@ -1,4 +1,3 @@
-import type { ComponentProps } from "react";
 import {
   render,
   screen,
@@ -8,7 +7,6 @@ import {
 } from "@tests/setup/test-utils";
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import IntegrationsPage from "@/sections/integrations/IntegrationsPage";
-import type AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
 import messages from "@/i18n/messages/en.json";
 import {
   makeDetail,
@@ -44,28 +42,6 @@ jest.mock("@/lib/settings/hooks", () => ({
 }));
 jest.mock("@/lib/mcp/svc", () => ({
   streamMCPServerProbe: (...args: unknown[]) => mockProbe(...args),
-}));
-jest.mock("@/sections/actions/modals/AddOpenAPIActionModal", () => ({
-  __esModule: true,
-  default: function MockSchemaStep(
-    props: ComponentProps<typeof AddOpenAPIActionModal>
-  ) {
-    return (
-      <div role="dialog" aria-label="OpenAPI schema">
-        <button
-          onClick={() =>
-            props.onConfigureAuthentication({
-              name: "Reports API",
-              description: "Weekly reports",
-              definition: { openapi: "3.0.0", info: { title: "Reports API" } },
-            })
-          }
-        >
-          Continue
-        </button>
-      </div>
-    );
-  },
 }));
 
 const linear = makeIntegration();
@@ -195,17 +171,17 @@ test("filters by kind and by search", async () => {
   render(<IntegrationsPage />);
   await screen.findByText("Linear");
 
-  await user.click(screen.getByRole("combobox", { name: copy.filters.label }));
+  await user.click(screen.getByRole("button", { name: copy.filters.label }));
   await user.click(screen.getByRole("option", { name: copy.filters.api }));
   expect(screen.queryByText("Linear")).not.toBeInTheDocument();
   expect(screen.getByText("Reports API")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("combobox", { name: copy.filters.label }));
+  await user.click(screen.getByRole("button", { name: copy.filters.label }));
   await user.click(screen.getByRole("option", { name: copy.filters.mcp }));
   expect(screen.getByText("Linear")).toBeInTheDocument();
   expect(screen.queryByText("Reports API")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("combobox", { name: copy.filters.label }));
+  await user.click(screen.getByRole("button", { name: copy.filters.label }));
   await user.click(screen.getByRole("option", { name: copy.filters.all }));
   await user.type(screen.getByRole("searchbox", { name: copy.search }), "week");
   expect(screen.getByText("Reports API")).toBeInTheDocument();
@@ -227,4 +203,40 @@ test("hides Add without manage:actions", async () => {
   expect(
     screen.queryByRole("button", { name: copy.add.label })
   ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: copy.add.catalog.browse })
+  ).not.toBeInTheDocument();
+});
+
+// ── Add ──────────────────────────────────────────────────────────────────────
+
+test("the Add menu has MCP Server and Custom API", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  mockList();
+  render(<IntegrationsPage />);
+  await screen.findByText("Linear");
+
+  await user.click(screen.getByRole("button", { name: copy.add.label }));
+  expect(
+    (await screen.findAllByRole("menuitem")).map((item) => item.textContent)
+  ).toEqual([copy.add.menu.mcpServer, copy.add.menu.customApi]);
+});
+
+test("the catalog section at the foot opens the catalog", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  mockList({ "/api/admin/integrations/presets": [] });
+  render(<IntegrationsPage />);
+  await screen.findByText("Linear");
+
+  await user.click(
+    screen.getByRole("button", { name: copy.add.catalog.browse })
+  );
+  expect(
+    await screen.findByRole("dialog", {
+      name: new RegExp(`^${copy.add.modal.catalog.title}`),
+    })
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByRole("button", { name: "Sentry" })
+  ).toBeInTheDocument();
 });

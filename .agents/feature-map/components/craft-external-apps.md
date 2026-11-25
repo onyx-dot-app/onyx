@@ -126,7 +126,11 @@ full-matches the URL against the app's patterns and `recognize_actions` maps
 the request to catalog actions. A request that matches no catalog action gets
 one synthetic `unspecified` action. A GraphQL request that also invokes a root
 field no matched action covers gets `unspecified` next to the matched actions,
-so an unknown mutation cannot ride on a known read's Allow. An MCP server attributes by host and path
+so an unknown mutation cannot ride on a known read's Allow. A custom GraphQL
+app matches the same way under its endpoint URL
+(`integrations/kinds/api.py:ApiKindHandler._match_graphql`): each root field
+in the body maps to `query.<field>` or `mutation.<field>`, and a body with no
+root field, or with one that is no action, adds `unspecified`. An MCP server attributes by host and path
 prefix (`sandbox_proxy/resolvers/mcp_matching.py:match_request`) and returns
 the prefix length in `RequestMatch`; the evaluator picks the longest prefix
 across servers, and a tie matches nothing. The kind then parses the JSON-RPC
@@ -241,7 +245,15 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    only for a session of the IP-resolved user. A forged tag can only move an
    approval to another session of the same user. The comment in
    `GateAddon._extract_session_tag` explains why signing the MCP session header
-   adds nothing. Keep the user check. The initial IP listing fails loudly when
+   adds nothing. Keep the user check. A tag that is no build session can be
+   a chat: each chat VM command sends its chat session as the proxy URL user
+   (`server/features/build/sandbox/firecracker/harness_sandbox.py`), and `IdentityResolver.resolve_chat_session`
+   accepts a chat of the owner that is not deleted. Such a request takes the
+   agent policies of that chat (`integrations/policy.py:resolve_chat_action_policies`)
+   with no chat grant and no run mode. Allow goes out, Blocked is denied, and
+   Ask is refused with `approval_needs_tool`, which names the chat tool
+   (`sandbox_proxy/addons/gate.py:_app_tool_hint`: `custom__<id>__<action key>` for a REST or GraphQL app,
+   `app__<id>__<action>` for a preset). The initial IP listing fails loudly when
    two sandboxes share an IP
    (`backend/onyx/sandbox_proxy/sandbox_identity/kubernetes.py:K8sInformerLookup._initial_list`,
    `backend/onyx/sandbox_proxy/sandbox_identity/docker.py:DockerEventsLookup._initial_sync`).
@@ -345,6 +357,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - An external app or MCP server that the old admin routes create has no
   integration row until the integration routes replace them, so the proxy does
   not match it.
+- The tech debt register holds
+  [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps) and the
+  [Linear and Notion presets hidden from the catalog](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog).
 
 ---
 

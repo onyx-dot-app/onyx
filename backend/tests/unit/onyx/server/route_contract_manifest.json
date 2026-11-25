@@ -501,6 +501,8 @@
   "POST /admin/image-generation/config/{image_provider_id}/default": "admin",
   "POST /admin/image-generation/test": "admin",
   "POST /admin/integrations": "manage:actions +scope",
+  "POST /admin/integrations/graphql-introspect": "manage:actions +scope",
+  "POST /admin/integrations/openapi-import": "manage:actions +scope",
   "POST /admin/integrations/{integration_id}/actions/refresh": "manage:actions +scope",
   "POST /admin/llm/bedrock/available-models": "manage:llms",
   "POST /admin/llm/bifrost/available-models": "manage:llms",

@@ -15,6 +15,7 @@ export const SIGN_IN_METHODS: Record<
 > = {
   mcp_server: ["oauth2", "api_key", "onyx_login"],
   openapi: ["oauth2", "api_key", "onyx_login"],
+  graphql: ["oauth2", "api_key", "onyx_login"],
   custom: ["api_key"],
 };
 
@@ -24,6 +25,7 @@ export const PROVIDER_MODES: Record<
 > = {
   mcp_server: ["manual", "discovery"],
   openapi: ["manual"],
+  graphql: ["manual"],
   custom: ["manual"],
   preset: ["preset"],
 };
@@ -105,13 +107,6 @@ export function normalizedUrl(value: string): string | null {
   } catch {
     return null;
   }
-}
-
-export function parseUrlPatterns(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
 }
 
 export function signInErrors(draft: SignInDraft): SignInError[] {

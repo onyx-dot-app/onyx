@@ -4,17 +4,27 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
+  InputTypeIn,
   LineItemButton,
   Text,
   type DropdownMenuItem,
 } from "@opal/components";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
+  ContentAction,
+  Section,
+  SettingsLayouts,
+  Toolbar,
+} from "@opal/layouts";
+import {
   SvgCheckCircle,
+  SvgPlug,
+  SvgPlus,
   SvgShare,
   SvgUploadCloud,
   SvgXCircle,
 } from "@opal/icons";
+import { SvgGitHub } from "@opal/logos";
 import { useNavigation } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
 import {
@@ -22,6 +32,7 @@ import {
   groupPlugins,
   type PluginGroup,
 } from "@/lib/customize/plugins";
+import { usePanel } from "@/lib/customize/hooks";
 import { pluginHref } from "@/lib/customize/paths";
 import type { SkillStatusFilter } from "@/lib/customize/skills";
 import {
@@ -34,6 +45,7 @@ import {
   type SkillEnablement,
   useRefreshSkillLists,
 } from "@/lib/skills/hooks";
+import { useMarketplaceAdded } from "@/lib/marketplaces/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
 import { canShareSkill } from "@/lib/skills/sharing";
 import type { Skill } from "@/lib/skills/types";
@@ -47,6 +59,8 @@ import {
   StatusFilter,
 } from "@/sections/customize/CustomizeList";
 import { skillIcon } from "@/sections/customize/skillIcon";
+import AddMarketplaceModal from "@/sections/marketplaces/AddMarketplaceModal";
+import MarketplacesTable from "@/sections/marketplaces/MarketplacesTable";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import PluginTurnOnModal from "@/sections/modals/plugins/PluginTurnOnModal";
@@ -69,6 +83,7 @@ function PluginRow({
 }: PluginRowProps) {
   const t = useTranslations("customize");
   const navigation = useNavigation();
+  const panel = usePanel();
   const [skill] = entry.skills;
   const { blocked } = pluginSwitch(entry);
   const enabled = skill ? enablement.enabledOf(skill) : false;
@@ -144,7 +159,7 @@ function PluginRow({
             : undefined
       }
       aria-label={t("skills.open", { name: entry.name })}
-      onClick={() => navigation.go(pluginHref(entry.id))}
+      onClick={() => navigation.go(pluginHref(entry.id, undefined, panel))}
       rightChildren={
         <CustomizeRowActions
           turnOn={
@@ -164,8 +179,14 @@ function PluginRow({
   );
 }
 
+/** The admin panel lists every plugin the admin sees, in admin chrome.
+ * Both panels list marketplaces below the plugins. */
 export default function CustomizePluginsPage() {
   const t = useTranslations("customize");
+  const panel = usePanel();
+  const adminCopy = useTranslations("admin.plugins");
+  const marketplaceCopy = useTranslations("plugins.marketplaces");
+  const onMarketplaceAdded = useMarketplaceAdded();
   const locale = useLocale();
   const { user } = useUser();
   const revalidate = useRefreshSkillLists();
@@ -175,11 +196,13 @@ export default function CustomizePluginsPage() {
   const [sharing, setSharing] = useState<MemberPluginEntry | null>(null);
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [addingMarketplace, setAddingMarketplace] = useState(false);
 
   const userEmail = user?.email ?? null;
   const entries = memberPluginEntries(
     (skills.data?.customs ?? []).filter(
-      (skill) => skill.member_visible && skill.kind === "plugin"
+      (skill) =>
+        skill.kind === "plugin" && (panel === "admin" || skill.member_visible)
     ),
     userEmail,
     locale
@@ -197,29 +220,50 @@ export default function CustomizePluginsPage() {
     0
   );
 
-  const controls = (
+  const statusFilter = (
+    <StatusFilter
+      value={status}
+      onChange={setStatus}
+      allLabel={t("plugins.filter.all")}
+    />
+  );
+  const addMenu = <AddSkillMenu key="add" upload="plugin" />;
+  const loadError = skills.error ? t("plugins.loadFailed") : false;
+
+  const marketplaces = (
     <>
-      <StatusFilter
-        value={status}
-        onChange={setStatus}
-        allLabel={t("plugins.filter.all")}
+      <Section id="marketplaces" gap={1} alignItems="stretch" height="auto">
+        <ContentAction
+          font="main-content-emphasis"
+          icon={SvgGitHub}
+          title={marketplaceCopy("page.title")}
+          description={marketplaceCopy("page.description")}
+          padding={0}
+          rightChildren={
+            <Button
+              prominence="secondary"
+              icon={SvgPlus}
+              onClick={() => setAddingMarketplace(true)}
+            >
+              {marketplaceCopy("add.menuItem")}
+            </Button>
+          }
+        />
+        <MarketplacesTable />
+      </Section>
+      <AddMarketplaceModal
+        open={addingMarketplace}
+        onClose={() => setAddingMarketplace(false)}
+        onAdded={(marketplace) => {
+          setAddingMarketplace(false);
+          onMarketplaceAdded(marketplace);
+        }}
       />
-      <AddSkillMenu upload="plugin" />
     </>
   );
 
-  return (
-    <CustomizeLayout
-      tab="plugins"
-      query={query}
-      onQueryChange={setQuery}
-      controls={controls}
-      loading={skills.isLoading}
-      error={skills.error ? t("plugins.loadFailed") : false}
-    >
-      <Text as="p" font="secondary-body" color="text-03">
-        {t("plugins.intro")}
-      </Text>
+  const list = (
+    <>
       {shownCount === 0 ? (
         <CustomizeEmpty
           illustration={SvgNoResult}
@@ -289,6 +333,61 @@ export default function CustomizePluginsPage() {
           onSaved={revalidate}
         />
       )}
+    </>
+  );
+
+  if (panel === "admin")
+    return (
+      <SettingsLayouts.Root
+        width="lg"
+        loading={skills.isLoading}
+        error={loadError}
+      >
+        <SettingsLayouts.Header
+          icon={SvgPlug}
+          title={adminCopy("title")}
+          description={adminCopy("description")}
+          stackActionsOnMobile
+          actions={[addMenu]}
+        />
+        <SettingsLayouts.Body>
+          <Toolbar
+            search={
+              <InputTypeIn
+                icon="search"
+                value={query}
+                placeholder={t("search")}
+                aria-label={t("search")}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            }
+            actions={statusFilter}
+          />
+          {list}
+          {marketplaces}
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
+    );
+
+  return (
+    <CustomizeLayout
+      tab="plugins"
+      query={query}
+      onQueryChange={setQuery}
+      controls={
+        <>
+          {statusFilter}
+          {addMenu}
+        </>
+      }
+      loading={skills.isLoading}
+      error={loadError}
+    >
+      <Text as="p" font="secondary-body" color="text-03">
+        {t("plugins.intro")}
+      </Text>
+      {list}
+      {marketplaces}
     </CustomizeLayout>
   );
 }

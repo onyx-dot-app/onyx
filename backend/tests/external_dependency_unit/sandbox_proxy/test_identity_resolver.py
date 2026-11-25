@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.chat import create_chat_session, delete_chat_session
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import BuildSession, Sandbox
 from onyx.sandbox_proxy.sandbox_identity.models import SandboxIdentity
@@ -149,3 +150,29 @@ def test_resolve_session_by_id_returns_none_for_unknown_session(
     resolver = _resolver_with(None)
     found = resolver.resolve_session_by_id(uuid4(), user_id, POSTGRES_DEFAULT_SCHEMA)
     assert found is None
+
+
+# ---------------------------------------------------------------------------
+# resolve_chat_session — the tag of a command of a chat
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_chat_session_accepts_only_a_live_chat_of_the_owner(
+    db_session: Session, seeded_sandbox: tuple[UUID, UUID, UUID]
+) -> None:
+    sandbox_id, user_id, build_session_id = seeded_sandbox
+    resolver = _resolver_with(_identity_for(sandbox_id))
+    other_user = create_test_user(db_session, "identity_resolver_other")
+    own = create_chat_session(db_session, "proxy tag", user_id, None).id
+    foreign = create_chat_session(db_session, "proxy tag", other_user.id, None).id
+    deleted = create_chat_session(db_session, "proxy tag", user_id, None).id
+    delete_chat_session(user_id, deleted, db_session)
+
+    def resolve(chat_id: UUID) -> UUID | None:
+        return resolver.resolve_chat_session(chat_id, user_id, POSTGRES_DEFAULT_SCHEMA)
+
+    assert resolve(own) == own
+    # A chat of a second user, a deleted chat, a Craft session and an
+    # unknown id.
+    for chat_id in (foreign, deleted, build_session_id, uuid4()):
+        assert resolve(chat_id) is None

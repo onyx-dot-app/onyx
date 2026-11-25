@@ -209,6 +209,19 @@ def get_owned_chat_session(
     )
 
 
+def get_chat_session_id_for_user(
+    db_session: Session, chat_session_id: UUID, user_id: UUID
+) -> UUID | None:
+    """The id when the chat is the user's and is not deleted."""
+    return db_session.scalar(
+        select(ChatSession.id).where(
+            ChatSession.id == chat_session_id,
+            ChatSession.user_id == user_id,
+            ChatSession.deleted.is_(False),
+        )
+    )
+
+
 def get_chat_sessions_by_slack_thread_id(
     slack_thread_id: str,
     user_id: UUID | None,

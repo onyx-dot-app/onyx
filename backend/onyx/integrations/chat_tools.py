@@ -12,14 +12,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import (
-    IntegrationAuthMode,
-    IntegrationKind,
-    PluginInstallationPolicy,
-)
+from onyx.db.enums import IntegrationAuthMode, PluginInstallationPolicy
 from onyx.db.integration import (
+    list_api_apps_by_integration,
+    list_external_apps_by_integration,
     list_mcp_servers_by_integration,
-    list_openapi_tools_by_integration,
 )
 from onyx.db.integration_connection import list_connections
 from onyx.db.integration_policy import list_policy_rows, list_session_granted_actions
@@ -32,8 +29,11 @@ from onyx.integrations.kinds.mcp_server import McpServerKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import (
     ActionSettings,
+    ApiConfig,
+    ApiShape,
     EffectivePolicy,
     IntegrationConfig,
+    LinkValue,
     PolicyRows,
 )
 from onyx.integrations.policy import (
@@ -44,6 +44,7 @@ from onyx.integrations.policy import (
 from onyx.integrations.registry import get_kind_handler
 from onyx.tools.interface import Tool
 from onyx.tools.models import IntegrationChatRequest, ToolApprovalScope
+from onyx.tools.tool_implementations.app_action.app_action_tool import AppConnectTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -72,9 +73,25 @@ def _integration_tools(
     )
     if isinstance(credentials, ConnectionProblem):
         logger.debug(
-            "Skipping integration %s: %s", integration.id, credentials.code.value
+            "Integration %s has no credential: %s",
+            integration.id,
+            credentials.code.value,
         )
-        return []
+        if (
+            acting_user is None
+            or not isinstance(config, ApiConfig)
+            or config.shape is ApiShape.CUSTOM
+            or link_settings.default is LinkValue.BLOCKED
+        ):
+            return []
+        # A preset or a custom app: one tool that asks the user to connect.
+        return [
+            AppConnectTool(
+                integration_id=integration.id,
+                integration_name=integration.name,
+                problem=credentials,
+            )
+        ]
     actions = [
         action
         for action in actions
@@ -154,8 +171,9 @@ def build_integration_chat_tools(
     db_session: Session, user: User, request: IntegrationChatRequest
 ) -> list[Tool]:
     """The tools of each enabled integration that the turn can use. An
-    integration whose credential does not resolve gives no tool, and an API
-    integration with no OpenAPI tool (a preset or custom app) gives none. A Blocked
+    integration whose credential does not resolve gives no tool, except that
+    a preset or a custom app gives one tool that asks the user to connect. An API
+    integration with neither an ``api_app`` nor a preset gives none. A Blocked
     action gives no tool; an Ask action carries its approval scope."""
     held = chat_integrations(
         db_session,
@@ -182,10 +200,6 @@ def build_integration_chat_tools(
             and agent_integration.integration.auth_mode
             is IntegrationAuthMode.INDIVIDUAL
         )
-        and not (
-            agent_integration.integration.kind is IntegrationKind.API
-            and agent_integration.integration.tool_id is None
-        )
     }
     user_id = None if user.is_anonymous else user.id
     actions = integration_actions_by_id(list(selected), db_session)
@@ -194,17 +208,18 @@ def build_integration_chat_tools(
     grants = list_session_granted_actions(
         db_session, request.chat_session_id, list(selected)
     )
-    api_tools = list_openapi_tools_by_integration(list(selected), db_session)
+    api_apps = list_api_apps_by_integration(list(selected), db_session)
+    apps = list_external_apps_by_integration(list(selected), db_session)
     servers = list_mcp_servers_by_integration(list(selected), db_session)
     tools: list[Tool] = []
     for integration_id, agent_integration in selected.items():
         integration = agent_integration.integration
         try:
             config: IntegrationConfig | None = None
-            if integration_id in api_tools:
-                config = ApiKindHandler.openapi_config_from_tool(
-                    api_tools[integration_id]
-                )
+            if integration_id in api_apps:
+                config = ApiKindHandler.config_from_api_app(api_apps[integration_id])
+            elif integration_id in apps:
+                config = ApiKindHandler.config_from_external_app(apps[integration_id])
             elif integration_id in servers:
                 config = McpServerKindHandler.config_from_server(
                     servers[integration_id]

@@ -356,6 +356,7 @@ covers new files that match it.
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
 | `web/src/app/admin/integrations/` | plugins |
+| `web/src/app/admin/plugins/` | plugins, skills |
 | `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx` | plugins |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/modals/plugins/` | plugins |
 | `web/src/sections/marketplaces/`, `web/src/lib/marketplaces/` | skills, plugins |

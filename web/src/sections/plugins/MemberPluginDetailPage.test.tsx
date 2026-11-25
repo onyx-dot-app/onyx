@@ -435,6 +435,9 @@ test("a synced plugin names its marketplace and says that GitHub holds it", asyn
   expect(
     screen.getByText("acme-tools marketplace, personal (acme/plugins)")
   ).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Open Marketplaces" })
+  ).toHaveAttribute("href", "/app/customize/plugins#marketplaces");
   expect(screen.queryByText("My uploads")).not.toBeInTheDocument();
 });
 
@@ -467,4 +470,25 @@ test("a personal synced plugin offers neither Share nor Upload New Version", asy
   ).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
   expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+});
+
+test("in the admin panel the back link returns to the admin plugin list", async () => {
+  window.history.replaceState(null, "", `/admin/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(await screen.findByRole("link", { name: "Plugins" })).toHaveAttribute(
+    "href",
+    "/admin/plugins"
+  );
 });

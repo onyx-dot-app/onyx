@@ -1077,6 +1077,7 @@ class SavedToolApproval(BaseModel):
     # belongs to.
     chat_message_id: int
     tool_call_id: str
+    action_id: str
     tool_name: str
     display_name: str
     arguments: dict[str, JsonValue]

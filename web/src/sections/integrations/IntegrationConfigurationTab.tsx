@@ -29,11 +29,15 @@ import {
   startOrganizationOAuth,
   updateIntegration,
 } from "@/lib/integrations/svc";
+import { FetchError } from "@/lib/fetcher";
 import type {
   AdminIntegrationDetail,
   AuthMethod,
+  EndpointLineError,
+  GraphQLConfig,
   IntegrationConfig,
   IntegrationUpdate,
+  OpenApiConfigView,
 } from "@/lib/integrations/types";
 import { useIntegrationPresets } from "@/lib/integrations/hooks";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
@@ -41,28 +45,21 @@ import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import { integrationDetailHref } from "@/lib/integrations/utils";
 import IntegrationSignInFields from "@/sections/integrations/IntegrationSignInFields";
 import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
+import GraphQLFields from "@/sections/integrations/GraphQLFields";
+import RestEndpointFields, {
+  EMPTY_REST,
+  endpointLines,
+  restDraftFrom,
+  type RestDraft,
+} from "@/sections/integrations/RestEndpointFields";
 import {
   normalizedUrl,
-  parseUrlPatterns,
   SIGN_IN_METHODS,
   signInDraftFromDetail,
   signInErrors,
   signInPayload,
   type SignInDraft,
 } from "@/sections/integrations/signIn";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseSpec(text: string): Record<string, unknown> | null {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
 
 interface IntegrationConfigurationTabProps {
   integration: AdminIntegrationDetail;
@@ -85,16 +82,19 @@ export default function IntegrationConfigurationTab({
       ? integration.config.server_url
       : ""
   );
-  const [urlPatterns, setUrlPatterns] = useState(
-    integration.config.shape === "custom"
-      ? integration.config.upstream_url_patterns.join("\n")
-      : ""
+  const [savedOpenApi, setSavedOpenApi] = useState<OpenApiConfigView | null>(
+    integration.config.shape === "openapi" ? integration.config : null
   );
-  const initialSpec =
-    integration.config.shape === "openapi"
-      ? JSON.stringify(integration.config.openapi_spec, null, 2)
-      : "";
-  const [specText, setSpecText] = useState(initialSpec);
+  const savedRest = savedOpenApi ? restDraftFrom(savedOpenApi) : EMPTY_REST;
+  const [rest, setRest] = useState<RestDraft>(savedRest);
+  const [lineErrors, setLineErrors] = useState<EndpointLineError[]>([]);
+  const [specText, setSpecText] = useState(
+    savedOpenApi?.openapi_document ?? ""
+  );
+  const [savedGraphql, setSavedGraphql] = useState<GraphQLConfig | null>(
+    integration.config.shape === "graphql" ? integration.config : null
+  );
+  const [graphql, setGraphql] = useState<GraphQLConfig | null>(savedGraphql);
   const [alwaysAllow, setAlwaysAllow] = useState(
     integration.users_can_save_always_allow
   );
@@ -125,17 +125,36 @@ export default function IntegrationConfigurationTab({
         ? undefined
         : { ...config, server_url: url };
     }
-    if (config.shape === "custom") {
-      const patterns = parseUrlPatterns(urlPatterns);
-      if (!patterns.length) return null;
-      return patterns.join("\n") === config.upstream_url_patterns.join("\n")
-        ? undefined
-        : { shape: "custom", upstream_url_patterns: patterns };
+    if (config.shape === "custom") return undefined;
+    if (config.shape === "graphql") {
+      if (!graphql) return undefined;
+      if (!graphql.endpoint_url.trim() || !graphql.graphql_schema.trim())
+        return null;
+      const next = { ...graphql, endpoint_url: graphql.endpoint_url.trim() };
+      return isEqual(next, savedGraphql) ? undefined : next;
     }
     if (config.shape === "openapi") {
-      if (specText === initialSpec) return undefined;
-      const spec = parseSpec(specText);
-      return spec ? { shape: "openapi", openapi_spec: spec } : null;
+      if (specText !== (savedOpenApi?.openapi_document ?? "")) {
+        if (!specText.trim()) return null;
+        return {
+          shape: "openapi",
+          openapi_document: specText,
+          base_url: null,
+          endpoints: null,
+        };
+      }
+      if (
+        rest.baseUrl === savedRest.baseUrl &&
+        rest.endpoints === savedRest.endpoints
+      )
+        return undefined;
+      if (!rest.baseUrl.trim()) return null;
+      return {
+        shape: "openapi",
+        openapi_document: rest.document,
+        base_url: rest.baseUrl.trim(),
+        endpoints: endpointLines(rest),
+      };
     }
     const filled = Object.fromEntries(
       Object.entries(presetCredentials).flatMap(([key, value]) =>
@@ -172,6 +191,7 @@ export default function IntegrationConfigurationTab({
       return;
     }
     setBusy(true);
+    setLineErrors([]);
     try {
       const update: IntegrationUpdate = {
         users_can_save_always_allow: alwaysAllow,
@@ -183,8 +203,15 @@ export default function IntegrationConfigurationTab({
       const saved = await updateIntegration(integration.id, update);
       // The response leaves out secrets and gives the schema as stored.
       setSignIn(signInDraftFromDetail(saved));
-      if (saved.config.shape === "openapi")
-        setSpecText(JSON.stringify(saved.config.openapi_spec, null, 2));
+      if (saved.config.shape === "openapi") {
+        setSavedOpenApi(saved.config);
+        setRest(restDraftFrom(saved.config));
+        setSpecText(saved.config.openapi_document);
+      }
+      if (saved.config.shape === "graphql") {
+        setSavedGraphql(saved.config);
+        setGraphql(saved.config);
+      }
       setPresetCredentials({});
       toast.success(t("saved"));
       // A new schema or server syncs the actions again.
@@ -192,6 +219,8 @@ export default function IntegrationConfigurationTab({
         await mutate(SWR_KEYS.adminIntegrationActions(integration.id));
       await refresh();
     } catch (error) {
+      if (error instanceof FetchError)
+        setLineErrors(error.info?.line_errors ?? []);
       toast.error(error instanceof Error ? error.message : t("saveFailed"));
     } finally {
       setBusy(false);
@@ -284,61 +313,68 @@ export default function IntegrationConfigurationTab({
             </Section>
           </Card>
         )}
-      {integration.config.shape !== "preset" && (
-        <Card padding={4}>
-          <Section gap={4} alignItems="stretch" height="auto">
-            <Content font="main-ui-action" title={t("connection.title")} />
-            {integration.config.shape === "mcp_server" ? (
-              <InputVertical
-                title={t("connection.serverUrl")}
-                error={
-                  showErrors && !normalizedUrl(serverUrl)
-                    ? t("connection.serverUrlError")
-                    : undefined
-                }
-              >
-                <InputTypeIn
-                  aria-label={t("connection.serverUrl")}
-                  value={serverUrl}
-                  variant={disabled ? "disabled" : "primary"}
-                  onChange={(event) => setServerUrl(event.target.value)}
+      {integration.config.shape !== "preset" &&
+        integration.config.shape !== "custom" && (
+          <Card padding={4}>
+            <Section gap={4} alignItems="stretch" height="auto">
+              <Content font="main-ui-action" title={t("connection.title")} />
+              {integration.config.shape === "mcp_server" ? (
+                <InputVertical
+                  title={t("connection.serverUrl")}
+                  error={
+                    showErrors && !normalizedUrl(serverUrl)
+                      ? t("connection.serverUrlError")
+                      : undefined
+                  }
+                >
+                  <InputTypeIn
+                    aria-label={t("connection.serverUrl")}
+                    value={serverUrl}
+                    variant={disabled ? "disabled" : "primary"}
+                    onChange={(event) => setServerUrl(event.target.value)}
+                  />
+                </InputVertical>
+              ) : graphql ? (
+                <GraphQLFields
+                  draft={graphql}
+                  onChange={setGraphql}
+                  showErrors={showErrors}
+                  disabled={disabled}
                 />
-              </InputVertical>
-            ) : integration.config.shape === "openapi" ? (
-              <InputVertical
-                title={t("connection.schema")}
-                description={t("connection.schemaDescription")}
-                error={
-                  showErrors && !parseSpec(specText)
-                    ? t("connection.schemaError")
-                    : undefined
-                }
-              >
-                <InputTextArea
-                  aria-label={t("connection.schema")}
-                  value={specText}
-                  rows={12}
-                  variant={disabled ? "disabled" : "primary"}
-                  onChange={(event) => setSpecText(event.target.value)}
-                />
-              </InputVertical>
-            ) : (
-              <InputVertical
-                title={t("connection.urlPatterns")}
-                description={t("connection.urlPatternsDescription")}
-              >
-                <InputTextArea
-                  aria-label={t("connection.urlPatterns")}
-                  value={urlPatterns}
-                  rows={3}
-                  variant={disabled ? "disabled" : "primary"}
-                  onChange={(event) => setUrlPatterns(event.target.value)}
-                />
-              </InputVertical>
-            )}
-          </Section>
-        </Card>
-      )}
+              ) : (
+                <>
+                  <RestEndpointFields
+                    draft={rest}
+                    onChange={(next) => {
+                      setRest(next);
+                      setLineErrors([]);
+                    }}
+                    lineErrors={lineErrors}
+                    showErrors={showErrors}
+                    disabled={disabled}
+                  />
+                  <InputVertical
+                    title={t("connection.schema")}
+                    description={t("connection.schemaDescription")}
+                    error={
+                      showErrors && !specText.trim()
+                        ? t("connection.schemaError")
+                        : undefined
+                    }
+                  >
+                    <InputTextArea
+                      aria-label={t("connection.schema")}
+                      value={specText}
+                      rows={12}
+                      variant={disabled ? "disabled" : "primary"}
+                      onChange={(event) => setSpecText(event.target.value)}
+                    />
+                  </InputVertical>
+                </>
+              )}
+            </Section>
+          </Card>
+        )}
       <Card padding={4}>
         <Section gap={4} alignItems="stretch" height="auto">
           <Content

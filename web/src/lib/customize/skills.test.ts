@@ -12,7 +12,6 @@ const OPTIONS: SkillListOptions = {
   craftEnabled: true,
   query: "",
   status: "all",
-  sort: "name",
   locale: "en",
 };
 

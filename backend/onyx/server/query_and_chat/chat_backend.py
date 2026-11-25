@@ -166,6 +166,7 @@ from onyx.file_store.serving import (
     resolve_inline_disposition,
 )
 from onyx.integrations.models import ApprovalMode
+from onyx.integrations.policy import always_asks
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
     get_llm_for_persona,
@@ -1857,8 +1858,12 @@ def decide_approval(
     if approval is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
     rejected = body.decision == ApprovalChoice.REJECT
+    # An action that asks each time takes a chat approval as a single one.
+    standing = body.decision == ApprovalChoice.APPROVE_SESSION and not always_asks(
+        approval.action_id
+    )
     upgrades_to_grant = (
-        body.decision == ApprovalChoice.APPROVE_SESSION
+        standing
         and approval.decision == ApprovalDecision.APPROVED
         and approval.decided_via == ApprovalDecidedVia.USER
     )
@@ -1879,7 +1884,7 @@ def decide_approval(
             ApprovalDecidedVia.POLICY
             if blocked and not rejected
             else ApprovalDecidedVia.SESSION_GRANT
-            if body.decision == ApprovalChoice.APPROVE_SESSION
+            if standing
             else ApprovalDecidedVia.USER,
         )
     db_session.refresh(approval)

@@ -158,6 +158,7 @@ class IntegrationRequestEvaluator(RequestEvaluator):
                 integration_id=integration.id,
                 kind=integration.kind,
                 app_name=integration.name,
+                api_app=integration.api_app_id is not None,
             )
         if not match.actions:
             return McpProtocolRequest(target=target)

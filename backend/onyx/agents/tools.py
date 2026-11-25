@@ -63,6 +63,8 @@ class PendingToolInput(BaseModel):
     approval: bool = False
     # How the requester names the action, for display.
     display_name: str | None = None
+    # Whether the user can approve the action for the rest of the chat.
+    can_approve_for_chat: bool = True
 
 
 class HumanToolAnswer(BaseModel):

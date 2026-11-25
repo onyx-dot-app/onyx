@@ -30,6 +30,7 @@ from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
+    PendingToolInput,
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
@@ -45,6 +46,7 @@ from onyx.chat.run_store import (
     ChatRunStore,
     fail_suspended_response,
 )
+from onyx.chat.tool_approvals import open_tool_approval
 from onyx.chat.tool_questions import CANCELLED_QUESTION_MESSAGE
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.approval_request import create_approval_request__no_commit
@@ -69,6 +71,7 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.gcs_file_store import GCSBackedFileStore
@@ -1680,3 +1683,41 @@ def test_a_suspended_response_without_its_checkpoint_is_repaired(
     ) == {chat.response_id}
     assert _status(chat.response_id) == RunStatus.ERROR
     _reject_while_user_input_waits(db_session, chat.chat_session_id)
+
+
+def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
+    db_session: Session, chat: ApprovalChat
+) -> None:
+    """The request tool of an app (`unspecified`) asks each time: an
+    approval for the chat is saved as a single approval, and the next call
+    asks again."""
+
+    def ask() -> PendingToolInput | ToolResult | None:
+        return open_tool_approval(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            chat_session_id=chat.chat_session_id,
+            response_id=chat.response_id,
+            user_id=chat.user.id,
+            tool_call_id=f"call-{uuid4().hex[:8]}",
+            tool_name="app__1__request",
+            display_name="Any other request",
+            arguments={},
+            scope=ToolApprovalScope(
+                integration_id=chat.integration_id,
+                action_id=WHOLE_DOMAIN_ACTION_TYPE,
+            ),
+            signed_out=False,
+        )
+
+    first = ask()
+    assert isinstance(first, PendingToolInput)
+    assert not first.can_approve_for_chat
+
+    chat.decide(db_session, first.request_id, ApprovalChoice.APPROVE_SESSION)
+
+    [row] = chat.rows(db_session)
+    assert (row.decision, row.decided_via) == (
+        ApprovalDecision.APPROVED,
+        ApprovalDecidedVia.USER,
+    )
+    assert isinstance(ask(), PendingToolInput)

@@ -26,7 +26,7 @@ export interface CraftMcpServer {
   craft_connected: boolean;
 }
 
-function appType(presetId: string | null): ExternalAppType {
+export function appType(presetId: string | null): ExternalAppType {
   return EXTERNAL_APP_TYPES.find((type) => type === presetId) ?? "CUSTOM";
 }
 

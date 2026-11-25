@@ -32,7 +32,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
     oauth_client: null,
     config: {
       shape: "openapi",
-      openapi_spec: {
+      openapi_document: JSON.stringify({
         openapi: "3.0.0",
         info: {
           title: `Health ${nonce}`,
@@ -49,7 +49,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
             },
           },
         },
-      },
+      }),
     },
   });
   let agentId: number | undefined;
