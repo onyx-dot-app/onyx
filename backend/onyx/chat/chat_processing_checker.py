@@ -114,7 +114,9 @@ class ChatTurnAdmission:
         ):
             raise CacheLockLostError("Chat session admission renewal expired")
 
-    def _renew_owner(self, session_id: UUID, lease_seconds: int) -> None:
+    def _renew_owner(
+        self, session_id: UUID, lease_seconds: int, also: Sequence[str] = ()
+    ) -> None:
         for attempt in range(_ADMISSION_RENEWAL_ATTEMPTS):
             self._check_deadline()
             started = time.monotonic()
@@ -122,7 +124,7 @@ class ChatTurnAdmission:
             self._lease_seconds = lease_seconds
             try:
                 renewed = self.cache.renew_if_value(
-                    self._owner_key(session_id), self._token, lease_seconds
+                    self._owner_key(session_id), self._token, lease_seconds, also=also
                 )
             except CACHE_TRANSIENT_ERRORS:
                 if attempt + 1 == _ADMISSION_RENEWAL_ATTEMPTS:
@@ -171,14 +173,17 @@ class ChatTurnAdmission:
         if session_id is None:
             raise RuntimeError("Chat turn has no admission")
         self._check_deadline()
-        lock = _admission_lock(self.cache, session_id)
-        try:
-            self._renew_owner(session_id, self._lease_seconds)
-            self.cache.expire(_get_fence_key(session_id), self._lease_seconds)
-            self.cache.expire(_responses_key(session_id), self._lease_seconds)
-            self.cache.expire(_preparation_stop_key(session_id), self._lease_seconds)
-        finally:
-            lock.release()
+        # One atomic step that changes nothing unless this turn still owns the
+        # session, so it needs no admission lock.
+        self._renew_owner(
+            session_id,
+            self._lease_seconds,
+            also=(
+                _get_fence_key(session_id),
+                _responses_key(session_id),
+                _preparation_stop_key(session_id),
+            ),
+        )
 
     def check_owner(self, session_id: UUID) -> None:
         """Validate ownership; callers serialize history writes against newer turns."""

@@ -12,7 +12,7 @@ typing error, not a silent cross-tenant write.
 # annotations like ``-> set[bytes]``.
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Collection, Generator, Mapping, Sequence
 from typing import Any, cast
 
 import redis
@@ -869,8 +869,18 @@ class TenantRedisClient:
             except redis.WatchError:
                 return False
 
-    def renew_if_value(self, name: KeyArg, expected: bytes, seconds: int) -> bool:
-        """Renew only the current tenant's matching lease, without a lock wait."""
+    def renew_if_value(
+        self,
+        name: KeyArg,
+        expected: bytes,
+        seconds: int,
+        *,
+        also: Collection[KeyArg] = (),
+    ) -> bool:
+        """Renew only the current tenant's matching lease, without a lock wait.
+
+        The same transaction gives the ``also`` keys that exist the same TTL.
+        """
         key = _prefix_key(self._prefix, name)
         with self._r.pipeline() as pipeline:
             try:
@@ -879,6 +889,8 @@ class TenantRedisClient:
                     return False
                 pipeline.multi()
                 pipeline.expire(key, seconds)
+                for other in also:
+                    pipeline.expire(_prefix_key(self._prefix, other), seconds)
                 return bool(pipeline.execute()[0])
             except redis.WatchError:
                 return False
