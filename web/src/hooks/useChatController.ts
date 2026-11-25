@@ -16,6 +16,7 @@ import {
 import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
+import { getNewSessionNavigation } from "@/lib/navigation/hooks";
 import {
   getLatestMessageChain,
   MessageTreeState,
@@ -243,7 +244,8 @@ export default function useChatController({
 
   const updateStatesWithNewSessionId = (
     newSessionId: string,
-    incognito = false
+    incognito = false,
+    select = true
   ) => {
     // Create new session in store if it doesn't exist
     const existingSession = sessions.get(newSessionId);
@@ -254,7 +256,7 @@ export default function useChatController({
     }
 
     // Set as current session
-    setCurrentSession(newSessionId);
+    if (select) setCurrentSession(newSessionId);
   };
 
   const handleNewSessionNavigation = (chatSessionId: string) => {
@@ -374,6 +376,9 @@ export default function useChatController({
           "input") !== "input"
       )
         return;
+      const newSessionAtSubmit = getNewSessionNavigation();
+      const stillOnComposer = () =>
+        getNewSessionNavigation() === newSessionAtSubmit;
       const controller = new AbortController();
       const submissionSessionId = getCurrentSessionId();
       if (submissionSessionId) {
@@ -445,7 +450,7 @@ export default function useChatController({
           toast.error(t("createSessionFailed.toast"));
           // The user moved to a different page while the request was pending.
           // Do not take them back or put the message into that page.
-          if (!isStillOnLocation([startUrl], window.location)) {
+          if (!stillOnComposer() || !isStillOnLocation([startUrl], window.location)) {
             return;
           }
           restoreSubmittedInput();
@@ -501,10 +506,14 @@ export default function useChatController({
       );
 
       // mark the session as the current session
-      updateStatesWithNewSessionId(currChatSessionId, incognito);
+      updateStatesWithNewSessionId(
+        currChatSessionId,
+        incognito,
+        stillOnComposer()
+      );
 
       // Navigate immediately for new sessions (before streaming starts)
-      if (isNewSession) {
+      if (isNewSession && stillOnComposer()) {
         handleNewSessionNavigation(currChatSessionId);
       }
 
@@ -714,7 +723,7 @@ export default function useChatController({
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
-      if (!messageToResend) resetInputBar();
+      if (stillOnComposer() && !messageToResend) resetInputBar();
       // The server saved nothing for this turn: drop its nodes, restore the
       // links of the node they hung from, and give the text back for a retry.
       // Other live changes, such as a preference pick, stay.
@@ -745,6 +754,7 @@ export default function useChatController({
         currentMessageTreeLocal = restored;
         store.updateSessionMessageTree(frozenSessionId, restored);
         if (
+          stillOnComposer() &&
           store.currentSessionId === frozenSessionId &&
           !regenerationRequest
         ) {
@@ -1294,7 +1304,7 @@ export default function useChatController({
                 isRetryable = streamingError.is_retryable ?? true;
                 errorDetails = streamingError.details || null;
 
-                updateSubmittedMessage(getCurrentSessionId(), "");
+                updateSubmittedMessage(frozenSessionId, "");
 
                 throw new Error(streamingError.error);
               }

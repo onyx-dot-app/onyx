@@ -4,7 +4,11 @@ import {
   NestedCall,
   isGroupEndPacket,
 } from "@/lib/timeline/chat/packetHelpers";
-import { type Packet, PacketType } from "@/app/app/services/streamingModels";
+import {
+  type ExecEnd,
+  type Packet,
+  PacketType,
+} from "@/app/app/services/streamingModels";
 import type {
   TimelineEntry,
   TimelineEntryStatus,
@@ -95,7 +99,7 @@ function isFailurePacket(packet: Packet, interrupted: boolean): boolean {
       if (obj.error !== null || obj.completion === "deadline_exceeded")
         return true;
       return (
-        !interrupted &&
+        !isExpectedInterrupt(obj, interrupted) &&
         ((obj.exit_code !== null && obj.exit_code !== 0) ||
           obj.completion === "signaled")
       );
@@ -113,6 +117,19 @@ function isFailurePacket(packet: Packet, interrupted: boolean): boolean {
 /** Input that holds Ctrl+C, e.g. to stop a running dev server. */
 export function isInterruptInput(chars: string): boolean {
   return chars.includes("\u0003");
+}
+
+export function isExpectedInterrupt(
+  end: ExecEnd | null,
+  sentInterrupt: boolean
+): boolean {
+  return (
+    sentInterrupt &&
+    end !== null &&
+    end.error === null &&
+    (end.completion === "exited" || end.completion === "signaled") &&
+    (end.exit_code === 130 || end.exit_code === -2)
+  );
 }
 
 /** The step sent Ctrl+C to a running process. */

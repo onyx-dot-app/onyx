@@ -14,6 +14,12 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { routeWithQuery } from "@/lib/routes";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
+let newSessionNavigation = 0;
+
+export function getNewSessionNavigation(): number {
+  return newSessionNavigation;
+}
+
 // "AppPosition" is where in the main application the user currently is. It is
 // derived from the URL and nothing else, so any flow that needs to put the user
 // somewhere — or to know where they are — states it as a URL and reads it back
@@ -154,6 +160,7 @@ class AppPosition {
    * change, so the page never clears the chat; this clears it.
    */
   private leaveSentChat() {
+    newSessionNavigation++;
     if (this.isNewSession())
       useChatSessionStore.getState().setCurrentSession(null);
   }

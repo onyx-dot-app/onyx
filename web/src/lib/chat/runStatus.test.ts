@@ -14,7 +14,7 @@ function loadRunStatus(): typeof RunStatus {
   return loaded;
 }
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => sessionStorage.clear());
 
 describe("unseen runs across reloads", () => {
   test("a record the user has not viewed survives a reload", () => {
@@ -44,10 +44,10 @@ describe("unseen runs across reloads", () => {
   });
 
   test("bad saved data loads as no records", () => {
-    localStorage.setItem(KEY, '[["chat-1","exploded"],42,"x"]');
+    sessionStorage.setItem(KEY, '[["chat-1","exploded"],42,"x"]');
     expect(loadRunStatus().useUnseenRuns.getState().unseen.size).toBe(0);
 
-    localStorage.setItem(KEY, "not json");
+    sessionStorage.setItem(KEY, "not json");
     expect(loadRunStatus().useUnseenRuns.getState().unseen.size).toBe(0);
   });
 });

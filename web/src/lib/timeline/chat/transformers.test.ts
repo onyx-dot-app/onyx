@@ -310,6 +310,12 @@ describe("toChatTimelineEntry status", () => {
     expect(toChatTimelineEntry(stdinStep("\u0003")).status).toBe("done");
   });
 
+  it("Ctrl+C does not hide an unrelated exit code", () => {
+    expect(
+      toChatTimelineEntry(stdinStep("\u0003", { exit_code: 1 })).status
+    ).toBe("error");
+  });
+
   it("a deadline after Ctrl+C still fails", () => {
     expect(
       toChatTimelineEntry(

@@ -88,10 +88,7 @@ export function endedRunStatus(
 export const UNSEEN_RUNS_STORAGE_KEY = "onyx:unseen-runs:v1";
 // The newest records kept; older ones (e.g. of deleted chats) are dropped.
 const MAX_UNSEEN_RUNS = 50;
-const ENDED_RUNS: ReadonlySet<string> = new Set<EndedRun>([
-  "failed",
-  "done",
-]);
+const ENDED_RUNS: ReadonlySet<string> = new Set<EndedRun>(["failed", "done"]);
 
 function isEndedRun(value: unknown): value is EndedRun {
   return typeof value === "string" && ENDED_RUNS.has(value);
@@ -101,7 +98,7 @@ function isEndedRun(value: unknown): value is EndedRun {
 function readUnseenRuns(): Map<string, EndedRun> {
   try {
     const parsed: unknown = JSON.parse(
-      window.localStorage.getItem(UNSEEN_RUNS_STORAGE_KEY) ?? "[]"
+      window.sessionStorage.getItem(UNSEEN_RUNS_STORAGE_KEY) ?? "[]"
     );
     if (!Array.isArray(parsed)) return new Map();
     const unseen = new Map<string, EndedRun>();
@@ -121,7 +118,7 @@ function readUnseenRuns(): Map<string, EndedRun> {
 
 function saveUnseenRuns(unseen: ReadonlyMap<string, EndedRun>): void {
   try {
-    window.localStorage.setItem(
+    window.sessionStorage.setItem(
       UNSEEN_RUNS_STORAGE_KEY,
       JSON.stringify([...unseen].slice(-MAX_UNSEEN_RUNS))
     );
@@ -134,6 +131,7 @@ interface UnseenRunsState {
   unseen: ReadonlyMap<string, EndedRun>;
   markUnseen: (sessionId: string, ended: EndedRun) => void;
   markSeen: (sessionId: string) => void;
+  clearAll: () => void;
 }
 
 /**
@@ -151,6 +149,7 @@ export const useUnseenRuns = create<UnseenRunsState>()((set) => ({
       saveUnseenRuns(unseen);
       return { unseen };
     }),
+  clearAll: () => set({ unseen: new Map() }),
   markSeen: (sessionId) =>
     set((state) => {
       if (!state.unseen.has(sessionId)) return {};

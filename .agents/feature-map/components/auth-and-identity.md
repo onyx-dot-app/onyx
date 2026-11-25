@@ -253,7 +253,7 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
     `onyx:draft:craft:` or `onyx:chat:output-panel:v1:` (the chat's right panel
     width, `web/src/lib/chat/rightPanel.ts:CHAT_PANEL_STORAGE_PREFIX`),
     every `localStorage` key that starts with `onyx:draft:chat:` (the chat
-    composer's drafts) or `onyx:unseen-runs:v1` (the sidebar's unseen runs,
+    composer's drafts) and the tab's `onyx:unseen-runs:v1` (the sidebar's unseen runs,
     `web/src/lib/chat/runStatus.ts`), and clears the Craft thumbnail cache. New Craft browser storage must use the
     `onyx:craft:` prefix, or it survives logout ([[craft-frontend]],
     [[chat-frontend]]).

@@ -27,12 +27,13 @@ import {
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import {
-import { StopReason } from "@/app/app/services/streamingModels";
   fetchSettledChatSession,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import type { Message } from "@/app/app/types";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { StopReason } from "@/app/app/services/streamingModels";
 
 jest.mock("next/navigation", () => {
   const actual = jest.requireActual("next/navigation");
@@ -235,6 +236,47 @@ test.each([false, true])(
     }
   }
 );
+
+test("New Session leaves a pending first send in its original chat", async () => {
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  const creation = Promise.withResolvers<string>();
+  jest.mocked(createChatSession).mockReturnValueOnce(creation.promise);
+  jest.mocked(sendMessage).mockImplementationOnce(async function* () {
+    yield sentTurn;
+    yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+  });
+  const resetInputBar = jest.fn();
+  const { result } = renderHook(() => ({
+    position: useAppPosition(),
+    controller: useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: null,
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar,
+      restoreInputBar: jest.fn(),
+    }),
+  }));
+
+  await act(async () => {
+    const send = result.current.controller.onSubmit({
+      message: "Send before opening a fresh session",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+    result.current.position.openNewSession();
+    creation.resolve("session");
+    await send;
+  });
+
+  expect(sendMessage).toHaveBeenCalled();
+  expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+  expect(resetInputBar).not.toHaveBeenCalled();
+});
 
 test.each([
   { isNewSession: false, stop: true },

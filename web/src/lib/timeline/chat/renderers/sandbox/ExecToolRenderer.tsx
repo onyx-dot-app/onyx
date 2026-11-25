@@ -11,7 +11,10 @@ import {
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { stripAnsi } from "@/lib/sandbox/ansi";
-import { isInterruptInput } from "@/lib/timeline/chat/transformers";
+import {
+  isExpectedInterrupt,
+  isInterruptInput,
+} from "@/lib/timeline/chat/transformers";
 import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import {
   SandboxCallContent,
@@ -112,9 +115,10 @@ export function ExecToolRenderer({
   // can add lines; a call that was already done when shown stays at its top.
   const [followOutput] = useState(!isComplete);
   // The exit of a process this step stopped with Ctrl+C is expected.
-  const interrupted =
-    start.type === PacketType.WRITE_STDIN_START &&
-    isInterruptInput(start.chars);
+  const interrupted = isExpectedInterrupt(
+    end,
+    start.type === PacketType.WRITE_STDIN_START && isInterruptInput(start.chars)
+  );
   // Only a failure names its exit code.
   const exitCode =
     end !== null &&
@@ -179,8 +183,7 @@ export function ExecToolRenderer({
           <Text
             font="secondary-body"
             color={
-              end.completion === "canceled" ||
-              (interrupted && end.completion !== "deadline_exceeded")
+              end.completion === "canceled" || interrupted
                 ? "status-warning-05"
                 : "status-error-05"
             }

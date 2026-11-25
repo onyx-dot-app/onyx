@@ -140,6 +140,7 @@
 .opal-line[data-opal-line-weight="heavy"][data-opal-line-status="warning"] {
   @apply bg-status-warning-00;
 }
-.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="error"] {
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="error"],
+.opal-line[data-opal-line-flavour="card"][data-opal-line-weight="heavy"][data-opal-line-status="error"]:hover {
   @apply bg-status-error-00;
 }
