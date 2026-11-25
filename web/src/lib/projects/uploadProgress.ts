@@ -4,10 +4,13 @@ import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
 
 interface UploadProgressStore {
   progressByTempId: Readonly<Record<string, number>>;
+  /** Counts held uploads that settled, so a holder can update its files. */
+  heldSettled: number;
 }
 
 export const useUploadProgressStore = create<UploadProgressStore>(() => ({
   progressByTempId: {},
+  heldSettled: 0,
 }));
 
 /** One request uploads a batch of files, so its files share one controller. */
@@ -60,12 +63,19 @@ export function trackUpload(tempIds: string[]): {
     isCancelled: (tempId) => !batch.pending.has(tempId),
     finish: (uploaded = []) => {
       const uploadedByTempId = new Map(uploaded.map((f) => [f.temp_id, f]));
+      let settledHeld = false;
       tempIds.forEach((id) => {
         if (batchByTempId.get(id) === batch) batchByTempId.delete(id);
-        if (heldUploads.has(id))
+        if (heldUploads.has(id)) {
           heldUploads.set(id, uploadedByTempId.get(id) ?? null);
+          settledHeld = true;
+        }
       });
       clearProgress(tempIds);
+      if (settledHeld)
+        useUploadProgressStore.setState((state) => ({
+          heldSettled: state.heldSettled + 1,
+        }));
     },
   };
 }
@@ -101,9 +111,9 @@ export function releaseUploads(files: ProjectFile[]): ProjectFile[] {
     if (file.status !== UserFileStatus.UPLOADING || !file.temp_id)
       return [file];
     const result = heldUploads.get(file.temp_id);
+    if (result === undefined)
+      return batchByTempId.has(file.temp_id) ? [file] : [];
     heldUploads.delete(file.temp_id);
-    if (result === null) return [];
-    if (result) return [{ ...file, ...result }];
-    return batchByTempId.has(file.temp_id) ? [file] : [];
+    return result === null ? [] : [{ ...file, ...result }];
   });
 }
