@@ -519,7 +519,7 @@ async def query_metadata(
       next page. `group_by`: `source` or `owner` (with `count`).
       `content_contains` matches whole words or phrases in the text, title and
       metadata values; with the default settings, case and word form do not
-      matter. It does not search Salesforce. Each value takes at most 200
+      matter. It searches Salesforce only under public connectors. Each value takes at most 200
       characters, and a value of only common words (such as "the and") is an
       error. It is slow: use it only for an exhaustive list or count by
       content, add date, source or folder filters when you can, and order by

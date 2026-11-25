@@ -226,9 +226,10 @@ All filters in one call apply together. Dates use ISO 8601, such as `2026-06-01`
 A `*_before` date is not included in the range.
 
 For documents, `content_contains` matches whole words or phrases in the text, the title, and the metadata values.
-With the default settings, case and word forms (such as plurals) do not change the match. It does not search Salesforce.
-It is slower than the other filters, so add date, source, or folder filters when you can.
-Document lists with `content_contains` sort by date only, and `group_by` does not work with it.
+With the default settings, case and word forms (such as plurals) do not change the match.
+It searches Salesforce only under public connectors. It is slower than the other filters, so add date, source,
+or folder filters when you can. Document lists with `content_contains` sort by date only,
+and `group_by` does not work with it.
 
 - Each value can have at most 200 characters, and a filter can have at most 20 values. A value of only common words,
   such as `the and`, returns an error.
