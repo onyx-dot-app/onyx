@@ -702,7 +702,7 @@ class UserPreferences(Base):
     )
 
     paste_as_tile: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="false"
+        Boolean, nullable=False, default=True, server_default="true"
     )
     interrupt_on_send: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"

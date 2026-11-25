@@ -645,7 +645,7 @@ export default function ChatPreferencesSettings() {
           withLabel
         >
           <InputSwitch
-            checked={user?.preferences?.paste_as_tile ?? false}
+            checked={user?.preferences?.paste_as_tile ?? true}
             onCheckedChange={(checked) => {
               void updatePreferences(
                 { paste_as_tile: checked },
