@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -17,6 +16,9 @@ interface GraphQLFieldsProps {
   onChange: (draft: GraphQLConfig) => void;
   showErrors: boolean;
   disabled: boolean;
+  /** True while introspection runs; the parent holds it to block Save. */
+  loading: boolean;
+  onLoadingChange: (loading: boolean) => void;
 }
 
 /** The GraphQL form: an endpoint URL and a schema in SDL. */
@@ -25,13 +27,14 @@ export default function GraphQLFields({
   onChange,
   showErrors,
   disabled,
+  loading,
+  onLoadingChange,
 }: GraphQLFieldsProps) {
   const t = useTranslations("admin.integrations.add.graphql");
-  const [loading, setLoading] = useState(false);
   const busy = disabled || loading;
 
   async function introspect() {
-    setLoading(true);
+    onLoadingChange(true);
     try {
       const view = await introspectGraphQL(draft.endpoint_url);
       onChange({ ...draft, graphql_schema: view.graphql_schema });
@@ -41,7 +44,7 @@ export default function GraphQLFields({
         error instanceof Error ? error.message : t("introspect.failed")
       );
     } finally {
-      setLoading(false);
+      onLoadingChange(false);
     }
   }
 

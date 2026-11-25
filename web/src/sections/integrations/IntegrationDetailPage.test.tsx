@@ -383,6 +383,41 @@ test("resolves a relative server of a spec imported from a URL", async () => {
   );
 });
 
+test("blocks Save while a spec import runs", async () => {
+  let finishImport: (view: OpenApiConfigView) => void = () => undefined;
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": () =>
+      new Promise<OpenApiConfigView>((resolve) => {
+        finishImport = resolve;
+      }),
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  await u.type(
+    view.getByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://reports.example.com/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+  await waitFor(() => expect(save).toBeDisabled());
+
+  finishImport(OPENAPI_VIEW);
+  await waitFor(() => expect(save).toBeEnabled());
+});
+
 test("connects the organization account with an API key", async () => {
   const shared = makeDetail({
     auth_mode: "shared",

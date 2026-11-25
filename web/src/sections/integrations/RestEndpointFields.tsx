@@ -48,6 +48,9 @@ interface RestEndpointFieldsProps {
   lineErrors: EndpointLineError[];
   showErrors: boolean;
   disabled: boolean;
+  /** True while an import runs; the parent holds it to block Save. */
+  importing: boolean;
+  onImportingChange: (importing: boolean) => void;
 }
 
 export default function RestEndpointFields({
@@ -56,16 +59,17 @@ export default function RestEndpointFields({
   lineErrors,
   showErrors,
   disabled,
+  importing,
+  onImportingChange,
 }: RestEndpointFieldsProps) {
   const t = useTranslations("admin.integrations.add.rest");
   const [specUrl, setSpecUrl] = useState("");
-  const [importing, setImporting] = useState(false);
   const busy = disabled || importing;
 
   async function runImport(
     body: { openapi_document: string } | { spec_url: string }
   ) {
-    setImporting(true);
+    onImportingChange(true);
     try {
       const view = await importOpenApiSpec(body);
       const specUrl = "spec_url" in body ? body.spec_url : null;
@@ -77,7 +81,7 @@ export default function RestEndpointFields({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("import.failed"));
     } finally {
-      setImporting(false);
+      onImportingChange(false);
     }
   }
 

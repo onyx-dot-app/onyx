@@ -100,6 +100,8 @@ export default function IntegrationConfigurationTab({
   >({});
   const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A schema import or introspection in flight; Save waits for it.
+  const [loadingSchema, setLoadingSchema] = useState(false);
   const presets = useIntegrationPresets(integration.shape === "preset");
   const preset = presets.data?.find(
     (option) => option.id === integration.preset_id
@@ -327,6 +329,8 @@ export default function IntegrationConfigurationTab({
                   onChange={setGraphql}
                   showErrors={showErrors}
                   disabled={disabled}
+                  loading={loadingSchema}
+                  onLoadingChange={setLoadingSchema}
                 />
               ) : (
                 <RestEndpointFields
@@ -338,6 +342,8 @@ export default function IntegrationConfigurationTab({
                   lineErrors={lineErrors}
                   showErrors={showErrors}
                   disabled={disabled}
+                  importing={loadingSchema}
+                  onImportingChange={setLoadingSchema}
                 />
               )}
             </Section>
@@ -372,7 +378,10 @@ export default function IntegrationConfigurationTab({
             />
           </InputHorizontal>
           <Section flexDirection="row" justifyContent="end" height="auto">
-            <Button disabled={disabled} onClick={() => void save()}>
+            <Button
+              disabled={disabled || loadingSchema}
+              onClick={() => void save()}
+            >
               {busy ? t("saving") : t("save")}
             </Button>
           </Section>
