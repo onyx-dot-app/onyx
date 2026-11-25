@@ -121,7 +121,7 @@ def _load_content_first() -> ContentFirst | None:
 CONTENT_FIRST = _load_content_first()
 
 
-def content_filter_is_available() -> bool:
+def _content_filter_is_available() -> bool:
     """Whether this deployment can match document content: the document index
     is on, the filter is not turned off, and the setting is valid."""
     return (
@@ -129,6 +129,9 @@ def content_filter_is_available() -> bool:
         and not DISABLE_POSTGRES_QUERY_CONTENT_FILTER
         and CONTENT_FIRST is not None
     )
+
+
+CONTENT_FILTER_AVAILABLE = _content_filter_is_available()
 
 
 def _censoring_sources() -> set[DocumentSource]:

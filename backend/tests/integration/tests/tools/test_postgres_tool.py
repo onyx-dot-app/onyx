@@ -135,6 +135,7 @@ def test_postgres_tool_matches_document_content(
             api_key=api_key,
             document_id=f"pgtool-{tag}-{i}",
         )
+    DocumentManager.wait_until_searchable(contents, admin_user)
 
     content_filter: dict[str, str | bool] = {
         "table": "document",

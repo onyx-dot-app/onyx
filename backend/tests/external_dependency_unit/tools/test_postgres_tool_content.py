@@ -478,20 +478,29 @@ def test_rejects_unsupported_content_queries(content_env: ContentEnv) -> None:
     assert "no searchable words" in message
 
 
-@pytest.mark.parametrize(
-    "setting",
-    ["DISABLE_POSTGRES_QUERY_CONTENT_FILTER", "DISABLE_VECTOR_DB", "CONTENT_FIRST"],
-)
-def test_rejects_content_when_unavailable(
-    content_env: ContentEnv, setting: str
-) -> None:
-    # CONTENT_FIRST is None when POSTGRES_QUERY_CONTENT_FIRST is invalid.
-    value = None if setting == "CONTENT_FIRST" else True
-    with patch.object(content, setting, value):
+def test_rejects_content_when_unavailable(content_env: ContentEnv) -> None:
+    with patch.object(postgres_tool, "CONTENT_FILTER_AVAILABLE", False):
         message = _run_error(
             content_env.tool, table="document", content_contains=_PHRASE
         )
     assert "not available" in message
+
+
+@pytest.mark.parametrize(
+    "setting",
+    ["DISABLE_POSTGRES_QUERY_CONTENT_FILTER", "DISABLE_VECTOR_DB", "CONTENT_FIRST"],
+)
+def test_each_setting_turns_the_filter_off(setting: str) -> None:
+    # CONTENT_FIRST is None when POSTGRES_QUERY_CONTENT_FIRST is invalid.
+    value = None if setting == "CONTENT_FIRST" else True
+    with (
+        patch.object(content, "DISABLE_POSTGRES_QUERY_CONTENT_FILTER", False),
+        patch.object(content, "DISABLE_VECTOR_DB", False),
+        patch.object(content, "CONTENT_FIRST", content.ContentFirst.AUTO),
+    ):
+        assert content._content_filter_is_available()
+        with patch.object(content, setting, value):
+            assert not content._content_filter_is_available()
 
 
 def test_invalid_setting_turns_the_filter_off() -> None:

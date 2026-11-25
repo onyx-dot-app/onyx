@@ -74,11 +74,11 @@ from onyx.tools.models import (
 )
 from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.postgres.content import (
+    CONTENT_FILTER_AVAILABLE,
     MAX_COUNT,
     ContentCursor,
     ContentFilter,
     ContentPath,
-    content_filter_is_available,
     date_field_for_order,
 )
 from onyx.tools.tool_implementations.postgres.models import (
@@ -234,7 +234,7 @@ _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "created_after": _prop("string", "chat_session: ISO date lower bound."),
     "created_before": _prop("string", "chat_session: ISO date upper bound, exclusive."),
     "chat_session_id": _any_of_prop("string", "chat_message: only messages in this session (UUID)."),
-    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text. document: documents whose text contains this word or phrase (whole words, any case, word forms such as plurals match; the text includes the title and metadata; Salesforce is searched only under public connectors). Slow on documents: use it only when the user wants an exhaustive list or count by content, add date, source or folder filters when you can, and use search to answer questions about what documents say. Document listings with it order by date only."),
+    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text. document: documents whose text contains this word or phrase (whole words, any case, word forms such as plurals match; the text includes the title and metadata; Salesforce is searched only under public connectors; each indexed section of a document is matched on its own, so a phrase that crosses two sections can be missed). Slow on documents: use it only when the user wants an exhaustive list or count by content, add date, source or folder filters when you can, and use search to answer questions about what documents say. Document listings with it order by date only."),
     "message_type": _prop("string", "chat_message: filter by author.", ["user", "assistant"]),
     "sent_after": _prop("string", "chat_message: ISO date lower bound."),
     "sent_before": _prop("string", "chat_message: ISO date upper bound, exclusive."),
@@ -338,7 +338,7 @@ def _parse_any_of(field: str, value: Any) -> list[Any]:
 def _validate_document_content_filter(
     phrases: list[str], group_by: str | None, order_by: DocumentOrder
 ) -> None:
-    if not content_filter_is_available():
+    if not CONTENT_FILTER_AVAILABLE:
         raise _reject(
             "'content_contains' is not available for documents on this "
             "deployment. Use search to find documents by what they say."
