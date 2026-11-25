@@ -9,7 +9,36 @@ import { cn } from "@opal/utils";
 // loaded image) across renders.
 const FAVICON_ICONS = new Map<string, IconFunctionComponent>();
 
-const PRIVATE_SUFFIXES = [".local", ".internal", ".lan", ".home", ".corp"];
+const PRIVATE_SUFFIXES = [
+  ".local",
+  ".internal",
+  ".lan",
+  ".home",
+  ".home.arpa",
+  ".corp",
+];
+
+/** Whether four IPv4 octets are loopback, private or link-local. */
+function isPrivateIpv4([a = 0, b = 0]: number[]): boolean {
+  return (
+    a === 10 ||
+    a === 127 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254)
+  );
+}
+
+/** The IPv4 octets of an IPv4-mapped IPv6 address (`::ffff:a00:1`). */
+function mappedIpv4(name: string): number[] | null {
+  const dotted = /^::ffff:(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(name);
+  if (dotted) return dotted.slice(1).map(Number);
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(name);
+  if (!hex) return null;
+  const high = parseInt(hex[1] ?? "0", 16);
+  const low = parseInt(hex[2] ?? "0", 16);
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff];
+}
 
 /**
  * Whether a host is private: a lookup in Google's favicon service would
@@ -23,21 +52,22 @@ function isPrivateHost(host: string): boolean {
     .replace(/^\[|\]$/g, "")
     .replace(/\.+$/, "");
   if (name === "localhost" || name.endsWith(".localhost")) return true;
-  if (PRIVATE_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
+  if (
+    PRIVATE_SUFFIXES.some(
+      (suffix) => name === suffix.slice(1) || name.endsWith(suffix)
+    )
+  )
+    return true;
   if (name.includes(":")) {
+    // An IPv4-mapped address is private when its IPv4 address is.
+    const mapped = mappedIpv4(name);
+    if (mapped) return isPrivateIpv4(mapped);
     // IPv6: loopback, unique local (fc00::/7) and link-local (fe80::/10).
     return name === "::1" || /^f[cd]/.test(name) || /^fe[89ab]/.test(name);
   }
   const octets = name.split(".").map(Number);
   if (octets.length === 4 && octets.every((octet) => Number.isInteger(octet))) {
-    const [a = 0, b = 0] = octets;
-    return (
-      a === 10 ||
-      a === 127 ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 169 && b === 254)
-    );
+    return isPrivateIpv4(octets);
   }
   // A name without a dot only resolves on a private network.
   return !name.includes(".");
