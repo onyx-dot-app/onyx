@@ -118,7 +118,7 @@ The chart takes `<version>` from `craft.hostAgent.rootfs.version` (default: the
 pinned `global.version`, else the pinned chart `appVersion`) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
 and the template tag move together (`onyx.craftFcRootfsVersion`). An explicit
 `craft.hostAgent.rootfs.image.tag` needs an explicit `configMap.SANDBOX_FC_TEMPLATE`
-(the chart fails without it); the operator keeps those two aligned. Without
+(without it, `firecracker` fails the render and `auto` renders no Firecracker parts); the operator keeps those two aligned. Without
 `existingSecret` values, the chart makes the agent mTLS CA and certificates and
 keeps them on upgrade with `lookup` (`deployment/helm/charts/onyx/templates/craft-fc-host-agent.yaml`).
 The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with
