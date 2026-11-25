@@ -295,8 +295,12 @@ class ApiTool(Tool):
                 error=error_info,
             ),
             content=content,
-            is_error=not response.ok,
+            is_error=not response.ok or self._failed(tool_result),
         )
+
+    def _failed(self, tool_result: CustomToolUserFileSnapshot | JsonValue) -> bool:  # noqa: ARG002
+        """Whether a response with a success status reports a failure."""
+        return False
 
 
 class CustomTool(ApiTool):

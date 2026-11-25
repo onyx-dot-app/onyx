@@ -19,6 +19,10 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
     validate_custom_tool_url,
 )
+from onyx.tools.tool_implementations.custom.graphql_tool import (
+    GraphQLTool,
+    parse_graphql_schema,
+)
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
     validate_openapi_schema,
@@ -619,6 +623,51 @@ def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> No
         assert isinstance(result, ToolResult)
     assert result.is_error is (status_code >= 400)
     assert "upstream response" in result.text
+
+
+@pytest.mark.parametrize(
+    ("body", "is_error"),
+    [
+        ({"data": {"close": {"id": "7"}}}, False),
+        ({"data": {"close": None}, "errors": [{"message": "not allowed"}]}, True),
+    ],
+)
+def test_a_graphql_response_with_errors_is_an_error(
+    body: dict[str, Any], is_error: bool
+) -> None:
+    tool = GraphQLTool(
+        integration_id=1,
+        action_key="mutation.close",
+        schema=parse_graphql_schema(
+            "type T { id: ID! }\n"
+            "type Query { t: T }\n"
+            "type Mutation { close(id: ID!): T }"
+        ),
+        endpoint_url="https://example.com/graphql",
+        headers={},
+        approval=None,
+    )
+    response = unittest.mock.MagicMock()
+    response.is_redirect = False
+    response.status_code = 200
+    response.headers = {"Content-Type": "application/json"}
+    response.iter_content.return_value = [json.dumps(body).encode()]
+    with patch(
+        "onyx.tools.tool_implementations.http_request.ssrf_safe_request",
+        return_value=response,
+    ):
+        result = tool.run(
+            ToolInvocation(
+                call_id="close",
+                arguments={"id": "7"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+    assert isinstance(result, ToolResult)
+    assert result.is_error is is_error
+    assert json.loads(result.text) == body
 
 
 @pytest.mark.parametrize(

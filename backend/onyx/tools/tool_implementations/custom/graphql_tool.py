@@ -33,7 +33,11 @@ from pydantic import JsonValue
 
 from onyx.external_apps.matching.graphql_parsing import operation_invocations
 from onyx.integrations.models import CallCredentials
-from onyx.tools.models import ToolApprovalScope, ToolCallException
+from onyx.tools.models import (
+    CustomToolUserFileSnapshot,
+    ToolApprovalScope,
+    ToolCallException,
+)
 from onyx.tools.tool_implementations.custom.custom_tool import ApiTool
 from onyx.tools.tool_name import custom_tool_name
 
@@ -241,3 +245,8 @@ class GraphQLTool(ApiTool):
                 llm_facing_message=f"The {self._name} call is not valid: {e}",
             ) from e
         return "POST", self._base_url, body
+
+    def _failed(self, tool_result: CustomToolUserFileSnapshot | JsonValue) -> bool:
+        """A GraphQL server reports a failed field with status 200 and an
+        ``errors`` list. The result keeps any partial ``data``."""
+        return isinstance(tool_result, dict) and bool(tool_result.get("errors"))
