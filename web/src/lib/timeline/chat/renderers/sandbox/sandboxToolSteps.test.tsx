@@ -442,6 +442,59 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
   }
 });
 
+test("a patch shows its line counts in the header, and a failed one does not", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const rejected = at({ turn_index: 1, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [
+          { path: "new.py", change: "add", move_path: null },
+          { path: "old.py", change: "update", move_path: "moved.py" },
+        ],
+        error: null,
+      }),
+      applied(sectionEnd),
+      rejected({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
+      rejected({
+        type: PacketType.APPLY_PATCH_END,
+        files: [],
+        error: "Failed to find expected lines in old.py",
+      }),
+      rejected(sectionEnd),
+      ...answer(2),
+    ])
+  );
+  try {
+    await expandTimeline();
+    // The patch adds two lines and removes one. Only the applied step's
+    // header shows the total; each file's panel shows its own counts, in
+    // both steps.
+    expect(
+      screen.getAllByRole("group", { name: "2 additions, 1 deletions" })
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByRole("group", { name: "1 additions, 1 deletions" })
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("group", { name: "1 additions, 0 deletions" })
+    ).toHaveLength(2);
+    expect(screen.getAllByText("print('hi')").length).toBeGreaterThan(0);
+  } finally {
+    view.unmount();
+  }
+});
+
 function fileProgress(tool_name: FileToolName, paths: string[]): ObjTypes {
   return { type: PacketType.FILE_TOOL_PROGRESS, tool_name, paths };
 }

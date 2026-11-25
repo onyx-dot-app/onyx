@@ -13,6 +13,9 @@ import {
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { SandboxCallContent } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
 import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
+import { DiffBody } from "@/lib/timeline/components/bodies/DiffBody";
+import { DiffStat } from "@/lib/timeline/components/bodies/DiffStat";
+import { parseApplyPatch } from "@/lib/timeline/components/bodies/diffLines";
 import { useSandboxCallStatus } from "@/lib/sandbox/hooks";
 
 // git-style status letters for the changed files
@@ -50,7 +53,24 @@ export function ApplyPatchToolRenderer({
     }
     return { start, end, progress };
   }, [packets]);
+  const tRead = useTranslations("craft.toolCards.read");
   const patch = start?.patch ?? "";
+  const patchFiles = useMemo(
+    () =>
+      patch === ""
+        ? []
+        : parseApplyPatch(patch, (count) =>
+            tRead("moreLines.label", { count })
+          ),
+    [patch, tRead]
+  );
+  const totals = patchFiles.reduce(
+    (sum, file) => ({
+      added: sum.added + file.added,
+      removed: sum.removed + file.removed,
+    }),
+    { added: 0, removed: 0 }
+  );
   const { isComplete, error, stopped } = useSandboxCallStatus(
     packets,
     end,
@@ -110,15 +130,21 @@ export function ApplyPatchToolRenderer({
           .join("\n")
       : "";
 
-  // One panel: the patch as a diff, then the output band, which waits with a
+  // One panel: each file's diff, then the output band, which waits with a
   // loading shimmer while the patch applies, then lists the changed files or
   // shows the error.
   const content = (
     <SandboxCallContent renderType={renderType}>
+      {patchFiles.map((file, index) => (
+        <DiffBody
+          key={index}
+          title={stripBidiControls(file.path) || t("sandbox.patch.title")}
+          copyText={index === 0 ? patch : undefined}
+          lines={file.lines}
+        />
+      ))}
       <CommandBody
-        command={patch}
-        diff
-        title={t("sandbox.patch.title")}
+        command=""
         output={changedFiles}
         error={error ?? undefined}
         outputLoading={!isComplete}
@@ -134,6 +160,10 @@ export function ApplyPatchToolRenderer({
       // The live progress updates in place; only the end of the call swaps
       // the title.
       statusKey: liveProgress === null ? undefined : "progress",
+      headerAccessory:
+        error === null && !stopped ? (
+          <DiffStat added={totals.added} removed={totals.removed} />
+        ) : undefined,
       supportsCollapsible: true,
       // Nothing to open until the patch, its end or an error arrives; until
       // then the step shows a loading shimmer.

@@ -15086,6 +15086,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added} adiciones, {removed} eliminaciones"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# línea sin cambios} other {# líneas sin cambios}}"
         },

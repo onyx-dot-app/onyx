@@ -5,7 +5,7 @@ import { codeSpan, markdown } from "@opal/utils";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
-import DiffBody from "@/lib/timeline/craft/components/tool-cards/DiffBody";
+import { DiffBody } from "@/lib/timeline/components/bodies/DiffBody";
 import ReadBody from "@/lib/timeline/craft/components/tool-cards/ReadBody";
 import SearchBody from "@/lib/timeline/craft/components/tool-cards/SearchBody";
 import WebSearchBody from "@/lib/timeline/craft/components/tool-cards/WebSearchBody";
@@ -98,7 +98,13 @@ export function renderToolCallBody(toolCall: ToolCallState): ReactNode {
     case "execute":
       return <BashBody toolCall={toolCall} />;
     case "edit":
-      return <DiffBody toolCall={toolCall} />;
+      return (
+        <DiffBody
+          title={toolCall.description || ""}
+          oldText={toolCall.oldContent ?? ""}
+          newText={toolCall.newContent ?? ""}
+        />
+      );
     case "read":
       return <ReadBody toolCall={toolCall} />;
     case "search":
