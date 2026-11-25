@@ -57,6 +57,8 @@ export function SignInModeField({
       <InputSingleSelect
         placeholder={t("mode.title")}
         value={draft.authMode}
+        // A default makes a re-pick close the list instead of unselecting.
+        defaultOption="none"
         disabled={disabled}
         options={authModes.map((mode) => ({
           value: mode,
@@ -126,6 +128,7 @@ export function SignInMethodFields({
           <InputSingleSelect
             placeholder={t("method.title")}
             value={draft.authMethod ?? ""}
+            defaultOption={methods[0]}
             disabled={disabled}
             options={methods.map((method) => ({
               value: method,
@@ -250,6 +253,7 @@ export function SignInMethodFields({
               <InputSingleSelect
                 placeholder={t("oauth.providerMode.title")}
                 value={draft.providerMode}
+                defaultOption={providerModes[0]}
                 disabled={disabled}
                 options={providerModes.map((mode) => ({
                   value: mode,

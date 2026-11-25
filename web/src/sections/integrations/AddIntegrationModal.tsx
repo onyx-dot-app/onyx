@@ -703,6 +703,7 @@ export default function AddIntegrationModal({
                   <InputSingleSelect
                     placeholder={t("mcp.transport.title")}
                     value={transport}
+                    defaultOption="STREAMABLE_HTTP"
                     disabled={busy}
                     options={TRANSPORTS.map((value) => ({
                       value,
@@ -732,6 +733,7 @@ export default function AddIntegrationModal({
                   <InputSingleSelect
                     placeholder={t("owner.title")}
                     value={forOrganization ? "organization" : "personal"}
+                    defaultOption="personal"
                     disabled={busy}
                     options={[
                       { value: "personal", title: t("owner.personal") },

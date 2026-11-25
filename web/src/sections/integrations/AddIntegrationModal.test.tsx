@@ -135,6 +135,30 @@ describe("MCP server", () => {
     );
   });
 
+  test("re-picking the preselected sign-in closes the list", async () => {
+    mockProbe.mockResolvedValue(OAUTH_PROBE);
+    const { user } = open({ kind: "mcp_server" });
+    await fillConnect(
+      user,
+      "Docs",
+      add.mcp.url.title,
+      "https://mcp.example.com/mcp"
+    );
+    await screen.findByText(add.mcp.probe.oauth);
+
+    const mode = screen.getByRole("combobox", { name: copy.signIn.mode.title });
+    await user.click(mode);
+    await user.click(
+      await screen.findByRole("option", { name: copy.signIn.mode.individual })
+    );
+
+    // An open list covers the Advanced toggle below it.
+    await waitFor(() =>
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
+    );
+    expect(mode).toHaveValue(copy.signIn.mode.individual);
+  });
+
   test("a server with no detected transport does not keep the last one", async () => {
     mockProbe.mockResolvedValueOnce(OAUTH_PROBE).mockResolvedValueOnce({
       kind: "unreachable",
