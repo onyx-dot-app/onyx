@@ -21,9 +21,8 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: configMap values MAGIC_LINK_ENABLED and MAGIC_LINK_TTL_SECONDS
-        turn on sign-in with a link sent by email and set how long a link works.
-        Empty keeps it off. Sign-in links are not copied to
+      description: configMap value MAGIC_LINK_ENABLED turns on sign-in with a
+        link sent by email. Empty keeps it off. Sign-in links are not copied to
         EMAIL_ARCHIVE_BCC_ADDRESSES.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`

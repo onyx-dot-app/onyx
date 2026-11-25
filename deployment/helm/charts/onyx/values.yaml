@@ -1903,8 +1903,6 @@ configMap:
   EMAIL_ARCHIVE_BCC_ADDRESSES: ""
   # "true" turns on sign-in with a link sent by email. Needs the SMTP settings above.
   MAGIC_LINK_ENABLED: ""
-  # How long a sign-in link works, in seconds. Defaults to 900.
-  MAGIC_LINK_TTL_SECONDS: ""
   # External S3 configuration
   S3_ENDPOINT_URL: ""  # ignored while objectStore or minio is enabled
   S3_FILE_STORE_BUCKET_NAME: ""
