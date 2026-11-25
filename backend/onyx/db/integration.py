@@ -1,8 +1,20 @@
+import json
 from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    Text,
+    and_,
+    cast,
+    delete,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import (
@@ -107,12 +119,28 @@ def list_enabled_openapi_documents(
     db_session: Session, integration_id: int | None = None
 ) -> list[tuple[int, str | None]]:
     """``(integration_id, openapi_document)`` of each enabled REST app, or of
-    only ``integration_id``."""
+    only ``integration_id``. See ``_rest_app_from_tool`` for an app with no
+    ``api_app`` row."""
     return list(
         db_session.execute(
-            select(Integration.id, ApiApp.openapi_document)
-            .join(ApiApp, ApiApp.id == Integration.api_app_id)
-            .where(_enabled(integration_id), ApiApp.api_type == ApiAppType.REST)
+            select(
+                Integration.id,
+                func.coalesce(
+                    ApiApp.openapi_document, cast(Tool.openapi_schema, Text)
+                ),
+            )
+            .outerjoin(ApiApp, ApiApp.id == Integration.api_app_id)
+            .outerjoin(Tool, Tool.id == Integration.tool_id)
+            .where(
+                _enabled(integration_id),
+                or_(
+                    ApiApp.api_type == ApiAppType.REST,
+                    and_(
+                        Integration.api_app_id.is_(None),
+                        Tool.openapi_schema.is_not(None),
+                    ),
+                ),
+            )
             .order_by(Integration.id)
         ).tuples()
     )
@@ -161,13 +189,48 @@ def get_openapi_tool_for_integration(
     )
 
 
+def _rest_app_from_tool(openapi_schema: dict[str, Any]) -> ApiApp:
+    """An unsaved REST app from the tool row. During a rolling deploy an
+    older server writes an OpenAPI app with only its tool row; the next spec
+    save writes its ``api_app`` row."""
+    try:
+        base_url = openapi_to_url(openapi_schema)
+    except ValueError:
+        base_url = ""
+    return ApiApp(
+        api_type=ApiAppType.REST,
+        base_url=base_url,
+        openapi_document=json.dumps(openapi_schema),
+    )
+
+
+def list_api_apps_by_integration(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, ApiApp]:
+    """The ``api_app`` row of each integration that has one, or the app that
+    ``_rest_app_from_tool`` makes."""
+    if not integration_ids:
+        return {}
+    rows = db_session.execute(
+        select(Integration.id, ApiApp, Tool.openapi_schema)
+        .outerjoin(ApiApp, ApiApp.id == Integration.api_app_id)
+        .outerjoin(Tool, Tool.id == Integration.tool_id)
+        .where(Integration.id.in_(integration_ids))
+    ).tuples()
+    apps: dict[int, ApiApp] = {}
+    for integration_id, app, openapi_schema in rows:
+        if app is not None:
+            apps[integration_id] = app
+        elif openapi_schema is not None:
+            apps[integration_id] = _rest_app_from_tool(openapi_schema)
+    return apps
+
+
 def get_api_app_for_integration(
     integration_id: int, db_session: Session
 ) -> ApiApp | None:
-    return db_session.scalar(
-        select(ApiApp)
-        .join(Integration, Integration.api_app_id == ApiApp.id)
-        .where(Integration.id == integration_id)
+    return list_api_apps_by_integration([integration_id], db_session).get(
+        integration_id
     )
 
 
@@ -289,23 +352,6 @@ def list_integration_actions_by_id(
     ):
         actions[action.integration_id].append(action)
     return actions
-
-
-def list_api_apps_by_integration(
-    integration_ids: Collection[int], db_session: Session
-) -> dict[int, ApiApp]:
-    """The ``api_app`` row of each integration that has one."""
-    if not integration_ids:
-        return {}
-    return dict(
-        db_session.execute(
-            select(Integration.id, ApiApp)
-            .join(ApiApp, ApiApp.id == Integration.api_app_id)
-            .where(Integration.id.in_(integration_ids))
-        )
-        .tuples()
-        .all()
-    )
 
 
 def list_external_apps_by_integration(

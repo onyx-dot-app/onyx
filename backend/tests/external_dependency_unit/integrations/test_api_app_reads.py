@@ -1,5 +1,7 @@
 """The readers of an OpenAPI integration's definition read the ``api_app``
-row, not the ``tool`` row that the dual write also keeps."""
+row, not the ``tool`` row that the dual write also keeps. With no ``api_app``
+row, as an older server writes during a rolling deploy, they read the tool
+row."""
 
 import json
 from typing import Any
@@ -7,11 +9,11 @@ from uuid import uuid4
 
 import pytest
 import yaml
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IntegrationAuthMode, PluginInstallationPolicy
-from onyx.db.integration import list_integration_actions
+from onyx.db.integration import get_api_app_for_integration, list_integration_actions
 from onyx.db.models import ApiApp, Integration, Tool, User
 from onyx.integrations.chat_tools import build_integration_chat_tools
 from onyx.integrations.kinds.api import sync_integration_actions__no_commit
@@ -20,6 +22,7 @@ from onyx.sandbox_proxy.usable_integrations import load_match_targets
 from onyx.server.features.integrations import admin_api
 from onyx.server.features.integrations.models import (
     IntegrationCreate,
+    IntegrationUpdate,
     OpenApiConfigInput,
     OpenApiConfigView,
 )
@@ -116,3 +119,65 @@ def test_readers_use_the_api_app_document(
 
     snapshot = tool_api.get_custom_tool(tool_id, db_session, admin)
     assert snapshot.definition == API_APP_SPEC
+
+
+def test_an_app_with_only_its_tool_row_reads_and_saves(
+    db_session: Session, admin: User
+) -> None:
+    detail = admin_api.create_integration(
+        IntegrationCreate(
+            name=f"items-{uuid4().hex[:8]}",
+            auth_mode=IntegrationAuthMode.NONE,
+            config=OpenApiConfigInput(openapi_document=json.dumps(TOOL_ROW_SPEC)),
+        ),
+        admin,
+        db_session,
+    )
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None and integration.api_app_id is not None
+    api_app_id = integration.api_app_id
+    integration.api_app_id = None
+    db_session.flush()
+    db_session.execute(delete(ApiApp).where(ApiApp.id == api_app_id))
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    db_session.commit()
+
+    config = admin_api.get_integration_admin(detail.id, admin, db_session).config
+    assert isinstance(config, OpenApiConfigView)
+    assert parse_openapi_document(config.openapi_document) == TOOL_ROW_SPEC
+    assert config.base_url == "https://tool-row.example.com/v1"
+
+    tools = build_integration_chat_tools(
+        db_session,
+        admin,
+        IntegrationChatRequest(
+            persona_id=7,
+            integration_links=[
+                IntegrationLinkConfiguration(
+                    integration_id=detail.id, action_settings=ActionSettings()
+                )
+            ],
+            approval_mode=ApprovalMode.INTERACTIVE,
+        ),
+    )
+    assert [tool._base_url for tool in tools if isinstance(tool, CustomTool)] == [
+        "https://tool-row.example.com/v1"
+    ]
+    (target,) = load_match_targets(db_session, detail.id)
+    assert target.endpoint is not None
+    assert target.endpoint.host == "tool-row.example.com"
+
+    # A save writes the missing row.
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            config=OpenApiConfigInput(openapi_document=json.dumps(API_APP_SPEC))
+        ),
+        admin,
+        db_session,
+    )
+    saved = get_api_app_for_integration(detail.id, db_session)
+    assert saved is not None and saved.id is not None
+    assert parse_openapi_document(saved.openapi_document or "") == API_APP_SPEC

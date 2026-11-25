@@ -204,7 +204,7 @@ class ApiKindHandler(IntegrationKindHandler):
     def _openapi_config(
         self, integration: Integration, db_session: Session
     ) -> ApiConfig | None:
-        if integration.api_app_id is None:
+        if integration.api_app_id is None and integration.tool_id is None:
             return None
         app = get_api_app_for_integration(integration.id, db_session)
         return self.config_from_api_app(app) if app is not None else None
@@ -355,9 +355,7 @@ class ApiKindHandler(IntegrationKindHandler):
                 if action.key in keys
             ]
         if (
-            config.shape is not ApiShape.OPENAPI
-            or config.api_app_id is None
-            or config.openapi_spec is None
+            config.shape is not ApiShape.OPENAPI or config.openapi_spec is None
         ):
             return []
         keys = {action.key for action in actions}
