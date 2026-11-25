@@ -97,6 +97,10 @@ class FakeCache(CacheBackend):
         self.delete(key)
         return True
 
+    def delete_many(self, keys: Collection[str]) -> None:
+        for key in keys:
+            self.delete(key)
+
     def delete_prefix(self, prefix: str) -> None:
         if not prefix:
             raise ValueError("Cache deletion requires a nonempty prefix")
