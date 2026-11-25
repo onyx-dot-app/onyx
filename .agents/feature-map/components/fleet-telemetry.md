@@ -63,8 +63,11 @@ bounded deque. It takes no lock and does no I/O. A full queue drops the event.
 The daemon thread enrolls at `/v1/enroll` before its first batch, so startup
 never waits for the database or the network. The service reply settles each
 batch. The sender does not resend rejected events, and resends events the
-service could not store at most `_MAX_RETRIES` times. Each heartbeat carries
-the drop, reject and invalid counts.
+service could not store at most `_MAX_RETRIES` times. Events over the service's
+ingress budget (`retry` with code `customer_ingress_budget_exceeded`) are the
+exception: like a 429, they stay pending without using a retry. Backoff is
+jittered and waits at least `Retry-After`, capped at 300 seconds. Each heartbeat
+carries the drop, reject and invalid counts.
 
 **Emit points in application code.**
 - Query timing: `utils/fleet_query_telemetry.py:telemetry_chat` wraps the chat

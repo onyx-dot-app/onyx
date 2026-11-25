@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import re
 import threading
 import time
@@ -354,6 +355,8 @@ _FINAL_FLUSH_SECONDS: float = 5.0
 # The service asks to send an event again when it could not store it yet. The
 # sender sends such an event at most this many more times.
 _MAX_RETRIES: int = 3
+# The retry code for events whose customer is over the service's ingress budget.
+_BUDGET_EXCEEDED: str = "customer_ingress_budget_exceeded"
 # Short-lived processes wait at most this long at exit for their final delivery.
 EXIT_FLUSH_SECONDS: float = 2.0
 # Indexing counter deltas are summed per attempt and stage for this long.
@@ -700,6 +703,7 @@ class BoundedTelemetry:
             return False
         if not (self._pending or self._queue or self._stage_sums):
             return True
+        retry_after: float = 0.0
         try:
             if transport is None:
                 if self._session is None:
@@ -741,48 +745,66 @@ class BoundedTelemetry:
                     self.rejected += len(self._pending)
                     self.dropped += len(self._pending)
                     self._pending = []
+                # Sent with 429, and with a reply that marks events over budget.
+                retry_after = _retry_after_seconds(response.headers.get("Retry-After"))
                 if not response.ok:
                     raise RuntimeError("telemetry delivery failed")
                 result: Any = read_json_body(response, 65536)
         except Exception:
             # An outage keeps the batch and backs off.
-            self._back_off()
+            self._back_off(retry_after)
             return False
         counts: dict[str, Any] = result if isinstance(result, dict) else {}
-        retry: list[dict[str, Any]] = self._retry_events(counts.get("results"))
+        retry, throttled = self._retry_indexes(counts.get("results"))
         sent: Any = counts.get("accepted")
         rejected: Any = counts.get("rejected")
         sent = sent if type(sent) is int else len(self._pending) - len(retry)
         rejected = rejected if type(rejected) is int else 0
         self.sent += sent
         self.rejected += rejected
-        if retry and self._retries < _MAX_RETRIES:
+        # Events over the service's ingress budget wait like a 429 outage: they stay
+        # pending without using a retry. The pending batch bounds them.
+        keep: set[int] = set(throttled)
+        if retry - throttled and self._retries < _MAX_RETRIES:
             self._retries += 1
-            self.dropped += max(0, len(self._pending) - sent - len(retry))
-            self._pending = retry
-            self._back_off()
+            keep |= retry
+        if keep:
+            self.dropped += max(0, len(self._pending) - sent - len(keep))
+            self._pending = [
+                event for index, event in enumerate(self._pending) if index in keep
+            ]
+            self._back_off(retry_after)
             return False
         self.failures = 0
         self.dropped += max(0, len(self._pending) - sent)
         self._pending = []
         return True
 
-    def _back_off(self) -> None:
+    def _back_off(self, retry_after: float = 0.0) -> None:
         self.failures = min(self.failures + 1, 8)
-        self._blocked_until = time.monotonic() + min(300, 2**self.failures)
+        window: float = min(300, 2**self.failures)
+        # Jitter spreads the retries of processes that failed at the same time.
+        delay: float = window / 2 + random.uniform(0, window / 2)
+        self._blocked_until = time.monotonic() + max(delay, min(300.0, retry_after))
 
-    def _retry_events(self, results: Any) -> list[dict[str, Any]]:
-        """The events of the batch that the service asks to send again."""
+    def _retry_indexes(self, results: Any) -> tuple[set[int], set[int]]:
+        """The batch positions the service asks to send again, and the subset it could
+        not take because their customer was over its ingress budget."""
+        retry: set[int] = set()
+        throttled: set[int] = set()
         if not isinstance(results, list):
-            return []
-        indexes: set[int] = {
-            row["index"]
-            for row in results
-            if isinstance(row, dict)
-            and row.get("status") == "retry"
-            and type(row.get("index")) is int
-        }
-        return [event for index, event in enumerate(self._pending) if index in indexes]
+            return retry, throttled
+        for row in results:
+            if (
+                isinstance(row, dict)
+                and row.get("status") == "retry"
+                and type(row.get("index")) is int
+                and 0 <= row["index"] < len(self._pending)
+            ):
+                retry.add(row["index"])
+                if row.get("code") == _BUDGET_EXCEEDED:
+                    throttled.add(row["index"])
+        return retry, throttled
 
     def _enroll(self, transport: Any) -> None:
         """Register the deployment key. The service answers with this deployment's IDs."""
@@ -928,6 +950,16 @@ class BoundedTelemetry:
         ) and time.monotonic() < deadline:
             if not self.flush_once():
                 return
+
+
+def _retry_after_seconds(value: str | None) -> float:
+    """The delay of a `Retry-After` header in seconds. HTTP dates, and values that are
+    not a finite positive number, count as none."""
+    try:
+        seconds: float = float(value or 0)
+    except ValueError:
+        return 0.0
+    return seconds if math.isfinite(seconds) and seconds > 0 else 0.0
 
 
 def poll_due(previous: float | None, now: float, interval: float) -> bool:
