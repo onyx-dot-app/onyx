@@ -62,7 +62,7 @@ def test_only_a_shown_call_holds_its_command(shows: bool) -> None:
 
     assert holds == [approvals if shows else None]
     if shows:
-        approvals.end.assert_called_once_with(cancelled=False, exited=True)
+        approvals.end.assert_called_once_with(cancelled=False)
 
 
 @pytest.mark.parametrize(

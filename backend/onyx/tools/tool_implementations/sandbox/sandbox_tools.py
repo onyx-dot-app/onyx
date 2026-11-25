@@ -221,16 +221,10 @@ def _held_exec_result(
         chat_session_id=ref.session_id,
         update=invocation.update,
     )
-    exited = False
     try:
-        result = _exec_tool_result(start(approvals), invocation, max_chars)
-        exited = (
-            isinstance(result.details, SandboxExecResult)
-            and result.details.session_id is None
-        )
-        return result
+        return _exec_tool_result(start(approvals), invocation, max_chars)
     finally:
-        approvals.end(cancelled=invocation.cancellation.cancelled, exited=exited)
+        approvals.end(cancelled=invocation.cancellation.cancelled)
 
 
 def _exec_result(result: ExecCommandResult, max_chars: int) -> ToolResult:

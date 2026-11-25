@@ -11,8 +11,7 @@ which wakes the proxy. The call does not yield while a card waits (`holds`).
 
 When the last call that waits on the command ends, the command leaves the
 foreground and its requests that still wait end: rejected by the user on a
-Stop, expired otherwise. A command that exited drops its "approve for this
-command" grants. Each card that a call shows ends with its request's
+Stop, expired otherwise. Each card that a call shows ends with its request's
 outcome; the renderer closes the cards of a stopped call.
 
 Only a call that a client streams holds requests (`ToolContext.
@@ -151,7 +150,7 @@ class CommandApprovals:
             return False
         return bool(rows)
 
-    def end(self, *, cancelled: bool, exited: bool) -> None:
+    def end(self, *, cancelled: bool) -> None:
         """The call returned. When no other call waits on the command, it
         leaves the foreground and its requests that wait end."""
         self._stop.set()
@@ -168,7 +167,7 @@ class CommandApprovals:
             _waiting[command_id] -= 1
             if _waiting[command_id] == 0:
                 del _waiting[command_id]
-                ended = self._end_command(command_id, decision, exited=exited)
+                ended = self._end_command(command_id, decision)
         # Every card on screen ends with its request's outcome, also one that
         # the user decided after the watcher's last read.
         with self._lock:
@@ -200,17 +199,13 @@ class CommandApprovals:
         except Exception:
             logger.exception("command_approvals_report_failed command=%s", command_id)
 
-    def _end_command(
-        self, command_id: UUID, decision: ApprovalDecision, *, exited: bool
-    ) -> list[UUID]:
+    def _end_command(self, command_id: UUID, decision: ApprovalDecision) -> list[UUID]:
         """Take the command out of the foreground and end its requests that
         wait with `decision`; the IDs of the requests that it ended."""
         cache: CacheBackend | None = None
         try:
             cache = self._cache()
             approval_cache.clear_command_foreground(command_id, cache)
-            if exited:
-                approval_cache.drop_command_grants(command_id, cache)
         except Exception:
             logger.exception("command_foreground_clear_failed command=%s", command_id)
         ended: list[UUID] = []

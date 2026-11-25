@@ -17,7 +17,7 @@ ID, and two more keys:
   proxy holds an Ask request of the command only while it is set.
 * `approval:command:{command_id}:grant:{integration_id}:{action}` — one key
   per action that the user approved for the rest of the command. Plain keys,
-  not a set, so the TTL and the prefix delete apply on every cache backend.
+  not a set, so the TTL applies on every cache backend.
 """
 
 import asyncio
@@ -48,9 +48,8 @@ SESSION_GRANT_TTL_S = 60 * 60
 # The call that waits on a command renews the key each second; a lost API
 # process leaves it for this long.
 COMMAND_FOREGROUND_TTL_S = 60
-# A command grant applies only while the command is in the foreground, and the
-# call deletes it when the command exits. The TTL covers a command that is
-# never polled again; it matches the VM's command deadline.
+# A command grant applies only while the command is in the foreground, which
+# an exited command never is again. The TTL matches the VM's command deadline.
 COMMAND_GRANT_TTL_S = 4 * 60 * 60
 
 
@@ -201,12 +200,8 @@ def _command_foreground_key(command_id: UUID) -> str:
     return f"approval:command:{command_id}:foreground"
 
 
-def _command_grants_prefix(command_id: UUID) -> str:
-    return f"approval:command:{command_id}:grant:"
-
-
 def _command_grant_key(command_id: UUID, integration_id: int, action_type: str) -> str:
-    return f"{_command_grants_prefix(command_id)}{integration_id}:{action_type}"
+    return f"approval:command:{command_id}:grant:{integration_id}:{action_type}"
 
 
 def mark_command_foreground(
@@ -269,10 +264,6 @@ def command_grants_cover(
         for action_type in action_types
     }
     return bool(keys) and cache.exists_many(keys) == keys
-
-
-def drop_command_grants(command_id: UUID, cache: CacheBackend) -> None:
-    cache.delete_prefix(_command_grants_prefix(command_id))
 
 
 def pop_announcement(

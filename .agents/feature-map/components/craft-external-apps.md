@@ -389,7 +389,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     saves the grant, then scans the waiting rows: a request that misses the
     grant committed its row before that check, and two decisions never lock
     each other's rows. A grant applies only in the foreground, never to an
-    action that always asks, and is deleted when the command exits. The
+    action that always asks, and so ends when the command exits. The
     recheck before forwarding checks a COMMAND_GRANT row against the current
     policy, as a SESSION_GRANT row. Only a call whose `ToolContext.
     shows_command_approvals` is set holds: a root agent of a streamed turn

@@ -105,7 +105,7 @@ def chat(
     finally:
         for approvals in started:
             if not approvals._stop.is_set():
-                approvals.end(cancelled=False, exited=True)
+                approvals.end(cancelled=False)
         db_session.rollback()
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session.id))
         db_session.commit()
@@ -277,7 +277,7 @@ def test_a_held_request_shows_a_card_and_the_decision_wakes_the_gate(
         assert reports.outcomes()[str(held.approval_id)] == outcome
         assert not approvals.holds()
     finally:
-        approvals.end(cancelled=False, exited=True)
+        approvals.end(cancelled=False)
     assert not gate._command_in_foreground(ctx)
 
 
@@ -309,8 +309,10 @@ def test_approve_for_the_command_covers_the_same_action_until_the_command_exits(
             db_session, ctx, _matched(chat.integration_id, "issues.delete")
         )
     finally:
-        approvals.end(cancelled=False, exited=True)
-    assert not gate._session_grant(db_session, ctx, matched)
+        approvals.end(cancelled=False)
+    # The exited command is no longer in the foreground, so the gate refuses
+    # its Ask requests before it checks a grant.
+    assert not gate._command_in_foreground(ctx)
 
 
 def test_a_stop_refuses_the_requests_that_wait(
@@ -322,7 +324,7 @@ def test_a_stop_refuses_the_requests_that_wait(
     held = _HeldRequest(gate, ctx, _matched(chat.integration_id))
     reports.wait_for(lambda: bool(reports.cards()))
 
-    approvals.end(cancelled=True, exited=False)
+    approvals.end(cancelled=True)
 
     assert held.result() == ApprovalDecision.REJECTED
     assert reports.outcomes() == {str(held.approval_id): "cancelled"}
@@ -347,7 +349,7 @@ def test_the_end_reports_a_decision_that_the_watcher_did_not_read(
     approvals._thread.join(timeout=_WAIT_S)
 
     _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_ONCE)
-    approvals.end(cancelled=False, exited=True)
+    approvals.end(cancelled=False)
 
     assert held.result() == ApprovalDecision.APPROVED
     assert reports.outcomes() == {str(held.approval_id): "approved"}
@@ -371,14 +373,14 @@ def test_a_call_that_ends_leaves_the_requests_to_another_call_of_the_command(
         held = _HeldRequest(gate, ctx, _matched(chat.integration_id))
         reports.wait_for(lambda: bool(reports.cards()))
 
-        first.end(cancelled=False, exited=False)
+        first.end(cancelled=False)
 
         assert gate._command_in_foreground(ctx)
         assert second.holds()
         _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_ONCE)
         assert held.result() == ApprovalDecision.APPROVED
     finally:
-        second.end(cancelled=False, exited=True)
+        second.end(cancelled=False)
     assert not gate._command_in_foreground(ctx)
 
 
@@ -417,9 +419,7 @@ def test_a_call_that_begins_during_the_cleanup_marks_after_it(
     monkeypatch.setattr(
         command_approvals_tool.approval_cache, "mark_command_foreground", logged_mark
     )
-    ending = threading.Thread(
-        target=first.end, kwargs={"cancelled": False, "exited": False}
-    )
+    ending = threading.Thread(target=first.end, kwargs={"cancelled": False})
     ending.start()
     assert cleaning.wait(_WAIT_S)
     beginning = threading.Thread(target=second.begin, args=(command_id,))
@@ -469,7 +469,7 @@ def test_the_command_grants_together_cover_a_waiting_request(
         assert last.result() == ApprovalDecision.APPROVED
         assert both.result() == ApprovalDecision.APPROVED
     finally:
-        approvals.end(cancelled=False, exited=True)
+        approvals.end(cancelled=False)
 
 
 def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
@@ -503,7 +503,7 @@ def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
     try:
         _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_COMMAND)
     finally:
-        approval_cache.drop_command_grants(command_id, cache)
+        cache.delete_prefix(f"approval:command:{command_id}:")
 
     assert seen == [(True, ApprovalDecision.APPROVED)]
 
@@ -535,12 +535,11 @@ def test_a_command_grant_that_the_cache_cannot_save_approves_once(
     assert second_row is not None and second_row.decision is None
 
 
-def test_command_grants_expire_and_clear_on_the_postgres_cache(
+def test_command_grants_expire_on_the_postgres_cache(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """Every grant row has the grant TTL, and the command's exit deletes
-    them all."""
+    """Every grant row has the grant TTL."""
     cache = PostgresCacheBackend(POSTGRES_DEFAULT_SCHEMA)
     command_id = uuid4()
 
@@ -560,5 +559,4 @@ def test_command_grants_expire_and_clear_on_the_postgres_cache(
             command_id, 7, ["issues.create", "issues.delete"], cache
         )
     finally:
-        approval_cache.drop_command_grants(command_id, cache)
-    assert not {row.key for row in added} & set(rows())
+        cache.delete_prefix(f"approval:command:{command_id}:")

@@ -35,16 +35,6 @@ def test_a_grant_covers_its_actions_of_its_integration_only() -> None:
     assert not approval_cache.command_grants_cover(command, 7, [], cache)
 
 
-def test_a_grant_ends_when_the_command_exits() -> None:
-    cache = FakeCache()
-    command = uuid4()
-    approval_cache.grant_command_actions(command, 7, ["issues.create"], cache)
-
-    approval_cache.drop_command_grants(command, cache)
-
-    assert not approval_cache.command_grants_cover(command, 7, ["issues.create"], cache)
-
-
 def test_a_grant_covers_ask_actions_and_never_one_that_always_asks() -> None:
     assert approval_cache.command_grant_actions(
         [
