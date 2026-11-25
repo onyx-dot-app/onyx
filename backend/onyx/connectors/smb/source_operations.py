@@ -692,7 +692,7 @@ class SmbSourceOperations(SourceOperations):
                 connection.start_tls()
             connection.bind()
         except Exception:
-            connection.unbind()
+            _close_ldap(connection)
             raise
         return connection
 
@@ -708,10 +708,7 @@ class SmbSourceOperations(SourceOperations):
             connection: LdapConnection | None = self._ldap_connection
             self._ldap_connection = None
         if connection is not None:
-            try:
-                connection.unbind()
-            except LDAPException:
-                logger.debug("Closing the LDAP connection failed", exc_info=True)
+            _close_ldap(connection)
 
     def _map_ldap_error(self, error: Exception, target: str) -> Exception:
         host: str = self._credentials().ldap_host
@@ -936,6 +933,15 @@ class SmbSourceOperations(SourceOperations):
             if cookie is None:
                 return sids
         raise RuntimeError(f"The members of {group.sid} passed {_MAX_LDAP_PAGES} pages")
+
+
+def _close_ldap(connection: LdapConnection) -> None:
+    """Closes a connection that can already be broken. The failure that broke
+    it is the one to report."""
+    try:
+        connection.unbind()
+    except (LDAPException, OSError):
+        logger.debug("Closing the LDAP connection failed", exc_info=True)
 
 
 def _enable_keepalive(connection: Connection) -> None:
