@@ -50,6 +50,13 @@ export class ToolQuestionCard {
       .click();
   }
 
+  /** The hint that a multi-select question shows. */
+  async expectMultiSelectHint(): Promise<void> {
+    await expect(
+      this.card.getByText("Choose all that apply.", { exact: true })
+    ).toBeVisible();
+  }
+
   /** Toggles an option of a multi-select question. */
   async toggle(option: string): Promise<void> {
     await this.card

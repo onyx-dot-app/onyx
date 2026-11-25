@@ -203,9 +203,7 @@ test("the user chooses several options of a multi-select question", async ({
     await chatPage.inputBar.fill(`Post the update. ${nonce}`);
     await chatPage.inputBar.send();
     await questions.expectPending("Where should the update go?");
-    await expect(
-      questions.card.getByText("Choose all that apply.", { exact: true })
-    ).toBeVisible();
+    await questions.expectMultiSelectHint();
 
     await questions.toggle("Wiki");
     await questions.toggle("Slack");
