@@ -104,6 +104,7 @@ class SandboxDaemonErrorReason(str, Enum):
     LIMIT_EXCEEDED = "LIMIT_EXCEEDED"
     ARCHIVE_INVALID = "ARCHIVE_INVALID"
     EXECUTION_CAP_REACHED = "EXECUTION_CAP_REACHED"
+    BROWSER_START_FAILED = "BROWSER_START_FAILED"
 
 
 # The daemon will not accept this VM's key: nothing can use the VM.

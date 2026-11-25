@@ -60,7 +60,10 @@ This component owns:
   agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
   over mTLS and then vsock, without decoding it. The guest daemon runs as
   root, but it runs each command as the sandbox user (uid 1000,
-  `--command-user`). Session saves in this
+  `--command-user`). `BrowserStart` and `BrowserStop` run one headless
+  Chrome per VM, owned by the daemon outside the command cgroups, so it
+  outlives each command; clients attach to its DevTools (CDP) port.
+  Session saves in this
   runtime hold only `attachments/`, without dependencies
   (tar + zstd). The node agent moves the archive to and from object storage
   with presigned URLs from the API server.
