@@ -11980,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "Subagents working",
         "attachFilesButton": {
           "tooltip": "Attach Files"
         },
@@ -12033,9 +12032,6 @@
           "interruptLabel": "Interrupt",
           "waitHint": "Wait for the response to finish.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "Stop subagents"
         },
         "questionAttachmentsHint": "Answers to the agent's questions can't include files. Remove the files to answer."
       },
@@ -12183,8 +12179,7 @@
         "withdrawFailed": "Could not remove the pending message.",
         "loadFailed": "Could not load pending messages.",
         "alreadyAccepted": "This message was already accepted and is no longer pending.",
-        "interruptFailed": "Could not send this message now. It remains pending.",
-        "stopSubagentsFailed": "Could not stop the subagents."
+        "interruptFailed": "Could not send this message now. It remains pending."
       },
       "pendingToolApproval": {
         "toast": "Approve or reject the pending tool calls first."
@@ -13591,7 +13586,9 @@
           "stopped": "Stopped",
           "error": "Failed"
         },
-        "finished": "Previous agents"
+        "finished": "Previous agents",
+        "stop": "Stop {name}",
+        "stopFailed": "Could not stop the agent."
       },
       "files": {
         "title": "Files",

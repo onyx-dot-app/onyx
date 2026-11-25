@@ -18,7 +18,14 @@ const STATUS: ChatSessionStatus = {
 };
 
 function agent(path: string, status: ChatSubagent["status"]): ChatSubagent {
-  return { id: path, path, status, stopped_by_user: false };
+  return {
+    id: path,
+    path,
+    status,
+    stopped_by_user: false,
+    started_at: null,
+    duration_seconds: null,
+  };
 }
 
 function serve(agents: ChatSubagent[], status = STATUS) {
@@ -142,7 +149,7 @@ test("a request this client already decided leaves the card at once", async () =
   expect(screen.queryByText("Approve run_command")).toBeNull();
 });
 
-test("an agent that a streaming reply starts shows while the reply streams", async () => {
+test("an agent that a streaming reply starts opens the card once per run of agents", async () => {
   jest.useFakeTimers();
   try {
     let agents: ChatSubagent[] = [];
@@ -159,8 +166,13 @@ test("an agent that a streaming reply starts shows while the reply streams", asy
     agents = [agent("/root/poet", "running")];
     status = { ...STATUS, has_active_subagents: true };
     await act(async () => jest.advanceTimersByTimeAsync(5000));
-    act(() => screen.getByRole("button", { name: "Activity" }).click());
     expect(screen.getByText("poet")).toBeVisible();
+
+    // Closed while the agents run, the card stays closed
+    act(() => screen.getByRole("button", { name: "Activity" }).click());
+    agents = [agent("/root/poet", "running"), agent("/root/critic", "running")];
+    await act(async () => jest.advanceTimersByTimeAsync(5000));
+    expect(screen.queryByText("poet")).toBeNull();
   } finally {
     jest.useRealTimers();
   }
@@ -223,4 +235,59 @@ test("View all files shows the Files list even while a file is open", async () =
   const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
   expect(panel?.mode).not.toBe("closed");
   expect(panel?.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+});
+
+test("agents live when the chat loads leave the card closed", async () => {
+  serve([agent("/root/poet", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  renderActivity();
+  await screen.findByRole("button", { name: "Activity" });
+  await act(async () => undefined);
+  expect(screen.queryByText("poet")).toBeNull();
+});
+
+test("each live agent has its own Stop, which stops only that agent", async () => {
+  serve([agent("/root/poet", "running"), agent("/root/critic", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  renderActivity();
+  const trigger = await screen.findByRole("button", { name: "Activity" });
+  act(() => trigger.click());
+  const fetchSpy = jest.mocked(global.fetch);
+  await act(async () =>
+    screen.getByRole("button", { name: "Stop poet" }).click()
+  );
+
+  const stops = fetchSpy.mock.calls.filter(([url]) =>
+    String(url).endsWith("/stop-subagents")
+  );
+  expect(stops).toHaveLength(1);
+  expect(String(stops[0]?.[0])).toBe("/api/chat/chat-session/s/stop-subagents");
+  expect(stops[0]?.[1]?.method).toBe("POST");
+  expect(stops[0]?.[1]?.body).toBe(JSON.stringify({ agent_id: "/root/poet" }));
+  expect(screen.getByRole("button", { name: "Stop critic" })).toBeVisible();
+});
+
+test("a live agent shows its run time; a finished one its saved duration", async () => {
+  serve(
+    [
+      {
+        ...agent("/root/poet", "running"),
+        started_at: new Date(Date.now() - 65_000).toISOString(),
+      },
+      { ...agent("/root/researcher", "complete"), duration_seconds: 42 },
+    ],
+    { ...STATUS, has_active_subagents: true }
+  );
+  renderActivity();
+  const trigger = await screen.findByRole("button", { name: "Activity" });
+  act(() => trigger.click());
+  expect(await screen.findByText("1m 5s")).toBeVisible();
+  // A finished agent has no Stop
+  act(() => screen.getByRole("button", { name: /Previous agents/ }).click());
+  expect(screen.getByText("42s")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Stop researcher" })).toBeNull();
 });

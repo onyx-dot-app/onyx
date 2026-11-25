@@ -3212,6 +3212,32 @@ def agent_session_path(db_session: Session, agent: ChatSession) -> str:
     )
 
 
+def agent_subtree_ids(
+    db_session: Session, chat_session_id: UUID, agent_id: UUID
+) -> set[UUID]:
+    """The agent and the agents below it, or empty when the agent is not one
+    of the chat's agents below its root."""
+    ancestors = session_ancestors(db_session, [agent_id])
+    try:
+        chain = agent_ancestor_chain(agent_id, ancestors)
+    except ValueError:
+        return set()
+    if len(chain) < 2 or chain[-1].id != chat_session_id:
+        return set()
+    subtree = (
+        select(ChatSession.id)
+        .where(ChatSession.id == agent_id)
+        .cte("agent_subtree", recursive=True)
+    )
+    # UNION stops traversal if corrupt ancestry repeats a row.
+    subtree = subtree.union(
+        select(ChatSession.id)
+        .join(ChatMessage, ChatMessage.id == ChatSession.spawned_by_message_id)
+        .join(subtree, ChatMessage.chat_session_id == subtree.c.id)
+    )
+    return set(db_session.scalars(select(subtree.c.id)))
+
+
 def response_invocation(response: ChatMessage) -> ToolCall | None:
     """The tool call that started a child response; its question records it."""
     question = response.parent_message

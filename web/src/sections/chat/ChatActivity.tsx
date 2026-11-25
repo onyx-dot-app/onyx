@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, LineItemButton, Text } from "@opal/components";
@@ -16,11 +16,13 @@ import {
   SvgHelpCircle,
   SvgLoader,
   SvgPauseCircle,
+  SvgStop,
   SvgStopCircle,
   SvgXCircle,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
+import { formatDurationSeconds } from "@opal/time";
 import {
   useCurrentChatState,
   useCurrentMessageTree,
@@ -34,6 +36,7 @@ import {
   useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 import type { ChatSubagent } from "@/lib/chat/types";
+import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 
 function SpinningLoader({ className, ...props }: IconProps) {
   return (
@@ -72,16 +75,79 @@ function agentState(agent: ChatSubagent): keyof typeof STATUS_ICONS {
   return agent.status ?? "starting";
 }
 
+interface AgentRowProps {
+  agent: ChatSubagent;
+  onStop: (agentId: string) => Promise<void>;
+}
+
+/** One agent: its status, how long its run has worked, and a Stop while live. */
+function AgentRow({ agent, onStop }: AgentRowProps) {
+  const t = useTranslations("chat.activity.agents");
+  const state = agentState(agent);
+  const live = !isFinished(agent);
+  const name = agent.path.replace(/^\/root\//, "");
+  const parsed = agent.started_at ? Date.parse(agent.started_at) : NaN;
+  const startedAt = live && !Number.isNaN(parsed) ? parsed : undefined;
+  const elapsedSeconds = useStreamingDuration(live, startedAt);
+  // The server's clock can run ahead of the browser's
+  const seconds =
+    startedAt !== undefined
+      ? Math.max(1, elapsedSeconds)
+      : live
+        ? null
+        : agent.duration_seconds;
+  return (
+    <LineItemButton
+      presentational
+      icon={STATUS_ICONS[state]}
+      title={name}
+      titleMaxLines={1}
+      rightChildren={
+        <Section flexDirection="row" width="fit" height="fit" gap={0.5}>
+          {/* Plain text: a button label animates its changes, so each tick
+              would flash */}
+          {seconds !== null && (
+            <Text
+              font="secondary-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
+              {formatDurationSeconds(seconds)}
+            </Text>
+          )}
+          <Text
+            font="secondary-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
+            {t(`status.${state}`)}
+          </Text>
+          {live && (
+            <Button
+              icon={SvgStop}
+              prominence="tertiary"
+              size="xs"
+              tooltip={t("stop", { name })}
+              aria-label={t("stop", { name })}
+              onClick={() => void onStop(agent.id)}
+            />
+          )}
+        </Section>
+      }
+    />
+  );
+}
+
 interface ChatActivityProps {
   sessionId: string;
 }
 
 /**
  * The chat's activity card, toggled from its header: what waits for the user,
- * the background agents and their status, and the published files. It stays
- * open until its header button closes it, and shows only once the chat has any
- * of them. A waiting request scrolls to its card; files open in the right
- * panel. The card pins to the chat region's top end, under its header, so the
+ * the background agents with their status, run time and Stop, and the
+ * published files. Agents that start open it; it stays open until its header
+ * button closes it, and shows only once the chat has any of them. A waiting
+ * request scrolls to its card; files open in the right panel. The card pins to the chat region's top end, under its header, so the
  * header's buttons stay in place. With no output panel open and a workspace at
  * least 64rem wide, the chat's content narrows for it; otherwise it floats
  * over the chat's end.
@@ -106,29 +172,27 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
       ),
     [tree, localStatuses, localAnswers]
   );
-  const agents = useChatSubagents(sessionId, useCurrentChatState() !== "input");
+  const { agents, loaded, stopAgent } = useChatSubagents(
+    sessionId,
+    useCurrentChatState() !== "input"
+  );
   const files = usePublishedFiles("current");
   // Finished agents fold under one row, as their own list
   const [showFinished, setShowFinished] = useState(false);
   const finishedAgents = agents.filter(isFinished);
   const liveAgents = agents.filter((agent) => !isFinished(agent));
-  const agentRow = (agent: ChatSubagent) => {
-    const state = agentState(agent);
-    return (
-      <LineItemButton
-        key={agent.id}
-        presentational
-        icon={STATUS_ICONS[state]}
-        title={agent.path.replace(/^\/root\//, "")}
-        titleMaxLines={1}
-        rightChildren={
-          <Text font="secondary-body" color="text-03">
-            {t(`agents.status.${state}`)}
-          </Text>
-        }
-      />
-    );
-  };
+  const agentRow = (agent: ChatSubagent) => (
+    <AgentRow key={agent.id} agent={agent} onStop={stopAgent} />
+  );
+  // Agents that start while the chat shows open the card, once per run of
+  // agents. Agents already live when the chat loads do not.
+  const liveCount = loaded ? liveAgents.length : null;
+  const previousLiveCount = useRef<number | null>(null);
+  useEffect(() => {
+    if (liveCount === null) return;
+    if (previousLiveCount.current === 0 && liveCount > 0) setOpen(true);
+    previousLiveCount.current = liveCount;
+  }, [liveCount]);
   const activitySlot = useContext(AppWorkspaceElementsContext)?.activitySlot;
   // Beside a closed output panel, the chat makes room for the card
   const docked = !useRightPanelShown();

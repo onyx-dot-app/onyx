@@ -15,9 +15,12 @@ export function useStreamingDuration(
   isStreaming: boolean,
   startTime: number | undefined
 ): number {
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // A start in the past shows its time from the first render, not 0
+  const [elapsedSeconds, setElapsedSeconds] = useState(() =>
+    startTime ? Math.floor((Date.now() - startTime) / 1000) : 0
+  );
   const rafRef = useRef<number | null>(null);
-  const lastElapsedRef = useRef<number>(0);
+  const lastElapsedRef = useRef<number>(elapsedSeconds);
 
   useEffect(() => {
     if (!startTime) {

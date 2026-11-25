@@ -11980,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "Subagentes trabajando",
         "attachFilesButton": {
           "tooltip": "Adjuntar archivos"
         },
@@ -12033,9 +12032,6 @@
           "interruptLabel": "Interrumpir",
           "waitHint": "Espera a que termine la respuesta.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "Detener subagentes"
         },
         "questionAttachmentsHint": "Las respuestas a las preguntas del agente no pueden incluir archivos. Quita los archivos para responder."
       },
@@ -12183,8 +12179,7 @@
         "withdrawFailed": "No se pudo eliminar el mensaje pendiente.",
         "loadFailed": "No se pudieron cargar los mensajes pendientes.",
         "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",
-        "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente.",
-        "stopSubagentsFailed": "No se pudieron detener los subagentes."
+        "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente."
       },
       "pendingToolApproval": {
         "toast": "Primero aprueba o rechaza las llamadas a herramientas pendientes."
@@ -13591,7 +13586,9 @@
           "stopped": "Detenido",
           "error": "Falló"
         },
-        "finished": "Agentes anteriores"
+        "finished": "Agentes anteriores",
+        "stop": "Detener {name}",
+        "stopFailed": "No se pudo detener el agente."
       },
       "files": {
         "title": "Archivos",

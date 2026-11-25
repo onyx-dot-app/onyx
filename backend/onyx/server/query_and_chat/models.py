@@ -420,6 +420,11 @@ class QuestionAnswersResponse(BaseModel):
     continuation: CurrentStreamInfo | None = None
 
 
+class StopSubagentsRequest(BaseModel):
+    # Stops this agent and the agents below it; None stops every agent.
+    agent_id: UUID | None = None
+
+
 class StopSubagentsResponse(BaseModel):
     # The running agent runs that were interrupted.
     stopped_count: int
@@ -523,6 +528,10 @@ class ChatSubagent(BaseModel):
     # None before its first run starts
     status: RunStatus | None
     stopped_by_user: bool
+    # When its current or latest run started
+    started_at: datetime | None = None
+    # How long its latest run worked, once it finished and saved its duration
+    duration_seconds: float | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):

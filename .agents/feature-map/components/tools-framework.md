@@ -302,7 +302,9 @@ returns a tool error, and inbox work for an idle agent waits until a run finishe
 or leave the queue, and runs that agents start in `chat/run_store.py:ChatRunStore.reserve_run_id`,
 where inbox work checks capacity first. The `stop-subagents` route takes the chat lock, drops
 pending work for agents below the root (`db/chat_inputs.py:drop_agent_work__no_commit`), and stops
-the active background agents with the reason "user". A parent's Stop refuses its later spawns.
+the active background agents with the reason "user". A body `{ "agent_id": ... }` scopes all of it
+to that agent and the agents below it (`db/chat.py:agent_subtree_ids`); an agent outside the chat is
+404. A parent's Stop refuses its later spawns.
 A stopped run records `STOPPED_BY_USER`: `list_agents` shows "stopped by the user", and its
 result wakes no agent; the root reads it at its next step.
 The controls stay direct in code mode. Each child inherits code mode but owns

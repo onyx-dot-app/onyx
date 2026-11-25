@@ -1564,20 +1564,14 @@ test("a failed submission that ends after the composer closes goes to the chat's
   );
 });
 
-test("Stop subagents interrupts background work and refreshes the status", async () => {
-  let active = true;
+test("the composer shows no subagent status; the activity card holds it", async () => {
   fetchSpy.mockImplementation(async (url, init) => {
-    const path = String(url);
-    if (path.endsWith("/stop-subagents")) {
-      active = false;
-      return new Response(JSON.stringify(null));
-    }
-    if (path.endsWith("/status"))
+    if (String(url).endsWith("/status"))
       return new Response(
         JSON.stringify({
           is_processing: false,
           current_stream: null,
-          has_active_subagents: active,
+          has_active_subagents: true,
           has_startable_input: false,
           approvals_version: "1",
           latest_response_id: 2,
@@ -1585,22 +1579,17 @@ test("Stop subagents interrupts background work and refreshes the status", async
       );
     return new Response(JSON.stringify(init?.method ? null : pending));
   });
-  const user = setupUser();
   render(<ChatInput {...props("input")} initialMessage="" />);
-  const stop = await screen.findByRole("button", { name: "Stop subagents" });
-  // Screen readers announce the status text without the control inside it.
-  expect(screen.getByRole("status")).not.toContainElement(stop);
-  await user.click(stop);
   await waitFor(() =>
-    expect(screen.queryByTestId("subagent-activity")).not.toBeInTheDocument()
+    expect(
+      fetchSpy.mock.calls.some(([url]) => String(url).endsWith("/status"))
+    ).toBe(true)
   );
+  await act(async () => undefined);
+  expect(screen.queryByText("Subagents working")).not.toBeInTheDocument();
   expect(
-    fetchSpy.mock.calls.filter(
-      ([url, init]) =>
-        String(url) === "/api/chat/chat-session/session/stop-subagents" &&
-        init?.method === "POST"
-    )
-  ).toHaveLength(1);
+    screen.queryByRole("button", { name: "Stop subagents" })
+  ).not.toBeInTheDocument();
 });
 
 describe("approvals version in the status", () => {

@@ -384,6 +384,7 @@ and a run that an agent starts when the run store reserves it. Inbox work checks
 work over the limit becomes a failed run that its sender sees.
 `POST /chat/chat-session/{session_id}/stop-subagents` takes the chat lock, drops pending work for agents below the root,
 and stops every active background agent on the selected branch. The root turn and its foreground workers keep running.
+A body `{"agent_id": ...}` limits the drop and the stop to that agent and the agents below it.
 A parent's Stop blocks its later spawns. A stopped run records `RunFailureKind.STOPPED_BY_USER`:
 `list_agents` shows "stopped by the user", and its result wakes no agent; the root reads it as a notice at its next step.
 Return `ChildRunWait` to wait for results without holding a tool thread.

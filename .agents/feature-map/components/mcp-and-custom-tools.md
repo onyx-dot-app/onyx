@@ -850,7 +850,7 @@ default agent, is Blocked.
     (`ChatTurnExecution._publish`). Background agents keep running and keep
     their requests. A suspended response runs nothing, so a Stop finds no
     turn: the stop route only pauses the queue, and the requests still wait.
-    "Stop subagents"
+    Stop on an agent in the activity card
     (`server/query_and_chat/chat_backend.py:stop_chat_subagents`) sets each
     active agent's Stop key, saves the user's rejection of their rows, then
     cancels the live ones and ends the parked ones

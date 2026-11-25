@@ -47,6 +47,10 @@ export class ChatPage {
   readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
   readonly agentResultsDividers: Locator;
+  /** The chat's activity card, which opens when agents start. */
+  readonly activityPanel: Locator;
+  /** One Stop button per live agent in the activity card. */
+  readonly stopAgentButtons: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
@@ -89,6 +93,10 @@ export class ChatPage {
       "Subagent results received",
       { exact: true }
     );
+    this.activityPanel = page.getByRole("region", { name: "Activity" });
+    this.stopAgentButtons = this.activityPanel.getByRole("button", {
+      name: /^Stop /,
+    });
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
       name: "Scroll to bottom",
@@ -648,6 +656,13 @@ export class ChatPage {
 
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
+  /** Stops one live agent, by its name, from the activity card. */
+  async stopAgent(name: string): Promise<void> {
+    await this.activityPanel
+      .getByRole("button", { name: `Stop ${name}`, exact: true })
+      .click();
+  }
+
   async reload({ skills = false } = {}): Promise<void> {
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });

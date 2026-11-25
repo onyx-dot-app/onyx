@@ -110,6 +110,19 @@ export interface ChatSubagent {
   /** Null before its first run starts. */
   status: RunStatus | null;
   stopped_by_user: boolean;
+  /** When its current or latest run started, as an ISO date. */
+  started_at: string | null;
+  /** How long its latest run worked, once it finished, when known. */
+  duration_seconds: number | null;
+}
+
+/** The chat's background agents, as `useChatSubagents` gives them. */
+export interface ChatSubagents {
+  agents: ChatSubagent[];
+  /** The first list has loaded. */
+  loaded: boolean;
+  /** Stops the agent and the agents below it. */
+  stopAgent: (agentId: string) => Promise<void>;
 }
 
 export interface ChatSessionQueue {
@@ -119,7 +132,6 @@ export interface ChatSessionQueue {
   error: string | null;
   /** A pending-message request is in flight. */
   busy: boolean;
-  hasActiveSubagents: boolean;
   needsResponseSelection: boolean;
   /**
    * A queued or interrupting message's turn starts as Deep Research when
@@ -134,8 +146,6 @@ export interface ChatSessionQueue {
   ) => Promise<boolean>;
   withdraw: (id: string) => Promise<PendingChatMessage | null>;
   interrupt: (id: string) => Promise<void>;
-  /** Interrupts every running subagent on the selected branch. */
-  stopSubagents: () => Promise<void>;
 }
 
 /** The card's answers to a question request's questions, or text that the
