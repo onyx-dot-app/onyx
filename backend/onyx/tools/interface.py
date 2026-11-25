@@ -426,11 +426,14 @@ def tool_definition_from_arguments(
     such as a mapping, is an error too, because strict mode requires every
     object to be closed."""
     schema = arguments.model_json_schema()
-    # Titles repeat the property names; leave them out of every request.
-    schema.pop("title", None)
+    # Titles repeat the names, and a model's docstring is for developers;
+    # leave both out of the arguments model and its nested models.
+    for model_schema in (schema, *schema.get("$defs", {}).values()):
+        model_schema.pop("title", None)
+        model_schema.pop("description", None)
+        for field_schema in model_schema.get("properties", {}).values():
+            field_schema.pop("title", None)
     properties = schema["properties"]
-    for field_schema in properties.values():
-        field_schema.pop("title", None)
     if strict:
         if "$defs" in schema:
             raise ValueError(

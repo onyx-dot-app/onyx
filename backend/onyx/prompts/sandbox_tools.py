@@ -141,15 +141,16 @@ Usage:
 - Publishing the same path again adds a new version of that file; earlier cards keep their version.
 - Do not paste the contents of a published file into your reply.
 - Do not tell the user that a file is available unless this tool succeeded.
-- Files published earlier, in this chat and in the user's other chats, can be found and downloaded with the artifact tools.
+- Files published earlier, in this chat and in the user's other chats, can be found and downloaded with the library tools.
 """
 
-ARTIFACTS_LIST_DESCRIPTION = """Lists the files that were published with publish_files in the user's chats, this chat included: the newest version of each file, most recently published first.
+LIBRARY_LIST_DESCRIPTION = """Lists the files that were published with publish_files in the user's chats, this chat included: the newest version of each file. By default, the most recently published come first.
 
 Usage:
-- `query` finds text in the file name, the file's title or the chat's title, in any case. `chat_id` lists the files of one chat.
-- Each entry has the file ID to download, the path relative to its chat's working directory, and its chat. A version over 1 means that older versions exist.
-- When more files exist, the result has a `next_cursor`. Send it with the same `query` and `chat_id` to get the next, older files.
+- `sort` orders by first publish (created_at), latest publish (modified_at), file name or size; `sort_order` is asc or desc.
+- `filters` keeps files by publish time, by extension, or by category. `chat_id` lists the files of one chat. `query` finds text in the file name, the file's title or the chat's title, in any case.
+- Each entry has the file's `library_file_id`, which stays the same across versions, and the `file_id` of its newest version, the path relative to its chat's working directory, and its chat. A version_number over 1 means that older versions exist.
+- When more files exist, the result has a `next_cursor`. Send it with the same other arguments to get the next page.
 """
 
 ARTIFACTS_DOWNLOAD_DESCRIPTION = f"""Copies a published file from the user's chats into this chat's working directory, at {ARTIFACT_FILES_DIR}/<short file ID>-<name>, and returns that path. The call ends when the copy is done.
