@@ -9,7 +9,7 @@ published file asks (ARTIFACTS_DELETE_APPROVAL).
 """
 
 import posixpath
-from collections.abc import Callable, Generator, Hashable, Sequence
+from collections.abc import Callable, Generator, Hashable, Mapping, Sequence
 from contextlib import closing
 from functools import partial
 from typing import Literal
@@ -1338,16 +1338,20 @@ class LoadSkillTool(SandboxTool):
         )
 
 
-def sandbox_tools_for_model(family: ToolFamily) -> tuple[type[SandboxTool], ...]:
-    """The sandbox tools of a chat turn whose model gets the tools of
-    `family`, in the order the prompt names them. Claude models get the tools
-    they work with: edit and write for files, and the artifact tool for
-    published files. The others get apply_patch and the library tools. No
-    turn gets both sets. The turn builds them, and its prompt and token
-    estimate name them."""
-    if family is ToolFamily.CLAUDE:
-        return (ExecCommandTool, WriteStdinTool, EditTool, WriteTool, ArtifactTool)
-    return (
+# The sandbox tools of a chat turn by the tool family of its model, in the
+# order the prompt names them. Claude models get the tools they work with:
+# edit and write for files, and the artifact tool for published files. The
+# others get apply_patch and the library tools. No turn gets both sets. The
+# turn builds them, and its prompt and token estimate name them.
+SANDBOX_TOOLS: Mapping[ToolFamily, tuple[type[SandboxTool], ...]] = {
+    ToolFamily.CLAUDE: (
+        ExecCommandTool,
+        WriteStdinTool,
+        EditTool,
+        WriteTool,
+        ArtifactTool,
+    ),
+    ToolFamily.OPENAI: (
         ExecCommandTool,
         WriteStdinTool,
         ApplyPatchTool,
@@ -1359,7 +1363,8 @@ def sandbox_tools_for_model(family: ToolFamily) -> tuple[type[SandboxTool], ...]
         LibraryReplaceLibraryFileTool,
         LibraryManageLibraryTool,
         LibrarySearchTool,
-    )
+    ),
+}
 
 
 def sandbox_guidance(

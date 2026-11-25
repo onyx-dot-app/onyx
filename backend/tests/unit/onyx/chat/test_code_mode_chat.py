@@ -77,10 +77,10 @@ from onyx.tools.tool_implementations.code_mode.shapes import (
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     ApplyPatchTool,
     ExecCommandTool,
     WriteStdinTool,
-    sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -394,7 +394,7 @@ def test_the_token_reservation_counts_code_mode_guidance() -> None:
         "base",
         include_all_guidance=True,
         include_user_info=False,
-        all_guidance_sandbox_tools=sandbox_tools_for_model(ToolFamily.OPENAI),
+        all_guidance_sandbox_tools=SANDBOX_TOOLS[ToolFamily.OPENAI],
     )
     assert CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME) in reserved
     assert "## Sandbox" in reserved
@@ -721,7 +721,7 @@ def test_the_token_estimate_names_the_model_s_sandbox_tools(
         persona_system_prompt="",
         base_system_prompt="base",
         token_counter=count,
-        sandbox_tools=sandbox_tools_for_model(family),
+        sandbox_tools=SANDBOX_TOOLS[family],
     )
     [estimate] = prompts
     assert all(name in estimate for name in named)

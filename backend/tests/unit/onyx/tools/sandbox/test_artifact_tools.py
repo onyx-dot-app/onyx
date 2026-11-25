@@ -64,6 +64,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     parse_artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     ApplyPatchTool,
     ArtifactTool,
     EditTool,
@@ -78,15 +79,14 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibrarySearchTool,
     WriteStdinTool,
     WriteTool,
-    sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.spill import RESULT_MAX_CHARS
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 
 
 def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() -> None:
-    claude = sandbox_tools_for_model(ToolFamily.CLAUDE)
-    other = sandbox_tools_for_model(ToolFamily.OPENAI)
+    claude = SANDBOX_TOOLS[ToolFamily.CLAUDE]
+    other = SANDBOX_TOOLS[ToolFamily.OPENAI]
     assert claude == (
         ExecCommandTool,
         WriteStdinTool,
@@ -116,7 +116,7 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
     turn.vm_chat_files = []
     stubs = build_tool_stubs(
         OPENAI_CODE_MODE,
-        [tool(turn) for tool in sandbox_tools_for_model(ToolFamily.OPENAI)],
+        [tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI]],
     )
 
     assert stubs.deferred_namespaces == {
@@ -159,7 +159,7 @@ def test_no_immediate_text_names_an_artifact_function_in_code_mode(
     description or system prompt names a function of it."""
     turn = MagicMock(spec=SandboxTurn)
     turn.vm_chat_files = []
-    tools: list[Tool] = [tool(turn) for tool in sandbox_tools_for_model(family)]
+    tools: list[Tool] = [tool(turn) for tool in SANDBOX_TOOLS[family]]
     artifact_functions = [
         tool for tool in tools if tool.code_mode_function_name.namespace == group
     ]
@@ -192,7 +192,7 @@ def test_the_deferred_note_says_what_the_library_group_is_for() -> None:
     turn = MagicMock(spec=SandboxTurn)
     turn.vm_chat_files = []
     offered, _ = with_code_mode(
-        [tool(turn) for tool in sandbox_tools_for_model(ToolFamily.OPENAI)],
+        [tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI]],
         OPENAI_CODE_MODE,
     )
     [description] = [

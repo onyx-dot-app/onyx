@@ -128,15 +128,18 @@ run / wait tools (code mode; a cell per program, a store per chat)
   llm/interfaces.py:LLMConfig.tool_family
                                         ToolFamily.CLAUDE when model_capabilities.
                                         is_claude_model(model_identity_names) holds, else
-                                        OPENAI: the one rule that picks every tool shape
-                                        (code mode, question tool, sandbox file tools)
+                                        OPENAI: the one family decision; the family picks
+                                        each tool's shape (an X_SHAPES lookup)
   code_mode/shapes.py:CODE_MODE_SHAPES  one CodeModeShape per family: run/wait tool names
                                         and argument models (interface.py:ToolArguments
-                                        [RunRequest] / [WaitRequest] subclasses; each run
-                                        model names its yield argument, YIELD_ARGUMENT,
-                                        copied to run_yield_argument), the program search
-                                        function (a ProgramFunction: name and stub) and its
-                                        host function, and the describe function, if any.
+                                        [RunRequest] / [WaitRequest] subclasses), and the
+                                        argument names that the prompt and host functions
+                                        use: run_yield_argument and the search function's
+                                        search_name and search_limit_argument, from which
+                                        the shape builds the search stub (search) and
+                                        code_mode/shapes.py:SearchHost builds its host
+                                        function; and the describe function,
+                                        if any.
                                         with_code_mode builds CodeCells(shape); the run and
                                         wait tools and the cells read the shape there. OPENAI: exec
                                         (code, yield_time_ms, max_output_tokens) / wait
@@ -146,7 +149,7 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         output_chars_from_tokens. CLAUDE: repl
                                         (code, timeout) / poll (cell_id, timeout,
                                         terminate), search_tools(query, max) and
-                                        describe_tool(name); default output budget. Each
+                                        describe_tool(name); DEFAULT_MAX_OUTPUT_CHARS. Each
                                         argument model's request() gives the RunRequest /
                                         WaitRequest that CodeCells serves, so the engine is
                                         the same for every shape. Extra arguments are
@@ -297,10 +300,9 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
   chat/execution.py:create_chat_agent   builds the tools with one SandboxTurn for every
                                         agent, as it adds the skill tools; a durable resume
                                         prepares the turn again and builds them the same way.
-                                        sandbox_tools_for_model(family) owns the set and
-                                        its order: for ToolFamily.CLAUDE
-                                        (LLMConfig.tool_family, the one family decision that
-                                        also picks the code mode and question tool shapes), EditTool,
+                                        SANDBOX_TOOLS[family] owns the set and its order
+                                        (LLMConfig.tool_family; the family picks each
+                                        tool's shape): for ToolFamily.CLAUDE, EditTool,
                                         WriteTool and ArtifactTool, the tools Claude models
                                         work with; else ApplyPatchTool,
                                         LibraryCreateLibraryFileTool, LibraryListTool,
