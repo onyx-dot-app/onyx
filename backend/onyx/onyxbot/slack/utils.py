@@ -549,6 +549,55 @@ def fetch_user_semantic_id_from_id(
     )
 
 
+def _extract_blocks_text(blocks: list[dict[str, Any]]) -> str | None:
+    parts: list[str] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        text_obj = block.get("text")
+        if isinstance(text_obj, dict):
+            t = text_obj.get("text")
+            if t:
+                parts.append(str(t))
+        elif isinstance(text_obj, str) and text_obj:
+            parts.append(text_obj)
+
+        for field in block.get("fields") or []:
+            if isinstance(field, dict):
+                f_text = field.get("text")
+                if f_text:
+                    parts.append(str(f_text))
+            elif isinstance(field, str) and field:
+                parts.append(field)
+    return "\n".join(parts) if parts else None
+
+
+def _extract_attachments_text(attachments: list[dict[str, Any]]) -> str | None:
+    parts: list[str] = []
+    for att in attachments:
+        if not isinstance(att, dict):
+            continue
+        for key in ("pretext", "title", "text"):
+            val = att.get(key)
+            if val:
+                parts.append(str(val))
+        for field in att.get("fields") or []:
+            if isinstance(field, dict):
+                title = field.get("title") or ""
+                value = field.get("value") or ""
+                if title and value:
+                    parts.append(f"{title}: {value}")
+                elif title or value:
+                    parts.append(str(title or value))
+        if att.get("blocks"):
+            b_text = _extract_blocks_text(att["blocks"])
+            if b_text:
+                parts.append(b_text)
+        if not parts and att.get("fallback"):
+            parts.append(str(att["fallback"]))
+    return "\n".join(parts) if parts else None
+
+
 def read_slack_thread(
     tenant_id: str,
     slack_bot_id: int,
@@ -568,7 +617,6 @@ def read_slack_thread(
             )
             message_type = MessageType.USER
         else:
-            blocks: Any
             is_onyx_bot_response = False
 
             reply_user = reply.get("user")
@@ -615,15 +663,12 @@ def read_slack_thread(
                 )
                 user_sem_id = bot_user_name or "Unknown" + " Bot"
 
-                # For other bots, just use the text as we have no way of knowing that the
-                # useful portion is
+                # For other bots, extract text from text, blocks, or attachments
                 message = reply.get("text")
-                if not message:
-                    message = (
-                        blocks[0]  # ty: ignore[possibly-unresolved-reference]
-                        .get("text", {})
-                        .get("text")
-                    )
+                if not message and reply.get("blocks"):
+                    message = _extract_blocks_text(reply["blocks"])
+                if not message and reply.get("attachments"):
+                    message = _extract_attachments_text(reply["attachments"])
 
             if not message:
                 logger.warning("Skipping Slack thread message, no text found")
