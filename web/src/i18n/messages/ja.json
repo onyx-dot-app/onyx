@@ -12590,12 +12590,6 @@
             "between": "{start}から{end}まで"
           }
         },
-        "stoppedDuration": {
-          "label": "{duration} 後に停止しました"
-        },
-        "interruptedThinking": {
-          "label": "この応答を停止しました"
-        },
         "memory": {
           "default": {
             "status": "メモリ"
@@ -13642,9 +13636,11 @@
       }
     },
     "find": {
+      "capped": "最新の {count, plural, other {# 件のメッセージ}}を検索しました",
       "close": "検索を閉じる",
       "count": "{current} / {total}",
       "label": "セッション内を検索",
+      "loadingOlder": "以前のメッセージを読み込み中…",
       "next": "次の一致",
       "placeholder": "セッション内を検索",
       "previous": "前の一致"

@@ -12590,12 +12590,6 @@
             "between": "من {start} إلى {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "أوقفته بعد {duration}"
-        },
-        "interruptedThinking": {
-          "label": "أوقفت هذا الرد"
-        },
         "memory": {
           "default": {
             "status": "الذاكرة"
@@ -13642,9 +13636,11 @@
       }
     },
     "find": {
+      "capped": "تم البحث في {count, plural, zero {# رسالة} one {آخر رسالة} two {آخر رسالتين} few {آخر # رسائل} many {آخر # رسالة} other {آخر # رسالة}}",
       "close": "إغلاق البحث",
       "count": "{current} من {total}",
       "label": "البحث في الجلسة",
+      "loadingOlder": "جارٍ تحميل الرسائل الأقدم…",
       "next": "التطابق التالي",
       "placeholder": "البحث في الجلسة",
       "previous": "التطابق السابق"

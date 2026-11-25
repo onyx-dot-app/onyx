@@ -36,6 +36,7 @@ import {
   useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 import type { ChatSubagent, RunStatus } from "@/lib/chat/types";
+import type { PublishedFile } from "@/app/app/services/streamingModels";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 
 /** A live agent: the agent glyph with a small blue dot, as T3 Code's. */
@@ -167,7 +168,12 @@ function AgentRow({ agent, onStop }: AgentRowProps) {
 
 interface ChatActivityProps {
   sessionId: string;
+  // Lists the published files, whose row opens the chat's Files panel; a
+  // page without that panel, such as the extension's, leaves them out
+  showFiles?: boolean;
 }
+
+const NO_FILES: PublishedFile[] = [];
 
 /**
  * The chat's activity card, toggled from its header: what waits for the user,
@@ -180,7 +186,10 @@ interface ChatActivityProps {
  * least 64rem wide, the chat's content narrows for it; otherwise it floats
  * over the chat's end.
  */
-export default function ChatActivity({ sessionId }: ChatActivityProps) {
+export default function ChatActivity({
+  sessionId,
+  showFiles = true,
+}: ChatActivityProps) {
   const t = useTranslations("chat.activity");
   const format = useFormatter();
   const [open, setOpen] = useState(false);
@@ -202,7 +211,8 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
   );
   const streaming = useCurrentChatState() !== "input";
   const { agents, loaded, stopAgent } = useChatSubagents(sessionId, streaming);
-  const files = usePublishedFiles("current");
+  const publishedFiles = usePublishedFiles("current");
+  const files = showFiles ? publishedFiles : NO_FILES;
   // Finished agents fold under one row, as their own list
   const [showFinished, setShowFinished] = useState(false);
   const finishedAgents = agents.filter(isFinished);
