@@ -759,7 +759,7 @@ renderers of finished calls do not redraw. A call is its cell and
 `sub_turn_index`, as `CodeModeRenderer` (`backend/onyx/chat/renderer.py`)
 states, so the latest report replaces the earlier ones in place. Pacing
 compares the last packet of each step, because a new report can have as many
-packets as the old one. The program, its output, `wait`
+packets as the old one. The program, its output, wait tool (`wait` or `poll`)
 calls, yields and closing records have no step. A program without tool calls
 shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
 in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
