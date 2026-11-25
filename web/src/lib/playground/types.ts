@@ -6,7 +6,6 @@
  */
 export enum PlaygroundRestrictedFeature {
   LLM_PROVIDERS = "llm_providers",
-  CONTEXTUAL_RAG = "contextual_rag",
   SSO = "sso",
   SCIM = "scim",
   WHITELABEL = "whitelabel",
@@ -39,8 +38,6 @@ export const PLAYGROUND_FEATURE_REASON: Record<
 > = {
   [PlaygroundRestrictedFeature.LLM_PROVIDERS]:
     PlaygroundRestrictionReason.OWN_KEYS,
-  [PlaygroundRestrictedFeature.CONTEXTUAL_RAG]:
-    PlaygroundRestrictionReason.ENTERPRISE,
   [PlaygroundRestrictedFeature.SSO]: PlaygroundRestrictionReason.ENTERPRISE,
   [PlaygroundRestrictedFeature.SCIM]: PlaygroundRestrictionReason.ENTERPRISE,
   [PlaygroundRestrictedFeature.WHITELABEL]:
