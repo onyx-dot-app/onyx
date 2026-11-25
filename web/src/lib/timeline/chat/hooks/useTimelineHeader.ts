@@ -3,6 +3,8 @@ import { useLocale, useTranslations } from "next-intl";
 import { TurnGroup } from "@/lib/timeline/chat/transformers";
 import type { AwaitingUser } from "@/lib/chat/toolApprovals";
 import {
+  IMAGE_GENERATION_TOOL_TYPE,
+  isCodeInterpreterToolType,
   Packet,
   PacketType,
   SearchToolPacket,
@@ -54,6 +56,14 @@ function stepHeaderText(
       return t("header.browsing.label");
     case PacketType.PYTHON_TOOL_START:
       return t("header.executingCode.label");
+    // A tool's arguments stream in before its start packet.
+    case PacketType.TOOL_CALL_ARGUMENT_DELTA:
+      if (isCodeInterpreterToolType(obj.tool_type)) {
+        return t("header.executingCode.label");
+      }
+      return obj.tool_type === IMAGE_GENERATION_TOOL_TYPE
+        ? t("header.generatingImages.label")
+        : null;
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return t("header.generatingImages.label");
     case PacketType.FILE_READER_START:

@@ -120,6 +120,36 @@ describe("useTimelineHeader", () => {
     expect(result.current.headerText).toBe("header.working.label");
   });
 
+  it("names a step by the tool whose arguments stream first", () => {
+    const delta = (toolType: string): Packet => ({
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.TOOL_CALL_ARGUMENT_DELTA,
+        tool_type: toolType,
+        tool_id: "call",
+        argument_deltas: {},
+      },
+    });
+    const { result, rerender } = renderHook(
+      ({ packets }: { packets: Packet[] }) => useTimelineHeader(group(packets)),
+      {
+        initialProps: {
+          packets: [
+            delta("python"),
+            {
+              placement: { turn_index: 0 },
+              obj: { type: PacketType.PYTHON_TOOL_START, code: "print(1)" },
+            },
+          ],
+        },
+      }
+    );
+    expect(result.current.headerText).toBe("header.executingCode.label");
+
+    rerender({ packets: [delta("generate_image")] });
+    expect(result.current.headerText).toBe("header.generatingImages.label");
+  });
+
   it("names the program a command runs", () => {
     const { result } = renderHook(() =>
       useTimelineHeader(
@@ -138,7 +168,7 @@ describe("useTimelineHeader", () => {
     expect(result.current.headerText).toBe("header.runningProgram.label:npm");
   });
 
-  it("previews the latest reasoning on one line", () => {
+  it("shows the reasoning's latest section title", () => {
     const reasoning = (text: string): Packet => ({
       placement: { turn_index: 0 },
       obj: { type: PacketType.REASONING_DELTA, reasoning: text },
@@ -153,9 +183,23 @@ describe("useTimelineHeader", () => {
     );
     expect(result.current.headerText).toBe("header.thinking.label");
 
+    // Plain text has no title: the header stays "Thinking".
+    const plain = reasoning("The user wants a list.\nI should check.\n\n");
+    rerender({ packets: [start, plain] });
+    expect(result.current.headerText).toBe("header.thinking.label");
+
+    // A title line wins, without its markdown markers.
+    const first = reasoning("**Planning the answer**\n\nI will list ");
+    rerender({ packets: [start, plain, first] });
+    expect(result.current.headerText).toBe("Planning the answer");
+
+    // A later title replaces it; a heading counts once its line ends.
+    const partial = reasoning("the steps.\n\n## Checking `sources`");
+    rerender({ packets: [start, plain, first, partial] });
+    expect(result.current.headerText).toBe("Planning the answer");
     rerender({
-      packets: [start, reasoning("Check the\n\nlogs "), reasoning(" first.")],
+      packets: [start, plain, first, partial, reasoning("\nNow I read ")],
     });
-    expect(result.current.headerText).toBe("Check the logs first.");
+    expect(result.current.headerText).toBe("Checking sources");
   });
 });

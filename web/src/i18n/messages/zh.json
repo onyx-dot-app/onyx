@@ -15098,7 +15098,7 @@
       },
       "diff": {
         "stat": {
-          "label": "新增 {added} 行，删除 {removed} 行"
+          "label": "{added, plural, other {新增 # 行}}，{removed, plural, other {删除 # 行}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {# 行未更改} other {# 行未更改}}"
