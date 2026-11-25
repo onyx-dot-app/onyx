@@ -37,7 +37,7 @@ FIRST_DR_PLAN = "first_dr_plan"
 FIRST_RESEARCH_AGENT = "first_research_agent"
 
 # Final code_mode_delta statuses of a program that did not finish its work.
-# "running" is not final: a later wait_code observation reports the end.
+# "running" is not final: a later wait observation reports the end.
 CODE_FAILED_STATUSES = frozenset({"failed", "timed_out", "cancelled", "terminated"})
 # BUSY_MESSAGE in backend/onyx/tools/tool_implementations/code_mode/sandbox.py.
 CODE_SANDBOX_BUSY = "The code sandbox is busy"
@@ -55,7 +55,7 @@ class StreamSummary:
     search_calls: int = 0
     reasoning_packets: int = 0
     citations: int = 0
-    # Code mode: execute_code programs, wait_code observations, searches that
+    # Code mode: programs, wait observations, searches that
     # programs made, each once (also counted in search_calls), and failed
     # observations.
     code_programs: int = 0
@@ -181,7 +181,7 @@ class ChatStreamAnalyzer:
         group = _group(placement)
         cell_id = obj.get("cell_id")
         if packet_type == CODE_MODE_START:
-            # A wait_code observation names its cell; execute_code starts one.
+            # A wait observation names its cell; a program starts one.
             cell = self._cells.get(cell_id) if isinstance(cell_id, int) else None
             self._code_mode_groups[group] = cell or group
             if obj.get("observation") or 0:
@@ -190,7 +190,7 @@ class ChatStreamAnalyzer:
                 self.summary.code_programs += 1
             return True
         if packet_type == CODE_MODE_DELTA:
-            # The final delta of execute_code names the cell it started.
+            # The final delta of a program names the cell it started.
             if isinstance(cell_id, int):
                 self._cells.setdefault(
                     cell_id, self._code_mode_groups.get(group, group)
