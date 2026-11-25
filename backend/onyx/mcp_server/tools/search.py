@@ -517,8 +517,9 @@ async def query_metadata(
       `content_contains`. Listings take `order_by` and return `next_cursor`
       when more match: pass it back as `cursor` with the same filters and
       `order_by` for the next page. `group_by`: `source` or `owner` (with `count`).
-      `content_contains` matches whole words or phrases in the text, title and
-      metadata values; with the default settings, case and word form do not
+      `content_contains` matches whole words or phrases in the text, title,
+      the metadata values in the indexed text, and any AI-generated
+      summaries; with the default settings, case and word form do not
       matter. It searches Salesforce only under public connectors. Each
       indexed section of a document is matched on its own, so a phrase that
       crosses two sections can be missed. Each value takes at most 200
@@ -526,7 +527,7 @@ async def query_metadata(
       error. It is slow: use it only for an exhaustive list or count by
       content, add date, source or folder filters when you can, and order by
       date. It does not work with `group_by`. A broad count can return "At
-      least N", and a count can be slightly higher than the rows a listing
+      least N", and a count can be higher than the rows a listing
       returns; a slow page can hold fewer rows, or none, and still return
       `next_cursor`, so keep paging while it is set. Deployments without the
       document index refuse it.
