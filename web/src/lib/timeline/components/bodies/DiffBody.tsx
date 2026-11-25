@@ -77,11 +77,19 @@ export function DiffBody(props: DiffBodyProps) {
     [counts, diffLines]
   );
 
+  // A pure addition or removal leaves one column empty: it stays unified.
   const autoSideBySide =
+    stats.added > 0 &&
+    stats.removed > 0 &&
     stats.added + stats.removed > SIDE_BY_SIDE_AUTO_THRESHOLD;
   const [mode, setMode] = useState<"unified" | "side-by-side">(
     autoSideBySide ? "side-by-side" : "unified"
   );
+
+  const toggleLabel =
+    mode === "unified"
+      ? t("viewToggle.sideBySideTooltip")
+      : t("viewToggle.unifiedTooltip");
 
   if (given === null && !newText && !oldText) {
     return null;
@@ -95,20 +103,19 @@ export function DiffBody(props: DiffBodyProps) {
         rightChildren={
           <>
             <DiffStat added={stats.added} removed={stats.removed} />
-            <Button
-              variant="default"
-              prominence="tertiary"
-              size="2xs"
-              icon={mode === "unified" ? SvgColumn : SvgMenu}
-              onClick={() =>
-                setMode(mode === "unified" ? "side-by-side" : "unified")
-              }
-              tooltip={
-                mode === "unified"
-                  ? t("viewToggle.sideBySideTooltip")
-                  : t("viewToggle.unifiedTooltip")
-              }
-            />
+            {stats.added + stats.removed > 0 && (
+              <Button
+                variant="default"
+                prominence="tertiary"
+                size="2xs"
+                icon={mode === "unified" ? SvgColumn : SvgMenu}
+                onClick={() =>
+                  setMode(mode === "unified" ? "side-by-side" : "unified")
+                }
+                tooltip={toggleLabel}
+                aria-label={toggleLabel}
+              />
+            )}
           </>
         }
       />

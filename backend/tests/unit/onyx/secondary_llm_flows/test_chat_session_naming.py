@@ -430,3 +430,10 @@ def test_failed_regeneration_raises_and_keeps_the_saved_name() -> None:
 
     with pytest.raises(RuntimeError):
         _name_chat_session_with_saved_name(regenerate=True, generate=generate)
+
+
+def test_empty_regenerated_name_raises_and_keeps_the_saved_name() -> None:
+    generate = MagicMock(return_value="  ")
+
+    with pytest.raises(ValueError):
+        _name_chat_session_with_saved_name(regenerate=True, generate=generate)
