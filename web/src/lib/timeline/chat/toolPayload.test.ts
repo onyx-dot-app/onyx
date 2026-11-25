@@ -9,8 +9,8 @@ describe("flatFields", () => {
   test("lists a flat object", () => {
     expect(flatFields({ repo: "onyx", limit: 3, draft: false })).toEqual([
       ["repo", "onyx"],
-      ["limit", "3"],
-      ["draft", "false"],
+      ["limit", 3],
+      ["draft", false],
     ]);
   });
 
@@ -20,6 +20,8 @@ describe("flatFields", () => {
     ["array", [1, 2]],
     ["multiline", { text: "a\nb" }],
     ["long", { text: "x".repeat(121) }],
+    ["long key", { ["x".repeat(121)]: 1 }],
+    ["multiline key", { "a\nb": 1 }],
     ["empty", {}],
     ["text", "hello"],
     ["null", null],
@@ -51,6 +53,15 @@ describe("isEcho", () => {
   test("the same value under another key is a real answer", () => {
     expect(isEcho([["count", "3"]], [["limit", "3"]])).toBe(false);
     expect(isEcho([["status", "open"]], [["state", "open"]])).toBe(false);
+  });
+
+  test("preserves value types and cannot conflate a key with its value", () => {
+    expect(isEcho(flatFields({ count: "3" }), flatFields({ count: 3 }))).toBe(
+      false
+    );
+    expect(
+      isEcho(flatFields({ a: "b\u0000c" }), flatFields({ "a\u0000b": "c" }))
+    ).toBe(false);
   });
 
   test("a payload that is not flat fields is never an echo", () => {

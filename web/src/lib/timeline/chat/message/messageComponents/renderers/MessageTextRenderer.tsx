@@ -18,6 +18,7 @@ import {
   stripPartialCitations,
   ScrollableTable,
   MarkdownImage,
+  MarkdownLinkContent,
 } from "@/lib/timeline/chat/message/messageComponents/markdownUtils";
 import { BlinkingBar } from "../../BlinkingBar";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -330,7 +331,7 @@ export const MessageTextRenderer: MessageRenderer<
             citations={s?.citations}
             href={href}
           >
-            {children}
+            <MarkdownLinkContent>{children}</MarkdownLinkContent>
           </MemoizedAnchor>
         );
       },

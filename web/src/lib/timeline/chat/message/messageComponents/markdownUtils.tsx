@@ -1,4 +1,6 @@
 import React, {
+  createContext,
+  useContext,
   useCallback,
   useEffect,
   useRef,
@@ -139,12 +141,24 @@ export function ScrollableTable({
  * During typewriter animation, [[N]](url) is revealed character by character,
  * and ReactMarkdown can't parse an incomplete link: it would show as raw text.
  */
-/** Markdown image: loads lazily, caps its height and opens a full view. */
-export function MarkdownImage({
-  src,
-  alt,
-  title,
-}: React.ComponentProps<"img"> & ExtraProps) {
+const LinkedMarkdownImage = createContext(false);
+
+export function MarkdownLinkContent({ children }: React.PropsWithChildren) {
+  return (
+    <LinkedMarkdownImage.Provider value>
+      {children}
+    </LinkedMarkdownImage.Provider>
+  );
+}
+
+type MarkdownImageProps = React.ComponentProps<"img"> & ExtraProps;
+
+export function MarkdownImage(props: MarkdownImageProps) {
+  return <MarkdownImageContent key={String(props.src ?? "")} {...props} />;
+}
+
+function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
+  const linked = useContext(LinkedMarkdownImage);
   const t = useTranslations("chat.messages");
   const tFiles = useTranslations("chat.files");
   const [failed, setFailed] = useState(false);
@@ -160,6 +174,18 @@ export function MarkdownImage({
     );
   }
 
+  const image = (
+    <img
+      src={src}
+      alt={alt ?? ""}
+      title={title}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-auto max-h-[30rem] w-auto max-w-full rounded-lg object-contain"
+    />
+  );
+  if (linked) return image;
+
   return (
     <>
       <span
@@ -170,14 +196,7 @@ export function MarkdownImage({
         onKeyDown={clickOnKeyDown(() => setFullImageShowing(true))}
         className="block cursor-zoom-in"
       >
-        <img
-          src={src}
-          alt={alt ?? ""}
-          title={title}
-          loading="lazy"
-          onError={() => setFailed(true)}
-          className="h-auto max-h-[30rem] w-auto max-w-full rounded-lg object-contain"
-        />
+        {image}
       </span>
       {fullImageShowing && (
         <FullImageModal src={src} open onOpenChange={setFullImageShowing} />
@@ -250,7 +269,7 @@ export const useMarkdownComponents = (
           citations={state?.citations}
           href={props.href}
         >
-          {props.children}
+          <MarkdownLinkContent>{props.children}</MarkdownLinkContent>
         </MemoizedAnchor>
       );
     },

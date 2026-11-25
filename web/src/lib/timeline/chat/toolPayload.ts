@@ -3,7 +3,11 @@ import { isJsonObject, type JsonValue } from "@/lib/json";
 const MAX_FIELDS = 8;
 const MAX_FIELD_LENGTH = 120;
 
-export type ToolField = [key: string, value: string];
+export type ToolField = [key: string, value: string | number | boolean];
+
+function isShortLine(value: string): boolean {
+  return value.length <= MAX_FIELD_LENGTH && !/[\r\n]/.test(value);
+}
 
 /** A flat object of short strings, numbers and booleans as key/value rows,
  * or null for any other payload. */
@@ -13,17 +17,17 @@ export function flatFields(payload: JsonValue | undefined): ToolField[] | null {
   if (entries.length === 0 || entries.length > MAX_FIELDS) return null;
   const fields: ToolField[] = [];
   for (const [key, value] of entries) {
-    if (typeof value === "number" || typeof value === "boolean") {
-      fields.push([key, String(value)]);
-    } else if (
-      typeof value === "string" &&
-      value.length <= MAX_FIELD_LENGTH &&
-      !value.includes("\n")
+    if (
+      !isShortLine(key) ||
+      !(
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        (typeof value === "string" && isShortLine(value))
+      )
     ) {
-      fields.push([key, value]);
-    } else {
       return null;
     }
+    fields.push([key, value]);
   }
   return fields;
 }
@@ -47,6 +51,6 @@ export function isEcho(
   request: ToolField[] | null
 ): boolean {
   if (!response || !request) return false;
-  const sent = new Set(request.map(([key, value]) => `${key}\u0000${value}`));
-  return response.every(([key, value]) => sent.has(`${key}\u0000${value}`));
+  const sent = new Map(request);
+  return response.every(([key, value]) => sent.get(key) === value);
 }

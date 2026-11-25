@@ -86,15 +86,11 @@ function ToolFields({ fields }: ToolFieldsProps) {
           gap={2}
           height="fit"
         >
-          <Text
-            font="secondary-mono"
-            color="text-03"
-            wordWrap="whitespace-nowrap"
-          >
+          <Text font="secondary-mono" color="text-03" wordWrap="wrap-anywhere">
             {`${key}:`}
           </Text>
           <Text font="secondary-mono" color="text-04" wordWrap="wrap-anywhere">
-            {value}
+            {String(value)}
           </Text>
         </Section>
       ))}
