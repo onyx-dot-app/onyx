@@ -217,6 +217,10 @@ In Onyx v6 and later, the default chart values turn on Firecracker. Most install
       --values sandbox-values.yaml   # only with the Terraform values
     ```
 
+    An install that set Firecracker up before Onyx v6 has `craft-fc-values.yaml` and `craft-fc-secrets.yaml`.
+    Keep them in this command and in each later upgrade.
+    They hold settings such as `craft.hostAgent.dataDir` and the registration value that the running host agents use.
+
     The first start on each node copies the root drive (about 4 GiB) and builds the node template.
   </Step>
 </Steps>

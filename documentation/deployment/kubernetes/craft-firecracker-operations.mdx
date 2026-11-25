@@ -57,9 +57,14 @@ The host agent, the root drive, and the template name follow the Onyx version. A
 <Steps>
   <Step title="Upgrade with Helm">
     ```bash
-    helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
-      --version <chart version>
+    helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml --values craft-fc-values.yaml \
+      --values craft-fc-secrets.yaml --version <chart version>
     ```
+
+    Pass every values file that your install uses.
+    An install from before Onyx v6 has `craft-fc-values.yaml` and `craft-fc-secrets.yaml`. Keep them in each upgrade,
+    because they hold settings such as `craft.hostAgent.dataDir` and the registration value.
+    A new install on Onyx v6 or later can have no Firecracker values files: then pass only `onyx-values.yaml`.
 
     The host agent DaemonSet replaces one pod at a time.
   </Step>
@@ -153,7 +158,7 @@ and the clients restart by themselves:
 kubectl $K -n $NS delete secret onyx-craft-fc-host-agent-tls
 kubectl $K -n $REL delete secret onyx-craft-fc-host-agent-client-tls
 helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
-  --version <chart version>
+  --values craft-fc-values.yaml --values craft-fc-secrets.yaml --version <chart version>
 ```
 
 The Secret names start with the release name (`onyx` here). New calls to the host agents fail until the upgrade ends.
@@ -167,7 +172,7 @@ or when the sandbox proxy host or `craft.hostAgent.relayTls.serverName` changes:
 kubectl $K -n $NS delete secret onyx-craft-fc-host-agent-relay-tls
 kubectl $K -n $REL delete secret onyx-sandbox-proxy-relay-tls
 helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
-  --version <chart version>
+  --values craft-fc-values.yaml --values craft-fc-secrets.yaml --version <chart version>
 ```
 
 For your own certificates (`existingSecret`):
