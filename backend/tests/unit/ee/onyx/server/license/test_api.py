@@ -29,6 +29,13 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import ApplicationStatus
 
 
+@pytest.fixture(autouse=True)
+def free_claim_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "ee.onyx.server.license.api.claim_cooldown_is_active", lambda: False
+    )
+
+
 class TestNormalizeLicenseFile:
     """Reduces a .lic file to the bare base64 blob."""
 
@@ -250,6 +257,7 @@ class TestClaimUsesTheCheckoutSession:
         with pytest.raises(OnyxError):
             claim_license(_=MagicMock(), db_session=MagicMock())
 
+        mock_reclaim.assert_called_once()
         mock_post.assert_not_called()
 
 
