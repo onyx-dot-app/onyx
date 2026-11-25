@@ -124,7 +124,9 @@ test("Regenerate title asks the server for a new name", async () => {
   fireEvent.click(
     await screen.findByRole("menuitem", { name: "Regenerate title" })
   );
-  await waitFor(() => expect(mockRename).toHaveBeenCalledWith("chat-1", null));
+  await waitFor(() =>
+    expect(mockRename).toHaveBeenCalledWith("chat-1", null, true)
+  );
   await waitFor(() => expect(mockRefresh).toHaveBeenCalled());
 });
 
@@ -132,4 +134,10 @@ test("double-click on the row starts the rename", () => {
   render(<ChatButton chatSession={chatSession} />);
   fireEvent.doubleClick(screen.getByTestId("ChatButton"));
   expect(screen.getByRole("textbox")).toBeInTheDocument();
+});
+
+test("the menu opened from the row takes focus on its trigger", async () => {
+  openContextMenu();
+  await screen.findByRole("menuitem", { name: "Rename" });
+  expect(screen.getByRole("button", { name: "Chat options" })).toHaveFocus();
 });
