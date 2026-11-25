@@ -11,6 +11,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from opensearchpy import ConnectionTimeout
 
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
@@ -293,8 +294,15 @@ def test_count_stops_at_the_deadline(
         ) == ContentMatchCount(count=2, is_complete=False)
 
 
+@pytest.mark.parametrize(
+    "timeout",
+    [
+        OpenSearchServerSideTimeout("timed out"),
+        ConnectionTimeout("TIMEOUT", "timed out", None),
+    ],
+)
 def test_count_timeout_keeps_the_counted_pages(
-    content_index: OpenSearchDocumentIndex,
+    content_index: OpenSearchDocumentIndex, timeout: Exception
 ) -> None:
     request = _request(["quick brown", "tie breaker", "zebra"])
     client = content_index._client
@@ -305,7 +313,7 @@ def test_count_timeout_keeps_the_counted_pages(
         nonlocal calls
         calls += 1
         if calls > 1:
-            raise OpenSearchServerSideTimeout("timed out")
+            raise timeout
         return real_page(*args, **kwargs)
 
     with (
@@ -316,7 +324,7 @@ def test_count_timeout_keeps_the_counted_pages(
             request, max_count=100
         ) == ContentMatchCount(count=2, is_complete=False)
         calls = 1
-        with pytest.raises(OpenSearchServerSideTimeout):
+        with pytest.raises(type(timeout)):
             content_index.count_documents_by_content(request, max_count=100)
 
 

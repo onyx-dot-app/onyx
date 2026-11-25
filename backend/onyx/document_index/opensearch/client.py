@@ -9,6 +9,7 @@ from http import HTTPStatus
 from typing import Any, Generic, NoReturn, TypeVar
 
 from opensearchpy import (
+    ConnectionTimeout,
     NotFoundError,
     OpenSearch,
     TransportError,
@@ -316,6 +317,14 @@ class OpenSearchServerSideTimeout(Exception):
     """
     A server-side timeout occurred when searching an OpenSearch index.
     """
+
+
+# A search that ran out of time on the server, or that the client stopped
+# waiting for.
+SEARCH_TIMEOUT_ERRORS: tuple[type[Exception], ...] = (
+    OpenSearchServerSideTimeout,
+    ConnectionTimeout,
+)
 
 
 def _summarize_write_errors(errors: list[dict[str, Any]]) -> str:

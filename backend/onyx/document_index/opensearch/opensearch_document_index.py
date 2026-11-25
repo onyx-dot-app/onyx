@@ -49,11 +49,11 @@ from onyx.document_index.interfaces import (
     TenantState,
 )
 from onyx.document_index.opensearch.client import (
+    SEARCH_TIMEOUT_ERRORS,
     OpenSearchClient,
     OpenSearchDocumentMissingError,
     OpenSearchIndexClient,
     OpenSearchIndexWriteBlockedError,
-    OpenSearchServerSideTimeout,
     SearchHit,
     is_cluster_block_error,
 )
@@ -1372,7 +1372,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     ),
                     search_type=OpenSearchSearchType.CONTENT_COUNT,
                 )
-            except OpenSearchServerSideTimeout:
+            except SEARCH_TIMEOUT_ERRORS:
                 # Keep the pages already counted; with none, the call fails.
                 if after_document_id is None:
                     raise
