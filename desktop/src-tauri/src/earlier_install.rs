@@ -186,8 +186,11 @@ pub fn remove_earlier_files(dir: &Path) -> Removal {
     listed.sort_by_key(|n| n.eq_ignore_ascii_case("uninstall.exe"));
     for name in listed {
         let path = dir.join(name);
-        let Ok(meta) = std::fs::symlink_metadata(&path) else {
-            continue;
+        let meta = match std::fs::symlink_metadata(&path) {
+            Ok(meta) => meta,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            // Not readable now: keep the record and try again later.
+            Err(_) => return Removal::Retry,
         };
         let removed = if is_link(&meta) && link_is_dir(&meta) {
             std::fs::remove_dir(&path)

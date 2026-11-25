@@ -54,9 +54,10 @@ The desktop app (`desktop/`) is a native Tauri 2 app for macOS, Windows and
 Linux. It keeps the earlier web-view shell's bundle ID (`app.onyx.desktop`)
 and name. The installers upgrade it in place (the MSI does a major upgrade),
 except the Windows setup program (`.exe`): the old per-user copy stays, and
-the app retires it at the user's first launch (uninstall entry first, then
-shortcuts and program folder; the old uninstaller never runs, because it would
-delete this app's data folders). The first launch imports the old server
+the app retires it at the user's first launch (uninstall entry first, then the
+old shortcuts, `onyx.exe` and `uninstall.exe`, and the folder only if it is then
+empty; the old uninstaller never runs, because it would delete this app's data
+folders). The first launch imports the old server
 URL. Version tags release it with
 the server, except beta and cloud tags (the `ods release classify` routing). It signs in through
 `/api/auth/mobile/login`, hands the token to the remote web UI as the session
