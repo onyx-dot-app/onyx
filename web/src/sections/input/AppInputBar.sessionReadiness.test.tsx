@@ -50,7 +50,10 @@ jest.mock("@/lib/chat/sessionReadiness", () => ({
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
-    user: { preferences: { interrupt_on_send: mockInterruptOnSend } },
+    user: {
+      id: "test-user",
+      preferences: { interrupt_on_send: mockInterruptOnSend },
+    },
     isAdmin: false,
   }),
 }));
@@ -1414,7 +1417,7 @@ test("an edited queued message is saved as the draft before the composer shows i
   await waitFor(() => expect(textbox).toHaveTextContent(/^Queued follow-up$/));
   // A chat switch cancels the composer's delayed save, so the text is saved now.
   expect(mockWriteDraft).toHaveBeenCalledWith(
-    "chat:session",
+    "chat::test-user:session",
     expect.objectContaining({ message: "Queued follow-up", mentions: [] }),
     expect.any(Function),
     "local"
@@ -1477,7 +1480,7 @@ test("an edit that finishes after a chat switch returns its text to its own chat
   );
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
-      "chat:session",
+      "chat::test-user:session",
       expect.objectContaining({ message: "Queued follow-up", mentions: [] }),
       expect.any(Function),
       "local"
@@ -1508,14 +1511,14 @@ test.each([
     );
     await waitFor(() =>
       expect(mockWriteDraft).toHaveBeenCalledWith(
-        "chat:session",
+        "chat::test-user:session",
         expect.objectContaining({ message: "Keep this draft", mentions: [] }),
         expect.any(Function),
         "local"
       )
     );
     expect(mockWriteDraft).not.toHaveBeenCalledWith(
-      "chat:new",
+      "chat::test-user:new",
       expect.anything()
     );
   }
@@ -1543,7 +1546,7 @@ test("a failed submission that ends after the composer closes goes to the chat's
   );
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
-      "chat:session",
+      "chat::test-user:session",
       expect.objectContaining({ message: "Keep this draft", mentions: [] }),
       expect.any(Function),
       "local"

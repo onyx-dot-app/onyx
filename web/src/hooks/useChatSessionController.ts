@@ -1,5 +1,6 @@
 "use client";
 
+import { takeRecentChatShortcutTarget } from "@/lib/shortcuts/utils";
 import { useEffect, useCallback, useState } from "react";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -142,7 +143,9 @@ export default function useChatSessionController({
     chatSessionIdRef.current = existingChatSessionId;
     loadedIdSessionRef.current = existingChatSessionId;
 
-    chatInputBarRef.current?.focus();
+    if (!takeRecentChatShortcutTarget(existingChatSessionId)) {
+      chatInputBarRef.current?.focus();
+    }
 
     const isCreatingNewSession =
       priorChatSessionId === null && existingChatSessionId !== null;

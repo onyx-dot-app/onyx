@@ -104,7 +104,7 @@ import ChatShortcuts, {
 } from "@/sections/sidebar/ChatShortcuts";
 import { JUMP_TO_CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
 import { formatHotkey } from "@/lib/shortcuts/utils";
-import { useQueryController } from "@/providers/QueryControllerProvider";
+import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
 
@@ -252,7 +252,7 @@ export default function AppSidebar() {
   const navigation = useNavigation();
   const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
-  const { setAppMode, reset } = useQueryController();
+  const { resetNewSession } = useChatShortcutActions();
   useTrackChatRuns();
 
   // Use SWR hooks for data fetching
@@ -536,13 +536,10 @@ export default function AppSidebar() {
     ]
   );
 
-  const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
+  const { hasAdminAccess, adminCapabilities, isAdmin } = useUser();
   const activeSidebarTab = useAppPosition();
   const craftLink = navigation.linkTo(CRAFT_PATH, { scroll: false });
   const createProjectModal = useCreateModal();
-  const defaultAppMode =
-    (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
-    "chat";
 
   const moreAgentsButton = (
     <div data-testid="AppSidebar/more-agents">
@@ -651,13 +648,9 @@ export default function AppSidebar() {
               href={activeSidebarTab.linkToNewSession().href}
               selected={activeSidebarTab.isNewSession()}
               onClick={(event) => {
-                // Already on a new session: start it over instead.
-                if (activeSidebarTab.isNewSession()) {
-                  setAppMode(defaultAppMode);
-                  reset();
-                  return;
-                }
+                const handledBefore = event.defaultPrevented;
                 activeSidebarTab.linkToNewSession().onClick(event);
+                if (!handledBefore && event.defaultPrevented) resetNewSession();
               }}
             >
               {t("appSidebar.newSession.label")}

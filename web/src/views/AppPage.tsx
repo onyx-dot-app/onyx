@@ -623,12 +623,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const isSearch =
     state.phase === "searching" || state.phase === "search-results";
 
-  // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
-  // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
   useEffect(() => {
     if (isNewSession) setAppMode(defaultAppMode);
-    if (!isNewSession && isSearch) resetInputBar();
-  }, [isNewSession, defaultAppMode, isSearch, resetInputBar, setAppMode]);
+  }, [isNewSession, defaultAppMode, setAppMode]);
 
   // Declared after the default-mode reset so incognito wins the same commit:
   // search mode has its own persistence and no incognito safeguards.

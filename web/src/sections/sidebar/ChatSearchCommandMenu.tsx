@@ -195,7 +195,7 @@ export default function ChatSearchCommandMenu({
       icon: SvgEditBig,
       label: t("chatSearch.newSession.label"),
       hotkey: CHAT_SHORTCUTS.newChat,
-      run: () => appPosition.openNewSession(),
+      run: shortcutActions.newChat,
     },
     {
       value: "toggle-sidebar",

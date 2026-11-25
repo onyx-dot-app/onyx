@@ -269,6 +269,9 @@ export default function MultiModelSelector({
         >
           {canAdd && (
             <Button
+              data-model-picker-open={
+                isPresent && open && replacingIndex === null ? "" : undefined
+              }
               prominence="tertiary"
               icon={SvgPlusCircle}
               size="sm"
@@ -301,6 +304,11 @@ export default function MultiModelSelector({
                   return (
                     <div
                       key={llmOptionKey(model)}
+                      data-model-picker-open={
+                        isPresent && open && replacingIndex === index
+                          ? ""
+                          : undefined
+                      }
                       data-model-picker-pill={
                         isPresent && index === 0 ? "" : undefined
                       }

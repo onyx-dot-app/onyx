@@ -80,7 +80,23 @@ export function isModalOpen(): boolean {
 
 /** Opens the chat model picker on its first model, or closes it when open. */
 export function toggleModelPicker(): void {
-  document
-    .querySelector<HTMLElement>("[data-model-picker-pill] button")
-    ?.click();
+  const openPicker = document.querySelector<HTMLElement>(
+    "button[data-model-picker-open], [data-model-picker-open] button"
+  );
+  const firstModel = document.querySelector<HTMLElement>(
+    "[data-model-picker-pill] button"
+  );
+  (openPicker ?? firstModel)?.click();
+}
+
+let recentChatShortcutTarget: string | null = null;
+
+export function markRecentChatShortcutTarget(chatId: string) {
+  recentChatShortcutTarget = chatId;
+}
+
+export function takeRecentChatShortcutTarget(chatId: string | null): boolean {
+  const keepFocus = chatId !== null && recentChatShortcutTarget === chatId;
+  recentChatShortcutTarget = null;
+  return keepFocus;
 }

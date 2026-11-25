@@ -8,6 +8,7 @@ import ChatShortcuts, {
 
 const mockActions: ChatShortcutActions = {
   newChat: jest.fn(),
+  resetNewSession: jest.fn(),
   toggleModelPicker: jest.fn(),
   previousChat: jest.fn(),
   nextChat: jest.fn(),

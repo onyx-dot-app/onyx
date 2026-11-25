@@ -50,7 +50,8 @@
   and Cmd+Option on Mac or Ctrl+Alt with 1–9 opens the Nth Recents chat.
   Holding those modifiers shows the shortcut at the end of each chat row. All but
   Alt+Up and Alt+Down work from the chat input too, since those keys move
-  the caret by paragraph on macOS. None runs while a modal is open.
+  the caret by paragraph on macOS. Only the sidebar shortcut runs while
+  another modal is open.
   `web/src/lib/shortcuts/constants.ts` lists them;
   `sections/sidebar/ChatShortcuts.tsx` binds them with Opal's `useHotkey`.
   Cmd/Ctrl+K opens or closes the sidebar's search menu
@@ -72,7 +73,8 @@
   draft holds the text, its `@` picks and the uploaded files, and survives
   reload and browser closure. A send or an emptied input clears it, and
   logout removes all of them. Incognito keeps its composer text and files
-  in memory.
+  in memory. Persisted drafts are scoped to the signed-in account and tenant.
+  Drafts from older tabs without an account or privacy mode are not restored.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button stops every active

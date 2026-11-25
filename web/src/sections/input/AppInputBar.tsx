@@ -157,7 +157,12 @@ function toStoredChatDraft(
   return {
     message: composed.message,
     mentions: composed.mentions,
-    files: files.filter((file) => file.status === UserFileStatus.COMPLETED),
+    files: files.filter(
+      (file) =>
+        file.status === UserFileStatus.COMPLETED ||
+        file.status === UserFileStatus.SKIPPED ||
+        (file.status !== UserFileStatus.UPLOADING && isFilePending(file.status))
+    ),
   };
 }
 
@@ -343,8 +348,18 @@ const AppInputBar = React.memo(
 
     // Keyed by chat session id, or "new" until the session is created.
     const chatSessionId = appPosition.chat();
-    const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
-    const composerScope = incognitoEnabled ? null : chatDraftStorageKey;
+    const draftOwner = user?.id ? `${user.tenant_id ?? ""}:${user.id}` : null;
+    const chatDraftStorageKey = draftOwner
+      ? draftKey("chat", `${draftOwner}:${chatSessionId ?? "new"}`)
+      : null;
+    const composerScope =
+      incognitoEnabled || isSearchMode ? null : chatDraftStorageKey;
+    const submitScope = JSON.stringify([
+      chatSessionId,
+      composerScope,
+      incognitoEnabled,
+      isSearchMode,
+    ]);
     const {
       draft: chatDraft,
       loaded: chatDraftLoaded,
@@ -399,13 +414,11 @@ const AppInputBar = React.memo(
     useEffect(() => {
       if (!chatDraftLoaded || draftSeededRef.current) return;
       draftSeededRef.current = true;
-      if (chatDraft && !initialMessage && !composedRef.current.message) {
-        // Skip the save effect's next run; it would fire with the stale empty
-        // message and wipe what we just seeded.
-        skipNextDraftSaveRef.current = true;
-        const draft = toChatDraft(chatDraft);
+      const draft = chatDraft === null ? null : toChatDraft(chatDraft);
+      skipNextDraftSaveRef.current = true;
+      setCurrentMessageFiles(draft?.files ?? []);
+      if (draft && !initialMessage && !composedRef.current.message) {
         setMessage(draft.message, draft.mentions);
-        if (draft.files?.length) setCurrentMessageFiles(draft.files);
       }
     }, [
       chatDraftLoaded,
@@ -450,7 +463,7 @@ const AppInputBar = React.memo(
       }
       if (chatState !== "input") return;
       if (!toolConfiguration.optionsLoaded) {
-        setHeldSendKey(chatDraftStorageKey);
+        setHeldSendKey(submitScope);
         return;
       }
       // Stop TTS first to prevent overlapping voices.
@@ -527,7 +540,7 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       if (
-        heldSendKey !== chatDraftStorageKey ||
+        heldSendKey !== submitScope ||
         !toolConfiguration.optionsLoaded ||
         hasPendingFiles ||
         disabled
@@ -537,7 +550,7 @@ const AppInputBar = React.memo(
       submitMessage(composedRef.current);
     }, [
       heldSendKey,
-      chatDraftStorageKey,
+      submitScope,
       toolConfiguration.optionsLoaded,
       hasPendingFiles,
       disabled,
@@ -580,11 +593,14 @@ const AppInputBar = React.memo(
         mountedRef.current &&
         previousScopeRef.current === composerScope &&
         useChatSessionStore.getState().currentSessionId === sessionId;
-      if (!isOpen && incognitoEnabled) return;
-      const key = draftKey("chat", sessionId);
+      const key =
+        draftOwner && !incognitoEnabled
+          ? draftKey("chat", `${draftOwner}:${sessionId}`)
+          : null;
+      if (!isOpen && !key) return;
       const newer: ChatDraft = isOpen
         ? { ...composedRef.current, files: currentMessageFiles }
-        : toChatDraft(readDraft<StoredChatDraft>(key, "local") ?? "");
+        : toChatDraft((key && readDraft<StoredChatDraft>(key, "local")) || "");
       const offset = returned.message.length + 2;
       const combined: ComposedMessage = newer.message.trim()
         ? {
@@ -599,9 +615,10 @@ const AppInputBar = React.memo(
             ],
           }
         : returned;
-      if (!incognitoEnabled) {
+      const restoreKey = isOpen ? composerScope : key;
+      if (restoreKey) {
         writeDraft(
-          isOpen ? chatDraftStorageKey : key,
+          restoreKey,
           toStoredChatDraft(combined, newer.files ?? []),
           isChatDraftEmpty,
           "local"

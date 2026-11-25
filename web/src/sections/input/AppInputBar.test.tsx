@@ -64,7 +64,10 @@ const storedMcpTool = memberTool({
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
 }));
-let mockUser: { preferences: { shortcut_enabled: boolean } } | null = null;
+let mockUser: {
+  id: string;
+  preferences: { shortcut_enabled: boolean };
+} | null = null;
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: mockUser, isAdmin: false }),
 }));
@@ -239,7 +242,7 @@ function Composer({
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  mockUser = null;
+  mockUser = { id: "test-user", preferences: { shortcut_enabled: false } };
   mockChatSkills = NO_SKILLS;
   mockIncognitoEnabled = false;
   mockSttEnabled = false;
@@ -285,11 +288,17 @@ test("an immediate reload restores draft text and completed uploads", async () =
     ...projectFile("uploading-file"),
     status: UserFileStatus.UPLOADING,
   };
+  const first = render(<Composer />);
+  const processing = {
+    ...projectFile("processing-file"),
+    status: UserFileStatus.PROCESSING,
+  };
   mockProjectsContext.currentMessageFiles = [
     projectFile("draft-file"),
+    processing,
     uploading,
   ];
-  const first = render(<Composer />);
+  first.rerender(<Composer />);
   await setupUser().type(screen.getByRole("textbox"), "unsent text");
   first.unmount();
 
@@ -299,7 +308,18 @@ test("an immediate reload restores draft text and completed uploads", async () =
   expect(screen.getByRole("textbox")).toHaveTextContent("unsent text");
   expect(mockProjectsContext.setCurrentMessageFiles).toHaveBeenCalledWith([
     projectFile("draft-file"),
+    processing,
   ]);
+});
+
+test("a different account cannot restore the previous account's draft", async () => {
+  const first = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "account A draft");
+  first.unmount();
+
+  mockUser = { id: "another-user", preferences: { shortcut_enabled: false } };
+  render(<Composer />);
+  expect(screen.getByRole("textbox")).not.toHaveTextContent("account A draft");
 });
 
 test("incognito keeps its draft out of storage and restores the regular draft on exit", async () => {
@@ -314,12 +334,12 @@ test("incognito keeps its draft out of storage and restores the regular draft on
 
   await user.type(message(), "private draft");
   act(() => window.dispatchEvent(new Event("pagehide")));
-  expect(localStorage.getItem(draftKey("chat", "new"))).toContain(
+  expect(localStorage.getItem(draftKey("chat", ":test-user:new"))).toContain(
     "regular draft"
   );
-  expect(localStorage.getItem(draftKey("chat", "new"))).not.toContain(
-    "private draft"
-  );
+  expect(
+    localStorage.getItem(draftKey("chat", ":test-user:new"))
+  ).not.toContain("private draft");
   expect(sessionStorage.length).toBe(0);
 
   mockIncognitoEnabled = false;
@@ -359,6 +379,7 @@ describe("restore after a failed send", () => {
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer inputBarRef={inputBarRef} />);
     await setupUser().type(screen.getByRole("textbox"), "newer draft");
+    mockProjectsContext.setCurrentMessageFiles.mockClear();
     act(() =>
       inputBarRef.current?.restore({
         message: "failed message",
@@ -377,6 +398,7 @@ describe("restore after a failed send", () => {
     ] satisfies ProjectFile[];
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer inputBarRef={inputBarRef} />);
+    mockProjectsContext.setCurrentMessageFiles.mockClear();
     act(() =>
       inputBarRef.current?.restore({
         message: "failed message",
@@ -418,7 +440,7 @@ describe("`@` skill mentions", () => {
   });
 
   beforeEach(() => {
-    mockUser = { preferences: { shortcut_enabled: true } };
+    mockUser = { id: "test-user", preferences: { shortcut_enabled: true } };
     mockChatSkills = {
       ...NO_SKILLS,
       skills: [

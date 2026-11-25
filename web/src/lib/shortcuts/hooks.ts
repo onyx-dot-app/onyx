@@ -1,12 +1,19 @@
 "use client";
 
 import { useMemo } from "react";
+import { useQueryController } from "@/providers/QueryControllerProvider";
+import { useUser } from "@/providers/UserProvider";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useAppPosition } from "@/lib/navigation/hooks";
-import { adjacentChatId, toggleModelPicker } from "@/lib/shortcuts/utils";
+import {
+  adjacentChatId,
+  markRecentChatShortcutTarget,
+  toggleModelPicker,
+} from "@/lib/shortcuts/utils";
 
 export interface ChatShortcutActions {
   newChat: () => void;
+  resetNewSession: () => void;
   toggleModelPicker: () => void;
   previousChat: () => void;
   nextChat: () => void;
@@ -18,19 +25,36 @@ export interface ChatShortcutActions {
 export function useChatShortcutActions(): ChatShortcutActions {
   const appPosition = useAppPosition();
   const { chatSessions } = useChatSessions();
+  const { reset, setAppMode } = useQueryController();
+  const { user } = useUser();
+  const defaultMode =
+    user?.preferences?.default_app_mode?.toLowerCase() === "search"
+      ? "search"
+      : "chat";
 
   return useMemo(() => {
     const chatIds = chatSessions.map((session) => session.id);
     function openChat(chatId: string | null | undefined) {
-      if (chatId) appPosition.openChat(chatId);
+      if (!chatId || chatId === appPosition.chat()) return;
+      markRecentChatShortcutTarget(chatId);
+      appPosition.openChat(chatId);
+    }
+    function resetNewSession() {
+      if (!appPosition.isNewSession()) return;
+      setAppMode(defaultMode);
+      reset();
     }
     return {
-      newChat: () => appPosition.openNewSession(),
+      newChat: () => {
+        resetNewSession();
+        appPosition.openNewSession();
+      },
+      resetNewSession,
       toggleModelPicker,
       previousChat: () =>
         openChat(adjacentChatId(chatIds, appPosition.chat(), -1)),
       nextChat: () => openChat(adjacentChatId(chatIds, appPosition.chat(), 1)),
       jumpToChat: (index) => openChat(chatIds[index]),
     };
-  }, [appPosition, chatSessions]);
+  }, [appPosition, chatSessions, defaultMode, reset, setAppMode]);
 }
