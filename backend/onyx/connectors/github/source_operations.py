@@ -513,7 +513,9 @@ class GitHubSourceOperations(SourceOperations):
         _headers, data = self._get(
             f"/repos/{repo_full_name}/branches/{urllib.parse.quote(branch)}"
         )
-        return GitHubBranch(name=data["name"])
+        return GitHubBranch(
+            name=data["name"], tree_sha=data["commit"]["commit"]["tree"]["sha"]
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
