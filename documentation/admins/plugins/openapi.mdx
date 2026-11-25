@@ -67,9 +67,9 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     | `POST`, `PUT` or `PATCH` | A JSON body that accepts any object |
     | The text after the path | The name of the action |
 
-    Onyx makes the action key from the method and the path, for example `get_tickets_id`. If a line is not correct,
-    Onyx shows the error under the endpoints, with the line number.
-    The Onyx API server must be able to reach the base URL.
+    Onyx makes the action key from the method and the path, and adds an eight-character suffix,
+    for example `get_tickets_id_c8e55555`. If a line is not correct, Onyx shows the error under the endpoints,
+    with the line number. The Onyx API server must be able to reach the base URL.
   </Step>
 
   <Step title="Set the sign-in">
