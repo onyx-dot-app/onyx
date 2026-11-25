@@ -507,7 +507,7 @@ async def query_metadata(
     top-k search cannot answer completely: "how many Jira tickets changed last
     week", "list every doc with 'pricing' in the title", "the 10 oldest
     Confluence pages", "documents by owner", "every doc that mentions
-    'Scania'". It filters on metadata (titles, dates, owners, sources,
+    'SOC 2'". It filters on metadata (titles, dates, owners, sources,
     folders) and, with `content_contains`, on the words in a document's text;
     use `search_indexed_documents` for what documents say.
 
@@ -515,16 +515,19 @@ async def query_metadata(
     - `document`: `source_type`, `title_contains`, `updated_after`,
       `updated_before`, `owned_by`, `parent_hierarchy_node_id`,
       `content_contains`. Listings take `order_by` and return `next_cursor`
-      when more match: pass it back as `cursor` with the same filters for the
-      next page. `group_by`: `source` or `owner` (with `count`).
+      when more match: pass it back as `cursor` with the same filters and
+      `order_by` for the next page. `group_by`: `source` or `owner` (with `count`).
       `content_contains` matches whole words or phrases in the text, title and
       metadata values; with the default settings, case and word form do not
-      matter. It searches Salesforce only under public connectors. Each value takes at most 200
+      matter. It searches Salesforce only under public connectors. Each
+      indexed section of a document is matched on its own, so a phrase that
+      crosses two sections can be missed. Each value takes at most 200
       characters, and a value of only common words (such as "the and") is an
       error. It is slow: use it only for an exhaustive list or count by
       content, add date, source or folder filters when you can, and order by
       date. It does not work with `group_by`. A broad count can return "At
-      least N"; a slow page can hold fewer rows, or none, and still return
+      least N", and a count can be slightly higher than the rows a listing
+      returns; a slow page can hold fewer rows, or none, and still return
       `next_cursor`, so keep paging while it is set. Deployments without the
       document index refuse it.
     - `hierarchy_node` (folders, spaces, channels): `source_type`,

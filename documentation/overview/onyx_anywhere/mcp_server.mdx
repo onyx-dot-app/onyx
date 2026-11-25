@@ -217,7 +217,7 @@ Use `search_indexed_documents` for questions about what documents say.
 | `group_by` | string | No | With `count`: `source` or `owner` for documents, `month` for chat sessions and messages. |
 | `limit` | integer | No | Number of rows or page size. Defaults to 25. The maximum is 100. |
 | `order_by` | string | No | Document lists only: `updated_desc` (default), `updated_asc`, `created_desc`, `created_asc`, `title_asc`, or `title_desc`. |
-| `cursor` | string | No | The `next_cursor` value from the previous page of a document list. Use the same filters. |
+| `cursor` | string | No | The `next_cursor` value from the previous page of a document list. Use the same filters and `order_by`. |
 | `agent` | string | No | Name of an accessible Onyx agent. Document queries stay inside that agent's knowledge. |
 
 Each table has its own filters, such as `source_type`, `title_contains`, `owned_by`, and `updated_after` for documents.
@@ -227,13 +227,15 @@ A `*_before` date is not included in the range.
 
 For documents, `content_contains` matches whole words or phrases in the text, the title, and the metadata values.
 With the default settings, case and word forms (such as plurals) do not change the match.
-It searches Salesforce only under public connectors. It is slower than the other filters, so add date, source,
+It searches Salesforce only under public connectors. It matches each indexed section of a document on its own,
+so a phrase that crosses two sections can be missed. It is slower than the other filters, so add date, source,
 or folder filters when you can. Document lists with `content_contains` sort by date only,
 and `group_by` does not work with it.
 
 - Each value can have at most 200 characters, and a filter can have at most 20 values. A value of only common words,
   such as `the and`, returns an error.
-- A broad count can return "At least N matching documents" instead of an exact number.
+- A broad count can return "At least N matching documents" instead of an exact number. A count can also be
+  slightly higher than the number of rows that a list returns across all of its pages.
 - A slow list can return fewer rows than `limit`, or none, together with a `next_cursor`. Continue to page while the
   result has a `next_cursor`.
 - The filter needs the document index. The server refuses it if the deployment turns off the document index
