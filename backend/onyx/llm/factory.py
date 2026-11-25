@@ -1,6 +1,9 @@
+import hashlib
+import threading
 from collections.abc import Callable
 from functools import lru_cache
 
+from cachetools import LRUCache
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
@@ -43,7 +46,10 @@ from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationVie
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 
@@ -662,15 +668,46 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
     return llm_tokenizer.encode
 
 
+# Token counts of long texts, such as the system prompt, kept across turns.
+# The key is (tenant, encode function, SHA-256 of the text). The count depends
+# on nothing else, and the cache holds no prompt content. A shorter text costs
+# little to count, so it stays in the counter of its turn.
+_LONG_TEXT_MIN_CHARS = 4096
+_LONG_TEXT_TOKEN_COUNTS: LRUCache[
+    tuple[str | None, Callable[[str], list[int]], bytes], int
+] = LRUCache(maxsize=4096)
+_LONG_TEXT_TOKEN_COUNTS_LOCK = threading.Lock()
+
+
+def _count_long_text_tokens(encode: Callable[[str], list[int]], text: str) -> int:
+    key = (
+        # A caller with no tenant context can still count.
+        CURRENT_TENANT_ID_CONTEXTVAR.get(),
+        encode,
+        # surrogatepass keeps the encoding one-to-one for any str.
+        hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest(),
+    )
+    with _LONG_TEXT_TOKEN_COUNTS_LOCK:
+        cached = _LONG_TEXT_TOKEN_COUNTS.get(key)
+    if cached is not None:
+        return cached
+    token_count = len(encode(text))
+    with _LONG_TEXT_TOKEN_COUNTS_LOCK:
+        _LONG_TEXT_TOKEN_COUNTS[key] = token_count
+    return token_count
+
+
 def get_llm_token_counter(llm: LLM) -> Callable[[str], int]:
     tokenizer_encode_func: Callable[[str], list[int]] | None = None
 
-    # Keep prompt content local to this counter, never in a process-wide cache.
+    # Keep prompt content local to this counter; the process-wide cache holds digests.
     @lru_cache(maxsize=TOKEN_COUNT_CACHE_SIZE)
     def count(text: str) -> int:
         nonlocal tokenizer_encode_func
         if tokenizer_encode_func is None:
             tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
+        if len(text) >= _LONG_TEXT_MIN_CHARS:
+            return _count_long_text_tokens(tokenizer_encode_func, text)
         return len(tokenizer_encode_func(text))
 
     return count

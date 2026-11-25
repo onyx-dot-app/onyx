@@ -172,7 +172,8 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
             return_value=encode,
         ),
     ):
-        # Each run and model counter must own its cache independently.
+        # Each run and model counter must own its cache independently. Only
+        # texts of 4096 characters or more share counts, by digest.
         for _ in range(2):
             model = ContextModel(tool_rounds=2)
             token_counter = get_llm_token_counter(model)

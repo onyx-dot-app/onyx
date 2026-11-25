@@ -925,3 +925,49 @@ def test_client_captures_nested_deployment_settings_after_merging() -> None:
         "metadata": {"deployment": ["original"], "source": "request"},
         "default_only": {"enabled": True},
     }
+
+
+def test_long_text_token_count_is_shared_by_counters_of_one_tokenizer() -> None:
+    from onyx.llm import factory
+    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+    long_text = "word " * factory._LONG_TEXT_MIN_CHARS
+    short_text = "word"
+    encoded: list[str] = []
+
+    def encode(text: str) -> list[int]:
+        encoded.append(text)
+        return [0] * len(text.split())
+
+    def other_encode(text: str) -> list[int]:
+        encoded.append(text)
+        return [0]
+
+    def count(encode_func: Callable[[str], list[int]], text: str) -> int:
+        # A new counter, as each chat turn makes.
+        with patch.object(
+            factory, "get_llm_tokenizer_encode_func", return_value=encode_func
+        ):
+            return factory.get_llm_token_counter(MagicMock(spec=LLM))(text)
+
+    assert count(encode, long_text) == factory._LONG_TEXT_MIN_CHARS
+    assert count(encode, long_text) == factory._LONG_TEXT_MIN_CHARS
+    assert encoded == [long_text]
+
+    # The count of another text, tokenizer or tenant is never reused.
+    assert count(encode, long_text + "word") == factory._LONG_TEXT_MIN_CHARS + 1
+    assert count(other_encode, long_text) == 1
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_other")
+    try:
+        assert count(encode, long_text) == factory._LONG_TEXT_MIN_CHARS
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    assert len(encoded) == 4
+
+    # A short text stays in the counter of its turn.
+    assert count(encode, short_text) == 1
+    assert count(encode, short_text) == 1
+    assert encoded[4:] == [short_text, short_text]
+    with factory._LONG_TEXT_TOKEN_COUNTS_LOCK:
+        keys = list(factory._LONG_TEXT_TOKEN_COUNTS)
+    assert all(isinstance(key[2], bytes) and len(key[2]) == 32 for key in keys)
