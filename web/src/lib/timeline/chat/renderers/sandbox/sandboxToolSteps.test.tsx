@@ -481,13 +481,13 @@ test("a patch shows its line counts in the header, and a failed one does not", a
     // header shows the total; each file's panel shows its own counts, in
     // both steps.
     expect(
-      screen.getAllByRole("group", { name: "2 additions, 1 deletions" })
+      screen.getAllByRole("group", { name: "2 additions, 1 deletion" })
     ).toHaveLength(1);
     expect(
-      screen.getAllByRole("group", { name: "1 additions, 1 deletions" })
+      screen.getAllByRole("group", { name: "1 addition, 1 deletion" })
     ).toHaveLength(2);
     expect(
-      screen.getAllByRole("group", { name: "1 additions, 0 deletions" })
+      screen.getAllByRole("group", { name: "1 addition, 0 deletions" })
     ).toHaveLength(2);
     expect(screen.getAllByText("print('hi')").length).toBeGreaterThan(0);
   } finally {

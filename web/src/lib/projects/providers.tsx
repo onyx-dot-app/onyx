@@ -505,7 +505,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
               return next;
             });
           }
-          onSuccess?.(uploaded);
+          onSuccess?.({ ...uploaded, user_files: uploadedFiles });
         })
         .catch((err: unknown) => {
           // Roll back optimistic inserts on failure

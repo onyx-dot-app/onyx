@@ -15089,7 +15089,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added} ajouts, {removed} suppressions"
+          "label": "{added, plural, one {# ajout} other {# ajouts}}, {removed, plural, one {# suppression} other {# suppressions}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {# ligne inchangée} other {# lignes inchangées}}"

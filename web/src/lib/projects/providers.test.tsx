@@ -486,6 +486,7 @@ describe("ProjectsContext beginUpload cancel", () => {
     mockDeleteUserFile.mockReset();
     mockDeleteUserFile.mockResolvedValue({ deleted: true });
     const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const onSuccess = jest.fn();
 
     let optimisticFiles: ProjectFile[] = [];
     await act(async () => {
@@ -494,7 +495,8 @@ describe("ProjectsContext beginUpload cancel", () => {
           new File(["a"], "kept.txt", { type: "text/plain" }),
           new File(["b"], "removed.txt", { type: "text/plain" }),
         ],
-        null
+        null,
+        onSuccess
       );
     });
     const [kept, removed] = optimisticFiles.map((f) => f.temp_id ?? "");
@@ -523,12 +525,15 @@ describe("ProjectsContext beginUpload cancel", () => {
     expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
       removed
     );
+    expect(onSuccess).toHaveBeenCalledWith({
+      user_files: [serverFile(kept, "user-kept")],
+      rejected_files: [],
+    });
     expect(mockToastError).not.toHaveBeenCalled();
   });
-
-  it("lets a request with all bytes sent finish, then deletes its cancelled file", async () => {
+  it("deletes a file cancelled after its whole body was sent", async () => {
     let finishUpload: (value: unknown) => void = () => {};
-    let signal: AbortSignal | undefined;
+    let uploadOptions: UploadFilesOptions = {};
     mockUploadFiles.mockImplementation(
       (
         _files: File[],
@@ -538,8 +543,7 @@ describe("ProjectsContext beginUpload cancel", () => {
         options: UploadFilesOptions
       ) =>
         new Promise((resolve) => {
-          signal = options.signal;
-          options.onProgress?.(1);
+          uploadOptions = options;
           finishUpload = resolve;
         })
     );
@@ -550,26 +554,35 @@ describe("ProjectsContext beginUpload cancel", () => {
     let optimisticFiles: ProjectFile[] = [];
     await act(async () => {
       optimisticFiles = await result.current.beginUpload(
-        [new File(["a"], "a.txt", { type: "text/plain" })],
+        [new File(["a"], "sent.txt", { type: "text/plain" })],
         null
       );
     });
     const tempId = optimisticFiles[0]?.temp_id ?? "";
+    act(() => uploadOptions.onProgress?.(1));
     act(() => cancelUpload(tempId));
 
-    expect(signal?.aborted).toBe(false);
+    expect(uploadOptions.signal?.aborted).toBe(false);
     await act(async () => {
       finishUpload({
-        user_files: [{ ...optimisticFiles[0], id: "user-a", temp_id: tempId }],
+        user_files: [
+          {
+            ...optimisticFiles[0],
+            id: "user-sent",
+            temp_id: tempId,
+            status: UserFileStatus.PROCESSING,
+          },
+        ],
         rejected_files: [],
       });
     });
 
     await waitFor(() =>
-      expect(mockDeleteUserFile).toHaveBeenCalledWith("user-a")
+      expect(mockDeleteUserFile).toHaveBeenCalledWith("user-sent")
     );
     expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
       tempId
     );
+    expect(mockToastError).not.toHaveBeenCalled();
   });
 });
