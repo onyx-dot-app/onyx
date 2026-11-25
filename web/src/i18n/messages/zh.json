@@ -12205,6 +12205,23 @@
       "agentResults": {
         "received": "已收到子代理结果"
       },
+      "callout": {
+        "note": {
+          "title": "备注"
+        },
+        "tip": {
+          "title": "提示"
+        },
+        "important": {
+          "title": "重要"
+        },
+        "warning": {
+          "title": "警告"
+        },
+        "caution": {
+          "title": "注意"
+        }
+      },
       "codeBlock": {
         "copyButton": {
           "copiedLabel": "已复制！",

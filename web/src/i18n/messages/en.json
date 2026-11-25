@@ -12205,6 +12205,23 @@
       "agentResults": {
         "received": "Subagent results received"
       },
+      "callout": {
+        "note": {
+          "title": "Note"
+        },
+        "tip": {
+          "title": "Tip"
+        },
+        "important": {
+          "title": "Important"
+        },
+        "warning": {
+          "title": "Warning"
+        },
+        "caution": {
+          "title": "Caution"
+        }
+      },
       "codeBlock": {
         "copyButton": {
           "copiedLabel": "Copied!",

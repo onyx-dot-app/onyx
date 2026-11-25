@@ -11,6 +11,22 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import { useTranslations } from "next-intl";
+import { InputCheckbox } from "@opal/components";
+import {
+  SvgAlertCircle,
+  SvgAlertTriangle,
+  SvgChevronRight,
+  SvgInfo,
+  SvgLightbulbSimple,
+  SvgXOctagon,
+} from "@opal/icons";
+import { Content } from "@opal/layouts";
+import type {
+  IconFunctionComponent,
+  IconProps,
+  StatusColor,
+} from "@opal/types";
 import { cn } from "@opal/utils";
 import {
   MemoizedLink,
@@ -25,11 +41,15 @@ import { useInResponse } from "@/lib/timeline/components/Response";
 import { CodeBlockBody } from "@/lib/timeline/components/bodies/CodeBlockBody";
 import { prepareAnswerMarkdown } from "@/lib/answerText/utils";
 import { splitMarkdownBlocks } from "@/lib/answerText/streamBlocks";
+import { remarkDetails } from "@/lib/answerText/remarkDetails";
+import { remarkGithubAlerts } from "@/lib/answerText/remarkGithubAlerts";
 
 // Math is `$$…$$` only (see `prepareAnswerMarkdown`).
 const REMARK_PLUGINS: PluggableList = [
   remarkGfm,
   [remarkMath, { singleDollarTextMath: false }],
+  remarkGithubAlerts,
+  remarkDetails,
 ];
 const REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
 
@@ -89,8 +109,151 @@ function InlineCode({ children }: React.ComponentProps<"code"> & ExtraProps) {
   );
 }
 
+const CALLOUTS = {
+  note: { icon: SvgInfo, color: "info", border: "border-theme-blue-05" },
+  tip: {
+    icon: SvgLightbulbSimple,
+    color: "success",
+    border: "border-theme-green-05",
+  },
+  important: {
+    icon: SvgAlertCircle,
+    color: "queued",
+    border: "border-theme-purple-05",
+  },
+  warning: {
+    icon: SvgAlertTriangle,
+    color: "warning",
+    border: "border-status-warning-05",
+  },
+  caution: {
+    icon: SvgXOctagon,
+    color: "error",
+    border: "border-status-error-05",
+  },
+} as const satisfies Record<
+  string,
+  { icon: IconFunctionComponent; color: StatusColor; border: string }
+>;
+
+type CalloutKind = keyof typeof CALLOUTS;
+
+function isCalloutKind(value: unknown): value is CalloutKind {
+  return typeof value === "string" && Object.hasOwn(CALLOUTS, value);
+}
+
+/** A blockquote, or a GitHub alert (`> [!NOTE]`) as a callout. */
+function AnswerBlockquote({
+  node,
+  children,
+  ...rest
+}: React.ComponentProps<"blockquote"> & ExtraProps) {
+  const t = useTranslations("chat.messages.callout");
+  const kind = node?.properties.dataAlert;
+  if (!isCalloutKind(kind)) {
+    return <blockquote {...rest}>{children}</blockquote>;
+  }
+  const callout = CALLOUTS[kind];
+  return (
+    <div
+      role="note"
+      data-alert={kind}
+      dir={rest.dir}
+      className={cn(
+        "my-4 border-s-2 ps-3 [&>:nth-child(2)]:mt-1 [&>:last-child]:mb-0",
+        callout.border
+      )}
+    >
+      <div className="not-prose">
+        <Content
+          icon={callout.icon}
+          title={t(`${kind}.title`)}
+          color={callout.color}
+          font="main-ui-action"
+          width="fit"
+        />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DetailsChevron({ className, ...props }: IconProps) {
+  return (
+    <SvgChevronRight
+      {...props}
+      className={cn(className, "transition-transform group-open:rotate-90")}
+    />
+  );
+}
+
+/** `<details>` from `remarkDetails`: a native disclosure. */
+function AnswerDetails({
+  node: _node,
+  className,
+  children,
+  ...rest
+}: React.ComponentProps<"details"> & ExtraProps) {
+  return (
+    <details {...rest} className={cn(className, "group my-4")}>
+      {children}
+    </details>
+  );
+}
+
+function AnswerSummary({ node }: React.ComponentProps<"summary"> & ExtraProps) {
+  return (
+    <summary className="not-prose list-none cursor-pointer [&::-webkit-details-marker]:hidden">
+      <Content
+        icon={DetailsChevron}
+        title={node ? textOf(node.children) : ""}
+        font="main-ui-action"
+        width="fit"
+      />
+    </summary>
+  );
+}
+
+/** A GFM task list item: no bullet; its checkbox is `TaskCheckbox`. */
+function AnswerListItem({
+  node: _node,
+  className,
+  children,
+  ...rest
+}: React.ComponentProps<"li"> & ExtraProps) {
+  return (
+    <li
+      {...rest}
+      className={cn(
+        className,
+        className?.includes("task-list-item") && "list-none"
+      )}
+    >
+      {children}
+    </li>
+  );
+}
+
+/** GFM renders a task's box as a disabled input; show it read-only. */
+function TaskCheckbox({
+  type,
+  checked,
+}: React.ComponentProps<"input"> & ExtraProps) {
+  if (type !== "checkbox") return null;
+  return (
+    <span className="-ms-6 me-2 inline-block align-middle">
+      <InputCheckbox checked={checked === true} disabled />
+    </span>
+  );
+}
+
 const BASE_COMPONENTS: Components = {
   a: MemoizedLink,
+  blockquote: AnswerBlockquote,
+  details: AnswerDetails,
+  summary: AnswerSummary,
+  li: AnswerListItem,
+  input: TaskCheckbox,
   p: ({ dir, children }) => (
     <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
   ),
