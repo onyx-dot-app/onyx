@@ -12595,7 +12595,7 @@
         "stoppedDuration": {
           "label": "{duration} 후에 중지함"
         },
-        "stoppedUnknownDuration": {
+        "interruptedThinking": {
           "label": "이 응답을 중지함"
         },
         "memory": {
@@ -12718,10 +12718,10 @@
         "stepsButton": {
           "label": "{count, plural, one {#단계} other {#단계}}"
         },
-        "workedDuration": {
+        "thoughtDuration": {
           "label": "{duration} 동안 작업함"
         },
-        "workedUnknownDuration": {
+        "thoughtUnknownDuration": {
           "label": "작업함"
         },
         "toggleRow": {

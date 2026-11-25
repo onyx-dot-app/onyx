@@ -345,6 +345,8 @@ class PendingChatMessageRequest(BaseModel):
 class ChatRenameRequest(BaseModel):
     chat_session_id: UUID
     name: str | None = None
+    # With no name: replace a saved name too, instead of returning it.
+    regenerate: bool = False
 
 
 class ChatSessionUpdateRequest(BaseModel):

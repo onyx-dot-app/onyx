@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, memo, useMemo, useEffect } from "react";
+import React, { useState, memo, useMemo, useEffect, useRef } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -31,7 +31,8 @@ import {
   showErrorNotification,
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
-import { compactElapsed, useNowMinute } from "@/lib/sidebar/relativeTime";
+import { compactElapsed } from "@/lib/sidebar/relativeTime";
+import { useNowMinute } from "@opal/hooks";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import {
@@ -137,6 +138,20 @@ const ChatButton = memo(
     const markUnseen = useUnseenRuns((state) => state.markUnseen);
     const markSeen = useUnseenRuns((state) => state.markSeen);
     const [menuOpen, setMenuOpen] = useState(false);
+    const optionsRef = useRef<HTMLDivElement>(null);
+    const focusOptionsOnOpen = useRef(false);
+
+    // The menu's keys are handled on its trigger, so a menu opened from the
+    // row needs focus there.
+    useEffect(() => {
+      if (!menuOpen) {
+        focusOptionsOnOpen.current = false;
+        return;
+      }
+      if (!focusOptionsOnOpen.current) return;
+      focusOptionsOnOpen.current = false;
+      optionsRef.current?.querySelector("button")?.focus();
+    }, [menuOpen]);
     const [optionsFocused, setOptionsFocused] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
@@ -341,7 +356,7 @@ const ChatButton = memo(
     async function handleRegenerateTitle() {
       setRegeneratingTitle(true);
       try {
-        const response = await renameChatSession(chatSession.id, null);
+        const response = await renameChatSession(chatSession.id, null, true);
         if (!response.ok) throw new Error(`Rename failed: ${response.status}`);
         await refreshChatSessions();
       } catch (error) {
@@ -357,6 +372,7 @@ const ChatButton = memo(
       event.preventDefault();
       setContextPoint({ x: event.clientX, y: event.clientY });
       setMenuOpen(true);
+      focusOptionsOnOpen.current = true;
     }
 
     function handleDoubleClick(event: React.MouseEvent<HTMLElement>) {
@@ -498,29 +514,28 @@ const ChatButton = memo(
       </span>
     ) : null;
     const restingMarker = runStatusMarker ?? timeLabel;
-    const tooltip =
-      renaming || menuOpen ? undefined : (
-        <Section gap={0.25} alignItems="start" width="fit" height="fit">
-          <Text font="secondary-action" color="inherit">
-            {displayName}
+    const tooltip = renaming ? undefined : (
+      <Section gap={0.25} alignItems="start" width="fit" height="fit">
+        <Text as="p" font="secondary-action" color="inherit">
+          {displayName}
+        </Text>
+        {runStatusLabel && (
+          <Text as="p" font="secondary-body" color="inherit">
+            {runStatusLabel}
           </Text>
-          {runStatusLabel && (
-            <Text font="secondary-body" color="inherit">
-              {runStatusLabel}
-            </Text>
-          )}
-          {hasUpdatedDate && (
-            <Text font="secondary-body" color="inherit">
-              {t("chatButton.updatedAt", {
-                date: format.dateTime(updatedDate, {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                }),
-              })}
-            </Text>
-          )}
-        </Section>
-      );
+        )}
+        {hasUpdatedDate && (
+          <Text as="p" font="secondary-body" color="inherit">
+            {t("chatButton.updatedAt", {
+              date: format.dateTime(updatedDate, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }),
+            })}
+          </Text>
+        )}
+      </Section>
+    );
     const optionsButton = (
       <Dropdown.Trigger asChild>
         <Button
@@ -540,6 +555,7 @@ const ChatButton = memo(
         {/* The click stays here: the row underneath opens the chat. */}
         <div
           role="presentation"
+          ref={optionsRef}
           data-testid="ChatButton/options"
           onClick={noProp()}
         >
@@ -622,6 +638,7 @@ const ChatButton = memo(
             loading={runStatus === "working" || regeneratingTitle}
             tooltip={tooltip}
             tooltipDelay={TOOLTIP_DELAY_MS}
+            tooltipSuppressed={menuOpen}
             rightChildren={jumpHint ?? rightMenu}
             rightChildrenAtRest={
               (jumpHint && jumpShortcut?.width) ||

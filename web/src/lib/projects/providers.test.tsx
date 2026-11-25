@@ -13,6 +13,7 @@ const mockGetRecentFiles = jest.fn();
 const mockToastWarning = jest.fn();
 const mockToastError = jest.fn();
 const mockGetUserFileStatuses = jest.fn();
+const mockDeleteUserFile = jest.fn();
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -67,7 +68,7 @@ jest.mock("@/lib/projects/svc", () => {
     getProjectDetails: jest.fn(),
     renameProject: jest.fn(),
     deleteProject: jest.fn(),
-    deleteUserFile: jest.fn(),
+    deleteUserFile: (...args: unknown[]) => mockDeleteUserFile(...args),
     getUserFileStatuses: (...args: unknown[]) =>
       mockGetUserFileStatuses(...args),
     unlinkFileFromProject: jest.fn(),
@@ -347,6 +348,19 @@ describe("ProjectsContext attached file status polling", () => {
     expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"]);
   });
 
+  it("does not poll a completed file, such as one from a sent message", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([
+        { ...makePendingFile("store-id"), status: UserFileStatus.COMPLETED },
+      ]);
+    });
+
+    expect(mockGetUserFileStatuses).not.toHaveBeenCalled();
+    expect(result.current.currentMessageFiles).toHaveLength(1);
+  });
+
   it("polls a pending file again when it is attached again after it finished", async () => {
     const pendingFile = makePendingFile("file-1");
     mockGetUserFileStatuses.mockResolvedValue(completedStatuses(["file-1"]));
@@ -459,6 +473,56 @@ describe("ProjectsContext beginUpload cancel", () => {
 
     expect(signal?.aborted).toBe(true);
     await waitFor(() => expect(onFailure).toHaveBeenCalledWith([tempId]));
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+  it("deletes a file cancelled while the rest of its batch uploaded", async () => {
+    let finishUpload: (value: unknown) => void = () => {};
+    mockUploadFiles.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishUpload = resolve;
+        })
+    );
+    mockDeleteUserFile.mockReset();
+    mockDeleteUserFile.mockResolvedValue({ deleted: true });
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [
+          new File(["a"], "kept.txt", { type: "text/plain" }),
+          new File(["b"], "removed.txt", { type: "text/plain" }),
+        ],
+        null
+      );
+    });
+    const [kept, removed] = optimisticFiles.map((f) => f.temp_id ?? "");
+    act(() => cancelUpload(removed ?? ""));
+    const serverFile = (tempId: string | undefined, id: string) => ({
+      ...optimisticFiles[0],
+      id,
+      temp_id: tempId,
+      status: UserFileStatus.PROCESSING,
+    });
+
+    await act(async () => {
+      finishUpload({
+        user_files: [
+          serverFile(kept, "user-kept"),
+          serverFile(removed, "user-removed"),
+        ],
+        rejected_files: [],
+      });
+    });
+
+    await waitFor(() =>
+      expect(mockDeleteUserFile).toHaveBeenCalledWith("user-removed")
+    );
+    expect(mockDeleteUserFile).toHaveBeenCalledTimes(1);
+    expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
+      removed
+    );
     expect(mockToastError).not.toHaveBeenCalled();
   });
 });

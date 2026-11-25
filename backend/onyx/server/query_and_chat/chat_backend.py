@@ -736,6 +736,7 @@ def rename_chat_session(
             additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
+            regenerate=rename_req.regenerate,
         )
     )
 

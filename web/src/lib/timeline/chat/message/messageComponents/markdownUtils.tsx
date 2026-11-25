@@ -36,6 +36,7 @@ import type { TextColor, TextFont } from "@opal/components";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import {
+  GALLERY_ALT_ATTR,
   GALLERY_IMAGE_ATTR,
   collectGallery,
   type GalleryState,
@@ -197,7 +198,7 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
         role="button"
         tabIndex={0}
         aria-label={alt || tFiles("inMessageImage.viewFullImage.label")}
-        {...{ [GALLERY_IMAGE_ATTR]: src }}
+        {...{ [GALLERY_IMAGE_ATTR]: src, [GALLERY_ALT_ATTR]: alt ?? "" }}
         onClick={openGallery}
         onKeyDown={clickOnKeyDown(openGallery)}
         className="block w-fit max-w-full cursor-zoom-in"
@@ -206,9 +207,8 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
       </span>
       {gallery && (
         <FullImageModal
-          urls={gallery.urls}
+          images={gallery.images}
           initialIndex={gallery.index}
-          alt={alt}
           open
           onOpenChange={(open) => {
             if (!open) setGallery(null);

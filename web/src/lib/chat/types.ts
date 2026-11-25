@@ -48,6 +48,8 @@ export interface ComposedMessage {
 /** A question that did not reach the server, to put back in the composer. */
 export interface UnsentMessage extends ComposedMessage {
   files: ProjectFile[];
+  /** The sent question that an unsent edit replaces. */
+  messageIdToResend?: number;
 }
 
 /** A sent question that the user edits in the composer. */

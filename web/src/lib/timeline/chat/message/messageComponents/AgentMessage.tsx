@@ -21,6 +21,7 @@ import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
 import MessageTime from "@/lib/timeline/chat/message/MessageTime";
 import { HumanMessageBubble } from "@/lib/timeline/chat/message/HumanMessage";
+import { chatFindInlineKey } from "@/lib/chatFind/match";
 import type {
   TransformedStep,
   TurnGroup,
@@ -589,6 +590,10 @@ const AgentMessage = React.memo(function AgentMessage({
                     <HumanMessageBubble
                       content={section.userMessage.message}
                       mentions={section.userMessage.mentions}
+                      findKey={chatFindInlineKey(
+                        nodeId,
+                        section.userMessage.id
+                      )}
                     />
                   </Section>
                 )}
@@ -775,6 +780,16 @@ const AgentMessage = React.memo(function AgentMessage({
                                     isLastSection && codeModeWorking
                                   }
                                   awaitingUser={awaitingUser}
+                                  isFirstRun={
+                                    sectionIndex === 0 &&
+                                    !segments
+                                      .slice(0, index)
+                                      .some(
+                                        (s) =>
+                                          s.kind === "run" &&
+                                          s.turnGroups.length > 0
+                                      )
+                                  }
                                 />
                               ),
                             };
@@ -858,6 +873,10 @@ function endsWithRun(segments: SectionSegment[]): boolean {
   );
   return (
     last?.kind === "images" ||
+    // A question is a tool call with no step of its own, so its record
+    // ends the run; without a slot under it, the cursor stays on the text
+    // above the card.
+    (last?.kind === "record" && last.record.kind === "question") ||
     (last?.kind === "run" && last.turnGroups.length > 0)
   );
 }

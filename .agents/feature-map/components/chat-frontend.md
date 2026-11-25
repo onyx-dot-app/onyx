@@ -70,8 +70,10 @@
   near the view so it mounts, then the CSS Custom Highlight API paints the
   matches inside rows marked `data-chat-find-text`
   (`lib/chatFind/highlights.ts`, `lib/chatFind/hooks.ts`). Citation chips and
-  callout titles are marked `data-chat-find-ignore`. A match in a closed
-  `<details>` opens it. A search starts at the top row of the view.
+  callout titles are marked `data-chat-find-ignore`; footnotes are left out.
+  It searches every answer of a multi-model turn and the user messages a
+  reply shows in place. A match in a closed `<details>` opens it, and one
+  below a long question's fold unfolds the bubble (`data-chat-find-fold`). A search starts at the top row of the view.
   Enter and Shift+Enter step; Escape closes and returns focus.
 - **A user types or pastes with no field focused.** On the chat page, a
   printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and
@@ -796,7 +798,9 @@ command step names its program (`web/src/lib/timeline/chat/commandProgramName.ts
 A reasoning step shows a one-line preview of its latest text
 (`reasoningPreview`), which its own step card also shows while it streams. The
 collapsed run card shows this header while it works. Once done, it reads
-"Worked for {duration}", or "You stopped after {duration}". Before
+"Worked for {duration}", or "You stopped after {duration}" when the stop
+ended its work. Only the response's first run uses the response's start and
+duration (`isFirstRun`); a later run times itself. Before
 the first step, the response shows the cursor, not a run card. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a
@@ -1001,7 +1005,7 @@ from a separate store. After 150 ms the tooltip shows the title, status and
 last update time. With no status mark, the row shows the relative update time
 at its end until hover. Right-click, or the context-menu key, opens the options
 menu at the pointer. Double-click renames. The menu has Regenerate title (a
-rename with `name: null`) and Mark as unread or Mark as read. Working shimmers
+rename with `name: null` and `regenerate: true`, which replaces a saved name) and Mark as unread or Mark as read. Working shimmers
 the title (`SidebarTab` `loading`). The other statuses put a mark at the row's
 end. On hover, the options button replaces the warning icon, error icon, or
 blue unseen dot for Done. Working (`loading`, `streaming` or `cancelling`), Needs

@@ -55,6 +55,24 @@ test("an open details block starts open", () => {
   expect(container.querySelector("details")).toHaveAttribute("open");
 });
 
+test("details tags that share a line block with text or each other still nest", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Outer &amp; more</summary>\nFirst line\n\n<details>\n<summary>Inner</summary>\n\nInner body\n\n</details>\n</details>\n\nAfter."
+      }
+    />
+  );
+
+  const outer = container.querySelector("details");
+  expect(outer?.querySelector("summary")).toHaveTextContent(/^Outer & more$/);
+  expect(outer).toHaveTextContent("First line");
+  const inner = outer?.querySelector("details");
+  expect(inner?.querySelector("summary")).toHaveTextContent(/^Inner$/);
+  expect(inner).toHaveTextContent("Inner body");
+  expect(container.querySelector("details + p")).toHaveTextContent("After.");
+});
+
 test("a task list shows read-only checkboxes without bullets", () => {
   render(<AnswerMarkdown content={"- [x] Done\n- [ ] To do"} />);
 
@@ -66,4 +84,14 @@ test("a task list shows read-only checkboxes without bullets", () => {
     expect(box).toHaveAttribute("aria-disabled", "true");
   }
   expect(screen.getByText("Done").closest("li")).toHaveClass("list-none");
+});
+
+test("a loose task list keeps the checkbox out of the paragraph", () => {
+  const { container } = render(
+    <AnswerMarkdown content={"- [x] Done\n\n- [ ] To do"} />
+  );
+
+  expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+  expect(container.querySelector("p [role='checkbox']")).toBeNull();
+  expect(container.querySelector("p")).toHaveTextContent("Done");
 });

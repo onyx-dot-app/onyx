@@ -17,7 +17,8 @@ import { placeMentions, MENTION_TRIGGER } from "@/lib/chat/mentions";
 import type { ComposedMention, MessageEdit, Mention } from "@/lib/chat/types";
 import type { IconFunctionComponent } from "@opal/types";
 import { useTranslations } from "next-intl";
-import { chatFindTextKey } from "@/lib/chatFind/highlights";
+import { chatFindTextKey } from "@/lib/chatFind/match";
+import { CHAT_FIND_UNFOLD_EVENT } from "@/lib/chatFind/highlights";
 
 // The chip icon of each mention kind.
 const MENTION_CHIP_ICONS: Record<Mention["type"], IconFunctionComponent> = {
@@ -41,6 +42,13 @@ export function HumanMessageBubble({
   const [textElement, setTextElement] = useState<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
   const clipped = useOverflow(textElement);
+  useEffect(() => {
+    if (!textElement) return;
+    const unfold = () => setExpanded(true);
+    textElement.addEventListener(CHAT_FIND_UNFOLD_EVENT, unfold);
+    return () =>
+      textElement.removeEventListener(CHAT_FIND_UNFOLD_EVENT, unfold);
+  }, [textElement]);
   const body = useMemo(() => {
     if (!mentions?.length) return content;
     const parts: React.ReactNode[] = [];
@@ -88,6 +96,7 @@ export function HumanMessageBubble({
       >
         <div
           ref={setTextElement}
+          data-chat-find-fold={clipped && !expanded ? "closed" : undefined}
           className={cn(
             !expanded && "max-h-72 overflow-hidden",
             clipped &&
