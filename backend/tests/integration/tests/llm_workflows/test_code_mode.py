@@ -202,9 +202,11 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
             ).raise_for_status()
         )
         persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
-        cleanup.callback(
-            lambda: PersonaManager.delete(persona, user_performing_action=admin_user)
-        )
+
+        @cleanup.callback
+        def _delete_persona() -> None:
+            assert PersonaManager.delete(persona, user_performing_action=admin_user)
+
         link_persona(persona.id, integration_id, {})
         claude = MockLLMManager.create(
             mock_llm.api_base,
@@ -295,7 +297,11 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
         session = ChatSessionManager.create(
             persona_id=persona.id, user_performing_action=admin_user
         )
-        cleanup.callback(ChatSessionManager.delete, session, admin_user)
+
+        @cleanup.callback
+        def _delete_session() -> None:
+            assert ChatSessionManager.delete(session, admin_user)
+
         first = ChatSessionManager.send_message(
             session.id, f"Start a cell. {nonce}", admin_user
         )
