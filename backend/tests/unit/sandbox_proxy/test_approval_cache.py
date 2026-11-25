@@ -108,10 +108,18 @@ class _MemoryCache(CacheBackend):
     def exists(self, key: str) -> bool:
         return key in self.values
 
-    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+    def renew_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        seconds: int,
+        *,
+        also: Collection[str] = (),
+    ) -> bool:
         if self.get(key) != expected:
             return False
-        self.expire(key, seconds)
+        for name in (key, *also):
+            self.expire(name, seconds)
         return True
 
     def ttl(self, key: str) -> int:  # noqa: ARG002
