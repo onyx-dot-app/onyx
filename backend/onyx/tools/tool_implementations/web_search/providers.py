@@ -1,4 +1,9 @@
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from sqlalchemy.orm import Session
+
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_current_tenant_if_none,
+)
 from onyx.db.models import InternetSearchProvider
 from onyx.db.web_search import (
     fetch_active_web_content_provider,
@@ -227,8 +232,10 @@ def get_default_provider() -> WebSearchProvider | None:
         return _build_search_provider(provider_model)
 
 
-def get_default_content_provider() -> WebContentProvider:
-    with get_session_with_current_tenant() as db_session:
+def get_default_content_provider(
+    db_session: Session | None = None,
+) -> WebContentProvider:
+    with get_session_with_current_tenant_if_none(db_session) as db_session:
         provider_model = fetch_active_web_content_provider(db_session)
         if provider_model:
             provider = build_content_provider_from_config(
