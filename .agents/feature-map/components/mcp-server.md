@@ -16,7 +16,7 @@
   `https://<onyx domain>/mcp` and a Personal Access Token or API key as a
   bearer token. When the deployment has the Onyx OAuth provider (on only when
   `WEB_DOMAIN` is HTTPS, or HTTP on localhost), the client can instead sign the
-  user in through the browser and get a token scoped to `read:search`. `backend/onyx/mcp_server/mcp.json.template` shows the client
+  user in through the browser and get a token scoped to `read:search` and `read:chat`. `backend/onyx/mcp_server/mcp.json.template` shows the client
   configuration.
 - **The client's model** can then call `search_indexed_documents` for ranked
   results from the knowledge base, and `search_web` and `open_urls` for the
@@ -137,8 +137,10 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    `request.state.token_scopes`, so an unscoped PAT or API key carries the
    user's full access. Do not assume the MCP layer gates a PAT by scope. Only
    `onyx_oat_` tokens are checked here, by
-   `mcp_server/auth.py:OnyxTokenVerifier.verify_oauth_token`, for exactly
-   `read:search` and the MCP resource.
+   `mcp_server/auth.py:OnyxTokenVerifier.verify_oauth_token`, for the MCP
+   resource and a grant scope that `auth/oauth_provider.py:is_valid_oauth_provider_grant_scope`
+   accepts: `read:search` and `read:chat`, or `read:search` alone for grants
+   made before `read:chat` was added.
 2. `acl-from-search-route` **ACLs come from `/search`, not from this process.**
    `server/features/search/api.py:search` builds `SearchTool` with the resolved
    user, which always applies that user's ACL filters ([[access-control]]). A
@@ -146,13 +148,15 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    index itself.
 3. `oauth-token-route-allowlist` **An OAuth provider token reaches only an
    allowlist of routes.** `oauth_provider/auth.py:_ACCESS_ROUTES` admits
-   `onyx_oat_` tokens only on the routes this server calls, and only with
-   exactly `read:search`. A new API route that a tool calls must be added
+   `onyx_oat_` tokens only on the routes this server calls, and only with a
+   valid grant scope. A new API route that a tool calls must be added
    there. Otherwise the API server rejects OAuth clients on that route while
    PAT clients work. The allowlist is not enough: the token's scopes are set to
-   `READ_SEARCH` only, so a route gated on any permission that `READ_SEARCH`
-   does not imply returns 403 to every OAuth client
-   (`auth/permissions.py:require_permission`). A malformed or refresh-type `onyx_oat_` bearer gets a 401
+   the grant's scopes (`READ_SEARCH` and `READ_CHAT`, or `READ_SEARCH` alone for
+   an older grant), so a route gated on any other permission returns 403 to
+   every OAuth client (`auth/permissions.py:require_permission`). Every new
+   grant carries both scopes, whatever the client requests; the grant stores
+   the scopes the user approved on the consent page. A malformed or refresh-type `onyx_oat_` bearer gets a 401
    (`oauth_provider/auth.py:oauth_provider_tenant_from_request`), and identity
    resolution never falls back to a browser cookie ([[auth-and-identity]]).
 4. `client-facing-names-stable` **Tool and resource names, arguments and result

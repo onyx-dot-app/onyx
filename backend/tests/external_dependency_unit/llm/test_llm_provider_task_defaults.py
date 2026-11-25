@@ -69,6 +69,7 @@ def test_schema_engine() -> Generator[Engine, None, None]:
                     "search_settings",
                     "user_group",
                     "user",
+                    "user_preferences",
                 )
             ],
         )

@@ -213,9 +213,10 @@ last ceiling when that is higher. After the hold the share grows by 0.05 each
 10 s up to 80 % of the ceiling, then by 0.005; above the ceiling it moves the
 ceiling up. A project window stores its share in `:learned` for 7 days
 whenever the share changes. A run that finds no window state starts from the
-stored share, and grows slowly from it, or with none stored from
-`GOOGLE_START_SHARE` (0.25) with fast growth. So a new run does not start with
-a storm at the full budget. EE group sync and doc permission sync
+stored share, or with none stored from `GOOGLE_START_SHARE` (0.25). That
+share is the ceiling of the new window, so the window grows slowly (0.005 each
+10 s) from it. So a new run does not start with a storm at the full budget, and
+a cold start does not grow into one in its first minutes. EE group sync and doc permission sync
 (`ee/onyx/external_permissions/google_drive/`) spend from the same budgets. A
 rate refusal there, in connector validation, or in the directory probe raises
 as a temporary error. It never reads as "no access" or as a permission error.

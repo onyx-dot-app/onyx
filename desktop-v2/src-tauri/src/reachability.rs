@@ -22,6 +22,11 @@ pub enum Unreachable {
     ServerError {
         status: u16,
     },
+    /// Something answered, but not the Onyx API (a captive portal, a sign-in
+    /// gateway, another site).
+    NotOnyx,
+    /// The Onyx web UI answered for `/api`: no proxy sends `/api` to the API server.
+    ApiNotRouted,
     Unknown,
 }
 
@@ -71,14 +76,42 @@ impl Unreachable {
         })
     }
 
-    /// One line for the launcher and dialogs.
+    /// The server answered, so a page that finished loading is its error
+    /// page, not the app.
+    pub fn server_answered(&self) -> bool {
+        matches!(
+            self,
+            Self::ServerError { .. } | Self::NotOnyx | Self::ApiNotRouted
+        )
+    }
+
+    /// One line for the launcher, onboarding, sign-in and dialogs.
     pub fn message(&self, server: &str) -> String {
         let host = display_host(server);
         match self {
+            Self::NoNetwork => "This computer is not connected to a network.".into(),
+            Self::Dns => format!("Can't find {host}. Check the server address."),
+            Self::Tls => format!(
+                "This computer does not trust the security certificate of {host}. \
+                 Your IT team may need to install your company's root certificate."
+            ),
+            Self::Timeout => format!("{host} took too long to answer. Try again later."),
+            Self::Refused => format!(
+                "{host} does not accept connections. Check the server address and port, \
+                 and that the server is running."
+            ),
             Self::ServerError { status } => {
                 format!("{host} has a problem (error {status}). Try again later.")
             }
-            _ => format!("Can't reach {host}. Check your connection."),
+            Self::NotOnyx => format!(
+                "{host} does not look like an Onyx server. Check the server address. \
+                 A network sign-in page (for example, on public Wi-Fi) can also cause this."
+            ),
+            Self::ApiNotRouted => format!(
+                "{host} serves the Onyx web app, but not its API. \
+                 Ask your admin to send /api to the Onyx API server."
+            ),
+            Self::Unknown => format!("Can't reach {host}. Check your connection."),
         }
     }
 }
@@ -191,7 +224,7 @@ mod tests {
 
     #[test]
     fn health_reports_refused_and_server_errors() {
-        let api = Api::new();
+        let api = Api::new("0.0.0-test").unwrap();
         let down = format!("http://127.0.0.1:{CLOSED_PORT}");
         assert_eq!(
             tauri::async_runtime::block_on(api.health(&down)),
@@ -225,7 +258,7 @@ mod tests {
     #[test]
     fn messages_name_the_host() {
         assert_eq!(
-            Unreachable::Refused.message("http://localhost:3000"),
+            Unreachable::Unknown.message("http://localhost:3000"),
             "Can't reach localhost:3000. Check your connection."
         );
         assert_eq!(display_host("https://cloud.onyx.app"), "cloud.onyx.app");
@@ -233,5 +266,32 @@ mod tests {
             serde_json::to_value(Unreachable::ServerError { status: 502 }).unwrap(),
             serde_json::json!({ "kind": "serverError", "status": 502 })
         );
+        assert_eq!(
+            serde_json::to_value(Unreachable::ApiNotRouted).unwrap(),
+            serde_json::json!({ "kind": "apiNotRouted" })
+        );
+    }
+
+    #[test]
+    fn each_reason_has_its_own_message() {
+        let server = "https://onyx.example:8443";
+        let reasons = [
+            Unreachable::NoNetwork,
+            Unreachable::Dns,
+            Unreachable::Tls,
+            Unreachable::Timeout,
+            Unreachable::Refused,
+            Unreachable::ServerError { status: 502 },
+            Unreachable::NotOnyx,
+            Unreachable::ApiNotRouted,
+            Unreachable::Unknown,
+        ];
+        let messages: std::collections::HashSet<String> =
+            reasons.iter().map(|r| r.message(server)).collect();
+        assert_eq!(messages.len(), reasons.len());
+        assert!(Unreachable::Tls.message(server).contains("certificate"));
+        assert!(Unreachable::Dns
+            .message(server)
+            .contains("onyx.example:8443"));
     }
 }

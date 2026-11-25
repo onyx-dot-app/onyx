@@ -40,6 +40,7 @@ highlighted markup.
 | `lineNumbers` | `boolean`         | `false` | Shows each line's `number` in a gutter (`background-tint-01`)               |
 | `markers`     | `boolean`         | `false` | Shows a `+` / `-` column for diff lines                                     |
 | `copyText`    | `string`          | —       | A copy button that appears on hover at the top end, for a panel without a header |
+| `grow`        | `boolean`         | `false` | Grows with the lines instead of scrolling past 24rem, e.g. for code in answer text |
 
 `kind` is `"context"` (default), `"added"` (green tint, `+`), `"removed"`
 (red tint, `-`) or `"note"` (a full-width italic line, e.g. "12 unchanged
@@ -47,10 +48,12 @@ lines").
 
 ### `CodePanel.Output`
 
-| Prop       | Type      | Default | Description                  |
-| ---------- | --------- | ------- | ---------------------------- |
-| `children` | `string`  | —       | The output text              |
-| `error`    | `boolean` | `false` | Red text on a red tint       |
+| Prop       | Type      | Default | Description                                                     |
+| ---------- | --------- | ------- | --------------------------------------------------------------- |
+| `children` | `string`  | —       | The output text                                                 |
+| `error`    | `boolean` | `false` | Red text on a red tint                                          |
+| `loading`  | `boolean` | `false` | The output is still awaited: a line shimmer in place of the text |
+| `follow`   | `boolean` | `false` | Keeps the newest output in view as it streams, until the user scrolls up |
 
 ### `CodePanel.Footer`
 

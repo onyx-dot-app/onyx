@@ -1,5 +1,5 @@
 import abc
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from types import TracebackType
 from typing import Any, ClassVar, Generic, TypeAlias, TypeVar
 
@@ -82,6 +82,34 @@ class SourceApiLimiter(abc.ABC):
         the user, and False when it limited the whole credential."""
         raise NotImplementedError
 
+    def report_retry_after(self, api: str, seconds: float) -> None:  # noqa: ARG002
+        """Tells the limiter that the source asked its callers to wait
+        ``seconds`` before the next request (Retry-After). A limiter with a
+        shared pause then holds every call of every worker for that time.
+        The default does nothing."""
+        return None
+
+
+class RunScopedCache(abc.ABC):
+    """A store of short-lived values that every worker of one listing run
+    shares, such as the permission lookups of conversion. The worker builds
+    it and passes it to the connector, like the source API limiter. A
+    connector names its entries and gives each one a lifetime. Both methods
+    fail soft: when the store cannot be reached, ``get`` returns None and
+    ``set`` keeps nothing."""
+
+    @abc.abstractmethod
+    def get(self, key: str) -> str | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set(self, key: str, value: str, ttl_seconds: int) -> None:
+        raise NotImplementedError
+
+
+# Builds the cache of one listing run, from the run id.
+RunScopedCacheFactory: TypeAlias = Callable[[str], RunScopedCache]
+
 
 class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
@@ -91,6 +119,9 @@ class BaseConnector(abc.ABC, Generic[CT]):
 
     # Optional shared budget for the source's API calls.
     source_api_limiter: SourceApiLimiter | None = None
+
+    # Optional builder of the cache that the workers of a listing run share.
+    run_scoped_cache_factory: RunScopedCacheFactory | None = None
 
     # True when the slim listing filters `start` by the same date as indexing,
     # so a prune can list only the documents from the indexing start.
@@ -146,6 +177,12 @@ class BaseConnector(abc.ABC, Generic[CT]):
         """Inject the shared budget for this connector's source API calls. A
         connector that does not limit its calls ignores it."""
         self.source_api_limiter = limiter
+
+    def set_run_scoped_cache_factory(self, factory: RunScopedCacheFactory) -> None:
+        """Inject the builder of the cache that the workers of one listing
+        run share. A connector that keeps nothing between workers ignores
+        it."""
+        self.run_scoped_cache_factory = factory
 
     def set_raw_file_callback(self, callback: RawFileCallback) -> None:
         """Inject the per-attempt raw-file persistence callback.

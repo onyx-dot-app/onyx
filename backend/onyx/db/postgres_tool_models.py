@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -11,11 +12,36 @@ class GroupCount(BaseModel):
     count: int
 
 
-class DocumentCursor(BaseModel):
-    """The last document of a listing page: its position in the newest-first
-    order."""
+class DocumentOrder(str, Enum):
+    """Orders of a document listing. Documents with no value sort last in
+    either direction, and ties break on the document id."""
 
-    updated_at: datetime | None
+    UPDATED_DESC = "updated_desc"
+    UPDATED_ASC = "updated_asc"
+    CREATED_DESC = "created_desc"
+    CREATED_ASC = "created_asc"
+    TITLE_ASC = "title_asc"
+    TITLE_DESC = "title_desc"
+
+    @property
+    def is_date(self) -> bool:
+        return self not in (DocumentOrder.TITLE_ASC, DocumentOrder.TITLE_DESC)
+
+    @property
+    def is_descending(self) -> bool:
+        return self in (
+            DocumentOrder.UPDATED_DESC,
+            DocumentOrder.CREATED_DESC,
+            DocumentOrder.TITLE_DESC,
+        )
+
+
+class DocumentCursor(BaseModel):
+    """The last document of a listing page: its position in the page's order.
+    `sort_value` is that document's ordered column: a datetime for date orders,
+    the title for title orders."""
+
+    sort_value: datetime | str | None
     document_id: str
 
 

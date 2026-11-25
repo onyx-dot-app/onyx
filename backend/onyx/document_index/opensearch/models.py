@@ -12,12 +12,6 @@ class ResourceIssue(str, Enum):
     VECTOR_MEMORY = "vector_memory"
 
 
-class ResourceHealth(BaseModel):
-    checked_at: datetime | None = None
-    issues: list[ResourceIssue] = Field(default_factory=list)
-    stale: bool = True
-
-
 class ResourceSnapshot(BaseModel):
     checked_at: datetime
     issues: list[ResourceIssue]
@@ -146,6 +140,14 @@ class ClusterIndexStatus(BaseModel):
     store_size_bytes: int
     primary_shards: int
     replicas: int
+
+
+class ClusterIssueState(BaseModel):
+    """What the admin notifications remember between cluster checks."""
+
+    # When each critical issue was first seen, by issue kind or "unreachable".
+    # A cleared issue leaves the map, so its return is a new occurrence.
+    first_seen: dict[str, datetime] = Field(default_factory=dict)
 
 
 class UsageThresholds(BaseModel):

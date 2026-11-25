@@ -48,7 +48,10 @@ def requires_code_mode(enabled: bool) -> pytest.MarkDecorator:
 
 
 def tool_call_reply(
-    *calls: ToolCall, tool_choice: str | None = None, required: bool = True
+    *calls: ToolCall,
+    tool_choice: str | None = None,
+    required: bool = True,
+    conditions: RequestConditions | None = None,
 ) -> Reply:
     """A reply that calls tools the way the server offers them: native tool
     calls, or with code mode on, one `execute_code` program that awaits each
@@ -56,12 +59,18 @@ def tool_call_reply(
     characters of its name as `_`; it can call a deferred (MCP or custom)
     function without `tool_search`. The
     program call takes the first call's id, so a later reply can wait for
-    `has_results_for=[calls[0].id]` in both modes."""
+    `has_results_for=[calls[0].id]` in both modes. `conditions` holds more
+    checks; its offered tools add to the called ones, and `tool_choice`, when
+    set, replaces its tool choice."""
+    base = conditions or RequestConditions()
     if not CODE_MODE_ENABLED:
         return Reply(
             tool_calls=list(calls),
-            conditions=RequestConditions(
-                offers=[call.name for call in calls], tool_choice=tool_choice
+            conditions=base.model_copy(
+                update={
+                    "offers": [*base.offers, *(call.name for call in calls)],
+                    "tool_choice": tool_choice or base.tool_choice,
+                }
             ),
             required=required,
         )
@@ -75,7 +84,12 @@ def tool_call_reply(
         tool_calls=[
             ToolCall(id=calls[0].id, name="execute_code", arguments={"code": program})
         ],
-        conditions=RequestConditions(offers=["execute_code"], tool_choice=tool_choice),
+        conditions=base.model_copy(
+            update={
+                "offers": [*base.offers, "execute_code"],
+                "tool_choice": tool_choice or base.tool_choice,
+            }
+        ),
         required=required,
     )
 

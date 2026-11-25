@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 
@@ -61,6 +61,18 @@ class FirecrawlClient(WebContentProvider):
         max_workers = min(_DEFAULT_MAX_WORKERS, len(urls))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             return list(executor.map(self._get_webpage_content_safe, urls))
+
+    def iter_contents(self, urls: Sequence[str]) -> Iterator[WebContent]:
+        if not urls:
+            return
+
+        max_workers = min(_DEFAULT_MAX_WORKERS, len(urls))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(self._get_webpage_content_safe, url) for url in urls
+            ]
+            for future in as_completed(futures):
+                yield future.result()
 
     # This allows the contents call to continue even if one URL fails, and return the results for the other URLs.
     def _get_webpage_content_safe(self, url: str) -> WebContent:

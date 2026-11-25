@@ -1,4 +1,4 @@
-"""Relays the source-API and adaptive-pool metrics of a spawned indexing
+"""Relays the source-API, adaptive-pool and listing-pause metrics of a spawned indexing
 process to the worker that spawned it.
 
 A docfetching worker runs each connector in a spawned process
@@ -34,12 +34,19 @@ from onyx.server.metrics.adaptive_pool_metrics import (
     ADAPTIVE_POOL_IN_FLIGHT,
     ADAPTIVE_POOL_LIMIT,
 )
+from onyx.server.metrics.listing_backpressure_metrics import (
+    LISTING_BACKPRESSURE_PAUSED_SECONDS,
+    LISTING_BACKPRESSURE_PAUSES,
+)
 from onyx.server.metrics.source_api_metrics import (
     LIMITER_BUDGET,
     LIMITER_CUT_USERS,
     LIMITER_CUTS,
     LIMITER_LOCAL_WAITERS,
+    LIMITER_PAUSED_SECONDS,
+    LIMITER_PAUSES,
     LIMITER_REDIS_WAITERS,
+    LIMITER_UNITS,
     LIMITER_WAIT_SECONDS,
     SOURCE_API_REQUESTS,
 )
@@ -65,8 +72,13 @@ RELAYED_COUNTERS: tuple[Counter, ...] = (
     SOURCE_API_REQUESTS,
     LIMITER_CUTS,
     LIMITER_WAIT_SECONDS,
+    LIMITER_UNITS,
+    LIMITER_PAUSES,
+    LIMITER_PAUSED_SECONDS,
     ADAPTIVE_POOL_CUTS,
     ADAPTIVE_POOL_GROWS,
+    LISTING_BACKPRESSURE_PAUSES,
+    LISTING_BACKPRESSURE_PAUSED_SECONDS,
 )
 RELAYED_GAUGES: tuple[tuple[Gauge, GaugeMerge], ...] = (
     (LIMITER_BUDGET, GaugeMerge.MIN),

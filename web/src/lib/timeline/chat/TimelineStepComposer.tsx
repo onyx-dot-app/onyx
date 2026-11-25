@@ -7,14 +7,10 @@ import { TimelineRendererOutput } from "./TimelineRendererComponent";
 export interface TimelineStepComposerProps {
   /** Results produced by the active renderer. */
   results: TimelineRendererOutput;
-  /** Whether the overall step is the last in the timeline (affects connector). */
-  isLastStep: boolean;
-  /** Whether the overall step is the first in the timeline (affects connector). */
-  isFirstStep: boolean;
-  /** Whether StepContainer should show collapse controls. */
-  collapsible?: boolean;
   /** The step's status; it decides the first row's icon and failed tint. */
   status?: TimelineEntryStatus;
+  /** Shown at the end of the first row's header, e.g. a memory's tag. */
+  headerAccessory?: React.ReactNode;
 }
 
 /**
@@ -23,10 +19,8 @@ export interface TimelineStepComposerProps {
  */
 export function TimelineStepComposer({
   results,
-  isLastStep,
-  isFirstStep,
-  collapsible = true,
   status = "done",
+  headerAccessory,
 }: TimelineStepComposerProps) {
   return (
     <>
@@ -37,19 +31,13 @@ export function TimelineStepComposer({
           <RunStep
             key={index}
             status={index === 0 ? status : "done"}
-            position={{
-              isFirst: index === 0 && isFirstStep,
-              isLast: index === results.length - 1 && isLastStep,
-            }}
             icon={result.icon as IconFunctionComponent | undefined}
             title={result.status ?? undefined}
             doneTitle={result.doneStatus ?? undefined}
             titleKey={result.statusKey}
             defaultExpanded={result.isExpanded}
-            expandable={collapsible}
-            isHover={result.isHover}
-            surfaceBackground={result.surfaceBackground}
             body={result.content}
+            headerAccessory={index === 0 ? headerAccessory : undefined}
           />
         )
       )}

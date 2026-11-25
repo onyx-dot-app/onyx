@@ -103,6 +103,7 @@ from onyx.db.models import ChatSession, User
 from onyx.db.skill import list_chat_skills
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.db.user_file import capture_user_file_metadata, prepare_chat_file_inputs
+from onyx.db.user_preferences import fetch_user_preferences
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS
 from onyx.deep_research.tool_definitions import (
@@ -123,7 +124,7 @@ from onyx.llm.factory import (
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import model_identity_names
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.override_models import LLMOverride
 from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -215,6 +216,7 @@ def _select_models(
     new_msg_req: SendMessageRequest,
     chat_session: ChatSession,
     user: User,
+    user_defaults: UserChatDefaults,
     llm_overrides: list[LLMOverride] | None,
     litellm_additional_headers: dict[str, str] | None,
     db_session: Session,
@@ -234,6 +236,7 @@ def _select_models(
         llm = get_llm_for_persona(
             persona=chat_session.persona,
             user=user,
+            user_defaults=user_defaults,
             llm_override=override,
             additional_headers=litellm_additional_headers,
             policy_fn=incognito_policy_fn,
@@ -493,10 +496,12 @@ def prepare_chat_turn(
                         "deep_research": new_msg_req.deep_research,
                     },
                 )
+            preferences = fetch_user_preferences(user, db_session)
             selected_models = _select_models(
                 new_msg_req,
                 chat_session,
                 user,
+                preferences.chat_defaults,
                 llm_overrides,
                 litellm_additional_headers,
                 db_session,
@@ -540,9 +545,13 @@ def prepare_chat_turn(
             # multi-model turn has no sandbox tools and publishes no files;
             # the web's file cards rely on it. Bots get no sandbox until they
             # have service-account sandboxes. Deep research gets no sandbox.
+            # Only the chat's owner gets it: the session directory and the
+            # published files belong to the owner's chat (a chat without an
+            # owner, which any user can open, gets none).
             sandbox_tools = (
                 HARNESS_SANDBOX_ENABLED
                 and not user.is_anonymous
+                and chat_session.user_id == user.id
                 and new_msg_req.origin
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
                 and chat_session.incognito_record_mode is None
@@ -564,7 +573,7 @@ def prepare_chat_turn(
             )
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
-            chat_skills = list_chat_skills(db_session, user, built_ins=sandbox_tools)
+            chat_skills = list_chat_skills(db_session, user, with_sandbox=sandbox_tools)
             # A question records its picks when it is accepted, after the
             # checks that can reject it; regeneration reuses the record.
             accepts_question = queued_turn is not None or (
@@ -572,7 +581,11 @@ def prepare_chat_turn(
             )
             picks = (
                 accept_picked_skills(
-                    [new_msg_req.mentions], chat_skills, user.id, db_session
+                    [new_msg_req.mentions],
+                    chat_skills,
+                    user.id,
+                    db_session,
+                    with_sandbox=sandbox_tools,
                 )[0]
                 if accepts_question
                 else AcceptedPicks()
@@ -701,7 +714,7 @@ def prepare_chat_turn(
             available_files = collect_available_file_ids(
                 chat_history, context_user_files
             )
-            memory = get_memories(user, db_session)
+            memory = get_memories(user, preferences, db_session)
             project_instructions = (
                 chat_session.project.instructions if chat_session.project else None
             )
@@ -754,7 +767,7 @@ def prepare_chat_turn(
                 else (),
                 files=new_msg_req.file_descriptors,
                 user_memory_context=memory
-                if user.use_memories
+                if preferences.use_memories
                 else memory.without_memories(),
                 base_system_prompt=base_system_prompt,
             )
@@ -980,6 +993,8 @@ def prepare_chat_turn(
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
+            use_memories=preferences.use_memories,
+            enable_memory_tool=preferences.enable_memory_tool,
             has_chat_skills=bool(chat_skills),
             skip_clarification=skip_clarification,
             cache=get_cache_backend(),

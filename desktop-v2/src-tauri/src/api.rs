@@ -12,7 +12,15 @@ use url::Url;
 
 use crate::reachability::{self, Unreachable};
 
-const USER_AGENT: &str = concat!("OnyxDesktop/", env!("CARGO_PKG_VERSION"));
+/// `version` is the app version from the Tauri config, which builds set;
+/// the Cargo.toml version is only a placeholder.
+fn user_agent(version: &str) -> String {
+    format!("OnyxDesktop/{version}")
+}
+
+/// The `origin` of launcher questions (the server's `MessageOrigin`).
+const ORIGIN: &str = "desktop";
+const FALLBACK_ORIGIN: &str = "unknown";
 
 pub struct Api {
     http: Client,
@@ -442,7 +450,8 @@ fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
     if trimmed.is_empty() {
         return Err("Enter a server URL.".into());
     }
-    let with_scheme = if trimmed.contains("://") {
+    let has_scheme = trimmed.contains("://");
+    let with_scheme = if has_scheme {
         trimmed.to_string()
     } else {
         format!("https://{trimmed}")
@@ -454,6 +463,17 @@ fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
     let Some(host) = url.host_str() else {
         return Err("The server URL must include a host.".into());
     };
+    // Only the origin is kept, so credentials in the URL would be lost.
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("Remove the user name and password from the server URL.".into());
+    }
+    // A policy typo such as `garbage` must not become `https://garbage`.
+    if allow_any_http && !has_scheme && is_bare_word(trimmed) {
+        return Err(
+            "Use a full host name (onyx.example.com) or a scheme (https://onyx) for the server URL."
+                .into(),
+        );
+    }
     // Passwords and session tokens cross this connection: plain http is only
     // for a server on this computer.
     if url.scheme() == "http" && !allow_any_http && !is_loopback_host(host) {
@@ -465,18 +485,119 @@ fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
     Ok(url.origin().ascii_serialization())
 }
 
+/// A single word with no dot and no port, other than `localhost`.
+fn is_bare_word(input: &str) -> bool {
+    let authority = input.split(['/', '?', '#']).next().unwrap_or_default();
+    !authority.contains(['.', ':', '[']) && !authority.eq_ignore_ascii_case("localhost")
+}
+
+/// Windows, and Linux without nss-myhostname, can send `*.localhost` names to
+/// DNS, which may answer with a remote address. macOS keeps the name rule.
+const LOCALHOST_SUBDOMAINS_ALLOWED: bool = cfg!(target_os = "macos");
+
+/// Whether a server saved by the user (`config.json`) is still allowed. One
+/// saved before `*.localhost` lost plain `http://` on Windows and Linux is not.
+pub fn saved_server_allowed(server: &str) -> bool {
+    let Ok(url) = Url::parse(server) else {
+        return true;
+    };
+    !(url.scheme() == "http"
+        && url
+            .host_str()
+            .is_some_and(|host| host.ends_with(".localhost"))
+        && !LOCALHOST_SUBDOMAINS_ALLOWED)
+}
+
 fn is_loopback_host(host: &str) -> bool {
     let host = host.trim_start_matches('[').trim_end_matches(']');
     host == "localhost"
-        || host.ends_with(".localhost")
+        || (LOCALHOST_SUBDOMAINS_ALLOWED && host.ends_with(".localhost"))
         || host
             .parse::<std::net::IpAddr>()
             .is_ok_and(|ip| ip.is_loopback())
 }
 
-async fn error_detail(response: Response) -> String {
+/// The web UI's Next.js `/api` route answers with this text when no proxy
+/// sends `/api` to the API server.
+const API_NOT_ROUTED_TEXT: &str = "only available in development mode";
+
+fn api_not_routed(status: StatusCode, body: &str) -> bool {
+    status == StatusCode::NOT_FOUND && body.contains(API_NOT_ROUTED_TEXT)
+}
+
+/// The backend version in a `GET /api/version` answer. Any answer other than
+/// the Onyx API's JSON means the address is not a working Onyx server.
+fn parse_version(status: StatusCode, body: &str) -> Result<String, Unreachable> {
+    if let Some(reason) = Unreachable::from_status(status) {
+        return Err(reason);
+    }
+    if api_not_routed(status, body) {
+        return Err(Unreachable::ApiNotRouted);
+    }
+    if !status.is_success() {
+        return Err(Unreachable::NotOnyx);
+    }
+    serde_json::from_str::<VersionResponse>(body)
+        .map(|v| v.backend_version)
+        .map_err(|_| Unreachable::NotOnyx)
+}
+
+/// Why a request failed. A redirect to another site is an answer from
+/// something other than the Onyx server.
+fn request_failed(error: &reqwest::Error) -> Unreachable {
+    if error.is_redirect() {
+        return Unreachable::NotOnyx;
+    }
+    Unreachable::from_reqwest(error).unwrap_or(Unreachable::Unknown)
+}
+
+/// The most of a short answer (version, sign-in settings, an error) that is
+/// read. A longer one is not from the Onyx API.
+const MAX_SHORT_BODY_BYTES: usize = 64 * 1024;
+
+/// The body of a short answer, or `None` if it is longer than
+/// `MAX_SHORT_BODY_BYTES`. Reading stops at the limit, with or without a
+/// `Content-Length`.
+async fn read_short_body(mut response: Response) -> Result<Option<String>, reqwest::Error> {
+    if response
+        .content_length()
+        .is_some_and(|len| len > MAX_SHORT_BODY_BYTES as u64)
+    {
+        return Ok(None);
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if body.len() + chunk.len() > MAX_SHORT_BODY_BYTES {
+            return Ok(None);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(Some(String::from_utf8_lossy(&body).into_owned()))
+}
+
+/// The JSON of a successful short answer. A body that does not come in is a
+/// connection error; a body that is not the expected JSON is not Onyx.
+async fn read_json<T: serde::de::DeserializeOwned>(
+    server: &str,
+    response: Response,
+) -> Result<T, String> {
+    let body = read_short_body(response)
+        .await
+        .map_err(|e| reachability::describe(server, &e))?;
+    body.and_then(|body| serde_json::from_str::<T>(&body).ok())
+        .ok_or_else(|| Unreachable::NotOnyx.message(server))
+}
+
+async fn error_detail(server: &str, response: Response) -> String {
     let status = response.status();
-    let body = response.text().await.unwrap_or_default();
+    let body = read_short_body(response)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    if api_not_routed(status, &body) {
+        return Unreachable::ApiNotRouted.message(server);
+    }
     let detail = serde_json::from_str::<serde_json::Value>(&body)
         .ok()
         .and_then(|v| {
@@ -499,7 +620,7 @@ async fn probe(client: &Client, url: &str) -> Result<(), Unreachable> {
         .timeout(Duration::from_secs(10))
         .send()
         .await
-        .map_err(|e| Unreachable::from_reqwest(&e).unwrap_or(Unreachable::Unknown))?;
+        .map_err(|e| request_failed(&e))?;
     match Unreachable::from_status(response.status()) {
         Some(reason) => Err(reason),
         None => Ok(()),
@@ -507,9 +628,12 @@ async fn probe(client: &Client, url: &str) -> Result<(), Unreachable> {
 }
 
 impl Api {
-    pub fn new() -> Self {
+    /// Fails if the TLS library cannot start (for example, a broken OpenSSL
+    /// configuration).
+    pub fn new(version: &str) -> Result<Self, String> {
+        let user_agent = user_agent(version);
         let http = Client::builder()
-            .user_agent(USER_AGENT)
+            .user_agent(&user_agent)
             .connect_timeout(Duration::from_secs(10))
             .redirect(reqwest::redirect::Policy::custom(|attempt| {
                 if redirect_allowed(attempt.previous(), attempt.url()) {
@@ -519,35 +643,51 @@ impl Api {
                 }
             }))
             .build()
-            .expect("failed to build HTTP client");
+            .map_err(|e| e.to_string())?;
         let probe = Client::builder()
-            .user_agent(USER_AGENT)
+            .user_agent(user_agent)
             .connect_timeout(Duration::from_secs(10))
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .expect("failed to build HTTP client");
-        Self { http, probe }
+            .map_err(|e| e.to_string())?;
+        Ok(Self { http, probe })
     }
 
+    /// The backend version, for the onboarding check.
     pub async fn version(&self, server: &str) -> Result<String, String> {
+        self.backend_version(server, Duration::from_secs(15))
+            .await
+            .map_err(|reason| {
+                log::warn!(
+                    "server check failed for {} ({reason})",
+                    crate::main_window::log_safe(server)
+                );
+                reason.message(server)
+            })
+    }
+
+    async fn backend_version(
+        &self,
+        server: &str,
+        timeout: Duration,
+    ) -> Result<String, Unreachable> {
         let response = self
             .http
             .get(format!("{server}/api/version"))
-            .timeout(Duration::from_secs(15))
+            .timeout(timeout)
             .send()
             .await
-            .map_err(|e| reachability::describe(server, &e))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "{server} does not look like an Onyx server ({}).",
-                response.status()
-            ));
+            .map_err(|e| request_failed(&e))?;
+        let status = response.status();
+        // A 5xx is the answer, whatever its body does.
+        if let Some(reason) = Unreachable::from_status(status) {
+            return Err(reason);
         }
-        response
-            .json::<VersionResponse>()
+        let body = read_short_body(response)
             .await
-            .map(|v| v.backend_version)
-            .map_err(|_| format!("{server} does not look like an Onyx server."))
+            .map_err(|e| request_failed(&e))?
+            .ok_or(Unreachable::NotOnyx)?;
+        parse_version(status, &body)
     }
 
     /// The session cookie name from `GET /api/auth/type`. A server that
@@ -562,12 +702,10 @@ impl Api {
             .await
             .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
-        let reported = response
-            .json::<CookieNameResponse>()
-            .await
-            .map_err(|e| format!("Unexpected response: {e}"))?
+        let reported = read_json::<CookieNameResponse>(server, response)
+            .await?
             .auth_cookie_name;
         Ok(reported
             .filter(|name| !name.is_empty())
@@ -584,12 +722,9 @@ impl Api {
             .await
             .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
-        let parsed = response
-            .json::<AuthTypeResponse>()
-            .await
-            .map_err(|e| format!("Unexpected response: {e}"))?;
+        let parsed = read_json::<AuthTypeResponse>(server, response).await?;
         Ok(AuthMethods {
             password: parsed.password_auth_enabled,
             sso: sso_options(&parsed),
@@ -612,7 +747,7 @@ impl Api {
             .await
             .map_err(|e| e.to_string())?;
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
         response
             .json::<TokenResponse>()
@@ -631,12 +766,20 @@ impl Api {
             .await
             .map_err(|e| reachability::describe(server, &e))?;
         if response.status() == StatusCode::NOT_FOUND {
+            let body = read_short_body(response)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            if api_not_routed(StatusCode::NOT_FOUND, &body) {
+                return Err(Unreachable::ApiNotRouted.message(server));
+            }
             return Err(
                 "This server does not support desktop sign-in. Update it to v4.2 or later.".into(),
             );
         }
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
         response
             .json::<TokenResponse>()
@@ -645,11 +788,13 @@ impl Api {
             .map_err(|e| format!("Unexpected sign-in response: {e}"))
     }
 
-    /// Whether both the API (`GET /api/version`) and the web UI (`GET /`)
-    /// answer without a 5xx error. Behind a proxy they are separate servers,
-    /// so one can fail while the other answers. No sign-in needed.
+    /// Whether the Onyx API answers `GET /api/version` with its JSON, and
+    /// the web UI (`GET /`) answers without a 5xx error. Behind a proxy they
+    /// are separate servers, so one can fail while the other answers. No
+    /// sign-in needed.
     pub async fn health(&self, server: &str) -> Result<(), Unreachable> {
-        probe(&self.http, &format!("{server}/api/version")).await?;
+        self.backend_version(server, Duration::from_secs(10))
+            .await?;
         probe(&self.probe, &format!("{server}/")).await
     }
 
@@ -682,7 +827,7 @@ impl Api {
             .await
             .map_err(|e| e.to_string())?;
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
         response
             .json::<TokenResponse>()
@@ -733,7 +878,7 @@ impl Api {
             return Ok(Vec::new());
         }
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
         let body = response.text().await.map_err(|e| e.to_string())?;
         parse_agents(&body, default_disabled)
@@ -777,7 +922,7 @@ impl Api {
         if response.status().is_success() || response.status() == StatusCode::NOT_FOUND {
             return Ok(());
         }
-        Err(error_detail(response).await)
+        Err(error_detail(server, response).await)
     }
 
     /// Uploads one chat file (`POST /api/user/projects/file/upload`, as the
@@ -817,7 +962,7 @@ impl Api {
             return Err(format!("{name} is too large for this server."));
         }
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
         let body = response.text().await.map_err(|e| e.to_string())?;
         upload_outcome(&body, name)
@@ -840,7 +985,7 @@ impl Api {
             .await
             .map_err(|e| e.to_string())?;
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
         response
             .json::<Vec<UserFileRow>>()
@@ -917,7 +1062,7 @@ impl Api {
             .await
             .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
         response
             .json::<ChatSessionResponse>()
@@ -938,22 +1083,48 @@ impl Api {
     ) -> Result<Response, SendError> {
         let file_descriptors: Vec<serde_json::Value> =
             files.iter().map(AttachedFile::descriptor).collect();
+        let mut body = json!({
+            "message": message,
+            "chat_session_id": chat_session_id,
+            "parent_message_id": if follow_up { json!(-1) } else { json!(null) },
+            "file_descriptors": file_descriptors,
+            "deep_research": false,
+            "origin": ORIGIN,
+        });
+        let response = self.post_message(server, token, &body).await?;
+        // Servers older than the desktop origin reject it before they take the
+        // question; ask again as an unknown client.
+        let response = if response.status() == StatusCode::UNPROCESSABLE_ENTITY {
+            body["origin"] = json!(FALLBACK_ORIGIN);
+            self.post_message(server, token, &body).await?
+        } else {
+            response
+        };
+        if !response.status().is_success() {
+            // The server answered and refused the question (for example a usage limit).
+            return Err(SendError {
+                message: error_detail(server, response).await,
+                not_sent: true,
+            });
+        }
+        Ok(response)
+    }
+
+    async fn post_message(
+        &self,
+        server: &str,
+        token: &str,
+        body: &serde_json::Value,
+    ) -> Result<Response, SendError> {
         // Bounds the wait for the response headers only; the streamed answer
         // that follows has its own idle timeout in `ask::run`.
         let request = self
             .http
             .post(format!("{server}/api/chat/send-chat-message"))
             .bearer_auth(token)
-            .json(&json!({
-                "message": message,
-                "chat_session_id": chat_session_id,
-                "parent_message_id": if follow_up { json!(-1) } else { json!(null) },
-                "file_descriptors": file_descriptors,
-                "deep_research": false,
-                "origin": "unknown",
-            }))
+            .json(body)
             .send();
-        let response = tokio::time::timeout(Duration::from_secs(120), request)
+        tokio::time::timeout(Duration::from_secs(120), request)
             .await
             .map_err(|_| SendError {
                 message: "The server did not start answering.".into(),
@@ -963,15 +1134,7 @@ impl Api {
                 message: reachability::describe(server, &e),
                 // A connection that never opened carried no question.
                 not_sent: e.is_connect(),
-            })?;
-        if !response.status().is_success() {
-            // The server answered and refused the question (for example a usage limit).
-            return Err(SendError {
-                message: error_detail(response).await,
-                not_sent: true,
-            });
-        }
-        Ok(response)
+            })
     }
 
     pub async fn search(
@@ -1007,7 +1170,7 @@ impl Api {
             return Err("Knowledge search is not available on this server.".into());
         }
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            return Err(error_detail(server, response).await);
         }
         let parsed = response
             .json::<SearchResponse>()
@@ -1039,16 +1202,16 @@ pub struct SendError {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use super::{
         body_chunks, file_state, is_file_id, multipart_body, normalize_managed_server_url,
-        normalize_server_url, parse_agents, parse_settings, redirect_allowed, sso_options,
-        upload_limit, upload_outcome, Agent, Api, AttachedFile, AuthTypeResponse, FileState,
-        ServerSettings, MAX_UPLOAD_BYTES,
+        normalize_server_url, parse_agents, parse_settings, parse_version, redirect_allowed,
+        saved_server_allowed, sso_options, upload_limit, upload_outcome, user_agent, Agent, Api,
+        AttachedFile, AuthTypeResponse, FileState, ServerSettings, MAX_UPLOAD_BYTES,
     };
     use crate::reachability::Unreachable;
     use url::Url;
@@ -1087,7 +1250,8 @@ mod tests {
 
     fn post(url: &str) -> Result<reqwest::StatusCode, reqwest::Error> {
         tauri::async_runtime::block_on(async {
-            Api::new()
+            Api::new("0.0.0-test")
+                .unwrap()
                 .http
                 .post(url)
                 .body("password=secret")
@@ -1120,6 +1284,69 @@ mod tests {
             reqwest::StatusCode::OK
         );
         assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
+
+    /// A send-chat-message endpoint that rejects origins it does not know, as
+    /// a server's request validation does. Returns the origins it received.
+    fn chat_server(known: &'static [&'static str]) -> (String, Arc<Mutex<Vec<String>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let origins = Arc::new(Mutex::new(Vec::new()));
+        let seen = origins.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { return };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut length = 0;
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                    let header = line.to_ascii_lowercase();
+                    if let Some(value) = header.strip_prefix("content-length:") {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                    line.clear();
+                }
+                let mut body = vec![0; length];
+                let _ = reader.read_exact(&mut body);
+                let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+                let origin = body["origin"].as_str().unwrap_or_default().to_string();
+                let status = if known.contains(&origin.as_str()) {
+                    "200 OK"
+                } else {
+                    "422 Unprocessable Entity"
+                };
+                seen.lock().unwrap().push(origin);
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+        (base, origins)
+    }
+
+    fn send(server: &str) -> bool {
+        tauri::async_runtime::block_on(async {
+            Api::new("0.0.0-test")
+                .unwrap()
+                .send_message(server, "token", "chat", "hello", false, &[])
+                .await
+                .is_ok()
+        })
+    }
+
+    #[test]
+    fn launcher_questions_say_they_come_from_the_desktop_app() {
+        let (server, origins) = chat_server(&["desktop", "unknown"]);
+        assert!(send(&server));
+        assert_eq!(*origins.lock().unwrap(), ["desktop"]);
+    }
+
+    #[test]
+    fn older_servers_get_the_question_as_an_unknown_client() {
+        let (server, origins) = chat_server(&["unknown"]);
+        assert!(send(&server));
+        assert_eq!(*origins.lock().unwrap(), ["desktop", "unknown"]);
     }
 
     #[test]
@@ -1377,6 +1604,216 @@ mod tests {
         );
         assert!(normalize_managed_server_url("ftp://onyx.corp.internal").is_err());
         assert!(normalize_server_url("  ").is_err());
+        // A page URL reduces to the server; credentials are refused.
+        assert_eq!(
+            normalize_managed_server_url("  HTTPS://Onyx.Example.com/some/path/?q=1#x  ").unwrap(),
+            "https://onyx.example.com"
+        );
+        for with_credentials in [
+            "https://user:pw@example.com",
+            "https://user@example.com",
+            "https://:pw@example.com",
+        ] {
+            assert!(normalize_server_url(with_credentials).is_err());
+            assert!(normalize_managed_server_url(with_credentials).is_err());
+        }
+    }
+
+    #[test]
+    fn a_managed_server_url_is_not_a_bare_word() {
+        for bare in ["garbage", "onyx", "Onyx/app", "1234"] {
+            assert!(normalize_managed_server_url(bare).is_err(), "{bare}");
+        }
+        for (input, server) in [
+            ("https://onyx", "https://onyx"),
+            ("http://onyx", "http://onyx"),
+            ("onyx:8443", "https://onyx:8443"),
+            ("onyx.corp", "https://onyx.corp"),
+            ("localhost", "https://localhost"),
+            ("10.0.0.5", "https://10.0.0.5"),
+            ("[::1]", "https://[::1]"),
+        ] {
+            assert_eq!(
+                normalize_managed_server_url(input).unwrap(),
+                server,
+                "{input}"
+            );
+        }
+        // Onboarding accepts an internal single-label host; the server check tests it.
+        assert_eq!(normalize_server_url("onyx").unwrap(), "https://onyx");
+    }
+
+    #[test]
+    fn plain_http_to_localhost_subdomains_only_on_macos() {
+        assert!(normalize_server_url("http://localhost").is_ok());
+        assert_eq!(
+            normalize_server_url("http://onyx.localhost:3000").is_ok(),
+            cfg!(target_os = "macos")
+        );
+        assert!(normalize_managed_server_url("http://onyx.localhost").is_ok());
+    }
+
+    const NOT_ROUTED: &str = r#"{"message":"This API is only available in development mode. In production, something else (e.g. nginx) should handle this."}"#;
+
+    fn json(code: &str, body: &str) -> String {
+        format!(
+            "HTTP/1.1 {code}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    fn html_page() -> String {
+        let body = "<html><body>Sign in to the Wi-Fi</body></html>";
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    #[test]
+    fn only_the_onyx_version_json_is_an_onyx_server() {
+        use reqwest::StatusCode;
+        assert_eq!(
+            parse_version(StatusCode::OK, r#"{"backend_version":"5.1.0"}"#),
+            Ok("5.1.0".into())
+        );
+        assert_eq!(
+            parse_version(StatusCode::OK, "<html></html>"),
+            Err(Unreachable::NotOnyx)
+        );
+        assert_eq!(
+            parse_version(StatusCode::OK, r#"{"status":"ok"}"#),
+            Err(Unreachable::NotOnyx)
+        );
+        assert_eq!(
+            parse_version(StatusCode::NOT_FOUND, "Not Found"),
+            Err(Unreachable::NotOnyx)
+        );
+        assert_eq!(
+            parse_version(StatusCode::NOT_FOUND, NOT_ROUTED),
+            Err(Unreachable::ApiNotRouted)
+        );
+        assert_eq!(
+            parse_version(StatusCode::BAD_GATEWAY, ""),
+            Err(Unreachable::ServerError { status: 502 })
+        );
+    }
+
+    #[test]
+    fn the_user_agent_names_the_app_version() {
+        assert_eq!(user_agent("0.1.0"), "OnyxDesktop/0.1.0");
+    }
+
+    #[test]
+    fn health_fails_for_a_page_that_is_not_onyx() {
+        let (server, _) = serve(|_| html_page());
+        let api = Api::new("0.0.0-test").unwrap();
+        assert_eq!(
+            tauri::async_runtime::block_on(api.health(&server)),
+            Err(Unreachable::NotOnyx)
+        );
+        let message = tauri::async_runtime::block_on(api.version(&server)).unwrap_err();
+        assert!(
+            message.contains("does not look like an Onyx server"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn an_unrouted_api_is_named_in_health_and_sign_in() {
+        let (server, _) = serve(|path| {
+            if path.starts_with("/api/") {
+                json("404 Not Found", NOT_ROUTED)
+            } else {
+                html_page()
+            }
+        });
+        let api = Api::new("0.0.0-test").unwrap();
+        assert_eq!(
+            tauri::async_runtime::block_on(api.health(&server)),
+            Err(Unreachable::ApiNotRouted)
+        );
+        let expected = Unreachable::ApiNotRouted.message(&server);
+        assert_eq!(
+            tauri::async_runtime::block_on(api.version(&server)).unwrap_err(),
+            expected
+        );
+        assert_eq!(
+            tauri::async_runtime::block_on(api.auth_methods(&server))
+                .err()
+                .unwrap(),
+            expected
+        );
+        assert_eq!(
+            tauri::async_runtime::block_on(api.login(&server, "a@b.c", "pw")).unwrap_err(),
+            expected
+        );
+    }
+
+    #[test]
+    fn saved_localhost_subdomains_follow_the_same_rule() {
+        assert_eq!(
+            saved_server_allowed("http://onyx.localhost:3000"),
+            cfg!(target_os = "macos")
+        );
+        assert!(saved_server_allowed("https://onyx.localhost"));
+        assert!(saved_server_allowed("http://localhost:3000"));
+        assert!(saved_server_allowed("https://cloud.onyx.app"));
+    }
+
+    #[test]
+    fn a_long_answer_is_not_onyx_and_is_not_read_to_the_end() {
+        // Chunked, so there is no Content-Length to reject it early.
+        let (server, _) = serve(|_| {
+            // Valid version JSON, made long with whitespace.
+            let json = r#"{"backend_version":"5.1.0"}"#;
+            let chunk = " ".repeat(16 * 1024);
+            let mut response = format!(
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n{json}\r\n",
+                json.len()
+            );
+            for _ in 0..64 {
+                response.push_str(&format!("{:x}\r\n{chunk}\r\n", chunk.len()));
+            }
+            response.push_str("0\r\n\r\n");
+            response
+        });
+        let api = Api::new("0.0.0-test").unwrap();
+        assert_eq!(
+            tauri::async_runtime::block_on(api.health(&server)),
+            Err(Unreachable::NotOnyx)
+        );
+    }
+
+    #[test]
+    fn a_body_cut_short_is_a_connection_error_not_a_wrong_server() {
+        let (server, _) = serve(|_| {
+            "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{\"pass".to_string()
+        });
+        let api = Api::new("0.0.0-test").unwrap();
+        let message = tauri::async_runtime::block_on(api.auth_methods(&server))
+            .err()
+            .unwrap();
+        assert!(
+            !message.contains("does not look like an Onyx server"),
+            "{message}"
+        );
+        assert_ne!(
+            tauri::async_runtime::block_on(api.health(&server)),
+            Err(Unreachable::NotOnyx)
+        );
+    }
+
+    #[test]
+    fn an_old_server_without_desktop_sign_in_is_still_named() {
+        let (server, _) = serve(|_| json("404 Not Found", r#"{"detail":"Not Found"}"#));
+        let message = tauri::async_runtime::block_on(
+            Api::new("0.0.0-test")
+                .unwrap()
+                .login(&server, "a@b.c", "pw"),
+        )
+        .unwrap_err();
+        assert!(message.contains("v4.2"), "{message}");
     }
 
     fn status(code: &str) -> String {
@@ -1386,12 +1823,12 @@ mod tests {
     fn health(root: impl Fn() -> String + Send + 'static) -> Result<(), Unreachable> {
         let (server, _) = serve(move |path| {
             if path == "/api/version" {
-                OK.to_string()
+                json("200 OK", r#"{"backend_version":"5.1.0"}"#)
             } else {
                 root()
             }
         });
-        tauri::async_runtime::block_on(Api::new().health(&server))
+        tauri::async_runtime::block_on(Api::new("0.0.0-test").unwrap().health(&server))
     }
 
     #[test]

@@ -12,6 +12,12 @@ export {
   type ButtonProps,
 } from "@opal/components/buttons/button/components";
 
+/* AvatarButton */
+export {
+  AvatarButton,
+  type AvatarButtonProps,
+} from "@opal/components/buttons/avatar-button/components";
+
 /* FilePickerButton */
 export {
   FilePickerButton,
@@ -255,6 +261,12 @@ export {
   type CollapsibleHeaderProps,
   type CollapsibleContentProps,
 } from "@opal/components/collapsible/components";
+
+/* ReadOnlyRegion */
+export {
+  ReadOnlyRegion,
+  type ReadOnlyRegionProps,
+} from "@opal/components/read-only-region/components";
 
 /* MessageCard */
 export {

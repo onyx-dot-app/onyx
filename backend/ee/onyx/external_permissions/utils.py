@@ -10,8 +10,13 @@ from onyx.access.models import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credential_families import to_source_credential_json
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch, SlimConnectorWithPermSync
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -33,6 +38,27 @@ def credential_json(cc_pair: ConnectorCredentialPair) -> dict[str, Any]:
             else {}
         ),
     )
+
+
+def set_shared_source_api_limiter(
+    connector: BaseConnector,
+    cc_pair: ConnectorCredentialPair,
+    callback: IndexingHeartbeatInterface | None = None,
+) -> None:
+    """Gives a connector that permission sync builds the shared source-API
+    budget of its credential, as the connector factory does for indexing.
+    Permission sync spends the same budget. A wait for the budget ends when
+    ``callback`` asks to stop."""
+    limiter = build_source_api_limiter(
+        cc_pair.connector.source,
+        cc_pair.credential_id,
+        callback.should_stop if callback is not None else None,
+        load_credential_json=lambda: credential_json(cc_pair),
+        cc_pair_id=cc_pair.id,
+        connector_specific_config=cc_pair.connector.connector_specific_config,
+    )
+    if limiter is not None:
+        connector.set_source_api_limiter(limiter)
 
 
 def generic_doc_sync(

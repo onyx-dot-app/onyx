@@ -12,7 +12,7 @@ import {
   chooseImplicitPreferred,
   getMostVisibleResponseId,
   getUnresolvedMultiModelTurn,
-} from "@/app/app/message/multiModel";
+} from "@/lib/timeline/chat/message/multiModel";
 import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
@@ -1338,7 +1338,7 @@ export default function useChatController({
                 // OverallStop (type "stop") has model_index=null — it's a
                 // global terminal packet that must be delivered to ALL
                 // models so each panel's AgentMessage sees the stop and
-                // exits "Thinking..." state.
+                // stops working.
                 const isGlobalStop =
                   packetObj.type === "stop" &&
                   typedPacket.placement?.model_index == null;

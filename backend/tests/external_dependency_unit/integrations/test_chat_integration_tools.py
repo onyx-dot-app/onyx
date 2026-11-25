@@ -174,9 +174,7 @@ def integration_ids(
 
 @pytest.fixture
 def user(make_test_user: MakeTestUser) -> User:
-    member = make_test_user("chat_integration_tools")
-    member.enable_memory_tool = False
-    return member
+    return make_test_user("chat_integration_tools")
 
 
 def _mcp(db_session: Session, created: list[int], **kwargs: Any) -> Integration:
@@ -243,6 +241,7 @@ def _build(
         configuration=configuration,
         user=user,
         llm=MagicMock(spec=LLM),
+        enable_memory_tool=False,
         db_session=db_session,
         custom_tool_config=CustomToolConfig(chat_session_id=chat_session_id),
         approval_mode=mode,

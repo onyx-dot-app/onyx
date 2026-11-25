@@ -1,9 +1,6 @@
 import io
 import os
-import posixpath
-import string
-import unicodedata
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -18,9 +15,7 @@ from onyx.chat.models import (
     SearchParams,
 )
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.enums import UserFileStatus
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import ChatMessage, Persona, UserFile
@@ -50,6 +45,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     AGENT_FILES_DIR,
     CHAT_FILES_DIR,
     PROJECT_FILES_DIR,
+    chat_file_name,
 )
 from onyx.server.query_and_chat.chat_utils import (
     is_code_interpreter_staged_file,
@@ -197,10 +193,6 @@ def resolve_context_user_files(
     return ContextUserFiles(project=project, agent=agent)
 
 
-# The longest file name, in UTF-8 bytes, of the VM's file system.
-_MAX_NAME_BYTES = 255
-
-
 def place_chat_files(
     uploads: Sequence[UserFile], context_files: ContextUserFiles
 ) -> PlacedChatFiles:
@@ -209,11 +201,7 @@ def place_chat_files(
     attachments/, and the project's and the agent's files in
     attachments/project/ and attachments/agent/.
 
-    A path is a function of its file alone, so it never holds another file:
-    `<directory>/<the first 8 hex digits of the file store ID>-<name>`. The
-    name is the last part of the file's name (the file store ID without one),
-    NFC, with control characters replaced by `_`; its stem is cut so that
-    the whole name fits _MAX_NAME_BYTES."""
+    Each file's name in its directory is `chat_file_name`'s."""
     vm_chat_files: list[VmChatFile] = []
     upload_paths: dict[str, str] = {}
     for directory, user_files in (
@@ -223,24 +211,7 @@ def place_chat_files(
     ):
         for user_file in user_files:
             file_id = user_file.file_id
-            base = "file"
-            for raw in (user_file.name or "", file_id):
-                cleaned = "".join(
-                    "_" if unicodedata.category(char) == "Cc" else char
-                    for char in posixpath.basename(
-                        unicodedata.normalize("NFC", raw).replace("\\", "/")
-                    )
-                )
-                if cleaned not in ("", ".", ".."):
-                    base = cleaned
-                    break
-            prefix = "".join(c for c in file_id if c in string.hexdigits)[:8].lower()
-            stem, extension = os.path.splitext(base)
-            if len(extension.encode()) > _MAX_NAME_BYTES // 2:
-                stem, extension = base, ""
-            room = _MAX_NAME_BYTES - len(f"{prefix}-{extension}".encode())
-            name = f"{prefix}-{stem.encode()[:room].decode(errors='ignore')}{extension}"
-            path = f"{directory}/{name}"
+            path = f"{directory}/{chat_file_name(file_id, user_file.name)}"
             vm_chat_files.append(VmChatFile(file_id=file_id, path=path))
             if directory == CHAT_FILES_DIR:
                 upload_paths[file_id] = path
@@ -691,51 +662,22 @@ def load_chat_files(
 
 
 def build_python_chat_files_from_search_docs(
-    search_docs: list[SearchDoc],
+    file_names: Mapping[str, str],
 ) -> list[ChatFile]:
-    """Load connector-backed search files for the code interpreter."""
-    if not search_docs:
-        return []
-
+    """Load search result files for the code interpreter, by file ID, under
+    the names that the search results give them
+    (`SearchDocsResponse.openable_file_names`)."""
     file_store = get_default_file_store()
 
     chat_files: list[ChatFile] = []
-    seen_file_ids: set[str] = set()
-    for doc in search_docs:
-        if not doc.file_id or doc.file_id in seen_file_ids:
-            continue
-        seen_file_ids.add(doc.file_id)
-
+    for file_id, filename in file_names.items():
         try:
-            record = file_store.read_file_record(doc.file_id)
+            content = file_store.read_file(file_id, mode="b").read()
         except Exception as e:
             logger.warning(
-                "file_id=%r not found in file store (%s); skipping.", doc.file_id, e
+                "Failed to read bytes for file_id=%r: %s; skipping.", file_id, e
             )
             continue
-
-        if record.file_origin not in (
-            FileOrigin.CONNECTOR,
-            FileOrigin.CONNECTOR_FILE_UPLOAD,
-        ):
-            logger.warning(
-                "file_id=%r has origin=%r, not eligible for code-interpreter staging; skipping.",
-                doc.file_id,
-                record.file_origin,
-            )
-            continue
-
-        try:
-            content = file_store.read_file(doc.file_id, mode="b").read()
-        except Exception as e:
-            logger.warning(
-                "Failed to read bytes for file_id=%r: %s; skipping.", doc.file_id, e
-            )
-            continue
-
-        filename = sandbox_filename_for_document(doc.semantic_identifier, doc.file_id)
-        chat_files.append(
-            ChatFile(filename=filename, content=content, file_id=doc.file_id)
-        )
+        chat_files.append(ChatFile(filename=filename, content=content, file_id=file_id))
 
     return chat_files

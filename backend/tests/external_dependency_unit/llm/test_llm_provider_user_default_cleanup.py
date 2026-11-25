@@ -1,6 +1,6 @@
 """
 Tests that deleting an LLM provider clears personal default models
-(User.default_model) referencing it, so users fall back to the global
+(UserPreferences.default_model) referencing it, so users fall back to the global
 default instead of a dangling provider reference.
 """
 
@@ -9,6 +9,10 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.db.llm import remove_llm_provider, upsert_llm_provider
+from onyx.db.user_preferences import (
+    fetch_user_preferences,
+    upsert_user_preferences__no_commit,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -47,18 +51,24 @@ def test_remove_llm_provider_clears_matching_user_defaults(
     unaffected_user = create_test_user(db_session, "default_model_kept")
 
     kept_default = f"{provider_to_keep.name}__openai__gpt-6-luna"
-    affected_user.default_model = f"{provider_to_delete.name}__openai__gpt-6-luna"
-    unaffected_user.default_model = kept_default
+    upsert_user_preferences__no_commit(
+        db_session,
+        affected_user.id,
+        default_model=f"{provider_to_delete.name}__openai__gpt-6-luna",
+    )
+    upsert_user_preferences__no_commit(
+        db_session, unaffected_user.id, default_model=kept_default
+    )
     db_session.commit()
 
     try:
         remove_llm_provider(db_session, provider_to_delete.id)
 
-        db_session.refresh(affected_user)
-        db_session.refresh(unaffected_user)
-
-        assert affected_user.default_model is None
-        assert unaffected_user.default_model == kept_default
+        assert fetch_user_preferences(affected_user, db_session).default_model is None
+        assert (
+            fetch_user_preferences(unaffected_user, db_session).default_model
+            == kept_default
+        )
     finally:
         remove_llm_provider(db_session, provider_to_keep.id)
         # Bulk delete to avoid loading the users' relationship graph

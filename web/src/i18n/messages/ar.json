@@ -6,7 +6,7 @@
       "account": "تم تسجيل الدخول باسم {email}",
       "workspace": "مساحة العمل: {workspaceName}",
       "appAddress": "عنوان التطبيق: {origin}",
-      "access": "قراءة نتائج البحث من المستندات التي يمكنك الوصول إليها. استخدام البحث على الويب وفتح صفحات الويب.",
+      "access": "قراءة نتائج البحث من المستندات التي يمكنك الوصول إليها. استخدام البحث على الويب وفتح صفحات الويب. قراءة سجل محادثاتك.",
       "allow": "السماح بالوصول",
       "deny": "رفض",
       "pending": "جارٍ حفظ اختيارك...",
@@ -4005,6 +4005,18 @@
             "mailboxes": {
               "label": "صناديق البريد",
               "description": "حدّد صناديق البريد المراد فهرستها (مثل INBOX وSent وDrafts). اتركه فارغًا لفهرسة جميع صناديق البريد."
+            }
+          }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "وحدات RU في الدقيقة",
+              "description": "حصة هذا الموصل من حد المعدل لتسجيل تطبيق Microsoft، بوحدات الموارد (RU) في الدقيقة. تحدد Microsoft حد التطبيق حسب فئة التراخيص، من 1,250 إلى 6,250 RU في الدقيقة. اتركه فارغًا ليتعلم Onyx الحد. [كيفية معرفة فئتك](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "الموصلات الأخرى على تسجيل التطبيق هذا: {connectors}. الإجمالي: {total} RU في الدقيقة.",
+              "none": "لا يوجد موصل آخر على تسجيل التطبيق هذا يحدد RU في الدقيقة.",
+              "hidden": "{count, plural, one {موصل واحد لا يمكنك رؤيته} two {موصلان لا يمكنك رؤيتهما} few {# موصلات لا يمكنك رؤيتها} many {# موصلًا لا يمكنك رؤيته} other {# موصل لا يمكنك رؤيته}}",
+              "unavailable": "تعذر تحميل RU في الدقيقة للموصلات الأخرى على تسجيل التطبيق هذا."
             }
           }
         }
@@ -8099,6 +8111,13 @@
         },
         "setDefaultButton": {
           "label": "تعيين كافتراضي"
+        },
+        "deleteButton": {
+          "ariaLabel": "حذف {title}",
+          "tooltip": "حذف"
+        },
+        "reconnectButton": {
+          "label": "إعادة الاتصال"
         }
       }
     },
@@ -9058,6 +9077,9 @@
       "provider": {
         "connected": {
           "label": "متصل"
+        },
+        "disconnected": {
+          "suffix": "(غير متصل)"
         }
       },
       "setupModal": {
@@ -9075,8 +9097,6 @@
         }
       },
       "toasts": {
-        "connected": "تم الاتصال بـ {label}",
-        "disconnected": "تم قطع الاتصال بـ {label}",
         "unexpectedError": "حدث خطأ غير متوقع."
       },
       "providers": {
@@ -9117,6 +9137,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "سيتم حذف مفتاح API وإعدادات **{label}**. لإرسال التتبعات مرة أخرى، قم بإعداده من البداية.",
+        "description": "إزالة مفتاح API وإعدادات هذا المزوّد.",
+        "submit": {
+          "label": "حذف"
+        },
+        "title": "حذف {label}",
+        "envBody": "سيتم حذف مفتاح API وإعدادات **{label}**. يبقى التتبع متوقفًا. لإرسال التتبعات مرة أخرى باستخدام إعدادات متغيرات البيئة، أعد الاتصال."
       }
     },
     "usage": {
@@ -9819,7 +9848,7 @@
       },
       "tierTooltip": "تتطلب بوابة LLM خطة Business أو Enterprise.",
       "scopeNote": {
-        "title": "يقوم كل مستخدم بتكوين رمزه الخاص وتفاصيل الاتصال ضمن الإعدادات → بوابة LLM."
+        "title": "يقوم كل مستخدم بتكوين رمزه الخاص وتفاصيل الاتصال ضمن الإعدادات → وصول الجهات الخارجية → بوابة LLM."
       },
       "toasts": {
         "settingsUpdateFailed": "فشل تحديث الإعدادات"
@@ -10692,7 +10721,7 @@
         "title": "مجموعة البحث - OpenSearch",
         "status": "حالة المجموعة",
         "version": "OpenSearch {version}",
-        "health": "الحالة {health}",
+        "noVersion": "OpenSearch",
         "updated": "تم التحديث {time}",
         "dataNodes": "عُقد البيانات",
         "shards": "الأجزاء",
@@ -11376,6 +11405,7 @@
         "playgroundAskAdmin": "اطلب من مسؤولك دعوتك.",
         "playgroundCheckFailed": "لم نتمكن من التحقق من تسجيلك. حاول مرة أخرى لاحقًا.",
         "playgroundEmailUsed": "لقد استخدمت وصولك إلى الـ playground.",
+        "playgroundFreeMail": "استخدم بريدك الإلكتروني الخاص بالعمل.",
         "playgroundLimitReached": "لقد استخدمت شركتك وصولها إلى الـ playground.",
         "serverError": "واجه موفر الهوية خطأً. يرجى المحاولة مرة أخرى.",
         "staleSignIn": "انتهت صلاحية رابط تسجيل الدخول هذا أو لم يعد صالحًا. يرجى تسجيل الدخول مرة أخرى.",
@@ -11777,33 +11807,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "حذف"
-      },
-      "deleteModal": {
-        "description": "هل أنت متأكد من رغبتك في حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
-        "submitButton": {
-          "label": "حذف"
-        },
-        "title": "حذف المحادثة"
-      },
-      "exportAs": {
-        "label": "تصدير باسم…"
-      },
-      "exportFailed": {
-        "message": "فشل تصدير المحادثة. يرجى المحاولة مرة أخرى."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "نص عادي"
-      },
-      "fullWidth": {
-        "ariaLabel": "تبديل عرض المحادثة الكامل",
-        "fitTooltip": "ملاءمة العرض",
-        "fullTooltip": "عرض كامل"
-      },
       "incognitoExit": {
         "ariaLabel": "الخروج من محادثة التخفي",
         "tooltip": "الخروج من محادثة التخفي"
@@ -11830,14 +11833,14 @@
       "modeButton": {
         "ariaLabel": "تغيير وضع التطبيق"
       },
-      "moveToProject": {
-        "label": "نقل إلى مشروع"
-      },
       "openSidebar": {
         "ariaLabel": "فتح الشريط الجانبي"
       },
       "share": {
-        "label": "مشاركة"
+        "label": "مشاركة…"
+      },
+      "shareMenu": {
+        "label": "مشاركة أو تصدير"
       }
     },
     "banners": {
@@ -11882,6 +11885,14 @@
       "licenseExpiry": {
         "source": {
           "label": "الترخيص"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "مجموعة البحث"
+        },
+        "cta": {
+          "label": "فتح حالة الخدمة"
         }
       },
       "nextButton": {
@@ -12200,7 +12211,7 @@
           "text": "تم حظر {toolName}"
         },
         "completedStatus": {
-          "text": "اكتمل {toolName}"
+          "text": "تم تنفيذ {toolName}"
         },
         "downloadFileLink": {
           "label": "تنزيل"
@@ -12230,13 +12241,10 @@
           "label": "الاستجابة"
         },
         "runningStatus": {
-          "text": "{toolName} قيد التشغيل..."
+          "text": "جارٍ تنفيذ {toolName}..."
         },
         "unreachableStatus": {
           "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"
-        },
-        "waitingIndicator": {
-          "text": "في انتظار الاستجابة..."
         }
       },
       "customToolAuth": {
@@ -12414,7 +12422,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "جارٍ التفكير"
+          "text": "جارٍ التفكير..."
         }
       },
       "timeline": {
@@ -12429,7 +12437,7 @@
             "status": "تم توليد الخطة"
           },
           "generating": {
-            "status": "جارٍ توليد الخطة"
+            "status": "جارٍ توليد الخطة..."
           }
         },
         "expandButton": {
@@ -12437,10 +12445,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "جارٍ القراءة"
+            "status": "جارٍ تصفح صفحات الويب..."
           },
           "read": {
-            "status": "تمت القراءة"
+            "status": "{count, plural, =0 {تم تصفح صفحات الويب} one {تم تصفح صفحة ويب واحدة} two {تم تصفح صفحتي ويب} few {تم تصفح # صفحات ويب} many {تم تصفح # صفحة ويب} other {تم تصفح # صفحة ويب}}"
           }
         },
         "fileReader": {
@@ -12448,69 +12456,108 @@
             "status": "قرأ {fileName} (الأحرف {start, number}–{end, number} من {total, number})"
           },
           "reading": {
-            "status": "جارٍ قراءة الملف"
+            "status": "جارٍ قراءة الملف..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {تم توليد صورة واحدة} other {تم توليد # صور}}"
         },
         "header": {
           "executingCode": {
-            "label": "جارٍ تنفيذ الكود"
+            "label": "جارٍ تنفيذ الكود..."
           },
           "executingNamedTool": {
-            "label": "جارٍ تنفيذ {toolName}"
+            "label": "جارٍ تنفيذ {toolName}..."
           },
           "executingTool": {
-            "label": "جارٍ تنفيذ الأداة"
+            "label": "جارٍ تنفيذ الأداة..."
           },
           "generatingImages": {
-            "label": "جارٍ توليد الصور"
+            "label": "جارٍ توليد الصور..."
           },
           "generatingPlan": {
-            "label": "جارٍ توليد الخطة"
+            "label": "جارٍ توليد الخطة..."
           },
           "queryingKnowledgeBase": {
-            "label": "جارٍ الاستعلام عن قاعدة المعرفة"
+            "label": "جارٍ الاستعلام عن قاعدة المعرفة..."
           },
           "reading": {
-            "label": "جارٍ القراءة"
+            "label": "جارٍ القراءة..."
           },
           "readingFile": {
-            "label": "جارٍ قراءة الملف"
+            "label": "جارٍ قراءة الملف..."
           },
           "researching": {
-            "label": "جارٍ البحث"
+            "label": "جارٍ البحث..."
           },
           "searchingWeb": {
-            "label": "جارٍ البحث في الويب"
+            "label": "جارٍ البحث في الويب..."
           },
           "thinking": {
-            "label": "جارٍ التفكير"
-          },
-          "thinkingEllipsis": {
             "label": "جارٍ التفكير..."
           },
           "updatingMemory": {
             "label": "جارٍ تحديث الذاكرة..."
           },
           "working": {
-            "label": "قيد العمل"
+            "label": "قيد العمل..."
           },
           "waitingForApproval": {
-            "label": "في انتظار موافقتك"
+            "label": "في انتظار موافقتك..."
           },
           "waitingForAnswer": {
-            "label": "في انتظار إجابتك"
+            "label": "في انتظار إجابتك..."
           },
           "runningCommand": {
-            "label": "جارٍ تشغيل الأمر"
+            "label": "جارٍ تشغيل الأمر..."
           },
           "editingFiles": {
-            "label": "جارٍ تعديل الملفات"
+            "label": "جارٍ تعديل الملفات..."
           },
           "publishingFiles": {
-            "label": "جارٍ نشر الملفات"
+            "label": "جارٍ نشر الملفات..."
+          },
+          "browsing": {
+            "label": "جارٍ تصفح صفحات الويب..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "جارٍ العمل...",
+              "done": "تم إنجاز العمل"
+            },
+            "crunchingDetails": {
+              "working": "جارٍ تدقيق التفاصيل...",
+              "done": "تم تدقيق التفاصيل"
+            },
+            "connectingDots": {
+              "working": "جارٍ ربط النقاط...",
+              "done": "تم ربط النقاط"
+            },
+            "runningNumbers": {
+              "working": "جارٍ حساب الأرقام...",
+              "done": "تم حساب الأرقام"
+            },
+            "fillingGaps": {
+              "working": "جارٍ سد الثغرات...",
+              "done": "تم سد الثغرات"
+            },
+            "sortingThingsOut": {
+              "working": "جارٍ ترتيب الأمور...",
+              "done": "تم ترتيب الأمور"
+            },
+            "gatheringPieces": {
+              "working": "جارٍ جمع القطع...",
+              "done": "تم جمع القطع"
+            },
+            "workingThroughIt": {
+              "working": "جارٍ العمل على ذلك...",
+              "done": "تم العمل على ذلك"
+            },
+            "ironingOutDetails": {
+              "working": "جارٍ ضبط التفاصيل...",
+              "done": "تم ضبط التفاصيل"
+            },
+            "roundingThingsOut": {
+              "working": "جارٍ استكمال الصورة...",
+              "done": "تم استكمال الصورة"
+            }
           }
         },
         "internalSearch": {
@@ -12518,10 +12565,10 @@
             "text": "لم يتم العثور على نتائج"
           },
           "reading": {
-            "status": "جارٍ القراءة"
+            "status": "جارٍ القراءة..."
           },
           "read": {
-            "label": "تمت القراءة"
+            "label": "المستندات المقروءة"
           },
           "header": {
             "default": "جارٍ البحث في المستندات الداخلية",
@@ -12529,7 +12576,8 @@
             "sources": "جارٍ البحث في {sources}",
             "doneSources": "تم البحث في {sources}",
             "sourcesOverflow": "{sources} +{count} أخرى",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "منذ {date}",
@@ -12548,7 +12596,7 @@
             "text": "أداة الذاكرة معطّلة"
           },
           "updating": {
-            "status": "جارٍ تحديث الذاكرة"
+            "status": "جارٍ تحديث الذاكرة..."
           },
           "updated": {
             "status": "تم تحديث الذاكرة"
@@ -12570,10 +12618,7 @@
             "status": "تم الاستعلام عن قاعدة المعرفة"
           },
           "querying": {
-            "status": "جارٍ الاستعلام عن قاعدة المعرفة"
-          },
-          "listed": {
-            "label": "{count, plural, one {مستند واحد مُدرج} other {# مستندات مُدرجة}}"
+            "status": "جارٍ الاستعلام عن قاعدة المعرفة..."
           },
           "query": {
             "table": {
@@ -12630,21 +12675,15 @@
             "label": "الإخراج:"
           },
           "running": {
-            "status": "جارٍ تشغيل Python"
+            "status": "جارٍ تشغيل Python..."
           },
           "ran": {
             "status": "تم تشغيل Python"
-          },
-          "runningCode": {
-            "label": "جارٍ تشغيل الكود..."
-          },
-          "writingCode": {
-            "status": "جارٍ كتابة الكود..."
           }
         },
         "reasoning": {
           "thinking": {
-            "status": "جارٍ التفكير"
+            "status": "جارٍ التفكير..."
           },
           "thought": {
             "status": "تم التفكير"
@@ -12680,7 +12719,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "جارٍ البحث في الويب"
+            "status": "جارٍ البحث في الويب..."
           },
           "searched": {
             "status": "تم البحث في الويب"
@@ -12688,19 +12727,16 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {جارٍ تشغيل الأمر} started {تم بدء الأمر} failed {فشل الأمر} canceled {أُلغي} done {تم تشغيل الأمر} other {تم تشغيل الأمر}}",
+            "status": "{phase, select, running {جارٍ تشغيل الأمر...} started {تم بدء الأمر} failed {فشل الأمر} canceled {أُلغي} done {تم تشغيل الأمر} other {تم تشغيل الأمر}}",
             "workdir": {
               "label": "في {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}...} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}...} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة} failed {تعذر إرسال إدخال إلى الجلسة} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة} other {تم إرسال إدخال إلى الجلسة}}} check {{phase, select, running {جارٍ فحص الجلسة} failed {تعذر فحص الجلسة} canceled {أُلغي} done {تم فحص الجلسة} other {تم فحص الجلسة}}} other {الجلسة}}"
+              "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة...} failed {تعذر إرسال إدخال إلى الجلسة} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة} other {تم إرسال إدخال إلى الجلسة}}} check {{phase, select, running {جارٍ فحص الجلسة...} failed {تعذر فحص الجلسة} canceled {أُلغي} done {تم فحص الجلسة} other {تم فحص الجلسة}}} other {الجلسة}}"
             }
-          },
-          "output": {
-            "title": "المخرجات"
           },
           "exitCode": {
             "label": "رمز الخروج {exitCode}"
@@ -13019,6 +13055,12 @@
       },
       "copyButton": {
         "tooltip": "نسخ المحتوى"
+      },
+      "sourceButton": {
+        "tooltip": "إظهار المصدر"
+      },
+      "previewButton": {
+        "tooltip": "إظهار المعاينة"
       },
       "downloadButton": {
         "label": "تنزيل الملف",
@@ -13481,10 +13523,6 @@
       "toggleButton": {
         "label": "تبديل اللوحة"
       },
-      "downloadButton": {
-        "label": "تنزيل",
-        "tooltip": "تنزيل الملف"
-      },
       "reloadButton": {
         "label": "تحديث الملفات",
         "error": "تعذّرت إعادة تحميل الملفات. حاول مرة أخرى."
@@ -13497,6 +13535,54 @@
       },
       "resizeHandle": {
         "label": "تغيير حجم اللوحة"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "فشل تصدير المحادثة. يرجى المحاولة مرة أخرى."
+      },
+      "plaintext": {
+        "label": "نص عادي"
+      },
+      "asMarkdown": {
+        "label": "تصدير بتنسيق Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "تصدير كنص عادي"
+      },
+      "menu": {
+        "label": "تصدير باسم…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "النشاط"
+      },
+      "needsYou": {
+        "title": "يحتاج إليك",
+        "approval": "الموافقة على {tool}",
+        "question": "الإجابة عن سؤال"
+      },
+      "agents": {
+        "title": "الوكلاء",
+        "status": {
+          "starting": "قيد البدء",
+          "running": "قيد التشغيل",
+          "suspended": "في الانتظار",
+          "complete": "تم",
+          "limit": "بلغ حد الخطوات",
+          "cancelled": "أُلغي",
+          "stopped": "أُوقف",
+          "error": "فشل"
+        },
+        "finished": "الوكلاء السابقون"
+      },
+      "files": {
+        "title": "الملفات",
+        "viewAll": "{count, plural, one {عرض # ملف} other {عرض كل الملفات (#)}}"
       }
     }
   },
@@ -13554,11 +13640,6 @@
       },
       "plant": {
         "label": "نباتات"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "اب"
       }
     },
     "commandMenu": {
@@ -14033,6 +14114,21 @@
         "label": "ترقية الخطة"
       },
       "availableFor": "متاح في {plan}"
+    },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "هذه ميزة Enterprise وهي غير متاحة في الـ Playground. نسخة Onyx الخاصة بك تتضمنها. [تحدث إلى المبيعات]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "قمنا بإعداد مفاتيح النماذج الخاصة بنا حتى تتمكن من تجربة الميزات. نسخة Onyx الخاصة بك تعمل بمفاتيحك. [تحدث إلى المبيعات]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "هذه الميزة متوقفة في الـ Playground. نسخة Onyx الخاصة بك تتضمنها. [تحدث إلى المبيعات]({salesUrl})"
+        },
+        "title": "حد الـ Playground",
+        "tooltip": "غير متاحة في الـ Playground. نسخة Onyx الخاصة بك تتضمنها."
+      }
     },
     "placeholders": {
       "email": "albarid@sharikatuk.com",
@@ -14990,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "قيد العمل"
+          "label": "قيد العمل..."
         }
       },
       "read": {
@@ -15759,7 +15855,8 @@
       "scrollRight": "تمرير التبويبات لليمين"
     },
     "toast": {
-      "moreCount": "+{count} أخرى"
+      "moreCount": "+{count} أخرى",
+      "closeAll": "إغلاق الكل"
     },
     "sidebar": {
       "open": "فتح الشريط الجانبي",
@@ -15773,11 +15870,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "مجهول",
-        "description": "عنوان البريد الإلكتروني لحسابك.",
-        "title": "البريد الإلكتروني"
-      },
       "password": {
         "changeButton": "تغيير كلمة المرور",
         "description": "تحديث كلمة مرور حسابك.",
@@ -15810,8 +15902,7 @@
           "mismatch": "كلمتا المرور غير متطابقتين",
           "newRequired": "كلمة المرور الجديدة مطلوبة"
         }
-      },
-      "title": "الحسابات"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15987,62 @@
         "title": "خلفية المحادثة"
       },
       "colorMode": {
-        "auto": "تلقائي",
+        "auto": "النظام",
         "dark": "داكن",
-        "description": "اختر وضع الألوان المفضل لواجهة الاستخدام.",
+        "description": "اختر السمة المفضلة لواجهة الاستخدام.",
         "light": "فاتح",
-        "title": "وضع الألوان"
+        "title": "السمة"
       },
-      "title": "المظهر"
+      "general": {
+        "title": "عام"
+      },
+      "fonts": {
+        "title": "الخطوط"
+      },
+      "transcriptWidth": {
+        "title": "عرض المحادثة",
+        "description": "اضبط عرض رسائل الدردشة وشريط الإدخال على هذا الجهاز.",
+        "standard": "قياسي",
+        "wide": "عريض",
+        "placeholder": "اختر عرضًا"
+      },
+      "responseFont": {
+        "default": "افتراضي",
+        "match": "مطابقة الواجهة",
+        "title": "خط الردود",
+        "description": "اختر الخط المستخدم لردود المحادثة.",
+        "placeholder": "اختر خطًا"
+      },
+      "interfaceFont": {
+        "title": "خط الواجهة",
+        "description": "اختر الخط المستخدم لنصوص التطبيق.",
+        "default": "افتراضي",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "النظام",
+        "placeholder": "اختر خطًا"
+      },
+      "accessibility": {
+        "title": "إمكانية الوصول"
+      },
+      "motion": {
+        "title": "الحركة",
+        "description": "اتبع إعداد الحركة في نظامك، أو قلّل الرسوم المتحركة في التطبيق بأكمله.",
+        "placeholder": "اختر إعداد الحركة",
+        "system": "النظام",
+        "reduced": "مخفّضة"
+      },
+      "popupDismissal": {
+        "title": "الإشعارات",
+        "description": "اختر ما إذا كانت الإشعارات تُغلق تلقائيًا أو تبقى حتى تغلقها بنفسك.",
+        "placeholder": "اختر متى تُغلق الإشعارات",
+        "auto_dismiss": "إغلاق تلقائي",
+        "stay_on_screen": "البقاء على الشاشة"
+      },
+      "dynamicConversations": {
+        "title": "المحادثات الديناميكية",
+        "description": "تحميل الرسائل وإلغاء تحميلها أثناء التمرير في المحادثات الطويلة. يحسّن هذا الأداء، لكن قارئات الشاشة لا يمكنها الوصول إلى الرسائل التي أُلغي تحميلها. أوقف هذا الخيار لإبقاء جميع الرسائل محمّلة."
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +16076,6 @@
         "description": "عرض الإجابات المتدفقة حرفًا بحرف. عطّل هذا لعرض الأجزاء فور وصولها.",
         "title": "التدفق السلس"
       },
-      "title": "المحادثات",
       "toasts": {
         "saveFailed": "فشل حفظ التفضيلات"
       },
@@ -15949,6 +16088,7 @@
     },
     "connectors": {
       "connectButton": "ربط",
+      "disconnectAriaLabel": "قطع الاتصال بـ {name}",
       "disconnectModal": {
         "continueNote": "لا يزال بإمكانك متابعة الجلسات الحالية التي تشير إلى محتوى {name}.",
         "description": "لن يتمكن {appName} بعد الآن من الوصول إلى محتوى حساب {name} الخاص بك أو البحث فيه.",
@@ -15956,11 +16096,9 @@
         "submit": "قطع الاتصال",
         "title": "قطع الاتصال بـ *{name}*"
       },
-      "emptyMessage": "لا توجد موصلات معدّة لمؤسستك.",
       "status": {
         "connected": "متصل",
-        "notConnected": "غير متصل",
-        "paused": "متوقف مؤقتًا"
+        "notConnected": "غير متصل"
       },
       "title": "الموصلات",
       "toasts": {
@@ -16024,7 +16162,6 @@
         "description": "اختر لغة واجهة الاستخدام.",
         "title": "لغة العرض"
       },
-      "title": "اللغة",
       "toasts": {
         "updateFailed": "فشل تحديث تفضيل اللغة"
       }
@@ -16037,23 +16174,20 @@
         "placeholder": "اختر قسمًا"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "الحسابات والوصول"
+        "appearance": {
+          "label": "المظهر"
+        },
+        "usage": {
+          "label": "الاستخدام"
+        },
+        "account": {
+          "label": "الحساب"
         },
         "chatPreferences": {
           "label": "تفضيلات المحادثة"
         },
-        "connectors": {
-          "label": "الموصلات"
-        },
-        "general": {
-          "label": "عام"
-        },
-        "llmGateway": {
-          "label": "بوابة LLM"
-        },
-        "usage": {
-          "label": "الاستخدام"
+        "thirdPartyAccess": {
+          "label": "وصول الجهات الخارجية"
         }
       }
     },
@@ -16102,9 +16236,9 @@
       }
     },
     "personalPreferences": {
-      "description": "قدّم تفضيلاتك المخصصة بلغة طبيعية.",
+      "description": "يأخذ {appName} هذه التعليمات في الاعتبار في جميع محادثاتك.",
       "placeholder": "صف كيف تريد أن يتصرف النظام والأسلوب الذي يجب أن يستخدمه.",
-      "title": "التفضيلات الشخصية"
+      "title": "التعليمات"
     },
     "profile": {
       "fullName": {
@@ -16118,8 +16252,68 @@
       },
       "workRole": {
         "description": "شارك دورك الوظيفي لتخصيص الإجابات بشكل أفضل.",
-        "placeholder": "دورك الوظيفي",
-        "title": "الدور الوظيفي"
+        "placeholder": "اختر دورًا وظيفيًا",
+        "title": "ما الذي يصف عملك على أفضل وجه؟",
+        "other": {
+          "placeholder": "أدخل دورك الوظيفي",
+          "title": "عملك"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "اختر صورة بحجم 10 ميغابايت أو أقل.",
+          "invalidType": "اختر صورة بتنسيق PNG أو JPEG أو WebP."
+        },
+        "description": "PNG أو JPEG أو WebP، بحد أقصى 10 ميغابايت.",
+        "toasts": {
+          "updateFailed": "تعذّر تحديث صورة ملفك الشخصي. حاول مرة أخرى."
+        },
+        "title": "صورة الملف الشخصي",
+        "editButton": {
+          "ariaLabel": "تغيير صورة الملف الشخصي"
+        },
+        "uploadButton": {
+          "ariaLabel": "تحميل صورة للملف الشخصي"
+        },
+        "menu": {
+          "label": "خيارات صورة الملف الشخصي",
+          "replace": {
+            "label": "استبدال الصورة"
+          },
+          "remove": {
+            "label": "إزالة"
+          }
+        },
+        "cropModal": {
+          "title": "قص الصورة",
+          "description": "اسحب الصورة أو استخدم مفاتيح الأسهم لتغيير موضعها. استخدم شريط التمرير أو عجلة الماوس للتكبير.",
+          "area": {
+            "ariaLabel": "منطقة القص"
+          },
+          "zoom": {
+            "ariaLabel": "التكبير"
+          },
+          "zoomIn": {
+            "ariaLabel": "تكبير"
+          },
+          "zoomOut": {
+            "ariaLabel": "تصغير"
+          },
+          "reset": {
+            "label": "إعادة تعيين"
+          },
+          "cancel": {
+            "label": "إلغاء"
+          },
+          "save": {
+            "label": "حفظ"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "يستخدم {appName} هذا الاسم عندما يتحدث إليك.",
+        "placeholder": "أضف اسمًا",
+        "title": "بماذا يجب أن يناديك {appName}؟"
       }
     },
     "promptShortcuts": {
@@ -16129,7 +16323,6 @@
         "publicTooltip": "لا يمكن حذف اختصارات المطالبات على مستوى المؤسسة.",
         "removeAriaLabel": "إزالة الاختصار"
       },
-      "title": "اختصارات المطالبات",
       "toasts": {
         "bothRequired": "الاختصار والنص الموسّع كلاهما مطلوبان",
         "deleteFailed": "فشل حذف الاختصار",
@@ -16152,9 +16345,6 @@
       "empty": {
         "description": "سيظهر استخدامك للنماذج وتكاليفها هنا بمجرد بدء المحادثة.",
         "title": "لم يُسجل استخدام بعد"
-      },
-      "header": {
-        "title": "الاستخدام"
       },
       "loadError": {
         "description": "حدث خطأ أثناء جلب استخدامك. حاول مرة أخرى بعد قليل.",
@@ -16215,9 +16405,31 @@
       },
       "playbackSpeed": {
         "description": "اضبط سرعة تشغيل الصوت.",
-        "title": "سرعة التشغيل"
+        "title": "سرعة التشغيل",
+        "value": "{speed}x"
       },
       "title": "الصوت"
+    },
+    "modelPreferences": {
+      "title": "تفضيلات النموذج"
+    },
+    "interactions": {
+      "title": "التفاعلات"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "مدير مجموعة",
+        "description": "مستوى وصولك في مساحة العمل هذه.",
+        "admin": "مسؤول",
+        "basic": "مستخدم أساسي",
+        "title": "دورك"
+      },
+      "tenantId": {
+        "description": "شارك هذا المعرّف مع الدعم عند طلب المساعدة.",
+        "copyTooltip": "نسخ معرّف المستأجر",
+        "title": "معرّف المستأجر"
+      },
+      "title": "المؤسسة"
     }
   },
   "sidebar": {
@@ -17083,19 +17295,6 @@
       "select": "تحديد {name}"
     }
   },
-  "opensearchHealth": {
-    "title": "يحتاج OpenSearch إلى موارد إضافية",
-    "disk": "يبلغ استخدام قرص OpenSearch ‏85% على الأقل على إحدى عقد البيانات. قد تتوقف الفهرسة عند امتلاء القرص.",
-    "jvmMemory": "ظل استخدام ذاكرة JVM في OpenSearch أعلى من 85% عبر فحوصات متكررة. قد يفشل البحث والفهرسة.",
-    "vectorMemory": "ذاكرة المتجهات في OpenSearch شبه ممتلئة أو وصلت إلى حدها. قد يفشل البحث والفهرسة.",
-    "contact": "تواصل مع مسؤول النظام أو فريق Onyx على [support@onyx.app](mailto:support@onyx.app).",
-    "stale": "الفحص الأخير غير متاح. يعكس هذا التحذير آخر فحص ناجح؛ لم يتم تأكيد التعافي.",
-    "dismiss": "إغلاق",
-    "diskTitle": "مساحة القرص",
-    "jvmMemoryTitle": "ذاكرة JVM",
-    "vectorMemoryTitle": "ذاكرة المتجهات",
-    "viewDetails": "عرض التفاصيل"
-  },
   "plugins": {
     "member": {
       "sections": {
@@ -17689,7 +17888,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {مهارة واحدة} other {{skills} مهارات}}",
       "loadFailed": "تعذر تحميل الإضافات.",
       "filter": {
         "all": "كل الإضافات"
@@ -17703,7 +17901,7 @@
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
       },
-      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تأتي كل مهارة تضيفها في إضافة خاصة بها.",
+      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تظهر الإضافة التي تحتوي فقط على ملف SKILL.md في جذرها في علامة تبويب المهارات.",
       "integrations": "{available} من {needed} من التكاملات متاحة",
       "nameHeld": "متوقف: يستخدم {names} اسم المهارة نفسه"
     },
@@ -17952,6 +18150,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {ينتظر هذا التشغيل موافقتك أدناه.} other {هذا التشغيل قيد التنفيذ.}}",
       "startedAt": "بدأ {time}",
       "viewTask": "عرض المهمة"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "التسويق"
+      },
+      "finance": {
+        "label": "المالية"
+      },
+      "other": {
+        "label": "أخرى"
+      },
+      "engineering": {
+        "label": "الهندسة"
+      },
+      "customerSupportSuccess": {
+        "label": "دعم العملاء ونجاحهم"
+      },
+      "peopleHr": {
+        "label": "الموارد البشرية"
+      },
+      "dataAnalytics": {
+        "label": "البيانات والتحليلات"
+      },
+      "legal": {
+        "label": "الشؤون القانونية"
+      },
+      "design": {
+        "label": "التصميم"
+      },
+      "product": {
+        "label": "المنتج"
+      },
+      "operations": {
+        "label": "العمليات"
+      },
+      "sales": {
+        "label": "المبيعات"
+      },
+      "leadership": {
+        "label": "القيادة"
+      }
     }
   }
 }

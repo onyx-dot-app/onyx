@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { Section } from "@opal/layouts";
-import ToolApprovalCard from "@/app/app/message/messageComponents/ToolApprovalCard";
-import { getMultiModelLabel } from "@/app/app/message/multiModel";
+import ToolApprovalCard from "@/lib/timeline/chat/message/messageComponents/ToolApprovalCard";
+import { getMultiModelLabel } from "@/lib/timeline/chat/message/multiModel";
 import { useCurrentMessageTree } from "@/app/app/stores/useChatSessionStore";
 import {
   readWaitingToolRequests,

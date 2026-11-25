@@ -43,6 +43,11 @@ ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 # The backend owns this cookie: PATCH /user/language and GET /me set it from
 # the user's stored preference. Name must match web/src/i18n/config.ts.
 NEXT_LOCALE_COOKIE_NAME = "NEXT_LOCALE"
+# Appearance cookie the Next.js server layout reads to render the user's fonts
+# and motion preference on first paint. The backend owns it like NEXT_LOCALE:
+# PATCH /user/appearance and GET /me set it. Name must match
+# web/src/lib/appearance/preferences.ts.
+APPEARANCE_COOKIE_NAME = "onyx_appearance"
 
 # ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
 ANONYMOUS_USER_INFO_ID = "__anonymous_user__"
@@ -125,6 +130,8 @@ KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
 KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY = "opensearch_cc_pair_ids_backfill_progress"
 KV_TABULAR_RECHUNK_PROGRESS_KEY = "tabular_rechunk_progress"
+KV_SUGGESTED_QUESTIONS_POOL_KEY = "suggested_questions_pool"
+KV_SUGGESTED_QUESTIONS_USER_KEY = "suggested_questions_user:{}"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -391,6 +398,8 @@ class NotificationType(str, Enum):
     SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"
     SCHEDULED_TASK_PRE_APPROVED_ACTION = "scheduled_task_pre_approved_action"
     APPROVAL_REQUESTED = "approval_requested"
+    # A critical issue on the OpenSearch cluster, for full admins.
+    OPENSEARCH_CLUSTER_ISSUE = "opensearch_cluster_issue"
 
 
 class BlobType(str, Enum):
@@ -505,6 +514,7 @@ class FileOrigin(str, Enum):
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
     SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"
+    USER_PROFILE_IMAGE = "user_profile_image"
 
 
 # Files that a chat produced for its readers: generated images and code
@@ -601,6 +611,11 @@ class OnyxCeleryQueues:
 
     # Scheduled tasks queue (Craft scheduled-task executor)
     SCHEDULED_TASKS = "scheduled_tasks"
+
+    # Playground suggested questions, consumed by the light worker. Runs take
+    # seconds (a decision call, an LLM call and a few searches), so they stay
+    # off the primary queue.
+    SUGGESTED_QUESTIONS = "suggested_questions"
 
 
 class OnyxRedisLocks:
@@ -738,6 +753,10 @@ class OnyxCeleryTask:
     CHECK_FOR_USER_FILE_DELETE = "check_for_user_file_delete"
     DELETE_SINGLE_USER_FILE = "delete_single_user_file"
     CHECK_FOR_INCOGNITO_FILE_CLEANUP = "check_for_incognito_file_cleanup"
+
+    # Playground suggested questions
+    GENERATE_SUGGESTED_QUESTIONS_POOL = "generate_suggested_questions_pool"
+    GENERATE_SUGGESTED_QUESTIONS_FOR_USER = "generate_suggested_questions_for_user"
 
     # Targeted reindex
     TARGETED_REINDEX_TASK = "targeted_reindex_task"

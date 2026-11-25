@@ -279,6 +279,7 @@ source_exclude = [
     "onyx/tracing/",
     "onyx/image_gen/providers/",
     "onyx/voice/providers/",
+    "onyx/natural_language_processing/embedding_providers/",
     "onyx/natural_language_processing/search_nlp_models.py",
     "ee/onyx/server/gateway/",
 ]

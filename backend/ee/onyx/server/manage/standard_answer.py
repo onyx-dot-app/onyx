@@ -25,8 +25,14 @@ from onyx.server.manage.models import (
     StandardAnswerCategoryCreationRequest,
     StandardAnswerCreationRequest,
 )
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(
+    prefix="/manage",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.STANDARD_ANSWERS))
+    ],
+)
 
 
 @router.post("/admin/standard-answer")

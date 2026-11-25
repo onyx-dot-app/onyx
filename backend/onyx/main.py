@@ -130,6 +130,9 @@ from onyx.server.features.skill.api import user_router as skill_router
 from onyx.server.features.skill.marketplace_api import (
     router as marketplace_router,
 )
+from onyx.server.features.suggested_questions.api import (
+    router as suggested_questions_router,
+)
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.features.usage.api import admin_usage_router, user_usage_router
@@ -151,7 +154,6 @@ from onyx.server.manage.image_generation.api import (
 from onyx.server.manage.llm.api import admin_router as llm_admin_router
 from onyx.server.manage.llm.api import basic_router as llm_router
 from onyx.server.manage.oauth_test import router as oauth_test_admin_router
-from onyx.server.manage.opensearch_health.api import router as opensearch_health_router
 from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.sso.api import admin_router as sso_admin_router
@@ -206,6 +208,7 @@ from onyx.utils.variable_functionality import (
 from shared_configs.configs import (
     CORS_ALLOW_CREDENTIALS,
     CORS_ALLOWED_ORIGIN,
+    IS_PLAYGROUND,
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,
     SENTRY_DSN,
@@ -614,7 +617,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, oauth_test_admin_router)
     include_router_with_global_prefix_prepended(application, admin_query_router)
     include_router_with_global_prefix_prepended(application, admin_router)
-    include_router_with_global_prefix_prepended(application, opensearch_health_router)
     include_router_with_global_prefix_prepended(application, connector_router)
     include_router_with_global_prefix_prepended(application, credential_router)
     include_router_with_global_prefix_prepended(
@@ -627,6 +629,11 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, connector_edit_router)
     include_router_with_global_prefix_prepended(application, targeted_reindex_router)
     include_router_with_global_prefix_prepended(application, projects_router)
+    # The chat page's suggested questions exist only on the playground.
+    if IS_PLAYGROUND:
+        include_router_with_global_prefix_prepended(
+            application, suggested_questions_router
+        )
     include_router_with_global_prefix_prepended(application, public_build_router)
     if SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER:
         include_router_with_global_prefix_prepended(application, microvm_router)

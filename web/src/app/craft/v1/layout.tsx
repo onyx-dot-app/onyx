@@ -8,7 +8,7 @@ import RequiredIntegrationGate from "@/sections/integrations/RequiredIntegration
 // MinimalMarkdown). CodeBlock expects this CSS to be present; we load it from
 // the craft layout so it's reliably themed on /craft without importing it
 // eagerly elsewhere or editing any component outside /craft.
-import "@/app/app/message/custom-code-styles.css";
+import "@/lib/timeline/chat/message/custom-code-styles.css";
 
 /**
  * Build V1 Layout - Skeleton pattern with 3-panel layout

@@ -6,6 +6,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server import playground as playground_module
+from onyx.server.playground import PlaygroundRestrictedFeature
 from onyx.server.settings import api as settings_api
 from onyx.server.settings.models import Settings, UserSettings
 
@@ -41,3 +43,16 @@ def test_is_playground_follows_the_flag(
 ) -> None:
     monkeypatch.setattr(settings_api, "IS_PLAYGROUND", playground)
     assert _fetch_settings(monkeypatch).is_playground is playground
+
+
+@pytest.mark.parametrize("playground", [False, True])
+def test_restricted_features_are_listed_only_on_the_playground(
+    playground: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(playground_module, "IS_PLAYGROUND", playground)
+    listed = _fetch_settings(monkeypatch).playground_restrictions
+    if playground:
+        assert PlaygroundRestrictedFeature.LLM_PROVIDERS in listed
+        assert PlaygroundRestrictedFeature.LLM_GATEWAY in listed
+    else:
+        assert listed == []

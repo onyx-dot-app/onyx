@@ -7,7 +7,7 @@ import {
   LineLoader,
   type LineLoaderWidth,
 } from "@opal/loaders/line-loader/components";
-import { pick, seededRandom, type NonEmpty } from "@opal/loaders/random";
+import { pick, seededRandom, type NonEmpty } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
 
 // The label widths a random tab picks from.

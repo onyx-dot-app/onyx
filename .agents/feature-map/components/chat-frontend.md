@@ -194,8 +194,7 @@
   a page without the panel shows every card. Every publish of one path in a chat is a version of one
   artifact (`artifact_id`, `version`). A click opens the card's version in
   its artifact's tab in the right panel; a page without the panel (NRF)
-  opens it in the preview modal. HTML shows as source, never as a rendered
-  page. Each card shows only its file; a later publish of the same path adds
+  opens it in the preview modal. Each card shows only its file; a later publish of the same path adds
   a card of its own. Cards that show one name also show their
   `display_path`, which the backend sends: relative to the chat's working
   directory, or the whole path outside it. The path shows under the title, before the type and size, in an
@@ -207,8 +206,10 @@
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the
   same place over the header, the panel beside the page and a panel over it.
-  The header and the panel's controls keep out of its room
-  (`lib/outputPanel/layout.ts:PANEL_TOGGLE_RESERVE`). It has one label and
+  The panel's controls keep out of its room
+  (`--panel-toggle-reserve` in `app/globals.css`). The header keeps out of
+  it only while the panel is closed; beside the open panel, which holds the
+  toggle, the share button keeps only the header's padding. It has one label and
   `aria-expanded`, and it acts on what the user sees: on a shown panel it
   closes any tab, Sources too; on a hidden panel, also one whose stored state
   shows Sources that the page hides, it shows the last shown Files tab, else
@@ -226,8 +227,7 @@
   replaces the chat's list only when no load that started later gave it, so an
   older load never overwrites a newer list. The button is off while the reload
   runs, and a failure shows a toast. A file tab's URL bar shows the file's
-  path, then a Download button; the preview in the panel draws no copy,
-  download or count of its own (`FilePreviewBody`'s `actions`). It
+  path, then the preview's actions: source toggle, copy and download. It
   opens at half the page; the user drags its edge, or uses the arrow keys on
   the edge, to resize it, and the width is kept per chat through a reload. A
   button expands it over the whole page and back. A page too narrow for both
@@ -239,8 +239,9 @@
   on every branch, also by answers that are not loaded and by subagents: one
   tile per artifact, its newest version, newest artifact first (a new
   version keeps its artifact's place), with its title or else its
-  name, and a search in the URL bar. A text or markdown tile up to 256 KB
-  shows the start of its file, scaled down, once it nears the view
+  name, and a search in the URL bar. A text, markdown or CSV tile up to 256 KB
+  shows the start of its file, scaled down, and an SVG tile draws its image
+  from the same text, once it nears the view
   (`SWR_KEYS.chatFileTileText`), read through the preview's bounded
   `loadChatFilePreview`; it loads at most once per file and session,
   and a failure is kept as well, so a failed tile does not fetch its file
@@ -252,7 +253,8 @@
   Craft's new-file marker until the panel shows it, also as a new version
   in its open tab. Several files can be open at once; tabs switch
   with a click or the arrow keys, reorder by drag or Alt+arrow among the
-  file tabs, and closing
+  file tabs (on a touch screen, a swipe scrolls the strip and a press and
+  hold starts the drag), and closing
   the active tab returns to the tab used before it, else to Files. Files and
   Sources cannot close or move, and a file tab cannot move before them. File
   tabs of one shown name show their paths. An artifact has one tab, which
@@ -268,17 +270,20 @@
   or workbook as a grid with a sheet bar, a PDF one page at a time with page
   thumbnails and zoom, a PowerPoint deck one slide at a time with a slide
   list, a Word file as pages scaled to fit the width, an image fit to the
-  panel, and code, data, SVG and text as highlighted source. The PDF and
+  panel, HTML as its page in a sandboxed frame, SVG as an image, and code,
+  data and text as highlighted source with line numbers (plain text wraps
+  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF and
   slide views share Craft's toolbar and resizable thumbnail column
   (`sections/file-preview/PreviewControls.tsx`). The column is one tab stop,
   the current page or slide, and the arrow keys move it, with focus. A
   preview under 480 px wide, as on a phone, starts with the column hidden:
   `lib/filePreview/hooks.ts:useThumbnailColumn` measures the row that holds
   the column and the page when it mounts, before the first paint, then
-  follows its width until the user toggles the column. The
-  modal adds the counts,
-  copy and download over the content's bottom, and an image's actual-size
-  toggle. A loader shows only when a load takes over 300 ms. A file over its
+  follows its width until the user toggles the column. The modal shows
+  the counts, copy, download and source toggle over the content's bottom. In
+  the panel, the visible file's actions move to the URL bar's row through
+  `PreviewActionsSlotContext` (`sections/file-preview/FloatingFooter.tsx`);
+  the counts and an image's actual-size toggle stay at the bottom. A loader shows only when a load takes over 300 ms. A file over its
   format's limit (5 MB of text, 20 MB for Word or PowerPoint, 100 MB for a
   PDF), a legacy `.ppt` and other types show one card with a download
   instead. So does a failed load, with a retry, and a PDF, deck, Word file or
@@ -296,9 +301,20 @@
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
   tab-separated text so a spreadsheet keeps the columns. Each answer table
   also has its own copy button, which writes HTML with links and full source
-  names (`app/app/message/tableCopyUtils.ts`). A share link opens a
+  names (`lib/timeline/chat/message/tableCopyUtils.ts`). A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
   sign-in.
+- **A user shares or exports a chat.** The header's share button opens a menu
+  with **Share…** and the two exports. Each chat's menu in the sidebar and on
+  the project page has **Export As…** with the same formats
+  (`web/src/lib/chat/hooks.ts:useChatExportMenu`). An export downloads the
+  user and assistant turns as Markdown or plain text
+  (`web/src/lib/chat/exportChatSession.ts`). The header hides the share menu in
+  incognito.
+- **A user deletes a chat** from its menu in the sidebar or on the project
+  page; the header has no Delete. Deleting the open chat from the sidebar
+  opens its project, or a new session when it has none
+  (`web/src/sections/sidebar/ChatButton.tsx`).
 - **The incognito start button** appears only on the new chat page when
   incognito is available and unlocked.
 - **A user in incognito** cannot turn incognito on or off once the session
@@ -437,10 +453,10 @@ session's `uncaughtError`, a `SessionError` with the error code and details,
 after settlement.
 An automatic follow-up response has a hidden `agent_results` question node as
 its parent. `ChatUI` and the shared chat view render that node with
-`web/src/app/app/message/AgentResultsDivider.tsx`, with no message controls. Checks that
+`web/src/lib/timeline/chat/message/AgentResultsDivider.tsx`, with no message controls. Checks that
 look for the last `user` node skip it, and export omits it. A multi-model turn
 is unresolved only while the chain tip's parent is its user message
-(`web/src/app/app/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
+(`web/src/lib/timeline/chat/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
 reopen response selection.
 
 **Packet processing.** `processPackets` is incremental. It processes only
@@ -451,7 +467,9 @@ step. `MESSAGE_START` makes an answer group. Debug and control packets
 that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group with no packet in
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
 making their own step. Generated images accumulate across tool steps, unique
-by file ID, and render once above the answer as soon as they arrive. Later tool
+by file ID, and render once, inline right after the step that made them
+(`web/src/lib/timeline/chat/message/messageComponents/AgentMessage.tsx:buildSectionSegments`), as soon as they arrive. An image
+ends its step's run, so a later step starts a new run card. Later tool
 calls do not hide them. An image call does not mark the answer as final;
 later search or image calls can continue the timeline. Published files work the same way: each
 `publish_files_end` adds its files, unique by file ID, to
@@ -484,8 +502,17 @@ reports that it failed. Its loader,
 and type pick the format (`lib/filePreview/format.ts:resolveFilePreviewFormat`).
 A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
 the workbook, and an image or an unsupported file reads no body: the image
-loads from the file URL in an `<img>`. SVG shows as XML source, because the
-server serves it as `application/octet-stream`. Other bodies
+loads from the file URL in an `<img>`. SVG loads as text, because the server
+serves it as `application/octet-stream`, and renders from a `data:` URL. HTML
+renders through `srcdoc` with an empty `sandbox`: an opaque origin with no
+scripts, so it cannot reach Onyx's page, cookies or API, and the sandbox
+refuses a meta refresh. A fixed prologue (`<!DOCTYPE html>` and a CSP meta)
+that `sections/file-preview/FilePreview.tsx` puts before the file also sets
+`script-src 'none'` and stops every network load: the page shows only its
+inline styles and its `data:`/`blob:` images, fonts and media, so it cannot
+send the file's contents to another site. Scripted or CDN parts do not show. Decision: scripts
+and CDN loads come back only with a real browser surface for previews, not by
+loosening this policy; the page's CSP applies too. Other bodies
 are read up to the format's limit while they stream, because the server sends
 no length. Text over 200,000 characters shows without highlighting, and
 markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
@@ -536,7 +563,12 @@ app shell's right slot, as the shared view places `ChatRightPanel`. Both
 always mount it, so a card opens its file also when the list holds no files;
 closed, the panel takes no room. The panel draws its own toggle once the chat
 has a session, and the header leaves room for it at its end
-(`layouts/chromes/AppChrome.tsx`, the shared view's header padding). In the
+(`layouts/chromes/AppChrome.tsx`, the shared view's header padding). That room
+is `--panel-toggle-reserve`, a registered property in `app/globals.css`: the
+open panel sets it to zero on the page element, and the page eases it with
+the panel's slide. The size button's `end-12` in
+`sections/chat/ChatRightPanel.tsx` repeats its 48px initial value; change both
+together. In the
 DOM, the toggle follows what the user sees: a closed panel puts it in the
 workspace's `panelToggleSlot`, before the page, and an open panel puts it
 before its tabs. Closing gives focus back to it when the move or the panel
@@ -666,11 +698,12 @@ it. A yield (status `running`) ends the program's turn: the model acts next.
 `useTimelineHeader` takes `codeModeWorking`, so the run header reads
 "Working" while the program runs between calls.
 The header names a step's activity from its own first packet; nested packets
-do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
+do not decide it. A step with no activity of its own reads "Working". Before
+the first step, the response shows the cursor, not a run card. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a
 cell's new call can move later steps into another turn group. The rail
-primitives, `StepContainer` and that list (`TimelineSteps`) live in
+primitives, `RunStep` and that list (`TimelineSteps`) live in
 `web/src/lib/timeline/`, which Craft shares ([[craft-frontend]]).
 `web/src/lib/timeline/chat/transformers.ts:groupStepsByTurn` gives every
 step its own group, in turn order. Concurrent calls of one program show as
@@ -783,7 +816,32 @@ reader, with no request. Saved replay emits the same packets from each step's
 human inputs, so both paths render user bubbles between response sections.
 Status polls every 2 seconds while `has_startable_input` or
 `has_active_subagents` is true. `stopSubagents` posts
-`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status. An idle chat that sees a running or unknown
+`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status.
+The header's activity button (`sections/chat/ChatActivity.tsx`) shows once a
+chat has a waiting request, a background agent or a published file. It is
+always the icon alone, so the header never shifts, and toggles a card that
+stays open until that button closes it. The card portals into the page column's
+`activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
+at the chat region's top end, so the header keeps its width and buttons. With
+no output panel open it sets `data-activity-docked`, and in a workspace at
+least 64rem wide (`@container/workspace`) the chat's scrolled content, the
+input row (`data-activity-room` in `views/AppPage.tsx`) and the footer make
+room for it: at least its 1rem end gutter, plus what the gutter of the
+centered chat column
+(`--app-chat-column-width`, reading or wide) lacks, so on a wide screen the
+column does not move, while the scroller keeps its width so its scrollbar stays at the
+end; otherwise it floats over the chat's end. The header's left side
+shows the chat's title on one clipped line; with no center content it takes
+all the room before the buttons. A waiting row nudges its card into view; the Files row opens the right
+panel. Agents come from
+`GET /chat/chat-session/{id}/agents` (`lib/chat/hooks.ts:useChatSubagents`),
+which reads `load_session_agent_metadata` for the selected branch and keeps
+the `spawn_agent` children (`ChatConfiguration`; Deep Research workers are
+foreground): `id`, `path`, `status` and `stopped_by_user`, with no
+transcript. The list loads again when the status changes
+`has_active_subagents` or `latest_response_id`, and polls while agents are
+active. The status it reads also polls while a reply streams, so agents that
+the reply starts show. An idle chat that sees a running or unknown
 response refreshes history and attaches to the stream.
 `app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
 the latest response's last packet is a turn-level stop. `AppInputBar` then
@@ -796,6 +854,12 @@ ignores keys during IME composition.
 **First-run onboarding.** `AppPage` renders
 `web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
 `web/src/lib/onboarding/hooks.ts:useShowOnboarding` decides whether it shows.
+The welcome screen shows a loader until `isOnboardingResolved` is true, so it
+mounts once in its final layout. A saved dismissal resolves the decision at
+once. Otherwise the hook waits until the provider and chat session requests
+stop loading; a failed request also stops loading. While onboarding shows,
+the grid's bottom row is a fixed 30% of the page, so steps grow upward and the
+input's place does not depend on the previous layout or the load order.
 The step order is in `web/src/lib/onboarding/constants.ts:STEP_CONFIG`.
 Dismissal and an admin's saved step live in `localStorage`, keyed by user id,
 so another browser starts again. The input lock is a comparison against
@@ -842,7 +906,7 @@ up its own branding.
    `nodeId` changes, the list gets shorter, or the packet at the last processed
    index is a different object, as after a replay or a reload. So append to the
    same packet objects, and give a rebuilt list new ones.
-   `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage` memoizes
+   `lib/timeline/chat/message/messageComponents/AgentMessage.tsx:AgentMessage` memoizes
    on `packetCount` and the array, because a send mutates its array in place.
 2. `packet-type-web-sets` **A new packet type needs more than an enum entry.**
    [[streaming-protocol]] lists the hand-mirrored places, including
@@ -981,8 +1045,8 @@ up its own branding.
     script write stops a trackpad fling.
     **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
     user message and its replies) in a `data-chat-turn` element. The latest turn
-    has `min-height: calc(100cqh - 3rem)` (the scroll element is a size
-    container): at the end of every chat, in every tab and after a reload, the
+    has `min-height: calc(100cqh - 3rem - var(--app-composer-height))` (the
+    scroll element is a size container): at the end of every chat, in every tab and after a reload, the
     latest user message sits 1rem below the top, with space below it, while the
     turn fits in that height. A taller turn ends at the bottom, and its user
     message is above the viewport. Nothing
@@ -992,6 +1056,12 @@ up its own branding.
     never moves the view). The scroll-to-bottom button ignores the latest
     turn's unfilled space. Text that grows inside that space changes no scroll
     height, so a ResizeObserver watches the latest turn's rows.
+    In a chat, `views/AppPage.tsx` lays the composer row over the scroll area,
+    so the scrollbar spans the page. `@opal/hooks:usePublishedHeight`
+    publishes the row's height as `--app-composer-height`, which keeps the
+    chat's end clear of the composer: a footer spacer (not content, so "at the
+    bottom" ignores it), the latest turn's minimum height, and
+    `scroll-padding-bottom` for focus and `scrollIntoView`.
     Each chat's position (end, or a row and offset) and its row heights live
     in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
     them from loaded rows only, so a switch never waits on the network. Rows

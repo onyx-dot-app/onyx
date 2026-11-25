@@ -8,15 +8,9 @@ import {
 } from "@opal/navigation";
 import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
+import { getUserAddressedName } from "@/lib/users/svc";
 import { endIncognitoSession } from "@/app/app/services/lib";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useLlmManager } from "@/lib/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
@@ -26,6 +20,7 @@ import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -83,6 +78,9 @@ import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
+import { useSuggestedQuestions } from "@/lib/suggestedQuestions/hooks";
+import { isFilePending } from "@/lib/projects/utils";
 import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
 import { STEP_CONFIG } from "@/lib/onboarding/constants";
@@ -102,12 +100,13 @@ import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
+import { usePublishedHeight } from "@opal/hooks";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
 import ScheduledRunBanner from "@/sections/scheduledTasks/ScheduledRunBanner";
-import { FULL_WIDTH_TRANSITION } from "@/lib/chat/layout";
-import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
+import { CHAT_WIDTH_TRANSITION } from "@/lib/chat/layout";
+import { useWideChat } from "@/providers/WideChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
@@ -197,7 +196,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
-  const { user } = useUser();
+  const { user, userResolution } = useUser();
   // `useUser()` reports null while loading, so gating on it would redirect during
   // the /me load window. Read the raw result instead (undefined = loading, null =
   // resolved signed-out). This matters for anonymous users specifically: they're
@@ -205,6 +204,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { user: resolvedUser } = useCurrentUser();
 
   const activeAgent = useActiveAgent();
+  // On the Playground, every chat open asks for the person's suggested
+  // questions, whatever the agent, so the server records the visit. Only the
+  // default agent shows them.
+  const { suggestions } = useSuggestedQuestions(
+    appPosition.isNewSession() || appPosition.isAgent()
+      ? (activeAgent?.id ?? null)
+      : null
+  );
 
   // An explicit agent pick supersedes project context — the two cannot both
   // scope a new chat. This used to ride on the agent-selection callback, but
@@ -262,6 +269,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onboardingState,
     onboardingActions,
     isLoadingOnboarding,
+    isOnboardingResolved,
     finishOnboarding,
     hideOnboarding,
   } = useShowOnboarding({
@@ -289,6 +297,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const isPlainChat = !activeAgent || isAssistant(activeAgent);
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
+  const { hasBackground } = useAppBackground();
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   // Reset scroll button when session changes
@@ -410,14 +419,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const multiModel = useMultiModelChat(llmManager);
 
-  const { fullWidthChat } = useFullWidthChat();
+  const { wideChat } = useWideChat();
 
-  // Full-width applies in a conversation and on the new-session view, where
-  // it widens the greeting row and the composer.
-  const fullWidthActive =
-    fullWidthChat &&
-    ((appPosition.isChat() && !!currentChatSessionId) ||
-      appPosition.isNewSession());
+  // The wide width applies only in a conversation. The new-session view keeps
+  // the reading width, with the composer centered on screen.
+  const wideChatActive =
+    wideChat && appPosition.isChat() && !!currentChatSessionId;
 
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
@@ -620,6 +627,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const isSearch =
     state.phase === "searching" || state.phase === "search-results";
+  // Search mode before a search runs too, on a new session only (an agent
+  // page always chats), as AppInputBar decides it.
+  const isSearchMode =
+    isSearch ||
+    (isNewSession && state.phase === "idle" && state.appMode === "search");
 
   // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
   // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
@@ -761,25 +773,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const onboardingVisible =
     isWelcomeFocus &&
-    (showOnboarding || !user?.personalization?.name) &&
+    isOnboardingResolved &&
+    (showOnboarding || !getUserAddressedName(user)) &&
     !onboardingDismissed;
 
-  // While onboarding is open, the bottom row keeps the height it had when
-  // onboarding appeared. New onboarding steps then grow upward instead of
-  // moving the input down.
-  const bottomRowRef = useRef<HTMLDivElement>(null);
-  const [onboardingBottomRowPx, setOnboardingBottomRowPx] = useState<
-    number | null
-  >(null);
-  useLayoutEffect(() => {
-    if (!onboardingVisible) {
-      setOnboardingBottomRowPx(null);
-      return;
-    }
-    if (onboardingBottomRowPx === null && bottomRowRef.current) {
-      setOnboardingBottomRowPx(bottomRowRef.current.offsetHeight);
-    }
-  }, [onboardingVisible, onboardingBottomRowPx]);
+  // In a chat, the messages scroll under the composer row, so the scrollbar
+  // spans the page. The row's height keeps the last message clear of it.
+  const [composerRow, setComposerRow] = useState<HTMLDivElement | null>(null);
+  usePublishedHeight(composerRow, "--app-composer-height");
 
   // Handle error case where no agents are available.
   // Only show this after agents have loaded to prevent flash during initial load.
@@ -789,13 +790,30 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const hasAgentStarterMessages =
     (activeAgent?.starter_messages?.length ?? 0) > 0;
+  // The input bar's disabled rule; suggestion clicks send like it, so they
+  // share it. Intentionally enabled during name-only onboarding
+  // (showOnboarding=false), since LLM providers are already configured and
+  // the user can chat.
+  const composerDisabled =
+    (!llmManager.isLoadingProviders && llmManager.hasAnyProvider === false) ||
+    // Only while the onboarding steps are on screen.
+    (onboardingVisible &&
+      showOnboarding &&
+      !isLoadingOnboarding &&
+      onboardingState.stepIndex <
+        STEP_CONFIG[OnboardingStep.OptionalSetup].index);
+  const hasSuggestedQuestions =
+    activeAgent?.id === DEFAULT_AGENT_ID &&
+    (suggestions?.questions.length ?? 0) > 0;
 
   const gridStyle = {
     // The chat column's width, set once here: the messages, the first-open
-    // skeleton, the greeting row and the composer all read it. Full width
-    // keeps a max-width (100%), so the switch animates instead of jumping.
-    "--app-chat-column-width": fullWidthActive
-      ? "100%"
+    // skeleton, the greeting row and the composer all read it. Both widths
+    // are lengths, so the switch animates instead of jumping. The wide token
+    // includes the side gutter (1rem each side at md and up); the reading
+    // width does not.
+    "--app-chat-column-width": wideChatActive
+      ? "calc(var(--width-chat-wide-max) - 2rem)"
       : "var(--width-chat-message-max)",
     // minmax(0, 1fr) (instead of "1fr") lets the single column shrink to the
     // grid's width. A bare "1fr" is minmax(auto, 1fr), whose auto minimum is
@@ -803,13 +821,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // otherwise blow the column past the viewport and clip the right edge.
     gridTemplateColumns: "minmax(0, 1fr)",
     // Onboarding: welcome floored at content height, form row compressible
-    // (scrolls), bottom row absorbs slack. Centered when short, pinned when tall.
+    // (scrolls). The bottom row is a fixed share of the page, so the input's
+    // place depends only on the page height: no onboarding step, earlier
+    // layout or load order can move it.
     gridTemplateRows: onboardingVisible
-      ? `minmax(min-content, 1fr) minmax(0, max-content) ${
-          onboardingBottomRowPx === null
-            ? "minmax(0, 1fr)"
-            : `minmax(0, ${onboardingBottomRowPx}px)`
-        }`
+      ? "minmax(min-content, 1fr) minmax(0, max-content) 30%"
       : isSearch
         ? "0fr auto 1fr"
         : appPosition.isChat()
@@ -819,7 +835,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             : "1fr auto 1fr",
   };
 
-  if (!isReady) return <OnyxInitializingLoader />;
+  // The welcome screen waits for the onboarding decision, so it mounts once in
+  // its final layout instead of showing the plain input and then sliding it
+  // into the onboarding layout.
+  const onboardingPending =
+    isWelcomeFocus &&
+    (userResolution === "loading" || (!!user && !isOnboardingResolved));
+
+  if (!isReady || onboardingPending) return <OnyxInitializingLoader />;
 
   return (
     <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>
@@ -868,7 +891,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     its scrollbar sits flush; non-chat siblings add their own px.
                     A leaving view leaves the flow, so the entering one does
                     not start below it and jump up when it unmounts. */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center relative *:data-[presence-phase=leaving]:absolute *:data-[presence-phase=leaving]:inset-0">
+                <div
+                  className={cn(
+                    "row-start-1 col-start-1 min-h-0 overflow-hidden flex flex-col items-center relative *:data-[presence-phase=leaving]:absolute *:data-[presence-phase=leaving]:inset-0",
+                    appPosition.isChat() && "row-end-3"
+                  )}
+                >
                   {/* ChatUI */}
                   <Presence
                     show={
@@ -884,9 +912,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   >
                     <Section justifyContent="start" gap={0}>
                       {currentChatSessionId && (
-                        <ScheduledRunBanner
-                          chatSessionId={currentChatSessionId}
-                        />
+                        // Makes room for a docked activity card (`AppChrome`)
+                        <div
+                          data-activity-room
+                          // The composer row's inline padding, so the room
+                          // for a docked card matches
+                          className="w-full sm:px-4 [&>*]:mx-auto"
+                        >
+                          <ScheduledRunBanner
+                            chatSessionId={currentChatSessionId}
+                          />
+                        </div>
                       )}
                       {/* The store's session, not the URL's: the store takes
                           the URL's chat one effect late, and the scroll reset
@@ -899,7 +935,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         pauseFollowing={isStreamDraining}
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
-                        fullWidth={fullWidthActive}
+                        wide={wideChatActive}
+                        footer={
+                          <div
+                            aria-hidden
+                            className="shrink-0 h-(--app-composer-height)"
+                          />
+                        }
                       >
                         <ChatUI
                           activeAgent={activeAgent!}
@@ -915,7 +957,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           onResubmit={handleResubmitLastMessage}
                           anchorNodeId={anchorNodeId}
                           selectedModels={multiModel.selectedModels}
-                          fullWidthChat={fullWidthActive}
+                          wideChat={wideChatActive}
                         />
                       </ChatScrollContainer>
                     </Section>
@@ -933,7 +975,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     width="full"
                     height="full"
                   >
-                    <div className="h-full w-full px-2 sm:px-4 pt-6 pb-12">
+                    <div className="h-full w-full px-2 sm:px-4 pt-6 pb-[calc(3rem+var(--app-composer-height,0px))]">
                       <Section justifyContent="start" gap={0}>
                         {/* A conversation's shape in the chat column, from the
                         top down like a real chat. More turns than fit, so it
@@ -947,7 +989,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           shadowDirection="bottom-only"
                           containerClassName={cn(
                             "w-full flex-1 md:max-w-(--app-chat-column-width)",
-                            FULL_WIDTH_TRANSITION
+                            CHAT_WIDTH_TRANSITION
                           )}
                           className="flex-1 min-h-0 overflow-y-hidden"
                         >
@@ -1035,7 +1077,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       alignItems="end"
                       className={cn(
                         "max-w-(--app-chat-column-width)",
-                        FULL_WIDTH_TRANSITION
+                        CHAT_WIDTH_TRANSITION
                       )}
                     >
                       <WelcomeMessage
@@ -1064,20 +1106,32 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                 {/* ── Middle-center: AppInputBar ── */}
                 <div
+                  ref={setComposerRow}
+                  data-testid="app-composer-row"
+                  // Makes room for a docked activity card (`AppChrome`)
+                  data-activity-room
                   className={cn(
-                    "row-start-2 flex flex-col items-center px-2 sm:px-4",
+                    "row-start-2 col-start-1 flex flex-col items-center px-2 sm:px-4",
+                    // Over the chat's scroll area, which keeps its scrollbar
+                    appPosition.isChat() && "relative z-10 pointer-events-none",
                     onboardingVisible && "min-h-0",
                     sessionFetchError && "hidden"
                   )}
                 >
                   <div
                     className={cn(
-                      "relative w-full flex flex-col",
+                      "relative w-full flex flex-col pointer-events-auto",
+                      appPosition.isChat() &&
+                        (hasBackground ? "backdrop-blur-md" : "bg-background"),
                       onboardingVisible && "min-h-0",
                       "md:max-w-(--app-chat-column-width)",
-                      FULL_WIDTH_TRANSITION
+                      CHAT_WIDTH_TRANSITION
                     )}
                   >
+                    {/* Fades the messages that scroll under the composer */}
+                    {appPosition.isChat() && !hasBackground && (
+                      <div className="absolute bottom-full inset-x-0 h-6 bg-linear-to-t from-background to-transparent pointer-events-none" />
+                    )}
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appPosition.isChat() && showScrollButton && (
                       <div className="absolute -top-14 self-center">
@@ -1165,18 +1219,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         activeAgent={activeAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
-                        // Intentionally enabled during name-only onboarding (showOnboarding=false)
-                        // since LLM providers are already configured and the user can chat.
-                        disabled={
-                          (!llmManager.isLoadingProviders &&
-                            llmManager.hasAnyProvider === false) ||
-                          // Only while the onboarding steps are on screen.
-                          (onboardingVisible &&
-                            showOnboarding &&
-                            !isLoadingOnboarding &&
-                            onboardingState.stepIndex <
-                              STEP_CONFIG[OnboardingStep.OptionalSetup].index)
-                        }
+                        disabled={composerDisabled}
                       />
                       <div
                         className={cn(
@@ -1190,8 +1233,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
                 <div
-                  ref={bottomRowRef}
-                  className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4"
+                  className={cn(
+                    "row-start-3 min-h-0 flex flex-col items-center w-full px-2 sm:px-4",
+                    // The onboarding row has a fixed height, so the agent's
+                    // description and starters scroll when they do not fit.
+                    onboardingVisible ? "overflow-y-auto" : "overflow-hidden"
+                  )}
                 >
                   {/* Agent description below input */}
                   {(appPosition.isNewSession() || appPosition.isAgent()) &&
@@ -1213,12 +1260,22 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appPosition.isNewSession() || appPosition.isAgent()) &&
-                      hasAgentStarterMessages
+                      !isSearchMode &&
+                      (hasAgentStarterMessages || hasSuggestedQuestions)
                     }
                     className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"
                   >
                     <Spacer rem={0.5} />
-                    <Suggestions onSubmit={onSubmit} />
+                    <Suggestions
+                      onChat={onChat}
+                      disabled={
+                        composerDisabled ||
+                        currentChatState !== "input" ||
+                        currentMessageFiles.some((file) =>
+                          isFilePending(file.status)
+                        )
+                      }
+                    />
                   </Fade>
 
                   {/* SearchUI */}

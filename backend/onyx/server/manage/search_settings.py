@@ -111,6 +111,7 @@ from onyx.server.manage.models import (
     VectorQuantizationSupport,
 )
 from onyx.server.models import IdReturn
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.audit import (
@@ -136,7 +137,12 @@ from shared_configs.embedding_models import (
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.utils import clean_model_name
 
-router = APIRouter(prefix="/search-settings")
+router = APIRouter(
+    prefix="/search-settings",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.EMBEDDING))
+    ],
+)
 logger = setup_logger()
 
 

@@ -21,8 +21,8 @@
  * `defaultOption`, and then never reads as empty: an empty value resolves to
  * it and re-picking any option is a no-op, like a native `<select>`. A
  * ComboBox takes none: its text is the filter, and a default would pre-fill
- * it with a label the user never chose. Either way `placeholder` names the
- * field for assistive technology.
+ * it with a label the user never chose. `aria-label` names the field for
+ * assistive technology, and falls back to `placeholder`.
  *
  * With no options a ComboBox degrades to a plain input.
  */
@@ -94,6 +94,7 @@ function SingleSelectFieldInner({
   defaultOption,
   disabled = false,
   placeholder,
+  "aria-label": ariaLabel,
   isError: externalIsError,
   onValidationError,
   name,
@@ -364,7 +365,7 @@ function SingleSelectFieldInner({
           <InputTypeIn
             name={name}
             placeholder={placeholder}
-            aria-label={placeholder}
+            aria-label={ariaLabel ?? placeholder}
             aria-invalid={!isValid}
             aria-describedby={!isValid ? `${fieldId}-error` : undefined}
             readOnly={!typeIn}
@@ -446,7 +447,7 @@ function SingleSelectFieldInner({
 
         <Dropdown.Data
           items={items}
-          label={placeholder ?? ""}
+          label={ariaLabel ?? placeholder}
           query={typeIn ? inputValue : undefined}
           highlightExactQuery={typeIn}
           search={

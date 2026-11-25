@@ -40,6 +40,7 @@ from onyx.server.manage.sso.models import (
     SSOProviderResponse,
     SSOProviderUpdateRequest,
 )
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.server.security.store import (
     load_effective_uncached,
     security_settings_write_lock,
@@ -113,7 +114,10 @@ def _reject_unfetchable_idp_url(config: dict[str, Any]) -> None:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
 
-admin_router = APIRouter(prefix="/admin/sso")
+admin_router = APIRouter(
+    prefix="/admin/sso",
+    dependencies=[Depends(restrict_in_playground(PlaygroundRestrictedFeature.SSO))],
+)
 
 
 def _require_business_tier_for_additional_enabled_provider(

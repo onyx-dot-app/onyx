@@ -119,8 +119,8 @@ each integration whose credential does not resolve.
 
 Two tools are added outside the built-in loop. `SearchTool` is added when the
 request forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is
-off, and the loop did not build it. `MemoryTool` is added when
-`user.enable_memory_tool` is set ([[#memory-tool-bypasses-filters]]). MCP and
+off, and the loop did not build it. `MemoryTool` is added when the
+user's `enable_memory_tool` preference is set ([[#memory-tool-bypasses-filters]]). MCP and
 OpenAPI actions receive stable qualified names with the integration id
 (`mcp__<integration id>__<name>__<tool>`, `custom__<integration id>__<operationId>`),
 independent of the other selected tools, and have `id = None`.
@@ -144,10 +144,11 @@ comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
 Code mode reads these `Tool` members: `code_mode_exposure` (abstract: `DIRECT`,
 `IMMEDIATE` or `DEFERRED`; a tool with `result_from_children` must be
 `DIRECT`), `code_mode_function_name` (MCP tools add their server as a
-namespace) and `code_mode_result` (the value and stub type a program
-receives); see [[code-execution]]. A tool that must not run twice sets
-`interrupted_result`: on restore, the runtime saves it as the result of a call
-that a lost execution owner left running (`agents/tools.py:AgentTool`).
+namespace and the integration's description as `namespace_description`)
+and `code_mode_result` (the value and stub type a program receives); see
+[[code-execution]]. A tool that must not run twice sets `interrupted_result`:
+on restore, the runtime saves it as the result of a call that a lost
+execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
 `inner_call_hint` answers a call of such a tool as a tool of its own: the
@@ -167,16 +168,22 @@ and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
 chat agent's configured tools when the turn's user has a chat skill
 ([[skills]]): the agent's tools and the request's tool options do not
 remove them. Restored and child agents receive them with the other configured
-tools. The tools hold the user and `built_ins` (the turn's `sandbox_tools`;
+tools. The tools hold the user and `with_sandbox` (the turn's `sandbox_tools`;
 chat built-ins need the VM) and read the user's current chat skills on each
 call; `skills_read` checks that the user can still see the skill and
 returns its SKILL.md, frontmatter included, up to 32,000 characters per call
 (`SKILL_READ_MAX_CHARS`). A longer text ends with a note that gives the
-`start_char` offset of the next call. The Deep Research orchestrator binds
+`start_char` offset of the next call. `skills_read` copies no files; the
+sandbox tool `load_skill` copies a skill into the VM. The Deep Research orchestrator binds
 both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
-tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
-a short JSON summary, not the SKILL.md text.
+tool catalog rows. A direct call renders as a generic tool card with a short
+JSON summary, not the SKILL.md text. In code mode they are `IMMEDIATE`
+functions that return text (`tools.skills_list`, `tools.skills_read`), and the
+chat agent's skills catalog names them so. SKILL.md text that the program
+prints or returns goes into its `code_mode_delta` packets; the web timeline
+does not show program output ([[chat-frontend]]). Deep Research does not use
+code mode and calls them directly.
 
 **Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
 `exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and
@@ -280,7 +287,8 @@ are plain `AgentTool` objects with no `Tool` row, and
 
 1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses the tool options
    and the agent's tools.** `tools/tool_constructor.py:_construct_tools_impl`
-   adds it after the agent tool loop whenever `user.enable_memory_tool` is set.
+   adds it after the agent tool loop whenever its `enable_memory_tool` argument
+   (the user's preference, captured in `ChatTurnSetup`) is set.
    A user who turns every tool off for a message can still get a memory write.
    A change to per-message filtering must decide whether memory follows it.
    In an incognito turn the tool is still offered, but `MemoryTool._run`
@@ -349,7 +357,7 @@ are plain `AgentTool` objects with no `Tool` row, and
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed arguments
    show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):
-   `run_python` and `execute_code` stream argument deltas, the file tools
+   `run_python`, `execute_code` and `generate_image` stream argument deltas, the file tools
    (`write`, `edit`, `apply_patch`) report `file_tool_progress`. Every stream
    is throttled
    ([[streaming-protocol]]). Code mode calls render with

@@ -160,9 +160,6 @@ class ChatAgent(Agent, RestorableFeature):
         # The tools the chat is configured with; restored and child agents receive
         # them, and code mode applies per agent.
         self.configured_tools = list(tools)
-        self.skills_catalog_message = skills_catalog_message(
-            self.configured_tools, llm.config.max_input_tokens
-        )
         self.code_mode = code_mode
         # Each agent instance has its own cells, so a restored run has none open;
         # a later run of this instance reopens them at its first step.
@@ -170,6 +167,14 @@ class ChatAgent(Agent, RestorableFeature):
             with_code_mode(self.configured_tools)
             if code_mode
             else (list(self.configured_tools), None)
+        )
+        code_tool = next(
+            (t for t in self.application_tools if isinstance(t, CodeModeTool)), None
+        )
+        self.skills_catalog_message = skills_catalog_message(
+            self.configured_tools,
+            llm.config.max_input_tokens,
+            str if code_tool is None else code_tool.called_name,
         )
         # Programs batch tool calls, so code mode gets its own cap when it applies.
         self.max_steps = (
@@ -183,8 +188,19 @@ class ChatAgent(Agent, RestorableFeature):
         self.started = time.monotonic()
         self.preferred_tool = _offered_preference(preferred_tool, self.configured_tools)
         self.chat_files = list(chat_files or [])
-        # Only the Python tool reads the files of found documents.
-        self.stages_files = any(
+        # Restored agents and subagents receive the configured tools, so the
+        # sandbox tools give each of them the chat's sandbox turn.
+        self._sandbox_turn = next(
+            (
+                tool.turn
+                for tool in self.configured_tools
+                if isinstance(tool, SandboxTool)
+            ),
+            None,
+        )
+        # Only the Python tool reads the files of found documents; a sandbox
+        # chat copies them into the VM instead.
+        self.stages_files = self._sandbox_turn is None and any(
             tool.name == PYTHON_TOOL_NAME for tool in self.configured_tools
         )
         self.citation_processor = DynamicCitationProcessor(
@@ -242,16 +258,6 @@ class ChatAgent(Agent, RestorableFeature):
             ]
         if question_tool is not None and not is_subagent:
             self.application_tools = [*self.application_tools, question_tool]
-        # Restored agents and subagents receive the configured tools, so the
-        # sandbox tools give each of them the chat's sandbox turn.
-        sandbox_turn = next(
-            (
-                tool.turn
-                for tool in self.configured_tools
-                if isinstance(tool, SandboxTool)
-            ),
-            None,
-        )
         # The root agent's sandbox and code mode results end with the file
         # copy status line when it changed. Subagents and the calls inside a
         # code mode program never read it, so they cannot use it up.
@@ -261,7 +267,7 @@ class ChatAgent(Agent, RestorableFeature):
                 for tool in self.application_tools
                 if isinstance(tool, (SandboxTool, CodeModeTool, WaitCodeTool))
             )
-            if sandbox_turn is not None and not is_subagent
+            if self._sandbox_turn is not None and not is_subagent
             else frozenset()
         )
         super().__init__(
@@ -281,8 +287,10 @@ class ChatAgent(Agent, RestorableFeature):
             ),
             after_tool_call=self._finalize_tool,
             # In a chat with a sandbox, large results go to a file in the VM.
-            prepare_tool_result=partial(self._prepare_sandbox_result, sandbox_turn)
-            if sandbox_turn is not None
+            prepare_tool_result=partial(
+                self._prepare_sandbox_result, self._sandbox_turn
+            )
+            if self._sandbox_turn is not None
             else None,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
@@ -397,6 +405,10 @@ class ChatAgent(Agent, RestorableFeature):
             chat_files=list(self.chat_files),
             url_snippet_map=extract_url_snippet_map(self.gathered_documents),
             inject_memories_in_prompt=self.inject_memories,
+            python_stages_search_files=self.stages_files,
+            sandbox_search_files=self._sandbox_turn.search_files.offer
+            if self._sandbox_turn is not None
+            else None,
         )
 
     def _prepare_step(self, state: StepInput) -> PreparedStep:

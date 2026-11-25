@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Tag, Text } from "@opal/components";
+import { Badge, Presence, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { LineLoader } from "@opal/loaders";
 import { SvgSearch } from "@opal/icons";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import type { IconFunctionComponent } from "@opal/types";
 import { openExternalLink } from "@/lib/search/utils";
 import type { SourceInfo } from "@/lib/timeline/components/bodies/SearchChipList";
+import { faviconIcon } from "@/lib/timeline/components/bodies/favicon";
 
 export const INITIAL_QUERIES_TO_SHOW = 3;
 export const QUERIES_PER_EXPANSION = 5;
@@ -26,9 +27,13 @@ export function queryToSourceInfo(query: string, index: number): SourceInfo {
   };
 }
 
-/** A source's own icon, else its connector's logo. */
+/** A source's own icon, a web page's favicon, else its connector's logo. */
 function sourceIcon(source: SourceInfo): IconFunctionComponent {
-  return source.icon ?? getSourceMetadata(source.sourceType).icon;
+  if (source.icon) return source.icon;
+  if (source.sourceType === ValidSources.Web && source.sourceUrl) {
+    return faviconIcon(source.sourceUrl);
+  }
+  return getSourceMetadata(source.sourceType).icon;
 }
 
 interface RetrievalBodyProps {
@@ -39,7 +44,8 @@ interface RetrievalBodyProps {
    * step that only searches; another step reads its results.
    */
   results: SourceInfo[] | null;
-  /** A finished step with no results says so; a running one shows a cursor. */
+  /** A finished step with no results says so; a running one shows a loading
+   *  shimmer where they will appear. */
   isComplete: boolean;
   /** Show only the results, without queries or the "Read" label. */
   compact?: boolean;
@@ -64,6 +70,20 @@ export function RetrievalBody({
     results !== null && (compact || results.length > 0 || queries.length > 0);
   const resultList = results ?? [];
   const hiddenResults = Math.max(0, resultList.length - visibleResults);
+  // Chips shown on the first render show at once (saved history). Chips
+  // shown later, from "+ n more" or a result that streams in, open their
+  // space and rise in. Chips hidden behind "+ n more" were not shown.
+  const [initialQueryCount] = useState(() =>
+    Math.min(queries.length, INITIAL_QUERIES_TO_SHOW)
+  );
+  const [initialResultIds] = useState(
+    () =>
+      new Set(
+        (results ?? [])
+          .slice(0, INITIAL_RESULTS_TO_SHOW)
+          .map((source) => source.id)
+      )
+  );
 
   return (
     // 0.25rem between the queries, "Read" and the results, and between the
@@ -79,7 +99,14 @@ export function RetrievalBody({
             wrap
           >
             {queries.slice(0, visibleQueries).map((query, index) => (
-              <Badge key={index} icon={SvgSearch} title={query} size={6} />
+              <Presence
+                key={index}
+                appear={index >= initialQueryCount}
+                width="fit"
+                grow
+              >
+                <Badge icon={SvgSearch} title={query} size={6} />
+              </Presence>
             ))}
             {hiddenQueries > 0 && (
               <Tag
@@ -92,9 +119,7 @@ export function RetrievalBody({
               />
             )}
           </Section>
-        ) : (
-          !isComplete && <BlinkingBar />
-        ))}
+        ) : null)}
 
       {showResults && !compact && (
         <Text as="p" font="secondary-action" color="text-03">
@@ -102,45 +127,59 @@ export function RetrievalBody({
         </Text>
       )}
 
-      {showResults &&
-        (resultList.length > 0 ? (
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            height="fit"
-            gap={1}
-            wrap
-          >
-            {resultList.slice(0, visibleResults).map((source) => {
-              const url = source.sourceUrl;
-              return (
+      {showResults && (
+        // The shimmer swaps out for the first results; later ones grow in.
+        <Presence.Swap
+          swapKey={
+            resultList.length > 0 ? "results" : isComplete ? "none" : "loading"
+          }
+        >
+          {resultList.length > 0 ? (
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              height="fit"
+              gap={1}
+              wrap
+            >
+              {resultList.slice(0, visibleResults).map((source) => {
+                const url = source.sourceUrl;
+                return (
+                  <Presence
+                    key={source.id}
+                    appear={!initialResultIds.has(source.id)}
+                    width="fit"
+                    grow
+                  >
+                    <Tag
+                      icon={sourceIcon(source)}
+                      title={source.title}
+                      truncate
+                      onClick={url ? () => openExternalLink(url) : undefined}
+                    />
+                  </Presence>
+                );
+              })}
+              {hiddenResults > 0 && (
                 <Tag
-                  key={source.id}
-                  icon={sourceIcon(source)}
-                  title={source.title}
-                  truncate
-                  onClick={url ? () => openExternalLink(url) : undefined}
+                  title={t("searchChips.showMore.label", {
+                    count: hiddenResults,
+                  })}
+                  onClick={() =>
+                    setVisibleResults((count) => count + RESULTS_PER_EXPANSION)
+                  }
                 />
-              );
-            })}
-            {hiddenResults > 0 && (
-              <Tag
-                title={t("searchChips.showMore.label", {
-                  count: hiddenResults,
-                })}
-                onClick={() =>
-                  setVisibleResults((count) => count + RESULTS_PER_EXPANSION)
-                }
-              />
-            )}
-          </Section>
-        ) : !isComplete ? (
-          <BlinkingBar />
-        ) : (
-          <Text as="p" font="main-ui-muted" color="text-03">
-            {t("internalSearch.noResults.text")}
-          </Text>
-        ))}
+              )}
+            </Section>
+          ) : isComplete ? (
+            <Text as="p" font="main-ui-muted" color="text-03">
+              {t("internalSearch.noResults.text")}
+            </Text>
+          ) : (
+            <LineLoader width="2/3" />
+          )}
+        </Presence.Swap>
+      )}
     </Section>
   );
 }

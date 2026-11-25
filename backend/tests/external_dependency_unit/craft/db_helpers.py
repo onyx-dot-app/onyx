@@ -16,6 +16,8 @@ Conventions:
 
 from __future__ import annotations
 
+import io
+import zipfile
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -69,7 +71,15 @@ from onyx.db.plugin import (
     get_or_create_organization_library__no_commit,
     get_or_create_user_uploads__no_commit,
 )
+from onyx.db.skill import (
+    create_custom_skill__no_commit,
+    list_chat_skills,
+    set_skill_installation_policy,
+)
 from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.file_store.file_store import get_default_file_store
+from onyx.skills.ingest import ingest_skill_bundle
+from onyx.skills.models import ChatSkill
 
 
 def force_approval_created_at(
@@ -536,3 +546,28 @@ def make_cc_pair(
         db_session.flush()
 
     return cc_pair
+
+
+def make_chat_custom_skill(
+    db_session: Session, author: User, files: dict[str, str]
+) -> tuple[ChatSkill, Plugin, str]:
+    """A custom skill of ``author`` from ``files`` (with SKILL.md), installed
+    by default, as chat lists it, with its plugin and bundle file ID for
+    cleanup."""
+    name = files["SKILL.md"].split("name: ", 1)[1].split("\n", 1)[0]
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        for path, content in files.items():
+            bundle_zip.writestr(path, content)
+    ingested = ingest_skill_bundle(
+        output.getvalue(), f"{name}.zip", get_default_file_store(), expected_name=name
+    )
+    created, _ = create_custom_skill__no_commit(ingested, author, db_session)
+    set_skill_installation_policy(created, PluginInstallationPolicy.DEFAULT, db_session)
+    db_session.commit()
+    skill = next(
+        skill
+        for skill in list_chat_skills(db_session, author, with_sandbox=True)
+        if skill.name == name
+    )
+    return skill, created, ingested.bundle_file_id

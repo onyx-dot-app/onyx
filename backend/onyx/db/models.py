@@ -83,6 +83,7 @@ from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
+    ApiAppType,
     ApprovalDecidedVia,
     ApprovalDecision,
     ArtifactType,
@@ -115,6 +116,7 @@ from onyx.db.enums import (
     IntegrationConnectionStatus,
     IntegrationKind,
     IntegrationOAuthProviderMode,
+    InterfaceFont,
     LLMModelFlowType,
     MarketplaceKind,
     MCPAuthenticationPerformer,
@@ -122,17 +124,20 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    MotionPreference,
     NotificationSeverity,
     PatType,
     Permission,
     PermissionSyncStatus,
     PersonaSharePermission,
     PluginInstallationPolicy,
+    PopupDismissal,
     PortAttemptStatus,
     ProcessingMode,
     QuestionAnsweredVia,
     QuestionOutcome,
     ReceiptStatus,
+    ResponseFont,
     SandboxStatus,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
@@ -163,6 +168,7 @@ from onyx.llm.models import (
     AssistantMessage,
     ReasoningEffort,
     ToolResultMessage,
+    UserChatDefaults,
 )
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
@@ -455,59 +461,16 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
 
-    """
-    Preferences probably should be in a separate table at some point, but for now
-    putting here for simpicity
-    """
-
-    temperature_override_enabled: Mapped[bool | None] = mapped_column(
-        Boolean, default=None
-    )
-    # Per-user chat defaults. An admin's per-model settings outrank them, see
-    # resolve_reasoning_effort and the factory temperature chain.
-    temperature_default: Mapped[float | None] = mapped_column(Float, default=None)
-    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
-        Enum(
-            ReasoningEffort,
-            native_enum=False,
-            values_callable=lambda x: [e.value for e in x],
-        ),
-        nullable=True,
-        default=None,
-    )
-    auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
-    shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    theme_preference: Mapped[ThemePreference | None] = mapped_column(
-        Enum(ThemePreference, native_enum=False),
-        nullable=True,
-        default=None,
-    )
-    # UI language. None = follow Settings.default_language.
-    language: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
-    chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
-    default_app_mode: Mapped[DefaultAppMode] = mapped_column(
-        Enum(DefaultAppMode, native_enum=False),
-        nullable=False,
-        default=DefaultAppMode.CHAT,
-    )
-    # personalization fields are exposed via the chat user settings "Personalization" tab
+    # Profile fields, shown in Settings > Account. The user's own settings
+    # are in `UserPreferences`.
+    # Full name. SCIM provisioning keeps it in sync with the IdP.
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The name Onyx calls the user. Only the user sets it.
+    preferred_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Free text. The web app offers a fixed list of work functions plus "Other".
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
-    use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    enable_memory_tool: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
-    user_preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    chosen_assistants: Mapped[list[int] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True, default=None
-    )
-    visible_assistants: Mapped[list[int]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=[]
-    )
-    hidden_assistants: Mapped[list[int]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=[]
-    )
+    # File store id of the profile photo (FileOrigin.USER_PROFILE_IMAGE).
+    profile_image_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Eagerly loaded: `UserInfo.from_model` reads this without a session, and a
     # lazy load would fail outright under async.
@@ -542,21 +505,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         onupdate=func.now(),
         nullable=False,
     )
-
-    default_model: Mapped[str] = mapped_column(Text, nullable=True)
-    # organized in typical structured fashion
-    # formatted as `displayName__provider__modelName`
-
-    # Input preferences
-    paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
-    interrupt_on_send: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false"
-    )
-
-    # Voice preferences
-    voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
-    voice_auto_playback: Mapped[bool] = mapped_column(Boolean, default=False)
-    voice_playback_speed: Mapped[float] = mapped_column(Float, default=1.0)
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
@@ -605,6 +553,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         return not bool(self.oauth_accounts)
 
     @property
+    def addressed_name(self) -> str | None:
+        """The name Onyx calls the user: the preferred name, else the full name."""
+        return self.preferred_name or self.personal_name
+
+    @property
     def is_anonymous(self) -> bool:
         """Returns True if this is the anonymous user."""
         return str(self.id) == ANONYMOUS_USER_UUID
@@ -624,6 +577,152 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
             self.oauth_accounts, key=lambda link: link.expires_at or 0
         )
         return live.access_token
+
+
+class UserPreferences(Base):
+    """The settings a user picks for themselves.
+
+    A user has no row until they first save a setting. Until then,
+    `fetch_user_preferences` returns each column's `default`. A column's
+    `server_default` must give the same value.
+    """
+
+    __tablename__ = "user_preferences"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    # Formatted as `displayName__provider__modelName`.
+    default_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Per-user chat defaults. An admin's per-model settings outrank them, see
+    # resolve_reasoning_effort and the factory temperature chain.
+    # None follows the workspace setting.
+    temperature_override_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+
+    # None = the frontend follows the workspace setting.
+    auto_scroll: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    shortcut_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    theme_preference: Mapped[ThemePreference | None] = mapped_column(
+        Enum(ThemePreference, native_enum=False), nullable=True
+    )
+    # UI language. None = follow Settings.default_language.
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+    chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_app_mode: Mapped[DefaultAppMode] = mapped_column(
+        Enum(DefaultAppMode, native_enum=False),
+        nullable=False,
+        default=DefaultAppMode.CHAT,
+        server_default=DefaultAppMode.CHAT.value,
+    )
+    interface_font: Mapped[InterfaceFont] = mapped_column(
+        Enum(
+            InterfaceFont,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=InterfaceFont.DEFAULT,
+        server_default=InterfaceFont.DEFAULT.value,
+    )
+    response_font: Mapped[ResponseFont] = mapped_column(
+        Enum(
+            ResponseFont,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=ResponseFont.MATCH,
+        server_default=ResponseFont.MATCH.value,
+    )
+    # Accessibility, in Settings > Appearance.
+    motion: Mapped[MotionPreference] = mapped_column(
+        Enum(
+            MotionPreference,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=MotionPreference.SYSTEM,
+        server_default=MotionPreference.SYSTEM.value,
+    )
+    popup_dismissal: Mapped[PopupDismissal] = mapped_column(
+        Enum(
+            PopupDismissal,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=PopupDismissal.AUTO_DISMISS,
+        server_default=PopupDismissal.AUTO_DISMISS.value,
+    )
+    # Off keeps every chat message mounted, so screen readers reach them all.
+    dynamic_conversations: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+
+    # Memory settings and instructions are in Settings > Chat Preferences.
+    use_memories: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    enable_memory_tool: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    # Free-text instructions that the chat prompt includes.
+    instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    chosen_assistants: Mapped[list[int] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    visible_assistants: Mapped[list[int]] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+        default=[],
+        server_default=text("'[]'::jsonb"),
+    )
+    hidden_assistants: Mapped[list[int]] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+        default=[],
+        server_default=text("'[]'::jsonb"),
+    )
+
+    paste_as_tile: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    interrupt_on_send: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
+    voice_auto_send: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    voice_auto_playback: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    voice_playback_speed: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default="1"
+    )
+
+    @property
+    def chat_defaults(self) -> UserChatDefaults:
+        return UserChatDefaults(
+            temperature_default=self.temperature_default,
+            reasoning_effort_default=self.reasoning_effort_default,
+        )
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -1407,6 +1506,12 @@ class Document(Base):
             "ix_document_secondary_only_sync_pending",
             "id",
             postgresql_where=text("secondary_only_sync_pending IS TRUE"),
+        ),
+        # Date filters and the newest-first keyset order of the postgres_query tool.
+        Index(
+            "ix_document_doc_updated_at_id",
+            doc_updated_at.desc().nulls_last(),
+            id.desc(),
         ),
     )
 
@@ -5624,8 +5729,16 @@ class ChatArtifact(Base):
     cascade from the chat removes the rows."""
 
     __tablename__ = "chat_artifact"
-    # Also the index of the chat's artifacts
-    __table_args__ = (UniqueConstraint("chat_session_id", "path"),)
+    __table_args__ = (
+        # Also the index of the chat's artifacts
+        UniqueConstraint("chat_session_id", "path"),
+        # The user's artifacts by latest publish (artifacts_list).
+        Index(
+            "ix_chat_artifact_user_id_updated_at",
+            "user_id",
+            desc("updated_at"),
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -5635,6 +5748,10 @@ class ChatArtifact(Base):
         PGUUID(as_uuid=True),
         ForeignKey("chat_session.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    # The chat's owner
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
     # The absolute, normalized VM path
     path: Mapped[str] = mapped_column(Text, nullable=False)
@@ -6121,6 +6238,11 @@ class Integration(Base):
     tool_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("tool.id", ondelete="CASCADE"), nullable=True, unique=True
     )
+    # The definition of a custom REST or GraphQL app. For one release an
+    # OpenAPI integration also keeps its tool_id, and both rows are written.
+    api_app_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("api_app.id", name="fk_integration_api_app"), nullable=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -6150,9 +6272,11 @@ class Integration(Base):
         # these columns as plain strings, past the enum type. A value outside
         # the enum makes each ORM read of the row raise.
         # Old code still writes the kind tables, so the database keeps each
-        # integration tied to exactly one row of its kind.
+        # integration tied to exactly one row of its kind. For one release a
+        # REST app has both tool_id and api_app_id.
         CheckConstraint(
-            "num_nonnulls(mcp_server_id, external_app_id, tool_id) = 1",
+            "num_nonnulls(mcp_server_id, external_app_id, "
+            "coalesce(tool_id, api_app_id)) = 1",
             name="ck_integration_single_kind_row",
         ),
         CheckConstraint(
@@ -6167,6 +6291,43 @@ class Integration(Base):
         CheckConstraint(
             "auth_method IN ('oauth2', 'api_key', 'onyx_login', 'managed')",
             name="ck_integration_auth_method",
+        ),
+        Index("ix_integration_api_app_id", "api_app_id", unique=True),
+    )
+
+
+class ApiApp(Base):
+    """The definition of a custom app that Onyx calls for the user: a REST API
+    from an OpenAPI document, or a GraphQL API from a schema. Its integration
+    points at it through ``Integration.api_app_id``."""
+
+    __tablename__ = "api_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    api_type: Mapped[ApiAppType] = mapped_column(
+        Enum(
+            ApiAppType,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    base_url: Mapped[str] = mapped_column(Text, nullable=False)
+    # The spec as text.
+    openapi_document: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The schema as SDL.
+    graphql_schema: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        # Two writers fill these columns outside the app's validation: the SQL
+        # copy in revision c2caf6a8285c, and for one release the dual write
+        # beside the OpenAPI tool row.
+        CheckConstraint(
+            "(api_type = 'rest' AND openapi_document IS NOT NULL "
+            "AND graphql_schema IS NULL) "
+            "OR (api_type = 'graphql' AND graphql_schema IS NOT NULL "
+            "AND openapi_document IS NULL)",
+            name="ck_api_app_definition",
         ),
     )
 
@@ -6233,7 +6394,7 @@ class IntegrationAction(Base):
             "integration_id", "key", name="uq_integration_action_integration_key"
         ),
         CheckConstraint(
-            "source IN ('mcp', 'openapi', 'external_app')",
+            "source IN ('mcp', 'openapi', 'external_app', 'graphql')",
             name="ck_integration_action_source",
         ),
         CheckConstraint(

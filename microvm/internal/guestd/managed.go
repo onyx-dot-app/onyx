@@ -60,13 +60,13 @@ type ManagedMount struct {
 }
 
 // DefaultManagedMount is the mount of a call with an empty mount name.
+// Only older root drives serve it: skills now go to the InstallSkill folder.
 const DefaultManagedMount = "skills"
 
 // DefaultManagedMounts match the image's attach script and the host agent's
-// layout 5 drive order (rootfs vda, scratch vdb, skills A vdc, upload
-// vdd/vde, skills B vdf, then two slots per added mount).
+// layout 5 drive order (rootfs vda, scratch vdb, managed A vdc, upload
+// vdd/vde, managed B vdf, then two slots per added mount).
 var DefaultManagedMounts = []ManagedMount{
-	{Name: "skills", MountPoint: "/mnt/skills", Devices: slotDevs("/dev/vdc", "/dev/vdf")},
 	{Name: "user-uploads", MountPoint: "/mnt/user-uploads", Devices: slotDevs("/dev/vdg", "/dev/vdh")},
 	{Name: "spaces", MountPoint: "/mnt/spaces", Devices: slotDevs("/dev/vdi", "/dev/vdj")},
 }

@@ -6,7 +6,7 @@
       "account": "Connecté en tant que {email}",
       "workspace": "Espace de travail : {workspaceName}",
       "appAddress": "Adresse de l'application : {origin}",
-      "access": "Lire les résultats des documents auxquels vous avez accès. Utiliser la recherche web et ouvrir des pages web.",
+      "access": "Lire les résultats des documents auxquels vous avez accès. Utiliser la recherche web et ouvrir des pages web. Lire votre historique de discussions.",
       "allow": "Autoriser l'accès",
       "deny": "Refuser",
       "pending": "Enregistrement de votre choix...",
@@ -4005,6 +4005,18 @@
             "mailboxes": {
               "label": "Boîtes aux lettres",
               "description": "Indiquez les boîtes aux lettres à indexer (par ex. INBOX, Sent, Drafts). Laissez vide pour indexer toutes les boîtes aux lettres."
+            }
+          }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "RU par minute",
+              "description": "La part de la limite de débit de l’inscription d’application Microsoft que ce connecteur peut utiliser, en unités de ressources (RU) par minute. Microsoft fixe la limite de l’application selon le niveau de licences, de 1 250 à 6 250 RU par minute. Laissez vide pour qu’Onyx apprenne la limite. [Comment trouver votre niveau](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "Autres connecteurs sur cette inscription d’application : {connectors}. Total : {total} RU par minute.",
+              "none": "Aucun autre connecteur de cette inscription d’application ne définit de RU par minute.",
+              "hidden": "{count, plural, one {# connecteur que vous ne pouvez pas voir} other {# connecteurs que vous ne pouvez pas voir}}",
+              "unavailable": "Impossible de charger les RU par minute des autres connecteurs de cette inscription d’application."
             }
           }
         }
@@ -8099,6 +8111,13 @@
         },
         "setDefaultButton": {
           "label": "Définir par défaut"
+        },
+        "deleteButton": {
+          "ariaLabel": "Supprimer {title}",
+          "tooltip": "Supprimer"
+        },
+        "reconnectButton": {
+          "label": "Reconnecter"
         }
       }
     },
@@ -9058,6 +9077,9 @@
       "provider": {
         "connected": {
           "label": "Connecté"
+        },
+        "disconnected": {
+          "suffix": "(déconnecté)"
         }
       },
       "setupModal": {
@@ -9075,8 +9097,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} connecté",
-        "disconnected": "{label} déconnecté",
         "unexpectedError": "Une erreur inattendue est survenue."
       },
       "providers": {
@@ -9117,6 +9137,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "La clé API et les paramètres de **{label}** seront supprimés. Pour envoyer de nouveau des traces, reconfigurez-le depuis le début.",
+        "description": "Supprime la clé API et les paramètres de ce fournisseur.",
+        "submit": {
+          "label": "Supprimer"
+        },
+        "title": "Supprimer {label}",
+        "envBody": "La clé API et les paramètres de **{label}** seront supprimés. Le traçage reste désactivé. Pour envoyer de nouveau des traces avec la configuration des variables d'environnement, reconnectez-le."
       }
     },
     "usage": {
@@ -9819,7 +9848,7 @@
       },
       "tierTooltip": "LLM Gateway nécessite le forfait Business ou Enterprise.",
       "scopeNote": {
-        "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → LLM Gateway."
+        "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → Accès tiers → LLM Gateway."
       },
       "toasts": {
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
@@ -10692,7 +10721,7 @@
         "title": "Cluster de recherche - OpenSearch",
         "status": "État du cluster",
         "version": "OpenSearch {version}",
-        "health": "État {health}",
+        "noVersion": "OpenSearch",
         "updated": "Mis à jour {time}",
         "dataNodes": "Nœuds de données",
         "shards": "Shards",
@@ -11376,6 +11405,7 @@
         "playgroundAskAdmin": "Demandez à votre administrateur de vous inviter.",
         "playgroundCheckFailed": "Nous n'avons pas pu vérifier votre inscription. Réessayez plus tard.",
         "playgroundEmailUsed": "Vous avez déjà utilisé votre accès au playground.",
+        "playgroundFreeMail": "Utilisez votre adresse e-mail professionnelle.",
         "playgroundLimitReached": "Votre entreprise a déjà utilisé son accès au playground.",
         "serverError": "Votre fournisseur d'identité a rencontré une erreur. Veuillez réessayer.",
         "staleSignIn": "Ce lien de connexion a expiré ou n'est plus valide. Veuillez vous reconnecter.",
@@ -11777,33 +11807,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "Supprimer"
-      },
-      "deleteModal": {
-        "description": "Voulez-vous vraiment supprimer ce chat ? Cette action est irréversible.",
-        "submitButton": {
-          "label": "Supprimer"
-        },
-        "title": "Supprimer le chat"
-      },
-      "exportAs": {
-        "label": "Exporter sous…"
-      },
-      "exportFailed": {
-        "message": "Échec de l'exportation du chat. Veuillez réessayer."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "Texte brut"
-      },
-      "fullWidth": {
-        "ariaLabel": "Basculer le chat en pleine largeur",
-        "fitTooltip": "Largeur ajustée",
-        "fullTooltip": "Pleine largeur"
-      },
       "incognitoExit": {
         "ariaLabel": "Quitter le chat incognito",
         "tooltip": "Quitter le chat incognito"
@@ -11830,14 +11833,14 @@
       "modeButton": {
         "ariaLabel": "Changer le mode de l'application"
       },
-      "moveToProject": {
-        "label": "Déplacer vers un projet"
-      },
       "openSidebar": {
         "ariaLabel": "Ouvrir la barre latérale"
       },
       "share": {
-        "label": "Partager"
+        "label": "Partager…"
+      },
+      "shareMenu": {
+        "label": "Partager ou exporter"
       }
     },
     "banners": {
@@ -11882,6 +11885,14 @@
       "licenseExpiry": {
         "source": {
           "label": "Licence"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "Cluster de recherche"
+        },
+        "cta": {
+          "label": "Ouvrir l'état du service"
         }
       },
       "nextButton": {
@@ -12200,7 +12211,7 @@
           "text": "{toolName} a été bloqué"
         },
         "completedStatus": {
-          "text": "{toolName} terminé"
+          "text": "{toolName} exécuté"
         },
         "downloadFileLink": {
           "label": "Télécharger"
@@ -12230,13 +12241,10 @@
           "label": "Réponse"
         },
         "runningStatus": {
-          "text": "{toolName} en cours d'exécution..."
+          "text": "Exécution de {toolName}..."
         },
         "unreachableStatus": {
           "text": "{toolName} n'a pas pu joindre son serveur"
-        },
-        "waitingIndicator": {
-          "text": "En attente de réponse..."
         }
       },
       "customToolAuth": {
@@ -12414,7 +12422,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "Réflexion"
+          "text": "Réflexion..."
         }
       },
       "timeline": {
@@ -12429,7 +12437,7 @@
             "status": "Plan généré"
           },
           "generating": {
-            "status": "Génération du plan"
+            "status": "Génération du plan..."
           }
         },
         "expandButton": {
@@ -12437,10 +12445,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Lecture"
+            "status": "Consultation de pages web..."
           },
           "read": {
-            "status": "Lu"
+            "status": "{count, plural, =0 {Pages web consultées} one {# page web consultée} other {# pages web consultées}}"
           }
         },
         "fileReader": {
@@ -12448,69 +12456,108 @@
             "status": "A lu {fileName} (caractères {start, number}–{end, number} sur {total, number})"
           },
           "reading": {
-            "status": "Lecture du fichier"
+            "status": "Lecture du fichier..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {# image générée} other {# images générées}}"
         },
         "header": {
           "executingCode": {
-            "label": "Exécution du code"
+            "label": "Exécution du code..."
           },
           "executingNamedTool": {
-            "label": "Exécution de {toolName}"
+            "label": "Exécution de {toolName}..."
           },
           "executingTool": {
-            "label": "Exécution de l'outil"
+            "label": "Exécution de l'outil..."
           },
           "generatingImages": {
-            "label": "Génération des images"
+            "label": "Génération des images..."
           },
           "generatingPlan": {
-            "label": "Génération du plan"
+            "label": "Génération du plan..."
           },
           "queryingKnowledgeBase": {
-            "label": "Interrogation de la base de connaissances"
+            "label": "Interrogation de la base de connaissances..."
           },
           "reading": {
-            "label": "Lecture"
+            "label": "Lecture..."
           },
           "readingFile": {
-            "label": "Lecture du fichier"
+            "label": "Lecture du fichier..."
           },
           "researching": {
-            "label": "Recherche en cours"
+            "label": "Recherche en cours..."
           },
           "searchingWeb": {
-            "label": "Recherche sur le web"
+            "label": "Recherche sur le web..."
           },
           "thinking": {
-            "label": "Réflexion"
-          },
-          "thinkingEllipsis": {
             "label": "Réflexion..."
           },
           "updatingMemory": {
             "label": "Mise à jour de la mémoire..."
           },
           "working": {
-            "label": "En cours"
+            "label": "En cours..."
           },
           "waitingForApproval": {
-            "label": "En attente de votre approbation"
+            "label": "En attente de votre approbation..."
           },
           "waitingForAnswer": {
-            "label": "En attente de votre réponse"
+            "label": "En attente de votre réponse..."
           },
           "runningCommand": {
-            "label": "Exécution de la commande"
+            "label": "Exécution de la commande..."
           },
           "editingFiles": {
-            "label": "Modification des fichiers"
+            "label": "Modification des fichiers..."
           },
           "publishingFiles": {
-            "label": "Publication des fichiers"
+            "label": "Publication des fichiers..."
+          },
+          "browsing": {
+            "label": "Consultation de pages web..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "Travail en cours...",
+              "done": "Travail effectué"
+            },
+            "crunchingDetails": {
+              "working": "Analyse des détails...",
+              "done": "Détails analysés"
+            },
+            "connectingDots": {
+              "working": "Recoupement des indices...",
+              "done": "Indices recoupés"
+            },
+            "runningNumbers": {
+              "working": "Calcul des chiffres...",
+              "done": "Chiffres calculés"
+            },
+            "fillingGaps": {
+              "working": "Comblement des lacunes...",
+              "done": "Lacunes comblées"
+            },
+            "sortingThingsOut": {
+              "working": "Mise en ordre...",
+              "done": "Mise en ordre terminée"
+            },
+            "gatheringPieces": {
+              "working": "Rassemblement des pièces...",
+              "done": "Pièces rassemblées"
+            },
+            "workingThroughIt": {
+              "working": "Travail en profondeur...",
+              "done": "Travail approfondi"
+            },
+            "ironingOutDetails": {
+              "working": "Peaufinage des détails...",
+              "done": "Détails peaufinés"
+            },
+            "roundingThingsOut": {
+              "working": "Finitions en cours...",
+              "done": "Finitions terminées"
+            }
           }
         },
         "internalSearch": {
@@ -12518,10 +12565,10 @@
             "text": "Aucun résultat trouvé"
           },
           "reading": {
-            "status": "Lecture"
+            "status": "Lecture..."
           },
           "read": {
-            "label": "Lu"
+            "label": "Documents lus"
           },
           "header": {
             "default": "Recherche dans les documents internes",
@@ -12529,7 +12576,8 @@
             "sources": "Recherche dans {sources}",
             "doneSources": "Recherche dans {sources} terminée",
             "sourcesOverflow": "{sources} +{count} autres",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "depuis le {date}",
@@ -12548,7 +12596,7 @@
             "text": "Outil de mémoire désactivé"
           },
           "updating": {
-            "status": "Mise à jour de la mémoire"
+            "status": "Mise à jour de la mémoire..."
           },
           "updated": {
             "status": "Mémoire mise à jour"
@@ -12570,10 +12618,7 @@
             "status": "Base de connaissances interrogée"
           },
           "querying": {
-            "status": "Interrogation de la base de connaissances"
-          },
-          "listed": {
-            "label": "{count, plural, one {# document listé} other {# documents listés}}"
+            "status": "Interrogation de la base de connaissances..."
           },
           "query": {
             "table": {
@@ -12630,21 +12675,15 @@
             "label": "Sortie :"
           },
           "running": {
-            "status": "Exécution de Python"
+            "status": "Exécution de Python..."
           },
           "ran": {
             "status": "Python exécuté"
-          },
-          "runningCode": {
-            "label": "Exécution du code..."
-          },
-          "writingCode": {
-            "status": "Écriture du code..."
           }
         },
         "reasoning": {
           "thinking": {
-            "status": "Réflexion"
+            "status": "Réflexion..."
           },
           "thought": {
             "status": "Réflexion terminée"
@@ -12680,7 +12719,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "Recherche sur le web"
+            "status": "Recherche sur le web..."
           },
           "searched": {
             "status": "Recherche sur le web terminée"
@@ -12688,19 +12727,16 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {Exécution de la commande} started {Commande lancée} failed {Échec de la commande} canceled {Annulé} done {Commande exécutée} other {Commande exécutée}}",
+            "status": "{phase, select, running {Exécution de la commande...} started {Commande lancée} failed {Échec de la commande} canceled {Annulé} done {Commande exécutée} other {Commande exécutée}}",
             "workdir": {
               "label": "Dans {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}...} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}...} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session} failed {Impossible d'envoyer la saisie à la session} canceled {Annulé} done {Saisie envoyée à la session} other {Saisie envoyée à la session}}} check {{phase, select, running {Vérification de la session} failed {Impossible de vérifier la session} canceled {Annulé} done {Session vérifiée} other {Session vérifiée}}} other {Session}}"
+              "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session...} failed {Impossible d'envoyer la saisie à la session} canceled {Annulé} done {Saisie envoyée à la session} other {Saisie envoyée à la session}}} check {{phase, select, running {Vérification de la session...} failed {Impossible de vérifier la session} canceled {Annulé} done {Session vérifiée} other {Session vérifiée}}} other {Session}}"
             }
-          },
-          "output": {
-            "title": "Sortie"
           },
           "exitCode": {
             "label": "Code de sortie {exitCode}"
@@ -13019,6 +13055,12 @@
       },
       "copyButton": {
         "tooltip": "Copier le contenu"
+      },
+      "sourceButton": {
+        "tooltip": "Afficher la source"
+      },
+      "previewButton": {
+        "tooltip": "Afficher l'aperçu"
       },
       "downloadButton": {
         "label": "Télécharger le fichier",
@@ -13481,10 +13523,6 @@
       "toggleButton": {
         "label": "Afficher ou masquer le panneau"
       },
-      "downloadButton": {
-        "label": "Télécharger",
-        "tooltip": "Télécharger le fichier"
-      },
       "reloadButton": {
         "label": "Actualiser les fichiers",
         "error": "Impossible de recharger les fichiers. Réessayez."
@@ -13497,6 +13535,54 @@
       },
       "resizeHandle": {
         "label": "Redimensionner le panneau"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "Échec de l'exportation du chat. Veuillez réessayer."
+      },
+      "plaintext": {
+        "label": "Texte brut"
+      },
+      "asMarkdown": {
+        "label": "Exporter en Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "Exporter en texte brut"
+      },
+      "menu": {
+        "label": "Exporter sous…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "Activité"
+      },
+      "needsYou": {
+        "title": "Votre action requise",
+        "approval": "Approuver {tool}",
+        "question": "Répondre à une question"
+      },
+      "agents": {
+        "title": "Agents",
+        "status": {
+          "starting": "Démarrage",
+          "running": "En cours",
+          "suspended": "En attente",
+          "complete": "Terminé",
+          "limit": "Limite d'étapes atteinte",
+          "cancelled": "Annulé",
+          "stopped": "Arrêté",
+          "error": "Échec"
+        },
+        "finished": "Agents précédents"
+      },
+      "files": {
+        "title": "Fichiers",
+        "viewAll": "{count, plural, one {Voir # fichier} other {Voir les # fichiers}}"
       }
     }
   },
@@ -13554,11 +13640,6 @@
       },
       "plant": {
         "label": "Plantes"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "Aa"
       }
     },
     "commandMenu": {
@@ -14033,6 +14114,21 @@
         "label": "Mettre à niveau l'offre"
       },
       "availableFor": "Disponible avec l’{plan}"
+    },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "Il s'agit d'une fonctionnalité Enterprise. Elle n'est pas disponible dans le playground. Votre propre Onyx l'inclut. [Parler aux ventes]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "Nous avons configuré nos propres clés de modèle pour que vous puissiez essayer les fonctionnalités. Votre propre Onyx fonctionne avec vos clés. [Parler aux ventes]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "Cette fonctionnalité est désactivée dans le playground. Votre propre Onyx l'inclut. [Parler aux ventes]({salesUrl})"
+        },
+        "title": "Limite du playground",
+        "tooltip": "Non disponible dans le playground. Votre propre Onyx l'inclut."
+      }
     },
     "placeholders": {
       "email": "e-mail@votreentreprise.com",
@@ -14990,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "En cours"
+          "label": "En cours..."
         }
       },
       "read": {
@@ -15759,7 +15855,8 @@
       "scrollRight": "Faire défiler les onglets vers la droite"
     },
     "toast": {
-      "moreCount": "+{count} de plus"
+      "moreCount": "+{count} de plus",
+      "closeAll": "Tout fermer"
     },
     "sidebar": {
       "open": "Ouvrir la barre latérale",
@@ -15773,11 +15870,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "anonyme",
-        "description": "Adresse e-mail de votre compte.",
-        "title": "E-mail"
-      },
       "password": {
         "changeButton": "Modifier le mot de passe",
         "description": "Mettez à jour le mot de passe de votre compte.",
@@ -15810,8 +15902,7 @@
           "mismatch": "Les mots de passe ne correspondent pas",
           "newRequired": "Le nouveau mot de passe est requis"
         }
-      },
-      "title": "Comptes"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15987,62 @@
         "title": "Arrière-plan du chat"
       },
       "colorMode": {
-        "auto": "Auto",
+        "auto": "Système",
         "dark": "Sombre",
-        "description": "Sélectionnez le mode de couleur préféré pour l'interface.",
+        "description": "Sélectionnez le thème préféré pour l'interface.",
         "light": "Clair",
-        "title": "Mode de couleur"
+        "title": "Thème"
       },
-      "title": "Apparence"
+      "general": {
+        "title": "Général"
+      },
+      "fonts": {
+        "title": "Polices"
+      },
+      "transcriptWidth": {
+        "title": "Largeur de la conversation",
+        "description": "Définissez la largeur des messages du chat et de la barre de saisie sur cet appareil.",
+        "standard": "Standard",
+        "wide": "Large",
+        "placeholder": "Sélectionnez une largeur"
+      },
+      "responseFont": {
+        "default": "Par défaut",
+        "match": "Identique à l'interface",
+        "title": "Police des réponses",
+        "description": "Sélectionnez la police des réponses du chat.",
+        "placeholder": "Sélectionnez une police"
+      },
+      "interfaceFont": {
+        "title": "Police de l'interface",
+        "description": "Sélectionnez la police du texte de l'application.",
+        "default": "Par défaut",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "Système",
+        "placeholder": "Sélectionnez une police"
+      },
+      "accessibility": {
+        "title": "Accessibilité"
+      },
+      "motion": {
+        "title": "Animations",
+        "description": "Suivez le réglage de mouvement de votre système ou réduisez les animations dans toute l'application.",
+        "placeholder": "Sélectionnez un réglage d'animation",
+        "system": "Système",
+        "reduced": "Réduites"
+      },
+      "popupDismissal": {
+        "title": "Affichage des notifications",
+        "description": "Choisissez si les notifications se ferment d'elles-mêmes ou restent affichées jusqu'à ce que vous les fermiez.",
+        "placeholder": "Sélectionnez quand les notifications se ferment",
+        "auto_dismiss": "Fermeture automatique",
+        "stay_on_screen": "Rester à l'écran"
+      },
+      "dynamicConversations": {
+        "title": "Conversations dynamiques",
+        "description": "Charge et décharge les messages lorsque vous faites défiler de longues conversations. Cela améliore les performances, mais les lecteurs d'écran ne peuvent pas accéder aux messages déchargés. Désactivez cette option pour garder tous les messages chargés."
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +16076,6 @@
         "description": "Animez les réponses diffusées caractère par caractère. Désactivez pour afficher les segments au fur et à mesure de leur arrivée.",
         "title": "Diffusion fluide"
       },
-      "title": "Chats",
       "toasts": {
         "saveFailed": "Échec de l'enregistrement des préférences"
       },
@@ -15949,6 +16088,7 @@
     },
     "connectors": {
       "connectButton": "Connecter",
+      "disconnectAriaLabel": "Déconnecter {name}",
       "disconnectModal": {
         "continueNote": "Vous pouvez toujours poursuivre les sessions existantes faisant référence au contenu {name}.",
         "description": "{appName} ne pourra plus accéder au contenu de votre compte {name} ni le rechercher.",
@@ -15956,11 +16096,9 @@
         "submit": "Déconnecter",
         "title": "Déconnecter *{name}*"
       },
-      "emptyMessage": "Aucun connecteur configuré pour votre organisation.",
       "status": {
         "connected": "Connecté",
-        "notConnected": "Non connecté",
-        "paused": "En pause"
+        "notConnected": "Non connecté"
       },
       "title": "Connecteurs",
       "toasts": {
@@ -16024,7 +16162,6 @@
         "description": "Sélectionnez la langue de l'interface.",
         "title": "Langue d'affichage"
       },
-      "title": "Langue",
       "toasts": {
         "updateFailed": "Impossible de mettre à jour la préférence de langue"
       }
@@ -16037,23 +16174,20 @@
         "placeholder": "Sélectionnez une section"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "Comptes et accès"
-        },
-        "chatPreferences": {
-          "label": "Préférences de chat"
-        },
-        "connectors": {
-          "label": "Connecteurs"
-        },
-        "general": {
-          "label": "Général"
-        },
-        "llmGateway": {
-          "label": "Passerelle LLM"
+        "appearance": {
+          "label": "Apparence"
         },
         "usage": {
           "label": "Utilisation"
+        },
+        "account": {
+          "label": "Compte"
+        },
+        "chatPreferences": {
+          "label": "Préférences de discussion"
+        },
+        "thirdPartyAccess": {
+          "label": "Accès tiers"
         }
       }
     },
@@ -16102,9 +16236,9 @@
       }
     },
     "personalPreferences": {
-      "description": "Indiquez vos préférences personnalisées en langage naturel.",
+      "description": "{appName} en tient compte dans toutes vos conversations.",
       "placeholder": "Décrivez comment vous souhaitez que le système se comporte et le ton qu'il doit utiliser.",
-      "title": "Préférences personnelles"
+      "title": "Instructions"
     },
     "profile": {
       "fullName": {
@@ -16118,8 +16252,68 @@
       },
       "workRole": {
         "description": "Indiquez votre rôle pour mieux adapter les réponses.",
-        "placeholder": "Votre rôle",
-        "title": "Rôle professionnel"
+        "placeholder": "Choisissez un rôle",
+        "title": "Qu’est-ce qui décrit le mieux votre travail ?",
+        "other": {
+          "placeholder": "Saisissez votre rôle",
+          "title": "Votre travail"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "Choisissez une image de 10 Mo maximum.",
+          "invalidType": "Choisissez une image PNG, JPEG ou WebP."
+        },
+        "description": "PNG, JPEG ou WebP, jusqu’à 10 Mo.",
+        "toasts": {
+          "updateFailed": "Impossible de mettre à jour votre photo de profil. Réessayez."
+        },
+        "title": "Photo de profil",
+        "editButton": {
+          "ariaLabel": "Modifier la photo de profil"
+        },
+        "uploadButton": {
+          "ariaLabel": "Importer une photo de profil"
+        },
+        "menu": {
+          "label": "Options de la photo de profil",
+          "replace": {
+            "label": "Remplacer la photo"
+          },
+          "remove": {
+            "label": "Supprimer"
+          }
+        },
+        "cropModal": {
+          "title": "Recadrer la photo",
+          "description": "Faites glisser ou utilisez les touches fléchées pour repositionner. Utilisez le curseur ou la molette pour zoomer.",
+          "area": {
+            "ariaLabel": "Zone de recadrage"
+          },
+          "zoom": {
+            "ariaLabel": "Zoom"
+          },
+          "zoomIn": {
+            "ariaLabel": "Zoom avant"
+          },
+          "zoomOut": {
+            "ariaLabel": "Zoom arrière"
+          },
+          "reset": {
+            "label": "Réinitialiser"
+          },
+          "cancel": {
+            "label": "Annuler"
+          },
+          "save": {
+            "label": "Enregistrer"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} utilise ce nom lorsqu’il s’adresse à vous.",
+        "placeholder": "Ajoutez un nom",
+        "title": "Comment {appName} doit-il vous appeler ?"
       }
     },
     "promptShortcuts": {
@@ -16129,7 +16323,6 @@
         "publicTooltip": "Impossible de supprimer les raccourcis d'invite de l'organisation.",
         "removeAriaLabel": "Supprimer le raccourci"
       },
-      "title": "Raccourcis d'invite",
       "toasts": {
         "bothRequired": "Le raccourci et l'expansion sont tous deux requis",
         "deleteFailed": "Échec de la suppression du raccourci",
@@ -16152,9 +16345,6 @@
       "empty": {
         "description": "L'utilisation et les coûts de vos modèles apparaîtront ici dès que vous commencerez à discuter.",
         "title": "Aucune utilisation enregistrée pour l'instant"
-      },
-      "header": {
-        "title": "Utilisation"
       },
       "loadError": {
         "description": "Une erreur s'est produite lors de la récupération de votre utilisation. Réessayez dans un instant.",
@@ -16215,9 +16405,31 @@
       },
       "playbackSpeed": {
         "description": "Ajustez la vitesse de lecture vocale.",
-        "title": "Vitesse de lecture"
+        "title": "Vitesse de lecture",
+        "value": "{speed}x"
       },
       "title": "Voix"
+    },
+    "modelPreferences": {
+      "title": "Préférences de modèle"
+    },
+    "interactions": {
+      "title": "Interactions"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "Gestionnaire du groupe",
+        "description": "Votre niveau d’accès dans cet espace de travail.",
+        "admin": "Administrateur",
+        "basic": "Utilisateur standard",
+        "title": "Votre rôle"
+      },
+      "tenantId": {
+        "description": "Communiquez cet ID au support lorsque vous demandez de l’aide.",
+        "copyTooltip": "Copier l’ID du locataire",
+        "title": "ID du locataire"
+      },
+      "title": "Organisation"
     }
   },
   "sidebar": {
@@ -17083,19 +17295,6 @@
       "select": "Sélectionner {name}"
     }
   },
-  "opensearchHealth": {
-    "title": "OpenSearch a besoin de plus de ressources",
-    "disk": "L’utilisation du disque OpenSearch atteint au moins 85 % sur un nœud de données. L’indexation peut s’arrêter si le disque se remplit.",
-    "jvmMemory": "L’utilisation de la mémoire JVM d’OpenSearch est restée supérieure à 85 % lors de contrôles répétés. La recherche et l’indexation peuvent échouer.",
-    "vectorMemory": "La mémoire vectorielle d’OpenSearch est presque pleine ou a atteint sa limite. La recherche et l’indexation peuvent échouer.",
-    "contact": "Contactez votre administrateur système ou l’équipe Onyx à [support@onyx.app](mailto:support@onyx.app).",
-    "stale": "Le dernier contrôle est indisponible. Cet avertissement reflète le dernier contrôle réussi ; le rétablissement n’a pas été confirmé.",
-    "dismiss": "Fermer",
-    "diskTitle": "Espace disque",
-    "jvmMemoryTitle": "Mémoire JVM",
-    "vectorMemoryTitle": "Mémoire vectorielle",
-    "viewDetails": "Voir les détails"
-  },
   "plugins": {
     "member": {
       "sections": {
@@ -17689,7 +17888,6 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, one {1 compétence} other {{skills} compétences}}",
       "loadFailed": "Impossible de charger vos plugins.",
       "filter": {
         "all": "Tous les plugins"
@@ -17703,7 +17901,7 @@
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
       },
-      "intro": "Un plugin regroupe des compétences et les intégrations dont elles ont besoin. Importez un plugin Claude Code ou Codex, ajoutez une marketplace depuis GitHub ou ajoutez une compétence. Chaque compétence que vous ajoutez est dans son propre plugin.",
+      "intro": "Un plugin regroupe des compétences et les intégrations dont elles ont besoin. Importez un plugin Claude Code ou Codex, ajoutez une marketplace depuis GitHub ou ajoutez une compétence. Un plugin qui ne contient qu’un fichier SKILL.md à sa racine se trouve dans l’onglet Compétences.",
       "integrations": "{available} intégrations disponibles sur {needed}",
       "nameHeld": "Désactivé : {names} utilise le même nom de compétence"
     },
@@ -17952,6 +18150,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {Cette exécution attend votre approbation ci-dessous.} other {Cette exécution est en cours.}}",
       "startedAt": "Démarrée {time}",
       "viewTask": "Voir la tâche"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "Marketing"
+      },
+      "finance": {
+        "label": "Finance"
+      },
+      "other": {
+        "label": "Autre"
+      },
+      "engineering": {
+        "label": "Ingénierie"
+      },
+      "customerSupportSuccess": {
+        "label": "Support et succès client"
+      },
+      "peopleHr": {
+        "label": "Personnes et RH"
+      },
+      "dataAnalytics": {
+        "label": "Données et analyse"
+      },
+      "legal": {
+        "label": "Juridique"
+      },
+      "design": {
+        "label": "Design"
+      },
+      "product": {
+        "label": "Produit"
+      },
+      "operations": {
+        "label": "Opérations"
+      },
+      "sales": {
+        "label": "Ventes"
+      },
+      "leadership": {
+        "label": "Direction"
+      }
     }
   }
 }

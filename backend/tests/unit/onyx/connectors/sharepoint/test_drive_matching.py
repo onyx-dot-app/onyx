@@ -100,6 +100,7 @@ def _fake_get_delta_page(
     drive_id: str,  # noqa: ARG001
     page_url: str,  # noqa: ARG001
     allow_full_resync: bool,  # noqa: ARG001
+    select_fields: str,  # noqa: ARG001
 ) -> DriveDeltaFetchResult:
     return _delta_fetch_result(_SAMPLE_ITEM)
 
@@ -172,6 +173,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         treat_sharing_link_as_public: bool = False,  # noqa: ARG001
         raw_file_callback: Any = None,  # noqa: ARG001
         permission_cache: Any = None,  # noqa: ARG001
+        inherited_access: Any = None,  # noqa: ARG001
     ) -> Document:
         captured_drive_names.append(drive.display_name)
         return Document(

@@ -74,7 +74,8 @@ def test_personal_sync_creates_versions_and_deletes(
     assert owner_row is not None
     # New plugins start off; the owner turns them on one at a time.
     assert not {
-        skill.name for skill in list_chat_skills(db_session, owner_row, built_ins=False)
+        skill.name
+        for skill in list_chat_skills(db_session, owner_row, with_sandbox=False)
     } & {
         "alpha",
         "beta",

@@ -421,6 +421,37 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class InterfaceFont(str, PyEnum):
+    """Font for interface text. Values match web/src/lib/appearance/preferences.ts."""
+
+    DEFAULT = "default"
+    SYSTEM = "system"
+    OPENDYSLEXIC = "opendyslexic"
+    ATKINSON = "atkinson"
+
+
+class ResponseFont(str, PyEnum):
+    """Font for chat response text: the interface font, or the default font."""
+
+    MATCH = "match"
+    DEFAULT = "default"
+
+
+class MotionPreference(str, PyEnum):
+    """Follow the OS reduced-motion setting, or always reduce motion. Values
+    match web/src/lib/appearance/preferences.ts."""
+
+    SYSTEM = "system"
+    REDUCED = "reduced"
+
+
+class PopupDismissal(str, PyEnum):
+    """Whether toasts close by themselves or stay until the user closes them."""
+
+    AUTO_DISMISS = "auto_dismiss"
+    STAY_ON_SCREEN = "stay_on_screen"
+
+
 class SupportedLanguage(str, PyEnum):
     EN = "en"
     ES = "es"
@@ -1068,6 +1099,11 @@ class IntegrationKind(str, PyEnum):
     API = "api"
 
 
+class ApiAppType(str, PyEnum):
+    REST = "rest"
+    GRAPHQL = "graphql"
+
+
 class IntegrationAuthMode(str, PyEnum):
     NONE = "none"
     # One connection for the organization.
@@ -1092,6 +1128,8 @@ class IntegrationActionSource(str, PyEnum):
     MCP = "mcp"
     # An operation of an OpenAPI spec.
     OPENAPI = "openapi"
+    # A query or mutation root field of a GraphQL schema.
+    GRAPHQL = "graphql"
     # The action catalog of a built-in external app, in code.
     EXTERNAL_APP = "external_app"
 

@@ -165,7 +165,7 @@ def test_skills_list_shows_the_full_description_capped() -> None:
             return_value=skills,
         ),
     ):
-        result = SkillsListTool(User(id=uuid4()), built_ins=False)._run(
+        result = SkillsListTool(User(id=uuid4()), with_sandbox=False)._run(
             ToolInvocation(
                 call_id="list",
                 arguments={},
@@ -231,6 +231,7 @@ def test_picked_skills_are_recorded_with_their_skill_messages_from_one_read() ->
             [triage, report, unreadable],
             uuid4(),
             Mock(),
+            with_sandbox=False,
         )
 
     # One read serves every message.

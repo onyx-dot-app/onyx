@@ -5,7 +5,8 @@ import type { RootContent } from "hast";
 import { createLowlight } from "lowlight";
 import { cn } from "@opal/utils";
 import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
-import "@/app/app/message/custom-code-styles.css";
+import { indentJson } from "@/lib/filePreview/indentJson";
+import "@/lib/timeline/chat/message/custom-code-styles.css";
 
 // Longer text shows without highlighting, which would block the page.
 // Markdown longer than this shows as source.
@@ -38,20 +39,15 @@ interface CodeFilePreviewProps {
 
 /**
  * Code, data and plain text on a code background. Grammars load on demand;
- * until then, and for unknown languages, the text shows plain. JSON shows
- * indented.
+ * until then, and for unknown languages, the text shows plain. Single-line
+ * JSON shows indented. Code shows line numbers; plain text wraps instead.
  */
 export function CodeFilePreview({ text, language }: CodeFilePreviewProps) {
   const plaintext = language === "plaintext";
-  const shown = useMemo(() => {
-    if (language !== "json") return text;
-    try {
-      return JSON.stringify(JSON.parse(text), null, 2);
-    } catch {
-      // Malformed JSON shows as it is
-      return text;
-    }
-  }, [text, language]);
+  const shown = useMemo(
+    () => (language === "json" ? indentJson(text) : text),
+    [text, language]
+  );
   const highlight = !plaintext && shown.length <= MAX_HIGHLIGHTED_CHARACTERS;
   const languages = useHighlightLanguages(highlight);
   const content = useMemo(() => {
@@ -60,11 +56,31 @@ export function CodeFilePreview({ text, language }: CodeFilePreviewProps) {
     if (!lowlight.registered(language)) return shown;
     return renderHighlighted(lowlight.highlight(language, shown).children);
   }, [shown, language, highlight, languages]);
+  const lineNumbers = useMemo(
+    () =>
+      plaintext
+        ? null
+        : Array.from(
+            { length: shown.split("\n").length },
+            (_, index) => index + 1
+          ).join("\n"),
+    [shown, plaintext]
+  );
 
   return (
-    <div className="h-full overflow-auto bg-background-code-01 p-4 pb-16">
+    <div
+      dir="ltr"
+      className="h-full overflow-auto bg-background-code-01 p-4 pb-16"
+    >
+      {lineNumbers !== null && (
+        <pre
+          aria-hidden
+          className="float-start m-0 select-none pe-4 text-end font-mono text-xs text-text-03"
+        >
+          {lineNumbers}
+        </pre>
+      )}
       <pre
-        dir="ltr"
         className={cn(
           "hljs m-0 font-mono text-xs",
           plaintext ? "whitespace-pre-wrap wrap-break-word" : "whitespace-pre"

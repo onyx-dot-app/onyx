@@ -1,10 +1,11 @@
 """Recent OpenSearch search samples for the admin Service Status page.
 
-Each process buffers one small sample per search and flushes the buffer to
-the shared cache every few seconds, as one member of a per-minute set. The
-status page reads the last minutes from every process. Prometheus keeps
-latency buckets per process; this keeps individual searches, so the page can
-show each slow or failed one and a few of the others.
+Each process buffers one small sample per OpenSearch search request and
+flushes the buffer to the shared cache every few seconds, as one member of a
+per-minute set. The status page reads the last minutes from every process and
+counts only the main search queries. Prometheus keeps latency buckets per
+process; this keeps individual searches, so the page can show each slow or
+failed one and a few of the others.
 """
 
 import json
@@ -19,6 +20,7 @@ from onyx.cache.factory import get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import CACHE_BACKEND, DISABLE_VECTOR_DB
 from onyx.configs.constants import CacheBackendType
+from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.models import (
     SearchActivity,
     SearchRatePoint,
@@ -46,6 +48,16 @@ SLOW_SEARCH_MS = 1000
 # 1.56M-chunk index in memory measured a p95 under 700 ms; a disk or memory
 # limit pushed it past 800 ms.
 SLOW_P90_MS = 700
+# The searches the page counts: one main query per user search. The fetches
+# that follow it (the hits' text, neighboring chunks) are cheap lookups by ID,
+# about 16 per search, and would hide a slow main query.
+MAIN_SEARCH_TYPES: frozenset[str] = frozenset(
+    {
+        OpenSearchSearchType.HYBRID.value,
+        OpenSearchSearchType.KEYWORD.value,
+        OpenSearchSearchType.SEMANTIC.value,
+    }
+)
 _KEY_TTL_SECONDS = (SAMPLE_WINDOW_MINUTES + 5) * 60
 
 
@@ -170,7 +182,8 @@ def _is_notable(sample: SearchSample) -> bool:
 def read_search_activity(now_ms: int | None = None) -> SearchActivity:
     """Returns the searches of the last SAMPLE_WINDOW_MINUTES from all processes.
 
-    The window starts on a whole minute, so it holds the current minute so far
+    Only main search queries (MAIN_SEARCH_TYPES) count, in the rate, the
+    percentiles and the listed samples. The window starts on a whole minute, so it holds the current minute so far
     and the SAMPLE_WINDOW_MINUTES - 1 whole minutes before it.
     """
     now_ms = now_ms if now_ms is not None else int(time.time() * 1000)
@@ -187,7 +200,10 @@ def read_search_activity(now_ms: int | None = None) -> SearchActivity:
         for raw in batches:
             for item in json.loads(raw)["samples"]:
                 sample = SearchSample.model_validate(item)
-                if start_ms <= sample.at_ms <= now_ms:
+                if (
+                    start_ms <= sample.at_ms <= now_ms
+                    and sample.search_type in MAIN_SEARCH_TYPES
+                ):
                     samples.append(sample)
     samples.sort(key=lambda sample: sample.at_ms)
 

@@ -26,6 +26,9 @@ from collections.abc import Iterator
 from typing import Any
 
 from onyx.chat.renderer import CODE_ARGUMENT_TOOLS
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 
 ONYX_CHAT_WIRE_VERSION = 2
 
@@ -57,6 +60,10 @@ _PRE_STARTS: dict[str, tuple[str, str]] = {
     "file_tool_progress": ("edit", "Editing files"),
 }
 _CODE_ARGUMENTS = ("execute", "Writing code")
+# The calls whose streamed arguments open them with their own start's title.
+_ARGUMENT_STARTS: dict[str, tuple[str, str]] = {
+    ImageGenerationTool.NAME: _TOOL_STARTS["image_generation_start"],
+}
 
 _MESSAGE_TYPES = {"message_start", "message_delta"}
 _REASONING_TYPES = {"reasoning_start", "reasoning_delta", "reasoning_done"}
@@ -139,11 +146,15 @@ class ChatAcpTranslator:
         call_id = _call_id(placement)
         opening = _TOOL_STARTS.get(packet_type) or _PRE_STARTS.get(packet_type)
         if call_id not in self._open and opening is not None:
+            tool_type = (
+                packet.get("tool_type")
+                if packet_type == "tool_call_argument_delta"
+                else None
+            )
             kind, title = (
                 _CODE_ARGUMENTS
-                if packet_type == "tool_call_argument_delta"
-                and packet.get("tool_type") in CODE_ARGUMENT_TOOLS
-                else opening
+                if tool_type in CODE_ARGUMENT_TOOLS
+                else _ARGUMENT_STARTS.get(str(tool_type), opening)
             )
             self._open[call_id] = False
             yield {

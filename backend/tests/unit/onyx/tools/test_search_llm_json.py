@@ -1,12 +1,13 @@
 """Unit tests for the search-result → LLM surface."""
 
+import hashlib
 import json
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk, InferenceSection
-from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.server.features.build.sandbox.harness_base import search_file_name
 from onyx.tools.tool_implementations.utils import (
     FILE_ASSOCIATED_GUIDANCE,
     convert_inference_sections_to_llm_string,
@@ -15,106 +16,31 @@ from onyx.tools.tool_implementations.utils import (
 FID = "550e8400-e29b-41d4-a716-446655440000"
 
 
-class TestSafeTitlePassthrough:
-    def test_plain_name_with_extension(self) -> None:
-        assert (
-            sandbox_filename_for_document("Q3 Sales.pdf", FID) == f"Q3 Sales_{FID}.pdf"
+class TestSearchFileName:
+    def test_the_prefix_is_a_hash_of_the_file_id(self) -> None:
+        digest = hashlib.sha256(FID.encode()).hexdigest()[:8]
+        assert search_file_name(FID, "Q3 Sales.pdf") == f"{digest}-Q3 Sales.pdf"
+
+    def test_one_title_with_two_files_gets_two_names(self) -> None:
+        # Connector IDs that share their leading digits still differ.
+        assert search_file_name("1234567890", "Report.pdf") != search_file_name(
+            "1234567891", "Report.pdf"
         )
 
-    def test_extensionless_title(self) -> None:
-        assert (
-            sandbox_filename_for_document("Quarterly Plan", FID)
-            == f"Quarterly Plan_{FID}"
+    def test_shell_and_path_characters_are_replaced(self) -> None:
+        name = search_file_name(FID, "$(curl evil)`id`; rm -rf ~.csv")
+        assert not set(name) & set("$`'\";&|()<>!*?[]{}~#/")
+        assert name.endswith(".csv")
+
+    def test_a_title_with_slashes_stays_whole(self) -> None:
+        assert search_file_name(FID, "Q1/Q2 Report\\v2.csv").endswith(
+            "-Q1_Q2 Report_v2.csv"
         )
 
-    def test_spaces_and_underscores_preserved(self) -> None:
-        assert (
-            sandbox_filename_for_document("my_report v2.csv", FID)
-            == f"my_report v2_{FID}.csv"
-        )
-
-
-class TestUnsafeCharacterReplacement:
-    def test_forward_slash_becomes_underscore(self) -> None:
-        assert (
-            sandbox_filename_for_document("Q1/Q2 Report", FID) == f"Q1_Q2 Report_{FID}"
-        )
-
-    def test_backslash_becomes_underscore(self) -> None:
-        assert (
-            sandbox_filename_for_document("path\\to\\file", FID)
-            == f"path_to_file_{FID}"
-        )
-
-    def test_colon_becomes_underscore(self) -> None:
-        assert sandbox_filename_for_document("Re: meeting", FID) == f"Re_ meeting_{FID}"
-
-    def test_wildcards_and_pipes_replaced(self) -> None:
-        assert sandbox_filename_for_document("file*?|<>", FID) == f"file__{FID}"
-
-    def test_quotes_and_angle_brackets_replaced(self) -> None:
-        assert (
-            sandbox_filename_for_document('"quoted" <html>', FID)
-            == f"_quoted_ _html__{FID}"
-        )
-
-    def test_null_byte_replaced(self) -> None:
-        assert sandbox_filename_for_document("ok\x00bad", FID) == f"ok_bad_{FID}"
-
-    def test_control_chars_replaced(self) -> None:
-        assert (
-            sandbox_filename_for_document("line\x01\x02\x1fok", FID) == f"line_ok_{FID}"
-        )
-
-    def test_consecutive_unsafe_chars_collapse(self) -> None:
-        assert sandbox_filename_for_document("a///b\\\\c", FID) == f"a_b_c_{FID}"
-
-    def test_path_traversal_is_neutralized(self) -> None:
-        result = sandbox_filename_for_document("../etc/passwd", FID)
-        assert "/" not in result
-        assert result == f"_etc_passwd_{FID}"
-
-
-class TestTrimmingAndFallbacks:
-    def test_leading_and_trailing_whitespace_stripped(self) -> None:
-        assert (
-            sandbox_filename_for_document("   report.csv   ", FID)
-            == f"report_{FID}.csv"
-        )
-
-    def test_leading_and_trailing_dots_stripped(self) -> None:
-        assert sandbox_filename_for_document("...hidden...", FID) == f"hidden_{FID}"
-
-    def test_empty_input_falls_back_to_document(self) -> None:
-        assert sandbox_filename_for_document("", FID) == f"document_{FID}"
-
-    def test_spaces_only_falls_back_to_document(self) -> None:
-        assert sandbox_filename_for_document("     ", FID) == f"document_{FID}"
-
-    def test_only_unsafe_chars_does_not_fall_back(self) -> None:
-        assert sandbox_filename_for_document("////", FID) == f"__{FID}"
-        assert sandbox_filename_for_document("   \t  ", FID) == f"__{FID}"
-
-    def test_only_dots_falls_back_to_document(self) -> None:
-        assert sandbox_filename_for_document("....", FID) == f"document_{FID}"
-
-
-class TestLengthCap:
-    def test_long_base_truncated_but_file_id_and_ext_preserved(self) -> None:
-        fid = "abc"
-        result = sandbox_filename_for_document("x" * 500 + ".pdf", fid)
-        assert len(result) == 200
-        assert result.endswith(f"_{fid}.pdf")
-
-    def test_extension_survives_pathological_input(self) -> None:
-        fid = "abc"
-        result = sandbox_filename_for_document("x" * 300 + ".pdf", fid)
-        assert len(result) == 200
-        assert result.endswith(".pdf")
-
-    def test_file_id_never_truncated(self) -> None:
-        result = sandbox_filename_for_document("x" * 500, FID)
-        assert result.endswith(f"_{FID}")
+    def test_a_multibyte_title_fits_the_byte_limit(self) -> None:
+        name = search_file_name(FID, "報告" * 100 + ".csv")
+        assert len(name.encode()) <= 255
+        assert name.endswith(".csv")
 
 
 def _make_chunk(
@@ -160,6 +86,21 @@ def _make_section(
     )
 
 
+def _convert_with_files(
+    sections: list[InferenceSection], citation_start: int = 1
+) -> tuple[str, dict[int, str]]:
+    """Convert where a tool opens the file of every section that has one."""
+    return convert_inference_sections_to_llm_string(
+        sections,
+        citation_start=citation_start,
+        file_names={
+            chunk.file_id: search_file_name(chunk.file_id, chunk.semantic_identifier)
+            for chunk in (section.center_chunk for section in sections)
+            if chunk.file_id is not None
+        },
+    )
+
+
 class TestCodeInterpreterFilenameInLLMJson:
     def test_filename_embeds_file_id_when_present(self) -> None:
         chunk = _make_chunk(
@@ -169,17 +110,19 @@ class TestCodeInterpreterFilenameInLLMJson:
         )
         section = _make_section(chunk)
 
-        llm_string, _ = convert_inference_sections_to_llm_string([section])
+        llm_string, _ = _convert_with_files([section])
         payload = json.loads(llm_string)
 
-        assert payload["results"][0]["file_name"] == ("Q3 Sales Report_file-abc123.pdf")
+        assert payload["results"][0]["file_name"] == search_file_name(
+            "file-abc123", "Q3 Sales Report.pdf"
+        )
         assert "file_id" not in payload["results"][0]
 
     def test_omitted_when_no_file_id(self) -> None:
         chunk = _make_chunk("doc-b", file_id=None)
         section = _make_section(chunk)
 
-        llm_string, _ = convert_inference_sections_to_llm_string([section])
+        llm_string, _ = _convert_with_files([section])
         payload = json.loads(llm_string)
 
         assert "file_name" not in payload["results"][0]
@@ -188,23 +131,12 @@ class TestCodeInterpreterFilenameInLLMJson:
         a = _make_chunk("doc-a", semantic_identifier="Report.pdf", file_id="fid-A")
         b = _make_chunk("doc-b", semantic_identifier="Report.pdf", file_id="fid-B")
 
-        llm_string, _ = convert_inference_sections_to_llm_string(
-            [_make_section(a), _make_section(b)]
-        )
+        llm_string, _ = _convert_with_files([_make_section(a), _make_section(b)])
         names = [r["file_name"] for r in json.loads(llm_string)["results"]]
-        assert names == ["Report_fid-A.pdf", "Report_fid-B.pdf"]
-
-    def test_filename_matches_shared_helper(self) -> None:
-        title = "Weird/Name*With:Stuff"
-        chunk = _make_chunk("doc-d", semantic_identifier=title, file_id="file-match")
-        section = _make_section(chunk)
-
-        llm_string, _ = convert_inference_sections_to_llm_string([section])
-        payload = json.loads(llm_string)
-
-        assert payload["results"][0]["file_name"] == sandbox_filename_for_document(
-            title, "file-match"
-        )
+        assert names == [
+            search_file_name("fid-A", "Report.pdf"),
+            search_file_name("fid-B", "Report.pdf"),
+        ]
 
     def test_citation_mapping_unchanged_by_file_presence(self) -> None:
         chunk = _make_chunk(
@@ -214,9 +146,7 @@ class TestCodeInterpreterFilenameInLLMJson:
         )
         section = _make_section(chunk)
 
-        _, citation_mapping = convert_inference_sections_to_llm_string(
-            [section], citation_start=42
-        )
+        _, citation_mapping = _convert_with_files([section], citation_start=42)
 
         assert citation_mapping == {42: "doc-e"}
 
@@ -233,15 +163,16 @@ class TestContentFieldWrappingForFileBearingHits:
             chunk, combined_content="center chunk\nPLUS adjacent\nAND MORE"
         )
 
-        llm_string, _ = convert_inference_sections_to_llm_string([section])
+        llm_string, _ = _convert_with_files([section])
         payload = json.loads(llm_string)
         content = payload["results"][0]["content"]
 
         expected = FILE_ASSOCIATED_GUIDANCE.format(
-            filename="data_file-wrap.csv", content="just the center chunk"
+            filename=search_file_name("file-wrap", "data.csv"),
+            content="just the center chunk",
         )
         assert content == expected
-        assert "data_file-wrap.csv" in content
+        assert search_file_name("file-wrap", "data.csv") in content
         assert "just the center chunk" in content
         assert "code interpreter" in content.lower()
         assert "PLUS adjacent" not in content
@@ -256,7 +187,7 @@ class TestContentFieldWrappingForFileBearingHits:
             chunk, combined_content="full combined section text here"
         )
 
-        llm_string, _ = convert_inference_sections_to_llm_string([section])
+        llm_string, _ = _convert_with_files([section])
         payload = json.loads(llm_string)
 
         assert payload["results"][0]["content"] == "full combined section text here"
@@ -270,12 +201,12 @@ class TestContentFieldWrappingForFileBearingHits:
         )
         section = _make_section(chunk)
 
-        llm_string, _ = convert_inference_sections_to_llm_string([section])
+        llm_string, _ = _convert_with_files([section])
         payload = json.loads(llm_string)
         content = payload["results"][0]["content"]
 
         assert "excerpt" in content.lower()
-        assert "report_file-phrasing.pdf" in content
+        assert search_file_name("file-phrasing", "report.pdf") in content
         assert "python code interpreter" in content.lower()
 
     def test_mixed_batch_only_file_hits_get_guidance(self) -> None:
@@ -291,10 +222,10 @@ class TestContentFieldWrappingForFileBearingHits:
             _make_section(plain_chunk, combined_content="plain combined"),
         ]
 
-        llm_string, _ = convert_inference_sections_to_llm_string(sections)
+        llm_string, _ = _convert_with_files(sections)
         results = json.loads(llm_string)["results"]
 
-        assert "sheet_file-mixed.xlsx" in results[0]["content"]
+        assert search_file_name("file-mixed", "sheet.xlsx") in results[0]["content"]
         assert "code interpreter" in results[0]["content"].lower()
         assert results[1]["content"] == "plain combined"
         assert "file_name" not in results[1]
@@ -302,3 +233,18 @@ class TestContentFieldWrappingForFileBearingHits:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-xvs"])
+
+
+def test_a_file_that_no_tool_opens_gets_no_sentence() -> None:
+    chunk = _make_chunk(
+        "doc-k", semantic_identifier="sheet.xlsx", file_id="file-k", content="body"
+    )
+    sections = [_make_section(chunk, combined_content="all of the section")]
+
+    for file_names in (None, {}, {"other-file": "other.csv"}):
+        llm_string, _ = convert_inference_sections_to_llm_string(
+            sections, file_names=file_names
+        )
+        [result] = json.loads(llm_string)["results"]
+        assert result["content"] == "all of the section"
+        assert "file_name" not in result

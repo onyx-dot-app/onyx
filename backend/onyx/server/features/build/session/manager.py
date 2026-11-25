@@ -379,7 +379,7 @@ class SessionManager:
             connectable_apps_section=build_connectable_apps_list(
                 list_connectable_apps(self._db_session, user)
             ),
-            user_name=user.personal_name,
+            user_name=user.addressed_name,
             llm_config=llm_config,
             mcp_servers=mcp_servers,
         )
@@ -505,7 +505,7 @@ class SessionManager:
                         connectable_apps_section=build_connectable_apps_list(
                             list_connectable_apps(self._db_session, user)
                         ),
-                        user_name=user.personal_name,
+                        user_name=user.addressed_name,
                         llm_config=llm_config,
                         mcp_servers=mcp_servers,
                     )
@@ -782,7 +782,7 @@ class SessionManager:
             mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
             nextjs_port = session.nextjs_port
             opencode_session_id = session.opencode_session_id
-            user_name = user.personal_name
+            user_name = user.addressed_name
             sandbox_skills_hash = sandbox.skills_hash
             sandbox_mcp_config_hash = sandbox.mcp_config_hash
             self._db_session.commit()

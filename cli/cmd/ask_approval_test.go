@@ -26,8 +26,12 @@ type approvalRun struct {
 	decisions chan string
 	// stops receives the stream_id of each Stop.
 	stops chan string
-	// sent closes when the server finished the stream of the message.
+	// sent closes when the server finished the stream of the message. ask
+	// can still be reading it.
 	sent chan struct{}
+	// statusRead closes at ask's first status read. A prompt reads the
+	// status only after ask received the whole stream, with its stop.
+	statusRead chan struct{}
 	// decideElsewhere decides a request as another client does.
 	decideElsewhere func(id, outcome string)
 }
@@ -89,7 +93,8 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 	if len(opts.requests) == 0 {
 		opts.requests = []string{"a1"}
 	}
-	run := &approvalRun{decisions: make(chan string, 8), stops: make(chan string, 8), sent: make(chan struct{})}
+	run := &approvalRun{decisions: make(chan string, 8), stops: make(chan string, 8), sent: make(chan struct{}), statusRead: make(chan struct{})}
+	var statusReadOnce sync.Once
 	requests := make([]map[string]any, len(opts.requests))
 	for i, id := range opts.requests {
 		requests[i] = requestEvent(id)
@@ -162,6 +167,7 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 		fmt.Fprintf(w, `{"approval_id":%q,"decision":%q,"decided_via":%q,"continuation":%s}`, id, decision, decidedVia, continuation)
 	})
 	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/status", func(w http.ResponseWriter, r *http.Request) {
+		statusReadOnce.Do(func() { close(run.statusRead) })
 		mu.Lock()
 		defer mu.Unlock()
 		// Only another client's decision leaves the stream to the status.
@@ -640,8 +646,7 @@ func TestAsk_InterruptedPromptLeavesTheRequestWaiting(t *testing.T) {
 	}()
 
 	waitForPrompts(t, errOut, 1)
-	// The stream stops for the decision before the interrupt.
-	within(t, run.sent)
+	within(t, run.statusRead)
 	cancel()
 
 	err := within(t, done)
@@ -667,7 +672,7 @@ func TestAsk_InterruptedPromptShowsNoFurtherRequest(t *testing.T) {
 	}()
 
 	waitForPrompts(t, errOut, 1)
-	within(t, run.sent)
+	within(t, run.statusRead)
 	cancel()
 	if code := exitCode(within(t, done)); code != exitcodes.ApprovalPending {
 		t.Fatalf("exit code = %d, want %d", code, exitcodes.ApprovalPending)

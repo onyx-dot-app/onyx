@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* ============================================================================
    Toast — a stack like a phone's notifications. The newest slides in at the
    top and pushes the others down; past three, the oldest tuck into a pile
@@ -162,9 +164,11 @@
 
 /* The pile: the edges of the tucked toasts peek out under the stack, layered
    like cards, with the count below. */
-/* The pile's count, a Tag under its edges, lifted so it reads over the
-   page. */
+/* The pile's count, a Tag under its edges, and the Close all button,
+   lifted so they read over the page. */
 .opal-toast-pile-count {
+  /* Usable above a modal dialog, like a toast. */
+  pointer-events: auto;
   margin-top: 0.5rem;
   filter: drop-shadow(0px 2px 6px var(--shadow-02));
 }
@@ -178,16 +182,18 @@
   rotate: 90deg;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .opal-toast,
-  .opal-toast[data-leaving],
-  .opal-toast-spacer,
-  .opal-toast[data-leaving] .opal-toast-spacer {
+.opal-toast,
+.opal-toast[data-leaving],
+.opal-toast-spacer,
+.opal-toast[data-leaving] .opal-toast-spacer {
+  @variant motion-reduce {
     animation: none;
     transition: none;
   }
+}
 
-  .opal-toast-chevron {
+.opal-toast-chevron {
+  @variant motion-reduce {
     transition: none;
   }
 }

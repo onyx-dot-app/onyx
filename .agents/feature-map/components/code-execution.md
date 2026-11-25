@@ -56,7 +56,10 @@
   `apply_patch` card names the files and counts them. Every
   model also gets `publish_files`, which gives files from the VM to the user
   as download cards; owners and viewers of a shared chat can download them,
-  and a hard chat delete deletes them.
+  and a hard chat delete deletes them. With `artifacts_list` and
+  `artifacts_download` the model finds the files that it published in the
+  user's own chats and copies one into the current chat's attachments
+  folder; they show as generic tool cards.
 
 ---
 
@@ -66,7 +69,8 @@ This component owns `PythonTool`, the Code Interpreter client, the settings
 table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
-`apply_patch`, `edit`, `write`, `publish_files`). Code mode's packets and replay belong to [[streaming-protocol]], and
+`apply_patch`, `edit`, `write`, `publish_files`, `artifacts_list`,
+`artifacts_download`). Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -209,9 +213,11 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch | edit + write / publish_files / artifacts_list + artifacts_download (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
-                                        and not for anonymous users (one VM per user), in
+                                        only for the chat's owner (not in a chat without
+                                        one, which any user can open), and not for
+                                        anonymous users (one VM per user), in
                                         incognito or when the request selects more than
                                         one model, and not for
                                         Slack or Discord bot turns (MessageOrigin
@@ -225,7 +231,8 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         LLM's names (model_identity_names) contains "claude"
                                         (model_capabilities.is_claude_model, the one rule that
                                         LLM requests and prompt caching use too), else
-                                        ApplyPatchTool; never both; PublishFilesTool for every
+                                        ApplyPatchTool; never both; PublishFilesTool,
+                                        ArtifactsListTool and ArtifactsDownloadTool for every
                                         model. The reserved-token prompt
                                         (calculate_reserved_tokens) names the same set
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
@@ -233,19 +240,21 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         SandboxTool that the turn offers, in order, named
                                         as the model calls it (CodeModeTool.called_name in
                                         code mode), except tools whose USE is None
-                                        (publish_files); the tool descriptions describe
-                                        only the tools
+                                        (publish_files, the artifact tools); the tool
+                                        descriptions describe only the tools, and
+                                        publish_files's names the artifact tools
   SandboxTurn.start_call                first call: the user's Sandbox row
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
                                         logged, the call still runs)
-  SandboxTurn._sync_skills              before each call (calls wait on one lock): the turn
-                                        reads the available chat built-ins once
-                                        (skills/push.py:build_chat_built_ins_bundle; the
-                                        zip is built once per process for each set), then
-                                        HarnessSandbox.sync_skills shows them at /mnt/skills
-                                        and skips a VM instance that has them (an error is
-                                        logged; the next call tries again)
+  LoadSkillTool                         the load_skill tool (sandbox_tools.py; code mode
+                                        DEFERRED; only for users with chat skills):
+                                        skills/chat.py:load_chat_skill_files resolves the
+                                        skill at the version the user runs now and builds its
+                                        files (skills/push.py:build_chat_skill_files);
+                                        HarnessSandbox.install_skill then sends them as one tar
+                                        to the daemon's InstallSkill and waits (guest-daemon
+                                        README "Skills").
   ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
                                         command gets AGENT_BROWSER_SESSION=<chat session>, so
                                         chats in one VM keep separate browsers); each
@@ -334,6 +343,63 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         publish is a new file and version.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
+  ArtifactsListTool / ArtifactsDownloadTool  sandbox_tools._ArtifactTool: code mode
+                                        DEFERRED in the group `artifacts`
+                                        (tools.artifacts__list / __download, found
+                                        with tool_search), JSON_OBJECT results
+                                        (ArtifactList, DownloadedArtifact), no saved
+                                        details (the generic card shows the JSON),
+                                        PARALLEL, and run again after a lost server
+                                        (interrupted_result None). Errors
+                                        (_artifact_errors): a HarnessSandboxError's
+                                        message, "timed out" for a TimeoutError, else
+                                        a fixed "failed; try again"; details only in
+                                        the log. Scope: the user's own root chats
+                                        that are not deleted, this chat and
+                                        scheduled-task chats included
+                                        (db/chat.py:_listable_chat; never a public
+                                        chat of another user). artifacts_list reads
+                                        only the database (SandboxTurn.user_id, no
+                                        start_call): db/chat.py:get_user_published_files,
+                                        the newest available version of each artifact,
+                                        newest ChatArtifact.updated_at first (an upsert
+                                        never moves it back), by the index (user_id,
+                                        updated_at DESC) so a page stops at its limit;
+                                        a query (at most 200 characters) matches the
+                                        file name, the version's title or the chat's
+                                        title (icontains, autoescape); limit clamped
+                                        to 1-50 (default 25); each row comes with its
+                                        ArtifactCursor (updated_at, artifact ID), whose
+                                        base64url JSON is next_cursor. Entries give
+                                        published_display_path; names and paths are
+                                        cut, and a page drops its last entries to stay
+                                        within ARTIFACTS_LIST_MAX_CHARS, below the
+                                        spill limit of one result (the step's budget
+                                        can still spill it).
+                                        artifacts_download: get_user_published_file
+                                        (any version's file ID, a CHAT_ARTIFACT record
+                                        whose object is not missing) and the 100 MiB
+                                        cap come before start_call, so a refused ID
+                                        never wakes the VM, and every refusal has one
+                                        message. Then HarnessSandbox.session_files and
+                                        one listing of attachments/artifacts/ (a
+                                        missing directory lists empty): a regular file
+                                        of the record's size at
+                                        attachments/artifacts/<chat_file_name> is a
+                                        cache hit and writes nothing; else the file
+                                        store read and SessionFiles.write (atomic,
+                                        file_copies' COPY_BASE_SECONDS + size /
+                                        COPY_MIN_BYTES_PER_SECOND) run as one task in
+                                        the pod's FileCopyPool write slots (at most
+                                        VM_COPY_WRITES per VM, with the chat file
+                                        copies). The wait for the slot has no timeout
+                                        (a Stop ends it, and pod shutdown fails it);
+                                        from the slot, llm/cancellation.py:wait_for_future
+                                        (shared with the spill) waits twice the write
+                                        timeout: a Stop raises AgentCancelled and the
+                                        write lands on its own. The copy cleanup never deletes
+                                        these files, and session saves skip
+                                        attachments/
   Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose
                                         configured tools hold a SandboxTool. A result
                                         with ToolResult.full_value always spills: the tool
@@ -403,15 +469,28 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         agent's files in attachments/project/ and
                                         attachments/agent/. A name is the first 8 hex
                                         digits of the file store ID and the file's
-                                        name, so a path never holds another file;
+                                        name (harness_base.chat_file_name: control
+                                        and shell characters and `:` become `_`, as the
+                                        model uses the paths in commands; the name has
+                                        no trailing whitespace or dots and fits 200
+                                        characters and 255 bytes, so the Python tool
+                                        stages it unchanged), so a path never holds
+                                        another file;
                                         the file messages of the branch name their
                                         paths in "In the VM:" lines
                                         (chat_utils.convert_chat_history). Each
                                         copy lists the three directories, writes
                                         the files that are not there at their
                                         size, and deletes the project and agent
-                                        files that left; a per-chat generation
-                                        lets the newest turn win.
+                                        files that left, never anything in
+                                        attachments/search/ or
+                                        attachments/artifacts/ (the artifact
+                                        downloads). SandboxTurn takes the chat's
+                                        next copy generation when it is created,
+                                        for both roots, so a later turn always
+                                        supersedes an earlier turn's late copies
+                                        (a background subagent's search), never
+                                        the reverse.
                                         Agent-host turns copy too, so an agent
                                         resumed on a restored VM has its files; deep
                                         research has no sandbox. The module docstring
@@ -423,6 +502,46 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         agent-host turns too; edits to
                                         attachments/ get ATTACHMENTS_NOT_SAVED_NOTE
                                         (sandbox_tools.py), and session saves skip it
+  TurnSearchFiles (sandbox/file_copies) SandboxTurn.search_files: the turn's copies
+                                        of search result files into the chat's
+                                        attachments/search/, shared by the root and
+                                        its subagents. ChatAgent passes its offer
+                                        as ToolContext.sandbox_search_files, so
+                                        direct, program and subagent searches use
+                                        it. SearchTool._build_search_result offers
+                                        the shown results' connector files whose
+                                        object is not confirmed missing, at most
+                                        SEARCH_FILE_MAX_BYTES (after
+                                        check_cancelled, so a stopped search
+                                        offers nothing); the turn
+                                        budget (MAX_TURN_SEARCH_FILES,
+                                        MAX_TURN_SEARCH_BYTES) decides which get a
+                                        path, named in the result with
+                                        prompts/sandbox_tools.py:SEARCH_FILE_GUIDANCE.
+                                        The search thread only counts and queues.
+                                        In the pod's copy slots, the intake checks
+                                        access once (get_accessible_documents_by_ids:
+                                        a readable document must still have the
+                                        file), lists attachments/search/, counts a
+                                        regular file of the size, modified
+                                        SEARCH_COPY_CLOCK_SKEW or more after the
+                                        file record's updated_at, as a hit
+                                        (logged),
+                                        picks the writes that fit in
+                                        MAX_CHAT_SEARCH_BYTES next to this turn's
+                                        offers and running writes, deletes the
+                                        oldest other search files only to make
+                                        room for them (file_copies._evictions; a
+                                        failed delete stops the intake with no
+                                        write), and writes them with the chat file
+                                        copy's retries, busy mark and slots. A file
+                                        that is not written gives its budget back.
+                                        An offered file that is refused, over a
+                                        limit, dropped or failed keeps its path;
+                                        SEARCH_FILE_GUIDANCE tells the model to
+                                        search again in a later turn.
+                                        No [files] line names them; a chat purge
+                                        deletes them with the working directory
   Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research
@@ -452,13 +571,20 @@ PowerPoint) and code files by extension
 `OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`). Other project and agent files reach the model only as prompt
 text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
-(`chat/files.py:build_python_chat_files_from_search_docs`, connector-origin
-files only), only when the chat offers the Python tool. Files already in
+(`chat/files.py:build_python_chat_files_from_search_docs`), only when the chat
+offers the Python tool and has no sandbox
+(`ToolContext.python_stages_search_files`). The search tool maps each
+connector file to its name in `SearchDocsResponse.openable_file_names` (one
+file record query; the result's text uses the same names), so staging reads
+no file records and names no file itself; `PythonTool` applies the staging
+caps. A sandbox chat copies the files into the VM instead
+(`TurnSearchFiles`). Files already in
 `ChatAgent.chat_files` from an earlier step are not loaded again. Search documents
 and citations are retained without Python. `chat/agent.py:ChatAgent._update_tool_context` merges them into
 `chat_files` after the step and skips a filename already present, so the code in
 a later step can open a spreadsheet that search found. A code mode cell stages
-the files of its nested searches the same way
+the files of its nested searches the same way, when its context's
+`python_stages_search_files` is set
 (`tools/tool_implementations/code_mode/cells.py:CodeCell._run_call`), so a later
 `run_python` call in the same program can open them. Staging has caps on file
 count, total bytes and parallel uploads. When files are dropped, the model gets
@@ -623,17 +749,28 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     it (`Tool.code_mode_exposure`, abstract): `DIRECT` (its own tool),
     `IMMEDIATE` (a function whose stub the description lists: the built-in
     tools) or `DEFERRED` (a callable function that the description omits; the
-    model finds it with `tool_search(query)`: MCP and OpenAPI tools). A tool
+    model finds it with `tool_search(query)`: MCP and OpenAPI tools, and the
+    sandbox artifact tools in the group `artifacts`). A tool
     that waits for a child run (`Tool.result_from_children`) must be `DIRECT`.
     `tools/tool_implementations/code_mode/code_mode_tool.py:with_code_mode`
     raises otherwise. The code mode tools are `DIRECT` too. MCP functions are
     named from `mcp__<server id>__<server>__<tool>`
     (`MCPTool.code_mode_function_name`), converted to a Python identifier
-    that stays unique among the turn's functions; the description names the
-    namespaces of deferred functions (an MCP tool's is its server) as tool
-    groups in one fixed paragraph. Programs call
-    every function through the `tools` namespace, `await tools.f(...)`: a
-    module that every program imports
+    that stays unique among the turn's functions. The description lists each
+    namespace of deferred functions on one line with the first line of its
+    description (`CodeModeFunctionName.namespace_description`, set by the
+    group's owner: a fixed line for a built-in group such as `artifacts`, the
+    integration's description for an MCP server), cut to 250 characters.
+    Built-in namespaces come first, then those of integrations (tools with
+    `integration_action`), each sorted by name. The lines fit 4 KiB: names
+    take the budget first, then descriptions in that order, so an MCP
+    server's description is cut before a built-in one. When the names alone
+    do not fit, the list keeps the first ones and counts the rest in a last
+    line. Deferred functions without a namespace (OpenAPI actions) get one
+    closing line
+    (`tools/tool_implementations/code_mode/prompt.py:_deferred_note`).
+    Programs call every function through the `tools` namespace,
+    `await tools.f(...)`: a module that every program imports
     (`tools/tool_implementations/code_mode/sandbox.py:TOOLS_NAMESPACE`), which
     the program's stubs declare as `class tools`, so the type checker checks
     each call. Bare names stay free for the program's own functions, and a
@@ -989,7 +1126,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   dependency unit tests take the `code_mode` fixture
   (`backend/tests/external_dependency_unit/conftest.py`) to run in both modes. Web:
   the code mode cases in
-  `web/src/app/app/message/messageComponents/AgentMessage.test.tsx`,
+  `web/src/lib/timeline/chat/message/messageComponents/AgentMessage.test.tsx`,
   `web/src/lib/timeline/chat/transformers.test.ts`,
   `web/src/lib/timeline/chat/hooks/useTimelineHeader.test.tsx`
   and the code mode block of

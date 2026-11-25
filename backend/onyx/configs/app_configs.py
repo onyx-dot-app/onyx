@@ -227,6 +227,15 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
     "https://disposable.github.io/disposable-email-domains/domains.json",
 )
 
+# Free-mail domains (gmail, proton and the like) the playground refuses at
+# sign-up, on top of the curated list in onyx/auth/free_mail_email_validator.py.
+# Plain text, one domain per line. Set to empty string to use the curated list
+# alone. Only the playground downloads it.
+FREE_MAIL_DOMAINS_URL = os.environ.get(
+    "FREE_MAIL_DOMAINS_URL",
+    "https://f.hubspotusercontent40.net/hubfs/2832391/Marketing/Lead-Capture/free-domains-2.csv",
+)
+
 # Captcha cookie TTL — how long a verified captcha token remains valid in
 # the browser cookie before the user has to solve another challenge. Sized
 # to comfortably cover one Google OAuth round-trip (typically <10s) while
@@ -1431,6 +1440,21 @@ except ValueError:
         _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT,
     )
     GOOGLE_DRIVE_CONVERSION_WORKERS = _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT
+
+# Files and site pages the SharePoint connector converts at once in one
+# docconversion task. Each conversion makes one download, and with permission
+# sync one or more permission reads, so this sets the requests in flight. The
+# shared Graph limiter paces them when ENABLE_SOURCE_API_LIMITER is on. The
+# SharePoint download host caps the rate, not the threads: on a test tenant,
+# 4 threads converted as many documents per minute as 16, with a quarter of
+# the limiter waiters and less memory.
+SHAREPOINT_CONVERSION_WORKERS = max(
+    1, _int_env("SHAREPOINT_CONVERSION_WORKERS", 4) or 4
+)
+
+# Folders of one drive that the SharePoint connector lists at once on a full
+# pass. Each one is a children page in flight.
+SHAREPOINT_LISTING_WORKERS = max(1, _int_env("SHAREPOINT_LISTING_WORKERS", 8) or 8)
 
 # Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
 # fetch. Native Docs report no `size`, so the fetch can't be checked from

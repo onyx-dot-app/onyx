@@ -2,7 +2,7 @@ import datetime
 import hashlib
 import struct
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, TypedDict, Unpack
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
@@ -988,7 +988,7 @@ def finish_user_delete(cleanup: UserDeleteCleanup, db_session: Session) -> None:
     # onyx.skills.push imports this module.
     from onyx.skills.push import push_skills_and_commit
 
-    delete_files_best_effort(cleanup.file_ids, "personal marketplace cleanup")
+    delete_files_best_effort(cleanup.file_ids, "user delete cleanup")
     if cleanup.affected_user_ids:
         push_skills_and_commit(cleanup.affected_user_ids, db_session)
 
@@ -997,8 +997,9 @@ def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
 ) -> UserDeleteCleanup:
-    """Removes the user's personal marketplaces too. The caller runs
-    `finish_user_delete` after the commit."""
+    """Removes the user's personal marketplaces too, and queues their profile
+    photo for deletion. The caller runs `finish_user_delete` after the
+    commit."""
     # onyx.db.plugin imports this module through onyx.db.user_group.
     from onyx.db.marketplace import delete_github_marketplace__no_commit
     from onyx.db.plugin import private_plugins_blocking_user_delete
@@ -1020,8 +1021,10 @@ def delete_user_from_db__no_commit(
                 ],
             },
         )
-    # A personal marketplace holds only copies of its repository.
     cleanup = UserDeleteCleanup()
+    if user_to_delete.profile_image_file_id:
+        cleanup.file_ids.append(user_to_delete.profile_image_file_id)
+    # A personal marketplace holds only copies of its repository.
     for marketplace_id in db_session.scalars(
         select(Marketplace.id)
         .where(
@@ -1222,3 +1225,45 @@ def fetch_scim_synced_user_ids(db_session: Session, user_ids: list[UUID]) -> set
             select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
         ).all()
     )
+
+
+class UserProfileValues(TypedDict, total=False):
+    """Profile columns of `User` to save. A missing key keeps the saved value;
+    None clears it."""
+
+    personal_name: str | None
+    preferred_name: str | None
+    personal_role: str | None
+
+
+def update_user_profile__no_commit(
+    db_session: Session, user_id: UUID, **values: Unpack[UserProfileValues]
+) -> None:
+    if not values:
+        return
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(**values)
+    )
+
+
+def replace_user_profile_image_file_id(
+    user_id: UUID,
+    profile_image_file_id: str | None,
+    db_session: Session,
+) -> str | None:
+    """Set the user's profile photo and return the file id it replaced. The row
+    lock makes concurrent replacements each see the file that they replace."""
+    previous_file_id = db_session.scalar(
+        select(User.profile_image_file_id)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .with_for_update()
+    )
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(profile_image_file_id=profile_image_file_id)
+    )
+    db_session.commit()
+    return previous_file_id

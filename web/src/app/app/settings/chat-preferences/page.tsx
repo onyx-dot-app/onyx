@@ -1,1 +1,1 @@
-export { ChatPreferencesSettings as default } from "@/views/SettingsPage";
+export { default } from "@/views/settings/ChatPreferencesSettings";

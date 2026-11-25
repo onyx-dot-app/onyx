@@ -8,8 +8,8 @@ import {
   RenderType,
   RendererResult,
   RendererOutput,
-} from "@/app/app/message/messageComponents/types";
-import { findRenderer } from "@/app/app/message/messageComponents/renderMessageComponent";
+} from "@/lib/timeline/chat/message/messageComponents/types";
+import { findRenderer } from "@/lib/timeline/chat/message/messageComponents/renderMessageComponent";
 
 /** Extended result that includes collapse state */
 export interface TimelineRendererResult extends RendererResult {
@@ -23,7 +23,7 @@ export interface TimelineRendererResult extends RendererResult {
   isLastStep: boolean;
   /** Hover state from parent */
   isHover: boolean;
-  /** Whether parent should wrap with StepContainer or render raw content */
+  /** Whether parent should wrap with RunStep or render raw content */
   timelineLayout: "timeline" | "content";
 }
 

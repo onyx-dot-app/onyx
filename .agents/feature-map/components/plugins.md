@@ -54,8 +54,9 @@ Group or user restriction needs EE.
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
-  row menu (Turn on/off, Share). An admin's list leaves out the plugins that
-  are not `member_visible`. The plugin page
+  row menu (Turn on/off, Share). The list leaves out skill-kind entries (one
+  SKILL.md at the bundle root; they are on Skills), and an admin's list
+  leaves out the plugins that are not `member_visible`. The plugin page
   (`sections/plugins/MemberPluginDetailPage.tsx`) has Share, a "..." menu
   (Upload New Version through `sections/modals/plugins/UploadPluginFlow.tsx`,
   Delete Plugin) and the switch in its header. A needed integration that is
@@ -233,7 +234,7 @@ integration_id}`), because the server leaves out each integration that the
 list does not name.
 `sections/plugins/IntegrationConnectPrompt.tsx` is the chat connect prompt. It
 reads the integration statuses again when the user opens it. A tool sign-in
-card (`web/src/app/app/message/messageComponents/CustomToolAuthCard.tsx`) also reads them again; a turn does not.
+card (`web/src/lib/timeline/chat/message/messageComponents/CustomToolAuthCard.tsx`) also reads them again; a turn does not.
 
 When a signed-in user changes tools or filters in an existing chat, the store
 keeps the change as an unconfirmed edit, and the chat's save loop PATCHes

@@ -1,3 +1,4 @@
+import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { Permission } from "@/lib/types";
 import { Tier } from "@/lib/tiers/types";
 import { IconFunctionComponent } from "@opal/types";
@@ -95,12 +96,21 @@ export interface AdminRouteEntry {
   requiredTier: Tier | null;
   visibleWhen: ((flags: FeatureFlags) => boolean) | null;
   beta?: boolean;
+  /**
+   * The feature this page configures. Set today only on the pages the
+   * playground can restrict: when the server lists the key in
+   * `playground_restrictions`, the page renders read-only under the
+   * playground notice and the sidebar marks it (`PlaygroundRestrictedPage`).
+   * Give other pages a key when something needs it.
+   */
+  featureKey?: PlaygroundRestrictedFeature;
 }
 
 export const ADMIN_ROUTES = {
   // ── System Configuration (unlabeled section) ──────────────────────
   LLM_MODELS: {
     path: "/admin/language-models",
+    featureKey: PlaygroundRestrictedFeature.LLM_PROVIDERS,
     icon: SvgCpu,
     title: "Language Models",
     sidebarLabel: "Language Models",
@@ -132,6 +142,7 @@ export const ADMIN_ROUTES = {
   },
   IMAGE_GENERATION: {
     path: "/admin/image-generation",
+    featureKey: PlaygroundRestrictedFeature.LLM_PROVIDERS,
     icon: SvgImage,
     title: "Image Generation",
     sidebarLabel: "Image Generation",
@@ -172,6 +183,7 @@ export const ADMIN_ROUTES = {
   },
   LLM_GATEWAY: {
     path: "/admin/llm-gateway",
+    featureKey: PlaygroundRestrictedFeature.LLM_GATEWAY,
     icon: SvgGlobe,
     title: "LLM Gateway",
     sidebarLabel: "LLM Gateway",
@@ -213,6 +225,7 @@ export const ADMIN_ROUTES = {
   },
   CUSTOM_ANALYTICS: {
     path: "/admin/performance/custom-analytics",
+    featureKey: PlaygroundRestrictedFeature.WHITELABEL,
     icon: SvgBarChart,
     title: "Custom Analytics",
     sidebarLabel: "Custom Analytics",
@@ -298,6 +311,7 @@ export const ADMIN_ROUTES = {
   },
   INDEX_SETTINGS: {
     path: "/admin/index-settings",
+    featureKey: PlaygroundRestrictedFeature.EMBEDDING,
     icon: SvgSearchMenu,
     title: "Index Settings",
     sidebarLabel: "Index Settings",
@@ -371,6 +385,7 @@ export const ADMIN_ROUTES = {
   },
   SCIM: {
     path: "/admin/scim",
+    featureKey: PlaygroundRestrictedFeature.SCIM,
     icon: SvgUserSync,
     title: "SCIM",
     sidebarLabel: "SCIM",
@@ -381,6 +396,7 @@ export const ADMIN_ROUTES = {
   },
   API_KEYS: {
     path: "/admin/service-accounts",
+    featureKey: PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS,
     icon: SvgUserKey,
     title: "Service Accounts",
     sidebarLabel: "Service Accounts",
@@ -414,6 +430,7 @@ export const ADMIN_ROUTES = {
   },
   THEME: {
     path: "/admin/theme",
+    featureKey: PlaygroundRestrictedFeature.WHITELABEL,
     icon: SvgPaintBrush,
     title: "Appearance & Theming",
     sidebarLabel: "Appearance & Theming",
@@ -436,6 +453,7 @@ export const ADMIN_ROUTES = {
   // not reaching it.
   SSO_PROVIDERS: {
     path: "/admin/sso-providers",
+    featureKey: PlaygroundRestrictedFeature.SSO,
     icon: SvgUserKey,
     title: "SSO Providers",
     sidebarLabel: "SSO Providers",
@@ -447,6 +465,7 @@ export const ADMIN_ROUTES = {
 
   HOOKS: {
     path: "/admin/hooks",
+    featureKey: PlaygroundRestrictedFeature.HOOKS,
     icon: SvgShareWebhook,
     title: "Hook Extensions",
     sidebarLabel: "Hook Extensions",
@@ -511,6 +530,7 @@ export const ADMIN_ROUTES = {
   // Log export reads container-local files; not applicable on multi-tenant cloud.
   EXPORT_LOGS: {
     path: "/admin/export-logs",
+    featureKey: PlaygroundRestrictedFeature.LOG_EXPORT,
     icon: SvgDownload,
     title: "Export Logs",
     sidebarLabel: "Export Logs",
@@ -534,6 +554,7 @@ export const ADMIN_ROUTES = {
   // ── Other (admin-only) ────────────────────────────────────────────
   STANDARD_ANSWERS: {
     path: "/admin/standard-answer",
+    featureKey: PlaygroundRestrictedFeature.STANDARD_ANSWERS,
     icon: SvgClipboard,
     title: "Standard Answers",
     sidebarLabel: "",

@@ -3,24 +3,32 @@ import fnmatch
 import html
 import os
 import re
+import threading
+import zlib
 from collections import deque
 from collections.abc import Generator, Iterable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from functools import partial
 from typing import Any, cast
 from urllib.parse import SplitResult, quote, unquote, urlsplit
+from uuid import uuid4
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from typing_extensions import override
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
+    SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+    SHAREPOINT_CONVERSION_WORKERS,
     SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
+    SHAREPOINT_LISTING_WORKERS,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
+    CheckpointedSlimConnector,
     CheckpointOutput,
     CredentialsConnector,
     CredentialsProviderInterface,
@@ -28,16 +36,22 @@ from onyx.connectors.interfaces import (
     IndexingHeartbeatInterface,
     Resolver,
     SecondsSinceUnixEpoch,
+    SlimCheckpointOutput,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
     DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
 )
-from onyx.connectors.microsoft_utils.drive_delta import build_delta_start_url
+from onyx.connectors.microsoft_utils.drive_delta import (
+    DRIVE_DELTA_SELECT_FIELDS,
+    build_delta_start_url,
+)
 from onyx.connectors.microsoft_utils.drive_items import (
+    DRIVE_ITEM_SELECT_FIELDS,
     DriveFolderReference,
     DriveItemContentError,
     DriveItemData,
@@ -51,29 +65,50 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
+from onyx.connectors.microsoft_utils.models import (
+    LIBRARY_INHERITANCE_MAX_ITEMS,
+    SharepointSecurable,
+)
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.microsoft_utils.sharepoint_access import (
+    CONTAINER_ACCESS_TTL_SECONDS,
+    SharedSharepointPermissionCache,
     SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
+    get_sharepoint_securable_external_access,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
     ExternalAccess,
     HierarchyNode,
+    ResolveTarget,
     SlimDocument,
+    SlimDocumentStub,
     TextSection,
 )
 from onyx.connectors.sharepoint.connector_utils import (
     validate_content_types,
     validate_site_url,
 )
-from onyx.connectors.sharepoint.models import SharepointDrive
+from onyx.connectors.sharepoint.listing import (
+    LISTING_SELECT_FIELDS,
+    SharepointListedKind,
+    SharepointListingPayload,
+    drive_item_from_payload,
+    drive_item_stub,
+    is_listable_drive_item,
+    site_page_stub,
+)
+from onyx.connectors.sharepoint.models import DriveChildrenPage, SharepointDrive
+from onyx.connectors.sharepoint.permission_inheritance import inherited_access_sources
 from onyx.connectors.sharepoint.source_operations import (
     CONFIG_AUTHORITY_HOST,
     CONFIG_GRAPH_API_HOST,
@@ -85,7 +120,9 @@ from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_calls_in_parallel
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
@@ -107,6 +144,15 @@ PERSONAL_SITE_URL_MARKER = "/personal/"
 ONEDRIVE_HOST_MARKER = "-my.sharepoint"
 
 ASPX_EXTENSION = ".aspx"
+
+# Conversion reads the access of one folder, library or site at a time under
+# one of these locks, chosen by a hash of its key.
+_CONTAINER_LOCK_COUNT = 64
+# The self-check: about one in this many files that inherit, and the first
+# _SELF_CHECK_FIRST_FILES of each listing run in each process, also get a
+# permission read of their own, which is compared with the inherited access.
+_SELF_CHECK_ONE_IN = 100
+_SELF_CHECK_FIRST_FILES = 3
 
 
 def is_site_excluded(site_url: str, excluded_site_patterns: list[str]) -> bool:
@@ -209,6 +255,16 @@ def _drives_matching_url_name(
     ]
 
 
+class FolderCursor(BaseModel):
+    """One children page that a full pass of a drive must still read: the
+    first page of a folder (the drive root when ``folder_id`` is None), or
+    the page behind ``next_link``. A next page keeps the id of its folder,
+    so a 404 for a folder deleted during the walk is skipped on any page."""
+
+    folder_id: str | None = None
+    next_link: str | None = None
+
+
 class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     cached_site_descriptors: deque[SiteDescriptor] | None = None
     current_site_descriptor: SiteDescriptor | None = None
@@ -248,20 +304,61 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     current_drive_delta_next_link: str | None = None
     current_drive_delta_resync_attempted: bool = False
 
+    # The full pass of the current drive, on the stub listing. The walk reads
+    # the folders of the drive with `/children`, several at one time. None
+    # when the drive is read with delta only.
+    # The children pages still to read, as a stack, so that it stays small.
+    full_pass_folders: list[FolderCursor] | None = None
+    # The delta cursor of the drive from before the walk. The walk can miss
+    # an item that is written or moved while it runs, so the delta from this
+    # cursor runs after the walk.
+    full_pass_catch_up_link: str | None = None
+    # True while the delta from that cursor runs. Its items are all changes
+    # since the cursor, so the time window does not filter them.
+    full_pass_catching_up: bool = False
+
     process_site_pages: bool = False
 
-    # Track yielded hierarchy nodes by their raw_node_id (URLs) to avoid duplicates
+    # The raw ids (URLs) of the hierarchy nodes that the walk yielded for the
+    # current site and drive, so that it yields each node one time. The walk
+    # drops the folder ids when it leaves a drive, and every id above
+    # MAX_SEEN_HIERARCHY_NODE_IDS. A node that is yielded again is stored
+    # again with no harm.
     seen_hierarchy_node_raw_ids: set[str] = Field(default_factory=set)
 
-    # Track yielded document IDs to avoid processing the same document twice.
-    # The Microsoft Graph delta API can return the same item on multiple pages.
-    seen_document_ids: set[str] = Field(default_factory=set)
-    permission_cache: SharepointPermissionCache = Field(
-        default_factory=SharepointPermissionCache
+    # Checkpoints from before the stub listing kept every document id of the
+    # current drive here. It is read, so that such a checkpoint resumes, and
+    # not written.
+    legacy_seen_document_ids: set[str] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("legacy_seen_document_ids", "seen_document_ids"),
+        exclude=True,
+    )
+    # The id of this listing run, set by its first step. Each stub carries
+    # it, and conversion keys the Redis permission cache by it.
+    listing_run_id: str | None = None
+
+    # Checkpoints from before the conversion stage kept the group expansions
+    # here. Each run now reads them again; conversion shares them through
+    # Redis for one listing run. Read, so that such a checkpoint resumes, and
+    # not written.
+    legacy_permission_cache: dict[str, Any] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("legacy_permission_cache", "permission_cache"),
+        exclude=True,
     )
 
 
 GRAPH_INVALID_REQUEST_CODE = "invalidRequest"
+_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
+# The most hierarchy node ids that a checkpoint keeps. A drive with more
+# folders yields some folder nodes again.
+MAX_SEEN_HIERARCHY_NODE_IDS = 20_000
+
+# What one step of the walk yields: documents on the fetching path, stubs on
+# the listing path, and hierarchy nodes and failures on both.
+_WalkItem = Document | ConnectorFailure | HierarchyNode | SlimDocument
+_WalkOutput = Generator[_WalkItem, None, "SharepointConnectorCheckpoint"]
 
 
 def is_graph_invalid_request(error: MicrosoftGraphError) -> bool:
@@ -336,7 +433,10 @@ def _convert_driveitem_to_document_with_permissions(
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
     permission_cache: SharepointPermissionCache | None = None,
+    inherited_access: ExternalAccess | None = None,
 ) -> Document | ConnectorFailure | None:
+    """With ``inherited_access``, the document gets that access and the
+    file's permissions are not read."""
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
@@ -354,7 +454,9 @@ def _convert_driveitem_to_document_with_permissions(
     sections = content.sections
     staged_file_id = content.staged_file_id
 
-    if include_permissions:
+    if include_permissions and inherited_access is not None:
+        external_access = inherited_access
+    elif include_permissions:
         logger.info("Getting external access for %s", driveitem.name)
         external_access = get_sharepoint_external_access(
             reader=ops,
@@ -725,14 +827,30 @@ def site_drive_from_graph(drive: SharepointDrive) -> SiteDrive:
     )
 
 
+class _LibraryInheritanceRead(BaseModel):
+    """One read of which items of a library have role assignments of their
+    own, for one listing run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # (listing run id, site URL, list id)
+    key: tuple[str, str, str]
+    started_at: datetime
+    finished_at: datetime
+    # The securable of each file that inherits, by list item id.
+    sources: dict[int, SharepointSecurable]
+
+
 class SharepointConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
+    CheckpointedSlimConnector[SharepointConnectorCheckpoint],
     CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
     CredentialsConnector,
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
+    listing_payload_type = SharepointListingPayload
 
     def __init__(
         self,
@@ -747,6 +865,8 @@ class SharepointConnector(
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         sharepoint_domain_suffix: str = DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
         exhaustive_ad_enumeration: bool = SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         if excluded_paths is None:
             excluded_paths = []
@@ -765,6 +885,19 @@ class SharepointConnector(
         self._ops: SharepointSourceOperations | None = None
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
+        # The group expansions of the permission reads of this connector
+        # object. Conversion uses one cache for each listing run instead
+        # (_run_permission_cache).
+        self._permission_cache = SharepointPermissionCache()
+        self._run_permission_caches: dict[str, SharedSharepointPermissionCache] = {}
+        self._run_permission_caches_lock = threading.Lock()
+        self._container_locks = [threading.Lock() for _ in range(_CONTAINER_LOCK_COUNT)]
+        # The inheritance of the library that the stub listing lists now.
+        # One library at a time.
+        self._library_inheritance: _LibraryInheritanceRead | None = None
+        # The self-checks that this object started, by listing run.
+        self._self_checks_started: dict[str, int] = {}
+        self._self_checks_lock = threading.Lock()
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self.authority_host = resolved_env.authority_host
@@ -1059,7 +1192,18 @@ class SharepointConnector(
         checkpoint.current_folder = None
         checkpoint.current_drive_delta_next_link = None
         checkpoint.current_drive_delta_resync_attempted = False
-        checkpoint.seen_document_ids.clear()
+        checkpoint.full_pass_folders = None
+        checkpoint.full_pass_catch_up_link = None
+        checkpoint.full_pass_catching_up = False
+        checkpoint.legacy_seen_document_ids = None
+        # The folder nodes of the drive are not needed after it. The site
+        # node stays, so that the next drive does not yield it again.
+        site = checkpoint.current_site_descriptor
+        checkpoint.seen_hierarchy_node_raw_ids = (
+            {site.url}
+            if site and site.url in checkpoint.seen_hierarchy_node_raw_ids
+            else set()
+        )
 
     @staticmethod
     def _match_legacy_drive(
@@ -1239,7 +1383,7 @@ class SharepointConnector(
                                     drive,
                                     self.ops,
                                     site_descriptor.url,
-                                    temp_checkpoint.permission_cache,
+                                    self._permission_cache,
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
                                     treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                                 )
@@ -1255,6 +1399,8 @@ class SharepointConnector(
                                     doc_created_at=driveitem.created_datetime,
                                 )
                             )
+                    except ConnectorStopSignal:
+                        raise
                     except Exception as e:
                         logger.warning("Failed to process driveitem: %s", str(e))
 
@@ -1280,7 +1426,7 @@ class SharepointConnector(
                                         site_page,
                                         self.ops,
                                         site_descriptor.url,
-                                        temp_checkpoint.permission_cache,
+                                        self._permission_cache,
                                         parent_hierarchy_raw_node_id=site_descriptor.url,
                                         treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                                     )
@@ -1299,6 +1445,8 @@ class SharepointConnector(
                                         ),
                                     )
                                 )
+                        except ConnectorStopSignal:
+                            raise
                         except Exception as e:
                             logger.warning(
                                 "Failed to process site page %s: %s",
@@ -1310,6 +1458,8 @@ class SharepointConnector(
                         if len(doc_batch) >= SLIM_BATCH_SIZE:
                             yield doc_batch
                             doc_batch = []
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     # Broadened from per-site Graph 4xx to any Exception.
                     # Slim retrieval can't yield ConnectorFailure, so
@@ -1354,6 +1504,17 @@ class SharepointConnector(
                 CONFIG_SITES: self.sites,
             },
         )
+        self._ops.request_pacer = self._request_pacer()
+
+    def _request_pacer(self) -> MicrosoftRequestPacer | None:
+        limiter = self.source_api_limiter
+        return MicrosoftRequestPacer(limiter) if limiter is not None else None
+
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        super().set_source_api_limiter(limiter)
+        if self._ops is not None:
+            self._ops.request_pacer = self._request_pacer()
 
     def _get_drives_for_site(
         self,
@@ -1413,7 +1574,7 @@ class SharepointConnector(
             external_access = get_sharepoint_hierarchy_node_external_access(
                 self.ops,
                 site_url,
-                checkpoint.permission_cache,
+                self._permission_cache,
                 HierarchyNodeType.SITE,
             )
 
@@ -1446,7 +1607,7 @@ class SharepointConnector(
             external_access = get_sharepoint_hierarchy_node_external_access(
                 self.ops,
                 site_url,
-                checkpoint.permission_cache,
+                self._permission_cache,
                 HierarchyNodeType.DRIVE,
                 list_id=drive.list_id,
             )
@@ -1479,6 +1640,11 @@ class SharepointConnector(
             if folder_url in checkpoint.seen_hierarchy_node_raw_ids:
                 continue
 
+            if (
+                len(checkpoint.seen_hierarchy_node_raw_ids)
+                >= MAX_SEEN_HIERARCHY_NODE_IDS
+            ):
+                checkpoint.seen_hierarchy_node_raw_ids.clear()
             checkpoint.seen_hierarchy_node_raw_ids.add(folder_url)
             external_access = None
             if include_permissions:
@@ -1491,10 +1657,12 @@ class SharepointConnector(
                     external_access = get_sharepoint_hierarchy_node_external_access(
                         self.ops,
                         site_url,
-                        checkpoint.permission_cache,
+                        self._permission_cache,
                         HierarchyNodeType.FOLDER,
                         folder_server_relative_path=folder_server_relative_path,
                     )
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     logger.warning(
                         "Failed to get permissions for folder %s, skipping: %s",
@@ -1525,14 +1693,18 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool,
         is_targeted_reindex: bool = False,
+        seen_document_ids: set[str] | None = None,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         """Process a single drive item into a Document (plus ancestor folder
         nodes), or a ConnectorFailure on error.
 
         Shared by the normal crawl (Phase 3b) and the targeted-reindex
-        ``reindex`` path. ``checkpoint`` is used purely as a dedup container
-        (``seen_document_ids`` / ``seen_hierarchy_node_raw_ids``); reindex passes
-        a throwaway checkpoint.
+        ``reindex`` path. ``checkpoint`` holds the hierarchy nodes already
+        yielded; reindex passes a throwaway checkpoint. ``seen_document_ids``
+        holds the documents that this call already yielded. It lives for one
+        call and not in the checkpoint, so a checkpoint does not grow with
+        the drive. Graph can return one item on two delta pages: the item is
+        then converted two times, and the later one is stored.
 
         When ``is_targeted_reindex`` is True, the branches that the crawl skips
         silently (denylist, unsupported type, empty non-PDF/image, non-indexable
@@ -1549,7 +1721,12 @@ class SharepointConnector(
                 yield _create_document_failure(driveitem, "excluded by path denylist")
             return
 
-        if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
+        if seen_document_ids is None:
+            seen_document_ids = set()
+        if driveitem.id and (
+            driveitem.id in seen_document_ids
+            or driveitem.id in (checkpoint.legacy_seen_document_ids or ())
+        ):
             logger.debug(
                 "Skipping duplicate document %s (%s)",
                 driveitem.id,
@@ -1570,11 +1747,6 @@ class SharepointConnector(
                 )
             return
 
-        should_yield_if_empty = (
-            driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
-            or driveitem_extension == ".pdf"
-        )
-
         folder_path = extract_folder_path_from_parent_reference(
             driveitem.parent_reference_path
         )
@@ -1593,28 +1765,61 @@ class SharepointConnector(
             else drive.web_url
         )
 
+        yield from self._convert_drive_item(
+            driveitem,
+            drive,
+            site_url,
+            include_permissions,
+            parent_hierarchy_url,
+            is_targeted_reindex,
+            self._permission_cache,
+            seen_document_ids,
+        )
+
+    def _convert_drive_item(
+        self,
+        driveitem: DriveItemData,
+        drive: SiteDrive,
+        site_url: str,
+        include_permissions: bool,
+        parent_hierarchy_url: str | None,
+        is_targeted_reindex: bool,
+        permission_cache: SharepointPermissionCache,
+        seen_document_ids: set[str] | None = None,
+        inherited_access: ExternalAccess | None = None,
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Downloads one file and yields its document, or a failure. With
+        ``inherited_access``, the document gets that access and the file's
+        permissions are not read. A file
+        with no content yields nothing, but for a PDF or an image, and for a
+        targeted reindex, which gets a failure. Safe to call from many
+        threads at one time."""
+        should_yield_if_empty = (
+            get_file_ext(driveitem.name) in OnyxFileExtensions.IMAGE_EXTENSIONS
+            or get_file_ext(driveitem.name) == ".pdf"
+        )
         try:
             doc_or_failure = _convert_driveitem_to_document_with_permissions(
                 driveitem,
                 drive,
                 self.ops,
                 site_url,
-                permission_cache=checkpoint.permission_cache,
+                permission_cache=permission_cache,
                 include_permissions=include_permissions,
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                 raw_file_callback=self.raw_file_callback,
+                inherited_access=inherited_access,
             )
 
             if isinstance(doc_or_failure, Document):
-                if doc_or_failure.sections:
-                    checkpoint.seen_document_ids.add(doc_or_failure.id)
-                    yield doc_or_failure
-                elif should_yield_if_empty:
+                if not doc_or_failure.sections and should_yield_if_empty:
                     doc_or_failure.sections = [
                         TextSection(link=driveitem.web_url, text="")
                     ]
-                    checkpoint.seen_document_ids.add(doc_or_failure.id)
+                if doc_or_failure.sections:
+                    if seen_document_ids is not None:
+                        seen_document_ids.add(doc_or_failure.id)
                     yield doc_or_failure
                 else:
                     logger.warning(
@@ -1634,6 +1839,8 @@ class SharepointConnector(
                     driveitem,
                     "not indexable (excluded content type or over size limit)",
                 )
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             logger.warning(
                 "Failed to process driveitem %s: %s",
@@ -1649,11 +1856,302 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
+        """One step of the fetching path: it downloads and converts each file."""
+        walk = self._walk_from_checkpoint(
+            start, end, checkpoint, include_permissions, stub_listing=False
+        )
+        while True:
+            try:
+                item = next(walk)
+            except StopIteration as stop:
+                return stop.value
+            if isinstance(item, SlimDocument):
+                raise RuntimeError("Bug: the fetching path yielded a slim document")
+            yield item
+
+    def _stub_drive_item(
+        self,
+        driveitem: DriveItemData,
+        drive: SiteDrive,
+        site_url: str,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+        seen_document_ids: set[str],
+    ) -> Generator[SlimDocumentStub | HierarchyNode, None, None]:
+        """The stub of one listed file, after its folder nodes. A file that
+        the fetching path drops before or after its download has no stub."""
+        if self._is_driveitem_excluded(driveitem):
+            logger.debug("Excluding by path denylist: %s", driveitem.web_url)
+            return
+        if driveitem.id in seen_document_ids:
+            return
+        if not is_listable_drive_item(driveitem, SHAREPOINT_CONNECTOR_SIZE_THRESHOLD):
+            logger.debug("Not listing %s: not a file to index", driveitem.web_url)
+            return
+
+        folder_path = extract_folder_path_from_parent_reference(
+            driveitem.parent_reference_path
+        )
+        if folder_path:
+            yield from self._yield_folder_hierarchy_nodes(
+                site_url,
+                drive,
+                folder_path,
+                checkpoint,
+                include_permissions=include_permissions,
+            )
+        seen_document_ids.add(driveitem.id)
+        inheritance = (
+            self._inherited_access_source(
+                checkpoint.listing_run_id, site_url, drive, driveitem
+            )
+            if self._lists_inheritance(include_permissions)
+            else None
+        )
+        yield drive_item_stub(
+            driveitem,
+            site_url=site_url,
+            drive_id=drive.drive_id,
+            drive_name=drive.display_name,
+            list_id=drive.list_id,
+            parent_hierarchy_raw_node_id=(
+                self._folder_url(drive, folder_path, checkpoint)
+                if folder_path
+                else drive.web_url
+            ),
+            listing_run_id=checkpoint.listing_run_id,
+            inherited_access_from=inheritance[0] if inheritance else None,
+            inheritance_read_at=inheritance[1] if inheritance else None,
+        )
+
+    def _lists_inheritance(self, include_permissions: bool) -> bool:
+        """True when the stub listing reads which files have role
+        assignments of their own, so that conversion reads permissions only
+        for those. It needs SharePoint REST, so a certificate credential.
+        Not with ``treat_sharing_link_as_public``: the sharing links of a
+        file are then read for each file."""
+        return (
+            include_permissions
+            and not self.treat_sharing_link_as_public
+            and self.ops.get_auth_method().supports_sharepoint_rest
+        )
+
+    def _inherited_access_source(
+        self,
+        listing_run_id: str | None,
+        site_url: str,
+        drive: SiteDrive,
+        driveitem: DriveItemData,
+    ) -> tuple[SharepointSecurable, datetime] | None:
+        """The securable whose role assignments the listed file has, when
+        the read of its library says that it has none of its own, and when
+        that read started: an item on any page of the read was seen after
+        that time, so its age is never too young. None for a
+        read of its own: the file has its own, it is not in the read (it is
+        newer than the read), or the read failed. A new listing run reads the
+        library again, and so does a run CONTAINER_ACCESS_TTL_SECONDS after
+        the read ended, so a read longer than that is not repeated for each
+        file. Its files then read their own in conversion."""
+        if not drive.list_id or not driveitem.list_item_id:
+            return None
+        try:
+            list_item_id = int(driveitem.list_item_id)
+        except ValueError:
+            return None
+        key = (listing_run_id or "", site_url, drive.list_id)
+        cached = self._library_inheritance
+        if (
+            cached is None
+            or cached.key != key
+            or datetime.now(timezone.utc) - cached.finished_at
+            > timedelta(seconds=CONTAINER_ACCESS_TTL_SECONDS)
+        ):
+            started_at = datetime.now(timezone.utc)
+            sources: dict[int, SharepointSecurable] = {}
+            try:
+                library = self.ops.get_library_inheritance(
+                    site_url=site_url, list_id=drive.list_id
+                )
+                if library is None:
+                    logger.info(
+                        "Drive '%s' has more than %d items; each of its files "
+                        "reads its own permissions.",
+                        drive.display_name,
+                        LIBRARY_INHERITANCE_MAX_ITEMS,
+                    )
+                else:
+                    sources = inherited_access_sources(library, drive.list_id)
+            except ConnectorStopSignal:
+                raise
+            except Exception as e:
+                _raise_if_throttled(e)
+                logger.warning(
+                    "Could not read which files of drive '%s' inherit their "
+                    "permissions (%s); each of its files reads its own.",
+                    drive.display_name,
+                    e,
+                )
+            cached = _LibraryInheritanceRead(
+                key=key,
+                started_at=started_at,
+                finished_at=datetime.now(timezone.utc),
+                sources=sources,
+            )
+            self._library_inheritance = cached
+        source = cached.sources.get(list_item_id)
+        return (source, cached.started_at) if source is not None else None
+
+    def _list_site_page_stubs(
+        self,
+        site_descriptor: SiteDescriptor,
+        start: datetime | None,
+        end: datetime | None,
+        listing_run_id: str | None,
+    ) -> Generator[SlimDocumentStub, None, None]:
+        """One stub for each site page in the time window, from the pages
+        listing with no canvas. The Pages API has no time filter, so every
+        run lists every page. Conversion reads the canvas of the pages that
+        changed."""
+        site_id = self.ops.get_site_id(site_url=site_descriptor.url)
+        next_link: str | None = None
+        while True:
+            try:
+                listing = self.ops.list_site_pages(
+                    site_id=site_id, next_link=next_link, expand_canvas=False
+                )
+            except MicrosoftGraphError as e:
+                if e.status == 404:
+                    logger.warning("Site page not found: %s", next_link or site_id)
+                    return
+                raise
+            for page in listing.pages:
+                if not _site_page_in_time_window(page, start, end):
+                    continue
+                stub = site_page_stub(
+                    page,
+                    site_id=site_id,
+                    site_url=site_descriptor.url,
+                    site_name=site_descriptor.drive_name,
+                    listing_run_id=listing_run_id,
+                )
+                if stub is not None:
+                    yield stub
+            next_link = listing.next_link
+            if next_link is None:
+                return
+
+    def _start_full_pass(
+        self, checkpoint: SharepointConnectorCheckpoint, drive: SiteDrive
+    ) -> None:
+        """Sets up the full pass of a drive: the delta cursor of the drive's
+        state now, then the walk from the drive root. When Graph gives no
+        cursor, the drive is read with delta only, as before."""
+        try:
+            catch_up_link = self.ops.get_latest_delta_link(drive_id=drive.drive_id)
+        except MicrosoftGraphError as e:
+            if e.is_throttled:
+                raise
+            logger.warning(
+                "No delta cursor for drive '%s' (%s); reading it with delta only.",
+                drive.display_name,
+                e,
+            )
+            return
+        if catch_up_link is None:
+            return
+        checkpoint.full_pass_catch_up_link = catch_up_link
+        checkpoint.full_pass_folders = [FolderCursor()]
+        checkpoint.full_pass_catching_up = False
+        checkpoint.current_drive_delta_next_link = None
+
+    def _read_full_pass_folders(
+        self,
+        checkpoint: SharepointConnectorCheckpoint,
+        drive: SiteDrive,
+        start: datetime,
+        end: datetime,
+    ) -> list[DriveItemData]:
+        """Reads one children page of up to SHAREPOINT_LISTING_WORKERS folders
+        at one time, and returns their files. The subfolders and the next
+        pages go on the stack. When the stack is empty, the checkpoint
+        continues with the delta from the cursor that was taken before the
+        walk."""
+        folders = checkpoint.full_pass_folders or []
+        batch = folders[-SHAREPOINT_LISTING_WORKERS:]
+        pages = run_calls_in_parallel(
+            [
+                partial(self._read_children_page, drive.drive_id, cursor, start, end)
+                for cursor in batch
+            ],
+            max_workers=SHAREPOINT_LISTING_WORKERS,
+        )
+        remaining = folders[: len(folders) - len(batch)]
+        files: list[DriveItemData] = []
+        for cursor, page in zip(batch, pages, strict=True):
+            files.extend(page.files)
+            if page.next_link:
+                remaining.append(
+                    FolderCursor(folder_id=cursor.folder_id, next_link=page.next_link)
+                )
+            remaining.extend(
+                FolderCursor(folder_id=folder_id) for folder_id in page.folder_ids
+            )
+        if remaining:
+            checkpoint.full_pass_folders = remaining
+        else:
+            checkpoint.full_pass_folders = None
+            checkpoint.full_pass_catching_up = True
+            checkpoint.current_drive_delta_next_link = (
+                checkpoint.full_pass_catch_up_link
+            )
+        return files
+
+    def _read_children_page(
+        self,
+        drive_id: str,
+        cursor: FolderCursor,
+        start: datetime,
+        end: datetime,
+    ) -> DriveChildrenPage:
+        try:
+            return self.ops.get_children_page(
+                drive_id=drive_id,
+                folder_id=cursor.folder_id,
+                next_link=cursor.next_link,
+                start=start,
+                end=end,
+            )
+        except MicrosoftGraphError as e:
+            # A folder deleted after its parent was read. The catch-up delta
+            # lists its deletion, and the walk goes on with the other folders.
+            if e.status_code != 404 or cursor.folder_id is None:
+                raise
+            logger.info(
+                "Skipping folder %s of drive %s: it no longer exists",
+                cursor.folder_id,
+                drive_id,
+            )
+            return DriveChildrenPage(files=[], folder_ids=[])
+
+    def _walk_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+        stub_listing: bool,
+    ) -> _WalkOutput:
+        """One step of the walk over sites, drives, delta pages and site
+        pages. With ``stub_listing``, the step yields a stub for each file
+        and page and downloads nothing. Without it, the step yields the
+        documents."""
         if self._ops is None:
             raise ConnectorMissingCredentialError("Sharepoint")
 
         checkpoint = copy.deepcopy(checkpoint)
         self._migrate_legacy_drive_checkpoint(checkpoint)
+        if stub_listing and checkpoint.listing_run_id is None:
+            checkpoint.listing_run_id = uuid4().hex
 
         if (
             checkpoint.has_more
@@ -1730,6 +2228,8 @@ class SharepointConnector(
                         [drive.display_name for drive in checkpoint.cached_drives],
                     )
 
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.error(
@@ -1796,6 +2296,8 @@ class SharepointConnector(
                     checkpoint,
                     include_permissions=include_permissions,
                 )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.error(
@@ -1819,7 +2321,14 @@ class SharepointConnector(
                     self.graph_api_base,
                     checkpoint.current_drive.drive_id,
                     start_dt,
+                    select_fields=(
+                        LISTING_SELECT_FIELDS
+                        if stub_listing
+                        else DRIVE_DELTA_SELECT_FIELDS
+                    ),
                 )
+                if stub_listing and start_dt <= _EPOCH:
+                    self._start_full_pass(checkpoint, checkpoint.current_drive)
         if checkpoint.current_site_descriptor and checkpoint.current_drive is not None:
             site_descriptor = checkpoint.current_site_descriptor
             start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
@@ -1830,7 +2339,32 @@ class SharepointConnector(
             driveitems: Iterable[DriveItemData]
             has_more_delta_pages = False
 
-            if checkpoint.current_drive_delta_next_link:
+            if checkpoint.full_pass_folders is not None:
+                try:
+                    driveitems = self._read_full_pass_folders(
+                        checkpoint, current_drive, start_dt, end_dt
+                    )
+                except ConnectorStopSignal:
+                    raise
+                except Exception as e:
+                    _raise_if_throttled(e)
+                    logger.error(
+                        "Failed to list the folders of drive '%s': %s",
+                        current_drive.display_name,
+                        e,
+                    )
+                    yield _create_entity_failure(
+                        current_drive.drive_id,
+                        f"Failed to list the folders of drive "
+                        f"'{current_drive.display_name}': {str(e)}",
+                        (start_dt, end_dt),
+                        e,
+                    )
+                    self._clear_drive_checkpoint_state(checkpoint)
+                    return checkpoint
+                # The catch-up delta follows the walk.
+                has_more_delta_pages = True
+            elif checkpoint.current_drive_delta_next_link:
                 try:
                     result = self.ops.get_delta_page(
                         drive_id=current_drive.drive_id,
@@ -1838,7 +2372,14 @@ class SharepointConnector(
                         allow_full_resync=not (
                             checkpoint.current_drive_delta_resync_attempted
                         ),
+                        select_fields=(
+                            LISTING_SELECT_FIELDS
+                            if stub_listing
+                            else DRIVE_ITEM_SELECT_FIELDS
+                        ),
                     )
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     _raise_if_throttled(e)
                     logger.error(
@@ -1858,7 +2399,11 @@ class SharepointConnector(
 
                 if result.resync_after_410:
                     checkpoint.current_drive_delta_resync_attempted = True
-                driveitems = iter_delta_page_files(result.page, start_dt, end_dt)
+                driveitems = (
+                    iter_delta_page_files(result.page, None, None)
+                    if checkpoint.full_pass_catching_up
+                    else iter_delta_page_files(result.page, start_dt, end_dt)
+                )
                 has_more_delta_pages = result.next_checkpoint_url is not None
                 checkpoint.current_drive_delta_next_link = result.next_checkpoint_url
             else:
@@ -1874,18 +2419,34 @@ class SharepointConnector(
                 )
 
             item_count = 0
+            # The documents of this call. Not in the checkpoint: see
+            # _process_drive_item.
+            seen_document_ids: set[str] = set()
             # Outer try catches BFS-generator failures mid-iteration;
             # per-item errors are still caught by the inner try below.
             try:
                 for driveitem in driveitems:
                     item_count += 1
+                    if stub_listing:
+                        yield from self._stub_drive_item(
+                            driveitem,
+                            current_drive,
+                            site_descriptor.url,
+                            checkpoint,
+                            include_permissions,
+                            seen_document_ids,
+                        )
+                        continue
                     yield from self._process_drive_item(
                         driveitem,
                         current_drive,
                         site_descriptor.url,
                         checkpoint,
                         include_permissions,
+                        seen_document_ids=seen_document_ids,
                     )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.exception(
@@ -1945,8 +2506,19 @@ class SharepointConnector(
             start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
             end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
             try:
-                site_pages = self._fetch_site_pages(
-                    site_descriptor, start=start_dt, end=end_dt
+                if stub_listing:
+                    yield from self._list_site_page_stubs(
+                        site_descriptor,
+                        start=start_dt,
+                        end=end_dt,
+                        listing_run_id=checkpoint.listing_run_id,
+                    )
+                site_pages = (
+                    iter(())
+                    if stub_listing
+                    else self._fetch_site_pages(
+                        site_descriptor, start=start_dt, end=end_dt
+                    )
                 )
                 for site_page in site_pages:
                     page_id = site_page.get("id")
@@ -1964,13 +2536,15 @@ class SharepointConnector(
                                 site_descriptor.drive_name,
                                 self.ops,
                                 site_descriptor.url,
-                                permission_cache=checkpoint.permission_cache,
+                                permission_cache=self._permission_cache,
                                 include_permissions=include_permissions,
                                 # Site pages have the site as their parent
                                 parent_hierarchy_raw_node_id=site_descriptor.url,
                                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                             )
                         )
+                    except ConnectorStopSignal:
+                        raise
                     except Exception as e:
                         logger.warning(
                             "Failed to process site page '%s' in site %s: %s",
@@ -2004,6 +2578,8 @@ class SharepointConnector(
                     "Finished processing site pages for site: %s",
                     site_descriptor.url,
                 )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 # Broadened from per-site Graph 4xx to any Exception:
@@ -2138,6 +2714,7 @@ class SharepointConnector(
         dedup: SharepointConnectorCheckpoint,
         site_drives_cache: dict[str, list[SiteDrive]],
         include_permissions: bool,
+        seen_document_ids: set[str],
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         resolved = self._resolve_driveitem_by_link(
             document_id, document_link, site_drives_cache
@@ -2162,6 +2739,7 @@ class SharepointConnector(
             dedup,
             include_permissions,
             is_targeted_reindex=True,
+            seen_document_ids=seen_document_ids,
         )
 
     def _reindex_site_page(
@@ -2194,7 +2772,7 @@ class SharepointConnector(
             site_descriptor.drive_name,
             self.ops,
             site_descriptor.url,
-            permission_cache=dedup.permission_cache,
+            permission_cache=self._permission_cache,
             include_permissions=include_permissions,
             parent_hierarchy_raw_node_id=site_descriptor.url,
             treat_sharing_link_as_public=self.treat_sharing_link_as_public,
@@ -2217,8 +2795,9 @@ class SharepointConnector(
             raise ConnectorMissingCredentialError("Sharepoint")
 
         # Throwaway checkpoint used purely as a dedup container for the shared
-        # helpers (seen_document_ids / seen_hierarchy_node_raw_ids).
+        # helpers (seen_hierarchy_node_raw_ids).
         dedup = self.build_dummy_checkpoint()
+        seen_document_ids: set[str] = set()
         site_drives_cache: dict[str, list[SiteDrive]] = {}
         # TODO(evan): Resolver.reindex is one-call-per-job and resolves targets
         # sequentially. If the interface grows batch semantics, Graph $batch
@@ -2255,7 +2834,10 @@ class SharepointConnector(
                         dedup,
                         site_drives_cache,
                         include_permissions,
+                        seen_document_ids,
                     )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 logger.warning(
                     "Failed to resolve SharePoint target %s (%s): %s",
@@ -2271,6 +2853,274 @@ class SharepointConnector(
                     failure_message=f"Failed to resolve during targeted reindex: {e}",
                     exception=e,
                 )
+
+    @override
+    def retrieve_slim_docs_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool = False,
+    ) -> SlimCheckpointOutput[SharepointConnectorCheckpoint]:
+        """One step of the stub listing, for the conversion stage. It walks
+        the same sites, drives and delta pages as ``load_from_checkpoint``,
+        and yields a stub for each file and site page that indexing keeps.
+        It downloads nothing. The returned checkpoint covers exactly what the
+        step yielded. With ``include_permissions``, the hierarchy nodes carry
+        their access, as on the fetching path. Conversion reads the access of
+        the documents."""
+        walk = self._walk_from_checkpoint(
+            start, end, checkpoint, include_permissions, stub_listing=True
+        )
+        while True:
+            try:
+                item = next(walk)
+            except StopIteration as stop:
+                return stop.value
+            if isinstance(item, Document):
+                raise RuntimeError("Bug: the stub listing yielded a document")
+            yield item
+
+    def _run_permission_cache(
+        self, payload: SharepointListingPayload
+    ) -> SharepointPermissionCache:
+        """The permission cache of the listing run of ``payload``, which the
+        conversion threads of every worker share through the run cache for
+        that run only. A payload with no run id, or a connector with no run
+        cache, uses the cache of this object."""
+        run_id = payload.listing_run_id
+        factory = self.run_scoped_cache_factory
+        if run_id is None or factory is None:
+            return self._permission_cache
+        with self._run_permission_caches_lock:
+            cache = self._run_permission_caches.get(run_id)
+            if cache is None:
+                cache = SharedSharepointPermissionCache(shared=factory(run_id))
+                self._run_permission_caches[run_id] = cache
+            return cache
+
+    def _convert_listed_drive_item(
+        self, payload: SharepointListingPayload, include_permissions: bool
+    ) -> Document | ConnectorFailure | None:
+        """The document of one listed file: one download by drive id and item
+        id, and with ``include_permissions`` the permission reads, addressed
+        by the list ids of the payload. No metadata call."""
+        driveitem = drive_item_from_payload(payload)
+        drive = SiteDrive(
+            drive_id=driveitem.drive_id or "",
+            display_name=payload.drive_name or "",
+            web_url="",
+            list_id=payload.list_id,
+        )
+        permission_cache = self._run_permission_cache(payload)
+        return next(
+            self._convert_drive_item(
+                driveitem,
+                drive,
+                payload.site_url,
+                include_permissions,
+                payload.parent_hierarchy_raw_node_id,
+                is_targeted_reindex=False,
+                permission_cache=permission_cache,
+                inherited_access=(
+                    self._listed_file_access(payload, driveitem, permission_cache)
+                    if include_permissions
+                    else None
+                ),
+            ),
+            None,
+        )
+
+    def _container_access(
+        self,
+        site_url: str,
+        securable: SharepointSecurable,
+        permission_cache: SharedSharepointPermissionCache,
+    ) -> ExternalAccess | None:
+        """The access of a folder, library or site that files inherit
+        from, read one time for each CONTAINER_ACCESS_TTL_SECONDS of a run.
+        None when it cannot be read."""
+        key = (
+            f"{site_url}|{securable.kind.value}|{securable.list_id or ''}"
+            f"|{securable.item_id if securable.item_id is not None else ''}"
+        )
+        lock = self._container_locks[zlib.crc32(key.encode()) % _CONTAINER_LOCK_COUNT]
+        with lock:
+            cached = permission_cache.get_container_access(key)
+            if cached is not None:
+                return cached
+            try:
+                access = get_sharepoint_securable_external_access(
+                    self.ops, site_url, permission_cache, securable
+                )
+            except ConnectorStopSignal:
+                raise
+            except Exception as e:
+                _raise_if_throttled(e)
+                logger.warning(
+                    "Could not read the access of the %s that files inherit "
+                    "from (%s); they read their own.",
+                    securable.kind.value,
+                    e,
+                )
+                return None
+            permission_cache.set_container_access(key, access)
+            return access
+
+    def _self_check_due(self, payload: SharepointListingPayload, doc_id: str) -> bool:
+        if zlib.crc32(doc_id.encode()) % _SELF_CHECK_ONE_IN == 0:
+            return True
+        run_id = payload.listing_run_id or ""
+        with self._self_checks_lock:
+            started = self._self_checks_started.get(run_id, 0)
+            if started >= _SELF_CHECK_FIRST_FILES:
+                return False
+            self._self_checks_started[run_id] = started + 1
+            return True
+
+    def _listed_file_access(
+        self,
+        payload: SharepointListingPayload,
+        driveitem: DriveItemData,
+        permission_cache: SharepointPermissionCache,
+    ) -> ExternalAccess | None:
+        """The access of a listed file from the securable it inherits from,
+        or None for a permission read of its own in conversion.
+
+        The self-check gives some files a read of their own too. When the two
+        differ, the file gets its own access, and every later file of the run
+        reads its own (the run cache shares this with the other workers).
+
+        No inheritance without a run cache, which bounds how long a
+        container's access is kept, or when the listing's read of the
+        library is older than CONTAINER_ACCESS_TTL_SECONDS: the file may have
+        got role assignments of its own since."""
+        source = payload.inherited_access_from
+        if (
+            source is None
+            or payload.inheritance_read_at is None
+            or datetime.now(timezone.utc) - datetime_to_utc(payload.inheritance_read_at)
+            > timedelta(seconds=CONTAINER_ACCESS_TTL_SECONDS)
+            or self.treat_sharing_link_as_public
+            or not isinstance(permission_cache, SharedSharepointPermissionCache)
+            or permission_cache.is_inheritance_off()
+        ):
+            return None
+        inherited = self._container_access(payload.site_url, source, permission_cache)
+        if inherited is None or not self._self_check_due(payload, driveitem.id):
+            return inherited
+        own = get_sharepoint_external_access(
+            reader=self.ops,
+            site_url=payload.site_url,
+            permission_cache=permission_cache,
+            drive_item=driveitem,
+            list_id=payload.list_id,
+        )
+        if own != inherited:
+            logger.error(
+                "The permissions of %s differ from those of the %s it inherits "
+                "from (list item %s). Each later file of this listing run reads "
+                "its own permissions.",
+                payload.web_url,
+                source.kind.value,
+                source.item_id,
+            )
+            permission_cache.turn_inheritance_off()
+        return own
+
+    def _convert_listed_site_page(
+        self, payload: SharepointListingPayload, include_permissions: bool
+    ) -> Document | ConnectorFailure:
+        """The document of one listed site page: one read of the page with
+        its canvas. A page with a corrupt canvas keeps its listed metadata."""
+        if not payload.site_id or payload.site_page is None:
+            raise ValueError("The listing payload names no site page")
+        page_id = str(payload.site_page.get("id") or "")
+        page = self._try_expand_single_page(payload.site_id, page_id, payload.site_page)
+        return _convert_sitepage_to_document(
+            page,
+            payload.site_name,
+            self.ops,
+            payload.site_url,
+            permission_cache=self._run_permission_cache(payload),
+            include_permissions=include_permissions,
+            parent_hierarchy_raw_node_id=payload.site_url,
+            treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+        )
+
+    def _convert_listed_target(
+        self,
+        target: ResolveTarget,
+        payload: SharepointListingPayload,
+        include_permissions: bool,
+    ) -> Document | ConnectorFailure | None:
+        """One target of ``resolve_targets``. It runs on a pool thread, so it
+        returns a failure and does not raise, but for a stop signal."""
+        try:
+            if payload.kind == SharepointListedKind.SITE_PAGE:
+                return self._convert_listed_site_page(payload, include_permissions)
+            return self._convert_listed_drive_item(payload, include_permissions)
+        except ConnectorStopSignal:
+            raise
+        except Exception as e:
+            logger.warning(
+                "Failed to convert SharePoint target %s (%s): %s",
+                target.document_id,
+                payload.web_url,
+                e,
+            )
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=target.document_id,
+                    document_link=payload.web_url or target.document_link,
+                ),
+                failure_message=f"SharePoint '{payload.name}': {e}",
+                exception=e,
+            )
+
+    @override
+    def resolve_targets(
+        self,
+        targets: list[ResolveTarget],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Converts each target from what its listing stored, in a thread
+        pool of SHAREPOINT_CONVERSION_WORKERS: one download for a file, one
+        page read for a site page, and the permission reads. The listing
+        already yielded the hierarchy nodes. A target with no payload goes
+        through ``reindex``."""
+        if self._ops is None:
+            raise ConnectorMissingCredentialError("Sharepoint")
+
+        listed: list[tuple[ResolveTarget, SharepointListingPayload]] = []
+        unlisted: list[ResolveTarget] = []
+        for target in targets:
+            if target.listing_payload is None:
+                unlisted.append(target)
+                continue
+            try:
+                payload = target.listing_payload.as_type(SharepointListingPayload)
+            except ValidationError:
+                unlisted.append(target)
+                continue
+            listed.append((target, payload))
+        if unlisted:
+            yield from super().resolve_targets(unlisted, include_permissions)
+        if not listed:
+            return
+
+        results = run_calls_in_parallel(
+            [
+                partial(
+                    self._convert_listed_target, target, payload, include_permissions
+                )
+                for target, payload in listed
+            ],
+            max_workers=SHAREPOINT_CONVERSION_WORKERS,
+        )
+        for result in results:
+            if result is not None:
+                yield result
 
     def build_dummy_checkpoint(self) -> SharepointConnectorCheckpoint:
         return SharepointConnectorCheckpoint(has_more=True)

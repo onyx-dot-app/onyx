@@ -8,6 +8,7 @@ import {
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { Settings } from "@/lib/settings/types";
+import type { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { Tier } from "@/lib/tiers/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
 
@@ -200,6 +201,8 @@ export interface SidebarItemEntry {
   disabled?: boolean;
   requiredTier?: Tier | null;
   beta?: boolean;
+  /** The page's feature key when the playground restricts it. The page stays reachable. */
+  restrictedFeatureKey?: PlaygroundRestrictedFeature;
 }
 
 export function buildItems(
@@ -208,6 +211,7 @@ export function buildItems(
   settings: Settings | null
 ): SidebarItemEntry[] {
   const userCanAccess = (perm: string) => hasPermission(permissions, perm);
+  const playgroundRestrictions = settings?.playground_restrictions ?? [];
   const items: SidebarItemEntry[] = [];
 
   // Safety: ADMIN_ROUTES satisfies Record<string, AdminRouteEntry>, so every
@@ -223,7 +227,15 @@ export function buildItems(
     if (!userCanAccess(route.requiredPermission)) continue;
     if (route.visibleWhen && !route.visibleWhen(flags)) continue;
 
+    const restrictedFeatureKey =
+      route.featureKey !== undefined &&
+      playgroundRestrictions.includes(route.featureKey)
+        ? route.featureKey
+        : undefined;
+    // A restricted page stays reachable: it renders read-only under the
+    // playground notice, so the tier upsell does not apply to it.
     const disabled =
+      restrictedFeatureKey === undefined &&
       route.requiredTier !== null &&
       !tierAtLeast(flags.tier, route.requiredTier);
 
@@ -235,6 +247,7 @@ export function buildItems(
       disabled,
       requiredTier: route.requiredTier,
       beta: route.beta,
+      restrictedFeatureKey,
     };
 
     // INDEX_SETTINGS surfaces a reindexing-needed error indicator

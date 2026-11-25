@@ -101,6 +101,7 @@ from onyx.tools.tool_constructor import (
 )
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    LoadSkillTool,
     sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -869,7 +870,7 @@ def bind_run_store(
             setup=setup,
             llm=llm,
             tools=tools,
-            inject_memories=user.use_memories,
+            inject_memories=setup.use_memories,
         ),
         root_response=root_response,
         on_child_released=on_child_released,
@@ -901,7 +902,7 @@ def bind_run_store(
                 setup=setup,
                 llm=llm,
                 tools=tools,
-                inject_memories=user.use_memories,
+                inject_memories=setup.use_memories,
                 depth=depth,
             ),
         ),
@@ -996,6 +997,7 @@ def create_chat_agent(
             configuration=setup.tool_configuration,
             user=user,
             llm=llm,
+            enable_memory_tool=setup.enable_memory_tool,
             selection_llm_factory=partial(
                 get_search_selection_llm,
                 fallback=llm,
@@ -1035,8 +1037,8 @@ def create_chat_agent(
         # the other configured tools.
         if setup.has_chat_skills:
             tools += [
-                SkillsListTool(user, built_ins=setup.sandbox_tools),
-                SkillsReadTool(user, built_ins=setup.sandbox_tools),
+                SkillsListTool(user, with_sandbox=setup.sandbox_tools),
+                SkillsReadTool(user, with_sandbox=setup.sandbox_tools),
             ]
 
         preferred_tool = setup.preferred_tool
@@ -1104,6 +1106,8 @@ def create_chat_agent(
                     )
                 )
             ]
+            if setup.has_chat_skills:
+                tools.append(LoadSkillTool(turn))
         return build_chat_agent(
             AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
             agent_id,
@@ -1112,7 +1116,7 @@ def create_chat_agent(
             llm=llm,
             tools=tools,
             on_drained=turn.end if turn is not None else None,
-            inject_memories=user.use_memories,
+            inject_memories=setup.use_memories,
             with_subagents=with_subagents,
             additional_context=setup.additional_context,
             question_tool=QuestionTool(

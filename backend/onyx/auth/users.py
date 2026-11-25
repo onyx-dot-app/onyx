@@ -185,6 +185,10 @@ from onyx.server.features.build.sandbox.firecracker.purge import (
 from onyx.server.features.build.sandbox.snapshot_manager import (
     delete_sandbox_blobs_best_effort,
 )
+from onyx.server.playground import (
+    PlaygroundRestrictedFeature,
+    is_restricted_in_playground,
+)
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
@@ -322,6 +326,10 @@ def user_needs_to_be_verified() -> bool:
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
     from onyx.cache.factory import get_cache_backend
+
+    # Restricted on the playground, whatever the cache says.
+    if is_restricted_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS):
+        return False
 
     cache = get_cache_backend(tenant_id=tenant_id)
     value = cache.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
@@ -618,7 +626,7 @@ async def resolve_tenant_for_user(email: str, request: Request | None = None) ->
     )(email=email, request=request)
 
 
-def _finish_user_delete_in_own_session(cleanup: UserDeleteCleanup) -> None:
+def finish_user_delete_in_own_session(cleanup: UserDeleteCleanup) -> None:
     """File store and sandbox calls block, so they run off the event loop."""
     with get_session_with_current_tenant() as db_session:
         finish_user_delete(cleanup, db_session)
@@ -646,7 +654,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             partial(delete_user_from_db__no_commit, user)
         )
         await self.user_db.session.commit()
-        await asyncio.to_thread(_finish_user_delete_in_own_session, cleanup)
+        await asyncio.to_thread(finish_user_delete_in_own_session, cleanup)
         await asyncio.to_thread(delete_sandbox_blobs_best_effort, sandbox_blob_paths)
         await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         await self.on_after_delete(user, request)
@@ -2587,8 +2595,6 @@ def get_anonymous_user() -> User:
         is_superuser=False,
         account_type=AccountType.ANONYMOUS,
         effective_permissions=[Permission.BASIC_ACCESS.value],
-        use_memories=False,
-        enable_memory_tool=False,
     )
     return user
 

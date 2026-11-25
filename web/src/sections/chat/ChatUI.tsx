@@ -10,15 +10,15 @@ import React, {
 import { Message } from "@/app/app/types";
 import type { ComposedMessage } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
-import HumanMessage from "@/app/app/message/HumanMessage";
-import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
-import { ErrorBanner } from "@/app/app/message/Resubmit";
+import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
+import AgentResultsDivider from "@/lib/timeline/chat/message/AgentResultsDivider";
+import { ErrorBanner } from "@/lib/timeline/chat/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
-import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
-import { MultiModelResponse } from "@/app/app/message/types";
-import { getMultiModelResponses } from "@/app/app/message/multiModel";
+import AgentMessage from "@/lib/timeline/chat/message/messageComponents/AgentMessage";
+import MultiModelResponseView from "@/lib/timeline/chat/message/MultiModelResponseView";
+import { MultiModelResponse } from "@/lib/timeline/chat/message/types";
+import { getMultiModelResponses } from "@/lib/timeline/chat/message/multiModel";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import {
@@ -93,11 +93,10 @@ export interface ChatUIProps {
   selectedModels?: SelectedModel[];
 
   /**
-   * When on, the chat is in full-width mode: messages use its padding layout.
-   * Their width comes from the page's `--app-chat-column-width`, not from
-   * this prop.
+   * When on, the chat uses the wide width's padding layout. The width itself
+   * comes from the page's `--app-chat-column-width`, not from this prop.
    */
-  fullWidthChat?: boolean;
+  wideChat?: boolean;
 }
 
 const ChatUI = React.memo(
@@ -113,7 +112,7 @@ const ChatUI = React.memo(
     onResubmit,
     anchorNodeId,
     selectedModels,
-    fullWidthChat,
+    wideChat,
   }: ChatUIProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
@@ -482,7 +481,7 @@ const ChatUI = React.memo(
         <div
           className={cn(
             "flex flex-col w-full h-full pt-4 pb-8 gap-12",
-            !fullWidthChat && "md:pe-1"
+            !wideChat && "md:pe-1"
           )}
         >
           {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
@@ -496,7 +495,10 @@ const ChatUI = React.memo(
                 justifyContent="start"
                 height="fit"
                 gap={12}
-                className={cn(latest && "min-h-[calc(100cqh-3rem)]")}
+                className={cn(
+                  latest &&
+                    "min-h-[calc(100cqh-3rem-var(--app-composer-height,0px))]"
+                )}
               >
                 {messages
                   .slice(turn.start, turn.end)
@@ -512,14 +514,14 @@ const ChatUI = React.memo(
                       className={cn(
                         "w-full self-center",
                         msgWidth,
-                        !fullWidthChat && "px-3"
+                        !wideChat && "px-3"
                       )}
                     />
                     <ToolQuestionsRegion
                       className={cn(
                         "w-full self-center",
                         msgWidth,
-                        !fullWidthChat && "px-3"
+                        !wideChat && "px-3"
                       )}
                     />
                     {errorBanner}

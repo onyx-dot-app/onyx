@@ -4,7 +4,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
-import { PATManagementPage } from "@tests/e2e/pages/PATManagementPage";
+import { SettingsThirdPartyAccessPage } from "@tests/e2e/pages/SettingsThirdPartyAccessPage";
 
 const ME_URL = "http://localhost:3000/api/me";
 
@@ -21,7 +21,7 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
-  const pat = new PATManagementPage(page);
+  const pat = new SettingsThirdPartyAccessPage(page);
   await pat.goto();
 
   const tokenName = `E2E Test Token ${Date.now()}`;
@@ -77,7 +77,7 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
-  const pat = new PATManagementPage(page);
+  const pat = new SettingsThirdPartyAccessPage(page);
   await pat.goto();
 
   const tokens = [
@@ -118,7 +118,7 @@ test("PAT Scoped Token (limited access)", async ({ page }, testInfo) => {
   await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
-  const pat = new PATManagementPage(page);
+  const pat = new SettingsThirdPartyAccessPage(page);
   await pat.goto();
 
   const tokenName = `Scoped Token ${Date.now()}`;

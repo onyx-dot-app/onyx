@@ -94,7 +94,7 @@ import {
 import { SCHEDULED_TASKS_PATH } from "@/lib/scheduledTasks/paths";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
-import { NotificationType } from "@/lib/notifications/interfaces";
+import { NotificationType } from "@/lib/notifications/types";
 import { dismissNotification } from "@/lib/notifications/api";
 import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";

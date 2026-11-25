@@ -26,6 +26,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup,
+    UserPreferences,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
@@ -1164,6 +1165,20 @@ def fetch_first_accessible_llm_provider_by_type(
     return provider
 
 
+def fetch_first_llm_provider(
+    db_session: Session, provider: str
+) -> LLMProviderModel | None:
+    """The tenant's lowest-ID setup of this provider (the `provider` column,
+    e.g. "openai"), for background work that runs for the whole tenant, not
+    for one user."""
+    return db_session.scalars(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider == provider)
+        .order_by(LLMProviderModel.id.asc())
+        .limit(1)
+    ).first()
+
+
 def fetch_all_accessible_llm_providers(
     db_session: Session, user: User
 ) -> list[LLMProviderView]:
@@ -1544,11 +1559,11 @@ def remove_llm_provider(
     # name or the provider id depending on the frontend writer, so match both.
     display_names = [provider.name] if provider.name else ["", str(provider.id)]
     db_session.execute(
-        update(User)
+        update(UserPreferences)
         .where(
             or_(
                 *(
-                    User.default_model.startswith(
+                    UserPreferences.default_model.startswith(
                         f"{display_name}__{provider.provider}__", autoescape=True
                     )
                     for display_name in display_names

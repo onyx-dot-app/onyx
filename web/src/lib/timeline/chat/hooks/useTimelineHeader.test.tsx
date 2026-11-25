@@ -81,9 +81,9 @@ describe("useTimelineHeader", () => {
     );
   });
 
-  it("keeps the pending header until a rendered packet arrives", () => {
+  it("shows working until a rendered packet arrives", () => {
     const { result } = renderHook(() => useTimelineHeader(group([debug])));
-    expect(result.current.headerText).toBe("header.thinkingEllipsis.label");
+    expect(result.current.headerText).toBe("header.working.label");
   });
 
   it("shows image generation as an ordinary step", () => {

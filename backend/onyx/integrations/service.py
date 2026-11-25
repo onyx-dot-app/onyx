@@ -45,6 +45,7 @@ from onyx.db.integration import (
     replace_integration_actions__no_commit,
     set_policy_rows__no_commit,
     upsert_oauth_client__no_commit,
+    write_openapi_document__no_commit,
 )
 from onyx.db.integration_access import (
     UserIntegrationState,
@@ -775,6 +776,8 @@ def create_integration__no_commit(
         tool_id=tool_id,
         db_session=db_session,
     )
+    if isinstance(config, OpenApiConfigInput):
+        write_openapi_document__no_commit(integration, config.openapi_spec, db_session)
 
     if auth_method is IntegrationAuthMethod.OAUTH2 and request.oauth_client:
         _write_oauth_client(
@@ -823,10 +826,7 @@ def _apply_config(
         return False
     if isinstance(config, OpenApiConfigInput):
         validate_openapi_definition(config.openapi_spec)
-        tool = get_openapi_tool_for_integration(integration.id, db_session)
-        if tool is None:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "The OpenAPI schema is missing.")
-        tool.openapi_schema = config.openapi_spec
+        write_openapi_document__no_commit(integration, config.openapi_spec, db_session)
         return True
     app = get_external_app_for_integration(integration.id, db_session)
     if app is None:

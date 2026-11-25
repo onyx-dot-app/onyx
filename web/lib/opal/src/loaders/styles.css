@@ -5,8 +5,8 @@
    sweeping across it. The wave matches TextLoader's (see the constants in
    text-loader/components.tsx): 40% of the block's width but at least 40px,
    a 2s crossing whatever the width, then a 1s pause. Only `translate`
-   animates, so the sweep composites on the GPU. Under
-   `prefers-reduced-motion` the sweep stops and the block holds still.
+   animates, so the sweep composites on the GPU. Under reduced motion the
+   sweep stops and the block holds still.
    --------------------------------------------------------------------------- */
 
 .opal-shimmer-block {
@@ -119,6 +119,16 @@
   }
 }
 
+/* Markdown in the wave stays one inline run, so the wave measures and paints
+   every glyph. A code span's chip would hide the wave behind it, so its text
+   rests at the wave's base colour instead. */
+.opal-text-loader-wave .block {
+  display: inline;
+}
+.opal-text-loader-wave code {
+  color: var(--text-02);
+}
+
 /* Right-to-left text is read from the right, so both waves run that way. */
 .opal-shimmer-block:dir(rtl)::after,
 .opal-text-loader-wave:dir(rtl) {
@@ -136,13 +146,19 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .opal-shimmer-block::after {
-    animation: none;
-    display: none;
+/* The variant wraps the host, not its ::after: a nested rule cannot match
+   through a pseudo-element parent. */
+.opal-shimmer-block {
+  @variant motion-reduce {
+    &::after {
+      animation: none;
+      display: none;
+    }
   }
+}
 
-  .opal-text-loader-wave {
+.opal-text-loader-wave {
+  @variant motion-reduce {
     animation: none;
   }
 }

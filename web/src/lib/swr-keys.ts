@@ -89,10 +89,13 @@ export const SWR_KEYS = {
 
   // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
-  opensearchResourceHealth: "/api/manage/admin/opensearch-health",
   serviceStatusOpenSearch: "/api/admin/service-status/opensearch",
   serviceStatusSearches: "/api/admin/service-status/opensearch/searches",
   version: "/api/version",
+
+  // ── Suggested questions (Playground) ────────────────────────────────────
+  suggestedQuestions: (agentId: number, seed: number) =>
+    `/api/chat/suggested-questions?agent_id=${agentId}&seed=${seed}`,
 
   // ── Settings ──────────────────────────────────────────────────────────────
   settings: "/api/settings",
@@ -108,6 +111,8 @@ export const SWR_KEYS = {
   chatFileTileText: (fileId: string) => `chat-file-tile-text:${fileId}`,
   chatSessionStatus: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/status`,
+  chatSessionAgents: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/agents`,
   pendingChatMessages: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/pending-messages`,
   maxSelectedDocumentTokens: (personaId: number) =>
@@ -404,6 +409,12 @@ export const SWR_KEYS = {
   // Every stored capability report of one source's credentials.
   credentialCheckReports: (source: string) =>
     `/api/manage/admin/credential/capability-reports?source=${source}`,
+  // The other Microsoft connectors on a credential's app registration, with
+  // the RU per minute that each one sets.
+  microsoftRateBudgets: (credentialId: number, connectorId: number | null) =>
+    `/api/manage/admin/credential/${credentialId}/microsoft-rate-budgets${
+      connectorId === null ? "" : `?exclude_connector_id=${connectorId}`
+    }`,
   // Every file-list page of one connector starts with this, so `mutate` can match them all.
   connectorFilesPrefix: (connectorId: number) =>
     `/api/manage/admin/connector/${connectorId}/files?`,

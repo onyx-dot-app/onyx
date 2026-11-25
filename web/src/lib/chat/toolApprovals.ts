@@ -18,7 +18,7 @@ import {
   getLatestMessageChain,
   type MessageTreeState,
 } from "@/app/app/services/messageTree";
-import { getMultiModelChildren } from "@/app/app/message/multiModel";
+import { getMultiModelChildren } from "@/lib/timeline/chat/message/multiModel";
 import type { Message } from "@/app/app/types";
 import type { ApprovalStatus } from "@/lib/approvals/types";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
