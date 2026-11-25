@@ -2,7 +2,8 @@
 
 With CODE_MODE_ENABLED, Onyx offers `exec` instead of retrieval tools: the
 mock's models are not Claude models, so they get the `exec`/`wait` shape.
-Its `code` argument is a Python program in which each tool is an async function.
+Its `code` argument is a Python program in which each tool is an async function
+of the `tools` namespace.
 The program's printed output, under an "Execution <status> in cell N" header,
 is the tool result that the model reads. A program that runs past its yield time
 returns "Execution running in cell N"; `wait(cell_id=N)` continues it.
@@ -37,7 +38,7 @@ def code_functions(tool: ToolDefinition) -> set[str]:
 def search_program(searches: Sequence[tuple[str, Sequence[str]]]) -> str:
     """A program that runs each (function, queries) search, in parallel when
     there are several, and prints one `[document] title` line per result."""
-    calls = [f"{name}(queries={list(queries)!r})" for name, queries in searches]
+    calls = [f"tools.{name}(queries={list(queries)!r})" for name, queries in searches]
     if len(calls) == 1:
         head = f"results = [await {calls[0]}]\n"
     else:
