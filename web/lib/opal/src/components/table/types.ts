@@ -185,8 +185,6 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   getImageAlt?: (row: TData) => string;
   /** Return the selection checkbox label for a row. */
   getSelectLabel?: (row: TData) => string;
-  /** Return whether a row can be selected. @default every row */
-  getCanSelect?: (row: TData) => boolean;
   /** Show a tinted background container behind the content. @default false */
   background?: boolean;
   /** The icon is an avatar, drawn larger. @default false */
