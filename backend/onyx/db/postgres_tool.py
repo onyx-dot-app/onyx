@@ -632,6 +632,21 @@ def filter_document_ids_for_tool(
     return set(_execute_with_timeout(db_session, stmt).scalars())
 
 
+def hierarchy_node_own_document_ids(
+    db_session: Session, node_ids: list[int]
+) -> list[str]:
+    """The documents that the nodes themselves are, such as Confluence pages."""
+    own_document_id = hierarchy_node_own_document_id()
+    stmt = select(own_document_id).where(
+        HierarchyNode.id.in_(node_ids), own_document_id.is_not(None)
+    )
+    return [
+        document_id
+        for document_id in _execute_with_timeout(db_session, stmt).scalars()
+        if document_id is not None
+    ]
+
+
 def _count_documents_stmt(
     db_session: Session,
     user_email: str | None,

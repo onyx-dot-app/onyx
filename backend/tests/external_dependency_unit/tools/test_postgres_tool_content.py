@@ -24,8 +24,12 @@ from onyx.access.models import DocumentAccess
 from onyx.agents.tools import ToolInvocation
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.db.enums import VectorQuantization
-from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
+from onyx.db.enums import HierarchyNodeType, VectorQuantization
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
+    HierarchyNode,
+)
 from onyx.db.models import Document as DbDocument
 from onyx.db.postgres_tool_models import DocumentScope
 from onyx.document_index.interfaces import (
@@ -44,6 +48,7 @@ from onyx.llm.models import ToolResult
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.postgres import content, postgres_tool
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
+from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.indexing_helpers import (
@@ -461,6 +466,100 @@ def test_rejects_unsupported_content_queries(content_env: ContentEnv) -> None:
     assert "order by date only" in message
     message = _run_error(tool, table="document", content_contains="the and")
     assert "no searchable words" in message
-    with patch.object(postgres_tool, "DISABLE_POSTGRES_QUERY_CONTENT_FILTER", True):
-        message = _run_error(tool, table="document", content_contains=_PHRASE)
+
+
+@pytest.mark.parametrize(
+    "setting",
+    ["DISABLE_POSTGRES_QUERY_CONTENT_FILTER", "DISABLE_VECTOR_DB", "CONTENT_FIRST"],
+)
+def test_rejects_content_when_unavailable(
+    content_env: ContentEnv, setting: str
+) -> None:
+    # CONTENT_FIRST is None when POSTGRES_QUERY_CONTENT_FIRST is invalid.
+    value = None if setting == "CONTENT_FIRST" else True
+    with patch.object(content, setting, value):
+        message = _run_error(
+            content_env.tool, table="document", content_contains=_PHRASE
+        )
     assert "not available" in message
+
+
+def test_invalid_setting_turns_the_filter_off() -> None:
+    with patch.object(content, "POSTGRES_QUERY_CONTENT_FIRST", "opensearh"):
+        assert content._load_content_first() is None
+    with patch.object(content, "POSTGRES_QUERY_CONTENT_FIRST", "postgres"):
+        assert content._load_content_first() == content.ContentFirst.POSTGRES
+
+
+def test_censoring_sources_come_from_ee() -> None:
+    with patch.object(global_version, "is_ee_version", return_value=True):
+        assert DocumentSource.SALESFORCE in content._censoring_sources()
+    with patch.object(global_version, "is_ee_version", return_value=False):
+        assert content._censoring_sources() == set()
+
+
+@pytest.mark.parametrize("postgres_first", [True, False])
+def test_censoring_sources_never_match(
+    content_env: ContentEnv, postgres_first: bool
+) -> None:
+    with (
+        _force_path(postgres_first),
+        patch.object(content, "_censoring_sources", return_value={DocumentSource.WEB}),
+    ):
+        for title_filter in ({}, {"title_contains": content_env.tag}):
+            text = _run(
+                content_env.tool,
+                table="document",
+                content_contains=_PHRASE,
+                count=True,
+                **title_filter,
+            )
+            assert text.startswith("0 matching documents")
+            text = _run(
+                content_env.tool,
+                table="document",
+                content_contains=_PHRASE,
+                **title_filter,
+            )
+            assert _listed(content_env, text) == []
+
+
+def test_sources_outside_the_scope_match_nothing(content_env: ContentEnv) -> None:
+    tool = PostgresTool(
+        user=content_env.tool._user,
+        current_chat_session_id=None,
+        scope=DocumentScope(source_types=[DocumentSource.SLACK]),
+    )
+    # Without a Postgres-only filter, OpenSearch counts alone.
+    text = _run(
+        tool, table="document", content_contains=_PHRASE, source_type="web", count=True
+    )
+    assert "\n0 matching documents" in text
+
+
+def test_selected_node_matches_its_own_document(
+    db_session: Session, content_env: ContentEnv
+) -> None:
+    node = HierarchyNode(
+        raw_node_id=f"pgtool_content_node_{content_env.tag}",
+        display_name="fox page",
+        source=DocumentSource.WEB,
+        node_type=HierarchyNodeType.FOLDER,
+        document_id=content_env.ids["fox"],
+    )
+    db_session.add(node)
+    db_session.commit()
+    try:
+        tool = PostgresTool(
+            user=content_env.tool._user,
+            current_chat_session_id=None,
+            scope=DocumentScope(hierarchy_node_ids=[node.id]),
+        )
+        # Without a Postgres-only filter, OpenSearch counts alone.
+        text = _run(tool, table="document", content_contains=_PHRASE, count=True)
+        assert "\n1 matching documents" in text
+        text = _run(tool, table="document", content_contains=_PHRASE)
+        assert _listed(content_env, text) == ["fox"]
+    finally:
+        db_session.delete(node)
+        db_session.commit()

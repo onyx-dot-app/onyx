@@ -21,7 +21,6 @@ from typing_extensions import override
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.agents.tools import ToolInvocation
-from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_CONTENT_FILTER
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
@@ -79,6 +78,7 @@ from onyx.tools.tool_implementations.postgres.content import (
     ContentCursor,
     ContentFilter,
     ContentPath,
+    content_filter_is_available,
     date_field_for_order,
 )
 from onyx.tools.tool_implementations.postgres.models import (
@@ -234,7 +234,7 @@ _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "created_after": _prop("string", "chat_session: ISO date lower bound."),
     "created_before": _prop("string", "chat_session: ISO date upper bound, exclusive."),
     "chat_session_id": _any_of_prop("string", "chat_message: only messages in this session (UUID)."),
-    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text. document: documents whose text contains this word or phrase (whole words, any case, word forms such as plurals match; the text includes the title and metadata). Slow on documents: use it only when the user wants an exhaustive list or count by content, add date, source or folder filters when you can, and use search to answer questions about what documents say. Document listings with it order by date only."),
+    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text. document: documents whose text contains this word or phrase (whole words, any case, word forms such as plurals match; the text includes the title and metadata; Salesforce records are not searched). Slow on documents: use it only when the user wants an exhaustive list or count by content, add date, source or folder filters when you can, and use search to answer questions about what documents say. Document listings with it order by date only."),
     "message_type": _prop("string", "chat_message: filter by author.", ["user", "assistant"]),
     "sent_after": _prop("string", "chat_message: ISO date lower bound."),
     "sent_before": _prop("string", "chat_message: ISO date upper bound, exclusive."),
@@ -338,7 +338,7 @@ def _parse_any_of(field: str, value: Any) -> list[Any]:
 def _validate_document_content_filter(
     phrases: list[str], group_by: str | None, order_by: DocumentOrder
 ) -> None:
-    if DISABLE_POSTGRES_QUERY_CONTENT_FILTER:
+    if not content_filter_is_available():
         raise _reject(
             "'content_contains' is not available for documents on this "
             "deployment. Use search to find documents by what they say."
@@ -963,13 +963,7 @@ class PostgresTool(Tool):
         document_index = get_default_document_index(
             get_current_search_settings(db_session), None
         )
-        for phrase in phrases:
-            if document_index.count_keyword_terms(phrase).total == 0:
-                raise _reject(
-                    f"'content_contains' value {phrase!r} has no searchable words "
-                    "(only common words such as 'the' or 'and'). Use a more "
-                    "specific phrase."
-                )
+        # Built first: its time budget covers the phrase checks too.
         content_filter = ContentFilter(
             db_session=db_session,
             document_index=document_index,
@@ -979,6 +973,13 @@ class PostgresTool(Tool):
             scope=self._scope,
             phrases=phrases,
         )
+        for phrase in phrases:
+            if document_index.count_keyword_terms(phrase).total == 0:
+                raise _reject(
+                    f"'content_contains' value {phrase!r} has no searchable words "
+                    "(only common words such as 'the' or 'and'). Use a more "
+                    "specific phrase."
+                )
         if args.count:
             count = content_filter.count()
             if count.is_complete:

@@ -21,6 +21,9 @@ exact count of 20,000 matches took 0.4 s.
 
 POSTGRES_QUERY_CONTENT_FIRST overrides the choice for every call.
 
+Sources that censor records at read time (Salesforce) are never matched: a
+phrase in a record the caller cannot read would still match its document.
+
 A listing keeps the way of its first page, so that its cursor stays valid.
 """
 
@@ -32,7 +35,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.chat_configs import POSTGRES_QUERY_CONTENT_FIRST
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.chat_configs import (
+    DISABLE_POSTGRES_QUERY_CONTENT_FILTER,
+    POSTGRES_QUERY_CONTENT_FIRST,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.preprocessing.access_filters import (
@@ -43,6 +50,7 @@ from onyx.db.postgres_tool import (
     POSTGRES_TOOL_MAX_LIMIT,
     document_source_types,
     filter_document_ids_for_tool,
+    hierarchy_node_own_document_ids,
     query_document_keys_for_tool,
     query_documents_for_tool,
     try_count_documents_for_tool,
@@ -55,8 +63,12 @@ from onyx.document_index.interfaces import (
     ContentMatchRequest,
     DocumentIndex,
 )
+from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 # At most this many candidates take the Postgres-first way.
 MAX_POSTGRES_FIRST_CANDIDATES = 20_000
@@ -87,8 +99,40 @@ class ContentFirst(str, Enum):
     OPENSEARCH = "opensearch"
 
 
-# An unknown value fails at import, so a typo cannot silently mean "auto".
-CONTENT_FIRST = ContentFirst(POSTGRES_QUERY_CONTENT_FIRST)
+def _load_content_first() -> ContentFirst | None:
+    """None for an unknown value: the tool then refuses content filters, so a
+    typo neither breaks imports nor silently means "auto"."""
+    try:
+        return ContentFirst(POSTGRES_QUERY_CONTENT_FIRST)
+    except ValueError:
+        logger.error(
+            "Invalid POSTGRES_QUERY_CONTENT_FIRST %r: use auto, postgres or "
+            "opensearch. postgres_query's document content filter is off.",
+            POSTGRES_QUERY_CONTENT_FIRST,
+        )
+        return None
+
+
+CONTENT_FIRST = _load_content_first()
+
+
+def content_filter_is_available() -> bool:
+    """Whether this deployment can match document content: the document index
+    is on, the filter is not turned off, and the setting is valid."""
+    return (
+        not DISABLE_VECTOR_DB
+        and not DISABLE_POSTGRES_QUERY_CONTENT_FILTER
+        and CONTENT_FIRST is not None
+    )
+
+
+def _censoring_sources() -> set[DocumentSource]:
+    get_sources = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "get_all_censoring_enabled_sources",
+        noop_return_value=set(),
+    )
+    return get_sources()
 
 
 class ContentCursor(BaseModel):
@@ -138,11 +182,15 @@ class ContentFilter:
         self._document_index = document_index
         self._user = user
         self._external_group_ids = external_group_ids
-        # The tool's document filter kwargs for the Postgres queries.
-        self._filters = filters
+        self._deadline = time.monotonic() + TIME_BUDGET_S
+        # The tool's document filter kwargs for the Postgres queries, with
+        # the sources narrowed to those the scope allows and that can match.
+        self._filters: dict[str, Any] = {
+            **filters,
+            "source_type": _matchable_sources(filters.get("source_type"), scope),
+        }
         self._scope = scope
         self._phrases = phrases
-        self._deadline = time.monotonic() + TIME_BUDGET_S
         access = build_access_filters_for_user(user, db_session)
         self._access_filters = IndexFilters(
             access_control_list=access.access_control_list,
@@ -176,6 +224,8 @@ class ContentFilter:
         after: ContentCursor | None,
         limit: int,
     ) -> ContentPage:
+        if self._no_source_can_match():
+            return ContentPage(rows=[], next_cursor=None, is_partial=False)
         path = after.path if after is not None else self.choose_path()
         limit = max(1, min(limit, POSTGRES_TOOL_MAX_LIMIT))
         if path == ContentPath.POSTGRES_FIRST:
@@ -217,13 +267,19 @@ class ContentFilter:
         )
 
     def count(self) -> ContentMatchCount:
+        if self._no_source_can_match():
+            return ContentMatchCount(count=0, is_complete=True)
         if self.choose_path() == ContentPath.POSTGRES_FIRST:
             return self._count_postgres_first()
         if self._has_postgres_only_filter():
             return self._count_opensearch_first_checked()
         return self._document_index.count_documents_by_content(
-            self._opensearch_first_request(), MAX_COUNT
+            self._opensearch_first_request(), MAX_COUNT, self._deadline
         )
+
+    def _no_source_can_match(self) -> bool:
+        # OpenSearch reads an empty source list as no source filter.
+        return self._filters["source_type"] == []
 
     def _has_postgres_only_filter(self) -> bool:
         return any(
@@ -295,14 +351,20 @@ class ContentFilter:
         """The text match with every filter that OpenSearch applies the same
         way as Postgres, or more loosely: Postgres checks the matches again."""
         scope = self._scope
-        source_types = document_source_types(self._filters.get("source_type"), scope)
+        # Postgres counts a selected node's own document, such as a
+        # Confluence page; the index lists only its descendants under it.
+        attached_document_ids = scope.attached_document_ids + (
+            hierarchy_node_own_document_ids(self._db_session, scope.hierarchy_node_ids)
+            if scope.hierarchy_node_ids
+            else []
+        )
         return ContentMatchRequest(
             phrases=self._phrases,
             filters=self._access_filters.model_copy(
                 update={
-                    "source_type": source_types,
+                    "source_type": self._filters["source_type"],
                     "document_set": scope.document_set_names or None,
-                    "attached_document_ids": scope.attached_document_ids or None,
+                    "attached_document_ids": attached_document_ids or None,
                     "hierarchy_node_ids": scope.hierarchy_node_ids or None,
                     "updated_at_range": scope.updated_at_range,
                     "created_at_range": scope.created_at_range,
@@ -400,6 +462,22 @@ class ContentFilter:
         return [
             rows_by_id[key.document_id] for key in keys if key.document_id in rows_by_id
         ]
+
+
+def _matchable_sources(
+    source_type: list[DocumentSource] | None, scope: DocumentScope
+) -> list[DocumentSource] | None:
+    """The sources that the request and the scope allow, without the ones
+    that censor at read time. None allows every source."""
+    allowed = document_source_types(source_type, scope)
+    censoring = _censoring_sources()
+    if not censoring:
+        return allowed
+    return [
+        source
+        for source in (allowed if allowed is not None else list(DocumentSource))
+        if source not in censoring
+    ]
 
 
 def _as_cursor(key: ContentMatchKey) -> DocumentCursor:
