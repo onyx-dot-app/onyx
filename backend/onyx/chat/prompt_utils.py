@@ -352,7 +352,7 @@ def calculate_reserved_tokens(
         ImageGenerationTool.DESCRIPTION,
         MemoryTool.DESCRIPTION,
         *(
-            tool.describe_in(sandbox.shell, str, chat_files=True)
+            tool.describe_in(sandbox.shell, str)
             for tool in sandbox.tools
             if sandbox_tools
         ),

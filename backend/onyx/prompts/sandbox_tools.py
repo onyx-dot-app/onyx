@@ -23,12 +23,23 @@ from onyx.tools.tool_implementations.sandbox.models import (
     READ_MAX_LINES,
 )
 
+# Where the chat's files are in the working directory
+# (tools/tool_implementations/sandbox/file_copies.py).
+CHAT_FILES_LAYOUT = (
+    f"{CHAT_FILES_DIR}/ has copies of the chat's files: the user's uploads, "
+    f"the project's files in {PROJECT_FILES_DIR}/ and the agent's files in "
+    f"{AGENT_FILES_DIR}/. Each name starts with a short file ID. Onyx can "
+    "put back the original files at any turn, so write a changed file to a "
+    f"path outside {CHAT_FILES_DIR}/."
+)
+
 # The chat system prompt's section about the sandbox, when the turn offers
 # sandbox tools: the VM facts that every tool shares, then `shell_line`:
 # SANDBOX_SHELL_LINE when the turn offers the command tool, else empty.
-SANDBOX_GUIDANCE = """
+SANDBOX_GUIDANCE = f"""
 ## Sandbox
-You have a private Linux VM for this chat. Your working directory is {workdir}. Its files are saved and come back in later turns, except dependency and cache folders such as node_modules and .venv. The VM stops after a while without use; running commands, installed packages and files outside the working directory are then lost.{shell_line}
+You have a private Linux VM for this chat. Your working directory is {{workdir}}. Its files are saved and come back in later turns, except dependency and cache folders such as node_modules and .venv. The VM stops after a while without use; running commands, installed packages and files outside the working directory are then lost.
+{CHAT_FILES_LAYOUT}{{shell_line}}
 """.lstrip()
 SANDBOX_SHELL_LINE = '\nDo not chain commands with `echo "===="` separators.'
 
@@ -43,16 +54,6 @@ Usage:
 - Output over the limit is cut in the middle. To read part of a long output, filter it with rg, head or tail."""
 EXEC_WORKDIR_RULE = "Pass `workdir` when the command needs another directory."
 EXEC_CD_RULE = "Start the command with `cd <dir> &&` when it needs another directory."
-# The end of the command tool's description in a chat with chat files
-# (tools/tool_implementations/sandbox/file_copies.py).
-CHAT_FILES_LAYOUT = (
-    f"{CHAT_FILES_DIR}/ has copies of the chat's files: the user's uploads, "
-    f"the project's files in {PROJECT_FILES_DIR}/ and the agent's files in "
-    f"{AGENT_FILES_DIR}/. Each name starts with a short file ID. Onyx can "
-    "put back the original files at any turn, so write a changed file to a "
-    f"path outside {CHAT_FILES_DIR}/."
-)
-
 # A search result whose original file the chat's sandbox gets
 # (tools/tool_implementations/sandbox/file_copies.py); the path is relative to
 # the working directory, as the paths of chat files are.

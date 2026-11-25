@@ -133,6 +133,7 @@ from onyx.llm.model_response import (
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
+    SystemMessage,
     TextContent,
     TextContentPart,
     ToolCall,
@@ -4725,23 +4726,23 @@ def test_a_hosted_agent_run_copies_the_chat_files(
     attach: Attach,
 ) -> None:
     """An agent host runs a worker whose sandbox call copies the chat's
-    files, so a worker on a VM that lost them gets them again. Its
-    exec_command describes the chat's files as the root's does."""
+    files, so a worker on a VM that lost them gets them again. Its system
+    prompt describes the chat's files as the root's does."""
     monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", False)
-    exec_descriptions: dict[str, str] = {}
+    system_prompts: dict[str, str] = {}
 
     def generate(
         request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
         texts = [message.text for message in request.messages]
-        [description] = [
-            tool.description
-            for tool in request.tools
-            if tool.name == EXEC_COMMAND_TOOL_NAME
-        ]
+        system_prompt = "\n".join(
+            message.text
+            for message in request.messages
+            if isinstance(message, SystemMessage)
+        )
         if "Initial task" in texts:
-            if "Follow up" in texts and "hosted" not in exec_descriptions:
-                exec_descriptions["hosted"] = description
+            if "Follow up" in texts and "hosted" not in system_prompts:
+                system_prompts["hosted"] = system_prompt
                 return AssistantMessage(
                     content=[
                         ToolCall(
@@ -4755,9 +4756,9 @@ def test_a_hosted_agent_run_copies_the_chat_files(
                 # Keep this turn active until its background copy finishes.
                 _wait_until(lambda: _attachments(node, ref) == copied)
             return AssistantMessage(content=[TextContent(text="Worker done.")])
-        if "root" in exec_descriptions:
+        if "root" in system_prompts:
             return AssistantMessage(content=[TextContent(text="Started.")])
-        exec_descriptions["root"] = description
+        system_prompts["root"] = system_prompt
         return AssistantMessage(
             content=[
                 ToolCall(
@@ -4853,8 +4854,8 @@ def test_a_hosted_agent_run_copies_the_chat_files(
     hosted_generation = cache.get(copy_generation_key(chat.chat_session_id))
     assert hosted_generation is not None
     assert int(hosted_generation) > int(generation)
-    assert exec_descriptions["root"].endswith(CHAT_FILES_LAYOUT)
-    assert exec_descriptions["hosted"] == exec_descriptions["root"]
+    assert CHAT_FILES_LAYOUT in system_prompts["root"]
+    assert CHAT_FILES_LAYOUT in system_prompts["hosted"]
 
 
 @pytest.mark.usefixtures("sandbox", "node")
