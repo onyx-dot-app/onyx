@@ -10,7 +10,18 @@ from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchMessageMetadata
 from onyx.file_store.models import ContextFileMetadata
 from onyx.llm.models import Message, ToolResultMessage, UserMessage
-from onyx.tools.constants import CITEABLE_TOOLS_NAMES
+from onyx.tools.constants import (
+    INTERNAL_SEARCH_TOOL_NAME,
+    POSTGRES_TOOL_NAME,
+    WEB_SEARCH_TOOL_NAME,
+)
+from onyx.tools.tool_implementations.open_url.open_url_tool import OPEN_URL_TOOL_NAMES
+
+# The tools whose results carry citable documents, in every shape.
+CITEABLE_TOOLS_NAMES = (
+    frozenset({INTERNAL_SEARCH_TOOL_NAME, WEB_SEARCH_TOOL_NAME, POSTGRES_TOOL_NAME})
+    | OPEN_URL_TOOL_NAMES
+)
 
 
 def message_citation_sources(message: Message) -> CitationMapping:

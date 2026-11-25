@@ -325,7 +325,6 @@ class AgentTool:
         interrupted_result: ToolResult | None = None,
         display_name: str | None = None,
         approval_required: Collection[str] = (),
-        inner_call_hint: Callable[[str], str | None] | None = None,
     ) -> None:
         self.definition = definition
         self.execute = execute
@@ -347,9 +346,6 @@ class AgentTool:
         # Names of calls, this tool's own or those it makes for the model, that
         # wait for the user's approval before they run.
         self.approval_required = frozenset(approval_required)
-        # For a call of a name that is no offered tool: how to call it through
-        # this tool, when it is one of the tools that this tool's calls make.
-        self.inner_call_hint = inner_call_hint
 
     def snapshot(self) -> "AgentTool":
         definition = self.definition.model_copy(deep=True)
@@ -365,7 +361,6 @@ class AgentTool:
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,
             approval_required=self.approval_required,
-            inner_call_hint=self.inner_call_hint,
         )
 
     @property

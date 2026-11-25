@@ -49,6 +49,7 @@ from onyx.indexing.chat_artifact_index import (
     send_chat_artifact_index_tasks,
 )
 from onyx.llm.cancellation import CancellationSignal, wait_for_future
+from onyx.llm.models import ToolResult
 from onyx.microvm.models import FileType
 from onyx.natural_language_processing.english_stopwords import strip_stopwords
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -100,6 +101,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     DeleteOperation,
     FoundText,
     KeptTitle,
+    LibraryCreateLibraryFileArguments,
     LibraryFileTarget,
     LibraryFindArguments,
     LibraryListArguments,
@@ -107,6 +109,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     LibraryPrepareMaterializeArguments,
     LibraryReadArguments,
     LibraryReplaceLibraryFileArguments,
+    LibraryRequest,
     LibrarySearchArguments,
     LibrarySearchCursor,
     LibrarySearchHit,
@@ -119,6 +122,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     MaterializedItem,
     MaterializedItems,
     PublishedFile,
+    PublishedFiles,
     PublishFileArgument,
     ReadText,
     RenameOperation,
@@ -732,9 +736,9 @@ def _card_chat(file: ListedArtifact) -> str:
 
 
 def delete_approval_details(
-    user_id: UUID, operations: Sequence[DeleteOperation | _OtherOperation]
+    user_id: UUID, request: LibraryRequest
 ) -> ToolApprovalDetails | None:
-    """The approval card of a call with these operations, which both tool
+    """The approval card of a call that runs `request`, which both tool
     families show; None for a call without a delete. A line for each of
     the user's artifacts that the deletes name, as the delete finds it
     (`_deleted_file`), with its display path, its newest version number
@@ -747,14 +751,16 @@ def delete_approval_details(
     operation gets a line, which the approval covers too, with the display
     path and the chat of the file that it changes. It never raises: a failed
     lookup asks with the targets as given."""
+    if not isinstance(request, ManageLibraryArguments):
+        return None
     deletes = [
         operation.target
-        for operation in operations
+        for operation in request.operations
         if isinstance(operation, DeleteOperation)
     ]
     others = [
         operation
-        for operation in operations
+        for operation in request.operations
         if not isinstance(operation, DeleteOperation)
     ]
     if not deletes:
@@ -1503,3 +1509,61 @@ def search_artifacts(
         ):
             return result
         shown = shown[:-1]
+
+
+def run_operation(
+    turn: SandboxTurn,
+    cancellation: CancellationSignal,
+    request: LibraryRequest,
+    *,
+    conflict_message: Callable[[ArtifactVersionConflict], str],
+) -> ToolResult:
+    """Run the operation that `request` asks for. Every tool over the user's
+    published files runs it, so both tool families give the same results; a
+    publish or a replace shows the publish card (PublishedFiles).
+    `conflict_message` words a new version's version conflict for the calling
+    tool."""
+    if isinstance(request, LibraryCreateLibraryFileArguments):
+        published = publish(
+            turn,
+            cancellation,
+            [PublishFileArgument(path=request.file, title=request.title)]
+            if request.file is not None
+            else [PublishFileArgument(path=path) for path in request.files or []],
+        )
+    elif isinstance(request, LibraryReplaceLibraryFileArguments):
+        try:
+            published = [replace_file(turn, cancellation, request)]
+        except ArtifactVersionConflict as error:
+            raise tool_error(conflict_message(error)) from error
+    elif isinstance(request, ManageLibraryArguments):
+        return ToolResult(
+            content=manage(
+                turn.user_id,
+                cancellation,
+                request,
+                conflict_message=conflict_message,
+            ).model_dump_json()
+        )
+    elif isinstance(request, LibraryListArguments):
+        return ToolResult(
+            content=list_artifacts(turn.user_id, request).model_dump_json()
+        )
+    elif isinstance(request, LibrarySearchArguments):
+        return ToolResult(
+            content=search_artifacts(
+                turn.user_id, cancellation, request
+            ).model_dump_json()
+        )
+    elif isinstance(request, LibraryReadArguments):
+        return ToolResult(content=read(turn.user_id, request).model_dump_json())
+    elif isinstance(request, LibraryFindArguments):
+        return ToolResult(content=find(turn.user_id, request).model_dump_json())
+    else:
+        return ToolResult(
+            content=materialize(turn, cancellation, request).model_dump_json()
+        )
+    return ToolResult(
+        content=ArtifactPublished.of(published).model_dump_json(),
+        details=PublishedFiles(files=published),
+    )

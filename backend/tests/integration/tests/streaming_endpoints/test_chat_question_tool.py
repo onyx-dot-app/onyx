@@ -484,7 +484,7 @@ def test_agents_that_the_root_starts_get_no_question_tool(
                 ToolCall(
                     id="spawn-lookup",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "lookup", "instruction": child_task},
+                    arguments={"task_name": "lookup", "message": child_task},
                 )
             ],
             conditions=RequestConditions(

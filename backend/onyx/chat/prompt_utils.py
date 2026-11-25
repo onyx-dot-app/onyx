@@ -34,6 +34,7 @@ from onyx.file_store.models import (
     FileToolMetadata,
 )
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     Message,
@@ -85,19 +86,25 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
-from onyx.tools.constants import EXEC_TOOL_NAME, FILE_READER_TOOL_NAME
+from onyx.tools.constants import (
+    FILE_READER_TOOL_NAME,
+)
 from onyx.tools.interface import Tool
 from onyx.tools.models import LlmPythonExecutionResult, ToolPreference
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     SandboxTool,
     sandbox_guidance,
 )
@@ -130,7 +137,7 @@ def build_chat_reminder(
     # Only suggest opening URLs when this agent has the tool.
     if (
         not any(part.tool_name == ImageGenerationTool.NAME for part in parts)
-        and context.has_open_url_tool
+        and context.open_url_reminder is not None
         and not context.out_of_cycles
         and any(
             part.tool_name == WebSearchTool.NAME
@@ -140,7 +147,7 @@ def build_chat_reminder(
             for part in tool_result_parts(result)
         )
     ):
-        reminder_text = OPEN_URL_REMINDER
+        reminder_text = context.open_url_reminder
     return build_reminder_message(
         reminder_text=reminder_text,
         include_citation_reminder=any(
@@ -178,8 +185,13 @@ def build_chat_prompt(
     is_last_step: bool,
     has_history_citations: bool = False,
     preferred_tool: ToolPreference | None = None,
+    called_name: Callable[[str], str] = str,
+    code_mode_run_name: str | None = None,
 ) -> ChatPrompt:
-    """Select instructions and reminders before assembling conversation history."""
+    """Select instructions and reminders before assembling conversation history.
+    `called_name` gives the name that the model calls a tool by (in code
+    mode, its program function), and `code_mode_run_name` names the code
+    mode run tool when code mode applies."""
     values = memory.user_info.placeholder_values if memory else {}
 
     def substitute(text: str | None) -> str | None:
@@ -225,15 +237,24 @@ def build_chat_prompt(
             datetime_aware=datetime_aware,
             tools=tools,
             include_user_info=False,
+            called_name=called_name,
+            code_mode_run_name=code_mode_run_name,
         )
         user_info = build_user_information_prompt(memory).strip()
     else:
         system = render(custom_prompt, True)
         custom = None
+    open_url_tool = next(
+        (tool for tool in callable_tools(tools) if isinstance(tool, OpenURLTool)),
+        None,
+    )
     reminder = build_chat_reminder(
         ChatReminderContext(
-            has_open_url_tool=any(
-                isinstance(tool, OpenURLTool) for tool in callable_tools(tools)
+            open_url_reminder=None
+            if open_url_tool is None
+            else OPEN_URL_REMINDER.format(
+                web_search=called_name(WebSearchTool.NAME),
+                open_url=called_name(open_url_tool.name),
             ),
             out_of_cycles=is_last_step,
             persona_task_prompt=render(persona_task, citations=cite),
@@ -284,7 +305,8 @@ def calculate_reserved_tokens(
     persona_system_prompt: str,
     base_system_prompt: str,
     token_counter: Callable[[str], int],
-    sandbox_tools: Sequence[type[SandboxTool]],
+    tool_family: ToolFamily,
+    sandbox_tools: bool,
     files: list[FileDescriptor] | None = None,
     user_memory_context: UserMemoryContext | None = None,
 ) -> int:
@@ -299,7 +321,8 @@ def calculate_reserved_tokens(
         db_session: Database session
         persona_system_prompt: Custom agent system prompt (can be empty string)
         token_counter: Function that counts tokens in text
-        sandbox_tools: The turn's sandbox tools (SANDBOX_TOOLS), if any
+        tool_family: The tool family whose tool names the estimate uses
+        sandbox_tools: Whether the turn gets the family's sandbox tools
         files: List of file descriptors from the chat message (optional)
         user_memory_context: User memory context (optional)
 
@@ -313,8 +336,8 @@ def calculate_reserved_tokens(
         user_memory_context=user_memory_context,
         tools=None,
         should_cite_documents=True,
-        include_all_guidance=True,
-        all_guidance_sandbox_tools=sandbox_tools,
+        all_guidance_family=tool_family,
+        all_guidance_sandbox=sandbox_tools,
     )
 
     custom_agent_prompt = persona_system_prompt or ""
@@ -475,17 +498,22 @@ def build_system_prompt(
     user_memory_context: UserMemoryContext | None = None,
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
-    include_all_guidance: bool = False,
     include_user_info: bool = True,
-    all_guidance_sandbox_tools: Sequence[type[SandboxTool]] = (),
+    all_guidance_family: ToolFamily | None = None,
+    all_guidance_sandbox: bool = False,
+    called_name: Callable[[str], str] = str,
+    code_mode_run_name: str | None = None,
 ) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
 
     `tools` are the offered tools. Tools that run inside their calls, such as code
-    mode functions, get their guidance too, and the prompt names them as functions.
-    With include_all_guidance, the prompt names every guided tool for a token
-    estimate, and `all_guidance_sandbox_tools` are the sandbox tools it names.
+    mode functions, get their guidance too, and the prompt names each tool as
+    `called_name` gives it (in code mode, its program function);
+    `code_mode_run_name` names the code mode run tool when code mode applies.
+    With `all_guidance_family`, the prompt is a token estimate: it has the
+    guidance of every guided tool, named as that tool family names it, and
+    with `all_guidance_sandbox` the family's sandbox tools.
 
     With include_user_info=False the per-user block is left out so the result is
     byte-identical across users; emit it separately via build_user_information_prompt.
@@ -496,7 +524,7 @@ def build_system_prompt(
         datetime_aware=datetime_aware,
         append_datetime_if_aware=True,
         should_cite_documents=should_cite_documents,
-        include_all_guidance=include_all_guidance,
+        include_all_guidance=all_guidance_family is not None,
         append_citation_if_missing=True,
     )
 
@@ -509,7 +537,8 @@ def build_system_prompt(
         system_prompt += REQUIRE_CITATION_GUIDANCE
         system_prompt += ANSWER_COVERAGE_GUIDANCE
 
-    if include_all_guidance:
+    if all_guidance_family is not None:
+        run_name = CODE_MODE_SHAPES[all_guidance_family].run_name
         tool_sections = [
             TOOL_DESCRIPTION_SEARCH_GUIDANCE,
             INTERNAL_SEARCH_GUIDANCE.format(name=SearchTool.NAME),
@@ -517,15 +546,20 @@ def build_system_prompt(
                 name=WebSearchTool.NAME,
                 site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE,
             ),
-            OPEN_URLS_GUIDANCE.format(name=OpenURLTool.NAME),
+            OPEN_URLS_GUIDANCE.format(name=OPEN_URL_SHAPES[all_guidance_family].name),
             PYTHON_TOOL_GUIDANCE.format(name=PythonTool.NAME),
             GENERATE_IMAGE_GUIDANCE.format(name=ImageGenerationTool.NAME),
             MEMORY_GUIDANCE.format(name=MemoryTool.NAME),
-            CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME),
+            CODE_MODE_GUIDANCE.format(name=run_name),
             POSTGRES_QUERY_GUIDANCE.format(name=PostgresTool.NAME),
         ]
-        sandbox_section = sandbox_guidance(
-            all_guidance_sandbox_tools, str, code_mode_run_name=EXEC_TOOL_NAME
+        sandbox = SANDBOX_TOOLS[all_guidance_family]
+        sandbox_section = (
+            sandbox_guidance(
+                sandbox.tools, sandbox.shell, str, code_mode_run_name=run_name
+            )
+            if all_guidance_sandbox
+            else None
         )
         if sandbox_section is not None:
             tool_sections.append(sandbox_section)
@@ -533,15 +567,6 @@ def build_system_prompt(
         return system_prompt
 
     if tools:
-        code_mode_tool = next((t for t in tools if isinstance(t, CodeModeTool)), None)
-        code_mode_run_name = (
-            None if code_mode_tool is None else code_mode_tool.shape.run_name
-        )
-        # The name that the model calls a tool by: in code mode, its program
-        # function's.
-        called_name: Callable[[str], str] = (
-            code_mode_tool.called_name if code_mode_tool is not None else str
-        )
         # Inner tools are functions of a code mode program, not direct tools.
         tools = callable_tools(tools)
         tool_guidance_sections: list[str] = (
@@ -593,10 +618,17 @@ def build_system_prompt(
                     template.format(name=called_name(tool.name))
                 )
 
-        sandbox_section = sandbox_guidance(
-            [tool for tool in tools if isinstance(tool, SandboxTool)],
-            called_name,
-            code_mode_run_name=code_mode_run_name,
+        sandbox_tools = [tool for tool in tools if isinstance(tool, SandboxTool)]
+        # The sandbox tools of an agent share one turn.
+        sandbox_section = (
+            sandbox_guidance(
+                [type(tool) for tool in sandbox_tools],
+                sandbox_tools[0].turn.shell,
+                called_name,
+                code_mode_run_name=code_mode_run_name,
+            )
+            if sandbox_tools
+            else None
         )
         if sandbox_section is not None:
             tool_guidance_sections.append(sandbox_section)

@@ -33,17 +33,12 @@ from onyx.tools.tool_implementations.code_mode.prompt import (
     INNER_CALL_MESSAGE,
     OTHER_OPERATION_MESSAGE,
     PROGRAM_FUNCTION_USE,
-    RUN_USE,
     WAIT_DESCRIPTION,
-    WAIT_USE,
     code_mode_description,
     program_function_operation,
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 from onyx.tools.tool_implementations.code_mode.shapes import (
-    CODE_MODE_SHAPES,
-    RUN_TOOL_NAMES,
-    WAIT_TOOL_NAMES,
     CodeModeShape,
 )
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
@@ -82,27 +77,6 @@ class CodeModeTool(Tool):
         self._cells = cells
         self._limits = limits
         self._stubs = build_tool_stubs(self.shape, self._inner_tools)
-        run = self.shape.run_name
-        # The program search exists only with deferred functions.
-        search = self.shape.search if self._stubs.tool_index is not None else None
-        describe = self.shape.describe or search
-        # What a call of a code mode operation of any shape, as a tool that
-        # this chat does not offer, says to use instead.
-        self._operation_uses = {
-            **dict.fromkeys(RUN_TOOL_NAMES, RUN_USE.format(run=run)),
-            **dict.fromkeys(
-                WAIT_TOOL_NAMES, WAIT_USE.format(wait=self.shape.wait_name)
-            ),
-            **{
-                function.name: PROGRAM_FUNCTION_USE.format(function=use.name, run=run)
-                for shape in CODE_MODE_SHAPES.values()
-                for function, use in (
-                    (shape.search, search),
-                    (shape.describe, describe),
-                )
-                if function is not None and use is not None
-            },
-        }
         # Calls to a sequential tool run one at a time, as they do outside programs.
         sequences: dict[str, SequentialCalls] = {}
         self._sequential_calls = {
@@ -128,6 +102,12 @@ class CodeModeTool(Tool):
     def inner_tools(self) -> list[Tool]:
         return self._inner_tools
 
+    @property
+    def has_search(self) -> bool:
+        """Programs have the shape's search function: some functions are
+        deferred."""
+        return self._stubs.tool_index is not None
+
     def operation_names(self, preference: ToolPreference) -> list[str]:
         return [
             program_function_operation(
@@ -141,29 +121,23 @@ class CodeModeTool(Tool):
         """The name that the model calls the tool named `tool_name` by:
         `tools.<function>` for a function of this tool's programs, else the
         tool's own name."""
-        function = next(
-            (
-                function
-                for function in self._stubs.functions.values()
-                if function.tool.name == tool_name
-            ),
-            None,
-        )
-        return tool_name if function is None else function.called_name
+        return self._stubs.called_names.get(tool_name, tool_name)
 
-    def inner_call_hint(self, name: str) -> str | None:
-        """`name` is a function name, as the description lists it, or the
-        name of its tool, also after `tools.` or `tools_`; or the name of a
-        code mode tool or program function of any shape."""
-        if name in self._operation_uses:
-            return OTHER_OPERATION_MESSAGE.format(
-                name=name, use=self._operation_uses[name]
-            )
-        candidates = [
-            name,
-            name.removeprefix(f"{TOOLS_NAMESPACE}."),
-            name.removeprefix(f"{TOOLS_NAMESPACE}_"),
-        ]
+    def inner_call_hint(self, name: str, tool_name: str | None = None) -> str | None:
+        """For a call of `name` as a tool of its own: how to call it from a
+        program; None when it is none of the programs' functions. `name` is a
+        function name, as the description lists it, or the name of its tool,
+        also after `tools.` or `tools_`. `tool_name` is the tool that the call
+        means, when `name` is another tool family's name for it."""
+        candidates = (
+            [tool_name]
+            if tool_name is not None
+            else [
+                name,
+                name.removeprefix(f"{TOOLS_NAMESPACE}."),
+                name.removeprefix(f"{TOOLS_NAMESPACE}_"),
+            ]
+        )
         function = next(
             (
                 function
@@ -175,14 +149,31 @@ class CodeModeTool(Tool):
         )
         if function is None:
             return None
+        # The arguments that a call must give: a strict schema also requires
+        # the optional ones, which accept null.
+        arguments = (
+            ", ".join(
+                f"{argument}=..."
+                for argument in sorted(
+                    function.required_arguments - function.nullable_arguments
+                )
+            )
+            or "..."
+        )
+        if tool_name is not None:
+            return OTHER_OPERATION_MESSAGE.format(
+                name=name,
+                use=PROGRAM_FUNCTION_USE.format(
+                    function=function.called_name,
+                    arguments=arguments,
+                    run=self.shape.run_name,
+                ),
+            )
         return INNER_CALL_MESSAGE.format(
             name=name,
             run=self.shape.run_name,
             called_name=function.called_name,
-            arguments=", ".join(
-                f"{argument}=..." for argument in sorted(function.required_arguments)
-            )
-            or "...",
+            arguments=arguments,
         )
 
     @property

@@ -882,7 +882,7 @@ default agent, is Blocked.
     stream showed.** `db/chat_response.py:read_response_replay_data` loads the
     `approval_request` rows of an ended or suspended response and the child
     runs it shows, and the rows of the background agents that its
-    `spawn_agent` and `send_message` calls started, directly or through
+    spawn tool (`spawn_agent` or `agent`) and `send_message` calls started, directly or through
     their agents, at any status; those show in that call's card, with the
     agent's name (`ToolApprovalRequest.agent_name`). Every request shows the
     arguments saved on its row, so a replayed card equals the live one. An

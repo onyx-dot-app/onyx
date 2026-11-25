@@ -15,11 +15,13 @@ import pytest
 
 from onyx.agents.runtime import Agent
 from onyx.llm.interfaces import GenerationContext
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.tools.models import CapabilityEntry, ToolContext, ToolOptions
 from onyx.tools.tool_constructor import should_disable_open_url_web_fetch
 from onyx.tools.tool_implementations.open_url.models import FailedFetch
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
     WEB_FETCH_DISABLED_REASON,
     OpenedPage,
     OpenURLTool,
@@ -81,6 +83,7 @@ def _build_tool(web_fetch_disabled: bool) -> OpenURLTool:
     # No content_provider passed in disabled mode: the constructor must not
     # try to resolve one (and must not raise when none is configured).
     return OpenURLTool(
+        shape=OPEN_URL_SHAPES[ToolFamily.OPENAI],
         tool_id=2,
         document_index=MagicMock(),
         user=MagicMock(),

@@ -17,6 +17,7 @@ from onyx.llm.cancellation import (
     CancellationSignal,
     cancellation_scope,
 )
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolCall, ToolResult, ToolResultMessage
 from onyx.microvm.models import FileEntry, FileListing, FileType
 from onyx.server.features.build.sandbox.harness_base import (
@@ -27,7 +28,11 @@ from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     HarnessSandboxRef,
 )
-from onyx.tools.constants import EXEC_TOOL_NAME, OPEN_URL_TOOL_NAME
+from onyx.tools.constants import (
+    EXEC_COMMAND_TOOL_NAME,
+    EXEC_TOOL_NAME,
+    OPEN_URL_TOOL_NAME,
+)
 from onyx.tools.models import SearchResult, SearchResults
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.code_mode.prompt import (
@@ -42,7 +47,6 @@ from onyx.tools.tool_implementations.sandbox.models import (
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
-    ExecCommandTool,
     LibraryFindTool,
     LibraryListTool,
     LibraryManageLibraryTool,
@@ -50,6 +54,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibrarySearchTool,
     _exec_result,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.spill import (
     SPILL_FAILED_NOTE,
     spill_large_result,
@@ -72,6 +77,7 @@ class _FakeVMTurn(SandboxTurn):
             chat_session_id=uuid4(),
             vm_chat_files=[],
             copy_vm_chat_files=False,
+            shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         self.files: dict[str, bytes] = {}
         self.times: dict[str, datetime | None] = {}
@@ -204,6 +210,7 @@ def _spill(
     *,
     call_id: str = "call",
     name: str = "fetch",
+    shell_name: str = "exec_command",
     code_mode_run_name: str | None = None,
 ) -> ToolResult:
     return spill_large_result(
@@ -214,6 +221,7 @@ def _spill(
             result=ToolResult(content=result) if isinstance(result, str) else result,
             step_results=(),
         ),
+        shell_name=shell_name,
         code_mode_run_name=code_mode_run_name,
     )
 
@@ -267,6 +275,14 @@ def test_many_short_lines_under_the_character_limit_stay_whole(
         LibraryFindTool.NAME,
         LibrarySearchTool.NAME,
         ArtifactTool.NAME,
+        # The tools that keep to their own limits, in each tool family.
+        "exec_command",
+        "bash",
+        "write_stdin",
+        "skills_read",
+        "skill",
+        "open_url",
+        "web_fetch",
     ],
 )
 def test_a_bounded_library_result_past_the_steps_budget_stays_whole(
@@ -289,6 +305,7 @@ def test_a_bounded_library_result_past_the_steps_budget_stays_whole(
             result=ToolResult(content=text),
             step_results=(earlier,),
         ),
+        shell_name="exec_command",
         code_mode_run_name=None,
     )
 
@@ -344,17 +361,24 @@ def test_a_preview_cannot_close_the_tag_in_any_case(turn: _FakeVMTurn) -> None:
 
 
 @pytest.mark.parametrize(
-    ("run_name", "read_with"),
+    ("shell_name", "run_name", "read_with"),
     [
-        (None, "Read the file with exec_command (grep"),
-        ("exec", "Read the file with exec_command in exec programs"),
-        ("repl", "Read the file with exec_command in repl programs"),
+        ("exec_command", None, "Read the file with exec_command (grep"),
+        ("bash", None, "Read the file with bash (grep"),
+        (
+            "tools.exec_command",
+            "exec",
+            "Read the file with tools.exec_command in exec programs",
+        ),
+        ("tools.bash", "repl", "Read the file with tools.bash in repl programs"),
     ],
 )
 def test_the_note_says_why_the_file_can_be_missing_and_to_rerun_only_reads(
-    turn: _FakeVMTurn, run_name: str | None, read_with: str
+    turn: _FakeVMTurn, shell_name: str, run_name: str | None, read_with: str
 ) -> None:
-    content = _spill(turn, "x" * 60_000, code_mode_run_name=run_name).content
+    content = _spill(
+        turn, "x" * 60_000, shell_name=shell_name, code_mode_run_name=run_name
+    ).content
 
     assert read_with in content
     assert (
@@ -587,7 +611,7 @@ def test_an_exec_call_spills_all_the_output_that_it_kept(turn: _FakeVMTurn) -> N
     assert isinstance(result.details, SandboxExecResult)
     cut = result.details.output
 
-    result = _spill(turn, result, name=ExecCommandTool.NAME)
+    result = _spill(turn, result, name=EXEC_COMMAND_TOOL_NAME)
 
     # The file marks the middle that the call did not keep.
     full = head + truncation_marker(7) + tail
@@ -647,6 +671,7 @@ def test_a_manage_result_past_the_steps_budget_stays_whole(
             result=ToolResult(content=text),
             step_results=(earlier,),
         ),
+        shell_name="exec_command",
         code_mode_run_name=None,
     )
 
@@ -671,6 +696,7 @@ def test_a_library_list_page_stays_whole_in_a_full_step(
             result=ToolResult(content=page),
             step_results=(earlier,),
         ),
+        shell_name="exec_command",
         code_mode_run_name=None,
     )
 

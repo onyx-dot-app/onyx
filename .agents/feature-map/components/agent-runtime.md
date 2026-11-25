@@ -59,7 +59,7 @@ document does not repeat it.
   and the root cannot be interrupted. `list_agents` shows unfinished agents and agents of the
   current user turn, and marks the caller; `include_finished` lists the whole branch tree.
   Chat starts a follow-up response when an idle parent has unread child results; a root
-  `wait_agents` call batches them ([[chat-persistence]], `db/chat_inputs.py:wakes_for_results`).
+  wait call (`wait_agent`, OpenAI tool shape only) batches them ([[chat-persistence]], `db/chat_inputs.py:wakes_for_results`).
   Queued messages and follow-ups start through one entry,
   `AgentCoordinator.start_message_run`, which restores the agent through its
   spawner whoever sent the work.

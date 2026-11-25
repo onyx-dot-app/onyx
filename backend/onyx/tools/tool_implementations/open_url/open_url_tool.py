@@ -1,7 +1,7 @@
 import json
 import threading
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel
@@ -27,7 +27,9 @@ from onyx.db.document import fetch_document_ids_by_links, filter_existing_docume
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.constants import OPEN_URL_TOOL_NAME, WEB_FETCH_TOOL_NAME
 from onyx.tools.interface import (
     CITATIONS_PER_TOOL_CALL,
     Tool,
@@ -392,6 +394,22 @@ class OpenedPage(NamedTuple):
     text: str
 
 
+class OpenURLShape(NamedTuple):
+    """How one tool family names the URL reading tool; its arguments are the
+    same in every shape."""
+
+    name: str
+
+
+OPEN_URL_SHAPES: Mapping[ToolFamily, OpenURLShape] = {
+    ToolFamily.OPENAI: OpenURLShape(OPEN_URL_TOOL_NAME),
+    # The name Claude models are trained on.
+    ToolFamily.CLAUDE: OpenURLShape(WEB_FETCH_TOOL_NAME),
+}
+# The tool's names across the shapes and saved chats.
+OPEN_URL_TOOL_NAMES = frozenset(shape.name for shape in OPEN_URL_SHAPES.values())
+
+
 def _report_opened(
     invocation: ToolInvocation,
     sections: list[InferenceSection],
@@ -423,7 +441,6 @@ class OpenURLTool(Tool):
     merge_list_argument = "urls"
     merge_list_limit = MAX_URLS_PER_CALL
 
-    NAME = "open_url"
     DESCRIPTION = "Open and read the content of one or more URLs."
     DESCRIPTION_NO_WEB_FETCH = (
         "Open and read the content of one or more URLs. Web access is "
@@ -440,10 +457,14 @@ class OpenURLTool(Tool):
         user: User,
         content_provider: WebContentProvider | None = None,
         web_fetch_disabled: bool = False,
+        *,
+        shape: OpenURLShape,
     ) -> None:
         """Initialize the OpenURLTool.
 
         Args:
+            shape: The model's tool family's shape (OPEN_URL_SHAPES), which
+                names the tool. The tool row keeps the name open_url.
             tool_id: Unique identifier for this tool instance.
             document_index: Index handle for retrieving stored documents.
             user: User context for ACL filtering, anonymous users only see public docs.
@@ -455,6 +476,7 @@ class OpenURLTool(Tool):
                 the live-crawl path is never used.
         """
         self._id = tool_id
+        self.shape = shape
         self._document_index = document_index
         self._user = user
         self._web_fetch_disabled = web_fetch_disabled
@@ -485,7 +507,7 @@ class OpenURLTool(Tool):
 
     @property
     def name(self) -> str:
-        return self.NAME
+        return self.shape.name
 
     @property
     def description(self) -> str:
@@ -609,9 +631,7 @@ class OpenURLTool(Tool):
                     and not indexed_result.sections
                     and not crawled_pages
                 ):
-                    return ToolResult(
-                        content="The call to open_url timed out", is_error=True
-                    )
+                    return ToolResult(content="The call timed out", is_error=True)
             else:
                 url_requests, unresolved_urls = _resolve_urls_to_document_ids(
                     urls, db_session
@@ -714,9 +734,7 @@ class OpenURLTool(Tool):
                     and not indexed_result.sections
                     and not crawled_pages
                 ):
-                    return ToolResult(
-                        content="The call to open_url timed out", is_error=True
-                    )
+                    return ToolResult(content="The call timed out", is_error=True)
 
                 # Last-resort: link-based lookup when doc-ID resolve + crawl both fail.
                 failed_web_fetches = self._fallback_link_lookup(

@@ -75,7 +75,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
 )
-from onyx.tools.constants import PYTHON_TOOL_NAME
+from onyx.tools.constants import PYTHON_TOOL_NAME, WAIT_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import CapabilityEntry, ChatFile, ToolContext
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
@@ -1219,19 +1219,19 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
     }
     # Only the root waits for its agents by ending its turn.
     assert [{tool.name for tool in request.tools} for request in requests] == [
-        {*expected, "wait_agents"},
+        {*expected, "wait_agent"},
         expected,
     ]
+    root_instructions = ROOT_AGENT_INSTRUCTIONS.format(name=WAIT_AGENT_TOOL_NAME)
     roles = [
         [
             m.text
             for m in request.messages
-            if m.text in (ROOT_AGENT_INSTRUCTIONS, SUBAGENT_INSTRUCTIONS)
-            and m.cacheable
+            if m.text in (root_instructions, SUBAGENT_INSTRUCTIONS) and m.cacheable
         ]
         for request in requests
     ]
-    assert roles == [[ROOT_AGENT_INSTRUCTIONS], [SUBAGENT_INSTRUCTIONS]]
+    assert roles == [[root_instructions], [SUBAGENT_INSTRUCTIONS]]
 
 
 @pytest.mark.parametrize("custom", [False, True])

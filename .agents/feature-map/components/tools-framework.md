@@ -31,7 +31,7 @@ The interface is `tools/interface.py:Tool`, which returns
   `deep_research/agent.py:DeepResearchAgent`. `ChatAgent` binds them with its
   own `ToolContext`.
 - **The sub-agents** run on the same runtime. `DeepResearchAgent` binds
-  `skills_list` and `skills_read` in its research phase, and gets the skills
+  `skills_list` and the family's skill read tool in its research phase, and gets the skills
   catalog ([[skills]]). It passes the tools to each
   `deep_research/research_agent.py:ResearchAgent` child, which binds them with
   its own `ToolContext`.
@@ -151,9 +151,12 @@ on restore, the runtime saves it as the result of a call that a lost
 execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of code mode programs; `chat/prompt_utils.py:callable_tools` reads it.
-`inner_call_hint` answers a call of such a tool as a tool of its own: the
-result says how to call it through the offered tool
-(`agents/tool_execution.py`).
+A call of a tool that the agent does not offer gets the agent's
+`unknown_tool_hint` as its result, when the hook gives one
+(`agents/tool_execution.py`). A chat agent's hook
+(`chat/agent.py:ChatAgent._unknown_tool_hint`) says how to call a code mode
+function from a program (`CodeModeTool.inner_call_hint`), and names the
+offered tool for a name of another tool family's shapes.
 
 A tool whose calls can wait for the user's approval sets `approval`
 (`tools/models.py:ToolApprovalScope`): an integration action that its policy
@@ -171,14 +174,50 @@ result that finishes after cancellation. Side effects that the tool already
 made are not undone, so check `invocation.cancellation` before irreversible
 work.
 
+**Tool shapes.** The model's tool family (`LLMConfig.tool_family`: Claude
+models, or all others) names some operations and takes their arguments in the
+shape its models are trained on. One `Tool` class serves each operation; its
+owning module maps each family to a shape (a name and an arguments model whose
+pure `request()` gives the operation's typed input):
+`tools/tool_implementations/code_mode/shapes.py:CODE_MODE_SHAPES` (`repl`/`poll` or `exec`/`wait`),
+`tools/tool_implementations/sandbox/shapes.py:SHELL_SHAPES` (`bash(command, timeout, description,
+run_in_background)` or `exec_command(cmd, workdir, yield_time_ms,
+max_output_tokens)`, and `write_stdin` with `timeout` or `yield_time_ms` and
+`max_output_tokens`), `tools/tool_implementations/subagents/shapes.py:AGENT_SHAPES` (`agent(description,
+prompt)` or `spawn_agent(task_name, message)`; `send_message` with `to` or
+`target`; only the OpenAI shape has `wait_agent`),
+`tools/tool_implementations/skills/skill_tools.py:SKILL_READ_SHAPES` (`skill(skill)` or
+`skills_read(name)`), and `tools/tool_implementations/open_url/open_url_tool.py:OPEN_URL_SHAPES`
+(`web_fetch` or `open_url`, same arguments), and
+`tools/tool_implementations/question/shapes.py:QUESTION_SHAPES`. Tool rows,
+`in_code_tool_id`, persona assignments and approval action ids do not change
+with the family. Each module also derives the names across families
+(`SHELL_TOOL_NAMES`, `SPAWN_TOOL_NAMES`, `AGENT_START_TOOL_NAMES`,
+`WAIT_AGENT_TOOL_NAMES`, `SKILLS_READ_TOOL_NAMES`, `OPEN_URL_TOOL_NAMES`,
+`QUESTION_TOOL_NAMES`), which the name-keyed sites
+use, because a chat's history holds calls of both families. A shape also
+names the arguments that other code reads by name, as fields: the shell
+card's `command_argument` and `workdir_argument`, and the spawn errors'
+`spawn_name_argument` and `spawn_task_argument`. A sandbox turn carries its
+`ShellShape` (`SandboxTurn.shell`). The agent shape tells whether the root
+waits for the agents that it created by itself (no `wait_name`, the Claude
+shape; [[chat-persistence]]); `ChatAgent` picks the root's instructions from
+it. A call of another family's name for a tool that the agent offers gets a
+result that names the agent's own (`unknown_tool_hint`). A description
+that names another tool is a template that `Tool.describe(called_name)`
+fills: with the tool's name, or in code mode with its program function
+(`ToolStubs.called_names`); `ChatAgent.called_name` gives the prompt the
+same names.
+
 **Chat skill tools.** `chat/execution.py:create_chat_agent` adds `skills_list`
-and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
+and the family's skill read tool, `skills_read` or `skill`
+(`tools/tool_implementations/skills/skill_tools.py`), to the
 chat agent's configured tools when the turn's user has a chat skill
 ([[skills]]): the agent's tools and the request's tool options do not
 remove them. Restored and child agents receive them with the other configured
 tools. The tools hold the user and `with_sandbox` (the turn's `sandbox_tools`;
 chat built-ins need the VM) and read the user's current chat skills on each
-call; `skills_read` checks that the user can still see the skill and
+call; the read tool checks that the user can still see the skill and
 returns its SKILL.md, frontmatter included, up to 32,000 characters per call
 (`SKILL_READ_MAX_CHARS`). A longer text ends with a note that gives the
 `start_char` offset of the next call. `skills_read` copies no files; the
@@ -187,7 +226,8 @@ both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows. A direct call renders as a generic tool card with a short
 JSON summary, not the SKILL.md text. In code mode they are `IMMEDIATE`
-functions that return text (`tools.skills_list`, `tools.skills_read`), and the
+functions that return text (`tools.skills_list`, `tools.skills_read` or
+`tools.skill`), and the
 chat agent's skills catalog names them so. SKILL.md text that the program
 prints or returns goes into its `code_mode_delta` packets; the web timeline
 does not show program output ([[chat-frontend]]). Deep Research does not use
@@ -234,7 +274,7 @@ catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds c
 with `build_chat_agent`, the same builder that restores saved children.
 Each child builds its own controls and conversation state.
 Agents nest two levels below the root (`agents/agent_coordination.py:MAX_CHILD_DEPTH`); an agent
-at that depth gets no `spawn_agent`. A chat runs at most ten active background agents on a branch
+at that depth gets no spawn tool. A chat runs at most ten active background agents on a branch
 (`chat/run_store.py:MAX_RUNNING_AGENTS`); `chat/models.py:AgentResultState.is_active` defines them:
 unfinished runs with a result row, so foreground workers never count. A spawn beyond that
 returns a tool error, and inbox work for an idle agent waits until a run finishes. Each run checks the owner's token rate limits: root turns when they are sent
@@ -262,11 +302,11 @@ Results reach the agent's spawner automatically before its next model call.
 A subagent suspends before completing until the results of children it spawned are available.
 The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results.
-Only the root gets `wait_agents` and the `ROOT_AGENT_INSTRUCTIONS` prompt block; the wait rule is in [[chat-persistence]]. These results
+Only the root gets the wait tool (`wait_agent`, in the OpenAI shape only) and the `ROOT_AGENT_INSTRUCTIONS` prompt block, which names the wait tool when the shape has one; the wait rule is in [[chat-persistence]]. These results
 stay in model history; only the parent's response appears as a chat message.
-Tool replies use concise text, and models see agent paths, never IDs. `send_message` and
-`interrupt_agent` take a `target`, and `wait_agents` takes `targets`: a path from spawn/list, or
-`..` for the caller's parent (`tools/tool_implementations/subagents/subagent_tools.py:_find_agent`, over `discover_agents`). A path names one agent on the branch: `spawn_agent` refuses a name whose
+Tool replies use concise text, and models see agent paths, never IDs. `send_message` takes
+a `target` (`to` in the Claude shape), `interrupt_agent` a `target`, and `wait_agent` `targets`: a path from spawn/list, or
+`..` for the caller's parent (`tools/tool_implementations/subagents/subagent_tools.py:_find_agent`, over `discover_agents`). A path names one agent on the branch: the spawn tool refuses a name whose
 path any visible agent holds, finished agents included (`agents/agent_coordination.py:register_child`).
 
 **Question tool.** `tools/tool_implementations/question/question_tool.py:QuestionTool`
@@ -542,9 +582,10 @@ are plain `AgentTool` objects with no `Tool` row, and
      `tools/interface.py:tool_definition_from_arguments` (`strict=True` for a
      built-in tool), and parse calls with
      `tools/interface.py:parse_tool_arguments`.
-  2. Add it to `BUILT_IN_TOOL_TYPES` and `BUILT_IN_TOOL_MAP`. Define `name` on
-     the class itself (a `str` or a property), or the import of
-     `tools/built_in_tools.py` fails in `_tool_llm_name`.
+  2. Add it to `BUILT_IN_TOOL_TYPES` and `BUILT_IN_TOOL_MAP`. Define its
+     name as a `NAME` class attribute, or as a `name` property that reads
+     the tool family's shape when the families name it differently
+     (**Tool shapes** above).
   3. Seed its `Tool` row in an Alembic migration with
      `in_code_tool_id=YourTool.__name__`. Copy
      `backend/alembic/versions/d3fd499c829c_add_file_reader_tool.py`.
@@ -566,7 +607,7 @@ are plain `AgentTool` objects with no `Tool` row, and
      `mobile/src/chat/tools.ts`.
   8. Deep research uses only the tools whose names are in the allowed set of
      `deep_research/research_agent.py:ResearchAgent.__init__`, which includes
-     `skills_list` and `skills_read`. Add a search tool there if deep research must use it.
+     the skill tools (`SKILL_TOOL_NAMES`). Add a search tool there if deep research must use it.
      Nothing reports a tool that is left out.
 - `gate-a-tool` **Gate a tool.** Pick the narrowest gate that matches who decides:
 

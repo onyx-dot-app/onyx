@@ -232,11 +232,6 @@ class Tool(abc.ABC):
         """How the model calls the preferred tool through this tool."""
         return [self.name] if self.matches(preference) else []
 
-    def inner_call_hint(self, name: str) -> str | None:  # noqa: ARG002
-        """For a call of `name` as a tool of its own: how to call it through
-        this tool instead; None when `name` is none of its inner tools."""
-        return None
-
     @property
     @abc.abstractmethod
     def code_mode_exposure(self) -> CodeModeExposure:
@@ -273,6 +268,14 @@ class Tool(abc.ABC):
     @abc.abstractmethod
     def display_name(self) -> str:
         raise NotImplementedError
+
+    def describe(self, called_name: Callable[[str], str]) -> str | None:  # noqa: ARG002
+        """The description, naming each other tool by the name that
+        `called_name` gives for its tool name, such as its code mode
+        function; None: the definition's description, which names no tool. A
+        tool whose description names other tools overrides it, and its
+        `description` names them as tools."""
+        return None
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
@@ -375,7 +378,6 @@ class Tool(abc.ABC):
                 for tool in (self, *self.inner_tools)
                 if tool.approval is not None
             ],
-            inner_call_hint=self.inner_call_hint,
         )
 
 

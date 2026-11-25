@@ -60,6 +60,7 @@ from onyx.tools.models import (
     PythonExecutionFile,
 )
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
+    CodeModeTool,
     with_code_mode,
 )
 from onyx.tools.tool_implementations.code_mode.models import (
@@ -77,11 +78,11 @@ from onyx.tools.tool_implementations.code_mode.shapes import (
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
-    SANDBOX_TOOLS,
     ApplyPatchTool,
     ExecCommandTool,
     WriteStdinTool,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.postgres_sanitization import sanitize_json_like
@@ -343,12 +344,25 @@ def test_direct_search_prompt_has_no_code_mode_guidance() -> None:
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in direct
 
 
+def _code_mode_prompt(offered: list[Tool]) -> str:
+    """The system prompt of an agent with `offered`, which names tools as
+    the agent's code mode tool, if any, calls them."""
+    code = next((tool for tool in offered if isinstance(tool, CodeModeTool)), None)
+    return build_system_prompt(
+        "base",
+        tools=offered,
+        include_user_info=False,
+        called_name=str if code is None else code.called_name,
+        code_mode_run_name=None if code is None else code.shape.run_name,
+    )
+
+
 @pytest.mark.parametrize("family", list(ToolFamily))
 def test_code_mode_guidance_names_the_shape_s_run_tool(family: ToolFamily) -> None:
     offered = with_code_mode(
         [MemoryTool(tool_id=1, llm=MagicMock())], CODE_MODE_SHAPES[family]
     )[0]
-    prompt = build_system_prompt("base", tools=offered, include_user_info=False)
+    prompt = _code_mode_prompt(offered)
     for other, shape in CODE_MODE_SHAPES.items():
         assert (CODE_MODE_GUIDANCE.format(name=shape.run_name) in prompt) is (
             other is family
@@ -359,7 +373,7 @@ def test_code_mode_guidance_names_the_shape_s_run_tool(family: ToolFamily) -> No
 def test_tool_sections_name_a_tool_as_the_model_calls_it(code_mode: bool) -> None:
     memory: list[Tool] = [MemoryTool(tool_id=1, llm=MagicMock())]
     offered = with_code_mode(memory, OPENAI_CODE_MODE)[0] if code_mode else memory
-    prompt = build_system_prompt("base", tools=offered, include_user_info=False)
+    prompt = _code_mode_prompt(offered)
     name = "tools.add_memory" if code_mode else "add_memory"
     assert MEMORY_GUIDANCE.format(name=name) in prompt
 
@@ -368,7 +382,7 @@ def test_tool_sections_name_a_tool_as_the_model_calls_it(code_mode: bool) -> Non
 def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> None:
     def prompt(tools: list[Tool]) -> str:
         offered = with_code_mode(tools, OPENAI_CODE_MODE)[0] if code_mode else tools
-        return build_system_prompt("base", tools=offered, include_user_info=False)
+        return _code_mode_prompt(offered)
 
     turn = SandboxTurn(
         tenant_id="t",
@@ -376,28 +390,38 @@ def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> 
         chat_session_id=uuid4(),
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
     prefix = "tools." if code_mode else ""
     assert "## Sandbox" not in prompt([EchoTool()])
     assert (
         f"Run commands with `{prefix}exec_command`, use `{prefix}write_stdin` for "
         f"commands that are still running and edit files with `{prefix}apply_patch`."
-    ) in prompt([ExecCommandTool(turn), WriteStdinTool(turn), ApplyPatchTool(turn)])
+    ) in prompt(
+        [
+            ExecCommandTool(turn),
+            WriteStdinTool(turn),
+            ApplyPatchTool(turn),
+        ]
+    )
     only_exec = prompt([ExecCommandTool(turn)])
     assert f"Run commands with `{prefix}exec_command`." in only_exec
     assert "apply_patch" not in only_exec
     assert ("Call them from `exec` programs." in only_exec) is code_mode
 
 
-def test_the_token_reservation_counts_code_mode_guidance() -> None:
+@pytest.mark.parametrize("include_sandbox", [False, True])
+def test_the_token_reservation_counts_code_mode_guidance(
+    include_sandbox: bool,
+) -> None:
     reserved = build_system_prompt(
         "base",
-        include_all_guidance=True,
         include_user_info=False,
-        all_guidance_sandbox_tools=SANDBOX_TOOLS[ToolFamily.OPENAI],
+        all_guidance_family=ToolFamily.OPENAI,
+        all_guidance_sandbox=include_sandbox,
     )
     assert CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME) in reserved
-    assert "## Sandbox" in reserved
+    assert ("## Sandbox" in reserved) is include_sandbox
 
 
 class _DirectOnlyTool(EchoTool):
@@ -703,12 +727,20 @@ def test_live_stdout_cut_at_the_limit_is_replaced_by_the_saved_stdout() -> None:
 @pytest.mark.parametrize(
     ("family", "named", "unnamed"),
     [
-        (ToolFamily.CLAUDE, ["`edit`", "`write`"], "`apply_patch`"),
-        (ToolFamily.OPENAI, ["`apply_patch`"], "`edit`"),
+        (
+            ToolFamily.CLAUDE,
+            ["`bash`", "`edit`", "`write`", "## repl\n", "## web_fetch\n"],
+            ["`apply_patch`", "## exec\n", "## open_url\n"],
+        ),
+        (
+            ToolFamily.OPENAI,
+            ["`exec_command`", "`apply_patch`", "## exec\n", "## open_url\n"],
+            ["`edit`", "## repl\n", "## web_fetch\n"],
+        ),
     ],
 )
-def test_the_token_estimate_names_the_model_s_sandbox_tools(
-    family: ToolFamily, named: list[str], unnamed: str
+def test_the_token_estimate_names_the_model_s_tools(
+    family: ToolFamily, named: list[str], unnamed: list[str]
 ) -> None:
     prompts: list[str] = []
 
@@ -721,8 +753,270 @@ def test_the_token_estimate_names_the_model_s_sandbox_tools(
         persona_system_prompt="",
         base_system_prompt="base",
         token_counter=count,
-        sandbox_tools=SANDBOX_TOOLS[family],
+        tool_family=family,
+        sandbox_tools=True,
     )
     [estimate] = prompts
-    assert all(name in estimate for name in named)
-    assert unnamed not in estimate
+    assert [name for name in named if name not in estimate] == []
+    assert [name for name in unnamed if name in estimate] == []
+
+
+class _DeferredTool(_LookupTool):
+    """A tool whose program function is deferred, so programs can search."""
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
+
+
+def _sandbox_tools(family: ToolFamily) -> list[Tool]:
+    turn = MagicMock(spec=SandboxTurn)
+    turn.shell = SHELL_SHAPES[family]
+    turn.vm_chat_files = []
+    return [ExecCommandTool(turn), WriteStdinTool(turn)]
+
+
+class _NamedTool(EchoTool):
+    """A tool by the name of a tool that has a shape per tool family."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+
+def _not_offered(name: str, use: str) -> str:
+    return f"`{name}` is not a tool in this chat. {use}"
+
+
+@pytest.mark.parametrize(
+    ("family", "code_mode", "tools", "called", "expected"),
+    [
+        # Another shape's code mode tools and program functions.
+        (
+            ToolFamily.OPENAI,
+            True,
+            [EchoTool()],
+            "repl",
+            _not_offered("repl", "Run a program with `exec`."),
+        ),
+        (
+            ToolFamily.OPENAI,
+            True,
+            [EchoTool()],
+            "poll",
+            _not_offered("poll", "Wait on a running cell with `wait`."),
+        ),
+        (
+            ToolFamily.CLAUDE,
+            True,
+            [EchoTool()],
+            "exec",
+            _not_offered("exec", "Run a program with `repl`."),
+        ),
+        # The search exists only with deferred functions.
+        (
+            ToolFamily.OPENAI,
+            True,
+            [EchoTool()],
+            "search_tools",
+            "Tool search_tools is unavailable for this step.",
+        ),
+        (
+            ToolFamily.OPENAI,
+            True,
+            [EchoTool(), _DeferredTool()],
+            "search_tools",
+            _not_offered(
+                "search_tools", "Call `await tool_search(...)` in `exec` programs."
+            ),
+        ),
+        (
+            ToolFamily.OPENAI,
+            True,
+            [EchoTool(), _DeferredTool()],
+            "describe_tool",
+            _not_offered(
+                "describe_tool", "Call `await tool_search(...)` in `exec` programs."
+            ),
+        ),
+        (
+            ToolFamily.OPENAI,
+            True,
+            [EchoTool(), _DeferredTool()],
+            "tool_search",
+            _not_offered(
+                "tool_search", "Call `await tool_search(...)` in `exec` programs."
+            ),
+        ),
+        (
+            ToolFamily.CLAUDE,
+            True,
+            [EchoTool(), _DeferredTool()],
+            "tool_search",
+            _not_offered(
+                "tool_search", "Call `await search_tools(...)` in `repl` programs."
+            ),
+        ),
+        # The Claude shape describes listed functions too.
+        (
+            ToolFamily.CLAUDE,
+            True,
+            [EchoTool()],
+            "describe_tool",
+            _not_offered(
+                "describe_tool", "Call `await describe_tool(...)` in `repl` programs."
+            ),
+        ),
+        # Another shape's name of a tool that the agent has.
+        (
+            ToolFamily.CLAUDE,
+            False,
+            _sandbox_tools(ToolFamily.CLAUDE),
+            "exec_command",
+            _not_offered("exec_command", "Call `bash` instead."),
+        ),
+        (
+            ToolFamily.CLAUDE,
+            True,
+            _sandbox_tools(ToolFamily.CLAUDE),
+            "exec_command",
+            _not_offered(
+                "exec_command",
+                "Call `await tools.bash(command=...)` in `repl` programs.",
+            ),
+        ),
+        # A strict schema's optional arguments, which accept null, are not
+        # listed as required.
+        (
+            ToolFamily.CLAUDE,
+            True,
+            _sandbox_tools(ToolFamily.CLAUDE),
+            "bash",
+            "`bash` is available only inside `repl` programs. Call it there: "
+            "`await tools.bash(command=...)`.",
+        ),
+        (
+            ToolFamily.OPENAI,
+            False,
+            _sandbox_tools(ToolFamily.OPENAI),
+            "bash",
+            _not_offered("bash", "Call `exec_command` instead."),
+        ),
+        *(
+            (
+                family,
+                False,
+                [_NamedTool(own)],
+                called,
+                _not_offered(called, f"Call `{own}` instead."),
+            )
+            for family, own, called in (
+                (ToolFamily.OPENAI, "skills_read", "skill"),
+                (ToolFamily.CLAUDE, "skill", "skills_read"),
+                (ToolFamily.OPENAI, "open_url", "web_fetch"),
+                (ToolFamily.CLAUDE, "web_fetch", "open_url"),
+                (ToolFamily.OPENAI, "request_user_input", "ask_user_question"),
+                (ToolFamily.CLAUDE, "ask_user_question", "request_user_input"),
+            )
+        ),
+        # A tool that the agent does not have by any name.
+        (
+            ToolFamily.CLAUDE,
+            False,
+            [EchoTool()],
+            "exec_command",
+            "Tool exec_command is unavailable for this step.",
+        ),
+    ],
+)
+def test_a_call_by_another_shape_s_name_says_what_to_call(
+    family: ToolFamily,
+    code_mode: bool,
+    tools: list[Tool],
+    called: str,
+    expected: str,
+) -> None:
+    llm = ScriptedLLM(
+        [
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        index=0,
+                        id="call",
+                        function=ResponseFunctionCall(name=called, arguments="{}"),
+                    )
+                ]
+            ),
+            Delta(content="Done."),
+        ],
+        family=family,
+    )
+    agent = ChatAgent(
+        messages=[],
+        tools=tools,
+        code_mode=code_mode,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=_context_files(),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+    )
+    run_agent(agent, messages=[UserMessage(content="Go")], max_steps=3)
+
+    [result] = [
+        message
+        for message in agent.state.messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert (result.content, result.is_error) == (expected, True)
+
+
+@pytest.mark.parametrize(
+    ("family", "called", "own"),
+    [
+        (ToolFamily.OPENAI, "agent", "spawn_agent"),
+        (ToolFamily.CLAUDE, "spawn_agent", "agent"),
+    ],
+)
+def test_a_call_of_another_shape_s_spawn_tool_names_the_agent_s_own(
+    family: ToolFamily, called: str, own: str
+) -> None:
+    llm = ScriptedLLM(
+        [
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        index=0,
+                        id="call",
+                        function=ResponseFunctionCall(name=called, arguments="{}"),
+                    )
+                ]
+            ),
+            Delta(content="Done."),
+        ],
+        family=family,
+    )
+    agent = ChatAgent(
+        messages=[],
+        tools=[EchoTool()],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=_context_files(),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+        create_subagent=MagicMock(),
+    )
+    run_agent(agent, messages=[UserMessage(content="Go")], max_steps=3)
+
+    [result] = [
+        message
+        for message in agent.state.messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert result.content == _not_offered(called, f"Call `{own}` instead.")

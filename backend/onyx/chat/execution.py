@@ -102,6 +102,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
     SkillsListTool,
     SkillsReadTool,
 )
@@ -1033,8 +1034,16 @@ def create_chat_agent(
         # the other configured tools.
         if setup.has_chat_skills:
             tools += [
-                SkillsListTool(user, with_sandbox=setup.sandbox_tools),
-                SkillsReadTool(user, with_sandbox=setup.sandbox_tools),
+                SkillsListTool(
+                    user,
+                    SKILL_READ_SHAPES[llm.config.tool_family],
+                    with_sandbox=setup.sandbox_tools,
+                ),
+                SkillsReadTool(
+                    user,
+                    SKILL_READ_SHAPES[llm.config.tool_family],
+                    with_sandbox=setup.sandbox_tools,
+                ),
             ]
 
         preferred_tool = setup.preferred_tool
@@ -1082,6 +1091,7 @@ def create_chat_agent(
             )
         # The chat agent and its subagents get the sandbox tools when the turn
         # offers them. They share one sandbox turn, which the root's runs end.
+        sandbox = SANDBOX_TOOLS[llm.config.tool_family]
         turn = (
             SandboxTurn(
                 tenant_id=get_current_tenant_id(),
@@ -1089,14 +1099,13 @@ def create_chat_agent(
                 chat_session_id=setup.chat_session_id,
                 vm_chat_files=setup.vm_chat_files,
                 copy_vm_chat_files=setup.copy_vm_chat_files,
+                shell=sandbox.shell,
             )
             if setup.sandbox_tools
             else None
         )
         if turn is not None:
-            sandbox_tools = [
-                tool(turn) for tool in SANDBOX_TOOLS[llm.config.tool_family]
-            ]
+            sandbox_tools = [tool(turn) for tool in sandbox.tools]
             # A turn that runs without asking (evals) gates no built-in
             # action, as integration policies allow its Ask actions.
             if setup.approval_mode is ApprovalMode.RUN_WITHOUT_ASKING:

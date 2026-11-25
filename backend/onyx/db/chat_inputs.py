@@ -6,7 +6,17 @@ A row is pending until a step or a new run consumes it; consuming deletes it.
 from collections.abc import Callable, Collection, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, and_, delete, exists, func, or_, select, type_coerce
+from sqlalchemy import (
+    Select,
+    and_,
+    delete,
+    exists,
+    false,
+    func,
+    or_,
+    select,
+    type_coerce,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -70,6 +80,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import UserMessage
 from onyx.llm.override_models import LLMOverride
 from onyx.tools.tool_implementations.subagents.models import AgentWaitDetails
+from onyx.tools.tool_implementations.subagents.shapes import (
+    IMPLICIT_WAIT_SPAWN_TOOL_NAMES,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -647,10 +660,14 @@ def agent_result_states(
 def agent_waits(
     session: Session, chat_session_id: UUID, branch: ChatBranch
 ) -> list[AgentWait]:
-    """The root's `wait_agents` calls on the branch that can hold unread results.
+    """The root's waits on the branch that can hold unread results: its wait
+    calls, and the implicit waits of the root responses whose tool shape
+    waits for its agents by itself (no AgentShape.wait_name). Such a
+    response's saved spawn calls are its wait: it holds the results of the
+    agents that those calls started.
 
-    Calls before the oldest unread result's root response hold nothing, so
-    they are skipped.
+    Responses before the oldest unread result's root response hold nothing,
+    so they are skipped.
     """
     oldest_result_root = (
         select(func.min(ChatInput.root_response_id))
@@ -669,7 +686,61 @@ def agent_waits(
             == AgentWaitDetails.model_fields["type"].default,
         )
     ).all()
-    if not calls:
+    # The agents that each ended root response started with a spawn tool of
+    # a shape whose waits are implicit: the question of the child's first run
+    # names the spawn call's row, and the response's saved generation of
+    # that step names the call's tool. A running response reads its agents'
+    # results as they finish, so it holds none.
+    spawn_call = aliased(ChatResponseItem)
+    question = aliased(ChatMessage)
+    spawning_response = aliased(ChatMessage)
+    spawned = session.execute(
+        select(ToolCall.parent_chat_message_id, question.chat_session_id)
+        .join(question, question.invoking_tool_call_id == ToolCall.id)
+        .join(
+            spawning_response,
+            spawning_response.id == ToolCall.parent_chat_message_id,
+        )
+        .join(
+            spawn_call,
+            and_(
+                spawn_call.chat_message_id == ToolCall.parent_chat_message_id,
+                spawn_call.step_index == ToolCall.turn_number,
+            ),
+        )
+        .where(
+            ToolCall.chat_session_id == chat_session_id,
+            ToolCall.parent_chat_message_id.in_(branch.message_ids),
+            ToolCall.parent_chat_message_id >= oldest_result_root,
+            spawning_response.response_status.in_(
+                [status for status in RunStatus if status.is_terminal]
+            ),
+            # false(): with no such names, no call is a wait.
+            or_(
+                false(),
+                *(
+                    type_coerce(spawn_call.message, JSONB)["content"].contains(
+                        func.jsonb_build_array(
+                            func.jsonb_build_object(
+                                "type",
+                                "tool_call",
+                                "id",
+                                ToolCall.tool_call_id,
+                                "name",
+                                name,
+                            )
+                        )
+                    )
+                    for name in IMPLICIT_WAIT_SPAWN_TOOL_NAMES
+                ),
+            ),
+        )
+    ).all()
+    implicit: dict[int, set[UUID]] = {}
+    for response_id, agent_id in spawned:
+        if response_id is not None:
+            implicit.setdefault(response_id, set()).add(agent_id)
+    if not calls and not implicit:
         return []
     # Messages to the root's agents; those that dispatch would start hold a wait.
     spawner = aliased(ChatMessage)
@@ -696,25 +767,26 @@ def agent_waits(
         for recipient, root_id, delivery, target_id in messages
         if _dispatch_would_start(delivery, target_id, latest.get(str(recipient)))
     ]
-    waits: list[AgentWait] = []
-    for response_id, result in calls:
-        if (
-            response_id is None
-            or result is None
-            or not isinstance(result.details, AgentWaitDetails)
-        ):
-            continue
-        wait = AgentWait(
+    waits = [
+        AgentWait(
             response_id=response_id,
             agent_ids=frozenset(UUID(agent_id) for agent_id in result.details.agent_ids)
             if result.details.agent_ids is not None
             else None,
             queued=False,
         )
+        for response_id, result in calls
+        if response_id is not None
+        and result is not None
+        and isinstance(result.details, AgentWaitDetails)
+    ] + [
+        AgentWait(response_id=response_id, agent_ids=frozenset(agent_ids), queued=False)
+        for response_id, agent_ids in implicit.items()
+    ]
+    for wait in waits:
         wait.queued = any(
             wait.holds(recipient, root_id) for recipient, root_id in starting
         )
-        waits.append(wait)
     return waits
 
 

@@ -77,7 +77,7 @@ from tests.external_dependency_unit.chat.test_parked_agent_handoff import (
     ACTION,
     _gated,
 )
-from tests.external_dependency_unit.chat.test_wait_agents import (
+from tests.external_dependency_unit.chat.test_wait_agent import (
     ScriptedLLM,
     _wait_until,
 )

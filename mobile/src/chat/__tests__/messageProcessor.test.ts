@@ -139,12 +139,12 @@ describe("messageProcessor", () => {
     let state = createInitialState(1);
     state = processPackets(state, [
       makeMessageStartPacket(),
-      makePacket({ type: "custom_tool_start", tool_name: "wait_agents" }, 1),
+      makePacket({ type: "custom_tool_start", tool_name: "wait_agent" }, 1),
     ]);
     expect(state.finalAnswerComing).toBe(false);
     state = processPackets(state, [
       makeMessageStartPacket(),
-      makePacket({ type: "custom_tool_start", tool_name: "wait_agents" }, 1),
+      makePacket({ type: "custom_tool_start", tool_name: "wait_agent" }, 1),
       makeStopPacket(),
     ]);
     expect(state.finalAnswerComing).toBe(true);

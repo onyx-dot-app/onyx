@@ -266,7 +266,7 @@ Background children keep running; the same control thread renews their owner
 leases until they finish. After admission is released, it does not check the
 turn's Stop key, admission lease or deadline. When a child releases ownership, the turn
 dispatches queued input and root results again; that dispatch also ends a root's
-`wait_agents` wait. `ChatRunStore` scans child
+wait-tool wait. `ChatRunStore` scans child
 inboxes after a notification and while children run on the branch. It starts
 child work only while its response is on the selected branch, and resumes the
 parked agent runs of its own branch whether or not it is selected. A dispatch

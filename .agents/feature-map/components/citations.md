@@ -293,9 +293,10 @@ of only markers stays empty.
 ## Recipes
 
 - `citeable-tool` **A new citeable tool.** Copy how `WebSearchTool` is wired; list the
-  current set in `tools/constants.py:CITEABLE_TOOLS_NAMES`. Add the tool name
-  there; it turns on the citation reminder in `build_chat_reminder` even when a
-  call finds nothing. Start its numbers at the offset in
+  current set in `chat/citation_utils.py:CITEABLE_TOOLS_NAMES`. Add the tool
+  name there (for a tool with shapes, the name from each shape); it turns on
+  the citation reminder in `build_chat_reminder` even when a call finds
+  nothing. Start its numbers at the offset in
   [[#number-block-per-tool-call]]. Return a `SearchDocsResponse` with
   `citation_mapping`, and put every cited document in `search_docs`.
   `chat/tool_results.py` owns the contract of every details type that carries

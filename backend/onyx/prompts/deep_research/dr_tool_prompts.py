@@ -9,7 +9,7 @@ RESEARCH_AGENT_TOOL_NAME = "research_agent"
 
 # ruff: noqa: E501, W605 start
 
-# Hard for the open_url tool to be called for a ton of search results all at once so limit to 3
+# Hard for the URL reading tool to be called for a ton of search results all at once so limit to 3
 WEB_SEARCH_TOOL_DESCRIPTION = """
 
 ## web_search
@@ -19,12 +19,13 @@ If you use multiple queries, ensure that the queries are related in topic but no
 """
 
 # This one is mostly similar to the one for the main flow but there won't be any user specified URLs to open.
+# `{name}` is the URL reading tool's name in the model's tool family.
 OPEN_URLS_TOOL_DESCRIPTION = """
 
-## open_urls
-Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches. \
+## {name}
+Use the `{name}` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches. \
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
-You should almost always use open_urls after a web_search call.
+You should almost always use {name} after a web_search call.
 """
 
 # NOTE: Internal search tool uses the same description as the default flow, not duplicating here.

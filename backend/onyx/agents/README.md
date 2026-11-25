@@ -232,13 +232,14 @@ Errors, including `AgentCancelled`, are logged; the run still becomes idle and r
 Chat's root agent gets it from `create_chat_agent` to end per-run tool state; subagents share the root's tools and install no `on_drained` hook.
 The sandbox tools end their sandbox turn there, which starts the session save.
 
-Two optional tool callbacks cover interception and enrichment:
+Optional tool callbacks cover interception and enrichment:
 
 | Callback | Contract |
 | --- | --- |
 | `before_tool_call` | Return a `ToolResult` to skip execution, `PendingToolInput` to await input, or `None` to proceed. |
 | `after_tool_call` | Enrich an already accepted result. Failure preserves that result and fails the run. |
 | `prepare_tool_result` | Replace a completed result before the run records and streams it. Failure fails the run. An amendment's preparation runs under the run's cancellation signal; when it fails or stops, the amendment applies as the release hook made it. |
+| `unknown_tool_hint` | Give the result of a call of a tool that the agent does not offer; `None` keeps the default result. Chat agents say how to call a code mode function from a program, and name the tool that they offer for another tool family's name. |
 
 Callbacks receive copies, except `prepare_tool_result`. Its `ToolResultContext`, like `ToolInvocation.recorded_results`, references the run's objects, since results can be large: the hook must not change them and returns a new result instead.
 `Run.record_tool_results` calls it for every result, one at a time in the order the calls complete, with the results of the step that the run recorded before.
@@ -374,8 +375,8 @@ A successful completion callback marks those child failures as handled.
 
 Spawning returns an `agent_id` for later messages and a `run_id` for that execution.
 Agents nest at most `MAX_CHILD_DEPTH` levels below the root: the root, its children, and their children.
-An agent at that depth is built without `spawn_agent`; it keeps the tools that reach existing agents.
-An active background agent is an unfinished run (running or suspended) with a result row; only `spawn_agent` runs have one.
+An agent at that depth is built without the spawn tool; it keeps the tools that reach existing agents.
+An active background agent is an unfinished run (running or suspended) with a result row; only the spawn tool's runs have one.
 Chat runs at most `MAX_RUNNING_AGENTS` active background agents on a branch; a spawn beyond that is a tool error,
 and inbox work for an idle agent waits until a run finishes.
 Every run checks the chat owner's token rate limits: a user's turn when it is sent or leaves the queue,
@@ -425,7 +426,7 @@ A subagent waits for those results before finishing, or before its last step, an
 this releases its execution thread until it can incorporate the results.
 The root can finish its response while background children continue.
 
-Chat's root can also end its turn with `wait_agents` and get one follow-up for those children;
+Chat's root can also end its turn with its wait tool (`wait_agent`; the Claude tool shape has none and waits for the agents that a response started by itself) and get one follow-up for those children;
 `.agents/feature-map/components/chat-persistence.md` describes the wait rule.
 Foreground tools retain their `ChildRunWait` result path.
 

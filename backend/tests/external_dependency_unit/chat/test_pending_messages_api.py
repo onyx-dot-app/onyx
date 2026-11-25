@@ -2445,7 +2445,7 @@ def _idle_worker_with_queued_message(
                 ModelToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "worker", "instruction": "Initial task"},
+                    arguments={"task_name": "worker", "message": "Initial task"},
                 )
             ]
         )
@@ -2726,7 +2726,7 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
                 ModelToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "worker", "instruction": "Long task"},
+                    arguments={"task_name": "worker", "message": "Long task"},
                 )
             ]
         )

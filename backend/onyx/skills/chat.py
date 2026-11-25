@@ -29,7 +29,6 @@ from onyx.skills.models import ChatSkill, ChatSkillFiles
 from onyx.tools.constants import (
     LOAD_SKILL_TOOL_NAME,
     SKILLS_LIST_TOOL_NAME,
-    SKILLS_READ_TOOL_NAME,
 )
 
 # Codex limits: the catalog's skill lines use at most 2% of the context
@@ -59,12 +58,15 @@ def _catalog_line_tokens(line_bytes: int) -> int:
 def render_skills_catalog(
     skills: Sequence[ChatSkill],
     context_window_tokens: int,
-    called_name: Callable[[str], str] = str,
+    *,
+    read_tool_name: str,
+    called_name: Callable[[str], str],
 ) -> str | None:
     """The catalog of skill names and descriptions, each skill's short
     description when it has one, fit to its budget as Codex fits it. Its
     instructions name the skill tools by `called_name`: the agent's name for
-    a tool, such as its code mode function.
+    a tool, such as its code mode function. `read_tool_name` is the skill
+    read tool's name in the model's shape (SKILL_READ_SHAPES).
 
     Over budget, each skill in turn gets one more description character until
     no more fit; a description cut for the budget has no ellipsis. If names
@@ -97,7 +99,7 @@ def render_skills_catalog(
     def catalog(lines: Sequence[str]) -> str:
         return SKILLS_CATALOG_PROMPT.format(
             skills="\n".join(lines),
-            read_tool=called_name(SKILLS_READ_TOOL_NAME),
+            read_tool=called_name(read_tool_name),
             list_tool=called_name(SKILLS_LIST_TOOL_NAME),
             load_tool=called_name(LOAD_SKILL_TOOL_NAME),
         )

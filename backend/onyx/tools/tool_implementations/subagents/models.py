@@ -13,40 +13,25 @@ class ChatConfiguration(BaseModel):
 
 
 class AgentWaitDetails(BaseModel):
-    """The agents that a root `wait_agents` call waits for; None means all."""
+    """The agents that a root's wait call waits for; None means all."""
 
     type: Literal["agent_wait"] = "agent_wait"
     agent_ids: list[str] | None
 
 
-class SpawnAgentArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(min_length=1, description="Short name.")
-    instruction: str = Field(min_length=1, description="Self-contained task.")
+# The description of an argument that names an agent.
+TARGET_DESCRIPTION = (
+    "An agent's path, as list_agents shows it, e.g. /root/research; .. is your parent."
+)
+DELIVERY_DESCRIPTION = "send: next step; queue: after completion."
+Delivery = Literal[MessageDelivery.SEND, MessageDelivery.QUEUE]
 
 
 class AgentSelectionArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    target: str = Field(
-        min_length=1,
-        description="Path from spawn_agent or list_agents, e.g. /root/research; "
-        ".. is your parent.",
-    )
-
-
-class SendMessageArguments(AgentSelectionArguments):
-    delivery: Literal[MessageDelivery.SEND, MessageDelivery.QUEUE] = Field(
-        default=MessageDelivery.SEND,
-        description="send: next step; queue: after completion.",
-    )
-    message: str = Field(min_length=1)
+    target: str = Field(min_length=1, description=TARGET_DESCRIPTION)
 
 
 class ListAgentsArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
     path_prefix: str | None = Field(
         default=None,
         description="Only paths with this prefix, e.g. /root/research.",
@@ -57,12 +42,10 @@ class ListAgentsArguments(BaseModel):
     )
 
 
-class WaitAgentsArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class WaitAgentArguments(BaseModel):
     targets: list[str] | None = Field(
         default=None,
-        description="Paths from spawn_agent or list_agents, e.g. /root/research. "
+        description="Agent paths, as list_agents shows them, e.g. /root/research. "
         "Omit to wait for all.",
     )
 

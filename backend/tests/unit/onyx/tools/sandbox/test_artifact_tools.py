@@ -48,10 +48,13 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactSort,
     ArtifactsRead,
     FindItem,
+    LibraryCreateLibraryFileArguments,
     LibraryFindArguments,
+    LibraryListArguments,
     LibraryListFilters,
     LibraryPrepareMaterializeArguments,
     LibraryReadArguments,
+    LibraryReplaceLibraryFileArguments,
     LibrarySearchArguments,
     LibrarySearchCursor,
     LibrarySearchResult,
@@ -80,13 +83,25 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     WriteStdinTool,
     WriteTool,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import (
+    SHELL_SHAPES,
+    ArtifactArguments,
+)
 from onyx.tools.tool_implementations.sandbox.spill import RESULT_MAX_CHARS
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 
 
+def _mock_turn(family: ToolFamily) -> MagicMock:
+    """A sandbox turn of the family's shell shape, without chat files."""
+    turn = MagicMock(spec=SandboxTurn)
+    turn.shell = SHELL_SHAPES[family]
+    turn.vm_chat_files = []
+    return turn
+
+
 def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() -> None:
-    claude = SANDBOX_TOOLS[ToolFamily.CLAUDE]
-    other = SANDBOX_TOOLS[ToolFamily.OPENAI]
+    claude = SANDBOX_TOOLS[ToolFamily.CLAUDE].tools
+    other = SANDBOX_TOOLS[ToolFamily.OPENAI].tools
     assert claude == (
         ExecCommandTool,
         WriteStdinTool,
@@ -112,11 +127,10 @@ def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() 
 
 
 def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
-    turn = MagicMock(spec=SandboxTurn)
-    turn.vm_chat_files = []
+    turn = _mock_turn(ToolFamily.OPENAI)
     stubs = build_tool_stubs(
         OPENAI_CODE_MODE,
-        [tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI]],
+        [tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI].tools],
     )
 
     assert stubs.deferred_namespaces == {
@@ -157,9 +171,8 @@ def test_no_immediate_text_names_an_artifact_function_in_code_mode(
     """Every artifact function is deferred in its family's group: only the
     deferred-groups note names the group, and no listed function, tool
     description or system prompt names a function of it."""
-    turn = MagicMock(spec=SandboxTurn)
-    turn.vm_chat_files = []
-    tools: list[Tool] = [tool(turn) for tool in SANDBOX_TOOLS[family]]
+    turn = _mock_turn(family)
+    tools: list[Tool] = [tool(turn) for tool in SANDBOX_TOOLS[family].tools]
     artifact_functions = [
         tool for tool in tools if tool.code_mode_function_name.namespace == group
     ]
@@ -189,10 +202,9 @@ def test_no_immediate_text_names_an_artifact_function_in_code_mode(
 
 
 def test_the_deferred_note_says_what_the_library_group_is_for() -> None:
-    turn = MagicMock(spec=SandboxTurn)
-    turn.vm_chat_files = []
+    turn = _mock_turn(ToolFamily.OPENAI)
     offered, _ = with_code_mode(
-        [tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI]],
+        [tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI].tools],
         OPENAI_CODE_MODE,
     )
     [description] = [
@@ -239,7 +251,7 @@ def _run(
 
     monkeypatch.setattr(artifact_operations, "get_session_with_current_tenant", session)
     monkeypatch.setattr(artifact_operations, "get_user_published_files", published)
-    turn = MagicMock(spec=SandboxTurn)
+    turn = _mock_turn(ToolFamily.OPENAI)
     outcome = LibraryListTool(turn).run(
         ToolInvocation(
             call_id="list",
@@ -567,8 +579,7 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
         (
             {"file_path": "a.md", "out_dir": "x"},
             "Invalid tool arguments: Action publish does not take out_dir; it "
-            "takes file_path, "
-            "file_paths, force, label, path, title, url",
+            "takes description, file_path, file_paths, force, label, path, title, url",
         ),
         (
             {
@@ -589,7 +600,7 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
                 "action": "restore",
                 "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b",
             },
-            "restore takes the url of the version to restore, ending in /v<N>",
+            "Invalid tool arguments: restore takes the url of the version to restore, ending in /v<N>",
         ),
         (
             {
@@ -607,7 +618,7 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
                 "file_path": "a.md",
                 "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b",
             },
-            "Pass the url from your last result, which names the version you "
+            "Invalid tool arguments: Pass the url from your last result, which names the version you "
             "saw, or force:true",
         ),
         (
@@ -615,22 +626,39 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
                 "file_paths": ["a.md"],
                 "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b/v1",
             },
-            "title and url go with file_path",
+            "Invalid tool arguments: title and url go with file_path",
         ),
-        ({"file_path": "a.md", "force": True}, "force and label go with url"),
-        ({"file_path": "a.md", "label": "why"}, "force and label go with url"),
-        ({}, "publish takes file_path or file_paths"),
+        (
+            {"file_path": "a.md", "force": True},
+            "Invalid tool arguments: force and label go with url",
+        ),
+        (
+            {"file_path": "a.md", "label": "why"},
+            "Invalid tool arguments: force and label go with url",
+        ),
+        ({}, "Invalid tool arguments: publish takes file_path or file_paths"),
         (
             {"file_path": "a.md", "file_paths": ["b.md"]},
-            "publish takes file_path or file_paths",
+            "Invalid tool arguments: publish takes file_path or file_paths",
         ),
-        ({"file_paths": ["a.md"], "title": "A"}, "title and url go with file_path"),
-        ({"file_paths": []}, "publish takes file_path or file_paths"),
+        (
+            {"file_paths": ["a.md"], "title": "A"},
+            "Invalid tool arguments: title and url go with file_path",
+        ),
+        (
+            {"file_paths": []},
+            "Invalid tool arguments: publish takes file_path or file_paths",
+        ),
         (
             {"file_paths": ["a.md"] * (PUBLISH_FILES_MAX_FILES + 1)},
-            f"publish takes at most {PUBLISH_FILES_MAX_FILES} file_paths",
+            "Invalid tool arguments: file_paths: List should have at most "
+            f"{PUBLISH_FILES_MAX_FILES} items after validation, not "
+            f"{PUBLISH_FILES_MAX_FILES + 1}",
         ),
-        ({"action": "read", "out_dir": "x"}, "read takes url, path or paths"),
+        (
+            {"action": "read", "out_dir": "x"},
+            "Invalid tool arguments: read takes url, path or paths",
+        ),
         *(
             (
                 {"action": "read", "paths": ["f", "g"], "offset": 10, **query},
@@ -645,17 +673,17 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
                 "paths": ["f"] * (ARTIFACTS_MATERIALIZE_MAX_ITEMS + 1),
                 "out_dir": "x",
             },
-            f"read copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files; pass "
+            f"Invalid tool arguments: read copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files; pass "
             "fewer paths",
         ),
         (
             {"action": "read", "path": "f", "out_dir": "x", "query": "q"},
-            "out_dir copies files; query, offset and limit go with a read of "
+            "Invalid tool arguments: out_dir copies files; query, offset and limit go with a read of "
             "their text, without out_dir",
         ),
         (
             {"action": "read", "url": "report.pdf", "out_dir": "x"},
-            "'report.pdf' is not an artifact url",
+            "Invalid tool arguments: 'report.pdf' is not an artifact url",
         ),
         ({"action": "delete"}, "Invalid tool arguments: delete takes url"),
         ({"action": "restore"}, "Invalid tool arguments: restore takes url"),
@@ -684,7 +712,7 @@ def test_the_artifact_tool_refuses_arguments_that_do_not_fit_the_action(
 ) -> None:
     """Refused calls never start the VM. An unknown action or argument is a
     validation error."""
-    turn = MagicMock(spec=SandboxTurn)
+    turn = _mock_turn(ToolFamily.CLAUDE)
     outcome = ArtifactTool(turn).run(
         ToolInvocation(
             call_id="artifact",
@@ -714,7 +742,7 @@ def test_the_artifact_tool_refuses_arguments_that_do_not_fit_the_action(
 def test_create_file_takes_one_file_or_several_without_starting_the_vm(
     arguments: dict[str, JsonValue], error: str | None
 ) -> None:
-    turn = MagicMock(spec=SandboxTurn)
+    turn = _mock_turn(ToolFamily.OPENAI)
     outcome = LibraryCreateLibraryFileTool(turn).run(
         ToolInvocation(
             call_id="create",
@@ -762,8 +790,10 @@ def test_a_call_that_does_not_delete_asks_nothing_and_reads_no_database(
     def no_lookup(*_args: object) -> None:
         raise AssertionError("the hook must not look anything up")
 
-    monkeypatch.setattr(artifact_operations, "delete_approval_details", no_lookup)
-    assert tool(MagicMock(spec=SandboxTurn)).approval_details(arguments) is None
+    monkeypatch.setattr(
+        artifact_operations, "get_session_with_current_tenant", no_lookup
+    )
+    assert tool(_mock_turn(ToolFamily.CLAUDE)).approval_details(arguments) is None
 
 
 @pytest.mark.parametrize(
@@ -1230,7 +1260,7 @@ def test_a_full_search_page_never_spills_and_its_cursor_continues_it(
     )
 
     def search(arguments: dict[str, JsonValue]) -> ToolResult:
-        turn = MagicMock(spec=SandboxTurn)
+        turn = _mock_turn(ToolFamily.OPENAI)
         outcome = LibrarySearchTool(turn).run(
             ToolInvocation(
                 call_id="search",
@@ -1268,3 +1298,114 @@ def test_a_full_search_page_never_spills_and_its_cursor_continues_it(
         bad = search({"search_query": [{"q": "x"}], "cursor": cursor})
         assert bad.is_error
         assert bad.content.startswith("The cursor is not a next_cursor")
+
+
+_ARTIFACT = "5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b"
+
+
+@pytest.mark.parametrize(
+    ("arguments", "request_type", "fields"),
+    [
+        # The arguments of the trained shape that Onyx does not use are
+        # ignored; a publish keeps its description.
+        (
+            {"file_path": "a.md", "description": "Notes.", "icon": "x", "pin": True},
+            LibraryCreateLibraryFileArguments,
+            {"file": "a.md", "description": "Notes."},
+        ),
+        (
+            {"file_paths": [f"{index}.md" for index in range(PUBLISH_FILES_MAX_FILES)]},
+            LibraryCreateLibraryFileArguments,
+            {"files": [f"{index}.md" for index in range(PUBLISH_FILES_MAX_FILES)]},
+        ),
+        (
+            {"file_path": "a.md", "url": f"/app/artifacts/{_ARTIFACT}/v2"},
+            LibraryReplaceLibraryFileArguments,
+            {"file": "a.md", "expected_current_version": 2},
+        ),
+        (
+            {"action": "list", "limit": 50, "after": "c", "type": "sheet"},
+            LibraryListArguments,
+            {"limit": 50, "cursor": "c"},
+        ),
+        (
+            {"action": "list", "query": "q", "limit": 5},
+            LibrarySearchArguments,
+            {"top_k": 5},
+        ),
+        (
+            {"action": "read", "path": "f", "offset": 3, "limit": 9},
+            LibraryReadArguments,
+            {},
+        ),
+        ({"action": "read", "paths": ["f"], "query": "x"}, LibraryFindArguments, {}),
+        (
+            {"action": "read", "path": "f", "out_dir": "copies"},
+            LibraryPrepareMaterializeArguments,
+            {},
+        ),
+        (
+            {"action": "delete", "url": f"/app/artifacts/{_ARTIFACT}"},
+            ManageLibraryArguments,
+            {},
+        ),
+    ],
+)
+def test_each_artifact_action_runs_a_library_operation(
+    arguments: dict[str, JsonValue],
+    request_type: type[BaseModel],
+    fields: dict[str, JsonValue],
+) -> None:
+    """Both families run the library operations: each artifact action gives
+    the arguments of one."""
+    request = ArtifactArguments.model_validate(arguments).request()
+    assert isinstance(request, request_type)
+    assert request.model_dump(include=set(fields)) == fields
+
+
+@pytest.mark.parametrize(
+    ("arguments", "error"),
+    [
+        (
+            {"action": "read", "paths": ["f"] * 6},
+            "read shows the text of at most 5 files; pass fewer paths, or copy "
+            "them with out_dir",
+        ),
+        ({"action": "read", "paths": []}, "read takes url, path or paths"),
+        (
+            {"action": "read", "paths": [], "out_dir": "x"},
+            "read takes url, path or paths",
+        ),
+        ({"action": "read", "path": "f", "offset": 0}, "read's offset is at least 1"),
+        (
+            {"action": "read", "path": "f", "limit": 2_001},
+            "read's limit is from 1 to 2000",
+        ),
+        (
+            {"action": "read", "path": "f", "query": "x", "limit": 101},
+            "read's limit is from 1 to 100",
+        ),
+        (
+            {"action": "read", "path": "f", "query": ""},
+            "read's query takes 1 to 500 characters",
+        ),
+        (
+            {"action": "list", "query": "q" * 201},
+            "list's query takes at most 200 characters",
+        ),
+    ],
+)
+def test_the_artifact_tool_names_its_own_arguments_in_refusals(
+    arguments: dict[str, JsonValue], error: str
+) -> None:
+    """A refusal names the artifact tool's arguments, never those of the
+    library operation that the action runs."""
+    with pytest.raises(ValidationError, match=re.escape(error)):
+        ArtifactArguments.model_validate(arguments)
+
+
+def test_the_approval_hook_asks_nothing_for_a_read_without_files() -> None:
+    """The hook runs before every call of the gated tool; arguments that the
+    call refuses never fail it."""
+    tool = ArtifactTool(_mock_turn(ToolFamily.CLAUDE))
+    assert tool.approval_details({"action": "read", "paths": []}) is None

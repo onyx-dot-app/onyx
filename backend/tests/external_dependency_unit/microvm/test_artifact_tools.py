@@ -158,9 +158,10 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibrarySearchTool,
     SandboxTool,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
-from tests.external_dependency_unit.chat.test_wait_agents import (
-    ScriptedLLM as WaitAgentsLLM,
+from tests.external_dependency_unit.chat.test_wait_agent import (
+    ScriptedLLM as WaitAgentLLM,
 )
 from tests.external_dependency_unit.code_mode_helpers import (
     ChatLLM,
@@ -255,13 +256,16 @@ def _artifact_id(file_id: str) -> UUID:
         ).one()
 
 
-def _turn(owner: User, chat_session_id: UUID) -> SandboxTurn:
+def _turn(
+    owner: User, chat_session_id: UUID, family: ToolFamily = ToolFamily.OPENAI
+) -> SandboxTurn:
     return SandboxTurn(
         tenant_id=TENANT_ID,
         user_id=owner.id,
         chat_session_id=chat_session_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        shell=SHELL_SHAPES[family],
     )
 
 
@@ -741,7 +745,7 @@ def test_bad_destinations_and_refused_files_never_start_the_vm(
     assert [line.split("' ", 1)[1] for line in lines[5:]] == [
         "leaves the working directory",
         f"is outside the working directory {session_workspace(calling)}; use "
-        "exec_command elsewhere",
+        "a shell command elsewhere",
     ]
     # Listing reads the database only.
     assert not _call(LibraryListTool(_turn(user, calling)), {}).is_error
@@ -1114,7 +1118,10 @@ def test_parallel_copies_take_the_vms_write_slots(
     threads = [
         threading.Thread(
             target=lambda file_id=file_id: results.append(
-                _copy(LibraryPrepareMaterializeTool(turn), [{"file_id": file_id}])
+                _copy(
+                    LibraryPrepareMaterializeTool(turn),
+                    [{"file_id": file_id}],
+                )
             )
         )
         for file_id in file_ids
@@ -1194,7 +1201,8 @@ def test_a_queued_copy_waits_for_its_slot_until_pod_shutdown(
 
     def copy(file_id: str) -> None:
         results[file_id] = _copy(
-            LibraryPrepareMaterializeTool(turn), [{"file_id": file_id}]
+            LibraryPrepareMaterializeTool(turn),
+            [{"file_id": file_id}],
         )
 
     threads = [threading.Thread(target=copy, args=(file_id,)) for file_id in held]
@@ -1255,7 +1263,10 @@ def test_the_chat_file_copies_leave_copied_artifacts_alone(
     pool = new_file_copy_pool()
     file_id = _publish(source, "kept.txt", b"kept")
     turn = _turn(user, calling)
-    _copy(LibraryPrepareMaterializeTool(turn), [{"file_id": file_id}])
+    _copy(
+        LibraryPrepareMaterializeTool(turn),
+        [{"file_id": file_id}],
+    )
     ref = _ref(db_session, user, calling)
     # A project file that left the chat, which the cleanup deletes.
     _put_vm_file(node, ref, "attachments/project/x.txt", b"left")
@@ -1371,7 +1382,7 @@ def test_a_chat_lists_and_copies_files_published_in_other_chats(
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "helper", "instruction": "Task helper"},
+                    arguments={"task_name": "helper", "message": "Task helper"},
                 )
             ]
         )
@@ -1379,7 +1390,7 @@ def test_a_chat_lists_and_copies_files_published_in_other_chats(
     monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", False)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona",
-        lambda **_kwargs: WaitAgentsLLM(generate),
+        lambda **_kwargs: WaitAgentLLM(generate),
     )
     for _part in handle_stream_message_objects(
         new_msg_req=SendMessageRequest(
@@ -2544,8 +2555,8 @@ def test_a_replace_of_a_file_that_is_not_yours_never_starts_the_vm(
         update(ChatSession).where(ChatSession.id == deleted_chat).values(deleted=True)
     )
     db_session.commit()
-    turn = _turn(user, _chat(db_session, user))
-    tool = LibraryReplaceLibraryFileTool(turn)
+    calling = _chat(db_session, user)
+    tool = LibraryReplaceLibraryFileTool(_turn(user, calling))
     for artifact_id in (theirs, in_deleted, uuid4()):
         result = _call(tool, {"library_file_id": str(artifact_id), "file": "x.md"})
         assert result.is_error
@@ -2562,7 +2573,7 @@ def test_a_replace_of_a_file_that_is_not_yours_never_starts_the_vm(
     )
     assert other_type.content == refusal
     other_type = _call(
-        ArtifactTool(turn),
+        ArtifactTool(_turn(user, calling, ToolFamily.CLAUDE)),
         {"file_path": "out/draft.txt", "url": artifact_url(_artifact_id(mine), 1)},
     )
     assert other_type.content == refusal
@@ -2910,14 +2921,20 @@ def test_the_delete_card_tells_apart_same_name_files_by_their_folders(
 
     both = artifact_operations.delete_approval_details(
         user.id,
-        [DeleteOperation(operation="delete", target=target) for target in targets],
+        ManageLibraryArguments(
+            operations=[
+                DeleteOperation(operation="delete", target=target) for target in targets
+            ]
+        ),
     )
     one = artifact_operations.delete_approval_details(
         user.id,
-        [
-            DeleteOperation(operation="delete", target=targets[0]),
-            RenameOperation(operation="rename", target=targets[1], new_name="a.md"),
-        ],
+        ManageLibraryArguments(
+            operations=[
+                DeleteOperation(operation="delete", target=targets[0]),
+                RenameOperation(operation="rename", target=targets[1], new_name="a.md"),
+            ]
+        ),
     )
 
     assert both is not None and one is not None
@@ -2948,16 +2965,19 @@ def test_the_delete_card_names_the_chat_of_each_other_operations_file(
 
     card = artifact_operations.delete_approval_details(
         user.id,
-        [
-            DeleteOperation(
-                operation="delete", target=LibraryFileTarget(library_file_id=deleted)
-            ),
-            RenameOperation(
-                operation="rename",
-                target=LibraryFileTarget(library_file_id=renamed),
-                new_name="final.md",
-            ),
-        ],
+        ManageLibraryArguments(
+            operations=[
+                DeleteOperation(
+                    operation="delete",
+                    target=LibraryFileTarget(library_file_id=deleted),
+                ),
+                RenameOperation(
+                    operation="rename",
+                    target=LibraryFileTarget(library_file_id=renamed),
+                    new_name="final.md",
+                ),
+            ]
+        ),
     )
 
     assert card is not None
@@ -2980,15 +3000,20 @@ def test_a_delete_of_a_file_that_is_not_found_yet_still_asks(
 
     card = artifact_operations.delete_approval_details(
         user.id,
-        [
-            DeleteOperation(
-                operation="delete",
-                target=LibraryFileTarget(library_file_id=artifact_id, version_number=2),
-            ),
-            DeleteOperation(
-                operation="delete", target=LibraryFileTarget(library_file_id=missing)
-            ),
-        ],
+        ManageLibraryArguments(
+            operations=[
+                DeleteOperation(
+                    operation="delete",
+                    target=LibraryFileTarget(
+                        library_file_id=artifact_id, version_number=2
+                    ),
+                ),
+                DeleteOperation(
+                    operation="delete",
+                    target=LibraryFileTarget(library_file_id=missing),
+                ),
+            ]
+        ),
     )
 
     assert card is not None
@@ -3034,10 +3059,12 @@ def test_the_delete_card_cuts_a_long_path_and_chat_title_as_the_list_does(
 
     card = artifact_operations.delete_approval_details(
         user.id,
-        [
-            DeleteOperation(operation="delete", target=deleted),
-            RenameOperation(operation="rename", target=renamed, new_name="b.md"),
-        ],
+        ManageLibraryArguments(
+            operations=[
+                DeleteOperation(operation="delete", target=deleted),
+                RenameOperation(operation="rename", target=renamed, new_name="b.md"),
+            ]
+        ),
     )
 
     assert card is not None
@@ -3105,23 +3132,26 @@ def test_the_delete_card_names_the_new_name_of_a_restore_or_update(
 
     card = artifact_operations.delete_approval_details(
         user.id,
-        [
-            DeleteOperation(
-                operation="delete", target=LibraryFileTarget(library_file_id=deleted)
-            ),
-            UpdateOperation(
-                operation="update",
-                library_file_id=artifact_id,
-                file_uri=FileUri(file_id=other),
-                file_name="c.md",
-            ),
-            RestoreVersionOperation(
-                operation="restore_version",
-                library_file_id=artifact_id,
-                version_number=1,
-                file_name="d.md",
-            ),
-        ],
+        ManageLibraryArguments(
+            operations=[
+                DeleteOperation(
+                    operation="delete",
+                    target=LibraryFileTarget(library_file_id=deleted),
+                ),
+                UpdateOperation(
+                    operation="update",
+                    library_file_id=artifact_id,
+                    file_uri=FileUri(file_id=other),
+                    file_name="c.md",
+                ),
+                RestoreVersionOperation(
+                    operation="restore_version",
+                    library_file_id=artifact_id,
+                    version_number=1,
+                    file_name="d.md",
+                ),
+            ]
+        ),
     )
 
     assert card is not None and card.payload is not None
@@ -3432,6 +3462,7 @@ def test_the_delete_card_lists_the_other_operations_of_the_call(
     kept = _artifact_id(_publish(chat, "draft.md", b"draft"))
     turn = MagicMock(spec=SandboxTurn)
     turn.user_id = user.id
+    turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
 
     details = LibraryManageLibraryTool(turn).approval_details(
         {
@@ -3741,7 +3772,7 @@ def test_an_update_renames_only_with_its_own_file_name_and_keeps_the_type(
         update({"file_name": "final.csv"})
 
     result = _call(
-        ArtifactTool(_turn(user, _chat(db_session, user))),
+        ArtifactTool(_turn(user, _chat(db_session, user), ToolFamily.CLAUDE)),
         {
             "url": artifact_url(artifact_id, 3),
             "path": artifact_url(_artifact_id(source), 1),
@@ -4212,7 +4243,10 @@ def index() -> Generator[Index, None, None]:
 def _search(
     user: User, chat_session_id: UUID, arguments: dict[str, JsonValue]
 ) -> LibrarySearchResult:
-    result = _call(LibrarySearchTool(_turn(user, chat_session_id)), arguments)
+    result = _call(
+        LibrarySearchTool(_turn(user, chat_session_id)),
+        arguments,
+    )
     assert not result.is_error, result.content
     return LibrarySearchResult.model_validate_json(result.content)
 

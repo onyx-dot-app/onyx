@@ -175,12 +175,13 @@ WAIT_DESCRIPTION = """Waits on a running `{run}` cell and returns new output or 
 - If the cell has already finished, `{wait}` returns the completed result and closes the cell."""
 
 
-# The result of a call of a code mode tool or program function, of any shape,
+# The result of a call of a tool of another tool family's shapes, by a name
 # that this chat does not offer; `{use}` is one of the *_USE texts.
 OTHER_OPERATION_MESSAGE = "`{name}` is not a tool in this chat. {use}"
+TOOL_USE = "Call `{name}` instead."
 RUN_USE = "Run a program with `{run}`."
 WAIT_USE = "Wait on a running cell with `{wait}`."
-PROGRAM_FUNCTION_USE = "Call `await {function}(...)` in `{run}` programs."
+PROGRAM_FUNCTION_USE = "Call `await {function}({arguments})` in `{run}` programs."
 
 # The result of a call of a code mode function as a tool of its own.
 INNER_CALL_MESSAGE = (
