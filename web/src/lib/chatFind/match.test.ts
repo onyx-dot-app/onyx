@@ -86,34 +86,118 @@ describe("findChatMatches", () => {
     message({ nodeId: 3, message: "Thanks", parentNodeId: 2 }),
   ];
 
-  it("counts the matches of each message in chat order", () => {
+  it("counts the matches of each text in chat order", () => {
     const { entries, total } = findChatMatches(
       chatFindTexts(messages, null),
       "foo"
     );
     expect(total).toBe(4);
     expect(
-      entries.map(({ nodeId, kind, start, count }) => ({
-        nodeId,
-        kind,
-        start,
-        count,
-      }))
+      entries.map(({ scopeKey, start, count }) => ({ scopeKey, start, count }))
     ).toEqual([
-      { nodeId: 1, kind: "user", start: 0, count: 1 },
-      { nodeId: 2, kind: "answer", start: 1, count: 3 },
+      { scopeKey: "user:1", start: 0, count: 1 },
+      { scopeKey: "answer:2", start: 1, count: 3 },
     ]);
   });
 
-  it("maps an index to its message, row and occurrence", () => {
+  it("maps an index to its scope, row and occurrence", () => {
     const { entries } = findChatMatches(chatFindTexts(messages, null), "foo");
     expect(chatFindMatchAt(entries, 3)).toEqual({
-      nodeId: 2,
+      scopeKey: "answer:2",
       rowId: "message-2",
-      kind: "answer",
       occurrence: 2,
     });
     expect(chatFindMatchAt(entries, 4)).toBeNull();
+  });
+
+  it("searches messages sent during a reply, in turn order", () => {
+    const reply = message({
+      nodeId: 2,
+      type: "assistant",
+      parentNodeId: 1,
+      packets: [
+        ...answerPackets("First foo."),
+        {
+          placement: { turn_index: 1 },
+          obj: {
+            type: "user_message",
+            id: "u1",
+            message: "foo again",
+            mentions: [],
+          },
+        },
+        {
+          placement: { turn_index: 2 },
+          obj: {
+            type: "message_start",
+            id: "m2",
+            content: "Last foo.",
+            final_documents: null,
+          },
+        },
+      ],
+    });
+    const { entries } = findChatMatches(chatFindTexts([reply], null), "foo");
+    expect(
+      entries.map(({ scopeKey, occurrenceStart }) => ({
+        scopeKey,
+        occurrenceStart,
+      }))
+    ).toEqual([
+      { scopeKey: "answer:2", occurrenceStart: 0 },
+      { scopeKey: "inline:2:u1", occurrenceStart: 0 },
+      { scopeKey: "answer:2", occurrenceStart: 1 },
+    ]);
+  });
+
+  it("splits a user message at its mention chips", () => {
+    const question = message({
+      nodeId: 1,
+      message: "use @lint now",
+      mentions: [{ type: "skill", name: "lint" }],
+    });
+    const { total } = findChatMatches(chatFindTexts([question], null), "e @l");
+    expect(total).toBe(0);
+    expect(
+      findChatMatches(chatFindTexts([question], null), "@lint").total
+    ).toBe(1);
+  });
+
+  it("searches every answer of a multi-model turn in the question's row", () => {
+    const question = message({
+      nodeId: 1,
+      message: "Compare",
+      childrenNodeIds: [2, 3],
+    });
+    const first = message({
+      nodeId: 2,
+      type: "assistant",
+      parentNodeId: 1,
+      modelDisplayName: "A",
+      packets: answerPackets("alpha foo"),
+    });
+    const second = message({
+      nodeId: 3,
+      type: "assistant",
+      parentNodeId: 1,
+      modelDisplayName: "B",
+      packets: answerPackets("beta foo"),
+    });
+    const tree = new Map([
+      [1, question],
+      [2, first],
+      [3, second],
+    ]);
+    const { entries } = findChatMatches(
+      chatFindTexts([question, first], tree),
+      "foo"
+    );
+    expect(entries.map(({ scopeKey, rowId }) => ({ scopeKey, rowId }))).toEqual(
+      [
+        { scopeKey: "answer:2", rowId: "message-1" },
+        { scopeKey: "answer:3", rowId: "message-1" },
+      ]
+    );
   });
 });
 

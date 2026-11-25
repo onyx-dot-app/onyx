@@ -1,5 +1,5 @@
 // Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
-import { findOccurrences, type ChatFindKind } from "@/lib/chatFind/match";
+import { findOccurrences } from "@/lib/chatFind/match";
 
 /** Marks the searchable text of one message; its value is `chatFindTextKey`. */
 const CHAT_FIND_TEXT_ATTRIBUTE = "data-chat-find-text";
@@ -9,9 +9,11 @@ const CHAT_FIND_IGNORE_ATTRIBUTE = "data-chat-find-ignore";
 const CHAT_FIND_HIGHLIGHT = "onyx-chat-find";
 const CHAT_FIND_ACTIVE_HIGHLIGHT = "onyx-chat-find-active";
 
-export function chatFindTextKey(kind: ChatFindKind, nodeId: number): string {
-  return `${kind}:${nodeId}`;
-}
+/**
+ * A clipped block that find can unfold, with `data-chat-find-fold="closed"`
+ * while clipped. Find sends it this event to unfold it.
+ */
+export const CHAT_FIND_UNFOLD_EVENT = "chatfindunfold";
 
 // Rendered text that the searched message text does not hold.
 const IGNORE_SELECTOR = [
@@ -21,6 +23,9 @@ const IGNORE_SELECTOR = [
   ".opal-code-panel-header",
   ".opal-code-panel-copy",
   '[role="toolbar"]',
+  // Footnotes: the answer's searched text leaves them out.
+  'a[href^="#user-content-fn-"]',
+  "[data-footnotes]",
 ].join(", ");
 
 // A match never spans these: the searched text splits at them too.
@@ -184,21 +189,39 @@ export function createChatFindPainter(): ChatFindPainter {
   };
 }
 
-/** Opens each closed `<details>` that hides `range`; its summary shows when closed. */
-export function openDetailsAround(range: Range, container: Element): void {
+/**
+ * Shows a match that a fold hides. A closed `<details>` opens at once (its
+ * summary shows when closed). A clipped fold gets `CHAT_FIND_UNFOLD_EVENT`
+ * when the match lies below its edge; it unfolds on its next render, so the
+ * caller waits for that. Returns whether it is waiting.
+ */
+export function revealFoldedMatch(range: Range, container: Element): boolean {
+  let waiting = false;
   for (
     let element = range.startContainer.parentElement;
     element && element !== container;
     element = element.parentElement
   ) {
-    if (
-      element instanceof HTMLDetailsElement &&
-      !element.open &&
-      !element.querySelector(":scope > summary")?.contains(range.startContainer)
+    if (element instanceof HTMLDetailsElement) {
+      if (
+        !element.open &&
+        !element
+          .querySelector(":scope > summary")
+          ?.contains(range.startContainer)
+      ) {
+        element.open = true;
+      }
+    } else if (
+      element instanceof HTMLElement &&
+      element.dataset.chatFindFold === "closed" &&
+      range.getBoundingClientRect().bottom >
+        element.getBoundingClientRect().bottom
     ) {
-      element.open = true;
+      element.dispatchEvent(new Event(CHAT_FIND_UNFOLD_EVENT));
+      waiting = true;
     }
   }
+  return waiting;
 }
 
 const MATCH_VIEW_MARGIN_PX = 96;

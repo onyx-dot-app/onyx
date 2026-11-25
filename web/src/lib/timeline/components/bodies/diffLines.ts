@@ -7,84 +7,101 @@ export interface DiffLine {
   newLineNum?: number;
 }
 
+/** A text as lines; an empty text, and a final newline, add no line. */
+function splitLines(text: string): string[] {
+  if (text === "") return [];
+  const lines = text.split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+
+/** Past this many cells in the middle of a diff, it falls back to a replace. */
+const MAX_LCS_CELLS = 4_000_000;
+
+/**
+ * A line diff from the longest common subsequence, after the shared head and
+ * tail are cut off.
+ */
 export function computeDiff(oldText: string, newText: string): DiffLine[] {
-  const oldLines = oldText.split("\n");
-  const newLines = newText.split("\n");
-  const result: DiffLine[] = [];
+  const oldLines = splitLines(oldText);
+  const newLines = splitLines(newText);
+  let head = 0;
+  while (
+    head < oldLines.length &&
+    head < newLines.length &&
+    oldLines[head] === newLines[head]
+  ) {
+    head++;
+  }
+  let tail = 0;
+  while (
+    tail < oldLines.length - head &&
+    tail < newLines.length - head &&
+    oldLines[oldLines.length - 1 - tail] ===
+      newLines[newLines.length - 1 - tail]
+  ) {
+    tail++;
+  }
+  const oldMid = oldLines.slice(head, oldLines.length - tail);
+  const newMid = newLines.slice(head, newLines.length - tail);
+  const n = oldMid.length;
+  const m = newMid.length;
 
-  // Last-occurrence index per unique line, so the "exists later" check
-  // below is O(1) instead of O(n) via slice().includes() — the prior
-  // form made computeDiff O(n²) on large diffs.
-  const lastOldIdxOf = new Map<string, number>();
-  oldLines.forEach((l, i) => lastOldIdxOf.set(l, i));
-  const lastNewIdxOf = new Map<string, number>();
-  newLines.forEach((l, i) => lastNewIdxOf.set(l, i));
-
-  let oldIdx = 0;
-  let newIdx = 0;
-  let oldLineNum = 1;
-  let newLineNum = 1;
-
-  while (oldIdx < oldLines.length || newIdx < newLines.length) {
-    const oldLine: string | undefined = oldLines[oldIdx];
-    const newLine: string | undefined = newLines[newIdx];
-
-    if (oldIdx >= oldLines.length || oldLine === undefined) {
-      result.push({
-        type: "added",
-        content: newLine ?? "",
-        newLineNum: newLineNum++,
-      });
-      newIdx++;
-    } else if (newIdx >= newLines.length || newLine === undefined) {
-      result.push({
-        type: "removed",
-        content: oldLine,
-        oldLineNum: oldLineNum++,
-      });
-      oldIdx++;
-    } else if (oldLine === newLine) {
-      result.push({
-        type: "unchanged",
-        content: oldLine,
-        oldLineNum: oldLineNum++,
-        newLineNum: newLineNum++,
-      });
-      oldIdx++;
-      newIdx++;
-    } else {
-      const oldExistsLaterInNew = (lastNewIdxOf.get(oldLine) ?? -1) > newIdx;
-      const newExistsLaterInOld = (lastOldIdxOf.get(newLine) ?? -1) > oldIdx;
-
-      if (!oldExistsLaterInNew && newExistsLaterInOld) {
-        result.push({
-          type: "removed",
-          content: oldLine,
-          oldLineNum: oldLineNum++,
-        });
-        oldIdx++;
-      } else if (oldExistsLaterInNew && !newExistsLaterInOld) {
-        result.push({
-          type: "added",
-          content: newLine,
-          newLineNum: newLineNum++,
-        });
-        newIdx++;
-      } else {
-        result.push({
-          type: "removed",
-          content: oldLine,
-          oldLineNum: oldLineNum++,
-        });
-        result.push({
-          type: "added",
-          content: newLine,
-          newLineNum: newLineNum++,
-        });
-        oldIdx++;
-        newIdx++;
+  // lcs[i][j]: the common length of oldMid[i..] and newMid[j..]
+  const lcs: Uint32Array[] | null =
+    n * m <= MAX_LCS_CELLS
+      ? Array.from({ length: n + 1 }, () => new Uint32Array(m + 1))
+      : null;
+  if (lcs !== null) {
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        lcs[i]![j] =
+          oldMid[i] === newMid[j]
+            ? lcs[i + 1]![j + 1]! + 1
+            : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
       }
     }
+  }
+
+  const result: DiffLine[] = [];
+  let oldLineNum = 1;
+  let newLineNum = 1;
+  const push = (type: DiffLineType, content: string) => {
+    if (type === "removed") {
+      result.push({ type, content, oldLineNum: oldLineNum++ });
+    } else if (type === "added") {
+      result.push({ type, content, newLineNum: newLineNum++ });
+    } else {
+      result.push({
+        type,
+        content,
+        oldLineNum: oldLineNum++,
+        newLineNum: newLineNum++,
+      });
+    }
+  };
+
+  for (let i = 0; i < head; i++) push("unchanged", oldLines[i] ?? "");
+  let i = 0;
+  let j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && oldMid[i] === newMid[j] && lcs !== null) {
+      push("unchanged", oldMid[i] ?? "");
+      i++;
+      j++;
+    } else if (
+      i < n &&
+      (lcs === null || j >= m || lcs[i + 1]![j]! >= lcs[i]![j + 1]!)
+    ) {
+      push("removed", oldMid[i] ?? "");
+      i++;
+    } else {
+      push("added", newMid[j] ?? "");
+      j++;
+    }
+  }
+  for (let k = oldLines.length - tail; k < oldLines.length; k++) {
+    push("unchanged", oldLines[k] ?? "");
   }
   return result;
 }
@@ -178,12 +195,24 @@ export function formatDiffCount(value: number): string {
 export interface PatchFile {
   /** The file's path, and its new path when it moved. */
   path: string;
+  /** The shown lines, which the patch's line limit can cut. */
   lines: DiffLine[];
+  /** Every added and removed line of the file, shown or not. */
   added: number;
   removed: number;
 }
 
-/** The most patch lines shown; the rest is a note. Counts keep all lines. */
+export interface ParsedPatch {
+  /** The files that have a panel; later files wait behind the line limit. */
+  files: PatchFile[];
+  /** Every added and removed line of the patch. */
+  added: number;
+  removed: number;
+  /** Lines that the limit left out, in the panels and in later files. */
+  omittedLines: number;
+}
+
+/** The most patch lines shown; the rest is a count. Totals keep all lines. */
 const MAX_PATCH_LINES = 2000;
 
 /** A heredoc wrapper around a patch (`<<EOF` ... `EOF`), as the tool accepts. */
@@ -192,15 +221,19 @@ const HEREDOC_OPEN = /^<<['"]?(\w+)['"]?\s*$/;
 /**
  * An apply_patch patch split by file. Its `@@` headers carry no line
  * offsets, so only a new file's lines are numbered. A hunk header with
- * context becomes a note; a bare `@@` is dropped.
+ * context becomes a note; a bare `@@` is dropped. The totals are the one
+ * count of the patch's changes.
  */
-export function parseApplyPatch(
-  patch: string,
-  moreLines: (count: number) => string
-): PatchFile[] {
-  const files: PatchFile[] = [];
+export function parseApplyPatch(patch: string): ParsedPatch {
+  const parsed: ParsedPatch = {
+    files: [],
+    added: 0,
+    removed: 0,
+    omittedLines: 0,
+  };
   let file: PatchFile | null = null;
   let isNewFile = false;
+  let count = 0;
   let lines = patch.split(/\r?\n/);
   const opener = HEREDOC_OPEN.exec(lines[0]?.trim() ?? "");
   if (opener) {
@@ -208,18 +241,21 @@ export function parseApplyPatch(
     lines = lines.slice(1, closing > 0 ? closing : undefined);
   }
   let shown = 0;
-  let noted = false;
   for (const line of lines) {
     if (line === "*** Begin Patch" || line === "*** End Patch") continue;
     const header = line.match(/^\*\*\* (Add|Update|Delete) File: (.*)$/);
-    if (header || file === null) {
-      file = { path: header?.[2] ?? "", lines: [], added: 0, removed: 0 };
+    if (header || (file === null && count === 0)) {
+      count++;
       isNewFile = header?.[1] === "Add";
-      files.push(file);
+      file = null;
+      if (shown < MAX_PATCH_LINES) {
+        file = { path: header?.[2] ?? "", lines: [], added: 0, removed: 0 };
+        parsed.files.push(file);
+      }
       if (header) continue;
     }
     if (line.startsWith("*** Move to: ")) {
-      file.path = `${file.path} → ${line.slice(13)}`;
+      if (file) file.path = `${file.path} \u2192 ${line.slice(13)}`;
       continue;
     }
     let next: DiffLine | null = null;
@@ -227,14 +263,16 @@ export function parseApplyPatch(
       const context = line.slice(2).trim();
       if (context) next = { type: "header", content: context };
     } else if (line.startsWith("+")) {
-      file.added++;
+      parsed.added++;
+      if (file) file.added++;
       next = {
         type: "added",
         content: line.slice(1),
-        newLineNum: isNewFile ? file.added : undefined,
+        newLineNum: isNewFile && file ? file.added : undefined,
       };
     } else if (line.startsWith("-")) {
-      file.removed++;
+      parsed.removed++;
+      if (file) file.removed++;
       next = { type: "removed", content: line.slice(1) };
     } else {
       next = {
@@ -243,18 +281,12 @@ export function parseApplyPatch(
       };
     }
     if (next === null) continue;
-    if (shown >= MAX_PATCH_LINES) {
-      if (!noted) {
-        file.lines.push({
-          type: "header",
-          content: moreLines(lines.length - shown),
-        });
-        noted = true;
-      }
-      continue;
+    if (shown >= MAX_PATCH_LINES || file === null) {
+      parsed.omittedLines++;
+    } else {
+      shown++;
+      file.lines.push(next);
     }
-    shown++;
-    file.lines.push(next);
   }
-  return files;
+  return parsed;
 }

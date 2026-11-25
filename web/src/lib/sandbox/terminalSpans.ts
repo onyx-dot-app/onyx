@@ -49,18 +49,17 @@ function xtermColor(index: number): string | undefined {
   return `rgb(${channel(Math.floor(cube / 36))},${channel(Math.floor(cube / 6) % 6)},${channel(cube % 6)})`;
 }
 
-/** Reads an extended color (`38;5;n` or `38;2;r;g;b`) at `i`; returns it and the next index. */
-function extendedColor(
-  codes: number[],
-  i: number
-): [string | undefined, number] {
-  if (codes[i + 1] === 5) return [xtermColor(codes[i + 2] ?? -1), i + 3];
-  if (codes[i + 1] === 2) {
-    const [r, g, b] = [codes[i + 2], codes[i + 3], codes[i + 4]];
-    const valid = [r, g, b].every((v) => v !== undefined && v >= 0 && v <= 255);
-    return [valid ? `rgb(${r},${g},${b})` : undefined, i + 5];
+/** Reads an extended color from its numbers: `[5, n]` or `[2, (colorspace,) r, g, b]`. */
+function extendedColor(args: number[]): string | undefined {
+  if (args[0] === 5) return xtermColor(args[1] ?? -1);
+  if (args[0] === 2) {
+    const [r, g, b] = args.slice(-3);
+    const valid =
+      args.length >= 4 &&
+      [r, g, b].every((v) => v !== undefined && v >= 0 && v <= 255);
+    return valid ? `rgb(${r},${g},${b})` : undefined;
   }
-  return [undefined, i + 1];
+  return undefined;
 }
 
 function newPen(): Pen {
@@ -75,15 +74,19 @@ function newPen(): Pen {
 }
 
 function applySgr(pen: Pen, params: string): Pen {
-  const codes = params === "" ? [0] : params.split(/[;:]/).map(Number);
+  // Semicolons split parameters; colons split one parameter's subparameters.
+  const groups = (params === "" ? "0" : params)
+    .split(";")
+    .map((group) => group.split(":").map(Number));
   let next = { ...pen };
-  for (let i = 0; i < codes.length; i++) {
-    const code = codes[i] ?? 0;
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i] ?? [0];
+    const code = group[0] ?? 0;
     if (code === 0) next = newPen();
     else if (code === 1) next.bold = true;
     else if (code === 2) next.dim = true;
     else if (code === 3) next.italic = true;
-    else if (code === 4) next.underline = true;
+    else if (code === 4) next.underline = group[1] !== 0;
     else if (code === 7) next.inverse = true;
     else if (code === 9) next.strike = true;
     else if (code === 22) {
@@ -100,10 +103,16 @@ function applySgr(pen: Pen, params: string): Pen {
     else if (code === 39) next.fg = undefined;
     else if (code === 49) next.bg = undefined;
     else if (code === 38 || code === 48) {
-      const [color, after] = extendedColor(codes, i);
+      let args = group.slice(1);
+      if (group.length === 1) {
+        // Semicolon form: the arguments are the next parameters.
+        const count = groups[i + 1]?.[0] === 5 ? 2 : 4;
+        args = groups.slice(i + 1, i + 1 + count).map((g) => g[0] ?? 0);
+        i += count;
+      }
+      const color = extendedColor(args);
       if (code === 38) next.fg = color;
       else next.bg = color;
-      i = after - 1;
     }
   }
   return next;
@@ -113,7 +122,10 @@ function penStyle(pen: Pen): TerminalSpanStyle | null {
   let color = pen.fg;
   let backgroundColor = pen.bg;
   if (pen.inverse) {
-    [color, backgroundColor] = [backgroundColor, color ?? baseColor(7)];
+    [color, backgroundColor] = [
+      backgroundColor ?? "var(--background-tint-00)",
+      color ?? "var(--text-04)",
+    ];
   }
   const decoration =
     pen.underline && pen.strike
@@ -139,7 +151,7 @@ function penStyle(pen: Pen): TerminalSpanStyle | null {
  * `var(--opal-ansi-N)`, so they follow the theme inside a `CodePanel`.
  * Escapes other than SGR (cursor moves, titles, links) are dropped.
  */
-export function terminalSpans(text: string): TerminalSpan[] {
+function parseSegment(text: string): TerminalSpan[] {
   if (!text.includes("\u001b")) return [{ text, style: null }];
   const spans: TerminalSpan[] = [];
   let pen = newPen();
@@ -167,4 +179,26 @@ export function terminalSpans(text: string): TerminalSpan[] {
     }
   }
   return spans;
+}
+
+// `truncation_marker` in backend/onyx/tools/tool_implementations/utils.py.
+const OMISSION =
+  /\.\.\. \[output truncated, \d+ characters omitted\](?: \.\.\.)?/g;
+
+/**
+ * Splits terminal output into styled spans. The 16 base colors are
+ * `var(--opal-ansi-N)`, so they follow the theme inside a `CodePanel`.
+ * Escapes other than SGR (cursor moves, titles, links) are dropped. A style
+ * never crosses an omission marker, since the cut can remove its reset.
+ */
+export function terminalSpans(text: string): TerminalSpan[] {
+  const spans: TerminalSpan[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(OMISSION)) {
+    spans.push(...parseSegment(text.slice(cursor, match.index)));
+    spans.push({ text: match[0], style: null });
+    cursor = match.index + match[0].length;
+  }
+  spans.push(...parseSegment(text.slice(cursor)));
+  return spans.filter((span) => span.text !== "");
 }

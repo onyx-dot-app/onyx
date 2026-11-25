@@ -7,6 +7,9 @@ test.each([
   ["/usr/bin/git status", "git"],
   ["bash -lc 'cd /app && pytest -q'", "pytest"],
   ["ls -la | grep x", "ls"],
+  ["sudo -u root python3 script.py", "python3"],
+  ["sudo -n npm test", "npm"],
+  ["env -i FOO=1 npm test", "npm"],
   ["", null],
   ["$(echo hi)", null],
 ])("%s runs %s", (command, program) => {

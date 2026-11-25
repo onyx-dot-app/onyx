@@ -12600,7 +12600,7 @@
         "stoppedDuration": {
           "label": "أوقفته بعد {duration}"
         },
-        "stoppedUnknownDuration": {
+        "interruptedThinking": {
           "label": "أوقفت هذا الرد"
         },
         "memory": {
@@ -12723,10 +12723,10 @@
         "stepsButton": {
           "label": "{count, plural, one {خطوة واحدة} other {# خطوات}}"
         },
-        "workedDuration": {
+        "thoughtDuration": {
           "label": "عمل لمدة {duration}"
         },
-        "workedUnknownDuration": {
+        "thoughtUnknownDuration": {
           "label": "عمل"
         },
         "toggleRow": {
