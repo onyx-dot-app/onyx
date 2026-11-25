@@ -4,6 +4,7 @@ import { ImageShape } from "@/app/app/services/streamingModels";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import {
+  GALLERY_ALT_ATTR,
   GALLERY_IMAGE_ATTR,
   collectGallery,
   type GalleryState,
@@ -82,7 +83,7 @@ export const InMessageImage = memo(function InMessageImage({
     <>
       {gallery && (
         <FullImageModal
-          urls={gallery.urls}
+          images={gallery.images}
           initialIndex={gallery.index}
           open
           onOpenChange={(open) => {
@@ -100,7 +101,10 @@ export const InMessageImage = memo(function InMessageImage({
           role="button"
           tabIndex={0}
           aria-label={t("inMessageImage.viewFullImage.label")}
-          {...{ [GALLERY_IMAGE_ATTR]: buildImgUrl(fileId) }}
+          {...{
+            [GALLERY_IMAGE_ATTR]: buildImgUrl(fileId),
+            [GALLERY_ALT_ATTR]: t("inMessageImage.image.alt"),
+          }}
           onClick={openGallery}
           onKeyDown={clickOnKeyDown(openGallery)}
         >
