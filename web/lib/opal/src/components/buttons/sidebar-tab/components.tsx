@@ -69,7 +69,10 @@ interface SidebarTabProps {
   rightChildrenAtRest?: boolean | string;
 
   /** Tooltip shown on hover. Takes precedence over the label tooltip. */
-  tooltip?: string | RichStr;
+  tooltip?: React.ReactNode | RichStr;
+
+  /** Delay in ms before `tooltip` appears. */
+  tooltipDelay?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +162,7 @@ function SidebarTab({
   rightChildren,
   rightChildrenAtRest,
   tooltip,
+  tooltipDelay,
   children,
 }: SidebarTabProps) {
   const Icon =
@@ -243,7 +247,7 @@ function SidebarTab({
   const trigger =
     overlay &&
     (tooltip ? (
-      <Tooltip tooltip={tooltip} side="end">
+      <Tooltip tooltip={tooltip} side="end" delayDuration={tooltipDelay}>
         {overlay}
       </Tooltip>
     ) : label !== undefined ? (

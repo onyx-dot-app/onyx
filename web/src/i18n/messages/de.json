@@ -16695,6 +16695,12 @@
       "deleteError": {
         "message": "Chat konnte nicht gelöscht werden. Bitte versuchen Sie es erneut."
       },
+      "markRead": {
+        "label": "Als gelesen markieren"
+      },
+      "markUnread": {
+        "label": "Als ungelesen markieren"
+      },
       "moveToProject": {
         "label": "In ein Projekt verschieben"
       },
@@ -16703,6 +16709,12 @@
       },
       "projectSearchInput": {
         "placeholder": "Projekte durchsuchen"
+      },
+      "regenerateTitle": {
+        "label": "Titel neu generieren"
+      },
+      "regenerateTitleError": {
+        "message": "Der Titel konnte nicht neu generiert werden. Bitte versuchen Sie es erneut."
       },
       "removeFromProject": {
         "label": "Aus {projectName} entfernen"
@@ -16727,9 +16739,12 @@
           "label": "In Arbeit"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Teilen"
+      },
+      "updatedAt": "Aktualisiert {date}",
+      "updatedNow": {
+        "label": "jetzt"
       }
     },
     "chatSearch": {

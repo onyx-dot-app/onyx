@@ -16695,6 +16695,12 @@
       "deleteError": {
         "message": "Falha ao excluir o chat. Tente novamente."
       },
+      "markRead": {
+        "label": "Marcar como lida"
+      },
+      "markUnread": {
+        "label": "Marcar como não lida"
+      },
       "moveToProject": {
         "label": "Mover para um projeto"
       },
@@ -16703,6 +16709,12 @@
       },
       "projectSearchInput": {
         "placeholder": "Pesquisar projetos"
+      },
+      "regenerateTitle": {
+        "label": "Regenerar título"
+      },
+      "regenerateTitleError": {
+        "message": "Falha ao regenerar o título. Tente novamente."
       },
       "removeFromProject": {
         "label": "Remover de {projectName}"
@@ -16727,9 +16739,12 @@
           "label": "Trabalhando"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Compartilhar"
+      },
+      "updatedAt": "Atualizado {date}",
+      "updatedNow": {
+        "label": "agora"
       }
     },
     "chatSearch": {

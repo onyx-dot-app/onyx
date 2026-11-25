@@ -16695,6 +16695,12 @@
       "deleteError": {
         "message": "채팅을 삭제하지 못했습니다. 다시 시도하세요."
       },
+      "markRead": {
+        "label": "읽음으로 표시"
+      },
+      "markUnread": {
+        "label": "읽지 않음으로 표시"
+      },
       "moveToProject": {
         "label": "프로젝트로 이동"
       },
@@ -16703,6 +16709,12 @@
       },
       "projectSearchInput": {
         "placeholder": "프로젝트 검색"
+      },
+      "regenerateTitle": {
+        "label": "제목 다시 생성"
+      },
+      "regenerateTitleError": {
+        "message": "제목을 다시 생성하지 못했습니다. 다시 시도해 주세요."
       },
       "removeFromProject": {
         "label": "{projectName}에서 제거"
@@ -16727,9 +16739,12 @@
           "label": "작업 중"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "공유"
+      },
+      "updatedAt": "업데이트 {date}",
+      "updatedNow": {
+        "label": "방금"
       }
     },
     "chatSearch": {

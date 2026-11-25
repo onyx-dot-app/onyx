@@ -49,6 +49,8 @@ Both tooltips (the folded name and an explicit `tooltip`) wrap the overlay contr
 | `onClick`             | `MouseEventHandler`                  | —                 | Click handler                                                                                             |
 | `type`                | `ButtonType`                         | —                 | HTML button type                                                                                          |
 | `rightChildren`       | `ReactNode`                          | —                 | Actions rendered on the right side                                                                        |
+| `tooltip`             | `ReactNode \| RichStr`               | —                 | Tooltip shown on hover over the tab. Takes precedence over the label tooltip                              |
+| `tooltipDelay`        | `number`                             | —                 | Delay in ms before `tooltip` appears                                                                      |
 | `rightChildrenAtRest` | `boolean \| string`                            | `false`           | `rightChildren` show at rest too, so the label keeps their room at all times. Pass a CSS width to override the default 1.5rem |
 
 ## Usage

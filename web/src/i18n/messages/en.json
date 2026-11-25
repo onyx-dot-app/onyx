@@ -16695,6 +16695,12 @@
       "deleteError": {
         "message": "Failed to delete chat. Please try again."
       },
+      "markRead": {
+        "label": "Mark as read"
+      },
+      "markUnread": {
+        "label": "Mark as unread"
+      },
       "moveToProject": {
         "label": "Move to Project"
       },
@@ -16703,6 +16709,12 @@
       },
       "projectSearchInput": {
         "placeholder": "Search Projects"
+      },
+      "regenerateTitle": {
+        "label": "Regenerate title"
+      },
+      "regenerateTitleError": {
+        "message": "Failed to regenerate the title. Please try again."
       },
       "removeFromProject": {
         "label": "Remove from {projectName}"
@@ -16727,9 +16739,12 @@
           "label": "Working"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Share"
+      },
+      "updatedAt": "Updated {date}",
+      "updatedNow": {
+        "label": "now"
       }
     },
     "chatSearch": {
