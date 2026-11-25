@@ -370,6 +370,16 @@ class PostgresCacheBackend(CacheBackend):
             session.execute(delete(CacheStore).where(CacheStore.key == key))
             session.commit()
 
+    def delete_many(self, keys: Collection[str]) -> None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        if not keys:
+            return
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            session.execute(delete(CacheStore).where(CacheStore.key.in_(keys)))
+            session.commit()
+
     def delete_prefix(self, prefix: str) -> None:
         from onyx.db.engine.sql_engine import get_session_with_tenant
 

@@ -104,6 +104,10 @@ class RedisCacheBackend(CacheBackend):
     def delete(self, key: str) -> None:
         self._r.delete(key)
 
+    def delete_many(self, keys: Collection[str]) -> None:
+        if keys:
+            self._r.delete(*keys)
+
     def delete_if_value(self, key: str, expected: bytes) -> bool:
         return self._r.delete_if_value(key, expected)
 

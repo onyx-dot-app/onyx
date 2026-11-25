@@ -72,6 +72,10 @@ class _MemoryCache(CacheBackend):
     def delete(self, key: str) -> None:
         self.values.pop(key, None)
 
+    def delete_many(self, keys: Collection[str]) -> None:
+        for key in keys:
+            self.delete(key)
+
     def delete_prefix(self, prefix: str) -> None:
         if not prefix:
             raise ValueError("Cache deletion requires a nonempty prefix")

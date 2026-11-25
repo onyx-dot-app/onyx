@@ -101,9 +101,10 @@ class ChatTurnAdmission:
                 )
             self._last_refresh = started
             self.cache.set(_get_fence_key(session_id), 0, ex=self._lease_seconds)
-            self.cache.delete(_responses_key(session_id))
             # A Stop for an earlier turn that never published is not this turn's.
-            self.cache.delete(_preparation_stop_key(session_id))
+            self.cache.delete_many(
+                [_responses_key(session_id), _preparation_stop_key(session_id)]
+            )
         finally:
             lock.release()
 
@@ -229,13 +230,18 @@ class ChatTurnAdmission:
                 self.cache.set(
                     _get_fence_key(session_id), 0, ex=successor._lease_seconds
                 )
-                self.cache.delete(_responses_key(session_id))
-                self.cache.delete(_preparation_stop_key(session_id))
+                self.cache.delete_many(
+                    [_responses_key(session_id), _preparation_stop_key(session_id)]
+                )
                 self._session_id = None
                 return successor
-            self.cache.delete(_get_fence_key(session_id))
-            self.cache.delete(_responses_key(session_id))
-            self.cache.delete(self._owner_key(session_id))
+            self.cache.delete_many(
+                [
+                    _get_fence_key(session_id),
+                    _responses_key(session_id),
+                    self._owner_key(session_id),
+                ]
+            )
             self._session_id = None
             return None
         finally:
