@@ -556,3 +556,20 @@ func TestSync_closesIssuesOfCleanScannedPackages(t *testing.T) {
 		})
 	}
 }
+
+func TestGroupAlertsKeepsBothImageAndLockfileOwners(t *testing.T) {
+	image := Finding{ID: "CVE-test", Package: "example", Ecosystem: "npm", Image: "dhi.io/node:24-dev@sha256:a", Severity: SeverityCritical}
+	lockfile := image
+	lockfile.Image = ""
+	lockfile.Manifest = "web/bun.lock"
+	for _, tc := range []struct {
+		findings []Finding
+		only     bool
+		pinned   bool
+	}{{[]Finding{image}, true, true}, {[]Finding{lockfile, image}, false, true}, {[]Finding{lockfile}, false, false}} {
+		got := groupAlerts(tc.findings, nil, "main")[0]
+		if got.PinnedImagesOnly != tc.only || got.HasPinnedImages != tc.pinned || slices.Contains(got.ImageFamilies, "node") != tc.pinned {
+			t.Fatalf("wrong repair owners: %+v", got)
+		}
+	}
+}
