@@ -259,14 +259,16 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
                 ],
                 conditions=RequestConditions(has_results_for=["repl-program"]),
             ),
-            # A program that runs past its timeout returns, and poll stops it.
+            # A program that runs past its 1-second timeout returns, and poll
+            # stops it. It ends well before the 30-second default, so it still
+            # runs only when the call honors the timeout.
             Reply(
                 tool_calls=[
                     ToolCall(
                         id="repl-slow",
                         name="repl",
                         arguments={
-                            "code": 'await asyncio.sleep(60)\nprint("late")',
+                            "code": 'await asyncio.sleep(8)\nprint("late")',
                             "timeout": 1_000,
                         },
                     )
