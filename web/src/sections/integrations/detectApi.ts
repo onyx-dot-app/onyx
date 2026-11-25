@@ -1,0 +1,141 @@
+import { FetchError } from "@/lib/fetcher";
+import { importOpenApiSpec, introspectGraphQL } from "@/lib/integrations/svc";
+import type {
+  GraphQLConfig,
+  OpenApiConfigView,
+} from "@/lib/integrations/types";
+import { normalizedUrl } from "@/sections/integrations/signIn";
+
+/** What the Add flow found at a URL or in an uploaded spec. */
+export type DetectedApi =
+  | { shape: "openapi"; view: OpenApiConfigView }
+  | { shape: "rest"; baseUrl: string }
+  | {
+      shape: "graphql";
+      config: GraphQLConfig;
+      queries: number;
+      mutations: number;
+    };
+
+export interface SpecFile {
+  name: string;
+  text: string;
+}
+
+export function isGraphQLFile(name: string): boolean {
+  return /\.(graphql|graphqls|gql)$/i.test(name);
+}
+
+/**
+ * Finds the kind of API. An uploaded `.graphql` file is a GraphQL schema for
+ * the URL; another file is an OpenAPI spec. With only a URL: an OpenAPI spec
+ * at the URL, else a GraphQL endpoint that answers introspection, else a REST
+ * base URL with no spec. Null when the API needs a URL that is missing.
+ * Throws when the file is not a spec that Onyx can add, or the URL is a spec
+ * that Onyx cannot add.
+ */
+export async function detectApi(
+  url: string | null,
+  file: SpecFile | null
+): Promise<DetectedApi | null> {
+  if (file && isGraphQLFile(file.name)) {
+    return url
+      ? graphqlResult({
+          shape: "graphql",
+          endpoint_url: url,
+          graphql_schema: file.text,
+        })
+      : null;
+  }
+  if (file) {
+    const view = await importOpenApiSpec({ openapi_document: file.text });
+    return openApiResult(view, url);
+  }
+  if (!url) return null;
+  try {
+    const result = openApiResult(
+      await importOpenApiSpec({ spec_url: url }),
+      url
+    );
+    if (result) return result;
+  } catch (error) {
+    // A spec that Onyx cannot add stops here. Else it is not a spec; try
+    // GraphQL next.
+    if (isSpecError(error)) throw error;
+  }
+  try {
+    return graphqlResult(await introspectGraphQL(url));
+  } catch {
+    return { shape: "rest", baseUrl: url };
+  }
+}
+
+function isSpecError(error: unknown): boolean {
+  return (
+    error instanceof FetchError && error.info?.error_code === "VALIDATION_ERROR"
+  );
+}
+
+/** A spec's server URL, resolved against the URL the spec came from when it
+ * is relative. Null when it stays relative. */
+export function specBaseUrl(
+  baseUrl: string,
+  specUrl: string | null
+): string | null {
+  if (normalizedUrl(baseUrl) !== null) return baseUrl.trim();
+  return specUrl ? new URL(baseUrl.trim() || "/", specUrl).href : null;
+}
+
+function openApiResult(
+  view: OpenApiConfigView,
+  url: string | null
+): DetectedApi | null {
+  const baseUrl = specBaseUrl(view.base_url, url);
+  return baseUrl
+    ? { shape: "openapi", view: { ...view, base_url: baseUrl } }
+    : null;
+}
+
+function graphqlResult(config: GraphQLConfig): DetectedApi {
+  const sdl = config.graphql_schema;
+  return {
+    shape: "graphql",
+    config,
+    queries: rootFieldCount(sdl, rootTypeName(sdl, "query", "Query")),
+    mutations: rootFieldCount(sdl, rootTypeName(sdl, "mutation", "Mutation")),
+  };
+}
+
+function rootTypeName(
+  sdl: string,
+  operation: "query" | "mutation",
+  fallback: string
+): string {
+  const schema = /\bschema\b[^{]*\{([^}]*)\}/.exec(sdl)?.[1];
+  const match = schema
+    ? new RegExp(`\\b${operation}\\s*:\\s*([A-Za-z_]\\w*)`).exec(schema)
+    : null;
+  return match?.[1] ?? fallback;
+}
+
+/** The number of fields of an object type in SDL; 0 when it is missing. */
+function rootFieldCount(sdl: string, typeName: string): number {
+  const start = new RegExp(`\\btype\\s+${typeName}\\b[^{]*\\{`).exec(sdl);
+  if (!start) return 0;
+  let end = start.index + start[0].length;
+  for (let depth = 1; end < sdl.length && depth > 0; end++) {
+    if (sdl[end] === "{") depth++;
+    else if (sdl[end] === "}") depth--;
+  }
+  let body = sdl
+    .slice(start.index + start[0].length, end - 1)
+    .replace(/"""[\s\S]*?"""/g, "")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, "")
+    .replace(/#[^\n]*/g, "");
+  // Arguments hold colons too; drop them, inner pairs first.
+  for (let previous = ""; previous !== body;) {
+    previous = body;
+    body = body.replace(/\([^()]*\)/g, "");
+  }
+  return body.match(/[A-Za-z_]\w*\s*:/g)?.length ?? 0;
+}

@@ -6,7 +6,8 @@ function authError(
   turnIndex: number,
   toolName: string,
   displayName: string,
-  toolId: number | null
+  toolId: number | null,
+  integrationId: number | null = null
 ): Packet[] {
   const placement = { turn_index: turnIndex, tab_index: 0 };
   return [
@@ -25,6 +26,7 @@ function authError(
         type: PacketType.CUSTOM_TOOL_DELTA,
         tool_name: toolName,
         tool_id: toolId,
+        integration_id: integrationId,
         response_type: "text",
         error: {
           is_auth_error: true,
@@ -48,8 +50,18 @@ describe("useAuthErrors", () => {
     const { result } = renderHook(() => useAuthErrors(packets));
 
     expect(result.current).toEqual([
-      { turnIndex: 0, toolName: "Create issue", toolId: null },
-      { turnIndex: 2, toolName: "New issue", toolId: null },
+      {
+        turnIndex: 0,
+        toolName: "Create issue",
+        toolId: null,
+        integrationId: null,
+      },
+      {
+        turnIndex: 2,
+        toolName: "New issue",
+        toolId: null,
+        integrationId: null,
+      },
     ]);
   });
 
@@ -62,7 +74,7 @@ describe("useAuthErrors", () => {
     const { result } = renderHook(() => useAuthErrors(packets));
 
     expect(result.current).toEqual([
-      { turnIndex: 0, toolName: "Get user", toolId: 7 },
+      { turnIndex: 0, toolName: "Get user", toolId: 7, integrationId: null },
     ]);
   });
 
@@ -85,8 +97,8 @@ describe("useAuthErrors", () => {
     const { result } = renderHook(() => useAuthErrors(packets));
 
     expect(result.current).toEqual([
-      { turnIndex: 0, toolName: "Get user", toolId: 7 },
-      { turnIndex: 2, toolName: "Get user", toolId: 7 },
+      { turnIndex: 0, toolName: "Get user", toolId: 7, integrationId: null },
+      { turnIndex: 2, toolName: "Get user", toolId: 7, integrationId: null },
     ]);
   });
 
@@ -116,8 +128,21 @@ describe("useAuthErrors", () => {
     rerender();
 
     expect(result.current).toEqual([
-      { turnIndex: 0, toolName: "Get user", toolId: 7 },
-      { turnIndex: 2, toolName: "Get user", toolId: 7 },
+      { turnIndex: 0, toolName: "Get user", toolId: 7, integrationId: null },
+      { turnIndex: 2, toolName: "Get user", toolId: 7, integrationId: null },
+    ]);
+  });
+
+  it("reports one card for an app, which has a tool for each action", () => {
+    const packets = [
+      ...authError(0, "app__9__connect", "GitHub", null, 9),
+      ...authError(1, "app__9__github_issues_read", "GitHub: Read", null, 9),
+    ];
+
+    const { result } = renderHook(() => useAuthErrors(packets));
+
+    expect(result.current).toEqual([
+      { turnIndex: 0, toolName: "GitHub", toolId: null, integrationId: 9 },
     ]);
   });
 });

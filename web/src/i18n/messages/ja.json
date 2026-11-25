@@ -141,44 +141,6 @@
         "tooltip": "{description}\nこのチャットではこのツールを優先します。エージェントは使用せずに回答する場合があります。"
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "キャンセル"
-      },
-      "copyButton": {
-        "tooltip": "定義をコピー"
-      },
-      "definition": {
-        "invalidJson": "JSON の形式が無効です",
-        "placeholder": "ここに OpenAPI スキーマを入力してください",
-        "required": "OpenAPI スキーマ定義は必須です",
-        "subDescription": "このプラグインで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI プラグイン]({docsUrl}) を参照してください。",
-        "title": "OpenAPI スキーマ定義"
-      },
-      "empty": {
-        "description": "OpenAPI スキーマを入力すると、ここにアクションのプレビューが表示されます。",
-        "title": "アクションが見つかりません"
-      },
-      "formatButton": {
-        "tooltip": "定義を整形"
-      },
-      "method": {
-        "noSummary": "概要はありません"
-      },
-      "toasts": {
-        "actionCreated": "OpenAPI プラグインを作成しました",
-        "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です"
-      },
-      "humanDescription": {
-        "title": "ユーザー向けの説明",
-        "hint": "プラグインのカードと詳細に表示されます。"
-      },
-      "agentDescription": {
-        "title": "エージェント向けの説明",
-        "hint": "OpenAPIスキーマのinfo.descriptionを編集します。",
-        "disabled": "このフィールドを編集するには、有効なスキーマを入力してください。"
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(切断済み)"
@@ -360,10 +322,8 @@
       "detectedTransport": "トランスポート: {transport}",
       "authenticationUndetected": "次のページで認証方法を選択してください。",
       "details": "詳細",
-      "checking": "サーバーを確認中…",
       "serverDetails": "サーバーの詳細",
       "authentication": "認証",
-      "continue": "続ける",
       "back": "戻る"
     },
     "policyEditor": {
@@ -10402,45 +10362,16 @@
       "loadFailed": "連携を読み込めませんでした。",
       "add": {
         "label": "追加",
-        "title": "連携を追加",
-        "description": "サービスを接続すると、チャットと Craft で使えるようになります。",
         "created": "{name} を追加しました。",
         "createFailed": "連携を追加できませんでした。",
-        "openapi": {
-          "title": "OpenAPI アプリを追加",
-          "schema": {
-            "title": "スキーマ",
-            "description": "アクションを定義するOpenAPIスキーマを追加します。",
-            "added": "{count, plural, other {スキーマには # 個のパスがあります。}}",
-            "required": "スキーマを追加してください。",
-            "add": "スキーマを追加",
-            "edit": "スキーマを編集"
-          }
-        },
         "preset": {
-          "title": "開始点",
           "loadFailed": "プリセットを読み込めませんでした。",
-          "instructions": "セットアップ手順",
-          "credentialRequired": "この値を入力してください。",
-          "description": "プリセットは、組み込みアプリの名前とサインインを入力します。任意のHTTPサービスを設定するには「カスタムアプリ」を選択します。",
-          "custom": "カスタムアプリ"
+          "credentialRequired": "この値を入力してください。"
         },
         "name": {
           "title": "名前",
           "placeholder": "名前を入力",
           "required": "名前を入力してください。"
-        },
-        "descriptionField": {
-          "title": "説明",
-          "placeholder": "説明を入力"
-        },
-        "custom": {
-          "patterns": {
-            "title": "URL パターン",
-            "description": "1 行に 1 つの URL パターンを入力します（例: https://api.example.com/*）。",
-            "placeholder": "https://api.example.com/*",
-            "required": "URL パターンを 1 つ以上入力してください。"
-          }
         },
         "mcp": {
           "url": {
@@ -10460,8 +10391,7 @@
             "title": "トランスポート",
             "streamableHttp": "Streamable HTTP",
             "sse": "Server-Sent Events (SSE)"
-          },
-          "suggested": "おすすめのサーバー"
+          }
         },
         "owner": {
           "title": "所有者",
@@ -10473,27 +10403,106 @@
         "submit": "追加",
         "adding": "追加しています…",
         "cancel": "キャンセル",
-        "type": {
-          "title": "種類",
-          "description": "Onyxがサービスに接続する方法を選択します。",
-          "mcp_server": {
-            "title": "MCPサーバー",
-            "description": "URLでリモートのMCPサーバーに接続します。"
+        "rest": {
+          "import": {
+            "title": "仕様をインポート",
+            "description": "JSON または YAML の OpenAPI 仕様をアップロードまたは貼り付けるか、URL からインポートします。Onyx がベース URL と操作ごとのエンドポイントを入力します。",
+            "upload": "仕様をアップロードまたは貼り付け",
+            "url": "仕様の URL",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "インポート",
+            "done": "{count, plural, other {# 件のエンドポイントをインポートしました。}}",
+            "failed": "仕様をインポートできませんでした。"
           },
-          "openapi": {
-            "title": "OpenAPIアプリ",
-            "description": "OpenAPIスキーマからアクションを作成します。"
+          "baseUrl": {
+            "title": "ベース URL",
+            "placeholder": "https://api.example.com",
+            "required": "ベース URL を追加してください。"
           },
-          "app": {
-            "title": "アプリ",
-            "description": "GitHubなどのプリセット、またはカスタムアプリから始めます。"
+          "endpoints": {
+            "title": "エンドポイント",
+            "description": "1 行に 1 つのエンドポイントを入力します: メソッド、パス、任意のクエリパラメーター、名前。各エンドポイントがアクションになります。",
+            "placeholder": "GET /tickets?status&limit チケットを一覧表示",
+            "required": "エンドポイントを 1 つ以上追加してください。",
+            "lineError": "{line} 行目 ({text}): {message}"
           }
         },
-        "details": {
-          "title": "詳細"
+        "graphql": {
+          "endpointUrl": {
+            "title": "エンドポイント URL",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "エンドポイント URL を追加してください。"
+          },
+          "schema": {
+            "title": "スキーマ",
+            "description": "GraphQL SDL のスキーマを貼り付けるか、.graphql ファイルをアップロードするか、エンドポイントから読み込みます。各クエリとミューテーションがアクションになります。",
+            "upload": ".graphql ファイルをアップロード",
+            "required": "スキーマを追加してください。"
+          },
+          "introspect": {
+            "submit": "エンドポイントから読み込む",
+            "done": "スキーマを読み込みました。",
+            "failed": "スキーマを読み込めませんでした。"
+          }
         },
-        "signIn": {
-          "title": "サインイン"
+        "menu": {
+          "mcpServer": "MCP サーバー",
+          "customApi": "カスタム API"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "MCP サーバーを追加",
+            "description": "URL でリモート MCP サーバーに接続します。"
+          },
+          "api": {
+            "title": "カスタム API を追加",
+            "description": "REST または GraphQL API に接続します。Onyx は URL または仕様からエンドポイントを見つけます。"
+          },
+          "catalog": {
+            "title": "カタログから追加",
+            "description": "設定するアプリまたは MCP サーバーを選択します。"
+          },
+          "namedTitle": "{name} を追加"
+        },
+        "catalog": {
+          "title": "カタログを見る",
+          "description": "Onyx が接続方法をすでに知っているアプリとホスト型 MCP サーバー。",
+          "browse": "見る"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "OpenAPI 仕様の URL、GraphQL エンドポイント、またはベース URL",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "有効な URL を入力するか、仕様をアップロードしてください。",
+            "needed": "API の URL を追加してください。仕様に URL がありません。"
+          },
+          "upload": {
+            "label": "openapi.json、openapi.yaml または schema.graphql をアップロード",
+            "chosen": "仕様: {file}",
+            "remove": "仕様を削除"
+          },
+          "failed": "仕様を読み取れませんでした。",
+          "specError": "仕様を追加できません: {detail}"
+        },
+        "detected": {
+          "openapi": "REST API、{count, plural, other {# 個のエンドポイント}}",
+          "openapiSkipped": "REST API、{count, plural, other {# 個のエンドポイント}}。{skipped} 個をスキップしました。",
+          "skippedTitle": "スキップしたエンドポイント",
+          "rest": "仕様のない REST API です。下にエンドポイントを追加してください。",
+          "graphql": "GraphQL API、{queries, plural, other {# 個のクエリ}}と{mutations, plural, other {# 個のミューテーション}}",
+          "preset": "組み込みアプリ。Onyx がその API を呼び出します。"
+        },
+        "continue": "続行",
+        "back": "戻る",
+        "detecting": "URL を確認しています…",
+        "advanced": "詳細設定",
+        "setup": {
+          "title": "{name} を設定",
+          "callbackUrl": "コールバック URL",
+          "copyCallbackUrl": "コールバック URL をコピー",
+          "scopes": "スコープ",
+          "open": "{name} を開く"
         }
       },
       "filters": {
@@ -10517,9 +10526,10 @@
       },
       "shape": {
         "mcp_server": "MCP サーバー",
-        "openapi": "OpenAPI アプリ",
+        "openapi": "REST アプリ",
         "preset": "アプリ",
-        "custom": "カスタムアプリ"
+        "custom": "カスタムアプリ",
+        "graphql": "GraphQL アプリ"
       },
       "signInSummary": "{mode, select, none {ログインなし} shared {{method, select, oauth2 {組織アカウント (OAuth)} api_key {組織の API キー} onyx_login {Onyx ログイン} managed {Onyx が管理} other {組織アカウント}}} individual {{method, select, oauth2 {各ユーザー (OAuth)} api_key {各ユーザー (API キー)} onyx_login {Onyx ログイン} managed {Onyx が管理} other {各ユーザー}}} other {不明}}",
       "status": {
@@ -10627,7 +10637,11 @@
           },
           "description": "説明",
           "menu": "その他の操作",
-          "owner": "所有者"
+          "owner": "所有者",
+          "urlPatternApp": {
+            "title": "このアプリは URL パターンを使用しています",
+            "description": "Onyx は URL パターンのアプリを追加しなくなりました。このサービスをカスタム REST アプリとして追加し直してから、このアプリを削除してください。"
+          }
         },
         "configuration": {
           "readOnly": "この連携は表示できますが、変更はできません。",
@@ -10635,8 +10649,6 @@
             "title": "接続",
             "serverUrl": "サーバー URL",
             "serverUrlError": "有効なサーバー URL を入力してください。",
-            "urlPatterns": "URL パターン",
-            "urlPatternsDescription": "1 行に 1 つの URL パターンを入力します。",
             "schema": "OpenAPI スキーマ",
             "schemaDescription": "変更したスキーマを保存すると、Onyx はアクションを再同期します。",
             "schemaError": "スキーマを JSON オブジェクトとして入力してください。"
@@ -10707,7 +10719,7 @@
         "saved": "{name} は {policy} になりました。",
         "saveFailed": "インストール設定を保存できませんでした。",
         "title": "インストール設定",
-        "description": "この連携を使える人。利用不可にすると非公開になり、所有者、共有相手、独自の設定を持つグループだけが使えます。所有者と共有相手だけに限定するには、それらのグループ設定を削除してください。",
+        "description": "組織内でこの連携を使える人。",
         "notAvailable": "非公開。所有者、共有相手、独自の設定を持つグループだけが使えます。",
         "required": "自分のアカウントでサインインするメンバーは、チャットと Craft を使う前に接続する必要があります。"
       },
@@ -10716,6 +10728,10 @@
         "saved": "{name} のグループ設定を保存しました。",
         "saveFailed": "グループ設定を保存できませんでした。"
       }
+    },
+    "plugins": {
+      "title": "プラグイン",
+      "description": "Claude Code と Codex のプラグインをアップロードし、GitHub からマーケットプレイスを同期します。プラグインはスキルのまとまりで、それらのスキルに必要な連携を示します。"
     },
     "serviceStatus": {
       "page": {
@@ -16733,6 +16749,9 @@
         "integrations": {
           "label": "連携"
         },
+        "plugins": {
+          "label": "プラグイン"
+        },
         "slackBot": {
           "label": "Slack ボット"
         },
@@ -17617,19 +17636,20 @@
         }
       },
       "alwaysAllow": {
-        "title": "常に許可",
-        "description": "承認を求めるアクションを確認なしで実行します。",
+        "title": "アクション",
+        "description": "各アクションの実行方法は管理者が設定します。承認を求めるアクションを確認なしで実行するには「確認しない」をオンにします。",
         "loadFailed": "アクションを読み込めませんでした。",
         "saveFailed": "保存できませんでした。もう一度お試しください。",
-        "alwaysAsks": "Craft はこれらのリクエストごとに承認を求めます。",
+        "alwaysAsks": "Onyx はこれらのリクエストごとに承認を求めます。",
         "switch": {
-          "label": "{name} を常に許可"
+          "label": "{name} を常に許可",
+          "visibleLabel": "確認しない"
         },
         "retry": {
           "label": "再試行"
         },
-        "readOnlyTitle": "アクション",
-        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。"
+        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。",
+        "readOnlyTitle": "アクション"
       },
       "oauthCallback": {
         "processing": "アカウントを接続中…",
@@ -17872,10 +17892,6 @@
       "open": "{name} を開く",
       "menu": "{name} の操作",
       "loadFailed": "マーケットプレイスを読み込めませんでした。",
-      "empty": {
-        "title": "マーケットプレイスはまだありません",
-        "description": "GitHub リポジトリを追加して、そのプラグインを取得します。"
-      },
       "page": {
         "title": "マーケットプレイス",
         "description": "プラグインの取得元の GitHub リポジトリとそのソースです。マーケットプレイスを同期すると、GitHub の変更を取得します。"
@@ -17934,6 +17950,10 @@
       "errors": {
         "rateLimited": "GitHub の API レート制限に達しました。数分後にもう一度お試しください。制限を引き上げるには GitHub を接続してください。",
         "rateLimitedUntil": "GitHub の API レート制限に達しました。{time} にリセットされます。制限を引き上げるには GitHub を接続してください。"
+      },
+      "empty": {
+        "title": "マーケットプレイスはまだありません",
+        "description": "GitHub リポジトリを追加して、そのプラグインを取得します。"
       }
     }
   },
@@ -18024,11 +18044,6 @@
         "on": "オン",
         "off": "オフ"
       },
-      "sort": {
-        "label": "並べ替え",
-        "updated": "最近更新",
-        "name": "名前"
-      },
       "add": {
         "label": "追加",
         "upload": "スキルをアップロード",
@@ -18077,6 +18092,11 @@
         "title": "一致するスキルはありません",
         "description": "別の検索語またはフィルターを試してください。",
         "clear": "すべてのスキルを表示"
+      },
+      "sort": {
+        "label": "並べ替え",
+        "updated": "最近更新",
+        "name": "名前"
       }
     },
     "integrations": {
@@ -18090,11 +18110,6 @@
       },
       "status": {
         "connected": "接続済み"
-      },
-      "add": {
-        "label": "追加",
-        "integration": "インテグレーションを追加",
-        "manage": "インテグレーションを管理"
       },
       "open": "{name} を開く",
       "empty": {
@@ -18120,7 +18135,7 @@
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
-      "intro": "プラグインはスキルと、そのスキルに必要な連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。ルートに SKILL.md だけがあるプラグインは［スキル］タブに表示されます。",
+      "intro": "プラグインはスキルのまとまりで、それらのスキルに必要な連携を示します。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。ルートに SKILL.md だけがあるプラグインは［スキル］タブに表示されます。",
       "integrations": "{needed} 件中 {available} 件の連携が利用可能",
       "nameHeld": "オフ: {names} が同じスキル名を使用しています"
     },

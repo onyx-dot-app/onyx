@@ -12,8 +12,9 @@ Craft can only reach content that the connected account can access in the applic
 Admins add Craft Apps in **Admin Panel → Integrations**. Users connect their accounts in **Customize** in Craft or Chat.
 
 <Note>
-  Craft Apps work only in [Craft](/overview/core_features/craft). Main Chat does not support them.
-  To give Chat access to the same application, add an [MCP server](/admins/plugins/mcp) for it.
+  Chat and Craft both use built-in Apps. In Chat, each action of an App is one tool,
+  and Onyx adds the credential when it sends the request. A Blocked action has no tool.
+  An action set to **Ask** shows an approval card before it runs.
 </Note>
 
 ## What Craft Apps can do
@@ -30,6 +31,11 @@ Admins add Craft Apps in **Admin Panel → Integrations**. Users connect their a
 | **HubSpot** | Read and search owners, contacts, companies, and deals. Create or update contacts, companies, and deals. |
 | **Zendesk** | Search, read, create, update, and delete tickets. Read ticket metrics and users. Manage Help Center content, side conversations, and macros. |
 
+<Note>
+  The catalog shows Linear and Notion as hosted MCP servers, not as Apps.
+  A hosted MCP server needs no OAuth application of your own. Linear and Notion Apps that you added before keep working.
+</Note>
+
 Each built-in App defines its actions, such as **Read messages** or **Post a message**.
 Admins set an approval policy for each action. See [Set action policies](#set-action-policies).
 
@@ -39,16 +45,15 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
 
 | | Craft App | MCP server |
 | --- | --- | --- |
-| Surfaces | Craft only | Chat, custom agents, and Craft |
+| Surfaces | Chat, custom agents, and Craft | Chat, custom agents, and Craft |
 | How Craft calls it | Craft sends HTTP requests to the provider API from its sandbox. The sandbox proxy adds the credentials. | Onyx calls MCP tools for the agent. |
 | Approvals | A policy for each cataloged action | A policy for each MCP tool |
 | Credentials in the sandbox | Never. The proxy injects them on the way out. | Never. Onyx holds them. |
-| Use it when | A built-in App exists for the application | No built-in App exists, or Chat also needs the tools |
+| Use it when | A built-in App exists for the application | No built-in App exists |
 
 ## Requirements
 
-- Craft must be available. Craft is available on the **Business** and **Enterprise** plans.
-  If you self-host Onyx, first follow [Deploying Craft](/deployment/local/craft).
+- To use an App from Craft, Craft must be available. Chat does not need Craft.
 - Only full admins can add, edit, or delete Craft Apps. The **Manage Actions** permission is not enough.
 
 ## Add a built-in App
@@ -66,9 +71,10 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
   </Step>
 
   <Step title="Add the App">
-    Go to **Admin Panel → Integrations**, click **Add**, then select **App**. Under **Start From**, select the App,
-    follow its **Setup instructions**, and enter the account settings, such as the client ID and client secret.
-    Onyx does not ask for a user's access token. Each user signs in later. Click **Add**.
+    Go to **Admin Panel → Integrations**. At the bottom of the page, under **Browse the Catalog**, click **Browse**.
+    Select the App. Follow the steps in the **Set Up** panel next to the fields, and enter the account settings,
+    such as the client ID and client secret. Onyx does not ask for a user's access token. Each user signs in later.
+    Click **Add**.
   </Step>
 
   <Step title="Review action policies">
@@ -205,8 +211,8 @@ They cannot turn on an action that you set to **Blocked**.
 
 ### Scheduled Tasks
 
-Craft Apps are not available to [Scheduled Tasks](/overview/core_features/scheduled_tasks).
-A Scheduled Task runs in chat and can use only MCP and OpenAPI integrations.
+A [Scheduled Task](/overview/core_features/scheduled_tasks) runs in chat and can use Apps,
+MCP servers and OpenAPI integrations.
 
 ## Skills for Apps
 
@@ -220,33 +226,24 @@ and counts toward the Skill limits, also for users who have not connected the Ap
 
 ## Custom Apps
 
-Use a custom App for a public HTTP API that no built-in App covers.
-A custom App gives Craft credentials and network access for the API. It does not have an action catalog.
+A custom App with URL patterns gives Craft credentials and network access for an HTTP API.
+It does not have an action catalog.
 
-<Steps>
-  <Step title="Set the URL patterns">
-    Go to **Admin Panel → Integrations**, click **Add**, then select **App**. Keep **Custom app** under **Start From**.
-    Enter a **Name** and the **URL Patterns**, one pattern on each line.
-    The proxy injects credentials only into requests that match these patterns.
-  </Step>
+<Note>
+  Onyx no longer adds custom Apps with URL patterns. To connect an API that no built-in App covers,
+  add a custom REST API with one action for each endpoint. See [OpenAPI](/admins/plugins/openapi).
+  An existing custom App keeps working in Craft, but Chat does not use it.
+  Its **Overview** tab asks you to add it again as a custom REST API.
+</Note>
 
-  <Step title="Set the sign-in">
-    A custom App signs in with an API key. Select a **Sign-in Mode**,
-    then enter the **Header Name** and the **Header Value**, such as `Bearer {api_key}`.
-    With **One account for the organization**, connect the account on the **Configuration** tab after you add the App.
-    With **Each user signs in**, each user enters a value.
-
-    <img className="rounded-image" src="/assets/admins/plugins/integration_custom_configuration_tab.webp" alt="The Configuration tab of a custom App with URL patterns and API key sign-in"/>
-
-    Click **Add**. Then create a Skill that explains how to call the API. See [Skills for Apps](#skills-for-apps).
-  </Step>
-</Steps>
+You cannot change the URL patterns of an existing custom App. To change them,
+add the API again as a custom REST API and delete the custom App.
+You can change its sign-in settings on its **Configuration** tab.
 
 For example:
 
 | Setting | Value |
 | --- | --- |
-| Upstream URL pattern | `https://api.example.com/v1/*` |
 | Header | `Authorization` |
 | Header value | `Bearer {api_key}` |
 | Sign-in Mode | **One account for the organization** for a shared service token, or **Each user signs in** to let each user enter a token. |

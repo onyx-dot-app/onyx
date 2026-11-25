@@ -169,6 +169,10 @@ requests that `ToolApprovals` opened (`PendingToolInput.approval`). A
 background agent's request shows at the card of the root response's call that
 started the agent, with `agent_name` set
 ([[mcp-and-custom-tools#chat-approval-records-replay]]).
+`can_approve_for_chat` is false for an action that asks each time, the
+request tool of an app (`integrations/policy.py:always_asks`): the
+card offers no approval for the chat, no saved grant skips its card, and the
+decision route saves such an approval as a single one.
 `tool_approval_resolved` carries an `outcome`
 (`chat/renderer.py:approval_outcome`): `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an

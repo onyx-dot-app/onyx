@@ -141,44 +141,6 @@
         "tooltip": "{description}\nPrefer this tool for this chat. The agent may answer without using it."
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "Cancel"
-      },
-      "copyButton": {
-        "tooltip": "Copy definition"
-      },
-      "definition": {
-        "invalidJson": "Invalid JSON format",
-        "placeholder": "Enter your OpenAPI schema here",
-        "required": "OpenAPI schema definition is required",
-        "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this plugin. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI plugins]({docsUrl}).",
-        "title": "OpenAPI Schema Definition"
-      },
-      "empty": {
-        "description": "Provide OpenAPI schema to preview actions here.",
-        "title": "No Actions Found"
-      },
-      "formatButton": {
-        "tooltip": "Format definition"
-      },
-      "method": {
-        "noSummary": "No summary provided"
-      },
-      "toasts": {
-        "actionCreated": "OpenAPI plugin created successfully",
-        "invalidJson": "Invalid JSON format in OpenAPI schema definition"
-      },
-      "humanDescription": {
-        "title": "Description for Humans",
-        "hint": "Displayed on the plugin card and in plugin details."
-      },
-      "agentDescription": {
-        "title": "Description for Agents",
-        "hint": "Edits info.description in the OpenAPI schema.",
-        "disabled": "Enter a valid schema to edit this field."
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(Disconnected)"
@@ -360,10 +322,8 @@
       "detectedTransport": "Transport: {transport}",
       "authenticationUndetected": "Choose the authentication method on the next page.",
       "details": "Details",
-      "checking": "Checking server…",
       "serverDetails": "Server details",
       "authentication": "Authentication",
-      "continue": "Continue",
       "back": "Back"
     },
     "policyEditor": {
@@ -10402,45 +10362,16 @@
       "loadFailed": "Could not load the integrations.",
       "add": {
         "label": "Add",
-        "title": "Add an Integration",
-        "description": "Connect a service so people can use it in chat and Craft.",
         "created": "Added {name}.",
         "createFailed": "Could not add the integration.",
-        "openapi": {
-          "title": "Add an OpenAPI App",
-          "schema": {
-            "title": "Schema",
-            "description": "Add the OpenAPI schema that defines the actions.",
-            "added": "{count, plural, one {The schema has # path.} other {The schema has # paths.}}",
-            "required": "Add a schema.",
-            "add": "Add schema",
-            "edit": "Edit schema"
-          }
-        },
         "preset": {
-          "title": "Start From",
           "loadFailed": "Could not load the presets.",
-          "instructions": "Setup instructions",
-          "credentialRequired": "Add this value.",
-          "description": "A preset fills in the name and sign-in of a built-in app. Choose Custom app to set up any HTTP service.",
-          "custom": "Custom app"
+          "credentialRequired": "Add this value."
         },
         "name": {
           "title": "Name",
           "placeholder": "Add a name",
           "required": "Add a name."
-        },
-        "descriptionField": {
-          "title": "Description",
-          "placeholder": "Add a description"
-        },
-        "custom": {
-          "patterns": {
-            "title": "URL Patterns",
-            "description": "Put one URL pattern on each line, for example https://api.example.com/*.",
-            "placeholder": "https://api.example.com/*",
-            "required": "Add at least one URL pattern."
-          }
         },
         "mcp": {
           "url": {
@@ -10460,8 +10391,7 @@
             "title": "Transport",
             "streamableHttp": "Streamable HTTP",
             "sse": "Server-sent events (SSE)"
-          },
-          "suggested": "Suggested Servers"
+          }
         },
         "owner": {
           "title": "Owner",
@@ -10473,27 +10403,106 @@
         "submit": "Add",
         "adding": "Adding…",
         "cancel": "Cancel",
-        "type": {
-          "title": "Type",
-          "description": "Choose how Onyx connects to the service.",
-          "mcp_server": {
-            "title": "MCP Server",
-            "description": "Connect a remote MCP server by its URL."
+        "rest": {
+          "import": {
+            "title": "Import a Spec",
+            "description": "Upload or paste an OpenAPI spec in JSON or YAML, or import it from a URL. Onyx fills in the base URL and one endpoint for each operation.",
+            "upload": "Upload or paste a spec",
+            "url": "Spec URL",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "Import",
+            "done": "{count, plural, one {Imported # endpoint.} other {Imported # endpoints.}}",
+            "failed": "Could not import the spec."
           },
-          "openapi": {
-            "title": "OpenAPI App",
-            "description": "Make actions from an OpenAPI schema."
+          "baseUrl": {
+            "title": "Base URL",
+            "placeholder": "https://api.example.com",
+            "required": "Add a base URL."
           },
-          "app": {
-            "title": "App",
-            "description": "Start from a preset, such as GitHub, or a custom app."
+          "endpoints": {
+            "title": "Endpoints",
+            "description": "Put one endpoint on each line: the method, the path, optional query parameters and a name. Each endpoint becomes an action.",
+            "placeholder": "GET /tickets?status&limit List tickets",
+            "required": "Add at least one endpoint.",
+            "lineError": "Line {line} ({text}): {message}"
           }
         },
-        "details": {
-          "title": "Details"
+        "graphql": {
+          "endpointUrl": {
+            "title": "Endpoint URL",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "Add an endpoint URL."
+          },
+          "schema": {
+            "title": "Schema",
+            "description": "Paste the schema in GraphQL SDL, upload a .graphql file, or load it from the endpoint. Each query and mutation becomes an action.",
+            "upload": "Upload a .graphql file",
+            "required": "Add a schema."
+          },
+          "introspect": {
+            "submit": "Load from Endpoint",
+            "done": "Loaded the schema.",
+            "failed": "Could not load the schema."
+          }
         },
-        "signIn": {
-          "title": "Sign-In"
+        "menu": {
+          "mcpServer": "MCP Server",
+          "customApi": "Custom API"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "Add MCP Server",
+            "description": "Connect a remote MCP server by its URL."
+          },
+          "api": {
+            "title": "Add Custom API",
+            "description": "Connect a REST or GraphQL API. Onyx finds the endpoints from the URL or a spec."
+          },
+          "catalog": {
+            "title": "Add from Catalog",
+            "description": "Pick an app or an MCP server to set up."
+          },
+          "namedTitle": "Add {name}"
+        },
+        "catalog": {
+          "title": "Browse the Catalog",
+          "description": "Apps and hosted MCP servers that Onyx already knows how to connect.",
+          "browse": "Browse"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "An OpenAPI spec URL, a GraphQL endpoint or a base URL",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "Enter a valid URL, or upload a spec.",
+            "needed": "Add the URL of the API. The spec does not give one."
+          },
+          "upload": {
+            "label": "Upload openapi.json, openapi.yaml or schema.graphql",
+            "chosen": "Spec: {file}",
+            "remove": "Remove the spec"
+          },
+          "failed": "Could not read the spec.",
+          "specError": "The spec cannot be added: {detail}"
+        },
+        "detected": {
+          "openapi": "REST API, {count, plural, one {# endpoint} other {# endpoints}}",
+          "openapiSkipped": "REST API, {count, plural, one {# endpoint} other {# endpoints}}. {skipped} skipped.",
+          "skippedTitle": "Skipped endpoints",
+          "rest": "REST API with no spec. Add the endpoints below.",
+          "graphql": "GraphQL API, {queries, plural, one {# query} other {# queries}} and {mutations, plural, one {# mutation} other {# mutations}}",
+          "preset": "Built-in app. Onyx calls its API."
+        },
+        "continue": "Continue",
+        "back": "Back",
+        "detecting": "Checking the URL…",
+        "advanced": "Advanced",
+        "setup": {
+          "title": "Set Up {name}",
+          "callbackUrl": "Callback URL",
+          "copyCallbackUrl": "Copy the callback URL",
+          "scopes": "Scopes",
+          "open": "Open {name}"
         }
       },
       "filters": {
@@ -10517,9 +10526,10 @@
       },
       "shape": {
         "mcp_server": "MCP server",
-        "openapi": "OpenAPI app",
+        "openapi": "REST app",
         "preset": "App",
-        "custom": "Custom app"
+        "custom": "Custom app",
+        "graphql": "GraphQL app"
       },
       "signInSummary": "{mode, select, none {No sign-in} shared {{method, select, oauth2 {Organization account (OAuth)} api_key {Organization API key} onyx_login {Onyx login} managed {Managed by Onyx} other {Organization account}}} individual {{method, select, oauth2 {Each user (OAuth)} api_key {Each user (API key)} onyx_login {Onyx login} managed {Managed by Onyx} other {Each user}}} other {Unknown}}",
       "status": {
@@ -10627,7 +10637,11 @@
           },
           "description": "Description",
           "menu": "More actions",
-          "owner": "Owner"
+          "owner": "Owner",
+          "urlPatternApp": {
+            "title": "This app uses URL patterns",
+            "description": "Onyx no longer adds URL-pattern apps. Add this service again as a custom REST app, then delete this one."
+          }
         },
         "configuration": {
           "readOnly": "You can see this integration. You cannot change it.",
@@ -10635,8 +10649,6 @@
             "title": "Connection",
             "serverUrl": "Server URL",
             "serverUrlError": "Enter a valid server URL.",
-            "urlPatterns": "URL Patterns",
-            "urlPatternsDescription": "Put one URL pattern on each line.",
             "schema": "OpenAPI Schema",
             "schemaDescription": "Onyx syncs the actions again when you save a changed schema.",
             "schemaError": "Enter the schema as a JSON object."
@@ -10707,7 +10719,7 @@
         "saved": "{name} is now {policy}.",
         "saveFailed": "Could not save the install setting.",
         "title": "Install Setting",
-        "description": "Who gets this integration. Not available keeps it private: only its owner, the people it is shared with and the groups with their own setting use it. Remove those group settings to limit it to the owner and the shares.",
+        "description": "Who in the organization gets this integration.",
         "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it.",
         "required": "Members who sign in with their own account must connect it before they can use chat and Craft."
       },
@@ -10716,6 +10728,10 @@
         "saved": "Group settings of {name} saved.",
         "saveFailed": "Could not save the group setting."
       }
+    },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Upload Claude Code and Codex plugins, and sync marketplaces from GitHub. A plugin is a set of skills, and it lists the integrations that those skills need."
     },
     "serviceStatus": {
       "page": {
@@ -16733,6 +16749,9 @@
         "integrations": {
           "label": "Integrations"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "slackBot": {
           "label": "Slack Bot"
         },
@@ -17617,19 +17636,20 @@
         }
       },
       "alwaysAllow": {
-        "title": "Always Allow",
-        "description": "Run an action that asks for approval with no prompt.",
+        "title": "Actions",
+        "description": "Your admin sets how each action runs. Turn on Don't ask me to run an action that asks without a prompt.",
         "loadFailed": "Could not load the actions.",
         "saveFailed": "Could not save. Try again.",
-        "alwaysAsks": "Craft asks for approval for each of these requests.",
+        "alwaysAsks": "Onyx asks for approval for each of these requests.",
         "switch": {
-          "label": "Always allow {name}"
+          "label": "Always allow {name}",
+          "visibleLabel": "Don't ask me"
         },
         "retry": {
           "label": "Try again"
         },
-        "readOnlyTitle": "Actions",
-        "readOnlyDescription": "Your admin sets how each action runs."
+        "readOnlyDescription": "Your admin sets how each action runs.",
+        "readOnlyTitle": "Actions"
       },
       "oauthCallback": {
         "processing": "Connecting your account…",
@@ -17872,10 +17892,6 @@
       "open": "Open {name}",
       "menu": "Actions for {name}",
       "loadFailed": "Could not load the marketplaces.",
-      "empty": {
-        "title": "No marketplaces yet",
-        "description": "Add a GitHub repository to get its plugins."
-      },
       "page": {
         "title": "Marketplaces",
         "description": "The GitHub repositories that you get plugins from, with their source. Sync a marketplace to get the changes from GitHub."
@@ -17934,6 +17950,10 @@
       "errors": {
         "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
         "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
+      },
+      "empty": {
+        "title": "No marketplaces yet",
+        "description": "Add a GitHub repository to get its plugins."
       }
     }
   },
@@ -18024,11 +18044,6 @@
         "on": "Turned on",
         "off": "Turned off"
       },
-      "sort": {
-        "label": "Sort",
-        "updated": "Recently updated",
-        "name": "Name"
-      },
       "add": {
         "label": "Add",
         "upload": "Upload skill",
@@ -18077,6 +18092,11 @@
         "title": "No matching skills",
         "description": "Try another search or filter.",
         "clear": "Show all skills"
+      },
+      "sort": {
+        "label": "Sort",
+        "updated": "Recently updated",
+        "name": "Name"
       }
     },
     "integrations": {
@@ -18090,11 +18110,6 @@
       },
       "status": {
         "connected": "Connected"
-      },
-      "add": {
-        "label": "Add",
-        "integration": "Add integration",
-        "manage": "Manage integrations"
       },
       "open": "Open {name}",
       "empty": {
@@ -18120,7 +18135,7 @@
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. A plugin that holds only a SKILL.md at its root is on the Skills tab.",
+      "intro": "A plugin is a set of skills, and it lists the integrations that those skills need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. A plugin that holds only a SKILL.md at its root is on the Skills tab.",
       "integrations": "{available} of {needed} integrations available",
       "nameHeld": "Off: {names} uses the same skill name"
     },

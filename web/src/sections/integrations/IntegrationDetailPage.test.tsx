@@ -13,6 +13,7 @@ import {
   mockFetch,
   requestBody,
 } from "@tests/setup/integrationTestUtils";
+import type { OpenApiConfigView } from "@/lib/integrations/types";
 
 const copy = messages.admin.integrations;
 const detailCopy = copy.detail;
@@ -28,6 +29,13 @@ jest.mock("next/navigation", () => ({
 const URL_DETAIL = "/api/admin/integrations/1";
 const URL_ACTIONS = `${URL_DETAIL}/actions`;
 const NO_ACTIONS = { default_policy: null, actions: [] };
+const OPENAPI_VIEW: OpenApiConfigView = {
+  shape: "openapi",
+  openapi_document: '{"openapi": "3.0.0"}',
+  base_url: "https://reports.example.com",
+  endpoints: ["GET /reports List reports"],
+  skipped: [],
+};
 
 function user() {
   return setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
@@ -275,8 +283,7 @@ test("sends a changed server URL with the configuration", async () => {
   );
 });
 
-test("sends an edited OpenAPI schema and rejects one that is not JSON", async () => {
-  const spec = { openapi: "3.0.0", info: { title: "Reports" } };
+test("sends an edited endpoint line, or an edited document as text", async () => {
   const fetchMock = mockFetch({
     [URL_DETAIL]: makeDetail({
       kind: "api",
@@ -284,7 +291,7 @@ test("sends an edited OpenAPI schema and rejects one that is not JSON", async ()
       auth_mode: "none",
       auth_method: null,
       oauth_client: null,
-      config: { shape: "openapi", openapi_spec: spec },
+      config: OPENAPI_VIEW,
     }),
     [`PATCH ${URL_DETAIL}`]: makeDetail(),
     "/api/admin/integrations": [],
@@ -292,32 +299,72 @@ test("sends an edited OpenAPI schema and rejects one that is not JSON", async ()
   const u = user();
   open("configuration");
   const view = await inPanel();
-  const schema = await view.findByRole("textbox", {
-    name: detailCopy.configuration.connection.schema,
+  const endpoints = await view.findByRole("textbox", {
+    name: copy.add.rest.endpoints.title,
   });
-  expect(schema).toHaveValue(JSON.stringify(spec, null, 2));
+  expect(endpoints).toHaveValue("GET /reports List reports");
   const save = view.getByRole("button", {
     name: detailCopy.configuration.save,
   });
 
-  await u.clear(schema);
-  await u.type(schema, "not json");
-  await u.click(save);
-  expect(
-    view.getByText(detailCopy.configuration.connection.schemaError)
-  ).toBeInTheDocument();
-  expect(
-    fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")
-  ).toBe(false);
-
-  await u.clear(schema);
-  await u.click(schema);
-  await u.paste('{"openapi":"3.1.0"}');
+  await u.clear(endpoints);
+  await u.type(endpoints, "GET /reports List all reports");
   await u.click(save);
   await waitFor(() =>
     expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
-      config: { shape: "openapi", openapi_spec: { openapi: "3.1.0" } },
+      config: {
+        shape: "openapi",
+        openapi_document: OPENAPI_VIEW.openapi_document,
+        base_url: "https://reports.example.com",
+        endpoints: ["GET /reports List all reports"],
+      },
     })
+  );
+
+  const schema = view.getByRole("textbox", {
+    name: detailCopy.configuration.connection.schema,
+  });
+  await u.clear(schema);
+  await u.click(schema);
+  await u.paste("openapi: 3.1.0");
+  await u.click(save);
+  await waitFor(() =>
+    expect(patchBodies(fetchMock).at(-1)).toMatchObject({
+      config: { shape: "openapi", openapi_document: "openapi: 3.1.0" },
+    })
+  );
+});
+
+test("resolves a relative server of a spec imported from a URL", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": {
+      ...OPENAPI_VIEW,
+      base_url: "/api/v3",
+    },
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.type(
+    await view.findByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://pets.example.com/api/v3/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+
+  await waitFor(() =>
+    expect(
+      view.getByRole("textbox", { name: copy.add.rest.baseUrl.title })
+    ).toHaveValue("https://pets.example.com/api/v3")
   );
 });
 
@@ -473,19 +520,19 @@ test("clears a saved client secret from the draft", async () => {
 });
 
 test("shows a saved schema as the server returns it", async () => {
-  const saved = { openapi: "3.1.0" };
+  const saved = { ...OPENAPI_VIEW, openapi_document: "openapi: 3.1.0\n" };
   let detail = makeDetail({
     kind: "api",
     shape: "openapi",
     auth_mode: "none",
     auth_method: null,
     oauth_client: null,
-    config: { shape: "openapi", openapi_spec: { openapi: "3.0.0" } },
+    config: OPENAPI_VIEW,
   });
   const fetchMock = mockFetch({
     [URL_DETAIL]: () => detail,
     [`PATCH ${URL_DETAIL}`]: () => {
-      detail = { ...detail, config: { shape: "openapi", openapi_spec: saved } };
+      detail = { ...detail, config: saved };
       return detail;
     },
     [URL_ACTIONS]: NO_ACTIONS,
@@ -499,14 +546,12 @@ test("shows a saved schema as the server returns it", async () => {
   });
   await u.clear(schema);
   await u.click(schema);
-  await u.paste(JSON.stringify(saved));
+  await u.paste("openapi: 3.1.0");
   const save = view.getByRole("button", {
     name: detailCopy.configuration.save,
   });
   await u.click(save);
-  await waitFor(() =>
-    expect(schema).toHaveValue(JSON.stringify(saved, null, 2))
-  );
+  await waitFor(() => expect(schema).toHaveValue(saved.openapi_document));
 
   await u.click(save);
   await waitFor(() => expect(patchBodies(fetchMock)).toHaveLength(2));
@@ -523,7 +568,7 @@ test("sends only Always allow when the sign-in did not change", async () => {
       auth_mode: "shared",
       auth_method: "api_key",
       oauth_client: null,
-      config: { shape: "openapi", openapi_spec: { openapi: "3.0.0" } },
+      config: OPENAPI_VIEW,
       header_template: { Authorization: "Bearer {api_key}", "X-Org": "{org}" },
     }),
     [`PATCH ${URL_DETAIL}`]: makeDetail(),
@@ -567,7 +612,10 @@ test("saves Always allow for an app that Onyx provides", async () => {
         name: "GitHub",
         auth_methods: ["oauth2"],
         required_org_credential_fields: [],
-        setup_instructions: null,
+        setup_steps: [],
+        setup_url: null,
+        callback_url: null,
+        scopes: [],
       },
     ],
     [`PATCH ${URL_DETAIL}`]: makeDetail(),
@@ -637,7 +685,7 @@ test("keeps every saved header when the API key header changes", async () => {
       auth_mode: "shared",
       auth_method: "api_key",
       oauth_client: null,
-      config: { shape: "openapi", openapi_spec: { openapi: "3.0.0" } },
+      config: OPENAPI_VIEW,
       header_template: { Authorization: "Bearer {api_key}", "X-Org": "{org}" },
     }),
     [`PATCH ${URL_DETAIL}`]: makeDetail(),
@@ -671,7 +719,7 @@ test("offers only the provider modes the backend accepts", async () => {
     [URL_DETAIL]: makeDetail({
       kind: "api",
       shape: "openapi",
-      config: { shape: "openapi", openapi_spec: { openapi: "3.0.0" } },
+      config: OPENAPI_VIEW,
     }),
     [URL_ACTIONS]: NO_ACTIONS,
   });
@@ -704,7 +752,10 @@ test("replaces the account settings of a preset", async () => {
           { key: "subdomain", label: "Subdomain", secret: false },
           { key: "client_id", label: "Client ID", secret: false },
         ],
-        setup_instructions: null,
+        setup_steps: [],
+        setup_url: null,
+        callback_url: null,
+        scopes: [],
       },
     ],
     [`PATCH ${URL_DETAIL}`]: makeDetail(),

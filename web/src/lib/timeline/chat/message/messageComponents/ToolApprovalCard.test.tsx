@@ -355,6 +355,20 @@ describe("Continuation", () => {
   );
 });
 
+test("an action that asks each time offers no approval for the chat", () => {
+  render(
+    <ToolApprovalCard
+      approval={{
+        ...approval,
+        request: { ...request, can_approve_for_chat: false },
+      }}
+    />
+  );
+  expect(
+    screen.queryByRole("button", { name: copy.approveChat.tooltip })
+  ).not.toBeInTheDocument();
+});
+
 describe("Decision outcomes", () => {
   it("posts the decision and shows the server's answer before the resolution arrives", async () => {
     const fetchMock = respond(200, decided("APPROVED", "SESSION_GRANT"));

@@ -158,7 +158,10 @@ export default function IntegrationActionsTab({
     return actions.map((action) => ({
       id: action.key,
       name: action.display_name,
-      description: action.description ?? "",
+      description:
+        action.description && action.description !== action.display_name
+          ? action.description
+          : "",
       defaultPolicy: fallback(action),
       disabledPolicies: action.always_asks ? ["allow"] : undefined,
       note: action.always_asks

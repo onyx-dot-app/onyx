@@ -88,6 +88,7 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
           actions={[{ id: request.tool_name, name: request.display_name }]}
           payload={request.arguments}
           sessionScope="chat"
+          canApproveForSession={request.can_approve_for_chat !== false}
           status={approval.status}
           onDecide={submit}
         />

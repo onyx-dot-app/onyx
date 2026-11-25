@@ -11,6 +11,9 @@ Admins manage plugins and integrations in the **Agents & Plugins** section of th
 
 - **Admin Panel → Integrations** (`/admin/integrations`) lists each MCP server and app. Add, configure and approve
   actions, and set the install setting of each integration here.
+- **Admin Panel → Plugins** (`/admin/plugins`) lists each uploaded or synced plugin. Upload plugins and manage
+  marketplaces in the **Marketplaces** section below the list.
+  See [Uploaded plugins](/admins/managing_features/craft_skills#uploaded-plugins).
 
 Each integration has its own access: an owner, an install setting, and the people it is shared with.
 A plugin holds skills only. It does not hold an integration and gives no access to one.
@@ -46,30 +49,29 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 ## Add an integration
 
 <Steps>
-  <Step title="Open the add page">
-    Go to **Admin Panel → Integrations** and click **Add**.
+  <Step title="Select what to add">
+    Go to **Admin Panel → Integrations** and click **Add**. Select one of these:
+
+    - **MCP Server**: a remote MCP server.
+    - **Custom API**: any REST or GraphQL API. See [OpenAPI](/admins/plugins/openapi).
+
+    For a built-in App, such as GitHub, or a suggested MCP server, such as Linear,
+    go to **Browse the Catalog** at the bottom of the Integrations page and click **Browse**. Then select the item.
+    The built-in Apps show only when Craft is available on your plan.
   </Step>
 
-  <Step title="Select the type">
-    Under **Type**, select **MCP Server**, **OpenAPI App**, or **App**.
-    **App** shows only when Craft is available on your plan.
+  <Step title="Enter a name and a URL">
+    Enter a **Name** and the URL, then click **Continue**.
+    Onyx checks the URL and finds the type of server or API and its sign-in. A catalog item skips this step.
   </Step>
 
-  <Step title="Fill in the details">
-    Fill in the details of that type. For an MCP server, pick a suggested server or enter its URL.
-    Onyx checks the server URL and suggests the sign-in settings. For an App,
-    select a preset under **Start From** to fill in the name and sign-in,
-    or keep **Custom app** to set up any HTTP service.
-  </Step>
-
-  <Step title="Set the sign-in">
-    Select the sign-in mode: **No sign-in**, **One account for the organization**, or **Each user signs in**.
-    Then select the method, such as **OAuth** or **API key**.
-  </Step>
-
-  <Step title="Select the owner and add">
-    **For me** makes a private integration. Only you can use it until you share it.
+  <Step title="Set the sign-in and add">
+    Onyx shows what it found and selects a **Sign-in Mode**: **No sign-in**, **One account for the organization**,
+    or **Each user signs in**. Change it if necessary. Open **Advanced** to change the sign-in method,
+    such as **OAuth** or **API key**, and to select the owner. **For me** makes a private integration.
+    Only you can use it until you share it.
     **For the organization** makes an integration with the install setting **Available**. Click **Add**.
+    Onyx opens the integration. Add a description and set the actions there.
   </Step>
 </Steps>
 
@@ -160,7 +162,7 @@ Click an integration to open its detail page.
 | Tab | Settings |
 | --- | --- |
 | **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Group Access**, **Enabled**, and **Delete** |
-| **Configuration** | Server URL, OpenAPI schema, or URL patterns, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
+| **Configuration** | Server URL, base URL and endpoints, OpenAPI schema, or GraphQL endpoint and schema, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
 | **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
 
 If you change the sign-in method, the OAuth client, the URLs, or the scopes, each user must connect again.
