@@ -12,6 +12,7 @@ import {
   useCurrentMessageHistory,
   useCurrentMessageTree,
   useHasOlderMessages,
+  useOlderMessagesFailed,
 } from "@/app/app/stores/useChatSessionStore";
 import { useScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
 import { useChatFindHighlights } from "@/lib/chatFind/hooks";
@@ -76,7 +77,10 @@ function ChatFindBar() {
   const focusRequestId = useChatFindStore((state) => state.focusRequestId);
   const messages = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
+  // Older messages are missing: not loaded yet, or a page failed to load.
   const hasOlderMessages = useHasOlderMessages();
+  const olderMessagesFailed = useOlderMessagesFailed();
+  const olderMissing = hasOlderMessages || olderMessagesFailed;
   const barRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -103,7 +107,7 @@ function ChatFindBar() {
     []
   );
   useEffect(() => {
-    if (!searchedQuery || !hasOlderMessages || !sessionId) return;
+    if (!searchedQuery || !olderMissing || !sessionId) return;
     if (olderLoadStartedRef.current) return;
     olderLoadStartedRef.current = true;
     setOlderPages("loading");
@@ -112,7 +116,7 @@ function ChatFindBar() {
         if (!unmountedRef.current) setOlderPages(capped ? "capped" : "done");
       }
     );
-  }, [searchedQuery, hasOlderMessages, sessionId]);
+  }, [searchedQuery, olderMissing, sessionId]);
 
   // A new search starts at the view; a step picks an index. Each one gets a
   // new id, so its match is brought into view even when it is the same one.

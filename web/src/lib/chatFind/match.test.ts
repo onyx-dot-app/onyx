@@ -156,6 +156,39 @@ describe("findChatMatches", () => {
     ]);
   });
 
+  it("searches a typed answer to several questions of a turn once", () => {
+    const question = (id: string): Packet[] => [
+      {
+        placement: { turn_index: 1 },
+        obj: {
+          type: "tool_question_request",
+          question_request_id: id,
+          tool_call_id: `call-${id}`,
+          questions: [],
+        },
+      },
+      {
+        placement: { turn_index: 1 },
+        obj: {
+          type: "tool_question_resolved",
+          question_request_id: id,
+          outcome: "answered",
+          message: "use foo",
+        },
+      },
+    ];
+    const reply = message({
+      nodeId: 2,
+      type: "assistant",
+      parentNodeId: 1,
+      packets: [...question("q1"), ...question("q2")],
+    });
+    const { entries } = findChatMatches(chatFindTexts([reply], null), "foo");
+    expect(entries.map(({ scopeKey }) => scopeKey)).toEqual([
+      "inline:2:question:q1",
+    ]);
+  });
+
   it("skips answer text of a nested call", () => {
     const reply = message({
       nodeId: 2,
