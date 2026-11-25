@@ -101,6 +101,7 @@ class ApiTool(Tool):
         acting_user_id: UUID | None = None,
     ) -> None:
         self.approval = approval
+        self._integration_id = integration_id
         self.integration_action = IntegrationActionRef(
             integration_id=integration_id, action=action_key
         )
@@ -187,6 +188,7 @@ class ApiTool(Tool):
             is_error=True,
             details=CustomToolCallSummary(
                 tool_name=self._name,
+                integration_id=self._integration_id,
                 response_type="text",
                 tool_result=None,
                 error=CustomToolErrorInfo(
@@ -282,6 +284,7 @@ class ApiTool(Tool):
         return ToolResult(
             details=CustomToolCallSummary(
                 tool_name=self._name,
+                integration_id=self._integration_id,
                 response_type=response_type,
                 tool_result=tool_result,
                 error=error_info,

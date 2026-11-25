@@ -626,6 +626,9 @@ def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> No
         assert isinstance(result, ToolResult)
     assert result.is_error is (status_code >= 400)
     assert "upstream response" in result.text
+    # The chat finds the sign-in of an app tool, which has no tool ID, by it.
+    assert isinstance(result.details, CustomToolCallSummary)
+    assert result.details.integration_id == 1
 
 
 @pytest.mark.parametrize(
@@ -909,6 +912,7 @@ def _assert_failed(
 ) -> None:
     assert isinstance(response.details, CustomToolCallSummary)
     assert response.is_error
+    assert response.details.integration_id == 1
     error = response.details.error
     assert error is not None
     assert not error.is_auth_error
