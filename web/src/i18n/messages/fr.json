@@ -11817,7 +11817,6 @@
       },
       "incognitoStart": {
         "ariaLabel": "Démarrer un chat incognito",
-        "lockedTooltip": "Le mode incognito ne peut être activé qu'avant le début du chat",
         "tooltip": "Chat incognito"
       },
       "mode": {
