@@ -132,6 +132,10 @@ state reach the fleet only from this pass.
 `MULTI_TENANT` it derives the key from `WEB_DOMAIN`, and
 `BoundedTelemetry._envelope` reports each tenant as its own customer unless the
 event is marked `shared`.
+Enrollment also sends `legacy_customer_uuid` (`legacy_customer_uuid()`, the pre-v5
+instance UUID read by `db/fleet_enrollment.py:get_legacy_customer_uuid`, never
+created) so the service can link an upgraded deployment to its pre-v5 records.
+A 422 drops the field for the next enrollment.
 
 ---
 

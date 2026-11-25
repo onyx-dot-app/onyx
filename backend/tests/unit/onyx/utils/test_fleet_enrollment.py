@@ -24,6 +24,7 @@ def test_sender_enrolls_once_with_the_stored_key(
 ) -> None:
     key: Mock = Mock(return_value=TEST_KEY)
     monkeypatch.setattr(fleet, "deployment_key", key)
+    monkeypatch.setattr(fleet, "legacy_customer_uuid", Mock(return_value=None))
     sender: fleet.BoundedTelemetry = fleet.BoundedTelemetry("api")
     calls: list[tuple[str, dict[str, Any]]] = []
     record: RecordingTransport = RecordingTransport()
@@ -66,6 +67,57 @@ def test_failed_enrollment_keeps_events_and_backs_off(
     assert sender._blocked_until > time.monotonic()
     assert not sender.flush_once(transport)
     assert transport.call_count == 1
+
+
+LEGACY_UUID: str = "22222222-2222-4222-8222-222222222222"
+
+
+def test_enrollment_reports_the_pre_v5_install_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fleet, "deployment_key", Mock(return_value=TEST_KEY))
+    legacy: Mock = Mock(return_value=LEGACY_UUID)
+    monkeypatch.setattr(fleet, "legacy_customer_uuid", legacy)
+    sender: fleet.BoundedTelemetry = fleet.BoundedTelemetry("api")
+    transport: Mock = Mock(return_value=Response(TEST_ENROLLMENT))
+    sender._enroll(transport)
+    assert transport.call_args.kwargs["json"] == {
+        "is_cloud": fleet.MULTI_TENANT,
+        "legacy_customer_uuid": LEGACY_UUID,
+    }
+    # Events still carry only the IDs that the service assigned.
+    assert sender.customer_uuid == TEST_ENROLLMENT["customer_uuid"]
+    legacy.assert_called_once()
+
+
+def test_a_service_without_the_field_gets_enrollment_without_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fleet, "deployment_key", Mock(return_value=TEST_KEY))
+    monkeypatch.setattr(fleet, "legacy_customer_uuid", Mock(return_value=LEGACY_UUID))
+    sender: fleet.BoundedTelemetry = fleet.BoundedTelemetry("api")
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    bodies: list[dict[str, Any]] = []
+
+    def old_service(url: str, **kwargs: Any) -> Response:
+        if url.endswith("/v1/enroll"):
+            bodies.append(kwargs["json"])
+            if "legacy_customer_uuid" in kwargs["json"]:
+                return Response({"error": "invalid_request"}, status=422)
+        return RecordingTransport()(url, **kwargs)
+
+    assert not sender.flush_once(old_service)
+    sender._blocked_until = 0.0
+    assert sender.flush_once(old_service)
+    assert bodies == [
+        {"is_cloud": fleet.MULTI_TENANT, "legacy_customer_uuid": LEGACY_UUID},
+        {"is_cloud": fleet.MULTI_TENANT},
+    ]
+
+
+def test_cloud_reports_no_pre_v5_install_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fleet, "MULTI_TENANT", True)
+    assert fleet.legacy_customer_uuid() is None
 
 
 def test_unknown_key_enrolls_again() -> None:
