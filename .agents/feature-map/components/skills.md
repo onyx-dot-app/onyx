@@ -48,7 +48,10 @@
   both panels; `/app/customize/plugins/marketplaces` redirects to the tab) has
   Add marketplace and the table
   (`sections/marketplaces/MarketplacesTable.tsx`); after an add the menu goes to
-  `#marketplaces`. The table has failed syncs above it,
+  `#marketplaces`, and the section scrolls into view when it mounts under that
+  hash. The page holds the one `useMarketplaces` subscription and passes it to
+  the table, because each subscription refreshes the skill lists on a sync
+  change. The table has failed syncs above it,
   a row menu (Sync now, Default Access, Replace login,
   Remove, which names the plugins it deletes) and a detail modal. Members see
   company marketplaces read-only (`can_manage` false: no row menu, no Sync

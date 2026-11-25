@@ -1,3 +1,4 @@
+import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import {
   render,
   screen,
@@ -8,7 +9,11 @@ import {
 import { mockFetch } from "@tests/setup/integrationTestUtils";
 import CustomizePluginsPage from "@/sections/customize/CustomizePluginsPage";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
-import { summaryFixture } from "@/sections/marketplaces/__fixtures__/marketplace";
+import {
+  MARKETPLACE_ID,
+  detailFixture,
+  summaryFixture,
+} from "@/sections/marketplaces/__fixtures__/marketplace";
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -141,6 +146,70 @@ test("the Marketplaces section lists marketplaces and Add marketplace opens the 
   expect(
     await screen.findByRole("dialog", { name: /^Add Marketplace\b/ })
   ).toBeInTheDocument();
+});
+
+test("the marketplaces stay usable when the plugins fail to load", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  mockFetch({
+    "/api/skills": () => new Response(null, { status: 500 }),
+    "/api/marketplaces": { marketplaces: [summaryFixture()] },
+  });
+  render(<CustomizePluginsPage />);
+
+  expect(
+    await screen.findByText("Could not load your plugins.")
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByRole("table", { name: "Marketplaces" })
+  ).toBeInTheDocument();
+});
+
+test("a link to #marketplaces scrolls to the section once it loads", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins#marketplaces");
+  const scrollIntoView = jest.fn();
+  Element.prototype.scrollIntoView = scrollIntoView;
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [] },
+    "/api/marketplaces": { marketplaces: [summaryFixture()] },
+  });
+  render(<CustomizePluginsPage />);
+
+  await screen.findByRole("table", { name: "Marketplaces" });
+  expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  expect(scrollIntoView.mock.contexts[0]).toBe(
+    document.getElementById("marketplaces")
+  );
+});
+
+test("a sync that changes a marketplace refreshes the plugins once", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  let synced = false;
+  const fetchMock = mockFetch({
+    "/api/skills": { builtins: [], customs: [] },
+    "/api/marketplaces": () => ({
+      marketplaces: [summaryFixture({ plugin_count: synced ? 3 : 2 })],
+    }),
+    [`POST /api/marketplaces/${MARKETPLACE_ID}/sync`]: () => {
+      synced = true;
+      return detailFixture();
+    },
+  });
+  const skillFetches = () =>
+    fetchMock.mock.calls.filter(([url]) => url === "/api/skills").length;
+  render(<CustomizePluginsPage />);
+
+  await screen.findByRole("table", { name: "Marketplaces" });
+  const before = skillFetches();
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  await user.click(
+    screen.getByRole("button", { name: "Actions for acme/plugins" })
+  );
+  await user.click(await screen.findByRole("menuitem", { name: /Sync now/ }));
+  await screen.findByText("3 plugins");
+  // Every subscriber refreshes in the same effect pass, so the first refetch
+  // means all of them ran.
+  await waitFor(() => expect(skillFetches()).toBeGreaterThan(before));
+  expect(skillFetches()).toBe(before + 1);
 });
 
 test("two copies of a plugin say which marketplace each comes from", async () => {

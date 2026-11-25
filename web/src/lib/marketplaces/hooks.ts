@@ -72,6 +72,8 @@ export function useMarketplaces(enabled = true) {
   };
 }
 
+export type MarketplacesState = ReturnType<typeof useMarketplaces>;
+
 export function useMarketplace(marketplaceId: string | null) {
   const { data, error, isLoading, mutate } = useSWR<MarketplaceDetail, Error>(
     marketplaceId ? SWR_KEYS.marketplace(marketplaceId) : null,

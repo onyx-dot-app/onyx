@@ -6,6 +6,7 @@ import {
   Button,
   InputTypeIn,
   LineItemButton,
+  MessageCard,
   Text,
   type DropdownMenuItem,
 } from "@opal/components";
@@ -179,6 +180,13 @@ function PluginRow({
   );
 }
 
+/** The section mounts after its list loads, too late for the browser's own
+ * scroll to `#marketplaces`. Stable, so it runs on mount only. */
+function scrollWhenLinked(element: HTMLDivElement | null) {
+  if (element && window.location.hash === "#marketplaces")
+    element.scrollIntoView();
+}
+
 /** The admin panel lists every plugin the admin sees, in admin chrome.
  * Both panels list marketplaces below the plugins once one exists. */
 export default function CustomizePluginsPage() {
@@ -232,12 +240,17 @@ export default function CustomizePluginsPage() {
     />
   );
   const addMenu = <AddSkillMenu key="add" upload="plugin" />;
-  const loadError = skills.error ? t("plugins.loadFailed") : false;
 
   const marketplaces = (
     <>
       {showMarketplaces && (
-        <Section id="marketplaces" gap={1} alignItems="stretch" height="auto">
+        <Section
+          id="marketplaces"
+          ref={scrollWhenLinked}
+          gap={1}
+          alignItems="stretch"
+          height="auto"
+        >
           <ContentAction
             font="main-content-emphasis"
             icon={SvgGitHub}
@@ -254,7 +267,7 @@ export default function CustomizePluginsPage() {
               </Button>
             }
           />
-          <MarketplacesTable />
+          <MarketplacesTable list={marketplaceList} />
         </Section>
       )}
       <AddMarketplaceModal
@@ -268,9 +281,17 @@ export default function CustomizePluginsPage() {
     </>
   );
 
+  // The marketplaces stay usable when the skills fail to load.
   const list = (
     <>
-      {shownCount === 0 ? (
+      {skills.error ? (
+        <MessageCard
+          variant="error"
+          outerPadding={1}
+          innerPadding={1}
+          title={t("plugins.loadFailed")}
+        />
+      ) : shownCount === 0 ? (
         <CustomizeEmpty
           illustration={SvgNoResult}
           title={
@@ -364,11 +385,7 @@ export default function CustomizePluginsPage() {
 
   if (panel === "admin")
     return (
-      <SettingsLayouts.Root
-        width="lg"
-        loading={skills.isLoading}
-        error={loadError}
-      >
+      <SettingsLayouts.Root width="lg" loading={skills.isLoading}>
         <SettingsLayouts.Header
           icon={SvgPlug}
           title={adminCopy("title")}
@@ -407,7 +424,6 @@ export default function CustomizePluginsPage() {
         </>
       }
       loading={skills.isLoading}
-      error={loadError}
     >
       <Text as="p" font="secondary-body" color="text-03">
         {t("plugins.intro")}

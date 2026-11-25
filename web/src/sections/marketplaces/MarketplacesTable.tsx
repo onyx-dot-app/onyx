@@ -28,7 +28,7 @@ import {
   syncMarketplace,
 } from "@/lib/marketplaces/api";
 import useScreenSize from "@/hooks/useScreenSize";
-import { useMarketplaces } from "@/lib/marketplaces/hooks";
+import type { MarketplacesState } from "@/lib/marketplaces/hooks";
 import type {
   MarketplaceDetail,
   MarketplaceSummary,
@@ -80,9 +80,14 @@ function Attention({ marketplaces, busy, onSync }: AttentionProps) {
   );
 }
 
-export default function MarketplacesTable() {
+interface MarketplacesTableProps {
+  /** The page's one subscription, so a sync refreshes the skill lists once. */
+  list: MarketplacesState;
+}
+
+export default function MarketplacesTable({ list }: MarketplacesTableProps) {
   const t = useTranslations("plugins.marketplaces");
-  const { marketplaces, error, isLoading, refresh } = useMarketplaces();
+  const { marketplaces, error, isLoading, refresh } = list;
   const { isMobile } = useScreenSize();
   const [openId, setOpenId] = useState<string | null>(null);
   const [defaultTarget, setDefaultTarget] = useState<MarketplaceSummary | null>(

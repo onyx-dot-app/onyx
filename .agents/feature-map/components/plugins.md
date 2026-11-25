@@ -72,7 +72,10 @@ Group or user restriction needs EE.
   Admin Panel → Plugins (`/admin/plugins`, full admin panel access) renders the
   same list (`CustomizePluginsPage`): settings chrome with
   Add in the header, every plugin, also the ones that are
-  not `member_visible`, and the Marketplaces section below them, as on the tab.
+  not `member_visible`, except the plugins of another user's personal GitHub
+  marketplace (`db/skill.py:_not_others_personal_marketplace`), and the
+  Marketplaces section below them, as on the tab. A failed `GET /skills` shows
+  an error in place of the list; the Marketplaces section stays.
   `/admin/plugins/[pluginId]` renders `MemberPluginDetailPage`. These pages read their panel from the path
   (`lib/customize/hooks.ts:usePanel`), so the links, back links, the
   upload redirect and the delete redirect stay in the admin panel

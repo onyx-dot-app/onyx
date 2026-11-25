@@ -8,6 +8,7 @@ import {
 } from "@tests/setup/test-utils";
 import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
 import { toast } from "@opal/layouts";
+import { useMarketplaces } from "@/lib/marketplaces/hooks";
 import MarketplacesTable from "@/sections/marketplaces/MarketplacesTable";
 import {
   MARKETPLACE_ID,
@@ -23,6 +24,10 @@ function user() {
 
 afterEach(() => jest.restoreAllMocks());
 
+function Table() {
+  return <MarketplacesTable list={useMarketplaces()} />;
+}
+
 test("lists each marketplace with its source, plugins and sync", async () => {
   mockFetch({
     "/api/marketplaces": {
@@ -31,7 +36,7 @@ test("lists each marketplace with its source, plugins and sync", async () => {
       ],
     },
   });
-  render(<MarketplacesTable />);
+  render(<Table />);
 
   const table = await screen.findByRole("table", { name: "Marketplaces" });
   expect(
@@ -51,7 +56,7 @@ test("a failed sync shows its reason and offers Sync now", async () => {
     },
     [`POST ${DETAIL_URL}/sync`]: detailFixture({ syncing: true }),
   });
-  render(<MarketplacesTable />);
+  render(<Table />);
 
   expect(
     await screen.findByText("The last sync of acme/plugins failed")
@@ -73,7 +78,7 @@ test("a running sync disables Sync now", async () => {
   mockFetch({
     "/api/marketplaces": { marketplaces: [summaryFixture({ syncing: true })] },
   });
-  render(<MarketplacesTable />);
+  render(<Table />);
   const actor = user();
 
   expect(await screen.findByText("Syncing")).toBeInTheDocument();
@@ -93,7 +98,7 @@ test("a marketplace that never synced offers Sync now", async () => {
       ],
     },
   });
-  render(<MarketplacesTable />);
+  render(<Table />);
   const actor = user();
 
   expect(await screen.findByText("Not synced")).toBeInTheDocument();
@@ -111,7 +116,7 @@ test("Remove names the plugins that it deletes before it asks to confirm", async
     [DETAIL_URL]: detailFixture(),
     [`DELETE ${DETAIL_URL}`]: new Response("null"),
   });
-  render(<MarketplacesTable />);
+  render(<Table />);
 
   await user().click(
     await screen.findByRole("button", { name: "Actions for acme/plugins" })
@@ -140,7 +145,7 @@ test("Remove stays disabled when the plugin list does not load", async () => {
       status: 500,
     }),
   });
-  render(<MarketplacesTable />);
+  render(<Table />);
 
   await user().click(
     await screen.findByRole("button", { name: "Actions for acme/plugins" })
@@ -164,7 +169,7 @@ test("the default access item shows only for a company marketplace", async () =>
       default_installation_policy: "DEFAULT",
     }),
   });
-  render(<MarketplacesTable />);
+  render(<Table />);
   const actor = user();
 
   await actor.click(
@@ -193,7 +198,7 @@ test("a member sees a company marketplace with no actions", async () => {
       marketplaces: [summaryFixture({ scope: "company", can_manage: false })],
     },
   });
-  render(<MarketplacesTable />);
+  render(<Table />);
 
   const table = await screen.findByRole("table", { name: "Marketplaces" });
   expect(within(table).getByText("Company")).toBeInTheDocument();
@@ -210,7 +215,7 @@ test("Replace login warns when the new login has no GitHub connection", async ()
     }),
   });
   const warning = jest.spyOn(toast, "warning").mockReturnValue("toast-id");
-  render(<MarketplacesTable />);
+  render(<Table />);
   const actor = user();
 
   await actor.click(
