@@ -384,9 +384,9 @@ counts what is sent, not the stored token counts.
   message get one more message with a line for each image
   (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
   alone (`chat/files.py:place_chat_files`), so a message keeps its lines
-  and the prefix stays cacheable. The shell tool's description (`exec_command`,
-  or `bash` for Claude models) gains the
-  layout of `attachments/` once, when the chat gets its first file.
+  and the prefix stays cacheable. The system prompt's `## Sandbox` section
+  gives the layout of `attachments/` in every sandbox turn, so no tool
+  definition changes when the chat gets its first file.
   Only user attachments enter the prompt as text, so turn preparation
   extracts text only for the files of user messages
   (`chat/process_message.py:prepare_chat_turn`, `text_file_ids`). Files of
