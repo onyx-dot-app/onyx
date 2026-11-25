@@ -12807,6 +12807,32 @@
             "doneUnnamed": "已加载技能",
             "failedUnnamed": "无法加载技能"
           }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "正在启动子代理 {name}",
+            "done": "已启动子代理 {name}",
+            "failed": "无法启动子代理 {name}",
+            "runningUnnamed": "正在启动子代理",
+            "doneUnnamed": "已启动子代理",
+            "failedUnnamed": "无法启动子代理"
+          },
+          "send": {
+            "running": "正在向 {name} 发送消息",
+            "done": "已向 {name} 发送消息",
+            "failed": "无法向 {name} 发送消息",
+            "runningUnnamed": "正在向子代理发送消息",
+            "doneUnnamed": "已向子代理发送消息",
+            "failedUnnamed": "无法向子代理发送消息"
+          },
+          "interrupt": {
+            "running": "正在中断 {name}",
+            "done": "已中断 {name}",
+            "failed": "无法中断 {name}",
+            "runningUnnamed": "正在中断子代理",
+            "doneUnnamed": "已中断子代理",
+            "failedUnnamed": "无法中断子代理"
+          }
         }
       },
       "toolApproval": {

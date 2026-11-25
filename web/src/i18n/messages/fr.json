@@ -12807,6 +12807,32 @@
             "doneUnnamed": "Compétence chargée",
             "failedUnnamed": "Impossible de charger la compétence"
           }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Lancement du sous-agent {name}",
+            "done": "Sous-agent {name} lancé",
+            "failed": "Impossible de lancer le sous-agent {name}",
+            "runningUnnamed": "Lancement du sous-agent",
+            "doneUnnamed": "Sous-agent lancé",
+            "failedUnnamed": "Impossible de lancer le sous-agent"
+          },
+          "send": {
+            "running": "Envoi du message à {name}",
+            "done": "Message envoyé à {name}",
+            "failed": "Impossible d'envoyer le message à {name}",
+            "runningUnnamed": "Envoi du message au sous-agent",
+            "doneUnnamed": "Message envoyé au sous-agent",
+            "failedUnnamed": "Impossible d'envoyer le message au sous-agent"
+          },
+          "interrupt": {
+            "running": "Interruption de {name}",
+            "done": "{name} interrompu",
+            "failed": "Impossible d'interrompre {name}",
+            "runningUnnamed": "Interruption du sous-agent",
+            "doneUnnamed": "Sous-agent interrompu",
+            "failedUnnamed": "Impossible d'interrompre le sous-agent"
+          }
         }
       },
       "toolApproval": {

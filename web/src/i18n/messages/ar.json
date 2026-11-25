@@ -12807,6 +12807,32 @@
             "doneUnnamed": "تم تحميل المهارة",
             "failedUnnamed": "تعذّر تحميل المهارة"
           }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "جارٍ تشغيل الوكيل الفرعي {name}",
+            "done": "تم تشغيل الوكيل الفرعي {name}",
+            "failed": "تعذّر تشغيل الوكيل الفرعي {name}",
+            "runningUnnamed": "جارٍ تشغيل الوكيل الفرعي",
+            "doneUnnamed": "تم تشغيل الوكيل الفرعي",
+            "failedUnnamed": "تعذّر تشغيل الوكيل الفرعي"
+          },
+          "send": {
+            "running": "جارٍ إرسال رسالة إلى {name}",
+            "done": "تم إرسال رسالة إلى {name}",
+            "failed": "تعذّر إرسال رسالة إلى {name}",
+            "runningUnnamed": "جارٍ إرسال رسالة إلى الوكيل الفرعي",
+            "doneUnnamed": "تم إرسال رسالة إلى الوكيل الفرعي",
+            "failedUnnamed": "تعذّر إرسال رسالة إلى الوكيل الفرعي"
+          },
+          "interrupt": {
+            "running": "جارٍ إيقاف {name}",
+            "done": "تم إيقاف {name}",
+            "failed": "تعذّر إيقاف {name}",
+            "runningUnnamed": "جارٍ إيقاف الوكيل الفرعي",
+            "doneUnnamed": "تم إيقاف الوكيل الفرعي",
+            "failedUnnamed": "تعذّر إيقاف الوكيل الفرعي"
+          }
         }
       },
       "toolApproval": {

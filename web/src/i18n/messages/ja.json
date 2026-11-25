@@ -12807,6 +12807,32 @@
             "doneUnnamed": "スキルをロードしました",
             "failedUnnamed": "スキルをロードできませんでした"
           }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "サブエージェント {name} を起動中",
+            "done": "サブエージェント {name} を起動しました",
+            "failed": "サブエージェント {name} を起動できませんでした",
+            "runningUnnamed": "サブエージェントを起動中",
+            "doneUnnamed": "サブエージェントを起動しました",
+            "failedUnnamed": "サブエージェントを起動できませんでした"
+          },
+          "send": {
+            "running": "{name} にメッセージを送信中",
+            "done": "{name} にメッセージを送信しました",
+            "failed": "{name} にメッセージを送信できませんでした",
+            "runningUnnamed": "サブエージェントにメッセージを送信中",
+            "doneUnnamed": "サブエージェントにメッセージを送信しました",
+            "failedUnnamed": "サブエージェントにメッセージを送信できませんでした"
+          },
+          "interrupt": {
+            "running": "{name} を中断中",
+            "done": "{name} を中断しました",
+            "failed": "{name} を中断できませんでした",
+            "runningUnnamed": "サブエージェントを中断中",
+            "doneUnnamed": "サブエージェントを中断しました",
+            "failedUnnamed": "サブエージェントを中断できませんでした"
+          }
         }
       },
       "toolApproval": {

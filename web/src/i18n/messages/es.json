@@ -12807,6 +12807,32 @@
             "doneUnnamed": "Habilidad cargada",
             "failedUnnamed": "No se pudo cargar la habilidad"
           }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Iniciando el subagente {name}",
+            "done": "Subagente {name} iniciado",
+            "failed": "No se pudo iniciar el subagente {name}",
+            "runningUnnamed": "Iniciando el subagente",
+            "doneUnnamed": "Subagente iniciado",
+            "failedUnnamed": "No se pudo iniciar el subagente"
+          },
+          "send": {
+            "running": "Enviando mensaje a {name}",
+            "done": "Mensaje enviado a {name}",
+            "failed": "No se pudo enviar el mensaje a {name}",
+            "runningUnnamed": "Enviando mensaje al subagente",
+            "doneUnnamed": "Mensaje enviado al subagente",
+            "failedUnnamed": "No se pudo enviar el mensaje al subagente"
+          },
+          "interrupt": {
+            "running": "Interrumpiendo {name}",
+            "done": "{name} interrumpido",
+            "failed": "No se pudo interrumpir {name}",
+            "runningUnnamed": "Interrumpiendo el subagente",
+            "doneUnnamed": "Subagente interrumpido",
+            "failedUnnamed": "No se pudo interrumpir el subagente"
+          }
         }
       },
       "toolApproval": {

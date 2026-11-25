@@ -23,6 +23,10 @@ import { NestedCall } from "@/lib/timeline/chat/packetHelpers";
 import { ReasoningRenderer } from "@/lib/timeline/chat/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "@/lib/timeline/chat/message/messageComponents/renderers/CustomToolRenderer";
 import {
+  AgentToolRenderer,
+  isAgentToolPacket,
+} from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
+import {
   isSkillToolPacket,
   SkillToolRenderer,
 } from "@/lib/timeline/chat/renderers/skill/SkillToolRenderer";
@@ -185,6 +189,9 @@ export function findRenderer(
   }
   if (packets.some(isPublishFilesToolPacket)) {
     return PublishFilesToolRenderer;
+  }
+  if (packets.some(isAgentToolPacket)) {
+    return AgentToolRenderer;
   }
   if (packets.some(isSkillToolPacket)) {
     return SkillToolRenderer;

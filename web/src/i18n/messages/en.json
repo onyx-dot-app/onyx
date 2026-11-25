@@ -12807,6 +12807,32 @@
             "doneUnnamed": "Loaded skill",
             "failedUnnamed": "Could not load skill"
           }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Spawning subagent {name}",
+            "done": "Spawned subagent {name}",
+            "failed": "Could not spawn subagent {name}",
+            "runningUnnamed": "Spawning subagent",
+            "doneUnnamed": "Spawned subagent",
+            "failedUnnamed": "Could not spawn subagent"
+          },
+          "send": {
+            "running": "Sending message to {name}",
+            "done": "Sent message to {name}",
+            "failed": "Could not send message to {name}",
+            "runningUnnamed": "Sending message to subagent",
+            "doneUnnamed": "Sent message to subagent",
+            "failedUnnamed": "Could not send message to subagent"
+          },
+          "interrupt": {
+            "running": "Interrupting {name}",
+            "done": "Interrupted {name}",
+            "failed": "Could not interrupt {name}",
+            "runningUnnamed": "Interrupting subagent",
+            "doneUnnamed": "Interrupted subagent",
+            "failedUnnamed": "Could not interrupt subagent"
+          }
         }
       },
       "toolApproval": {

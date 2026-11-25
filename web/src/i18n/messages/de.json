@@ -12807,6 +12807,32 @@
             "doneUnnamed": "Skill geladen",
             "failedUnnamed": "Skill konnte nicht geladen werden"
           }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Subagent {name} wird gestartet",
+            "done": "Subagent {name} gestartet",
+            "failed": "Subagent {name} konnte nicht gestartet werden",
+            "runningUnnamed": "Subagent wird gestartet",
+            "doneUnnamed": "Subagent gestartet",
+            "failedUnnamed": "Subagent konnte nicht gestartet werden"
+          },
+          "send": {
+            "running": "Nachricht an {name} wird gesendet",
+            "done": "Nachricht an {name} gesendet",
+            "failed": "Nachricht an {name} konnte nicht gesendet werden",
+            "runningUnnamed": "Nachricht an Subagent wird gesendet",
+            "doneUnnamed": "Nachricht an Subagent gesendet",
+            "failedUnnamed": "Nachricht an Subagent konnte nicht gesendet werden"
+          },
+          "interrupt": {
+            "running": "{name} wird unterbrochen",
+            "done": "{name} unterbrochen",
+            "failed": "{name} konnte nicht unterbrochen werden",
+            "runningUnnamed": "Subagent wird unterbrochen",
+            "doneUnnamed": "Subagent unterbrochen",
+            "failedUnnamed": "Subagent konnte nicht unterbrochen werden"
+          }
         }
       },
       "toolApproval": {

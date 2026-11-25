@@ -204,7 +204,10 @@ run_in_background)` or `exec_command(cmd, workdir, yield_time_ms,
 max_output_tokens)`, and `write_stdin` with `timeout` or `yield_time_ms` and
 `max_output_tokens`), `tools/tool_implementations/subagents/shapes.py:AGENT_SHAPES` (`agent(description,
 prompt)` or `spawn_agent(task_name, message)`; `send_message` with `to` or
-`target`; only the OpenAI shape has `wait_agent`),
+`target`; only the OpenAI shape has `wait_agent`. The web timeline keeps its
+own copy of the spawn, `send_message` and `interrupt_agent` names and
+arguments in `web/src/lib/timeline/chat/renderers/agent/AgentToolRenderer.tsx`,
+which titles those calls with the agent's name and shows the text sent),
 `tools/tool_implementations/skills/skill_tools.py:SKILL_READ_SHAPES` (`skill(skill)` or
 `skills_read(name)`), and `tools/tool_implementations/open_url/open_url_tool.py:OPEN_URL_SHAPES`
 (`web_fetch` or `open_url`, same arguments), and
