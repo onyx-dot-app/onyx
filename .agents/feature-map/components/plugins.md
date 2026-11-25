@@ -208,8 +208,8 @@ on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integr
 included). `sections/plugins/ShareIntegrationModal.tsx` reads and replaces the
 shares through `/integrations/{id}/access`; it reuses `AddPeoplePicker` with
 no permission menu.
-`sections/plugins/IntegrationConnectionRow.tsx` shows the
-status of one integration and its action; the API key form
+`sections/plugins/IntegrationConnectModal.tsx` shows the
+status of each integration and its action; the API key form
 (`web/src/sections/plugins/IntegrationCredentialsModal.tsx`, which the Craft
 setup card also opens) renders `CredentialFieldInputs` from `credential_fields`
 and calls `PUT /integrations/{id}/connection`; Disconnect is `DELETE` on the same path.

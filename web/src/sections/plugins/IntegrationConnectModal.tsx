@@ -3,10 +3,10 @@
 import type { ComponentProps } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, Modal, Text } from "@opal/components";
-import { Section } from "@opal/layouts";
-import { SvgKey } from "@opal/icons";
+import { ContentAction, Section } from "@opal/layouts";
+import { SvgCheckCircle, SvgKey, SvgPlug } from "@opal/icons";
 import type { MemberIntegration } from "@/lib/integrations/types";
-import IntegrationConnectionRow from "@/sections/plugins/IntegrationConnectionRow";
+import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
 
 interface IntegrationConnectModalProps {
   integrations: readonly MemberIntegration[];
@@ -23,6 +23,7 @@ export default function IntegrationConnectModal({
   onCloseAutoFocus,
 }: IntegrationConnectModalProps) {
   const t = useTranslations("plugins.chat.connectPrompt");
+  const stateCopy = useTranslations("integrations");
   return (
     <Modal open onOpenChange={(open) => !open && onClose()}>
       <Modal.Content
@@ -38,14 +39,30 @@ export default function IntegrationConnectModal({
         />
         <Modal.Body padding={4} gap={3} alignItems="stretch">
           <Section gap={2} alignItems="stretch" height="auto">
-            {integrations.map((integration) => (
-              <Card key={integration.id} padding={3} border="solid">
-                <IntegrationConnectionRow
-                  integration={integration}
-                  returnPath={returnPath}
-                />
-              </Card>
-            ))}
+            {integrations.map((integration) => {
+              const { state, reason } = integration.status;
+              return (
+                <Card key={integration.id} padding={3} border="solid">
+                  <ContentAction
+                    icon={state === "connected" ? SvgCheckCircle : SvgPlug}
+                    color={state === "connected" ? "success" : "default"}
+                    title={integration.name}
+                    description={
+                      state === "needs_reconnect" && reason
+                        ? reason
+                        : stateCopy("connectionState", { state })
+                    }
+                    padding={0}
+                    rightChildren={
+                      <IntegrationConnectButton
+                        integration={integration}
+                        returnPath={returnPath}
+                      />
+                    }
+                  />
+                </Card>
+              );
+            })}
           </Section>
           <Text font="secondary-body" color="text-03">
             {t("hint")}
