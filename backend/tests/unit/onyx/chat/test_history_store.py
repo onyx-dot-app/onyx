@@ -298,7 +298,9 @@ def test_database_save_rejects_mismatched_storage_before_mutation(
             )
         finish.assert_not_called()
         save_turn.assert_not_called()
-    session.get.assert_called_once_with(ChatMessage, 17)
+    # The read also carries loader options.
+    session.get.assert_called_once()
+    assert session.get.call_args.args == (ChatMessage, 17)
     session.flush.assert_not_called()
     session.commit.assert_not_called()
     assert message.message == "original content"

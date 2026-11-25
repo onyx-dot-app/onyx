@@ -114,6 +114,7 @@ from onyx.db.chat_inputs import (
     read_run_inputs,
 )
 from onyx.db.chat_response import (
+    find_response__no_commit,
     load_chat_approvals,
     load_child_responses,
     read_chat_execution,
@@ -122,6 +123,7 @@ from onyx.db.chat_response import (
     read_response_status__no_commit,
     read_response_steps,
     reserve_child_response__no_commit,
+    response_awaits_root_run__no_commit,
     save_chat_response_to_db,
     save_chat_turn,
     save_response_content,
@@ -4656,6 +4658,37 @@ def test_a_result_stopped_by_the_user_does_not_wake_its_reader(
     )[1]
     assert result.failure is not None
     assert not result.wakes_recipient
+
+
+def test_root_run_start_reads_each_row_once(
+    db_session: Session, conversation: ChatSession, executed_sql: list[str]
+) -> None:
+    response = _response(db_session, conversation)
+    question = response.parent_message
+    assert question is not None
+    record = _record(response)
+    message_id, question_id, session_id = response.id, question.id, conversation.id
+    db_session.commit()
+    db_session.expire_all()
+    executed_sql.clear()
+
+    assert response_awaits_root_run__no_commit(db_session, message_id, session_id)
+    # Another chat, and a row that is not a response.
+    assert not response_awaits_root_run__no_commit(db_session, message_id, uuid4())
+    assert not response_awaits_root_run__no_commit(db_session, question_id, session_id)
+    assert len(executed_sql) == 3
+
+    executed_sql.clear()
+    assert find_response__no_commit(db_session, message_id, for_root_save=True)
+    save_response_record__no_commit(db_session, message_id, record)
+    reads = [query for query in executed_sql if query.lstrip().startswith("SELECT")]
+    # One statement sets both timeouts. The others read the response with its
+    # session and question, its items and its tool calls.
+    assert sum("set_config" in query for query in reads) == 1
+    assert len(reads) == 4
+    # A root with no child reads no ancestry.
+    assert not any("WITH RECURSIVE" in query for query in executed_sql)
+    assert not response_awaits_root_run__no_commit(db_session, message_id, session_id)
 
 
 def test_selected_branch_reads_one_statement(
