@@ -262,6 +262,12 @@ export {
   type CollapsibleContentProps,
 } from "@opal/components/collapsible/components";
 
+/* ReadOnlyRegion */
+export {
+  ReadOnlyRegion,
+  type ReadOnlyRegionProps,
+} from "@opal/components/read-only-region/components";
+
 /* MessageCard */
 export {
   MessageCard,

@@ -14115,6 +14115,21 @@
       },
       "availableFor": "Available for {plan}"
     },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "This is an Enterprise feature. It is not available on the playground. Your own Onyx has it. [Talk to sales]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "We set up our own model keys so you can try the features. Your own Onyx runs on your keys. [Talk to sales]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "This feature is switched off on the playground. Your own Onyx has it. [Talk to sales]({salesUrl})"
+        },
+        "title": "Playground Limit",
+        "tooltip": "Not available on the playground. Your own Onyx has it."
+      }
+    },
     "placeholders": {
       "email": "email@yourcompany.com",
       "url": "https://",

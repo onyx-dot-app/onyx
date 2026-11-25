@@ -10,6 +10,7 @@ import {
   PendingRoute,
   useNavigation,
   usePathname,
+  useRenderedPathname,
   useRouteRendering,
 } from "@opal/navigation";
 import { useUser } from "@/providers/UserProvider";
@@ -26,6 +27,7 @@ import {
   hasPermission,
 } from "@/lib/permissions/utils";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
+import PlaygroundRestrictedPage from "@/sections/admin/PlaygroundRestrictedPage";
 import { useTranslations } from "next-intl";
 import { AdminTopBarSlotContext } from "@/layouts/chromes/AdminTopBarSlot";
 
@@ -47,6 +49,7 @@ export default function AdminChrome({
   // /ee/admin/… keeps that URL.
   const base = pathname.startsWith("/ee/admin") ? "/ee/admin" : "/admin";
   const routeRendering = useRouteRendering(base);
+  const renderedPathname = useRenderedPathname(base);
   const { vectorDbEnabled, isLoading, application_status } = useSettings();
   useAdminDocumentTitle();
   const navigation = useNavigation();
@@ -61,10 +64,23 @@ export default function AdminChrome({
   // Match-only per-page gate: if this page is a known admin route the user lacks the
   // permission for (a group manager landing on a full-admin page), send them to their
   // first permitted admin page. Unlisted detail sub-pages are left to the backend gate.
-  const matched = matchAdminRoute(pathname);
+  // The route table holds /admin/... paths; a direct /ee/admin/... visit is
+  // the same page.
+  const matched = matchAdminRoute(
+    base === "/ee/admin" ? pathname.slice("/ee".length) : pathname
+  );
   const denied =
     matched !== undefined &&
     !hasPermission(adminCapabilities, matched.requiredPermission);
+
+  // The restriction belongs to the page on screen. While the next page
+  // renders, the page being left keeps its own wrapper, so a navigation
+  // that is canceled does not remount it and lose its state.
+  const rendered = matchAdminRoute(
+    base === "/ee/admin"
+      ? renderedPathname.slice("/ee".length)
+      : renderedPathname
+  );
 
   useEffect(() => {
     if (!denied) return;
@@ -137,7 +153,9 @@ export default function AdminChrome({
         <AdminTopBarSlotContext.Provider value={isMobile ? topBarSlot : null}>
           <RootLayout.MainContent>
             <PendingRoute base={base} loader={<PageLoader />}>
-              {content}
+              <PlaygroundRestrictedPage featureKey={rendered?.featureKey}>
+                {content}
+              </PlaygroundRestrictedPage>
             </PendingRoute>
           </RootLayout.MainContent>
         </AdminTopBarSlotContext.Provider>

@@ -14115,6 +14115,21 @@
       },
       "availableFor": "Disponível no {plan}"
     },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "Este é um recurso Enterprise. Não está disponível no playground. O seu próprio Onyx o inclui. [Falar com vendas]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "Configuramos as nossas próprias chaves de modelo para que possa experimentar os recursos. O seu próprio Onyx funciona com as suas chaves. [Falar com vendas]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "Este recurso está desativado no playground. O seu próprio Onyx o inclui. [Falar com vendas]({salesUrl})"
+        },
+        "title": "Limite do playground",
+        "tooltip": "Não disponível no playground. O seu próprio Onyx o inclui."
+      }
+    },
     "placeholders": {
       "email": "email@suaempresa.com",
       "url": "https://",

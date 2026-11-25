@@ -14115,6 +14115,21 @@
       },
       "availableFor": "متاح في {plan}"
     },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "هذه ميزة Enterprise وهي غير متاحة في الـ Playground. نسخة Onyx الخاصة بك تتضمنها. [تحدث إلى المبيعات]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "قمنا بإعداد مفاتيح النماذج الخاصة بنا حتى تتمكن من تجربة الميزات. نسخة Onyx الخاصة بك تعمل بمفاتيحك. [تحدث إلى المبيعات]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "هذه الميزة متوقفة في الـ Playground. نسخة Onyx الخاصة بك تتضمنها. [تحدث إلى المبيعات]({salesUrl})"
+        },
+        "title": "حد الـ Playground",
+        "tooltip": "غير متاحة في الـ Playground. نسخة Onyx الخاصة بك تتضمنها."
+      }
+    },
     "placeholders": {
       "email": "albarid@sharikatuk.com",
       "url": "https://",
