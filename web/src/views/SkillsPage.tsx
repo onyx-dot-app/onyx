@@ -44,6 +44,7 @@ import type { CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import { deleteUserSkill } from "@/lib/skills/api";
+import { canManageSkill } from "@/lib/skills/sharing";
 import { useSettings } from "@/lib/settings/hooks";
 import { useSkillEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
@@ -79,13 +80,7 @@ export default function AdminSkillsPage() {
   });
 
   async function deleteSkill() {
-    if (
-      !deleteTarget ||
-      deleting ||
-      (deleteTarget.user_permission !== "OWNER" &&
-        deleteTarget.user_permission !== "EDITOR")
-    )
-      return;
+    if (!deleteTarget || deleting || !canManageSkill(deleteTarget)) return;
     setDeleting(true);
     try {
       await deleteUserSkill(deleteTarget.id);
@@ -111,7 +106,7 @@ export default function AdminSkillsPage() {
     }
   }
 
-  const loadedItems = useMemo<CustomSkill[]>(
+  const items = useMemo<CustomSkill[]>(
     () =>
       (data?.customs ?? [])
         // Plugins have their own admin page.
@@ -124,11 +119,7 @@ export default function AdminSkillsPage() {
         ),
     [data]
   );
-  const enablement = useSkillEnablement(loadedItems, refresh);
-  const items = loadedItems.map((item) => ({
-    ...item,
-    enabled: enablement.enabledOf(item),
-  }));
+  const enablement = useSkillEnablement(items, refresh);
 
   // The groups of the summaries the caller may see.
   const groupOptions = useMemo(() => {
@@ -309,14 +300,8 @@ export default function AdminSkillsPage() {
               <Section height="auto" alignItems="stretch">
                 <AdminSkillsTable
                   skills={visibleItems}
-                  selectedIds={bulk.selectedIds}
-                  onSelectionChange={bulk.select}
-                  busy={bulk.busy}
-                  isPending={enablement.isPending}
-                  enabledOf={enablement.enabledOf}
-                  onEnabledChange={(skill, enabled) =>
-                    void enablement.setEnabled(skill, enabled)
-                  }
+                  bulk={bulk}
+                  enablement={enablement}
                   onOpen={(skill) => navigation.go(adminSkillHref(skill.id))}
                   onShare={setShareTarget}
                   onDelete={(skill) => {

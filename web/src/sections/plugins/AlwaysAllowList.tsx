@@ -94,19 +94,21 @@ export default function AlwaysAllowList({
                 gap={2}
               >
                 {asks && (
-                  <Text font="secondary-body" color="text-03">
-                    {t("switch.visibleLabel")}
-                  </Text>
-                )}
-                {asks && (
-                  <InputSwitch
-                    aria-label={t("switch.label", {
-                      name: action.display_name,
-                    })}
-                    checked={action.user_policy === "allow"}
-                    disabled={savingKey !== null || action.always_asks}
-                    onCheckedChange={(checked) => void change(action, checked)}
-                  />
+                  <>
+                    <Text font="secondary-body" color="text-03">
+                      {t("switch.visibleLabel")}
+                    </Text>
+                    <InputSwitch
+                      aria-label={t("switch.label", {
+                        name: action.display_name,
+                      })}
+                      checked={action.user_policy === "allow"}
+                      disabled={savingKey !== null || action.always_asks}
+                      onCheckedChange={(checked) =>
+                        void change(action, checked)
+                      }
+                    />
+                  </>
                 )}
                 <Tag
                   title={policyCopy(
