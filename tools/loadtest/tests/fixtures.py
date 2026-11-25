@@ -20,11 +20,11 @@ INTERNAL_SEARCH_TOOL = {
 }
 
 # Code mode (CODE_MODE_ENABLED): retrieval tools are async functions inside
-# execute_code programs; the description lists their stubs.
-EXECUTE_CODE_TOOL = {
+# exec programs; the description lists their stubs.
+EXEC_TOOL = {
     "type": "function",
     "function": {
-        "name": "execute_code",
+        "name": "exec",
         "description": (
             "Run a Python program that calls the tools listed below.\n\n"
             "Functions:\n```python\n"
@@ -38,24 +38,24 @@ EXECUTE_CODE_TOOL = {
             "properties": {
                 "code": {"type": "string"},
                 "yield_time_ms": {"type": "integer"},
-                "max_output_chars": {"type": "integer"},
+                "max_output_tokens": {"type": "integer"},
             },
             "required": ["code"],
         },
     },
 }
 
-WAIT_CODE_TOOL = {
+WAIT_TOOL = {
     "type": "function",
     "function": {
-        "name": "wait_code",
-        "description": "Waits on a running `execute_code` cell.",
+        "name": "wait",
+        "description": "Waits on a running `exec` cell.",
         "parameters": {
             "type": "object",
             "properties": {
                 "cell_id": {"type": "integer"},
                 "yield_time_ms": {"type": "integer"},
-                "max_output_chars": {"type": "integer"},
+                "max_tokens": {"type": "integer"},
                 "terminate": {"type": "boolean"},
             },
             "required": ["cell_id"],

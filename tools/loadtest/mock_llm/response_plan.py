@@ -374,9 +374,9 @@ def _search_profile_calls(
             return []
         queries = _round_queries(snippet, completed_rounds, profile)
         return [_new_call("internal_search", json.dumps({"queries": queries}))]
-    execute_code = by_name.get(code_mode.EXECUTE_CODE)
-    if execute_code is None or "internal_search" not in code_mode.code_functions(
-        execute_code
+    exec_tool = by_name.get(code_mode.EXEC)
+    if exec_tool is None or "internal_search" not in code_mode.code_functions(
+        exec_tool
     ):
         return None
 
@@ -399,11 +399,11 @@ def _code_mode_step(
     programs the turn already ran. A None program ends the turn's tool calls."""
     cell = code_mode.running_cell(turn)
     if cell is not None:
-        return [_new_call(code_mode.WAIT_CODE, json.dumps({"cell_id": cell}))]
-    code = program(_rounds_called(turn, code_mode.EXECUTE_CODE))
+        return [_new_call(code_mode.WAIT, json.dumps({"cell_id": cell}))]
+    code = program(_rounds_called(turn, code_mode.EXEC))
     if code is None:
         return []
-    return [_new_call(code_mode.EXECUTE_CODE, json.dumps({"code": code}))]
+    return [_new_call(code_mode.EXEC, json.dumps({"code": code}))]
 
 
 def _pick_tool(
@@ -481,11 +481,11 @@ def _pick_tool(
     if _GENERATE_PLAN in by_name:
         return [make(by_name[_GENERATE_PLAN])]
     retrieval = [by_name[n] for n in _RETRIEVAL_TOOLS if n in by_name]
-    execute_code = by_name.get(code_mode.EXECUTE_CODE)
-    if knobs.n_auto_tools > 0 and not retrieval and execute_code is not None:
+    exec_tool = by_name.get(code_mode.EXEC)
+    if knobs.n_auto_tools > 0 and not retrieval and exec_tool is not None:
         # One program calls up to n_auto_tools query-taking functions in
         # parallel; then the turn answers.
-        offered = code_mode.code_functions(execute_code)
+        offered = code_mode.code_functions(exec_tool)
         functions = [n for n in code_mode.QUERY_FUNCTIONS if n in offered]
         searches = [(n, [snippet]) for n in functions[: knobs.n_auto_tools]]
 

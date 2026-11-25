@@ -1,10 +1,11 @@
 """Code mode wire contract: the programs the mock writes and the results it reads.
 
-With CODE_MODE_ENABLED, Onyx offers `execute_code` instead of retrieval tools.
+With CODE_MODE_ENABLED, Onyx offers `exec` instead of retrieval tools: the
+mock's models are not Claude models, so they get the `exec`/`wait` shape.
 Its `code` argument is a Python program in which each tool is an async function.
 The program's printed output, under an "Execution <status> in cell N" header,
 is the tool result that the model reads. A program that runs past its yield time
-returns "Execution running in cell N"; `wait_code(cell_id=N)` continues it.
+returns "Execution running in cell N"; `wait(cell_id=N)` continues it.
 """
 
 from __future__ import annotations
@@ -14,8 +15,8 @@ from collections.abc import Sequence
 
 from mock_llm.models import ChatMessage, ToolDefinition
 
-EXECUTE_CODE = "execute_code"
-WAIT_CODE = "wait_code"
+EXEC = "exec"
+WAIT = "wait"
 
 # Retrieval functions that take `queries` and return numbered search results.
 QUERY_FUNCTIONS = ("internal_search", "web_search")
@@ -29,7 +30,7 @@ _DOCUMENT_LINE_RE = re.compile(r"^\[(\d+)\] ", re.MULTILINE)
 
 
 def code_functions(tool: ToolDefinition) -> set[str]:
-    """Functions that the execute_code description lists as stubs."""
+    """Functions that the exec description lists as stubs."""
     return set(_FUNCTION_RE.findall(tool.function.description or ""))
 
 

@@ -1,4 +1,4 @@
-"""Code mode contracts: the mock's execute_code plans and the parser's code
+"""Code mode contracts: the mock's exec plans and the parser's code
 mode packets (backend/onyx/chat/renderer.py and streaming_models.py)."""
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ from mock_llm.profiles import turn_profile
 from mock_llm.response_plan import Knobs, prepare_response
 from onyx_client.stream_parser import ChatStreamAnalyzer
 
-from .fixtures import EXECUTE_CODE_TOOL, INTERNAL_SEARCH_TOOL, WAIT_CODE_TOOL
+from .fixtures import EXEC_TOOL, INTERNAL_SEARCH_TOOL, WAIT_TOOL
 
 client = TestClient(app)
 MODEL = "mock-profile-search-v1-ttft0-itl0"
 BATCHED = "mock-profile-search-v1-codebatched-ttft0-itl0"
-CODE_TOOLS = [EXECUTE_CODE_TOOL, WAIT_CODE_TOOL]
+CODE_TOOLS = [EXEC_TOOL, WAIT_TOOL]
 
 
 def question_for(rounds: int, seed: int = 0) -> str:
@@ -82,7 +82,7 @@ def run_turn(
         for call in calls:
             content = (
                 observation(step + 1, [step * 100 + 1, step * 100 + 2])
-                if call["function"]["name"] == "execute_code"
+                if call["function"]["name"] == "exec"
                 else json.dumps({"results": [{"document": step * 100 + 1}]})
             )
             messages.append(
@@ -102,8 +102,7 @@ def test_per_round_programs_follow_the_direct_plan(rounds: int) -> None:
     steps, answer = run_turn(MODEL, CODE_TOOLS, question)
     assert len(steps) == rounds
     assert all(
-        len(calls) == 1 and calls[0]["function"]["name"] == "execute_code"
-        for calls in steps
+        len(calls) == 1 and calls[0]["function"]["name"] == "exec" for calls in steps
     )
     programs = [
         json.loads(calls[0]["function"]["arguments"])["code"] for calls in steps
@@ -160,8 +159,8 @@ def test_code_mode_searches_match_direct_mode_for_each_seed(
 
 RUNNING = (
     "Execution running in cell 3 after 30.0s with 1 tool call so far.\n\n"
-    "Cell 3 continues. Call wait_code(cell_id=3) for more output, or "
-    "wait_code(cell_id=3, terminate=true) to stop it."
+    "Cell 3 continues. Call wait(cell_id=3) for more output, or "
+    "wait(cell_id=3, terminate=true) to stop it."
 )
 MULTI_TOOL = "mock-tools3-ttft0-itl0-len5"
 
@@ -186,34 +185,34 @@ def reply(
 
 
 def test_search_profile_runs_no_program_without_internal_search() -> None:
-    description = EXECUTE_CODE_TOOL["function"]["description"]
+    description = EXEC_TOOL["function"]["description"]
     web_only = {
-        **EXECUTE_CODE_TOOL,
+        **EXEC_TOOL,
         "function": {
-            **EXECUTE_CODE_TOOL["function"],
+            **EXEC_TOOL["function"],
             "description": description.replace("internal_search", "other_search"),
         },
     }
-    steps, _ = run_turn(MODEL, [web_only, WAIT_CODE_TOOL], question_for(2))
+    steps, _ = run_turn(MODEL, [web_only, WAIT_TOOL], question_for(2))
     programs = [
         json.loads(call["function"]["arguments"])["code"]
         for calls in steps
         for call in calls
-        if call["function"]["name"] == "execute_code"
+        if call["function"]["name"] == "exec"
     ]
     assert programs == []
 
 
-def test_running_cell_gets_wait_code_then_the_plan_continues() -> None:
+def test_running_cell_gets_wait_then_the_plan_continues() -> None:
     question = question_for(2)
     messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
     reply(messages, next_calls(MODEL, messages), RUNNING)
     wait = next_calls(MODEL, messages)
-    assert wait[0]["function"]["name"] == "wait_code"
+    assert wait[0]["function"]["name"] == "wait"
     assert json.loads(wait[0]["function"]["arguments"]) == {"cell_id": 3}
     reply(messages, wait, observation(3, [4]))
     second = next_calls(MODEL, messages)
-    assert second[0]["function"]["name"] == "execute_code"
+    assert second[0]["function"]["name"] == "exec"
     assert searches(json.loads(second[0]["function"]["arguments"])["code"]) == [
         [question + " implementation"]
     ]
@@ -230,7 +229,7 @@ def test_multi_tool_program_waits_for_its_running_cell_then_answers() -> None:
     messages: list[dict[str, Any]] = [{"role": "user", "content": "Find the policy"}]
     reply(messages, next_calls(MULTI_TOOL, messages), RUNNING)
     wait = next_calls(MULTI_TOOL, messages)
-    assert [call["function"]["name"] for call in wait] == ["wait_code"]
+    assert [call["function"]["name"] for call in wait] == ["wait"]
     reply(messages, wait, observation(3, [4]))
     assert next_calls(MULTI_TOOL, messages) == []
 
@@ -245,7 +244,7 @@ def test_a_later_turn_runs_its_own_program(model: str) -> None:
     history.append({"role": "assistant", "content": answer})
 
     later, _ = run_turn(model, CODE_TOOLS, question, history)
-    assert later[0][0]["function"]["name"] == "execute_code"
+    assert later[0][0]["function"]["name"] == "exec"
 
 
 def test_streamed_program_arguments_reassemble() -> None:
@@ -370,7 +369,7 @@ def test_completed_programs_count_programs_and_nested_searches() -> None:
     assert summary.code_failures == 0
 
 
-def test_running_program_finished_by_wait_code_succeeds() -> None:
+def test_running_program_finished_by_wait_succeeds() -> None:
     wait = [
         packet({"type": "code_mode_start", "code": "", "cell_id": 1, "observation": 1}),
         packet(code_delta("completed", observation=1)),
