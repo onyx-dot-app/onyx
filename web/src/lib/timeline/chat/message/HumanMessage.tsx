@@ -295,7 +295,7 @@ const HumanMessage = React.memo(function HumanMessage({
         width="fit"
         height="fit"
         gap={0}
-        className="shrink px-1"
+        className="shrink mx-1"
       >
         <CopyButton
           getCopyText={() => content}
@@ -364,7 +364,7 @@ const HumanMessage = React.memo(function HumanMessage({
           alignItems="center"
           height="fit"
           gap={0}
-          className="pt-1"
+          className="mt-1"
         >
           {!isEditing && isMobile && copyEditButton}
           {/* The send time sits under the bubble, at its end. */}

@@ -281,7 +281,7 @@ export default function MessageToolbar({
           height="fit"
           wrap
           gap={0}
-          className="max-w-full ps-1"
+          className="max-w-[calc(100%-0.25rem)] ms-1"
         >
           {includeMessageSwitcher && (
             <div className="-mx-1">
