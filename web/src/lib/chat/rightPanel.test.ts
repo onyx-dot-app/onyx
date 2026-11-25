@@ -29,6 +29,7 @@ function file(artifactId: string, version = 1): PublishedFile {
     artifact_id: `artifact-${artifactId}`,
     version,
     thumbnail_file_id: null,
+    chat_id: null,
   };
 }
 

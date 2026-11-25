@@ -514,6 +514,10 @@ export interface PublishedFile {
   artifact_id: string | null;
   // The publish's number in its artifact, from 1. Null with artifact_id.
   version: number | null;
+  // The root chat that owns the artifact, which can be another chat than the
+  // one that published this version. Null or absent in details saved without
+  // it: such a file is the publishing chat's own.
+  chat_id?: string | null;
   // A JPEG of the first page of a PDF, PowerPoint or Word file that rendered
   // when it was published, from /api/chat/file/{thumbnail_file_id}
   thumbnail_file_id: string | null;

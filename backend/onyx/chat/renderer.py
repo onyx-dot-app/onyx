@@ -109,6 +109,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     EditTool,
     ExecCommandTool,
+    LibraryReplaceLibraryFileTool,
     PublishFilesTool,
     WriteStdinTool,
     WriteTool,
@@ -182,6 +183,13 @@ def publish_card_files(
     call. Raises ValidationError when the arguments do not fit the card."""
     if name == PublishFilesTool.NAME:
         return _PUBLISH_FILE_ARGUMENTS.validate_python(args.get("files", []))
+    if name == LibraryReplaceLibraryFileTool.NAME:
+        return [
+            PublishFileArgument(
+                path=_STRING.validate_python(args.get("file", "")),
+                title=_OPTIONAL_STRING.validate_python(args.get("title")),
+            )
+        ]
     # A missing or null action is a publish, as parse_tool_arguments reads it.
     if name == ArtifactTool.NAME and args.get("action") in (None, "publish"):
         one, several = ARTIFACT_PUBLISH_PATHS

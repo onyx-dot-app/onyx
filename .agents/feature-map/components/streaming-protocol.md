@@ -302,8 +302,10 @@ files when the call published none (it publishes all or none). A
 publish gives a new one), `artifact_id` and `version` (every publish of one
 `path` in the chat is a version of one artifact, numbered from 1; both are
 null in details saved without them, and such a file is an artifact of its
-own), `name` (the file name, which the download keeps), `title` (null when the
-model gave none), `path` (absolute and normalized in the VM),
+own), `chat_id` (the root chat that owns the artifact, which a replace from
+another chat keeps; null in details saved without it), `name` (the file name,
+which the download keeps), `title` (null when the model gave none; a replace
+without one keeps the newest version's title), `path` (absolute and normalized in the VM),
 `display_path` (the path to show: relative
 to the chat's working directory, or the whole path outside it; derived from
 `path`), `size` in bytes, `mime_type` and `thumbnail_file_id` (a JPEG of the

@@ -180,10 +180,13 @@ class ChatFullResponse(BaseModel):
     pending_tool_approvals: list[ToolApprovalRequest] = []
 ```
 
-Each `ToolCallResponse` of a `publish_files` call lists the files it published in `published_files`.
-Each entry has the fields `file_id`, `artifact_id`, `version`, `name`, `title`, `path`, `size`, `mime_type`,
-and `thumbnail_file_id`. Every publish of one `path` in a chat is a version of one artifact.
+Each `ToolCallResponse` of a call that published files lists them in `published_files`.
+The calls that publish are `publish_files` and `library_replace_library_file`, and a publish of the `artifact` tool,
+which Claude models get. Each entry has the fields `file_id`, `artifact_id`, `version`, `chat_id`, `name`, `title`,
+`path`, `size`, `mime_type`, and `thumbnail_file_id`. `chat_id` is the chat that owns the artifact,
+which can differ from the chat that ran the call. Every publish of one `path` in a chat is a version of one artifact.
 It has the same `artifact_id` and the next `version`, from 1.
+A replace adds the next version and keeps the file's `artifact_id`, `chat_id`, and `path`.
 A message saved before files had versions has `artifact_id` and `version` set to null.
 `thumbnail_file_id` is a JPEG of the first page of a PDF, PowerPoint, or Word file.
 It is null for other files and for a file that did not render.

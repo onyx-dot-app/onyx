@@ -17,7 +17,9 @@ import {
   publishedFileLabel,
 } from "@/lib/chat/publishedFiles";
 
-/** A publish of `path`: a version of the path's artifact. */
+const CHAT_ID = "chat-b";
+
+/** A publish of `path`: a version of the path's artifact in chat CHAT_ID. */
 function published(
   fileId: string,
   path: string,
@@ -35,6 +37,7 @@ function published(
     artifact_id: `artifact${path}`,
     version,
     thumbnail_file_id: null,
+    chat_id: CHAT_ID,
   };
 }
 
@@ -94,7 +97,9 @@ describe("chatPublishedFiles", () => {
     ];
     const answer = response(2, 2, packets);
     const files = () =>
-      fileIds(chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer])));
+      fileIds(
+        chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer]), CHAT_ID)
+      );
 
     expect(files()).toEqual(["b", "a"]);
 
@@ -115,9 +120,11 @@ describe("chatPublishedFiles", () => {
     ]);
 
     expect(
-      chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer])).map(
-        ({ file_id, title }) => [file_id, title]
-      )
+      chatPublishedFiles(
+        NO_LOADED_PUBLISHED_FILES,
+        tree([answer]),
+        CHAT_ID
+      ).map(({ file_id, title }) => [file_id, title])
     ).toEqual([
       ["b", null],
       ["c", null],
@@ -134,7 +141,9 @@ describe("chatPublishedFiles", () => {
     ]);
 
     expect(
-      fileIds(chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer])))
+      fileIds(
+        chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer]), CHAT_ID)
+      )
     ).toEqual(["new", "old-b", "old-a"]);
   });
 
@@ -157,7 +166,9 @@ describe("chatPublishedFiles", () => {
     const messages = [question, switched, shown];
 
     expect(
-      fileIds(chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree(messages)))
+      fileIds(
+        chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree(messages), CHAT_ID)
+      )
     ).toEqual(["shown", "switched"]);
     // The server's list holds a file of a branch that is not loaded too.
     expect(
@@ -171,7 +182,8 @@ describe("chatPublishedFiles", () => {
             ],
             messages
           ),
-          tree(messages)
+          tree(messages),
+          CHAT_ID
         )
       )
     ).toEqual(["shown", "switched", "unloaded"]);
@@ -196,7 +208,7 @@ describe("chatPublishedFiles", () => {
     ]);
 
     expect(
-      chatPublishedFiles(loaded, tree([saved, live])).map(
+      chatPublishedFiles(loaded, tree([saved, live]), CHAT_ID).map(
         ({ file_id, title }) => [file_id, title]
       )
     ).toEqual([
@@ -226,10 +238,9 @@ describe("chatPublishedFiles", () => {
       [saved]
     );
 
-    expect(fileIds(chatPublishedFiles(loaded, tree([saved])))).toEqual([
-      "notes",
-      "subagent",
-    ]);
+    expect(fileIds(chatPublishedFiles(loaded, tree([saved]), CHAT_ID))).toEqual(
+      ["notes", "subagent"]
+    );
 
     // An older page replays more of them; they stay out too.
     const older = response(1, 1, [
@@ -241,7 +252,7 @@ describe("chatPublishedFiles", () => {
       2
     );
     expect(
-      fileIds(chatPublishedFiles(withOlder, tree([older, saved])))
+      fileIds(chatPublishedFiles(withOlder, tree([older, saved]), CHAT_ID))
     ).toEqual(["notes", "subagent"]);
 
     // An answer saved after the load publishes a newer version, which keeps
@@ -250,7 +261,9 @@ describe("chatPublishedFiles", () => {
       publishEnd([published("newer", "/w/report.md", 3)]),
     ]);
     expect(
-      fileIds(chatPublishedFiles(withOlder, tree([older, saved, newer])))
+      fileIds(
+        chatPublishedFiles(withOlder, tree([older, saved, newer]), CHAT_ID)
+      )
     ).toEqual(["notes", "newer"]);
   });
 
@@ -264,10 +277,9 @@ describe("chatPublishedFiles", () => {
     packets.push(publishEnd([published("after", "/w/report.md", 2)]));
     packets.push(publishEnd([published("chart", "/w/chart.png")]));
 
-    expect(fileIds(chatPublishedFiles(loaded, tree([answer])))).toEqual([
-      "chart",
-      "after",
-    ]);
+    expect(
+      fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
+    ).toEqual(["chart", "after"]);
   });
 
   test("a packet file that no load replayed shows only when newer than the listed version", () => {
@@ -279,14 +291,44 @@ describe("chatPublishedFiles", () => {
     ]);
     const loaded = load([published("second", "/w/report.md", 2)], []);
 
-    expect(fileIds(chatPublishedFiles(loaded, tree([answer])))).toEqual([
-      "second",
-    ]);
+    expect(
+      fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
+    ).toEqual(["second"]);
 
     answer.packets.push(publishEnd([published("third", "/w/report.md", 3)]));
-    expect(fileIds(chatPublishedFiles(loaded, tree([answer])))).toEqual([
-      "third",
+    expect(
+      fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
+    ).toEqual(["third"]);
+  });
+
+  test("a version that the chat adds to another chat's artifact stays out, as after a reload", () => {
+    // The answer adds a version to an artifact of chat A, whose list this
+    // chat's load leaves out; the reply card shows it.
+    const answer = response(-1, undefined, [
+      publishEnd([
+        { ...published("other", "/w/report.md", 2), chat_id: "chat-a" },
+        published("own", "/w/notes.md"),
+      ]),
     ]);
+
+    for (const loaded of [NO_LOADED_PUBLISHED_FILES, load([], [])])
+      expect(
+        fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
+      ).toEqual(["own"]);
+  });
+
+  test("a file saved before files named their chat stays, as this chat's own", () => {
+    const answer = response(-1, undefined, [
+      publishEnd([
+        { ...published("saved", "/w/report.md"), chat_id: undefined },
+      ]),
+    ]);
+
+    expect(
+      fileIds(
+        chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer]), CHAT_ID)
+      )
+    ).toEqual(["saved"]);
   });
 
   test("a shared chat shows its load's list, or its packets without one", () => {
@@ -301,7 +343,8 @@ describe("chatPublishedFiles", () => {
             { packets: [answer.packets], ...session },
             1
           ),
-          tree([answer])
+          tree([answer]),
+          CHAT_ID
         )
       );
 

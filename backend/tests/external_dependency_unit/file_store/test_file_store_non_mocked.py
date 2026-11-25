@@ -3,18 +3,20 @@ import time
 import uuid
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import AbstractContextManager
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, TypedDict, cast
 from unittest.mock import patch
 
 import pytest
 from botocore.exceptions import ClientError
+from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.file_store.file_store import S3BackedFileStore
+from onyx.file_store.file_store import S3BackedFileStore, record_uploaded_object
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -1180,3 +1182,41 @@ class TestS3BackedFileStore:
         file_size = file_store.get_file_size(nonexistent_file_id)
 
         assert file_size is None
+
+
+@pytest.mark.usefixtures("db_session", "tenant_context")
+def test_a_failed_record_commit_cleans_up_on_the_callers_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cleanup after a failed commit looks up references on the caller's
+    session: a session bound to its connection keeps it after the rollback, so
+    a second session could wait on a full pool and leak the object."""
+
+    def no_second_session() -> AbstractContextManager[Session]:
+        raise AssertionError("the cleanup opened a second session")
+
+    def fail(_session: Session) -> None:
+        raise RuntimeError("the caller's commit check failed")
+
+    monkeypatch.setattr(
+        "onyx.file_store.file_store.get_session_with_current_tenant",
+        no_second_session,
+    )
+    deleted: list[str] = []
+    object_key = f"orphan-{uuid.uuid4()}"
+    with get_session_with_current_tenant() as db_session:
+        event.listen(db_session, "before_commit", fail, once=True)
+        with pytest.raises(RuntimeError):
+            record_uploaded_object(
+                file_id=f"{uuid.uuid4()}.txt",
+                display_name=None,
+                file_origin=FileOrigin.OTHER,
+                file_type="text/plain",
+                file_metadata=None,
+                file_size=1,
+                bucket_name="bucket",
+                object_key=object_key,
+                db_session=db_session,
+                delete_object=lambda: deleted.append(object_key),
+            )
+    assert deleted == [object_key]

@@ -7,6 +7,7 @@ on are ToolCallExceptions (errors.py:artifact_errors)."""
 import base64
 import posixpath
 import time
+from collections.abc import Sequence
 from concurrent.futures import Future
 from functools import partial
 from itertools import count
@@ -44,17 +45,22 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_QUERY_MAX_CHARS,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_TITLE_CHARS,
+    ArtifactAtPath,
+    ArtifactById,
     ArtifactCursor,
     ArtifactList,
+    KeptTitle,
     LibraryListArguments,
     LibraryListFilters,
     LibraryPrepareMaterializeArguments,
+    LibraryReplaceLibraryFileArguments,
     ListedArtifact,
     MaterializeDestination,
     MaterializedItem,
     MaterializedItems,
     PublishedFile,
-    PublishFilesArguments,
+    PublishFileArgument,
+    artifact_extension,
     artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -89,17 +95,23 @@ def _copy_directory(session_id: UUID, directory: str) -> str:
     return relative
 
 
-def create_files(
+def publish(
     turn: SandboxTurn,
     cancellation: CancellationSignal,
-    arguments: PublishFilesArguments,
+    files: Sequence[PublishFileArgument],
+    *,
+    artifact: ListedArtifact | None = None,
+    expected_version: int | None = None,
 ) -> list[PublishedFile]:
     """Copy files from the VM to the file store, each as the next version of
-    the root chat's artifact at its path, so that everyone who can read the
-    chat can download them (`access/access.py:user_can_access_chat_file`).
-    The response's save attaches them to its message
-    (`db/chat_response.py:save_chat_turn`), and a hard chat delete deletes
-    them through their artifacts, saved or not
+    an artifact (`db/chat.py:save_chat_artifact`): the root chat's artifact
+    at the file's path, or `artifact`, whose name stays, and whose newest
+    version's title stays unless the file gives one, with the
+    `expected_version` check. Everyone who can read the artifact's chat can
+    download them (`access/access.py:user_can_access_chat_file`). The
+    response's save attaches them to its message
+    (`db/chat_response.py:save_chat_turn`), and a hard chat delete of the
+    artifact's chat deletes them, saved or not
     (`db/chat.py:delete_messages_and_files_from_chat_session`). A PDF,
     PowerPoint or Word file also gets a thumbnail of its first page, drawn
     in the VM, when it renders within the call's render budget. A call
@@ -114,7 +126,7 @@ def create_files(
             # The budget starts once the call has its sandbox, so a wake
             # or a skills sync does not spend it.
             render_until = time.monotonic() + RENDER_FIRST_PAGE_BUDGET_SECONDS
-            for requested in arguments.files:
+            for requested in files:
                 cancellation.check()
                 data = sandbox.read_file(
                     ref, requested.path, max_bytes=PUBLISH_FILES_MAX_BYTES
@@ -122,11 +134,15 @@ def create_files(
                 path = posixpath.normpath(
                     posixpath.join(session_workspace(ref.session_id), requested.path)
                 )
-                name = posixpath.basename(path)
+                name = (
+                    posixpath.basename(path) if artifact is None else artifact.file_name
+                )
                 # Postgres text cannot hold NUL, and a blank title is no
                 # title
                 title = (
-                    sanitize_string(requested.title or "")
+                    KeptTitle.NEWEST
+                    if artifact is not None and requested.title is None
+                    else sanitize_string(requested.title or "")
                     .strip()[:PUBLISH_FILES_MAX_TITLE_CHARS]
                     .rstrip()
                     or None
@@ -135,7 +151,7 @@ def create_files(
                 # budget is spent, no render looks up its file or logs.
                 thumbnail = (
                     sandbox.render_first_page(ref, path, until=render_until)
-                    if posixpath.splitext(name)[1].lower() in RENDER_FIRST_PAGE_SUFFIXES
+                    if posixpath.splitext(path)[1].lower() in RENDER_FIRST_PAGE_SUFFIXES
                     and len(data) <= RENDER_FIRST_PAGE_MAX_INPUT_BYTES
                     and time.monotonic() < render_until
                     else None
@@ -145,10 +161,12 @@ def create_files(
                         data,
                         name=name,
                         mime_type=chat_output_file_type(name),
-                        chat_session_id=ref.session_id,
-                        path=path,
                         title=title,
                         thumbnail=thumbnail,
+                        target=ArtifactAtPath(chat_session_id=ref.session_id, path=path)
+                        if artifact is None
+                        else ArtifactById(artifact_id=artifact.library_file_id),
+                        expected_version=expected_version,
                     )
                 )
             # A Stop during the last copy publishes nothing.
@@ -164,6 +182,50 @@ def create_files(
                 exc_info=True,
             )
         raise
+    return published
+
+
+def check_same_type(artifact: ListedArtifact, file: str) -> None:
+    """A tool error unless `file`, a new version's content, has the
+    extension of the artifact's name by the list's last-dot rule
+    (`artifact_extension`), in any case: a new version keeps the name, and
+    so the type. `file` is normalized as publish does, so a trailing slash
+    or dot names the same file."""
+    name = posixpath.basename(posixpath.normpath(file))
+    if artifact_extension(name) != artifact_extension(artifact.file_name):
+        raise tool_error(
+            f"{name} is not a file of the type of "
+            f"{artifact.file_name}; a new version keeps the file's name and "
+            "type, so publish it as a new file instead"
+        )
+
+
+def replace_file(
+    turn: SandboxTurn,
+    cancellation: CancellationSignal,
+    arguments: LibraryReplaceLibraryFileArguments,
+) -> PublishedFile:
+    """Publish a file from the VM as the next version of an artifact in any
+    listable chat of the user (`publish`), with its name, and its newest
+    version's title unless the arguments give one. The lookup and the type
+    check come first, so a refused replace never starts the VM. Raises
+    ArtifactVersionConflict when `expected_current_version` is not the
+    newest available version; each tool words it."""
+    with artifact_errors("The replace"):
+        with get_session_with_current_tenant() as db_session:
+            artifact = get_user_published_file(
+                db_session, turn.user_id, artifact_id=arguments.library_file_id
+            )
+    if artifact is None:
+        raise tool_error(f"No published file {arguments.library_file_id} in your chats")
+    check_same_type(artifact, arguments.file)
+    [published] = publish(
+        turn,
+        cancellation,
+        [PublishFileArgument(path=arguments.file, title=arguments.title)],
+        artifact=artifact,
+        expected_version=arguments.expected_current_version,
+    )
     return published
 
 
