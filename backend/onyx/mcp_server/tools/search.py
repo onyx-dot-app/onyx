@@ -524,9 +524,10 @@ async def query_metadata(
       indexed section of a document is matched on its own, so a phrase that
       crosses two sections can be missed. Each value takes at most 200
       characters, and a value that the index analyzer reduces to no words
-      (with the default settings, "the and") is an error. It is slow: use it only for an exhaustive list or count by
-      content, add date, source or folder filters when you can, and order by
-      date. It does not work with `group_by`. A broad count can return "At
+      (with the default settings, "the and") is an error. It is slow: use it
+      only for an exhaustive list or count by content, and add date, source or
+      folder filters when you can. Lists with it sort by date only; counts take
+      no `order_by`. It does not work with `group_by`. A broad count can return "At
       least N", and a count can be higher than the rows a listing
       returns; a slow page can hold fewer rows, or none, and still return
       `next_cursor`, so keep paging while it is set. Deployments without the
