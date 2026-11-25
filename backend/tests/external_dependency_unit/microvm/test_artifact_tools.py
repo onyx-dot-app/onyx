@@ -68,7 +68,7 @@ from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -1556,16 +1556,6 @@ def test_only_the_chats_owner_gets_the_sandbox_tools(
 # models, run the same operations, so each case runs through both.
 
 
-class _ClaudeLLM(ChatLLM):
-    """A scripted Claude model: its turns get the artifact tool."""
-
-    @property
-    def config(self) -> LLMConfig:
-        return super().config.model_copy(
-            update={"model_provider": "anthropic", "model_name": "claude-sonnet-4-5"}
-        )
-
-
 class _Family:
     """How one tool family calls each operation."""
 
@@ -1859,7 +1849,7 @@ class _Library(_Family):
 
 class _Artifact(_Family):
     def llm(self, steps: list[Delta]) -> ChatLLM:
-        return _ClaudeLLM(steps)
+        return ChatLLM(steps, family=ToolFamily.CLAUDE)
 
     def publish(
         self, call_id: str, paths: list[str], title: str | None = None
@@ -2271,7 +2261,7 @@ def test_an_artifact_read_takes_urls_and_file_ids_in_path_and_paths(
     notes = _publish(source, "notes.md", b"notes")
     artifact_id = _artifact_id(first)
     chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
-    llm = _ClaudeLLM(
+    llm = ChatLLM(
         [
             tool_step(
                 ArtifactTool.NAME,
@@ -2284,7 +2274,8 @@ def test_an_artifact_read_takes_urls_and_file_ids_in_path_and_paths(
                 },
             ),
             Delta(content="Done."),
-        ]
+        ],
+        family=ToolFamily.CLAUDE,
     )
     chat.send(llm)
 
@@ -2309,7 +2300,7 @@ def test_a_claude_program_finds_the_artifact_tool_and_publishes_with_it(
 ) -> None:
     chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
     sandbox.write_file(chat.ref(db_session), "out/a.md", b"# A\n")
-    llm = _ClaudeLLM(
+    llm = ChatLLM(
         [
             code_step(
                 CLAUDE_CODE_MODE,
@@ -2320,7 +2311,8 @@ def test_a_claude_program_finds_the_artifact_tool_and_publishes_with_it(
                 "print(r['files'][0]['url'])\n",
             ),
             Delta(content="Done."),
-        ]
+        ],
+        family=ToolFamily.CLAUDE,
     )
     parts = chat.send(llm, code_mode=True)
 

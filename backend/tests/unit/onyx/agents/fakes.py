@@ -5,6 +5,7 @@ from collections.abc import (
     Generator,
     Iterable,
     Iterator,
+    Mapping,
     Sequence,
 )
 from typing import Any, override
@@ -30,6 +31,7 @@ from onyx.agents.runtime import Agent, AgentBusy, Run
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
 from onyx.llm.models import (
@@ -210,11 +212,24 @@ def direct_message_coordinator(
     return coordinator
 
 
+# A model name of each tool family (LLMConfig.tool_family).
+TEST_MODEL_NAMES: Mapping[ToolFamily, str] = {
+    ToolFamily.OPENAI: "test-model",
+    ToolFamily.CLAUDE: "claude-test-model",
+}
+
+
 class ScriptedLLM(LitellmLLM):
-    def __init__(self, steps: list[Delta], max_input_tokens: int = 4096) -> None:
+    def __init__(
+        self,
+        steps: list[Delta],
+        max_input_tokens: int = 4096,
+        family: ToolFamily = ToolFamily.OPENAI,
+    ) -> None:
         self.max_input_tokens = max_input_tokens
         self.steps = iter(steps)
         self.requests: list[dict[str, Any]] = []
+        self.family = family
 
     def redact_error(self, text: str) -> str:
         return text
@@ -223,7 +238,7 @@ class ScriptedLLM(LitellmLLM):
     def config(self) -> LLMConfig:
         return LLMConfig(
             model_provider="openai",
-            model_name="test-model",
+            model_name=TEST_MODEL_NAMES[self.family],
             max_input_tokens=self.max_input_tokens,
             temperature=0,
         )
@@ -244,16 +259,16 @@ class FakeModelClient(LLM):
     def __init__(
         self,
         reply: Callable[[GenerationRequest, CancellationSignal], AssistantMessage],
-        model_name: str = "test-model",
+        family: ToolFamily = ToolFamily.OPENAI,
     ) -> None:
         self.reply = reply
-        self.model_name = model_name
+        self.family = family
 
     @property
     def config(self) -> LLMConfig:
         return LLMConfig(
             model_provider="openai",
-            model_name=self.model_name,
+            model_name=TEST_MODEL_NAMES[self.family],
             max_input_tokens=4096,
             temperature=0,
         )

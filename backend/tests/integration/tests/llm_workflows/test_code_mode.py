@@ -15,15 +15,17 @@ from tests.integration.common_utils.integration_rows import link_persona
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.integration import IntegrationManager
-from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.mock_llm import (
-    MockLLMManager,
     MockLLMScript,
     requires_code_mode,
 )
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.tool import ToolManager
-from tests.integration.common_utils.test_models import DATestUser, ToolName
+from tests.integration.common_utils.test_models import (
+    DATestLLMProvider,
+    DATestUser,
+    ToolName,
+)
 from tests.integration.mock_services.mock_llm_server.models import (
     Reply,
     RequestConditions,
@@ -178,7 +180,9 @@ def _replayed_code_cells(packets: list[dict]) -> int:
 
 
 def test_a_claude_model_runs_programs_with_repl_and_poll(
-    admin_user: DATestUser, mock_llm: MockLLMScript
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    claude_mock_llm: DATestLLMProvider,
 ) -> None:
     """A Claude model gets the shape it is trained on: `repl` and `poll`, and
     `search_tools` and `describe_tool` in programs. A chat that switches to it
@@ -208,15 +212,6 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
             assert PersonaManager.delete(persona, user_performing_action=admin_user)
 
         link_persona(persona.id, integration_id, {})
-        claude = MockLLMManager.create(
-            mock_llm.api_base,
-            admin_user,
-            model_name="claude-sonnet-4-5-mock",
-            make_default=False,
-        )
-        cleanup.callback(
-            LLMProviderManager.delete, claude, user_performing_action=admin_user
-        )
         mock_llm.conversation(
             nonce,
             # The other shape starts cell 1 and leaves it running.
@@ -311,7 +306,7 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
             f"Use the ping tool. {nonce}",
             admin_user,
             llm_override=LLMOverride(
-                model_configuration_id=claude.model_configuration_ids[0]
+                model_configuration_id=claude_mock_llm.model_configuration_ids[0]
             ),
         )
         # The model reads the rejected poll; the stream shows it as an error.
