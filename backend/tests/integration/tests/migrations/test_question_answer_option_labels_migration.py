@@ -50,6 +50,15 @@ NEW_ANSWERS = [
     {"question_id": "scope", "option_labels": ["Company"], "user_note": "EU"},
     {"question_id": "other", "option_labels": [], "user_note": "Later"},
 ]
+# A tool's arguments in a parked response that use the answers' and the
+# questions' key names; only question results and question rows change.
+UNRELATED_ARGUMENTS = {
+    "question_id": "q1",
+    "option_label": "kept",
+    "question": "Kept?",
+    "options": [],
+    "multi_select": True,
+}
 
 
 @pytest.fixture
@@ -101,58 +110,63 @@ def test_saved_answers_name_their_options_in_a_list(engine: Engine) -> None:
         session.flush()
         chat_id, message_id, call_id = chat.id, message.id, call.id
         session.commit()
-    details = {
-        "type": "question",
-        "outcome": QuestionOutcome.ANSWERED.value,
-        "answers": OLD_ANSWERS,
-    }
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO question_request (id, chat_session_id, chat_message_id, "
-                "tool_call_id, questions, answers, outcome, answered_via) VALUES "
-                "(:id, :chat, :message, 'call_ask', CAST(:questions AS jsonb), "
-                "CAST(:answers AS jsonb), :outcome, :via)"
-            ),
-            {
-                "id": question_request_id,
-                "chat": chat_id,
-                "message": message_id,
-                "questions": json.dumps([QUESTION]),
-                "answers": json.dumps(OLD_ANSWERS),
-                "outcome": QuestionOutcome.ANSWERED.name,
-                "via": QuestionAnsweredVia.CARD.name,
-            },
-        )
-        conn.execute(
-            text("UPDATE tool_call SET result = CAST(:result AS jsonb) WHERE id = :id"),
-            {
-                "id": call_id,
-                "result": json.dumps(
-                    {
-                        "role": "tool_result",
-                        "tool_call_id": "call_ask",
-                        "tool_name": "request_user_input",
-                        "content": "",
-                        "details": details,
-                    }
-                ),
-            },
-        )
-        conn.execute(
-            text(
-                "INSERT INTO chat_response_checkpoint (chat_message_id, state) "
-                "VALUES (:message, CAST(:state AS jsonb))"
-            ),
-            {
-                "message": message_id,
-                "state": json.dumps(
-                    {"answers": {"request": {"result": {"details": details}}}}
-                ),
-            },
-        )
-
     try:
+        details = {
+            "type": "question",
+            "outcome": QuestionOutcome.ANSWERED.value,
+            "answers": OLD_ANSWERS,
+        }
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO question_request (id, chat_session_id, chat_message_id, "
+                    "tool_call_id, questions, answers, outcome, answered_via) VALUES "
+                    "(:id, :chat, :message, 'call_ask', CAST(:questions AS jsonb), "
+                    "CAST(:answers AS jsonb), :outcome, :via)"
+                ),
+                {
+                    "id": question_request_id,
+                    "chat": chat_id,
+                    "message": message_id,
+                    "questions": json.dumps([QUESTION]),
+                    "answers": json.dumps(OLD_ANSWERS),
+                    "outcome": QuestionOutcome.ANSWERED.name,
+                    "via": QuestionAnsweredVia.CARD.name,
+                },
+            )
+            conn.execute(
+                text(
+                    "UPDATE tool_call SET result = CAST(:result AS jsonb) WHERE id = :id"
+                ),
+                {
+                    "id": call_id,
+                    "result": json.dumps(
+                        {
+                            "role": "tool_result",
+                            "tool_call_id": "call_ask",
+                            "tool_name": "request_user_input",
+                            "content": "",
+                            "details": details,
+                        }
+                    ),
+                },
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO chat_response_checkpoint (chat_message_id, state) "
+                    "VALUES (:message, CAST(:state AS jsonb))"
+                ),
+                {
+                    "message": message_id,
+                    "state": json.dumps(
+                        {
+                            "answers": {"request": {"result": {"details": details}}},
+                            "arguments": UNRELATED_ARGUMENTS,
+                        }
+                    ),
+                },
+            )
+
         upgrade_postgres(database=POSTGRES_DB, config_name="alembic", revision="head")
         with Session(engine) as session:
             question = session.get(QuestionRequest, question_request_id)
@@ -174,7 +188,8 @@ def test_saved_answers_name_their_options_in_a_list(engine: Engine) -> None:
                     "request": {
                         "result": {"details": {**details, "answers": NEW_ANSWERS}}
                     }
-                }
+                },
+                "arguments": UNRELATED_ARGUMENTS,
             }
 
         # The downgrade keeps the first option of each answer, and drops
@@ -229,6 +244,16 @@ def test_saved_answers_name_their_options_in_a_list(engine: Engine) -> None:
                 ),
                 {"id": question_request_id, "call": call_id, "message": message_id},
             ).one() == ([QUESTION], first, first, first)
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT state -> 'arguments' FROM chat_response_checkpoint "
+                        "WHERE chat_message_id = :message"
+                    ),
+                    {"message": message_id},
+                ).scalar_one()
+                == UNRELATED_ARGUMENTS
+            )
     finally:
         with engine.begin() as conn:
             conn.execute(
