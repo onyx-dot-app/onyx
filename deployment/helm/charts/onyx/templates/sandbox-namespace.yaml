@@ -1,4 +1,5 @@
-{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" }}
+{{- /* Also for Firecracker: sandbox-proxy writes its egress CA ConfigMap here. */}}
+{{- if include "onyx.sandboxProxyEnabled" . }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 apiVersion: v1
 kind: Namespace

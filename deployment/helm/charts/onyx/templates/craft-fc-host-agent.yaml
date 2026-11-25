@@ -1,6 +1,8 @@
 {{/*
-Craft Firecracker host agent. Rendered only with
-craft.sandboxRuntime=firecracker. Render tests in
+Craft Firecracker host agent. Rendered when onyx.craftFcEnabled (always
+with craft.sandboxRuntime=firecracker; with "auto" when the chart has every
+input), with or without ENABLE_CRAFT. Without onyx.app/kvm=true nodes the
+DaemonSet has no pods. Render tests in
 backend/tests/external_dependency_unit/craft_helm/test_craft_fc_host_agent.py.
 Agent flags and node requirements: microvm/README.md.
 
@@ -59,10 +61,7 @@ Agent flags and node requirements: microvm/README.md.
   Secret applies without a restart.
 */}}
 {{- $craft := .Values.craft | default dict }}
-{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
-{{- if ne (include "onyx.craftEnabled" .) "true" }}
-{{- fail "craft.sandboxRuntime=firecracker needs configMap.ENABLE_CRAFT=true" }}
-{{- end }}
+{{- if include "onyx.craftFcEnabled" . }}
 {{- $agent := $craft.hostAgent | default dict }}
 {{- $ns := include "onyx.craftHostAgentNamespace" . }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
@@ -79,7 +78,7 @@ Agent flags and node requirements: microvm/README.md.
 {{- $clientSecret := include "onyx.craftFcAgentClient.secretName" . }}
 {{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict }}
 {{- if ne (toString $reg.enabled) "true" }}
-{{- fail "auth.sandboxNodeRegistration.enabled must be true with craft.sandboxRuntime=firecracker" }}
+{{- fail "auth.sandboxNodeRegistration.enabled must be true with craft.sandboxRuntime=firecracker (with \"auto\" the chart then renders no Firecracker parts)" }}
 {{- end }}
 {{- /* The key the api_server reads (auth.sandboxNodeRegistration.secretKeys); the agent copy uses the same key. */}}
 {{- $regKey := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg }}
