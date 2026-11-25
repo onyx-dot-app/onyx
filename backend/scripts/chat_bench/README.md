@@ -19,7 +19,7 @@ Setup drops and creates the database on each run, and refuses a database or inde
 without the `chat_bench` prefix.
 
 `scripts/chat_bench/server.py` starts the real API server with counters added from outside:
-SQL statements, commits, connection checkouts, cache commands and threads started. No
+SQL statements, commits, connection checkouts, cache round trips and threads started. No
 product code knows about them.
 
 ## Run it
@@ -33,9 +33,9 @@ uv run python -m scripts.benchmark_chat_turn --json-out report.json
 
 | Option | Use |
 | --- | --- |
-| `--scenarios` | `warm` (the second turn of a session), `new-session` (the send creates the session), `long-history` (a session with 40 turns) |
+| `--scenarios` | `warm` (the second turn of a session), `new-session` (the send creates the session), `long-history` (a session with 40 turns, which grows by one turn for each measured turn), `long-answer` (a warm turn whose answer comes in 300 chunks) |
 | `--turns` | Measured turns per scenario. The default is 30 |
-| `--sample-ms` | Sample the stacks of all server threads at this interval. The report then holds `stack_samples`. It slows the run, so do not compare its timings |
+| `--sample-ms` | Sample the stacks of all server threads at this interval, and record the Onyx call site of each SQL statement. The stacks show where threads wait, not where the CPU goes. It slows the run, so do not compare its timings |
 | `--update-golden` | Store the digests and counts of this run as the expected values |
 
 ## Read the report
@@ -43,7 +43,14 @@ uv run python -m scripts.benchmark_chat_turn --json-out report.json
 - **CPU per turn** is the CPU time of the API server process divided by the turns. It is the
   most stable timing on a busy machine.
 - **Per turn** counts are almost exact. The server runs a few statements of its own between
-  turns, so a count can be a fraction above a whole number.
+  turns, so a count can be a fraction above a whole number. A connection checkout also sends
+  a pool ping, which the statement count does not include. A cache round trip is one command,
+  one pipeline, or one WATCH or read inside a pipeline.
+- **`long-answer`** shows the CPU for each streamed chunk. Compare its CPU per turn with
+  `warm`: the difference is the cost of 300 chunks.
+- The benchmark database has no license, no connector, no web search provider and no
+  integration. Each request therefore takes the unlicensed path of the license check, and the
+  tool checks take their path for an empty deployment.
 - **First token** is split in three. *Before the LLM* ends when the mock receives the request:
   auth, turn preparation, tools, the run store and LiteLLM. *In the mock LLM* is a control
   value. *After the LLM* ends when the client reads the first content: accumulator, dispatcher,
@@ -66,7 +73,7 @@ The exit status is 1 when a gate fails.
 | The reserved id comes before the answer | A break of `reserve-before-first-token` |
 | Transcript digest equals golden | Any change to packet types, order, placement or content |
 | LLM request digest equals golden | Any change to the prompt, history, tools or parameters |
-| Statements, commits, cache commands and threads per turn not above golden | A change that adds round trips |
+| Statements, commits, checkouts, cache round trips and threads per turn not above golden | A change that adds round trips, a commit or a thread |
 | No traceback in the API server log | An error that the stream hides |
 
 The golden values are in `golden.json`. Dates and times in the LLM request are replaced

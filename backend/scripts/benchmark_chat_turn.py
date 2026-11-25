@@ -54,9 +54,13 @@ _ANSWER = (
 )
 _QUESTION = "What is the status of the quarterly migration project?"
 
-_SCENARIOS = ("warm", "new-session", "long-history")
+# A long answer in many chunks, as a real model streams it.
+_LONG_ANSWER = " ".join([_ANSWER] * 12)
+_LONG_ANSWER_FRAGMENTS = 300
+
+_SCENARIOS = ("warm", "new-session", "long-history", "long-answer")
 _LONG_HISTORY_TURNS = 40
-_WARM_UP_TURNS = 3
+_WARM_UP_TURNS = 10
 
 # Parts of the LLM request that change between runs with no change in content.
 _VOLATILE_PATTERNS = (
@@ -210,14 +214,23 @@ class Bench:
                 ],
             },
         )
+        if response.status_code == 403:
+            # The first user of a new database is the admin.
+            raise RuntimeError(
+                "The benchmark user is not the admin: another process wrote a "
+                "user to the benchmark database during setup. Run again."
+            )
         response.raise_for_status()
         self.client.post(
             "/admin/llm/default",
             json={"provider_id": response.json()["id"], "model_name": _MODEL_NAME},
         ).raise_for_status()
 
-    def reset_mock(self) -> None:
-        script = {"conversations": [], "default_reply": {"text": _ANSWER}}
+    def reset_mock(self, long_answer: bool) -> None:
+        reply: dict[str, Any] = {"text": _ANSWER}
+        if long_answer:
+            reply = {"text": _LONG_ANSWER, "text_fragments": _LONG_ANSWER_FRAGMENTS}
+        script = {"conversations": [], "default_reply": reply}
         self.mock.put(f"/scripts/{_SCRIPT_ID}", json=script).raise_for_status()
 
     def create_session(self) -> str:
@@ -247,8 +260,8 @@ class Bench:
 
     # -- one turn ------------------------------------------------------------
 
-    def turn(self, session_id: str | None) -> TurnResult:
-        self.reset_mock()
+    def turn(self, session_id: str | None, long_answer: bool = False) -> TurnResult:
+        self.reset_mock(long_answer)
         body: dict[str, Any] = {"message": _QUESTION, "stream": True}
         if session_id is None:
             body["chat_session_info"] = {
@@ -349,7 +362,8 @@ def _p95(values: list[float | None]) -> float | None:
 def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
     """Prepares the sessions, then measures `turns` turns one after the other."""
     sessions: list[str | None]
-    if name == "warm":
+    long_answer = name == "long-answer"
+    if name in ("warm", "long-answer"):
         # The second turn of a session that holds one earlier exchange.
         sessions = []
         for _ in range(turns):
@@ -369,7 +383,7 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
     before = bench.stats()
     breakdown_before = bench.breakdown()
     started = time.monotonic()
-    results = [bench.turn(session_id) for session_id in sessions]
+    results = [bench.turn(session_id, long_answer) for session_id in sessions]
     elapsed = time.monotonic() - started
     after = bench.stats()
     breakdown_after = bench.breakdown()
@@ -382,14 +396,14 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
         ranked = sorted(difference.items(), key=lambda item: -item[1])
         return {key: round(value, 2) for key, value in ranked[:top] if value > 0}
 
+    cpu_keys = ("cpu_user_seconds", "cpu_system_seconds")
     per_turn = {
         key: round((after[key] - before[key]) / turns, 3)
         for key in before
-        if key not in ("rss_mb", "threads_alive")
+        if key not in ("rss_mb", "threads_alive", *cpu_keys)
     }
     per_turn["cpu_ms"] = round(
-        (per_turn.pop("cpu_user_seconds") + per_turn.pop("cpu_system_seconds")) * 1000,
-        2,
+        sum(after[key] - before[key] for key in cpu_keys) / turns * 1000, 2
     )
     saved = [bench.saved_answer(result.session_id) for result in results[-3:]]
     timings = [result.model_dump() for result in results]
@@ -418,12 +432,24 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
         },
         "breakdown_per_turn": {
             "sql_statements": per_turn_breakdown("sql_statements", 200),
-            "cache_commands": per_turn_breakdown("cache_commands", 50),
+            "cache_commands": per_turn_breakdown("cache_commands", 1000),
             "stack_samples": per_turn_breakdown("stack_samples", 400),
         },
         "results": [result.model_dump() for result in results],
         "saved_answers": saved,
     }
+
+
+# How far a count per turn may be above golden. The server runs a few
+# statements and cache calls of its own between turns; it starts no thread and
+# makes no commit there.
+_COUNT_TOLERANCES = {
+    "sql_statements": 1.0,
+    "sql_connections_checked_out": 0.5,
+    "cache_round_trips": 1.0,
+    "sql_commits": 0.1,
+    "threads_started": 0.1,
+}
 
 
 def _check_scenario(
@@ -435,6 +461,7 @@ def _check_scenario(
 ) -> None:
     results = [TurnResult.model_validate(r) for r in entry["results"]]
     turns = len(results)
+    answer = _LONG_ANSWER if name == "long-answer" else _ANSWER
 
     def count(predicate: Any) -> int:
         return sum(1 for result in results if predicate(result))
@@ -451,7 +478,7 @@ def _check_scenario(
     )
     gates.check(
         f"{name}: the answer is the mock answer",
-        count(lambda r: r.answer == _ANSWER) == turns,
+        count(lambda r: r.answer == answer) == turns,
     )
     gates.check(
         f"{name}: one LLM request per turn",
@@ -473,7 +500,7 @@ def _check_scenario(
     )
     gates.check(
         f"{name}: the saved answer equals the stream",
-        all(saved == _ANSWER for saved in entry["saved_answers"]),
+        all(saved == answer for saved in entry["saved_answers"]),
     )
 
     transcripts = sorted({r.transcript_digest for r in results})
@@ -496,7 +523,8 @@ def _check_scenario(
         "first_request_digest": results[0].request_digest,
         "sql_statements": entry["per_turn"]["sql_statements"],
         "sql_commits": entry["per_turn"]["sql_commits"],
-        "cache_commands": entry["per_turn"]["cache_commands"],
+        "sql_connections_checked_out": entry["per_turn"]["sql_connections_checked_out"],
+        "cache_round_trips": entry["per_turn"]["cache_round_trips"],
         "threads_started": entry["per_turn"]["threads_started"],
     }
     if update_golden:
@@ -516,11 +544,10 @@ def _check_scenario(
             current[field] == expected.get(field),
             f"{current[field]} vs golden {expected.get(field)}",
         )
-    for field in ("sql_statements", "sql_commits", "cache_commands", "threads_started"):
+    for field, tolerance in _COUNT_TOLERANCES.items():
         gates.check(
             f"{name}: {field} per turn not above golden",
-            # The server also runs a few statements of its own between turns.
-            current[field] <= expected.get(field, 0) + 1.0,
+            current[field] <= expected.get(field, 0) + tolerance,
             f"{current[field]} vs golden {expected.get(field)}",
         )
 
@@ -538,7 +565,8 @@ def _print_scenario(name: str, entry: dict[str, Any]) -> None:
         f"  Per turn:            {per_turn['sql_statements']} SQL statements, "
         f"{per_turn['sql_commits']} commits, "
         f"{per_turn['sql_connections_checked_out']} connection checkouts, "
-        f"{per_turn['cache_commands']} cache commands, "
+        f"{per_turn['cache_round_trips']} cache round trips "
+        f"({per_turn['cache_commands']} commands), "
         f"{per_turn['threads_started']} threads"
     )
     print(f"  First token ms:      {pair('first_token_ms')}  (median / p95)")

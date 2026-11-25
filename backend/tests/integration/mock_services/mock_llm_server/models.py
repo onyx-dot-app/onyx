@@ -53,6 +53,8 @@ class Reply(BaseModel):
     # Hold the stream after its first text chunk until the test releases this gate.
     pause_after_first_chunk: str | None = None
     heartbeat_while_paused: bool = False
+    # Stream the text in this number of chunks. The default is 3.
+    text_fragments: int | None = None
     # End the stream with this provider error after the text, as a failed call.
     error_after_text: str | None = None
 

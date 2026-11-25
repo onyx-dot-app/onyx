@@ -27,6 +27,7 @@ _counts: dict[str, int] = {
     "sql_rollbacks": 0,
     "sql_connections_checked_out": 0,
     "cache_commands": 0,
+    "cache_round_trips": 0,
     "threads_started": 0,
 }
 
@@ -40,6 +41,23 @@ _WHITESPACE = re.compile(r"\s+")
 _IN_LIST = re.compile(r"IN \([^)]*\)")
 
 
+_CALL_SITES = bool(os.environ.get("CHAT_BENCH_SAMPLE_MS"))
+
+
+def _call_site() -> str:
+    """The Onyx frames that issued a statement, innermost first."""
+    frame: Any = sys._getframe(2)
+    sites: list[str] = []
+    while frame is not None and len(sites) < 3:
+        filename = frame.f_code.co_filename
+        if "/onyx/" in filename and "/db/engine/" not in filename:
+            sites.append(
+                f"{os.path.basename(filename)}:{frame.f_code.co_name}:{frame.f_lineno}"
+            )
+        frame = frame.f_back
+    return " < ".join(sites)
+
+
 def _add(key: str, amount: int = 1) -> None:
     with _lock:
         _counts[key] += amount
@@ -51,6 +69,8 @@ def _install_counters() -> None:
         _conn: Any, _cursor: Any, statement: str, *_args: Any, **_kwargs: Any
     ) -> None:
         shape = _IN_LIST.sub("IN (...)", _WHITESPACE.sub(" ", statement))[:160]
+        if _CALL_SITES:
+            shape = f"{shape} @ {_call_site()}"
         with _lock:
             _counts["sql_statements"] += 1
             _sql_statements[shape] += 1
@@ -72,6 +92,7 @@ def _install_counters() -> None:
     def counted_command(self: Any, *args: Any, **kwargs: Any) -> Any:
         with _lock:
             _counts["cache_commands"] += 1
+            _counts["cache_round_trips"] += 1
             _cache_commands[str(args[0]) if args else "?"] += 1
         return execute_command(self, *args, **kwargs)
 
@@ -82,10 +103,23 @@ def _install_counters() -> None:
     def counted_pipeline(self: Any, *args: Any, **kwargs: Any) -> Any:
         with _lock:
             _counts["cache_commands"] += max(len(self.command_stack), 1)
+            _counts["cache_round_trips"] += 1
             _cache_commands["pipeline"] += 1
         return pipeline_execute(self, *args, **kwargs)
 
     redis.client.Pipeline.execute = counted_pipeline
+
+    # WATCH, and each read after it, goes to the server at once.
+    immediate = redis.client.Pipeline.immediate_execute_command
+
+    def counted_immediate(self: Any, *args: Any, **kwargs: Any) -> Any:
+        with _lock:
+            _counts["cache_commands"] += 1
+            _counts["cache_round_trips"] += 1
+            _cache_commands[f"pipeline {args[0]}" if args else "?"] += 1
+        return immediate(self, *args, **kwargs)
+
+    redis.client.Pipeline.immediate_execute_command = counted_immediate
 
     thread_start = threading.Thread.start
 

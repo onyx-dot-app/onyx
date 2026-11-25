@@ -144,8 +144,8 @@ def _pending_required(entry: _Entry) -> list[str]:
     ]
 
 
-def _fragments(text: str) -> list[str]:
-    size = max(1, -(-len(text) // _FRAGMENTS))
+def _fragments(text: str, count: int = _FRAGMENTS) -> list[str]:
+    size = max(1, -(-len(text) // count))
     return [text[i : i + size] for i in range(0, len(text), size)]
 
 
@@ -191,7 +191,8 @@ def _sse(
     yield _delta(model, {"role": "assistant", "content": ""})
     for piece in _fragments(reply.reasoning or ""):
         yield _delta(model, {"reasoning_content": piece})
-    for index, piece in enumerate(_fragments(reply.text or "")):
+    text_fragments = reply.text_fragments or _FRAGMENTS
+    for index, piece in enumerate(_fragments(reply.text or "", text_fragments)):
         if index == 0 and recorded is not None:
             recorded.first_text_at = time.monotonic()
         yield _delta(model, {"content": piece})
