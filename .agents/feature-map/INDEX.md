@@ -3,7 +3,8 @@
 Every component in the map, grouped by domain, and the recipes for common tasks.
 How to use the map is in [README.md](README.md). How the domains connect is in
 [ARCHITECTURE.md](ARCHITECTURE.md). Rules that every change must follow are in
-[CROSS-CUTTING.md](CROSS-CUTTING.md).
+[CROSS-CUTTING.md](CROSS-CUTTING.md). Temporary shapes and planned removals are
+in [TECH-DEBT.md](TECH-DEBT.md).
 
 Onyx is two products on one platform. **Chat and Search** answers questions
 from connected company data with citations. **Craft** runs a coding agent in a
