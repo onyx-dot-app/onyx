@@ -13105,6 +13105,13 @@
         "title": "Cannot preview this file",
         "description": "The file could not be shown here. Download the file to open it."
       },
+      "unavailable": {
+        "title": "No preview for this file",
+        "description": "A preview of this file cannot be made. Download the file to open it."
+      },
+      "preparing": {
+        "status": "Preparing the preview. This can take a little while."
+      },
       "unsupported": {
         "title": "Preview for this file type is not currently supported",
         "description": "Download the file to view its contents."

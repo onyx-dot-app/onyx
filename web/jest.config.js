@@ -29,8 +29,6 @@ const esmPackages = [
   "until-async",
   // Language Detection
   "linguist-languages",
-  // PowerPoint slides
-  "@jvmr",
   // Markdown & Syntax Highlighting
   "react-markdown",
   "remark-.*", // All remark packages

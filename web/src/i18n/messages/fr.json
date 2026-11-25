@@ -13105,6 +13105,13 @@
         "title": "Impossible de prévisualiser ce fichier",
         "description": "Le fichier ne peut pas être affiché ici. Téléchargez le fichier pour l’ouvrir."
       },
+      "unavailable": {
+        "title": "Aucun aperçu pour ce fichier",
+        "description": "Impossible de créer un aperçu de ce fichier. Téléchargez le fichier pour l’ouvrir."
+      },
+      "preparing": {
+        "status": "Préparation de l’aperçu. Cela peut prendre un peu de temps."
+      },
       "unsupported": {
         "title": "L’aperçu de ce type de fichier n’est pas disponible actuellement",
         "description": "Téléchargez le fichier pour consulter son contenu."

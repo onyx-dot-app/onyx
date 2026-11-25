@@ -7,16 +7,11 @@
  *   2. `mockChatEndpoint` / `mockChatEndpointSequence` — register
  *      `page.route` handlers that fulfill the endpoint with a provided body.
  *
- * `mockChatFilePdfPreview` stands in for the server's PDF of a Word or
- * PowerPoint file, which a test stack without a sandbox cannot make.
- *
  * Specs that share a module instance (same worker process) share the
  * `turnCounter` used to generate unique message IDs. Call
  * `resetTurnCounter()` in `beforeEach` so IDs start fresh per test.
  */
 
-import { readFileSync } from "fs";
-import { join } from "path";
 import type { Page } from "@playwright/test";
 
 let turnCounter = 0;
@@ -529,20 +524,4 @@ export async function mockChatEndpointSequence(
       body: buildMockStream(content),
     });
   });
-}
-
-/**
- * Serves a two-page PDF as the server's PDF of every chat file
- * (`/api/chat/file/{id}?preview=pdf`). Register it after any route that
- * serves the original file, so that it handles the PDF request first.
- */
-export async function mockChatFilePdfPreview(page: Page): Promise<void> {
-  const pdf = readFileSync(join(__dirname, "../fixtures/two_pages.pdf"));
-  await page.route(
-    (url) =>
-      url.pathname.startsWith("/api/chat/file/") &&
-      url.searchParams.get("preview") === "pdf",
-    (route) =>
-      route.fulfill({ status: 200, contentType: "application/pdf", body: pdf })
-  );
 }

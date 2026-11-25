@@ -24,6 +24,8 @@ const SPREADSHEET_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.ms-excel.sheet.macroenabled.12",
 ];
+// Matches the types the server converts to a PDF: RENDER_PREVIEW_PDF_MIME_TYPES
+// in backend/onyx/server/features/build/sandbox/harness_base.py
 const OFFICE_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",

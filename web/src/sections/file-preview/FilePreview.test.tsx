@@ -21,10 +21,29 @@ jest.mock("@/lib/chat/svc", () => ({
   fetchChatFile: jest.fn(),
 }));
 
-const mockPdfLoad: { fail: boolean; pageFail: "load" | "render" | null } = {
+interface MockPdfPage {
+  getViewport: (params: { scale: number }) => { width: number; height: number };
+}
+
+const mockPdfLoad: {
+  fail: boolean;
+  pageFail: "load" | "render" | null;
+  // Each page's width and height; a page not listed is US Letter
+  pageSizes: Record<number, [number, number]>;
+  // Settles before the document returns a page
+  pageReady: Promise<void>;
+} = {
   fail: false,
   pageFail: null,
+  pageSizes: {},
+  pageReady: Promise.resolve(),
 };
+
+function mockPdfPage(pageNumber: number): MockPdfPage {
+  const [width, height] = mockPdfLoad.pageSizes[pageNumber] ?? [612, 792];
+  return { getViewport: () => ({ width, height }) };
+}
+
 jest.mock("react-pdf", () => ({
   pdfjs: { version: "test", GlobalWorkerOptions: {} },
   Document: ({
@@ -33,27 +52,41 @@ jest.mock("react-pdf", () => ({
     onLoadError,
   }: {
     children: ReactNode;
-    onLoadSuccess: (pdf: { numPages: number }) => void;
+    onLoadSuccess: (pdf: {
+      numPages: number;
+      getPage: (pageNumber: number) => Promise<MockPdfPage>;
+    }) => void;
     onLoadError: () => void;
   }) => {
     useEffect(() => {
       if (mockPdfLoad.fail) onLoadError();
-      else onLoadSuccess({ numPages: 3 });
+      else
+        onLoadSuccess({
+          numPages: 3,
+          getPage: async (pageNumber) => {
+            await mockPdfLoad.pageReady;
+            return mockPdfPage(pageNumber);
+          },
+        });
     }, []);
     return <div>{children}</div>;
   },
   Page: ({
     pageNumber,
     scale,
+    onLoadSuccess,
     onLoadError,
     onRenderError,
   }: {
     pageNumber: number;
     scale?: number;
+    onLoadSuccess?: (page: MockPdfPage) => void;
     onLoadError?: (error: Error) => void;
     onRenderError?: (error: Error) => void;
   }) => {
     useEffect(() => {
+      if (mockPdfLoad.pageFail === null)
+        onLoadSuccess?.(mockPdfPage(pageNumber));
       if (scale === undefined) return;
       if (mockPdfLoad.pageFail === "load") onLoadError?.(new Error("load"));
       if (mockPdfLoad.pageFail === "render")
@@ -91,9 +124,12 @@ function expectDownloadLink(name: string, fileName: string) {
   expect(within(link).queryByRole("button")).toBeNull();
 }
 
-/** A file that cannot render shows one card, with the only download. */
-function expectUnavailableCard(fileName: string) {
-  expect(screen.getByText("Cannot preview this file")).toBeVisible();
+/** A file that cannot show shows one card, with the only download. */
+function expectUnavailableCard(
+  fileName: string,
+  title = "Cannot preview this file"
+) {
+  expect(screen.getByText(title)).toBeVisible();
   expect(screen.getAllByRole("link")).toHaveLength(1);
   expectDownloadLink("Download File", fileName);
 }
@@ -107,6 +143,8 @@ beforeAll(() => {
 beforeEach(() => {
   mockPdfLoad.fail = false;
   mockPdfLoad.pageFail = null;
+  mockPdfLoad.pageSizes = {};
+  mockPdfLoad.pageReady = Promise.resolve();
 });
 
 describe("loading and failure", () => {
@@ -124,11 +162,28 @@ describe("loading and failure", () => {
     expect(
       await screen.findByRole("status", { name: "Loading" })
     ).toBeVisible();
+    expect(
+      screen.queryByText("Preparing the preview. This can take a little while.")
+    ).toBeNull();
     await act(async () =>
       respond(fileResponse("hello", "text/plain", "notes.txt"))
     );
     expect(await screen.findByText("hello")).toBeVisible();
     expect(screen.queryByRole("status", { name: "Loading" })).toBeNull();
+  });
+
+  test("a Word or PowerPoint file says that its preview is being prepared", async () => {
+    jest.mocked(fetchChatFile).mockReturnValue(new Promise(() => undefined));
+    renderPreview("deck.pptx");
+
+    const status = await screen.findByText(
+      "Preparing the preview. This can take a little while."
+    );
+    expect(status).toBeVisible();
+    expect(status.closest("[aria-live]")).toHaveAttribute(
+      "aria-live",
+      "polite"
+    );
   });
 
   test("a failed load offers the download and a retry that loads again", async () => {
@@ -521,6 +576,27 @@ describe("documents", () => {
     expectDownloadLink("Download", "report.pdf");
   });
 
+  test("a PDF shows the loader until its first page loads", async () => {
+    let firstPageReady: () => void = () => undefined;
+    mockPdfLoad.pageReady = new Promise((resolve) => {
+      firstPageReady = resolve;
+    });
+    jest
+      .mocked(fetchChatFile)
+      .mockResolvedValue(
+        fileResponse("%PDF-1.4", "application/pdf", "report.pdf")
+      );
+    renderPreview("report.pdf");
+
+    expect(
+      await screen.findByRole("status", { name: "Loading" })
+    ).toBeVisible();
+    expect(screen.queryByText("1 / 3")).toBeNull();
+    await act(async () => firstPageReady());
+    expect(await screen.findByText("1 / 3")).toBeVisible();
+    expect(screen.queryByRole("status", { name: "Loading" })).toBeNull();
+  });
+
   test("a PDF that does not open offers one download", async () => {
     mockPdfLoad.fail = true;
     jest
@@ -548,38 +624,17 @@ describe("documents", () => {
     }
   );
 
-  test.each([
-    [
-      "deck.pptx",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ],
-    [
-      "letter.docx",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ],
-  ])(
-    "%s shows as the PDF pages that the server converts it to, and downloads the original",
-    async (name, mimeType) => {
-      jest
-        .mocked(fetchChatFile)
-        .mockImplementation(async (_fileId, variant) =>
-          variant === "pdf"
-            ? fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
-            : fileResponse("original", mimeType, name)
-        );
-      renderPreview(name);
-
-      expect(await screen.findByText("1 / 3")).toBeVisible();
-      expect(fetchChatFile).toHaveBeenCalledTimes(1);
-      expect(fetchChatFile).toHaveBeenCalledWith(
-        "file-1",
-        "pdf",
-        expect.any(AbortSignal)
+  test("a deck shows as the PDF pages that the server converts it to, and downloads the original", async () => {
+    jest
+      .mocked(fetchChatFile)
+      .mockResolvedValue(
+        fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
       );
-      expect(screen.getByTestId("pdf-page")).toHaveAttribute("data-page", "1");
-      expectDownloadLink("Download", name);
-    }
-  );
+    renderPreview("deck.pptx");
+
+    expect(await screen.findByText("1 / 3")).toBeVisible();
+    expectDownloadLink("Download", "deck.pptx");
+  });
 
   test("a deck that the server cannot convert offers one download and no retry", async () => {
     jest.mocked(fetchChatFile).mockRejectedValue(
@@ -590,9 +645,40 @@ describe("documents", () => {
     );
     renderPreview("deck.pptx");
 
-    await screen.findByText("Cannot preview this file");
-    expectUnavailableCard("deck.pptx");
+    await screen.findByText("No preview for this file");
+    expectUnavailableCard("deck.pptx", "No preview for this file");
+    expect(
+      screen.getByText(
+        "A preview of this file cannot be made. Download the file to open it."
+      )
+    ).toBeVisible();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  test("a thumbnail takes its page's shape: the first page's until it loads its own", async () => {
+    mockPdfLoad.pageSizes = { 1: [1280, 720], 2: [612, 792] };
+    jest
+      .mocked(fetchChatFile)
+      .mockResolvedValue(
+        fileResponse("%PDF-1.4", "application/pdf", "slides.pdf")
+      );
+    renderPreview("slides.pdf");
+
+    await screen.findByText("1 / 3");
+    const box = (page: number) =>
+      screen.getByRole("button", { name: `Go to page ${page}` })
+        .firstElementChild?.firstElementChild;
+    // A landscape slide gets a landscape box, and so does a page that has
+    // not loaded its own shape
+    expect(box(1)).toHaveStyle({ aspectRatio: String(1280 / 720) });
+    expect(box(2)).toHaveStyle({ aspectRatio: String(1280 / 720) });
+    // A page of another size gets its own shape once it loads, and keeps it
+    // when its drawing is dropped
+    fireEvent.click(screen.getByRole("button", { name: "Go to page 2" }));
+    expect(box(2)).toHaveStyle({ aspectRatio: String(612 / 792) });
+    fireEvent.click(screen.getByRole("button", { name: "Go to page 3" }));
+    expect(box(2)?.childElementCount).toBe(0);
+    expect(box(2)).toHaveStyle({ aspectRatio: String(612 / 792) });
   });
 
   /** Observed elements, each resized through its observer's callback. */

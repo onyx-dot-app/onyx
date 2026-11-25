@@ -13105,6 +13105,13 @@
         "title": "No se puede previsualizar este archivo",
         "description": "El archivo no se puede mostrar aquí. Descarga el archivo para abrirlo."
       },
+      "unavailable": {
+        "title": "No hay vista previa para este archivo",
+        "description": "No se puede crear una vista previa de este archivo. Descarga el archivo para abrirlo."
+      },
+      "preparing": {
+        "status": "Preparando la vista previa. Esto puede tardar un poco."
+      },
       "unsupported": {
         "title": "La vista previa de este tipo de archivo no está disponible actualmente",
         "description": "Descarga el archivo para ver su contenido."

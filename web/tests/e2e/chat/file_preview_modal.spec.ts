@@ -1,7 +1,6 @@
-import { test, expect, Page } from "@playwright/test";
+import { test, expect, Page, type Request } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
 import { FilePreviewModalPage } from "@tests/e2e/pages/FilePreviewModalPage";
-import { mockChatFilePdfPreview } from "@tests/e2e/utils/chatMock";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -109,6 +108,14 @@ async function sendMessageWithMockResponse(
 }
 
 const MOCK_FILE_ID = "00000000-0000-0000-0000-000000000001";
+
+/** The request for the mock file's stored PDF. */
+function isMockFilePdfPreview(url: URL): boolean {
+  return (
+    url.pathname === `/api/chat/file/${MOCK_FILE_ID}` &&
+    url.searchParams.get("preview") === "pdf"
+  );
+}
 
 test.describe("File preview modal from chat file links", () => {
   test.beforeEach(async ({ page }) => {
@@ -233,23 +240,41 @@ test.describe("File preview modal from chat file links", () => {
     expect(download.suggestedFilename()).toContain("data.csv");
   });
 
-  test("clicking a .docx file link opens the preview modal and shows the server's PDF", async ({
+  test("clicking a .docx file link without a stored PDF has the server convert it, then shows the PDF", async ({
     page,
   }) => {
     const mockContent = `Here is your document: [report.docx](/api/chat/file/${MOCK_FILE_ID})`;
-    const docxBuffer = fs.readFileSync(
-      path.join(__dirname, "../fixtures/three_images.docx")
+    const pdfBuffer = fs.readFileSync(
+      path.join(__dirname, "../fixtures/two_pages.pdf")
     );
-
-    await page.route(`**/api/chat/file/${MOCK_FILE_ID}`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType:
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        body: docxBuffer,
-      });
-    });
-    await mockChatFilePdfPreview(page);
+    await page.route(isMockFilePdfPreview, (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({
+              error_code: "PREVIEW_NOT_READY",
+              detail: "The file has no stored preview",
+            }),
+          })
+        : route.fallback()
+    );
+    const isConversion = (request: Request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname ===
+        `/api/chat/file/${MOCK_FILE_ID}/preview`;
+    await page.route(
+      (url) => url.pathname === `/api/chat/file/${MOCK_FILE_ID}/preview`,
+      (route) =>
+        isConversion(route.request())
+          ? route.fulfill({
+              status: 200,
+              contentType: "application/pdf",
+              body: pdfBuffer,
+            })
+          : route.fallback()
+    );
+    const conversion = page.waitForRequest(isConversion);
 
     await sendMessageWithMockResponse(
       page,
@@ -259,8 +284,31 @@ test.describe("File preview modal from chat file links", () => {
 
     const previewModal = new FilePreviewModalPage(page);
     await previewModal.openFromLastAnswer("report.docx");
+    await conversion;
     await previewModal.expectFileWithDownload("report.docx");
     await previewModal.expectPdfPage(1, 2);
+  });
+
+  test("a .pptx file that the server cannot convert shows that it has no preview", async ({
+    page,
+  }) => {
+    const mockContent = `Here is your deck: [deck.pptx](/api/chat/file/${MOCK_FILE_ID})`;
+    await page.route(isMockFilePdfPreview, (route) =>
+      route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error_code: "PREVIEW_UNAVAILABLE",
+          detail: "The file cannot be converted to a PDF",
+        }),
+      })
+    );
+
+    await sendMessageWithMockResponse(page, "Give me the deck", mockContent);
+
+    const previewModal = new FilePreviewModalPage(page);
+    await previewModal.openFromLastAnswer("deck.pptx");
+    await previewModal.expectNoPreview();
   });
 
   test("clicking a PDF file link opens the preview modal and pages through it", async ({

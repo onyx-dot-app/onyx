@@ -1,8 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
 import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
-import { FilePreviewModalPage } from "@tests/e2e/pages/FilePreviewModalPage";
 import { CHECKERED_PNG } from "@tests/e2e/fixtures/images";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
@@ -10,7 +7,6 @@ import {
   buildMockImageGenStream,
   buildMockStream,
   mockChatEndpoint,
-  mockChatFilePdfPreview,
   resetTurnCounter,
 } from "@tests/e2e/utils/chatMock";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
@@ -361,43 +357,6 @@ test.describe("Chat File Uploads", () => {
       await expectElementScreenshot(modal, {
         name: "chat-code-preview-modal",
       });
-    });
-  });
-
-  test.describe("Deck Preview Modal", () => {
-    // The server converts an uploaded deck to a PDF in the sandbox, which a
-    // test stack may not have, so the PDF is mocked.
-    test("an uploaded deck shows the server's PDF pages", async ({ page }) => {
-      await chat.goto();
-      await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
-      await mockChatFilePdfPreview(page);
-
-      const fileName = "two_slides.pptx";
-      await uploadFilesToChat(page, [
-        {
-          name: fileName,
-          mimeType:
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-          buffer: fs.readFileSync(
-            path.join(__dirname, "../fixtures/two_slides.pptx")
-          ),
-        },
-      ]);
-
-      await sendMessage(page, "Preview this deck");
-
-      const userMessage = page.locator("#onyx-human-message").first();
-      const fileDisplay = userMessage.locator("#onyx-file");
-      await expect(fileDisplay).toBeVisible();
-      await fileDisplay
-        .getByRole("button", { name: "Expand document" })
-        .click();
-
-      const previewModal = new FilePreviewModalPage(page);
-      await previewModal.expectFileWithDownload(fileName);
-      await previewModal.expectPdfPage(1, 2);
-      await previewModal.nextPdfPage();
-      await previewModal.expectPdfPage(2, 2);
     });
   });
 });

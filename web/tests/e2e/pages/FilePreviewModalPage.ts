@@ -49,6 +49,13 @@ export class FilePreviewModalPage {
     ).toBeVisible();
   }
 
+  /** Checks the card for a file that the server cannot preview. */
+  async expectNoPreview(): Promise<void> {
+    await expect(this.modal.getByText("No preview for this file")).toBeVisible({
+      timeout: 10000,
+    });
+  }
+
   /** Checks that the PDF shows `page` of `pageCount` and draws that page. */
   async expectPdfPage(page: number, pageCount: number): Promise<void> {
     await expect(this.pdfControls).toContainText(`${page} / ${pageCount}`, {

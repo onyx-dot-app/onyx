@@ -13,9 +13,8 @@ import {
 } from "@/lib/filePreview/fileName";
 
 const MB = 1024 * 1024;
-// The most bytes a preview reads. A larger file shows a download instead.
-// The PDF limit also applies to the PDF that the server converts a Word or
-// PowerPoint file to.
+// The most bytes a preview of a stored file reads. A larger file shows a
+// download instead.
 const PREVIEW_BYTE_LIMITS = {
   text: 5 * MB,
   pdf: 100 * MB,
@@ -23,6 +22,8 @@ const PREVIEW_BYTE_LIMITS = {
 
 // The server cannot make a PDF of a Word or PowerPoint file
 const PREVIEW_UNAVAILABLE_ERROR_CODE = "PREVIEW_UNAVAILABLE";
+// The server has not stored a PDF of the file yet, and can make one
+const PREVIEW_NOT_READY_ERROR_CODE = "PREVIEW_NOT_READY";
 
 interface ChatFileIdentity {
   // The stored name from the response, with an extension for its MIME type
@@ -58,7 +59,8 @@ type BodyFormat = Extract<
 
 /**
  * Loads the preview that the server makes of a file: a spreadsheet's parsed
- * sheets, or a Word or PowerPoint file as a PDF.
+ * sheets, or a Word or PowerPoint file as a PDF. The stored PDF loads when
+ * there is one; otherwise the server converts the file first.
  */
 async function loadServerPreview(
   fileId: string,
@@ -73,8 +75,22 @@ async function loadServerPreview(
     return { ...identity, kind: "spreadsheet", sheets: preview.sheets };
   }
   try {
-    const response = await fetchChatFile(fileId, "pdf", signal);
-    return await readBody(response, identity, { kind: "pdf" });
+    const response = await fetchChatFile(fileId, "pdf", signal).catch(
+      (error: unknown) => {
+        if (
+          error instanceof FetchError &&
+          error.info?.error_code === PREVIEW_NOT_READY_ERROR_CODE
+        )
+          return fetchChatFile(fileId, "convertPdf", signal);
+        throw error;
+      }
+    );
+    return await readBody(
+      response,
+      identity,
+      { kind: "pdf" },
+      PREVIEW_BYTE_LIMITS.pdf
+    );
   } catch (error) {
     if (
       error instanceof FetchError &&
@@ -86,16 +102,15 @@ async function loadServerPreview(
 }
 
 /**
- * Reads a preview's body up to its format's limit; the server streams files
- * without a length, so the limit applies while reading.
+ * Reads a preview's body up to `maxBytes`; the server streams files without
+ * a length, so the limit applies while reading.
  */
 async function readBody(
   response: Response,
   identity: ChatFileIdentity,
-  format: BodyFormat
+  format: BodyFormat,
+  maxBytes: number
 ): Promise<ChatFilePreviewData> {
-  const maxBytes =
-    format.kind === "pdf" ? PREVIEW_BYTE_LIMITS.pdf : PREVIEW_BYTE_LIMITS.text;
   const tooLarge: ChatFilePreviewData = {
     ...identity,
     kind: "tooLarge",
@@ -219,6 +234,13 @@ export async function loadChatFilePreview(
       await response.body?.cancel();
       return { ...identity, kind: format.kind };
     default:
-      return readBody(response, identity, format);
+      return readBody(
+        response,
+        identity,
+        format,
+        format.kind === "pdf"
+          ? PREVIEW_BYTE_LIMITS.pdf
+          : PREVIEW_BYTE_LIMITS.text
+      );
   }
 }

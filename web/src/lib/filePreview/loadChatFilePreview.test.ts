@@ -120,7 +120,7 @@ test("a spreadsheet type drops the workbook and loads the parsed sheets", async 
 const PPTX_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
-test("a Word or PowerPoint name loads only the server's PDF", async () => {
+test("a Word or PowerPoint name with a stored PDF loads only that PDF", async () => {
   jest
     .mocked(fetchChatFile)
     .mockResolvedValue(
@@ -153,40 +153,61 @@ test("a PowerPoint type drops the original and loads the server's PDF", async ()
   expect(data).toMatchObject({ kind: "pdf", name: "renamed.pptx" });
 });
 
-test("the server's PDF stops at the PDF limit", async () => {
-  const body = trackedBody([new Uint8Array(10)]);
-  const response = fileResponse(body.stream, "application/pdf");
-  response.headers.set("Content-Length", String(200 * MB));
-  jest.mocked(fetchChatFile).mockResolvedValue(response);
-
-  const data = await loadChatFilePreview("file-1", "letter.docx", signal);
-
-  expect(data).toMatchObject({
-    kind: "tooLarge",
-    limitMB: 100,
-    name: "letter.docx",
-  });
-  expect(body.cancelled()).toBe(true);
+const NOT_READY = new FetchError("Failed to load document.", 409, {
+  error_code: "PREVIEW_NOT_READY",
+  detail: "No stored preview",
 });
 
-test("a file the server cannot convert has no preview; other failures fail the load", async () => {
-  jest.mocked(fetchChatFile).mockRejectedValueOnce(
-    new FetchError("Failed to load document.", 422, {
-      error_code: "PREVIEW_UNAVAILABLE",
-    })
-  );
-  await expect(
-    loadChatFilePreview("file-1", "deck.pptx", signal)
-  ).resolves.toMatchObject({ kind: "unavailable", name: "deck.pptx" });
-
+test("a file without a stored PDF has the server convert it, then shows that PDF", async () => {
   jest
     .mocked(fetchChatFile)
+    .mockRejectedValueOnce(NOT_READY)
+    .mockResolvedValueOnce(
+      fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
+    );
+
+  const data = await loadChatFilePreview("file-1", "deck.pptx", signal);
+
+  expect(jest.mocked(fetchChatFile).mock.calls).toEqual([
+    ["file-1", "pdf", signal],
+    ["file-1", "convertPdf", signal],
+  ]);
+  if (data.kind !== "pdf") throw new Error(`Expected a PDF, got ${data.kind}`);
+  expect(await data.blob.text()).toBe("%PDF-1.4");
+});
+
+test("a conversion that cannot make a PDF shows that there is no preview", async () => {
+  jest
+    .mocked(fetchChatFile)
+    .mockRejectedValueOnce(NOT_READY)
+    .mockRejectedValueOnce(
+      new FetchError("Failed to load document.", 422, {
+        error_code: "PREVIEW_UNAVAILABLE",
+        detail: "No preview",
+      })
+    );
+
+  const data = await loadChatFilePreview("file-1", "deck.pptx", signal);
+
+  expect(data).toMatchObject({ kind: "unavailable", name: "deck.pptx" });
+});
+
+test("a conversion that fails for another reason fails the load, for a retry", async () => {
+  jest
+    .mocked(fetchChatFile)
+    .mockRejectedValueOnce(NOT_READY)
     .mockRejectedValueOnce(
       new FetchError("Failed to load document.", 503, null)
     );
+
   await expect(
     loadChatFilePreview("file-1", "deck.pptx", signal)
   ).rejects.toThrow("Failed to load document.");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-1",
+    "convertPdf",
+    signal
+  );
 });
 
 test("a malformed sheets payload fails the load", async () => {
@@ -235,6 +256,18 @@ test("a declared length over the limit reads nothing", async () => {
   jest.mocked(fetchChatFile).mockResolvedValue(response);
 
   const data = await loadChatFilePreview("file-1", "big.pdf", signal);
+
+  expect(data).toMatchObject({ kind: "tooLarge", limitMB: 100 });
+  expect(body.cancelled()).toBe(true);
+});
+
+test("a server PDF over the PDF limit reads nothing", async () => {
+  const body = trackedBody([new Uint8Array(10)]);
+  const response = fileResponse(body.stream, "application/pdf", "preview.pdf");
+  response.headers.set("Content-Length", String(200 * MB));
+  jest.mocked(fetchChatFile).mockResolvedValue(response);
+
+  const data = await loadChatFilePreview("file-1", "deck.pptx", signal);
 
   expect(data).toMatchObject({ kind: "tooLarge", limitMB: 100 });
   expect(body.cancelled()).toBe(true);

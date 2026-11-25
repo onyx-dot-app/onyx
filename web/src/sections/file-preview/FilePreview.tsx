@@ -14,8 +14,9 @@ import { useTranslations } from "next-intl";
 import { Button, CopyButton, OnyxLoader, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgCode, SvgEye } from "@opal/icons";
+import type { RichStr } from "@opal/types";
 import type { ChatFilePreviewState } from "@/lib/filePreview/hooks";
-import { svgDataUrl } from "@/lib/filePreview/format";
+import { resolveFilePreviewFormat, svgDataUrl } from "@/lib/filePreview/format";
 import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 import { DownloadButton } from "@/sections/file-preview/DownloadButton";
 import { PreviewUnavailable } from "@/sections/file-preview/PreviewUnavailable";
@@ -44,19 +45,35 @@ const HTML_PREVIEW_PROLOGUE = `<!DOCTYPE html><meta http-equiv="Content-Security
 // A fast load shows nothing; a slower one shows the loader
 const LOADER_DELAY_MS = 300;
 
-function Loading() {
+interface LoadingProps {
+  // A line under the loader, read out by screen readers
+  status?: string | RichStr;
+}
+
+function Loading({ status }: LoadingProps) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const timer = window.setTimeout(() => setVisible(true), LOADER_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, []);
-  return <Section>{visible && <OnyxLoader size={32} />}</Section>;
+  return (
+    <Section gap={1}>
+      {visible && <OnyxLoader size={32} />}
+      <div aria-live="polite">
+        {visible && status && (
+          <Text as="p" font="secondary-body" color="text-03">
+            {status}
+          </Text>
+        )}
+      </div>
+    </Section>
+  );
 }
 
 // PDF.js loads only when a PDF opens
 const PdfViewer = dynamic(() => import("@/sections/file-preview/PdfViewer"), {
   ssr: false,
-  loading: Loading,
+  loading: () => <Loading />,
 });
 
 /**
@@ -94,7 +111,18 @@ export const FilePreviewBody = memo(function FilePreviewBody({
   let content: ReactNode;
   let footer: ReactNode = null;
   if (isLoading || (!data && !error)) {
-    content = <Loading />;
+    // The server converts a Word or PowerPoint file on its first preview,
+    // which can take much longer than a download
+    content = (
+      <Loading
+        status={
+          resolveFilePreviewFormat(fileName, "application/octet-stream")
+            .kind === "office"
+            ? t("preparing.status")
+            : undefined
+        }
+      />
+    );
   } else if (!data) {
     content = (
       <PreviewUnavailable
@@ -105,7 +133,16 @@ export const FilePreviewBody = memo(function FilePreviewBody({
         onRetry={retry}
       />
     );
-  } else if (renderFailed || data.kind === "unavailable") {
+  } else if (data.kind === "unavailable") {
+    content = (
+      <PreviewUnavailable
+        fileName={data.name}
+        fileUrl={preview.url}
+        title={t("unavailable.title")}
+        description={t("unavailable.description")}
+      />
+    );
+  } else if (renderFailed) {
     content = (
       <PreviewUnavailable
         fileName={data.name}

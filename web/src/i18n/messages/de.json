@@ -13105,6 +13105,13 @@
         "title": "Für diese Datei ist keine Vorschau möglich",
         "description": "Die Datei kann hier nicht angezeigt werden. Laden Sie die Datei herunter, um sie zu öffnen."
       },
+      "unavailable": {
+        "title": "Keine Vorschau für diese Datei",
+        "description": "Für diese Datei kann keine Vorschau erstellt werden. Laden Sie die Datei herunter, um sie zu öffnen."
+      },
+      "preparing": {
+        "status": "Die Vorschau wird vorbereitet. Dies kann einen Moment dauern."
+      },
       "unsupported": {
         "title": "Die Vorschau für diesen Dateityp wird derzeit nicht unterstützt",
         "description": "Laden Sie die Datei herunter, um ihren Inhalt anzuzeigen."

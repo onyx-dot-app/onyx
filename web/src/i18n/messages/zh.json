@@ -13105,6 +13105,13 @@
         "title": "无法预览此文件",
         "description": "无法在此处显示该文件。请下载文件后打开。"
       },
+      "unavailable": {
+        "title": "此文件没有预览",
+        "description": "无法为此文件生成预览。请下载文件后打开。"
+      },
+      "preparing": {
+        "status": "正在准备预览，这可能需要一点时间。"
+      },
       "unsupported": {
         "title": "暂不支持预览此文件类型",
         "description": "下载文件以查看其内容。"

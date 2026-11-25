@@ -95,19 +95,6 @@ export function DocumentToolbar({
   );
 }
 
-/**
- * The step that an arrow key takes in a vertical list of pages or slides: Up
- * and the reading direction's back arrow go back one, Down and its forward
- * arrow go on one. Other keys take no step.
- */
-export function listArrowStep(key: string, rtl: boolean): -1 | 0 | 1 {
-  if (key === "ArrowUp" || key === (rtl ? "ArrowRight" : "ArrowLeft"))
-    return -1;
-  if (key === "ArrowDown" || key === (rtl ? "ArrowLeft" : "ArrowRight"))
-    return 1;
-  return 0;
-}
-
 const MIN_SIDEBAR_WIDTH = 88;
 const MAX_SIDEBAR_WIDTH = 320;
 // The most of the preview's width that the sidebar takes
