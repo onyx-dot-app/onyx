@@ -38,6 +38,8 @@ def test_send_builds_the_subject_and_lifetime_from_the_settings() -> None:
     assert LINK in html and LINK in text
     assert "10 minutes" in text
     assert send_email.call_args.kwargs["inline_png"] == ("logo.png", b"png")
+    # The link is a credential, so it never goes to the archive copies.
+    assert send_email.call_args.kwargs["archive"] is False
 
 
 def test_multi_tenant_uses_the_default_name_and_logo() -> None:

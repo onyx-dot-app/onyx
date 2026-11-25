@@ -203,22 +203,42 @@ def send_email(
     text_body: str,
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
+    *,
+    archive: bool = True,
 ) -> None:
+    """``archive=False`` keeps the email out of the archive copies. Use it for
+    an email whose content is a credential, such as a sign-in link."""
     if not EMAIL_CONFIGURED:
         raise ValueError("Email is not configured.")
 
     if SENDGRID_API_KEY:
         send_email_with_sendgrid(
-            user_email, subject, html_body, text_body, mail_from, inline_png
+            user_email,
+            subject,
+            html_body,
+            text_body,
+            mail_from,
+            inline_png,
+            archive=archive,
         )
         return
 
     send_email_with_smtplib(
-        user_email, subject, html_body, text_body, mail_from, inline_png
+        user_email,
+        subject,
+        html_body,
+        text_body,
+        mail_from,
+        inline_png,
+        archive=archive,
     )
 
 
-def _get_archive_bcc_addresses(user_email: str) -> tuple[str, ...]:
+def _get_archive_bcc_addresses(
+    user_email: str, archive: bool = True
+) -> tuple[str, ...]:
+    if not archive:
+        return ()
     seen_addresses = {user_email.casefold()}
     archive_bcc_addresses: list[str] = []
 
@@ -240,6 +260,8 @@ def send_email_with_sendgrid(
     text_body: str,
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
+    *,
+    archive: bool = True,
 ) -> None:
     from_email = Email(mail_from) if mail_from else Email("noreply@onyx.app")
     to_email = To(user_email)
@@ -251,7 +273,7 @@ def send_email_with_sendgrid(
         plain_text_content=Content("text/plain", text_body),
     )
 
-    for bcc_address in _get_archive_bcc_addresses(user_email):
+    for bcc_address in _get_archive_bcc_addresses(user_email, archive):
         mail.add_bcc(bcc_address)
 
     # Add HTML content
@@ -287,12 +309,14 @@ def send_email_with_smtplib(
     text_body: str,
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
+    *,
+    archive: bool = True,
 ) -> None:
     # Create a multipart/alternative message - this indicates these are alternative versions of the same content
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["To"] = user_email
-    archive_bcc_addresses = _get_archive_bcc_addresses(user_email)
+    archive_bcc_addresses = _get_archive_bcc_addresses(user_email, archive)
     if not mail_from:
         raise ValueError("EMAIL_FROM must be set when SMTP_USER is not provided")
     msg["From"] = mail_from
@@ -551,4 +575,7 @@ def send_magic_link_email(
         text_content,
         mail_from,
         inline_png=("logo.png", onyx_file.data),
+        # The link signs the recipient in. An archive copy would let anyone
+        # who reads the archive do the same.
+        archive=False,
     )

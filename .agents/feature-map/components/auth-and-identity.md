@@ -131,7 +131,9 @@ answers "link sent" for every well-formed address, whether or not it has an
 account, so nothing leaks before the inbox is proven. The link carries a random
 token. The cache keeps the token's hash and what the click should do: the
 address, the `start_new_team` choice and the next URL (`onyx/auth/magic_link.py`).
-A token works once and expires after `MAGIC_LINK_TTL_SECONDS`. The link opens a
+A token works once and expires after `MAGIC_LINK_TTL_SECONDS`. The email
+never goes to the archive copies (`EMAIL_ARCHIVE_BCC_ADDRESSES`), because the
+link is a credential. The link opens a
 web page that POSTs the token, so a mail scanner that fetches the link cannot use
 it up. Nothing is created until the token is redeemed
 (`onyx/auth/users.py:UserManager.magic_link_login`). Redeeming resolves the
