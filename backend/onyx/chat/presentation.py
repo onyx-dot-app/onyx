@@ -661,6 +661,7 @@ def replay_response(
                                 approval.integration_kind, approval.action_id
                             ),
                             agent_name=agent_name,
+                            app_name=approval.app_name,
                         ),
                     )
                 )

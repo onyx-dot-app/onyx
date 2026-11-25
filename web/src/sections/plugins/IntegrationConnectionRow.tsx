@@ -10,13 +10,12 @@ interface IntegrationConnectionRowProps {
   integration: MemberIntegration;
   /** Where the OAuth callback returns when no waiting tab closes it. */
   returnPath: string;
-  allowDisconnect?: boolean;
 }
 
+/** One integration and its Connect button; the caller's card pads it. */
 export default function IntegrationConnectionRow({
   integration,
   returnPath,
-  allowDisconnect = false,
 }: IntegrationConnectionRowProps) {
   const stateCopy = useTranslations("integrations");
   const { state, reason } = integration.status;
@@ -30,12 +29,11 @@ export default function IntegrationConnectionRow({
           ? reason
           : stateCopy("connectionState", { state })
       }
-      padding={2}
+      padding={0}
       rightChildren={
         <IntegrationConnectButton
           integration={integration}
           returnPath={returnPath}
-          allowDisconnect={allowDisconnect}
         />
       }
     />

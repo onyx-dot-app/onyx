@@ -17639,7 +17639,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "Aktionen",
         "description": "Dein Admin legt fest, wie jede Aktion ausgeführt wird. Aktiviere „Nicht fragen“, um eine Aktion, die nachfragt, ohne Rückfrage auszuführen.",
         "loadFailed": "Die Aktionen konnten nicht geladen werden.",
         "saveFailed": "Speichern fehlgeschlagen. Versuchen Sie es erneut.",
@@ -18120,7 +18119,8 @@
       "open": "{name} öffnen",
       "empty": {
         "title": "Noch keine Integrationen",
-        "description": "Bitten Sie Ihren Administrator, eine Integration hinzuzufügen."
+        "description": "Bitten Sie Ihren Administrator, eine Integration hinzuzufügen.",
+        "descriptionCanAdd": "Fügen Sie eine hinzu, oder durchsuchen Sie den Katalog."
       },
       "noMatches": {
         "title": "Keine passenden Integrationen",
@@ -18209,26 +18209,19 @@
       "loadFailed": "Diese Integration ist für Sie nicht verfügbar.",
       "tabs": {
         "overview": "Übersicht",
-        "configuration": "Konfiguration",
         "actions": "Aktionen"
       },
       "overview": {
-        "description": "Beschreibung",
-        "noDescription": "Keine Beschreibung.",
         "type": "Typ",
         "signIn": "Anmeldung",
         "url": "Server-URL",
         "owner": "Eigentümer",
         "organization": "Organisation",
-        "status": "Status",
         "switch": {
           "title": "Diese Integration Verwenden",
           "description": "Wenn dies aktiviert ist, können Sie sie in Chats und in Craft verwenden.",
           "required": "Ihr Admin hat diese Integration als erforderlich festgelegt. Sie können sie nicht deaktivieren."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Ihre Verbindung zu dieser Integration. Nur Sie verwenden sie.} shared {Das Konto dieser Integration. Alle mit Zugriff verwenden es.} other {Diese Integration benötigt keine Anmeldung.}}"
       }
     },
     "pluginPage": {

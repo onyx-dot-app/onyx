@@ -65,6 +65,8 @@ class PendingToolInput(BaseModel):
     display_name: str | None = None
     # What the requester shows of the call; None shows the call's arguments.
     display_arguments: dict[str, JsonValue] | None = None
+    # The integration of the action, for display.
+    app_name: str | None = None
     # Whether the user can approve the action for the rest of the chat.
     can_approve_for_chat: bool = True
 

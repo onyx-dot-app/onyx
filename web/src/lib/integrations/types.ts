@@ -278,7 +278,7 @@ export interface MemberIntegration {
 }
 
 export interface MemberAction extends IntegrationAction {
-  /** The user's saved "Always allow". */
+  /** The user's saved "Don't ask me". */
   user_policy: "allow" | null;
 }
 

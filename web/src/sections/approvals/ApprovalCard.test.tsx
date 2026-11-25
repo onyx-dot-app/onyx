@@ -125,9 +125,8 @@ describe("pending", () => {
     });
     expect(screen.getByText(description)).not.toHaveClass("truncate");
     const trigger = screen.getByRole("button", { name: header });
-    const headline = within(trigger).getByText(
-      "Approval requested: Send message in Slack"
-    );
+    // The step above says it waits, so the visible header is the headline.
+    const headline = within(trigger).getByText("Send message in Slack");
     expect(headline).not.toHaveClass("truncate");
     expect(headline.parentElement).not.toHaveClass("truncate");
     unmount();

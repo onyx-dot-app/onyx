@@ -45,7 +45,10 @@ function renderStatus(
   displayName?: string,
   responseType?: string
 ) {
-  const toolPackets = packets(error, toolName, displayName, responseType);
+  renderPackets(packets(error, toolName, displayName, responseType));
+}
+
+function renderPackets(toolPackets: CustomToolPacket[]) {
   render(
     <CustomToolRenderer
       packets={toolPackets}
@@ -161,4 +164,44 @@ describe("CustomToolRenderer", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(new RegExp(toolName))).not.toBeInTheDocument();
   });
+
+  test.each(["rejected", "disabled", "cancelled"] as const)(
+    "shows a call whose approval ended %s as not run",
+    (outcome) => {
+      renderPackets([
+        {
+          placement,
+          obj: {
+            type: PacketType.CUSTOM_TOOL_START,
+            tool_name: "create_ticket",
+            display_name: "Create a ticket",
+          },
+        },
+        {
+          placement,
+          obj: {
+            type: PacketType.TOOL_APPROVAL_REQUEST,
+            approval_id: "a1",
+            tool_call_id: "call-1",
+            tool_name: "create_ticket",
+            display_name: "Create a ticket",
+            arguments: {},
+            agent_name: null,
+          },
+        },
+        {
+          placement,
+          obj: {
+            type: PacketType.TOOL_APPROVAL_RESOLVED,
+            approval_id: "a1",
+            outcome,
+          },
+        },
+        { placement, obj: { type: PacketType.SECTION_END } },
+      ] as unknown as CustomToolPacket[]);
+
+      expect(screen.getByText("Create a ticket was blocked")).toBeVisible();
+      expect(screen.queryByText(/Executed/)).not.toBeInTheDocument();
+    }
+  );
 });

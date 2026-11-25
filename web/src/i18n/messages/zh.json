@@ -17639,7 +17639,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "操作",
         "description": "管理员设置每个操作的运行方式。开启“不要询问我”后，需要审批的操作将直接运行，不再提示。",
         "loadFailed": "无法加载操作。",
         "saveFailed": "无法保存。请重试。",
@@ -18120,7 +18119,8 @@
       "open": "打开 {name}",
       "empty": {
         "title": "还没有集成",
-        "description": "请让管理员添加集成。"
+        "description": "请让管理员添加集成。",
+        "descriptionCanAdd": "添加一个，或浏览目录。"
       },
       "noMatches": {
         "title": "没有匹配的集成",
@@ -18209,26 +18209,19 @@
       "loadFailed": "你无法使用此集成。",
       "tabs": {
         "overview": "概览",
-        "configuration": "配置",
         "actions": "操作"
       },
       "overview": {
-        "description": "描述",
-        "noDescription": "没有描述。",
         "type": "类型",
         "signIn": "登录",
         "url": "服务器 URL",
         "owner": "所有者",
         "organization": "组织",
-        "status": "状态",
         "switch": {
           "title": "使用此集成",
           "description": "开启后，你可以在对话和 Craft 中使用它。",
           "required": "管理员已将此集成设为必需。你无法将其关闭。"
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {你与此集成的连接。只有你使用它。} shared {此集成的账户。所有有权访问的人都使用它。} other {此集成无需登录。}}"
       }
     },
     "pluginPage": {

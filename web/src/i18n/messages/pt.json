@@ -17639,7 +17639,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "Ações",
         "description": "Seu administrador define como cada ação é executada. Ative \"Não me perguntar\" para executar sem aviso uma ação que pede aprovação.",
         "loadFailed": "Não foi possível carregar as ações.",
         "saveFailed": "Não foi possível salvar. Tente novamente.",
@@ -18120,7 +18119,8 @@
       "open": "Abrir {name}",
       "empty": {
         "title": "Nenhuma integração ainda",
-        "description": "Peça ao seu administrador para adicionar uma integração."
+        "description": "Peça ao seu administrador para adicionar uma integração.",
+        "descriptionCanAdd": "Adicione uma ou navegue pelo catálogo."
       },
       "noMatches": {
         "title": "Nenhuma integração correspondente",
@@ -18209,26 +18209,19 @@
       "loadFailed": "Esta integração não está disponível para você.",
       "tabs": {
         "overview": "Visão geral",
-        "configuration": "Configuração",
         "actions": "Ações"
       },
       "overview": {
-        "description": "Descrição",
-        "noDescription": "Sem descrição.",
         "type": "Tipo",
         "signIn": "Login",
         "url": "URL do servidor",
         "owner": "Proprietário",
         "organization": "Organização",
-        "status": "Status",
         "switch": {
           "title": "Usar Esta Integração",
           "description": "Quando ativada, você pode usá-la nos chats e no Craft.",
           "required": "Seu administrador tornou esta integração obrigatória. Você não pode desativá-la."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Sua conexão com esta integração. Só você a usa.} shared {A conta desta integração. Todos com acesso a usam.} other {Esta integração não precisa de login.}}"
       }
     },
     "pluginPage": {

@@ -17639,7 +17639,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "アクション",
         "description": "各アクションの実行方法は管理者が設定します。承認を求めるアクションを確認なしで実行するには「確認しない」をオンにします。",
         "loadFailed": "アクションを読み込めませんでした。",
         "saveFailed": "保存できませんでした。もう一度お試しください。",
@@ -18120,7 +18119,8 @@
       "open": "{name} を開く",
       "empty": {
         "title": "インテグレーションはまだありません",
-        "description": "管理者にインテグレーションの追加を依頼してください。"
+        "description": "管理者にインテグレーションの追加を依頼してください。",
+        "descriptionCanAdd": "追加するか、カタログを参照してください。"
       },
       "noMatches": {
         "title": "一致するインテグレーションはありません",
@@ -18209,26 +18209,19 @@
       "loadFailed": "このインテグレーションは利用できません。",
       "tabs": {
         "overview": "概要",
-        "configuration": "設定",
         "actions": "アクション"
       },
       "overview": {
-        "description": "説明",
-        "noDescription": "説明はありません。",
         "type": "種類",
         "signIn": "サインイン",
         "url": "サーバー URL",
         "owner": "所有者",
         "organization": "組織",
-        "status": "ステータス",
         "switch": {
           "title": "この統合を使用",
           "description": "オンにすると、チャットと Craft で使えます。",
           "required": "管理者がこの統合を必須にしました。オフにすることはできません。"
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {このインテグレーションへの接続です。使用するのはあなただけです。} shared {このインテグレーションのアカウントです。アクセス権を持つ全員が使用します。} other {このインテグレーションにサインインは不要です。}}"
       }
     },
     "pluginPage": {

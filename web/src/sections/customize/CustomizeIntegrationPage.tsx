@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Badge, Card, Text } from "@opal/components";
-import { ContentAction, Section } from "@opal/layouts";
+import { Badge, Text } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
 import { SvgPlug } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import {
@@ -24,19 +24,19 @@ import {
 } from "@/sections/customize/IntegrationAccessControls";
 import AlwaysAllowList from "@/sections/plugins/AlwaysAllowList";
 import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
-import IntegrationConnectionRow from "@/sections/plugins/IntegrationConnectionRow";
 
 function parseTab(value: string | null): IntegrationPageTab {
-  return value === "configuration" || value === "actions" ? value : "overview";
+  return value === "actions" ? value : "overview";
 }
 
 interface CustomizeIntegrationPageProps {
   integrationId: number;
 }
 
-/** One integration for a member: Overview, Configuration (the user's
- * connection) and Actions (the admin settings and the user's Always allow).
- * The admin sets Allow, Ask and Blocked on the admin page. */
+/** One integration for a member: Overview and Actions (the admin settings
+ * and the user's "Don't ask me"). The header holds the connection state and
+ * Connect or Disconnect. The admin sets Allow, Ask and Blocked on the admin
+ * page. */
 export default function CustomizeIntegrationPage({
   integrationId,
 }: CustomizeIntegrationPageProps) {
@@ -48,7 +48,7 @@ export default function CustomizeIntegrationPage({
   const accessCopy = useIntegrationStateCopy();
   const { data, error, isLoading } = useMemberIntegrations();
   const integration = data?.find((item) => item.id === integrationId);
-  const returnPath = integrationHref(integrationId, "configuration");
+  const returnPath = integrationHref(integrationId);
   const state = integration?.status.state;
   const reason = integration ? accessCopy.reason(integration) : null;
   const required = integration?.access.installation_policy === "REQUIRED";
@@ -60,10 +60,6 @@ export default function CustomizeIntegrationPage({
           label: t("tabs.overview"),
           content: (
             <DetailOverview
-              descriptionLabel={t("overview.description")}
-              description={
-                integration.description || t("overview.noDescription")
-              }
               facts={[
                 {
                   label: t("overview.type"),
@@ -87,10 +83,6 @@ export default function CustomizeIntegrationPage({
                   value:
                     integration.access.owner_email ??
                     t("overview.organization"),
-                },
-                {
-                  label: t("overview.status"),
-                  value: accessCopy.label(integration),
                 },
               ]}
               footer={
@@ -120,26 +112,6 @@ export default function CustomizeIntegrationPage({
         ...(integration.access.state === "no_access"
           ? []
           : [
-              {
-                value: "configuration" as const,
-                label: t("tabs.configuration"),
-                content: (
-                  <Section gap={2} alignItems="stretch" height="auto">
-                    <Text font="secondary-body" color="text-03">
-                      {t("configuration.description", {
-                        mode: integration.auth_mode,
-                      })}
-                    </Text>
-                    <Card border="solid" padding={2}>
-                      <IntegrationConnectionRow
-                        integration={integration}
-                        returnPath={returnPath}
-                        allowDisconnect
-                      />
-                    </Card>
-                  </Section>
-                ),
-              },
               {
                 value: "actions" as const,
                 label: t("tabs.actions"),
@@ -187,6 +159,11 @@ export default function CustomizeIntegrationPage({
                 title={stateCopy("connectionState", {
                   state: state ?? "not_set_up",
                 })}
+                tooltip={
+                  state === "needs_reconnect"
+                    ? (integration.status.reason ?? undefined)
+                    : undefined
+                }
               />,
               ...(reason === null
                 ? [
@@ -194,6 +171,7 @@ export default function CustomizeIntegrationPage({
                       key="connect"
                       integration={integration}
                       returnPath={returnPath}
+                      allowDisconnect
                     />,
                   ]
                 : []),

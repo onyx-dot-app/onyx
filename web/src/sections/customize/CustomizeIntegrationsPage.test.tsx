@@ -81,6 +81,34 @@ test("each member row shows its state as Claude does", async () => {
   ).not.toBeInTheDocument();
 });
 
+test("on a phone a muted row shows its short state with the reason as a tooltip", async () => {
+  const width = window.innerWidth;
+  window.innerWidth = 390;
+  try {
+    window.history.replaceState(null, "", "/app/customize/integrations");
+    mockFetch({
+      "/api/integrations": [
+        makeMemberIntegration({
+          id: 5,
+          name: "Excel",
+          status: connected,
+          access: makeAccess({ state: "turned_off" }),
+        }),
+      ],
+    });
+    render(<CustomizeIntegrationsPage />);
+
+    const label = await screen.findByText("Turned off");
+    expect(screen.queryByText("Turned off by an admin.")).toBeNull();
+    await setupUser().hover(label);
+    expect(
+      (await screen.findAllByText("Turned off by an admin.")).length
+    ).toBeGreaterThan(0);
+  } finally {
+    window.innerWidth = width;
+  }
+});
+
 test("no access rows go below every integration the user can use", async () => {
   window.history.replaceState(null, "", "/app/customize/integrations");
   const noAccess = makeAccess({

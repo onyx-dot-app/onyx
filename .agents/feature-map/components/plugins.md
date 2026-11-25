@@ -109,14 +109,15 @@ Group or user restriction needs EE.
   EE, no permission picker, `PUT /integrations/{id}/access`) and Publish to Org
   (`POST /integrations/{id}/publish`, off without global manage:actions). A row opens
   `/app/customize/integrations/[id]` (`sections/customize/CustomizeIntegrationPage.tsx`):
-  the status, Connect and the "..." menu in the header, then Overview (type,
-  sign-in, owner, state, and the "Use This Integration" switch),
-  Configuration (the user's connection, Disconnect)
-  and Actions (each action with the admin's Allow, Ask or Blocked, and the
-  user's Always allow switch when the admin allows it). The admin sets the
+  the connection status (a needs-reconnect reason as its tooltip), Connect or
+  Disconnect and the "..." menu in the header, then Overview (type, sign-in,
+  owner, and the "Use This Integration" switch) and Actions (each action with
+  the admin's Allow, Ask or Blocked, and the user's "Don't ask me" switch when
+  the admin allows it). There is no Configuration tab; `?tab=configuration`
+  links open Overview. The admin sets the
   policy only on `/admin/integrations/[id]`. A plugin that holds one skill
   opens that skill's page. When the admin lets users save it, each action that asks offers
-  "Always allow". A member with manage:actions adds a private integration
+  "Don't ask me" (saved as Always allow). A member with manage:actions adds a private integration
   ("For me" only) from the Integrations Add menu.
 - **In chat**, the tools popover lists the current agent's integrations
   (`sections/plugins/ChatIntegrationsPopover.tsx`) and switches each one; the

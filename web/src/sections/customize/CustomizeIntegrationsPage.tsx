@@ -119,6 +119,7 @@ export default function CustomizeIntegrationsPage({
       id: "status",
       title: t("columns.status"),
       width: { weight: 24 },
+      alignment: "right",
       cell: (row) => (
         <Section
           flexDirection="row"
@@ -154,7 +155,9 @@ export default function CustomizeIntegrationsPage({
         <CustomizeEmpty
           illustration={SvgUnPlugged}
           title={t("empty.title")}
-          description={t("empty.description")}
+          description={
+            canAdd ? t("empty.descriptionCanAdd") : t("empty.description")
+          }
         />
       ) : (
         <Table

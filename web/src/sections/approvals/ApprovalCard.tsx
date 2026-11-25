@@ -188,7 +188,12 @@ export default function ApprovalCard({
         <CometEdge active tone="info" speedSeconds={3.6}>
           <div className="rounded-08 border border-status-info-03 overflow-hidden bg-background-neutral-00">
             <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
-              <Collapsible.Trigger className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02">
+              {/* The spinner and the decisions show the wait; only screen
+                  readers hear "Approval requested". */}
+              <Collapsible.Trigger
+                aria-label={t("header.required", { headline })}
+                className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02"
+              >
                 <SvgLoader className="size-4 shrink-0 stroke-status-info-05 motion-safe:animate-spin" />
                 <span className="min-w-0 flex-1">
                   <Text
@@ -196,7 +201,7 @@ export default function ApprovalCard({
                     color="text-04"
                     wordWrap="wrap-anywhere"
                   >
-                    {t("header.required", { headline })}
+                    {headline}
                   </Text>
                 </span>
                 {expiresAt && (

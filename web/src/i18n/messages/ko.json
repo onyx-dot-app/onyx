@@ -17639,7 +17639,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "작업",
         "description": "관리자가 각 작업의 실행 방식을 설정합니다. 승인을 요청하는 작업을 확인 없이 실행하려면 '묻지 않기'를 켜세요.",
         "loadFailed": "작업을 불러올 수 없습니다.",
         "saveFailed": "저장할 수 없습니다. 다시 시도하세요.",
@@ -18120,7 +18119,8 @@
       "open": "{name} 열기",
       "empty": {
         "title": "아직 통합이 없습니다",
-        "description": "관리자에게 통합 추가를 요청하세요."
+        "description": "관리자에게 통합 추가를 요청하세요.",
+        "descriptionCanAdd": "통합을 추가하거나 카탈로그를 둘러보세요."
       },
       "noMatches": {
         "title": "일치하는 통합이 없습니다",
@@ -18209,26 +18209,19 @@
       "loadFailed": "이 통합을 사용할 수 없습니다.",
       "tabs": {
         "overview": "개요",
-        "configuration": "구성",
         "actions": "작업"
       },
       "overview": {
-        "description": "설명",
-        "noDescription": "설명이 없습니다.",
         "type": "유형",
         "signIn": "로그인",
         "url": "서버 URL",
         "owner": "소유자",
         "organization": "조직",
-        "status": "상태",
         "switch": {
           "title": "이 통합 사용",
           "description": "켜져 있으면 채팅과 Craft에서 사용할 수 있습니다.",
           "required": "관리자가 이 통합을 필수로 설정했습니다. 끌 수 없습니다."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {이 통합에 대한 내 연결입니다. 나만 사용합니다.} shared {이 통합의 계정입니다. 접근 권한이 있는 모든 사람이 사용합니다.} other {이 통합은 로그인이 필요하지 않습니다.}}"
       }
     },
     "pluginPage": {

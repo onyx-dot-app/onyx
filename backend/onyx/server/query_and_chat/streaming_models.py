@@ -607,7 +607,8 @@ class ToolApprovalRequest(BaseObj):
     # waits on: the card offers "approve for this command" in place of "approve
     # for this chat", which it never offers.
     can_approve_for_command: bool = False
-    # The app of such a request.
+    # The integration of a chat tool call's request, or the app of a
+    # command's request. None when the integration is gone.
     app_name: str | None = None
     # When such a request expires.
     expires_at: datetime | None = None

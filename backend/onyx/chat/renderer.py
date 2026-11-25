@@ -795,6 +795,7 @@ class ToolRenderer:
                 if event.request.display_arguments is not None
                 else tool_arguments_for_display(call),
                 can_approve_for_chat=event.request.can_approve_for_chat,
+                app_name=event.request.app_name,
             )
         else:
             obj = self.approval_resolved(

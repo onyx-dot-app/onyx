@@ -17639,7 +17639,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "Actions",
         "description": "Your admin sets how each action runs. Turn on Don't ask me to run an action that asks without a prompt.",
         "loadFailed": "Could not load the actions.",
         "saveFailed": "Could not save. Try again.",
@@ -18120,7 +18119,8 @@
       "open": "Open {name}",
       "empty": {
         "title": "No integrations yet",
-        "description": "Ask your admin to add an integration."
+        "description": "Ask your admin to add an integration.",
+        "descriptionCanAdd": "Add one, or browse the catalog."
       },
       "noMatches": {
         "title": "No matching integrations",
@@ -18209,26 +18209,19 @@
       "loadFailed": "This integration is not available to you.",
       "tabs": {
         "overview": "Overview",
-        "configuration": "Configuration",
         "actions": "Actions"
       },
       "overview": {
-        "description": "Description",
-        "noDescription": "No description.",
         "type": "Type",
         "signIn": "Sign-in",
         "url": "Server URL",
         "owner": "Owner",
         "organization": "Organization",
-        "status": "Status",
         "switch": {
           "title": "Use This Integration",
           "description": "When this is on, you can use it in chats and in Craft.",
           "required": "Your admin made this integration required. You cannot turn it off."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Your connection to this integration. Only you use it.} shared {The account of this integration. Everyone with access uses it.} other {This integration needs no sign-in.}}"
       }
     },
     "pluginPage": {

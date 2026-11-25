@@ -39,7 +39,7 @@ export default function IntegrationConnectModal({
         <Modal.Body padding={4} gap={3} alignItems="stretch">
           <Section gap={2} alignItems="stretch" height="auto">
             {integrations.map((integration) => (
-              <Card key={integration.id} padding={1} border="solid">
+              <Card key={integration.id} padding={3} border="solid">
                 <IntegrationConnectionRow
                   integration={integration}
                   returnPath={returnPath}
