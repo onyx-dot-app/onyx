@@ -170,7 +170,7 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         the active LLM's family, as restored children and
                                         sandbox tools use (a parked run resumes only on its
                                         own model). A call that started, then waited for
-                                        input or child runs or lost its owner, and whose
+                                        nested input or child runs or lost its owner, and whose
                                         tool is gone gets agents/tool_execution.py:
                                         STOPPED_CALL_MESSAGE (it may have had effects). A
                                         direct call of another shape's tool or program
