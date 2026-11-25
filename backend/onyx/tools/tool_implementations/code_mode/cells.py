@@ -121,7 +121,11 @@ from onyx.tools.tool_implementations.code_mode.stubs import (
     program_value,
     tool_arguments,
 )
-from onyx.tools.tool_implementations.sandbox.models import SandboxExecResult
+from onyx.tools.tool_implementations.sandbox.models import (
+    CommandApprovalRequest,
+    CommandApprovalResolved,
+    SandboxExecResult,
+)
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 from onyx.tools.tool_implementations.utils import truncate_output
 from onyx.tracing.framework.create import function_span
@@ -154,7 +158,7 @@ MAX_SAVED_EXECUTION_CHARS = 200_000
 # Open cells per response.
 MAX_OPEN_CELLS = 4
 # Progress events kept for an observer while none is attached; call starts and
-# ends are always kept.
+# ends, and command approval cards, are always kept.
 MAX_BUFFERED_PROGRESS_EVENTS = 1_000
 # How long the end of the response waits for a stopped cell's program to end,
 # counted from the cell's first stop request (Stop or the end of the response).
@@ -1421,7 +1425,10 @@ class CodeCell:
             if isinstance(previous, CodeModeStdout):
                 events[-1] = CodeModeStdout(text=previous.text + details.text)
                 return
-        if isinstance(details, CodeModeCallProgress):
+        # An approval card shows once, so it is always kept.
+        if isinstance(details, CodeModeCallProgress) and not isinstance(
+            details.details, (CommandApprovalRequest, CommandApprovalResolved)
+        ):
             if self._progress_events >= MAX_BUFFERED_PROGRESS_EVENTS:
                 return
             self._progress_events += 1

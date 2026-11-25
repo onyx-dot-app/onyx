@@ -33,6 +33,7 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCall,
     CodeModeCallFinished,
+    CodeModeCallProgress,
     CodeModeCallStarted,
     CodeModeExecutionResult,
     CodeModeStdout,
@@ -45,6 +46,7 @@ from onyx.tools.tool_implementations.code_mode.shapes import (
     DEFAULT_EXECUTE_YIELD_MS,
     OPENAI_CODE_MODE,
 )
+from onyx.tools.tool_implementations.sandbox.models import CommandApprovalRequest
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.unit.onyx.tools.code_mode.fakes import (
@@ -258,6 +260,39 @@ def test_events_between_observations_go_to_the_next_one() -> None:
         ("CodeModeCallFinished", 1),
     ]
     assert "".join(e.text for e in events if isinstance(e, CodeModeStdout)) == "x\n"
+
+
+def test_an_approval_card_between_observations_is_kept_past_the_progress_cap() -> None:
+    """A command approval card shows once, so a full progress buffer between
+    observations does not drop it."""
+    card = CommandApprovalRequest(
+        approval_id="a1",
+        app_name="Tracker",
+        action_type="issues.create",
+        display_name="Create an issue",
+        arguments={},
+        can_approve_for_command=True,
+    )
+
+    def noisy(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        for _ in range(cells_module.MAX_BUFFERED_PROGRESS_EVENTS):
+            invocation.update(ToolProgress(details=CodeModeStdout(text="x")))
+        invocation.update(ToolProgress(details=card))
+        return ToolResult(content='"done"')
+
+    response = Response()
+    response.execute = CodeModeTool(
+        [FakeTool("noisy", noisy)], cells=response.cells, limits=LIMITS
+    )
+    response.wait_tool = WaitCodeTool(response.cells, response.execute.program)
+    response.run("yield_control()\nawait tools.noisy(value='x')\n")
+    until(lambda: response.ended(1))
+    response.wait(1)
+
+    assert any(
+        isinstance(event, CodeModeCallProgress) and event.details == card
+        for event in response.last_events()
+    )
 
 
 def test_terminate_stops_the_cell() -> None:

@@ -98,6 +98,8 @@ class CommandApprovals:
         self._command_id: UUID | None = None
         # Cards on screen whose request still waits.
         self._shown: set[UUID] = set()
+        # Cards that ended; a stale pending read must not show them again.
+        self._resolved: set[UUID] = set()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -158,15 +160,15 @@ class CommandApprovals:
         command_id = self._command_id
         if command_id is None:
             return
-        with _WAITING_LOCK:
-            _waiting[command_id] -= 1
-            last = _waiting[command_id] == 0
-            if last:
-                del _waiting[command_id]
         decision = ApprovalDecision.REJECTED if cancelled else ApprovalDecision.EXPIRED
         ended: list[UUID] = []
-        if last:
-            ended = self._end_command(command_id, decision, exited=exited)
+        # The cleanup runs under the lock, so a new call of the command marks
+        # it and holds its requests only after the cleanup.
+        with _WAITING_LOCK:
+            _waiting[command_id] -= 1
+            if _waiting[command_id] == 0:
+                del _waiting[command_id]
+                ended = self._end_command(command_id, decision, exited=exited)
         # Every card on screen ends with its request's outcome, also one that
         # the user decided after the watcher's last read.
         with self._lock:
@@ -282,6 +284,7 @@ class CommandApprovals:
                 resolved = row.decision is not None and row.approval_id in self._shown
                 if resolved:
                     self._shown.discard(row.approval_id)
+                    self._resolved.add(row.approval_id)
             if resolved:
                 self._report(
                     CommandApprovalResolved(
@@ -292,7 +295,11 @@ class CommandApprovals:
     def _show(self, row: ActionApproval) -> None:
         """Show the card of a waiting request once."""
         with self._lock:
-            if row.decision is not None or row.approval_id in self._shown:
+            if (
+                row.decision is not None
+                or row.approval_id in self._shown
+                or row.approval_id in self._resolved
+            ):
                 return
             self._shown.add(row.approval_id)
         self._report(_card(row))

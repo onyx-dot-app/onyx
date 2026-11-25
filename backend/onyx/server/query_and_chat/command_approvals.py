@@ -60,6 +60,26 @@ def decide_command_approval(
             OnyxErrorCode.INVALID_INPUT,
             "This request cannot be approved for the rest of the command",
         )
+    integration_id = row.integration_id
+    cache: CacheBackend | None = None
+    try:
+        cache = get_cache_backend(tenant_id=get_current_tenant_id())
+        if for_command and integration_id is not None:
+            # Saved before the decision, so a recorded command grant is one
+            # the proxy can honor, and before the scan: a request that misses
+            # the grant in the cache committed its row before that check.
+            approval_cache.grant_command_actions(
+                command_id, integration_id, granted, cache
+            )
+    except CACHE_TRANSIENT_ERRORS as error:
+        # The proxy would refuse a grant that is not saved: approve once.
+        logger.warning(
+            "command_approval_grant_failed approval_id=%s error=%s",
+            row.approval_id,
+            error,
+        )
+        for_command = False
+        granted = []
     decision = (
         ApprovalDecision.REJECTED
         if choice == ApprovalChoice.REJECT
@@ -92,23 +112,6 @@ def decide_command_approval(
     db_session.commit()
 
     approved_ids = [row.approval_id]
-    integration_id = row.integration_id
-    cache: CacheBackend | None = None
-    try:
-        cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        if for_command and integration_id is not None:
-            # Saved before the scan: a request that misses the grant in the
-            # cache committed its row before that check, so the scan sees it.
-            approval_cache.grant_command_actions(
-                command_id, integration_id, granted, cache
-            )
-    except CACHE_TRANSIENT_ERRORS as error:
-        # A missed grant asks again.
-        logger.warning(
-            "command_approval_grant_failed approval_id=%s error=%s",
-            row.approval_id,
-            error,
-        )
 
     def covered(required: list[str]) -> bool:
         """The command's grants, this one with the earlier ones, cover the

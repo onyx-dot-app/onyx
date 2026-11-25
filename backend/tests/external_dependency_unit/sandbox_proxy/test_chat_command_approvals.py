@@ -17,11 +17,13 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel
-from sqlalchemy import delete
+from redis.exceptions import RedisError
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import ToolProgress
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
@@ -30,7 +32,7 @@ from onyx.db.enums import (
     ApprovalDecision,
     IntegrationKind,
 )
-from onyx.db.models import ActionApproval, ChatSession, Skill, User
+from onyx.db.models import ActionApproval, CacheStore, ChatSession, User
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
@@ -45,6 +47,9 @@ from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat import command_approvals
 from onyx.server.query_and_chat.chat_backend import decide_approval
 from onyx.server.query_and_chat.models import ChatApprovalDecisionRequest
+from onyx.tools.tool_implementations.sandbox import (
+    command_approvals as command_approvals_tool,
+)
 from onyx.tools.tool_implementations.sandbox.command_approvals import (
     CommandApprovals,
 )
@@ -57,7 +62,6 @@ from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.craft.db_helpers import (
     app_integration_id,
     make_external_app,
-    make_skill,
 )
 from tests.external_dependency_unit.integration_helpers import delete_integrations
 
@@ -76,13 +80,22 @@ class _Chat(BaseModel):
 def chat(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[_Chat, None, None]:
     user = create_test_user(db_session, "chat_command_approvals")
-    skill = make_skill(db_session, author_user_id=user.id)
-    app = make_external_app(db_session, skill=skill, auth_template={})
+    app = make_external_app(db_session, auth_template={})
     db_session.commit()
     integration_id = app_integration_id(db_session, app)
     chat_session = create_chat_session(db_session, "command", user.id, None)
+    # Every call that a test begins ends here, also when the test fails.
+    started: list[CommandApprovals] = []
+    begin = CommandApprovals.begin
+
+    def recording_begin(self: CommandApprovals, command_id: UUID) -> None:
+        started.append(self)
+        begin(self, command_id)
+
+    monkeypatch.setattr(CommandApprovals, "begin", recording_begin)
     try:
         yield _Chat(
             user=user,
@@ -90,12 +103,13 @@ def chat(
             integration_id=integration_id,
         )
     finally:
+        for approvals in started:
+            if not approvals._stop.is_set():
+                approvals.end(cancelled=False, exited=True)
         db_session.rollback()
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session.id))
         db_session.commit()
         delete_integrations(db_session, [integration_id])
-        db_session.execute(delete(Skill).where(Skill.id == skill.id))
-        db_session.commit()
 
 
 def _matched(
@@ -368,6 +382,53 @@ def test_a_call_that_ends_leaves_the_requests_to_another_call_of_the_command(
     assert not gate._command_in_foreground(ctx)
 
 
+def test_a_call_that_begins_during_the_cleanup_marks_after_it(
+    chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The last call's cleanup clears the foreground mark: a call of the
+    command that begins meanwhile marks it only after the cleanup."""
+    command_id, _reports, first = _command(chat)
+    second = CommandApprovals(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA,
+        chat_session_id=chat.chat_session_id,
+        update=_Reports(),
+    )
+    log: list[str] = []
+    cleaning = threading.Event()
+    marked = threading.Event()
+    end_command = CommandApprovals._end_command
+    mark = command_approvals_tool.approval_cache.mark_command_foreground
+
+    def paused_end_command(self: CommandApprovals, *args: Any, **kwargs: Any) -> Any:
+        cleaning.set()
+        # A begin that does not wait for the cleanup marks within this time.
+        marked.wait(timeout=2)
+        ended = end_command(self, *args, **kwargs)
+        log.append("cleaned")
+        return ended
+
+    def logged_mark(*args: Any) -> None:
+        mark(*args)
+        if cleaning.is_set():
+            log.append("marked")
+            marked.set()
+
+    monkeypatch.setattr(CommandApprovals, "_end_command", paused_end_command)
+    monkeypatch.setattr(
+        command_approvals_tool.approval_cache, "mark_command_foreground", logged_mark
+    )
+    ending = threading.Thread(
+        target=first.end, kwargs={"cancelled": False, "exited": False}
+    )
+    ending.start()
+    assert cleaning.wait(_WAIT_S)
+    beginning = threading.Thread(target=second.begin, args=(command_id,))
+    beginning.start()
+    ending.join(timeout=_WAIT_S)
+    beginning.join(timeout=_WAIT_S)
+    assert log[:2] == ["cleaned", "marked"]
+
+
 def _matched_actions(integration_id: int, *action_types: str) -> AllMatchedActions:
     return _matched(integration_id).model_copy(
         update={
@@ -445,3 +506,59 @@ def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
         approval_cache.drop_command_grants(command_id, cache)
 
     assert seen == [(True, ApprovalDecision.APPROVED)]
+
+
+def test_a_command_grant_that_the_cache_cannot_save_approves_once(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The proxy refuses a command grant that the cache does not hold, so the
+    decision is an approval of this request only."""
+    command_id = uuid4()
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    first = gate._persist_approval_row(ctx, _matched(chat.integration_id), {})
+    second = gate._persist_approval_row(ctx, _matched(chat.integration_id), {})
+
+    def fail(*_args: Any) -> None:
+        raise RedisError("down")
+
+    monkeypatch.setattr(command_approvals.approval_cache, "grant_command_actions", fail)
+
+    assert (
+        _decide(db_session, chat, first, ApprovalChoice.APPROVE_COMMAND)
+        == ApprovalDecidedVia.USER
+    )
+    db_session.expire_all()
+    first_row = db_session.get(ActionApproval, first)
+    second_row = db_session.get(ActionApproval, second)
+    assert first_row is not None and first_row.decided_via == ApprovalDecidedVia.USER
+    assert second_row is not None and second_row.decision is None
+
+
+def test_command_grants_expire_and_clear_on_the_postgres_cache(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Every grant row has the grant TTL, and the command's exit deletes
+    them all."""
+    cache = PostgresCacheBackend(POSTGRES_DEFAULT_SCHEMA)
+    command_id = uuid4()
+
+    def rows() -> dict[str, CacheStore]:
+        db_session.expire_all()
+        return {row.key: row for row in db_session.scalars(select(CacheStore))}
+
+    before = set(rows())
+    approval_cache.grant_command_actions(
+        command_id, 7, ["issues.create", "issues.delete"], cache
+    )
+    try:
+        added = [row for key, row in rows().items() if key not in before]
+        assert added
+        assert all(row.expires_at is not None for row in added)
+        assert approval_cache.command_grants_cover(
+            command_id, 7, ["issues.create", "issues.delete"], cache
+        )
+    finally:
+        approval_cache.drop_command_grants(command_id, cache)
+    assert not {row.key for row in added} & set(rows())

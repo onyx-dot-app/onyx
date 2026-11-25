@@ -15,8 +15,9 @@ ID, and two more keys:
 * `approval:command:{command_id}:foreground` — the chat session of a command
   that a call of the chat's run waits on. The call sets and renews it; the
   proxy holds an Ask request of the command only while it is set.
-* `approval:command:{command_id}:grants` — the `integration:action` members
-  that the user approved for the rest of the command.
+* `approval:command:{command_id}:grant:{integration_id}:{action}` — one key
+  per action that the user approved for the rest of the command. Plain keys,
+  not a set, so the TTL and the prefix delete apply on every cache backend.
 """
 
 import asyncio
@@ -200,12 +201,12 @@ def _command_foreground_key(command_id: UUID) -> str:
     return f"approval:command:{command_id}:foreground"
 
 
-def _command_grants_key(command_id: UUID) -> str:
-    return f"approval:command:{command_id}:grants"
+def _command_grants_prefix(command_id: UUID) -> str:
+    return f"approval:command:{command_id}:grant:"
 
 
-def _grant_member(integration_id: int, action_type: str) -> str:
-    return f"{integration_id}:{action_type}"
+def _command_grant_key(command_id: UUID, integration_id: int, action_type: str) -> str:
+    return f"{_command_grants_prefix(command_id)}{integration_id}:{action_type}"
 
 
 def mark_command_foreground(
@@ -247,10 +248,12 @@ def grant_command_actions(
     action_types: Iterable[str],
     cache: CacheBackend,
 ) -> None:
-    key = _command_grants_key(command_id)
     for action_type in set(action_types):
-        cache.set_add(key, _grant_member(integration_id, action_type))
-    cache.expire(key, COMMAND_GRANT_TTL_S)
+        cache.set(
+            _command_grant_key(command_id, integration_id, action_type),
+            b"1",
+            ex=COMMAND_GRANT_TTL_S,
+        )
 
 
 def command_grants_cover(
@@ -261,16 +264,15 @@ def command_grants_cover(
 ) -> bool:
     """Whether the user approved every one of `action_types` (non-empty) for
     the rest of the command."""
-    key = _command_grants_key(command_id)
-    unique = set(action_types)
-    return bool(unique) and all(
-        cache.set_contains(key, _grant_member(integration_id, action_type))
-        for action_type in unique
-    )
+    keys = {
+        _command_grant_key(command_id, integration_id, action_type)
+        for action_type in action_types
+    }
+    return bool(keys) and cache.exists_many(keys) == keys
 
 
 def drop_command_grants(command_id: UUID, cache: CacheBackend) -> None:
-    cache.delete(_command_grants_key(command_id))
+    cache.delete_prefix(_command_grants_prefix(command_id))
 
 
 def pop_announcement(
