@@ -29,6 +29,32 @@ test("the cursor marker hides while the last block is open code", () => {
   expect(kinds()).toEqual(["text"]);
 });
 
+test.each([
+  ["a table with an empty last cell", "| a | b |\n| - | - |\n| 1 |"],
+  ["a table with only its header", "| a | b |\n| - | - |"],
+  ["a list with an empty last item", "- one\n-"],
+])("the cursor stays in valid HTML at the end of %s", (_, content) => {
+  const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const { container } = render(
+      <AnswerMarkdown content={content} streaming cursor />
+    );
+    expect(container.querySelectorAll(".animate-pulse")).toHaveLength(1);
+    expect(
+      container.querySelector(
+        ":is(table, thead, tbody, tfoot, tr, ul, ol) > span"
+      )
+    ).toBeNull();
+    expect(
+      errors.mock.calls.some((call) =>
+        call.some((arg) => /cannot (be a child|contain)/.test(String(arg)))
+      )
+    ).toBe(false);
+  } finally {
+    errors.mockRestore();
+  }
+});
+
 test("the inline cursor hides while the last block is open code", () => {
   const { container } = render(
     <AnswerMarkdown content={OPEN_CODE} streaming cursor />

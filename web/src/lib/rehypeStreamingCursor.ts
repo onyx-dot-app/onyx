@@ -55,8 +55,31 @@ function cursor(anchor: boolean): Element {
   };
 }
 
-// Inserts the cursor after the last visible content in `children`.
-function insertCursor(children: RootContent[], anchor: boolean): void {
+// A span may not be a direct child of these, so the cursor goes in their
+// last cell or item, or after them.
+const STRUCTURAL_TAGS = new Set([
+  "table",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "ul",
+  "ol",
+]);
+// These hold the cursor even while empty, e.g. a table cell still streaming.
+const CONTAINER_TAGS = new Set(["td", "th", "li"]);
+
+/**
+ * Inserts the cursor after the last visible content in `children`. Returns
+ * false when `children` belong to a structural element that cannot hold it,
+ * so the caller places it after that element.
+ */
+function insertCursor(
+  children: RootContent[],
+  anchor: boolean,
+  parentTag?: string
+): boolean {
+  const structural = parentTag !== undefined && STRUCTURAL_TAGS.has(parentTag);
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
     if (!child || child.type === "comment" || child.type === "doctype") {
@@ -66,20 +89,25 @@ function insertCursor(children: RootContent[], anchor: boolean): void {
     if (
       child.type === "element" &&
       !isOpaque(child) &&
-      child.children.length > 0
+      (child.children.length > 0 || CONTAINER_TAGS.has(child.tagName)) &&
+      insertCursor(child.children, anchor, child.tagName)
     ) {
-      insertCursor(child.children, anchor);
-      return;
+      return true;
     }
+    if (structural) return false;
     children.splice(i + 1, 0, cursor(anchor));
-    return;
+    return true;
   }
+  if (structural) return false;
   children.push(cursor(anchor));
+  return true;
 }
 
 // Rehype plugin: put the streaming cursor inline after the last character.
 // Run it last, after the plugins that build the tree it walks.
 export function rehypeStreamingCursor(options?: RehypeStreamingCursorOptions) {
   const anchor = options?.anchor ?? false;
-  return (tree: Root) => insertCursor(tree.children, anchor);
+  return (tree: Root) => {
+    insertCursor(tree.children, anchor);
+  };
 }
