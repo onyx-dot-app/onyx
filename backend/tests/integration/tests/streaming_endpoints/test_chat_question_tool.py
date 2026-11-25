@@ -4,12 +4,13 @@ message continues the response in a new stream, and a reload shows the
 question's record."""
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import CurrentStreamInfo, SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import (
@@ -215,7 +216,7 @@ def test_a_card_answer_continues_the_response(
 # keys that the model adds.
 _CHANNELS = ["Email", "Slack", "Wiki"]
 _SHAPES = {
-    "openai": (
+    ToolFamily.OPENAI: (
         REQUEST_USER_INPUT_TOOL_NAME,
         ("channels", "scope"),
         [
@@ -232,7 +233,7 @@ _SHAPES = {
             QUESTIONS[0],
         ],
     ),
-    "claude": (
+    ToolFamily.CLAUDE: (
         ASK_USER_QUESTION_TOOL_NAME,
         ("Where should the update go?", "Who should get the email?"),
         [
@@ -260,13 +261,13 @@ _SHAPES = {
 }
 
 
-@pytest.mark.parametrize("shape", list(_SHAPES))
+@pytest.mark.parametrize("family", list(ToolFamily))
 def test_a_multi_select_answer_gives_the_model_every_chosen_option(
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     streaming_api: str,
-    request: pytest.FixtureRequest,
-    shape: str,
+    mock_llm_of_family: Callable[[ToolFamily], DATestLLMProvider | None],
+    family: ToolFamily,
 ) -> None:
     """Each model family asks in its own shape, and both reach the same card.
     A multi-select question takes several options and a note; the model reads
@@ -274,7 +275,7 @@ def test_a_multi_select_answer_gives_the_model_every_chosen_option(
     question as multi-select with the same answer. Two options for a
     single-select question, a repeated option and an unknown one are
     refused."""
-    tool_name, (channels, scope), questions = _SHAPES[shape]
+    tool_name, (channels, scope), questions = _SHAPES[family]
     nonce = uuid4().hex
     mock_llm.conversation(
         nonce,
@@ -293,9 +294,7 @@ def test_a_multi_select_answer_gives_the_model_every_chosen_option(
         ),
         conditions=RequestConditions(prompt_contains=[nonce]),
     )
-    provider: DATestLLMProvider | None = (
-        request.getfixturevalue("claude_mock_llm") if shape == "claude" else None
-    )
+    provider = mock_llm_of_family(family)
     session = ChatSessionManager.create(user_performing_action=admin_user)
     with _http(streaming_api, admin_user) as http:
         message = SendMessageRequest(
