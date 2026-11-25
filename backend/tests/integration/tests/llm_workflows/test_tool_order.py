@@ -3,6 +3,7 @@ both tool families: the direct tool list, and the functions that the code mode
 run tool's description lists. The persona's tool order does not change it."""
 
 from collections.abc import Callable
+from contextlib import ExitStack
 from uuid import uuid4
 
 import pytest
@@ -92,41 +93,65 @@ def test_the_model_reads_the_tools_in_rank_order(
     family = _FAMILIES[tool_family]
     provider = mock_llm_of_family(tool_family)
     nonce = uuid4().hex
-    # internal_search is only offered when a non-default connector exists.
-    CCPairManager.create_from_scratch(
-        source=DocumentSource.INGESTION_API, user_performing_action=admin_user
-    )
-    tool_ids = {
-        tool.in_code_tool_id: tool.id
-        for tool in ToolManager.list_tools(user_performing_action=admin_user)
-    }
-    integration_id = IntegrationManager.create(
-        {
-            "for_organization": True,
-            "name": f"ping-{nonce}",
-            "description": "Ping a service",
-            "auth_mode": "none",
-            "auth_method": None,
-            "config": {"shape": "openapi", "openapi_spec": _PING_SPEC},
-        },
-        admin_user,
-    ).id
-    # The persona lists its tools in reverse rank order.
-    persona = PersonaManager.create(
-        tool_ids=[tool_ids[OPEN_URL_TOOL_ID], tool_ids[SEARCH_TOOL_ID]],
-        user_performing_action=admin_user,
-    )
-    link_persona(persona.id, integration_id, {})
-    skill = SkillManager.create_custom(admin_user)
     mock_llm.conversation(
         nonce,
         Reply(text="Done."),
         conditions=RequestConditions(prompt_contains=[nonce]),
     )
-    try:
+    with ExitStack() as cleanup:
+        # internal_search is only offered when a non-default connector exists.
+        cc_pair = CCPairManager.create_from_scratch(
+            source=DocumentSource.INGESTION_API, user_performing_action=admin_user
+        )
+
+        @cleanup.callback
+        def _delete_cc_pair() -> None:
+            CCPairManager.pause_cc_pair(
+                cc_pair=cc_pair, user_performing_action=admin_user
+            )
+            CCPairManager.delete(cc_pair=cc_pair, user_performing_action=admin_user)
+
+        tool_ids = {
+            tool.in_code_tool_id: tool.id
+            for tool in ToolManager.list_tools(user_performing_action=admin_user)
+        }
+        integration_id = IntegrationManager.create(
+            {
+                "for_organization": True,
+                "name": f"ping-{nonce}",
+                "description": "Ping a service",
+                "auth_mode": "none",
+                "auth_method": None,
+                "config": {"shape": "openapi", "openapi_spec": _PING_SPEC},
+            },
+            admin_user,
+        ).id
+        cleanup.callback(
+            lambda: IntegrationManager.delete(
+                integration_id, admin_user
+            ).raise_for_status()
+        )
+        # The persona lists its tools in reverse rank order.
+        persona = PersonaManager.create(
+            tool_ids=[tool_ids[OPEN_URL_TOOL_ID], tool_ids[SEARCH_TOOL_ID]],
+            user_performing_action=admin_user,
+        )
+
+        @cleanup.callback
+        def _delete_persona() -> None:
+            assert PersonaManager.delete(persona, user_performing_action=admin_user)
+
+        link_persona(persona.id, integration_id, {})
+        skill = SkillManager.create_custom(admin_user)
+        cleanup.callback(SkillManager.delete_custom, skill, admin_user)
         session = ChatSessionManager.create(
             persona_id=persona.id, user_performing_action=admin_user
         )
+
+        @cleanup.callback
+        def _delete_session() -> None:
+            assert ChatSessionManager.delete(session, admin_user)
+
         response = ChatSessionManager.send_message(
             session.id,
             f"Hello. {nonce}",
@@ -167,7 +192,3 @@ def test_the_model_reads_the_tools_in_rank_order(
             description
         )
         assert custom_name not in description
-    finally:
-        assert PersonaManager.delete(persona, user_performing_action=admin_user)
-        SkillManager.delete_custom(skill, admin_user)
-        IntegrationManager.delete(integration_id, admin_user).raise_for_status()
