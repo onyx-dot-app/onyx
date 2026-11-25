@@ -329,3 +329,18 @@ def test_bundled_store_host_is_the_fqdn_with_firecracker() -> None:
     assert "svc" not in _configmap(_render(store))["S3_ENDPOINT_URL"]
     data = _configmap(_render([*store, *_PINNED, *_REGISTRATION]))
     assert ".onyx.svc." in data["S3_ENDPOINT_URL"]
+
+
+def test_explicit_drive_image_needs_its_template_in_auto() -> None:
+    drive = ["--set-string", "craft.hostAgent.rootfs.image.tag=rootfs-v6.0.0"]
+    assert _agent(_render([*_PINNED, *_REGISTRATION, *drive])) is None
+    docs = _render(
+        [
+            *_PINNED,
+            *_REGISTRATION,
+            *drive,
+            "--set-string",
+            "configMap.SANDBOX_FC_TEMPLATE=v6.0.0",
+        ]
+    )
+    assert _agent(docs) is not None

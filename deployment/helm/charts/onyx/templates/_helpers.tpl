@@ -339,6 +339,10 @@ true
 {{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict -}}
 {{- $agentTag := dig "image" "tag" "" $agent | default (include "onyx.craftFcReleaseTag" .) -}}
 {{- $rootfsTag := dig "rootfs" "image" "tag" "" $agent | default (dig "rootfs" "version" "" $agent) | default (include "onyx.craftFcReleaseTag" .) -}}
+{{- /* An explicit drive image needs its template name (craft-fc-host-agent.yaml). */}}
+{{- if and (dig "rootfs" "image" "tag" "" $agent) (not (index .Values.configMap "SANDBOX_FC_TEMPLATE")) -}}
+{{- $rootfsTag = "" -}}
+{{- end -}}
 {{- /* The agent needs its own copy of the credential (craft-fc-host-agent.yaml). */}}
 {{- $regKey := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg -}}
 {{- $agentReg := or $agent.registrationExistingSecret (and (not $reg.existingSecret) (dig "values" $regKey "" $reg)) -}}
