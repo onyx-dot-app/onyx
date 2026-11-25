@@ -2500,3 +2500,28 @@ def test_a_chat_recheck_matches_the_agents_integrations(
 
     assert addon._recheck_approval(flow, ctx, _MATCH, uuid4()) is None
     assert tags == [UUID(_TAG_UUID)]
+
+
+def test_a_chat_command_first_match_uses_the_chats_session() -> None:
+    """The first match reads the chat session out of a `<chat>.<command>`
+    tag, so it sees the integrations of the chat's agent."""
+    tags: list[UUID | None] = []
+
+    class _Recording(_StubMatcher):
+        def evaluate(
+            self,
+            request: http.Request,  # noqa: ARG002
+            tenant_id: str,  # noqa: ARG002
+            user_id: UUID,  # noqa: ARG002
+            session_tag: UUID | None = None,
+        ) -> AllMatchedActions | McpProtocolRequest | None:
+            tags.append(session_tag)
+            return None
+
+    addon = _build(
+        resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=_Recording()
+    )
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    assert addon._evaluate(flow, make_resolved_sandbox(), _COMMAND_TAG) is None
+    assert tags == [UUID(_TAG_UUID)]

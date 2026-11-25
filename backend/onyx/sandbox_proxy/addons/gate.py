@@ -752,7 +752,7 @@ class GateAddon:
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox, tag: str | None
     ) -> AllMatchedActions | McpProtocolRequest | None:
         try:
-            session_tag = UUID(tag) if tag else None
+            session_tag = parse_session_tag(tag)[0] if tag else None
         except ValueError:
             session_tag = None
         return self._request_evaluator.evaluate(
