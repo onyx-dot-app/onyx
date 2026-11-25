@@ -153,7 +153,6 @@ def test_openapi_config(monkeypatch: pytest.MonkeyPatch) -> None:
     integration, target = _use_openapi_tool(monkeypatch)
     config = HANDLER.load_config(integration, DB)
     assert config.shape is ApiShape.OPENAPI
-    assert config.api_app_id == 5
     assert config.base_url == "https://api.orders.example.com/v1"
 
 

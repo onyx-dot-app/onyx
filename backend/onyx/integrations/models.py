@@ -102,8 +102,6 @@ class ApiConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     shape: ApiShape
-    # Set for OPENAPI and GRAPHQL.
-    api_app_id: int | None = None
     base_url: str | None = None
     openapi_spec: dict[str, Any] | None = None
     # The schema as SDL, for GRAPHQL.

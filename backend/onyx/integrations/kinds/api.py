@@ -207,7 +207,7 @@ class ApiKindHandler(IntegrationKindHandler):
     def _openapi_config(
         self, integration: Integration, db_session: Session
     ) -> ApiConfig | None:
-        if integration.api_app_id is None and integration.tool_id is None:
+        if integration.api_app_id is None:
             return None
         app = get_api_app_for_integration(integration.id, db_session)
         return self.config_from_api_app(app) if app is not None else None
@@ -217,7 +217,6 @@ class ApiKindHandler(IntegrationKindHandler):
         if app.api_type is ApiAppType.GRAPHQL and app.graphql_schema is not None:
             return ApiConfig(
                 shape=ApiShape.GRAPHQL,
-                api_app_id=app.id,
                 base_url=app.base_url,
                 graphql_schema=app.graphql_schema,
             )
@@ -235,7 +234,6 @@ class ApiKindHandler(IntegrationKindHandler):
             base_url = None
         return ApiConfig(
             shape=ApiShape.OPENAPI,
-            api_app_id=app.id,
             openapi_spec=spec,
             base_url=base_url,
         )
