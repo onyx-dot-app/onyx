@@ -323,6 +323,11 @@ def validate_openapi_schema(
     if "paths" not in schema:
         raise ValueError("`paths` section is required in OpenAPI schema")
 
+    servers = schema.get("servers", [])
+    if not isinstance(servers, list) or not all(
+        isinstance(server, dict) for server in servers
+    ):
+        raise ValueError("`servers` must be a list of objects")
     if check_server_url and not openapi_to_url(schema):
         raise ValueError("OpenAPI schema does not contain a valid URL in `servers`")
 

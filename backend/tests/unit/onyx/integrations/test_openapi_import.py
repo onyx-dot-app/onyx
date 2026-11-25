@@ -160,6 +160,18 @@ def test_import_needs_no_server_url() -> None:
     assert len(view.endpoints) == 2
 
 
+@pytest.mark.parametrize("servers", [None, "https://pets.example.com", ["x"], [None]])
+def test_import_refuses_servers_of_the_wrong_shape(servers: Any) -> None:
+    spec = _callable_spec()
+    spec["servers"] = servers
+
+    with pytest.raises(OnyxError) as error:
+        _import(json.dumps(spec))
+
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+    assert "`servers`" in error.value.detail
+
+
 @pytest.mark.parametrize(
     "change, message",
     [
