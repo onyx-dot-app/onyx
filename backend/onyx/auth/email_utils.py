@@ -531,8 +531,14 @@ def build_magic_link_email(
 def send_magic_link_email(
     user_email: str, link: str, mail_from: str = EMAIL_FROM
 ) -> None:
-    application_name = _load_application_name()
-    onyx_file = OnyxRuntime.get_emailable_logo()
+    # On multi-tenant the person may have no workspace yet, and a signed-out
+    # request cannot read one. The deployment's own name and logo apply.
+    if MULTI_TENANT:
+        application_name = ONYX_DEFAULT_APPLICATION_NAME
+        onyx_file = OnyxRuntime.get_emailable_logo(workspace_branding=False)
+    else:
+        application_name = _load_application_name()
+        onyx_file = OnyxRuntime.get_emailable_logo()
     minutes_valid = max(1, MAGIC_LINK_TTL_SECONDS // 60)
 
     text_content, html_content = build_magic_link_email(
