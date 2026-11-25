@@ -84,14 +84,19 @@ def get_default_behavior_persona(
     db_session: Session,
     eager_load_for_tools: bool = False,
 ) -> Persona | None:
-    stmt = select(Persona).where(Persona.id == DEFAULT_PERSONA_ID)
-    if eager_load_for_tools:
-        stmt = stmt.options(
+    if not eager_load_for_tools:
+        # No read when the session already holds the persona, as a chat turn does.
+        return db_session.get(Persona, DEFAULT_PERSONA_ID)
+    stmt = (
+        select(Persona)
+        .where(Persona.id == DEFAULT_PERSONA_ID)
+        .options(
             selectinload(Persona.tools),
             selectinload(Persona.document_sets),
             selectinload(Persona.attached_documents),
             selectinload(Persona.hierarchy_nodes),
         )
+    )
     return db_session.scalars(stmt).first()
 
 
