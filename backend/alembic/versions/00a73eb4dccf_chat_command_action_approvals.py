@@ -1,7 +1,7 @@
 """chat command action approvals
 
 Revision ID: 00a73eb4dccf
-Revises: c2caf6a8285c
+Revises: a4253e609025
 Create Date: 2026-11-24 10:00:00.000000
 
 An action_approval row can belong to a command that a chat runs in its VM:
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "00a73eb4dccf"
-down_revision = "c2caf6a8285c"
+down_revision = "a4253e609025"
 branch_labels = None
 depends_on = None
 

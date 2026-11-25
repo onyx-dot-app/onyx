@@ -81,14 +81,10 @@ from onyx.tools.models import (
 )
 from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.sandbox import artifact_operations
+from onyx.tools.tool_implementations.sandbox.command_approvals import CommandApprovals
 from onyx.tools.tool_implementations.sandbox.errors import (
     sandbox_errors_as_tool_errors,
     tool_error,
-from onyx.tools.tool_implementations.sandbox import file_copies
-from onyx.tools.tool_implementations.sandbox.command_approvals import CommandApprovals
-from onyx.tools.tool_implementations.sandbox.file_copies import (
-    COPY_BASE_SECONDS,
-    COPY_MIN_BYTES_PER_SECOND,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchArguments,
