@@ -3,6 +3,7 @@
 import "@opal/loaders/styles.css";
 import { useLayoutEffect, useRef } from "react";
 import { Text, type TextFont } from "@opal/components";
+import type { RichStr } from "@opal/types";
 
 // The block shimmer in loaders/styles.css (LineLoader, CardLoader) uses the
 // same wave; keep the two in step.
@@ -19,10 +20,11 @@ const GAP_S = 1;
 
 interface TextLoaderProps {
   /**
-   * The text to shimmer, e.g. a status like "Thinking…". Plain text only:
-   * markdown could render blocks outside the measured inline run.
+   * The text to shimmer, e.g. a status like "Thinking…". Markdown (`RichStr`)
+   * renders inline only, so the wave stays one measured run; a code span
+   * keeps its chip, with plain text.
    */
-  children: string;
+  children: string | RichStr;
 
   /** Typography preset. @default "main-ui-action" */
   font?: TextFont;
@@ -39,6 +41,8 @@ interface TextLoaderProps {
  * width and rate to it.
  */
 function TextLoader({ children, font = "main-ui-action" }: TextLoaderProps) {
+  // A RichStr is a new object on each render; its text is what is measured.
+  const content = typeof children === "string" ? children : children.raw;
   const rootRef = useRef<HTMLDivElement>(null);
   const waveRef = useRef<HTMLSpanElement>(null);
 
@@ -69,7 +73,7 @@ function TextLoader({ children, font = "main-ui-action" }: TextLoaderProps) {
     const observer = new ResizeObserver(measure);
     observer.observe(root);
     return () => observer.disconnect();
-  }, [children, font]);
+  }, [content, font]);
 
   return (
     <div ref={rootRef} className="opal-text-loader">

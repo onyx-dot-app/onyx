@@ -13,7 +13,7 @@ import {
   FullChatState,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { StepContainer } from "@/lib/timeline/components/StepContainer";
+import { RunStep } from "@/lib/timeline/components/RunStep";
 import {
   isGroupEndPacket,
   NestedCall,
@@ -37,15 +37,15 @@ const CALLS_OF_A_NESTED_CALL: NestedCall[] = [];
 /**
  * ResearchAgentRenderer - Renders research agent steps in deep research
  *
- * Segregates packets by tool and uses StepContainer + TimelineRendererComponent.
+ * Segregates packets by tool and uses RunStep + TimelineRendererComponent.
  *
  * RenderType modes:
  * - FULL: Shows all nested tool groups, research task, and report. Headers passed as `status` prop.
  *         Used when step is expanded in timeline.
  * - COMPACT: Shows only the latest active item (tool or report). Header passed as `status` prop.
- *            Used when step is collapsed in timeline, still wrapped in StepContainer.
+ *            Used when step is collapsed in timeline, still wrapped in RunStep.
  * - HIGHLIGHT: Shows only the latest active item with header embedded directly in content.
- *              No StepContainer wrapper. Used for parallel streaming preview.
+ *              No RunStep wrapper. Used for parallel streaming preview.
  *              Nested tools are rendered with HIGHLIGHT mode recursively.
  */
 export const ResearchAgentRenderer: MessageRenderer<
@@ -249,29 +249,21 @@ export const ResearchAgentRenderer: MessageRenderer<
     ]);
   }
 
-  // Build content using StepContainer pattern
   const researchAgentContent = (
     <div className="flex flex-col">
       {/* Research Task - hidden in compact mode when tools/report are active */}
       {researchTask && !showOnlyReport && !showOnlyTools && (
-        <StepContainer
-          stepIcon={STEP_ICONS.thinking}
-          header={t("researchAgent.task.title")}
-          collapsible={true}
-          isLastStep={
-            !stopPacketSeen &&
-            nestedCalls.length === 0 &&
-            !fullReportContent &&
-            !isComplete
-          }
-          isHover={isHover}
-        >
-          <div className="ps-(--timeline-common-text-padding)">
+        <RunStep
+          status="done"
+          icon={STEP_ICONS.thinking}
+          title={t("researchAgent.task.title")}
+          defaultExpanded
+          body={
             <Text as="p" font="main-ui-muted" color="text-02">
               {researchTask}
             </Text>
-          </div>
-        </StepContainer>
+          }
+        />
       )}
 
       {/* Nested tool calls - hidden when report is streaming in compact mode */}
@@ -296,12 +288,7 @@ export const ResearchAgentRenderer: MessageRenderer<
               isHover={isHover}
             >
               {(results: TimelineRendererOutput) => (
-                <TimelineStepComposer
-                  results={results}
-                  isLastStep={isLastNestedStep}
-                  isFirstStep={!researchTask && index === 0}
-                  collapsible={true}
-                />
+                <TimelineStepComposer results={results} />
               )}
             </TimelineRendererComponent>
           );
@@ -309,22 +296,20 @@ export const ResearchAgentRenderer: MessageRenderer<
 
       {/* Intermediate report - hidden when tools are active in compact mode */}
       {fullReportContent && !showOnlyTools && (
-        <StepContainer
-          stepIcon={STEP_ICONS.agent}
-          header={t("researchAgent.report.title")}
-          isLastStep={!stopPacketSeen && !isComplete}
-          isFirstStep={!researchTask && nestedCalls.length === 0}
-          isHover={isHover}
-        >
-          <div className="ps-(--timeline-common-text-padding)">
+        <RunStep
+          status="done"
+          icon={STEP_ICONS.agent}
+          title={t("researchAgent.report.title")}
+          defaultExpanded
+          body={
             <ExpandableTextDisplay
               title={t("researchAgent.report.title")}
               content={fullReportContent}
               renderContent={renderReport}
               isStreaming={isReportStreaming}
             />
-          </div>
-        </StepContainer>
+          }
+        />
       )}
     </div>
   );

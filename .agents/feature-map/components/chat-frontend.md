@@ -701,7 +701,7 @@ the first step, the response shows the cursor, not a run card. `TransformedStep.
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a
 cell's new call can move later steps into another turn group. The rail
-primitives, `StepContainer` and that list (`TimelineSteps`) live in
+primitives, `RunStep` and that list (`TimelineSteps`) live in
 `web/src/lib/timeline/`, which Craft shares ([[craft-frontend]]).
 `web/src/lib/timeline/chat/transformers.ts:groupStepsByTurn` gives every
 step its own group, in turn order. Concurrent calls of one program show as

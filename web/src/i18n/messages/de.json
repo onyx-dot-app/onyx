@@ -12519,6 +12519,12 @@
           },
           "browsing": {
             "label": "{count, plural, =0 {Seiten werden aufgerufen} one {# Seite wird aufgerufen} other {# Seiten werden aufgerufen}}"
+          },
+          "doingWork": {
+            "label": "Arbeitet daran..."
+          },
+          "didWork": {
+            "label": "Arbeit erledigt"
           }
         },
         "internalSearch": {

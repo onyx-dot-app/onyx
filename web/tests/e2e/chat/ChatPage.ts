@@ -1013,11 +1013,15 @@ export class ChatPage {
    * shows `output`. The step's body is a code panel with the request and
    * the response, so the output is matched as text. */
   async expectCustomToolResult(name: string, output: string): Promise<void> {
-    // A run card folds by a button named for its step count.
+    // A long run folds its steps into a card whose button is named for the
+    // step count; a short run shows each step as its own card.
     const fold = this.scrollContainer
       .getByRole("button", { name: /^\d+ steps?$/ })
       .first();
-    if ((await fold.getAttribute("aria-expanded")) === "false") {
+    if (
+      (await fold.count()) > 0 &&
+      (await fold.getAttribute("aria-expanded")) === "false"
+    ) {
       await fold.click();
     }
     const status = this.scrollContainer.getByText(`Executed ${name}`, {

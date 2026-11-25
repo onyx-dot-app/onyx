@@ -12519,6 +12519,12 @@
           },
           "browsing": {
             "label": "{count, plural, =0 {جارٍ التصفح} one {جارٍ تصفح صفحة واحدة} two {جارٍ تصفح صفحتين} few {جارٍ تصفح # صفحات} many {جارٍ تصفح # صفحة} other {جارٍ تصفح # صفحة}}"
+          },
+          "doingWork": {
+            "label": "جارٍ العمل..."
+          },
+          "didWork": {
+            "label": "تم إنجاز العمل"
           }
         },
         "internalSearch": {

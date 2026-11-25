@@ -24,6 +24,8 @@ export interface ChatStepProps {
   chatState: FullChatState;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
+  /** Shown at the end of the step's header, e.g. a memory's tag. */
+  headerAccessory?: React.ReactNode;
 }
 
 /**
@@ -37,18 +39,17 @@ export const ChatStep = React.memo(function ChatStep({
   chatState,
   stopPacketSeen,
   stopReason,
+  headerAccessory,
 }: ChatStepProps) {
   const renderStep = useCallback(
     (results: TimelineRendererOutput) => (
       <TimelineStepComposer
         results={results}
-        isLastStep={position.isLast}
-        isFirstStep={position.isFirst}
-        collapsible
         status={status}
+        headerAccessory={headerAccessory}
       />
     ),
-    [position.isFirst, position.isLast, status]
+    [status, headerAccessory]
   );
 
   return (

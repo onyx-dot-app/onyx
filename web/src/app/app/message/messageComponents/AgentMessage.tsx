@@ -800,7 +800,9 @@ export default AgentMessage;
  * steps run and until what comes next.
  */
 function endsWithRun(segments: SectionSegment[]): boolean {
-  const last = segments.at(-1);
+  // Generated images that arrive before the answer sit after the run; the
+  // run still ends the section, so the cursor keeps its slot under them.
+  const last = segments.findLast((s) => s.kind !== "extras");
   return last?.kind === "run" && last.turnGroups.length > 0;
 }
 

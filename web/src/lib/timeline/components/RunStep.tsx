@@ -1,19 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import type { LineVariant } from "@opal/components";
+import { Line } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { StepContainer } from "@/lib/timeline/components/StepContainer";
-import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import type {
-  TimelineEntryStatus,
-  TimelineStepPosition,
-} from "@/lib/timeline/types";
+import type { TimelineEntryStatus } from "@/lib/timeline/types";
 
 export interface RunStepProps {
   status: TimelineEntryStatus;
-  position: TimelineStepPosition;
   /** The step kind's icon; a running or failed step shows its status. */
   icon?: IconFunctionComponent;
   /** The title while the step runs, and after it fails or is stopped. */
@@ -22,19 +16,14 @@ export interface RunStepProps {
   doneTitle?: string | RichStr;
   /** The title's identity: a new key swaps the title. Defaults to its text. */
   titleKey?: React.Key;
-  /** Rendered at the inline end of the header, before the toggle. */
+  /** Rendered at the end of the header, before the chevron. */
   headerAccessory?: React.ReactNode;
   /** The step's body; `null` for a step with nothing to show. */
   body?: React.ReactNode;
   /** Start open. */
   defaultExpanded?: boolean;
-  /** Whether the step folds. Defaults to having a body. */
-  expandable?: boolean;
   /** The body has no header (the body is its own control). */
   hideHeader?: boolean;
-  isHover?: boolean;
-  /** The surface when the step has not failed. */
-  surfaceBackground?: TimelineSurfaceBackground;
 }
 
 function statusIcon(
@@ -47,22 +36,14 @@ function statusIcon(
   return undefined;
 }
 
-function statusVariant(status: TimelineEntryStatus): LineVariant | undefined {
-  if (status === "error") return "error-heavy";
-  if (status === "stopped") return "error-light";
-  return undefined;
-}
-
 /**
- * One step of a run, the same in chat and Craft. The status decides the icon
- * and the colour: a spinner while running; the alert icon and a red tint when
- * failed; a red stop icon when stopped. A step that did not finish keeps its
- * running title, and a done step shows `doneTitle`. Every step folds its body
- * away completely; a failed step stays expandable so its error is reachable.
+ * One step of a run, the same everywhere: on its own as a hoisted run card,
+ * or inside a collapsed run card. It is an Opal `Line` card whose title is
+ * the step's (a spinner and a shimmer while it runs, its done title once it
+ * finishes), with a chevron that opens its body.
  */
 export function RunStep({
   status,
-  position,
   icon,
   title,
   doneTitle,
@@ -70,35 +51,35 @@ export function RunStep({
   headerAccessory,
   body = null,
   defaultExpanded = false,
-  expandable: expandableProp,
   hideHeader = false,
-  isHover = false,
-  surfaceBackground,
 }: RunStepProps) {
-  const [ownExpanded, setOwnExpanded] = useState(defaultExpanded);
-  // A step without a header always shows its body.
-  const isExpanded = hideHeader || ownExpanded;
-  const failed = status === "error";
-  const expandable = (expandableProp ?? body !== null) || failed;
+  const [open, setOpen] = useState(defaultExpanded);
+  if (hideHeader) return <>{body}</>;
+
+  const shownTitle = status === "done" ? (doneTitle ?? title) : title;
+  const cardBody =
+    body !== null
+      ? {
+          expandable: true as const,
+          expanded: open,
+          expandedContent: body,
+        }
+      : { expandable: false as const };
 
   return (
-    <StepContainer
-      stepIcon={statusIcon(status) ?? icon}
-      header={status === "done" ? (doneTitle ?? title) : title}
-      headerKey={titleKey}
-      headerAccessory={headerAccessory}
-      isExpanded={isExpanded}
-      onToggle={() => setOwnExpanded((prev) => !prev)}
-      supportsCollapsible={expandable}
-      isFirstStep={position.isFirst}
-      isLastStep={position.isLast}
-      hideHeader={hideHeader}
-      isHover={isHover}
-      surfaceBackground={surfaceBackground}
-      variant={statusVariant(status)}
-    >
-      {body}
-    </StepContainer>
+    <Line
+      icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
+      title={shownTitle ?? ""}
+      titleKey={titleKey}
+      shimmer={status === "streaming"}
+      rightChildren={headerAccessory}
+      // Filled while open; otherwise only on hover.
+      filled={open}
+      onClick={() => setOpen((prev) => !prev)}
+      // The body starts under the title text.
+      bodyInset="title"
+      {...cardBody}
+    />
   );
 }
 

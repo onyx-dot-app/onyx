@@ -80,10 +80,10 @@ function thought(content: string): TimelineEvent {
 
 const endTurn: TimelineEvent = { type: "stop", stopReason: "end_turn" };
 
-// Opens a folded run card. Its fold button is named by the step count.
+// Opens the run card: the first fold control, the card's own.
 function openRun() {
-  const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
-  if (fold?.getAttribute("aria-expanded") === "false") fireEvent.click(fold);
+  const fold = screen.queryAllByRole("button", { expanded: false })[0];
+  if (fold) fireEvent.click(fold);
 }
 
 // Opens every closed step.
@@ -322,7 +322,10 @@ describe("BuildMessageList thinking visibility", () => {
     // follows it.
     expect(await screen.findByText(/^Final answer/)).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: "1 step", expanded: false })
+      await screen.findByRole("button", {
+        name: /^Expand Thought/,
+        expanded: false,
+      })
     ).toBeInTheDocument();
     openRun();
     expect(screen.getByText("Thought")).toBeInTheDocument();

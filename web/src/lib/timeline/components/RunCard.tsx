@@ -1,18 +1,16 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Line, Presence, Text } from "@opal/components";
+import { SvgSparkle } from "@opal/icons";
 import { formatDurationSeconds } from "@opal/time";
 import { useTranslations } from "next-intl";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
-import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
-import {
-  CompletedHeader,
-  MemoryTagWithTooltip,
-} from "@/lib/timeline/components/headers/CompletedHeader";
-import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
+import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import type {
   TimelineEntryStatus,
   TimelineStepPosition,
@@ -50,6 +48,17 @@ export interface RunCardProps<S extends RunCardStep> {
   streamingStartTime?: number;
   /** The server's duration, shown for a run that did not work here. */
   durationSeconds?: number;
+  /** The finished header's text, in place of the duration. */
+  doneText?: string | RichStr;
+  /** The header's icon while the run works and once it is done. */
+  icon?: IconFunctionComponent;
+  /**
+   * Play the card's entry when it mounts while its run works. Off for a card
+   * that takes the place of a run's own step cards (see AgentTimeline).
+   */
+  appear?: boolean;
+  /** Mount folded, even while the run works. */
+  startFolded?: boolean;
   summary?: RunCardSummary;
 }
 
@@ -68,6 +77,10 @@ export function RunCard<S extends RunCardStep>({
   autoCollapse = false,
   streamingStartTime,
   durationSeconds,
+  doneText,
+  icon = SvgSparkle,
+  appear = true,
+  startFolded = false,
   summary,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
@@ -76,10 +89,15 @@ export function RunCard<S extends RunCardStep>({
   const stopped =
     !isRunning &&
     (isStopped ?? steps.some((step) => step.status === "stopped"));
-  const [isOpen, setIsOpen] = useState(isRunning);
+  const [isOpen, setIsOpen] = useState(isRunning && !startFolded);
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
-  const [arrivedLive] = useState(isRunning);
+  const [arrivedLive] = useState(appear && isRunning);
+  // Steps already there when the card mounts show at once; later ones rise
+  // in.
+  const [initialStepIds] = useState(
+    () => new Set(steps.map((step) => step.id))
+  );
   // A card the user folded or opened keeps their choice.
   const userToggled = useRef(false);
   const toggle = () => {
@@ -128,20 +146,26 @@ export function RunCard<S extends RunCardStep>({
   const visible = steps.length > 0 || isRunning;
   const foldable = steps.length > 0;
 
+  const headerTitle = isRunning
+    ? workingText
+    : stopped
+      ? t("interruptedThinking.label")
+      : (doneText ??
+        (finishedSeconds
+          ? t("thoughtDuration.label", {
+              duration: formatDurationSeconds(finishedSeconds),
+            })
+          : t("thoughtUnknownDuration.label")));
+
   return (
     <Presence show={visible} appear={arrivedLive} grow>
       <TimelineRoot>
         <Line
-          flavour="card"
-          filled={isRunning || isOpen}
+          // Filled while open; otherwise only on hover, as a step card is.
+          filled={isOpen}
           onClick={foldable ? toggle : undefined}
           // The header's own fold button, in every state, so its step count
           // animates as it changes and it lights up with the header.
-          foldLabel={
-            foldable
-              ? t("stepsButton.label", { count: steps.length })
-              : undefined
-          }
           rightChildren={
             foldable && (
               <>
@@ -179,19 +203,37 @@ export function RunCard<S extends RunCardStep>({
                     </Text>
                   </div>
                 </Presence>
+                {/* The step count is text before the chevron, so the card's
+                    chevron lines up with its steps' chevrons. */}
+                <div className="px-(--padding-text-4)">
+                  <Text
+                    as="p"
+                    font="secondary-body"
+                    color="text-03"
+                    wordWrap="whitespace-nowrap"
+                  >
+                    {t("stepsButton.label", { count: steps.length })}
+                  </Text>
+                </div>
               </>
             )
           }
           expandable
           expanded={isOpen}
           expandedContent={
-            // The steps, 0.25rem apart.
+            // The steps, 4px apart. A step card
+            // inside has no padding of its own, so its title lines up with
+            // the card's own title.
             <Section alignItems="stretch" gap={1} height="auto">
               {steps.map((step, index) => (
                 // A step that streams in rises in, after the card opens room
                 // for it. Steps already there when the card mounts (a saved
                 // run) appear at once.
-                <Presence key={step.id} appear={isRunning} grow>
+                <Presence
+                  key={step.id}
+                  appear={isRunning && !initialStepIds.has(step.id)}
+                  grow
+                >
                   {renderStep(step, {
                     isFirst: index === 0,
                     isLast: index === steps.length - 1,
@@ -200,23 +242,15 @@ export function RunCard<S extends RunCardStep>({
               ))}
             </Section>
           }
-        >
-          {/* The header swaps when the run's state changes: working,
-              stopped or done. While working, a new activity ("Thinking" to
-              "Searching...") updates the text in place, so the shimmer
-              never restarts. */}
-          <Presence.Swap
-            swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
-          >
-            {isRunning ? (
-              <StreamingHeader headerText={workingText} />
-            ) : stopped ? (
-              <StoppedHeader />
-            ) : (
-              <CompletedHeader processingDurationSeconds={finishedSeconds} />
-            )}
-          </Presence.Swap>
-        </Line>
+          // The card's own title, the same header a hoisted run card has.
+          // It swaps when the run's state changes (working, stopped, done);
+          // while working, a new activity updates the text in place, so the
+          // shimmer never restarts.
+          icon={stopped && !isRunning ? STEP_ICONS.stopped : icon}
+          title={headerTitle}
+          titleKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+          shimmer={isRunning}
+        />
       </TimelineRoot>
     </Presence>
   );

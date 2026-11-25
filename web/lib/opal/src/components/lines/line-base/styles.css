@@ -21,16 +21,9 @@
   @apply ps-7 pe-1 pb-1;
 }
 
-/* `content` pads only the start, to sit under the content, flush with the
-   row: a step's row hovers without a fill, so nothing needs a gap. */
-.opal-line .opal-line-body[data-opal-line-body-inset="content"] {
-  @apply pe-0 pb-0;
-}
-
-/* A step's row (a `Collapsible.Header` with `hover="subtle"`) toggles it:
-   on hover, the title and a default icon darken, with no fill. The colours
+/* A card's title darkens while its header is hovered (below). The colours
    and timing are `Interactive`'s tertiary default: `text-03` at rest,
-   `text-04` on hover, over `--duration-interactive`, together. */
+   `text-04` on hover, over `--duration-interactive`. */
 .opal-line-title {
   @apply min-w-0 text-text-03;
 }
@@ -38,9 +31,36 @@
 .opal-line .opal-line-icon {
   transition: color var(--duration-interactive) ease-in-out;
 }
-.opal-line[data-opal-line-status="default"]
-  .opal-collapsible-header[data-hover="subtle"]:hover
-  :is(.opal-line-title, .opal-line-icon) {
+
+/* A card's own title (`title`): the icon box and the title inline, as
+   `Content` lays out an inline title, inset as a run card's title is. Its
+   icon takes the title's colour. */
+.opal-line-card-title {
+  @apply flex flex-row items-center gap-1 min-w-0;
+  margin: var(--padding-text-2) var(--padding-text-4);
+  --content-foreground-icon: currentColor;
+}
+.opal-line-card-title-text {
+  @apply block min-w-0;
+  padding-inline: 2px;
+}
+/* A shimmering title stays on one line too: it is cut at the header's end. */
+.opal-line-card-title-text > .opal-text-loader {
+  @apply max-w-full overflow-hidden whitespace-nowrap;
+}
+/* A long title stays within the header: its swap box may shrink, and the
+   text truncates (with a tooltip) rather than widening the card. */
+.opal-line-card-title .opal-presence-swap,
+.opal-line-card-title .opal-presence-swap-content {
+  @apply min-w-0 max-w-full;
+}
+
+/* A card's header that toggles it darkens its title the same way. A title
+   of your own takes `.opal-line-title` (an icon in it with `currentColor`
+   follows). */
+.opal-line[data-opal-line-flavour="card"][data-opal-line-status="default"]
+  .opal-collapsible-header:not([data-disabled]):hover
+  .opal-line-title {
   @apply text-text-04;
 }
 
@@ -54,6 +74,16 @@
    the card's own padding. */
 .opal-line .opal-line-body[data-opal-line-body-inset="flush"] {
   @apply p-0;
+}
+/* `title` starts the body under the header's title text: the title's inset,
+   its icon box (one title line), the gap and the text's own padding. */
+.opal-line .opal-line-body[data-opal-line-body-inset="title"] {
+  @apply p-0;
+  padding-inline-start: calc(var(--padding-text-4) + 2px);
+}
+.opal-line
+  .opal-line-body[data-opal-line-body-inset="title"][data-opal-line-has-icon] {
+  padding-inline-start: calc(var(--padding-text-4) + 1.25rem + 0.25rem + 2px);
 }
 
 /* A card that cannot fold yet keeps its header (see `Line`), disabled: no
@@ -70,6 +100,12 @@
 .opal-line[data-opal-line-flavour="card"] {
   @apply rounded-12 p-1 transition-colors duration-300;
 }
+/* A card inside a card (a step in a run card) has no padding of its own,
+   so its title lines up with the outer card's. */
+.opal-line[data-opal-line-flavour="card"]
+  .opal-line[data-opal-line-flavour="card"] {
+  @apply p-0;
+}
 .opal-line[data-opal-line-flavour="card"][data-opal-line-filled="true"],
 .opal-line[data-opal-line-flavour="card"][data-opal-line-clickable="true"]:hover {
   @apply bg-background-tint-00;
@@ -84,14 +120,6 @@
 .opal-line:not([data-opal-line-status="default"]) .opal-line-icon,
 .opal-line:not([data-opal-line-status="default"]) .opal-line-title {
   color: var(--opal-line-status-fg);
-}
-
-/* On hover, an error row's red deepens to the strongest danger step. The
-   other statuses have no step above -05, so they keep their colour. */
-.opal-line[data-opal-line-status="error"]
-  .opal-collapsible-header[data-hover="subtle"]:hover
-  :is(.opal-line-title, .opal-line-icon) {
-  color: var(--action-danger-06);
 }
 
 .opal-line[data-opal-line-weight="heavy"][data-opal-line-status="info"] {

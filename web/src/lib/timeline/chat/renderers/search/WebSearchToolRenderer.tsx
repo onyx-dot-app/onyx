@@ -35,7 +35,7 @@ const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
  * RenderType modes:
  * - FULL: Shows queries timeline step. Used when step is expanded in timeline.
  * - HIGHLIGHT: Shows queries with header embedded directly in content.
- *              No StepContainer wrapper. Used for parallel streaming preview.
+ *              No RunStep wrapper. Used for parallel streaming preview.
  * - INLINE: Shows queries for collapsed streaming view.
  */
 export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
@@ -69,7 +69,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     ]);
   }
 
-  // HIGHLIGHT mode: header embedded in content, no StepContainer
+  // HIGHLIGHT mode: header embedded in content, no RunStep
   if (isHighlight) {
     return children([
       {

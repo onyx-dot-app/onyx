@@ -6,7 +6,6 @@ import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
 import { ContentAction, Section } from "@opal/layouts";
-import { formatDurationSeconds } from "@opal/time";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@opal/components";
 
@@ -92,41 +91,5 @@ export function MemoryTagWithTooltip({
         </Tooltip>
       )}
     </>
-  );
-}
-
-// =============================================================================
-// CompletedHeader
-// =============================================================================
-
-export interface CompletedHeaderProps {
-  processingDurationSeconds?: number;
-}
-
-/** The finished run's title: how long it took, for every run. A saved
- *  memory adds its tag on the card's right side (see RunCard). */
-export function CompletedHeader({
-  processingDurationSeconds = 0,
-}: CompletedHeaderProps) {
-  const t = useTranslations("chat.messages.timeline");
-
-  const durationText = processingDurationSeconds
-    ? t("thoughtDuration.label", {
-        duration: formatDurationSeconds(processingDurationSeconds),
-      })
-    : t("thoughtUnknownDuration.label");
-
-  return (
-    <Section
-      flexDirection="row"
-      justifyContent="start"
-      gap={0}
-      height="fit"
-      className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
-    >
-      <Text as="p" font="main-ui-action" color="text-03">
-        {durationText}
-      </Text>
-    </Section>
   );
 }
