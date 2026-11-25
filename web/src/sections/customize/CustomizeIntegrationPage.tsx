@@ -86,25 +86,32 @@ export default function CustomizeIntegrationPage({
                 },
               ]}
               footer={
-                reason !== null ? (
-                  <Text as="p" font="secondary-body" color="text-03">
-                    {reason}
-                  </Text>
-                ) : (
-                  <ContentAction
-                    font="main-ui-action"
-                    title={t("overview.switch.title")}
-                    description={
-                      required
-                        ? t("overview.switch.required")
-                        : t("overview.switch.description")
-                    }
-                    padding={0}
-                    rightChildren={
-                      <IntegrationSwitch integration={integration} />
-                    }
-                  />
-                )
+                <>
+                  {state === "needs_reconnect" && integration.status.reason && (
+                    <Text as="p" font="secondary-body" color="text-03">
+                      {integration.status.reason}
+                    </Text>
+                  )}
+                  {reason !== null ? (
+                    <Text as="p" font="secondary-body" color="text-03">
+                      {reason}
+                    </Text>
+                  ) : (
+                    <ContentAction
+                      font="main-ui-action"
+                      title={t("overview.switch.title")}
+                      description={
+                        required
+                          ? t("overview.switch.required")
+                          : t("overview.switch.description")
+                      }
+                      padding={0}
+                      rightChildren={
+                        <IntegrationSwitch integration={integration} />
+                      }
+                    />
+                  )}
+                </>
               }
             />
           ),
@@ -159,11 +166,6 @@ export default function CustomizeIntegrationPage({
                 title={stateCopy("connectionState", {
                   state: state ?? "not_set_up",
                 })}
-                tooltip={
-                  state === "needs_reconnect"
-                    ? (integration.status.reason ?? undefined)
-                    : undefined
-                }
               />,
               // Disconnect stays while the integration is turned off.
               ...(reason === null || state === "connected"

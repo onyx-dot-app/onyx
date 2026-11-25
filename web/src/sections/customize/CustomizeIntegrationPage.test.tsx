@@ -237,6 +237,18 @@ test("a turned off integration keeps Disconnect for the user's connection", asyn
   );
 });
 
+test("the overview shows why the user must reconnect", async () => {
+  open(
+    makeMemberIntegration({
+      status: { state: "needs_reconnect", reason: "The token expired." },
+    })
+  );
+  expect(await screen.findByText("The token expired.")).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Reconnect Linear" })
+  ).toBeVisible();
+});
+
 test("OAuth continues in this tab when the browser blocks the new tab", async () => {
   jest.spyOn(window, "open").mockReturnValue(null);
   open(makeMemberIntegration(), {

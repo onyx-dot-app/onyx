@@ -81,7 +81,7 @@ test("each member row shows its state as Claude does", async () => {
   ).not.toBeInTheDocument();
 });
 
-test("on a phone a muted row shows its short state with the reason as a tooltip", async () => {
+test("on a phone a turned off row shows its short state; no access keeps its reason", async () => {
   const width = window.innerWidth;
   window.innerWidth = 390;
   try {
@@ -94,11 +94,24 @@ test("on a phone a muted row shows its short state with the reason as a tooltip"
           status: connected,
           access: makeAccess({ state: "turned_off" }),
         }),
+        makeMemberIntegration({
+          id: 4,
+          name: "Drive",
+          access: makeAccess({
+            state: "no_access",
+            user_enabled: false,
+            shared_with_everyone: false,
+          }),
+        }),
       ],
     });
     render(<CustomizeIntegrationsPage />);
 
     const label = await screen.findByText("Turned off");
+    // A No access row opens no detail page, so a touch user reads it here.
+    expect(
+      screen.getByText("No access: this integration is not shared with you.")
+    ).toBeVisible();
     expect(screen.queryByText("Turned off by an admin.")).toBeNull();
     await setupUser().hover(label);
     expect(

@@ -100,7 +100,8 @@ interface IntegrationStateControlProps {
 
 /** The control of one member row: a switch for On and Turn on, Connect and
  * the switch for Sign in, and a muted reason for No access and Turned off.
- * On a phone the row shows the short state, with the reason as its tooltip. */
+ * On a phone a Turned off row shows the short state; its detail page shows
+ * the reason. A No access row has no detail page, so it keeps the reason. */
 export function IntegrationStateControl({
   integration,
   returnPath,
@@ -109,7 +110,7 @@ export function IntegrationStateControl({
   const { isMobile } = useScreenSize();
   const reason = copy.reason(integration);
   if (reason !== null)
-    return isMobile ? (
+    return isMobile && integration.access.state !== "no_access" ? (
       <Text font="secondary-body" color="text-03" maxLines={1} tooltip={reason}>
         {copy.label(integration)}
       </Text>
