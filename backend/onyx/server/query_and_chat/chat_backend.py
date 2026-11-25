@@ -104,6 +104,7 @@ from onyx.db.chat import (
     get_incognito_session_ids_for_user,
     get_owned_chat_session,
     get_selected_branch,
+    selected_response_status_for_user,
     set_as_latest_chat_message,
     set_chat_session_tool_options__no_commit,
     set_preferred_response,
@@ -998,18 +999,14 @@ def handle_send_chat_message(
     # other caller's access error.
     if chat_message_req.chat_session_id is not None:
         with get_session_with_current_tenant() as db_session:
-            try:
-                get_chat_session_by_id(
-                    chat_session_id=chat_message_req.chat_session_id,
-                    user_id=user.id,
-                    db_session=db_session,
+            # One read; see `_reject_while_user_input_waits` for the rule.
+            if (
+                selected_response_status_for_user(
+                    db_session, chat_message_req.chat_session_id, user.id
                 )
-            except ValueError:
-                pass
-            else:
-                _reject_while_user_input_waits(
-                    db_session, chat_message_req.chat_session_id
-                )
+                == RunStatus.SUSPENDED
+            ):
+                raise OnyxError(OnyxErrorCode.APPROVAL_PENDING, USER_INPUT_PENDING)
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(
