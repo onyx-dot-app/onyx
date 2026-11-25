@@ -198,7 +198,7 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
         aria-label={alt || tFiles("inMessageImage.viewFullImage.label")}
         onClick={() => setFullImageShowing(true)}
         onKeyDown={clickOnKeyDown(() => setFullImageShowing(true))}
-        className="block cursor-zoom-in"
+        className="block w-fit max-w-full cursor-zoom-in"
       >
         {image}
       </span>

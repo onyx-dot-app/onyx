@@ -19,6 +19,12 @@ describe("stripAnsi", () => {
     expect(stripAnsi("\u001b(Bplain")).toBe("plain");
   });
 
+  test("removes terminal control strings and their payloads", () => {
+    expect(stripAnsi("before\u001bP1;2|private data\u001b\\after")).toBe(
+      "beforeafter"
+    );
+  });
+
   test("keeps text without escapes", () => {
     expect(stripAnsi("[32m is not an escape")).toBe("[32m is not an escape");
   });
