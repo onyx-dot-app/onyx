@@ -10,9 +10,11 @@ import threading
 import time
 import uuid
 from collections import deque
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, NamedTuple
+from functools import wraps
+from typing import Any, NamedTuple, ParamSpec, TypeVar
 
 import requests
 
@@ -111,6 +113,45 @@ CONNECTOR_ROW_SETTINGS: tuple[str, ...] = (
     "auto_sync_enabled",
     "permission_sync_enabled",
 )
+
+
+class ToolKind(str, Enum):
+    """Fixed tool classes for query tool counts. Never a tool's own name."""
+
+    SEARCH = "search"
+    WEB_SEARCH = "web_search"
+    OPEN_URL = "open_url"
+    MCP = "mcp"
+    CUSTOM = "custom"
+    IMAGE = "image"
+    PYTHON = "python"
+    CODE_MODE = "code_mode"
+    SANDBOX = "sandbox"
+    OTHER = "other"
+
+
+class LoginFailure(str, Enum):
+    """The login method of a failed sign-in."""
+
+    PASSWORD = "password"
+    # The Google OAuth router configured by environment variables.
+    OAUTH = "oauth"
+    # The multi-provider OIDC router, which also serves Google provider rows.
+    OIDC = "oidc"
+    SAML = "saml"
+
+
+class MCPFailure(str, Enum):
+    """MCP server failures outside a tool call."""
+
+    DISCOVERY_AUTH = "discovery_auth"
+    DISCOVERY_TIMEOUT = "discovery_timeout"
+    DISCOVERY_ERROR = "discovery_error"
+    PROBE_UNREACHABLE = "probe_unreachable"
+    PROBE_BLOCKED = "probe_blocked"
+
+
+_TOOL_KINDS: frozenset[str] = frozenset(kind.value for kind in ToolKind)
 # The document types a corpus count can break down by.
 _DOCUMENT_TYPES: frozenset[str] = frozenset(label.value for label in DocumentTypeLabel)
 # Nested maps: their values must be numbers or booleans.
@@ -133,6 +174,10 @@ _NESTED_FIELDS: dict[str, frozenset[str]] = {
     ),
     "expected_by_type": _DOCUMENT_TYPES,
     "expected_bytes_by_type": _DOCUMENT_TYPES,
+    "tool_calls": _TOOL_KINDS,
+    "tool_failures": _TOOL_KINDS,
+    "login_failures": frozenset(failure.value for failure in LoginFailure),
+    "mcp_failures": frozenset(failure.value for failure in MCPFailure),
 }
 # The keys each event type may carry. The fleet service checks the values.
 _FIELDS: dict[str, frozenset[str]] = {
@@ -169,6 +214,9 @@ _FIELDS: dict[str, frozenset[str]] = {
             "error_code",
             "error_source",
             "llm_provider",
+            "tool_calls",
+            "tool_failures",
+            "mcp_auth_failures",
         }
     ),
     "connector": frozenset(
@@ -276,6 +324,7 @@ _FIELDS: dict[str, frozenset[str]] = {
     ),
     "runtime": frozenset({"service_instance_id", "reason"}),
     "version": frozenset({"version"}),
+    "failure_counts": frozenset({"login_failures", "mcp_failures"}),
     "heartbeat": frozenset(
         {
             "deployment_type",
@@ -310,6 +359,8 @@ EXIT_FLUSH_SECONDS: float = 2.0
 # Indexing counter deltas are summed per attempt and stage for this long.
 _STAGE_WINDOW_SECONDS: float = 30.0
 _MAX_STAGE_KEYS: int = 256
+# Each failure count stops here within one window, so an attack cannot grow it without bound.
+MAX_FAILURE_COUNT: int = 100_000
 
 
 def fingerprint(value: str) -> str:
@@ -391,6 +442,83 @@ def deployment_key() -> str:
     from onyx.db.fleet_enrollment import get_or_create_deployment_key
 
     return get_or_create_deployment_key()
+
+
+class FailureCounts:
+    """Failures outside queries, counted in memory under fixed keys.
+
+    The sender sends the counts with each heartbeat in one `failure_counts`
+    event, so a burst of failures never adds events."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        # A forked child gets a fresh lock and none of its parent's counts.
+        self._lock = threading.Lock()
+        self._counts: dict[LoginFailure | MCPFailure, int] = {}
+
+    def add(self, failure: LoginFailure | MCPFailure) -> None:
+        with self._lock:
+            self._counts[failure] = min(
+                self._counts.get(failure, 0) + 1, MAX_FAILURE_COUNT
+            )
+
+    def take(self) -> dict[str, Any] | None:
+        """The counts since the previous call; None when there were none."""
+        with self._lock:
+            counts, self._counts = self._counts, {}
+        login: dict[str, int] = {
+            key.value: value
+            for key, value in counts.items()
+            if isinstance(key, LoginFailure)
+        }
+        mcp: dict[str, int] = {
+            key.value: value
+            for key, value in counts.items()
+            if isinstance(key, MCPFailure)
+        }
+        data: dict[str, Any] = {
+            **({"login_failures": login} if login else {}),
+            **({"mcp_failures": mcp} if mcp else {}),
+        }
+        return data or None
+
+
+_failure_counts: FailureCounts = FailureCounts()
+os.register_at_fork(after_in_child=_failure_counts.reset)
+
+
+def count_failure(failure: LoginFailure | MCPFailure) -> None:
+    """Count one failure. No I/O; never raises."""
+    try:
+        if _client is not None:
+            _failure_counts.add(failure)
+    except Exception:
+        pass
+
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def count_login_failures(
+    method: LoginFailure,
+) -> Callable[[Callable[_P, Awaitable[_R]]], Callable[_P, Awaitable[_R]]]:
+    """Count each exception that a login handler raises, then raise it again."""
+
+    def decorate(handler: Callable[_P, Awaitable[_R]]) -> Callable[_P, Awaitable[_R]]:
+        @wraps(handler)
+        async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            try:
+                return await handler(*args, **kwargs)
+            except Exception:
+                count_failure(method)
+                raise
+
+        return wrapper
+
+    return decorate
 
 
 class _QueuedEvent(NamedTuple):
@@ -768,6 +896,8 @@ class BoundedTelemetry:
                                 ),
                             },
                         )
+                        if failures := _failure_counts.take():
+                            self.emit("failure_counts", failures)
                         last_resource = now
                     # A backlog drains in consecutive batches; an idle queue sends nothing.
                     for _ in range(_MAX_BATCHES_PER_WAKEUP):

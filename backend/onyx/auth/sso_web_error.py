@@ -25,6 +25,7 @@ from onyx.error_handling.exceptions import (
     log_onyx_error,
     onyx_error_to_json_response,
 )
+from onyx.utils.fleet_telemetry import LoginFailure, count_failure
 
 _COOKIE_SECURE = WEB_DOMAIN.startswith("https")
 
@@ -51,13 +52,29 @@ _P = ParamSpec("_P")
 
 
 def redirect_sso_errors_to_web(
-    handler: Callable[_P, Awaitable[Response]],
+    login_method: LoginFailure,
+) -> Callable[
+    [Callable[_P, Awaitable[Response]]], Callable[_P, Coroutine[Any, Any, Response]]
+]:
+    """Each OnyxError also counts as one failed login of ``login_method``."""
+
+    def decorate(
+        handler: Callable[_P, Awaitable[Response]],
+    ) -> Callable[_P, Coroutine[Any, Any, Response]]:
+        return _redirect_errors(handler, login_method)
+
+    return decorate
+
+
+def _redirect_errors(
+    handler: Callable[_P, Awaitable[Response]], login_method: LoginFailure
 ) -> Callable[_P, Coroutine[Any, Any, Response]]:
     @functools.wraps(handler)
     async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> Response:
         try:
             return await handler(*args, **kwargs)
         except OnyxError as error:
+            count_failure(login_method)
             request = kwargs.get("request")
             if not isinstance(request, Request):
                 raise

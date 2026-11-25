@@ -33,6 +33,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.utils.fleet_telemetry import MCPFailure, count_failure, error_category
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
     run_async_sync_no_cancel,
@@ -339,6 +340,14 @@ async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
     return tools_response.tools
 
 
+def _discovery_failure(error: Exception) -> MCPFailure:
+    if has_auth_rejection_response(error):
+        return MCPFailure.DISCOVERY_AUTH
+    if error_category(error) == "timeout":
+        return MCPFailure.DISCOVERY_TIMEOUT
+    return MCPFailure.DISCOVERY_ERROR
+
+
 def discover_mcp_tools(
     server_url: str,
     connection_headers: dict[str, str] | None = None,
@@ -357,6 +366,7 @@ def discover_mcp_tools(
             auth,
         )
     except Exception as error:
+        count_failure(_discovery_failure(error))
         if has_unauthorized_response(error):
             raise OnyxError(
                 OnyxErrorCode.UNAUTHENTICATED,
