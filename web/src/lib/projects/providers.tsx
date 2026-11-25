@@ -163,6 +163,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const currentMessageFilesRef = useRef<ProjectFile[]>([]);
   const pollIntervalRef = useRef<number | null>(null);
   const isPollingRef = useRef<boolean>(false);
+  // A poll asked for while one runs, such as for a file attached again.
+  const pollAgainRef = useRef<boolean>(false);
   const [lastFailedFiles, setLastFailedFiles] = useState<ProjectFile[]>([]);
   const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
     new Set()
@@ -663,13 +665,19 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
   // Targeted polling for tracked uploaded files only
   useEffect(() => {
-    const ids = Array.from(trackedUploadIds);
-    const shouldPoll = ids.length > 0;
+    const shouldPoll = trackedUploadIds.size > 0;
 
     const poll = async () => {
-      if (isPollingRef.current) return;
+      if (isPollingRef.current) {
+        pollAgainRef.current = true;
+        return;
+      }
       isPollingRef.current = true;
+      // The latest set, so a poll run again after the one in flight asks for
+      // files tracked meanwhile.
+      const ids = Array.from(trackedUploadIdsRef.current);
       try {
+        if (ids.length === 0) return;
         const statuses = await svcGetUserFileStatuses(ids);
         if (!statuses) return;
         const requestedIds = new Set(ids);
@@ -814,6 +822,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         }
       } finally {
         isPollingRef.current = false;
+        if (pollAgainRef.current) {
+          pollAgainRef.current = false;
+          void poll();
+        }
       }
     };
 
