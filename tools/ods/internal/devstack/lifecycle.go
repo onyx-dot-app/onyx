@@ -102,11 +102,11 @@ func (s *Stack) run(ctx context.Context, p Provider, opts Options, infra bool) (
 		return nil, err
 	}
 	defer unlock()
-	return s.runLocked(ctx, p, opts, infra)
+	return s.runLocked(ctx, p, opts, infra, false)
 }
 
 // runLocked is run with the lifecycle lock already held.
-func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra bool) (*Status, error) {
+func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, restart bool) (*Status, error) {
 	st, err := s.ReadState()
 	if err != nil {
 		return nil, err
@@ -137,10 +137,22 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra b
 		}
 		defer release()
 	}
-	if s.Mode == Shared && st != nil && st.Root != s.Root {
-		if !infra {
-			return nil, s.ownerError(st)
+	handoff := s.Mode == Shared && st != nil && st.Root != s.Root
+	if handoff && !infra {
+		return nil, s.ownerError(st)
+	}
+	if restart {
+		if err := s.checkOtherStackWeb(); err != nil {
+			refused := State{Root: s.Root, Project: s.Project, Profile: opts.Profile}
+			if st != nil {
+				refused = *st
+			}
+			refused.Phase = PhaseFailed
+			refused.Errors = []string{err.Error()}
+			return s.status(&refused, false), err
 		}
+	}
+	if restart || handoff {
 		if err := s.stopServices(opts.StopTimeout); err != nil {
 			return nil, err
 		}
@@ -178,6 +190,11 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra b
 	st.Profile = opts.Profile
 	st.SettleTime = opts.SettleTime
 	st.Errors = nil
+	if restart {
+		if err := s.clearNextDevCache(); err != nil {
+			return nil, s.fail(st, err)
+		}
+	}
 	st.Phase = PhasePreparing
 	if err := s.WriteState(st); err != nil {
 		return nil, err
@@ -643,8 +660,8 @@ func (s *Stack) Down(ctx context.Context, p Provider, opts Options) error {
 	return s.releaseLeases(st, true)
 }
 
-// Restart stops the services and starts them again against the running
-// infrastructure.
+// Restart stops the services, clears the Next.js cache, and starts the
+// services again against the running infrastructure.
 func (s *Stack) Restart(ctx context.Context, p Provider, opts Options) (*Status, error) {
 	if s.Mode == Frontend {
 		return nil, fmt.Errorf("use 'ods web dev' to launch the frontend")
@@ -658,10 +675,7 @@ func (s *Stack) Restart(ctx context.Context, p Provider, opts Options) (*Status,
 	if err := s.checkOwner(); err != nil {
 		return nil, err
 	}
-	if err := s.stopServices(opts.StopTimeout); err != nil {
-		return nil, err
-	}
-	return s.runLocked(ctx, p, opts, false)
+	return s.runLocked(ctx, p, opts, false, true)
 }
 
 // ServiceStatus is one service as reported by Status.

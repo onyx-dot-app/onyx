@@ -353,6 +353,11 @@ admin value is not Ask.
   organization connection with the tool row. A test keeps the query count
   constant
   (`backend/tests/external_dependency_unit/integrations/test_list_query_counts.py`).
+  These lists skip an integration with no known shape and log a warning
+  (`_shapes(..., skip_unknown=True)`), so a row that a later release wrote,
+  e.g. an `api_app` with no `tool` row, does not break them after a rollback.
+  A direct read of that integration still gives 404
+  (`backend/tests/external_dependency_unit/integrations/test_unknown_shape_in_lists.py`).
 - Delete (`db/integration.py:delete_integration__no_commit`) deletes the
   integration, then its kind row and its `api_app` row. A deleted kind row deletes its integration by cascade.
 - A preset keeps its client id, secret and host settings (Zendesk
