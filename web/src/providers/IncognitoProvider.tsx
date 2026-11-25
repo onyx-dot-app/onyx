@@ -13,6 +13,7 @@ import {
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { subscribeNewSessionNavigation } from "@/lib/navigation/hooks";
 
 interface IncognitoAvailabilityResponse {
   available: boolean;
@@ -83,6 +84,15 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
     setIncognitoSessionId(next ? crypto.randomUUID() : null);
     setIncognitoEnabled(next);
   }, [incognitoLocked, setIncognitoEnabled]);
+
+  useEffect(
+    () =>
+      subscribeNewSessionNavigation(() => {
+        if (incognitoEnabledRef.current)
+          setIncognitoSessionId(crypto.randomUUID());
+      }),
+    []
+  );
 
   // Memoized so consumers keying callbacks on the context object do not
   // rebuild them on every provider render.

@@ -94,15 +94,7 @@ function isFailurePacket(packet: Packet, interrupted: boolean): boolean {
     case PacketType.PYTHON_TOOL_DELTA:
       return !!obj.stderr;
     case PacketType.EXEC_END:
-      // A user's stop ("canceled") is not a failure, and neither is the exit
-      // of a process that the step itself stopped with Ctrl+C.
-      if (obj.error !== null || obj.completion === "deadline_exceeded")
-        return true;
-      return (
-        !isExpectedInterrupt(obj, interrupted) &&
-        ((obj.exit_code !== null && obj.exit_code !== 0) ||
-          obj.completion === "signaled")
-      );
+      return didExecFail(obj, interrupted);
     case PacketType.APPLY_PATCH_END:
     case PacketType.PUBLISH_FILES_END:
       return obj.error !== null;
@@ -129,6 +121,16 @@ export function isExpectedInterrupt(
     end.error === null &&
     (end.completion === "exited" || end.completion === "signaled") &&
     (end.exit_code === 130 || end.exit_code === -2)
+  );
+}
+
+export function didExecFail(end: ExecEnd, sentInterrupt: boolean): boolean {
+  if (end.error !== null || end.completion === "deadline_exceeded") return true;
+  return (
+    end.completion !== "canceled" &&
+    !isExpectedInterrupt(end, sentInterrupt) &&
+    ((end.exit_code !== null && end.exit_code !== 0) ||
+      end.completion === "signaled")
   );
 }
 

@@ -193,7 +193,7 @@ test("a command shows its output while it runs and how it ended", async () => {
       ])
     );
     await expandTimeline();
-    expect(screen.getByText("Ran command")).toBeInTheDocument();
+    expect(screen.getByText("Command failed")).toBeInTheDocument();
     // Where it ran is a comment above the command.
     expect(view.container).toHaveTextContent("# in /home/onyx/workspaces/abc");
     expect(
@@ -204,7 +204,7 @@ test("a command shows its output while it runs and how it ended", async () => {
     expect(screen.getByText("Output truncated")).toBeInTheDocument();
     // A failed command is a failed step: red, as failed Python is.
     expect(
-      screen.getByText("Ran command").closest(".opal-line")
+      screen.getByText("Command failed").closest(".opal-line")
     ).toHaveAttribute("data-opal-line-status", "error");
   } finally {
     view.unmount();

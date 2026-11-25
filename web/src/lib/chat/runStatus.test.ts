@@ -43,6 +43,14 @@ describe("unseen runs across reloads", () => {
     expect(kept.has("chat-54")).toBe(true);
   });
 
+  test("clearing all runs removes active and persisted markers", () => {
+    const { useUnseenRuns } = loadRunStatus();
+    useUnseenRuns.getState().markUnseen("chat-1", "failed");
+    useUnseenRuns.getState().clearAll();
+    expect(useUnseenRuns.getState().unseen.size).toBe(0);
+    expect(loadRunStatus().useUnseenRuns.getState().unseen.size).toBe(0);
+  });
+
   test("bad saved data loads as no records", () => {
     sessionStorage.setItem(KEY, '[["chat-1","exploded"],42,"x"]');
     expect(loadRunStatus().useUnseenRuns.getState().unseen.size).toBe(0);

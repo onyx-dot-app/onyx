@@ -9,7 +9,7 @@ import {
   invalidateChatDraftWrites,
   type DraftStorage,
 } from "@/hooks/useDraft";
-import { UNSEEN_RUNS_STORAGE_KEY, useUnseenRuns } from "@/lib/chat/runStatus";
+import { useUnseenRuns } from "@/lib/chat/runStatus";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -60,7 +60,6 @@ export async function logout(): Promise<Response> {
       "onyx:craft:",
       draftKey("craft", ""),
       CHAT_PANEL_STORAGE_PREFIX,
-      UNSEEN_RUNS_STORAGE_KEY,
     ]);
     useUnseenRuns.getState().clearAll();
     removeStorageKeys("local", [draftKey("chat", "")]);

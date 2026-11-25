@@ -149,7 +149,14 @@ export const useUnseenRuns = create<UnseenRunsState>()((set) => ({
       saveUnseenRuns(unseen);
       return { unseen };
     }),
-  clearAll: () => set({ unseen: new Map() }),
+  clearAll: () => {
+    try {
+      window.sessionStorage.removeItem(UNSEEN_RUNS_STORAGE_KEY);
+    } catch {
+      // Disabled storage does not affect the in-memory records.
+    }
+    set({ unseen: new Map() });
+  },
   markSeen: (sessionId) =>
     set((state) => {
       if (!state.unseen.has(sessionId)) return {};

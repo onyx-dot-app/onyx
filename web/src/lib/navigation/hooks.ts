@@ -15,6 +15,14 @@ import { routeWithQuery } from "@/lib/routes";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 let newSessionNavigation = 0;
+const newSessionListeners = new Set<() => void>();
+
+export function subscribeNewSessionNavigation(listener: () => void) {
+  newSessionListeners.add(listener);
+  return () => {
+    newSessionListeners.delete(listener);
+  };
+}
 
 export function getNewSessionNavigation(): number {
   return newSessionNavigation;
@@ -161,6 +169,7 @@ class AppPosition {
    */
   private leaveSentChat() {
     newSessionNavigation++;
+    for (const listener of newSessionListeners) listener();
     if (this.isNewSession())
       useChatSessionStore.getState().setCurrentSession(null);
   }

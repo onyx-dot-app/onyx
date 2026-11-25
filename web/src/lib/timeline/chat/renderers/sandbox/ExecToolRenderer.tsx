@@ -12,6 +12,7 @@ import {
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { stripAnsi } from "@/lib/sandbox/ansi";
 import {
+  didExecFail,
   isExpectedInterrupt,
   isInterruptInput,
 } from "@/lib/timeline/chat/transformers";
@@ -71,13 +72,21 @@ export function ExecToolRenderer({
   );
   const output = stripAnsi(end === null ? liveOutput : (end.output ?? ""));
 
+  // A call replayed from history starts at the top of its output.
+  const [followOutput] = useState(!isComplete);
+
   if (start === null) {
     return children([{ icon: null, status: null, content: <></> }]);
   }
 
+  const sentInterrupt =
+    start.type === PacketType.WRITE_STDIN_START &&
+    isInterruptInput(start.chars);
+  const commandFailed = end !== null && didExecFail(end, sentInterrupt);
   const phase = !isComplete
     ? "running"
-    : error !== null
+    : error !== null ||
+        (start.type === PacketType.EXEC_COMMAND_START && commandFailed)
       ? "failed"
       : end?.completion === "canceled"
         ? "canceled"
@@ -111,14 +120,7 @@ export function ExecToolRenderer({
       ? t("sandbox.noOutput.text")
       : "");
   const outputLoading = !isComplete && !output;
-  // Output that streamed in keeps following through the final output, which
-  // can add lines; a call that was already done when shown stays at its top.
-  const [followOutput] = useState(!isComplete);
-  // The exit of a process this step stopped with Ctrl+C is expected.
-  const interrupted = isExpectedInterrupt(
-    end,
-    start.type === PacketType.WRITE_STDIN_START && isInterruptInput(start.chars)
-  );
+  const interrupted = isExpectedInterrupt(end, sentInterrupt);
   // Only a failure names its exit code.
   const exitCode =
     end !== null &&
