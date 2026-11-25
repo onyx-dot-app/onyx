@@ -120,6 +120,25 @@ describe("AgentTimeline's handover to the run card", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("all tests passed")).toBeVisible();
   });
+
+  it("moves the focus to the same step inside the run card", async () => {
+    const user = userEvent.setup();
+    const commandOnly = longRun.slice(-1);
+    const view = render(
+      <AgentTimeline turnGroups={commandOnly} chatState={{ agent }} />
+    );
+
+    await user.click(screen.getByRole("button", { name: /Running command/ }));
+    expect(
+      screen.getByRole("button", { name: /Running command/ })
+    ).toHaveFocus();
+
+    view.rerender(<AgentTimeline turnGroups={longRun} chatState={{ agent }} />);
+
+    expect(
+      screen.getByRole("button", { name: /Fold Running command/ })
+    ).toHaveFocus();
+  });
 });
 
 describe("AgentTimeline's collapsed run card", () => {

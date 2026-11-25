@@ -192,6 +192,18 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const boxRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  // The step whose control has focus in the step cards, so the focus can
+  // move to the same step in the run card when it takes over at once.
+  const focusedStepIdRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const id = focusedStepIdRef.current;
+    if (!handedOverOpen || id === null) return;
+    const active = document.activeElement;
+    if (active?.isConnected && active !== document.body) return;
+    const card = cardRef.current;
+    const row = card?.querySelector(`[data-run-step-id="${CSS.escape(id)}"]`);
+    (row ?? card)?.querySelector<HTMLElement>("button")?.focus();
+  }, [handedOverOpen]);
   useLayoutEffect(() => {
     if (layout !== "handover") return;
     const box = boxRef.current;
@@ -339,6 +351,17 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           }
           aria-hidden={layout === "handover" || undefined}
           inert={layout === "handover" || undefined}
+          onFocus={(event) => {
+            focusedStepIdRef.current =
+              event.target
+                .closest("[data-run-step-id]")
+                ?.getAttribute("data-run-step-id") ?? null;
+          }}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              focusedStepIdRef.current = null;
+            }
+          }}
         >
           {stepCards}
         </div>
