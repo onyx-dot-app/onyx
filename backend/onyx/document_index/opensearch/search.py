@@ -545,11 +545,46 @@ class DocumentQuery:
         # whose exact date is in the window.
         updated_range: dict[str, int] = {}
         if request.updated_after is not None:
-            updated_range["gte"] = math.floor(request.updated_after.timestamp())
+            updated_range["gte"] = math.floor(
+                datetime_to_utc(request.updated_after).timestamp()
+            )
         if request.updated_before is not None:
-            updated_range["lt"] = math.ceil(request.updated_before.timestamp())
+            updated_range["lt"] = math.ceil(
+                datetime_to_utc(request.updated_before).timestamp()
+            )
         if updated_range:
             filters.append({"range": {LAST_UPDATED_FIELD_NAME: updated_range}})
+        if request.restricted_sources:
+            # Chunks without cc-pair IDs (indexed before the field) never
+            # match a restricted source.
+            filters.append(
+                {
+                    "bool": {
+                        "should": [
+                            {
+                                "bool": {
+                                    "must_not": [
+                                        {
+                                            "terms": {
+                                                SOURCE_TYPE_FIELD_NAME: [
+                                                    source.value
+                                                    for source in request.restricted_sources
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "terms": {
+                                    CC_PAIR_IDS_FIELD_NAME: request.restricted_source_cc_pair_ids
+                                }
+                            },
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            )
         return filters
 
     @staticmethod

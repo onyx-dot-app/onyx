@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Self
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource
@@ -100,6 +100,11 @@ class ContentMatchRequest(BaseModel):
     # Postgres.
     updated_after: datetime | None = None
     updated_before: datetime | None = None
+    # Documents of these sources match only through one of the cc-pairs in
+    # `restricted_source_cc_pair_ids`, such as a source that censors records
+    # at read time except under a public connector.
+    restricted_sources: list[DocumentSource] = Field(default_factory=list)
+    restricted_source_cc_pair_ids: list[int] = Field(default_factory=list)
 
 
 class ContentMatchKey(BaseModel):

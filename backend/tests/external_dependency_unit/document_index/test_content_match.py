@@ -13,7 +13,7 @@ import pytest
 
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
-from onyx.configs.constants import PUBLIC_DOC_PAT
+from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces import (
     ContentMatchCount,
@@ -72,6 +72,10 @@ _DOCUMENTS: list[tuple[str, datetime | None, DocumentAccess, list[str]]] = [
 ]
 
 
+# Every other document has no cc-pair IDs, like a chunk indexed before them.
+_CC_PAIR_IDS = {"d1": {7}, "d6": {8}}
+
+
 def _chunks() -> list[DocMetadataAwareIndexChunk]:
     chunks = []
     for doc_id, updated_at, access, contents in _DOCUMENTS:
@@ -81,6 +85,7 @@ def _chunks() -> list[DocMetadataAwareIndexChunk]:
                 chunk.model_copy(
                     update={
                         "access": access,
+                        "cc_pair_ids": _CC_PAIR_IDS.get(doc_id),
                         "source_document": chunk.source_document.model_copy(
                             update={"doc_updated_at": updated_at}
                         ),
@@ -128,6 +133,10 @@ def _request(
         updated_after=updated_after,
         updated_before=updated_before,
     )
+
+
+def _restricted(request: ContentMatchRequest, **update: object) -> ContentMatchRequest:
+    return request.model_copy(update=update)
 
 
 def _match_ids(
@@ -294,3 +303,34 @@ def test_shard_failures_are_errors(content_index: OpenSearchDocumentIndex) -> No
             )
         with pytest.raises(RuntimeError, match="shard failures"):
             content_index.count_documents_by_content(request, max_count=100)
+
+
+def test_restricted_source_matches_only_through_its_cc_pairs(
+    content_index: OpenSearchDocumentIndex,
+) -> None:
+    # The test chunks are FILE documents. d1 is under cc-pair 7, d6 under 8,
+    # and d5 has no cc-pair IDs.
+    request = _restricted(
+        _request(["quick brown"]),
+        restricted_sources=[DocumentSource.FILE],
+        restricted_source_cc_pair_ids=[7],
+    )
+    assert _match_ids(content_index, request) == ["d1"]
+    assert content_index.count_documents_by_content(
+        request, max_count=100
+    ) == ContentMatchCount(count=1, is_complete=True)
+    other_source = _restricted(
+        _request(["quick brown"]),
+        restricted_sources=[DocumentSource.SALESFORCE],
+        restricted_source_cc_pair_ids=[],
+    )
+    assert _match_ids(content_index, other_source) == ["d1", "d6", "d5"]
+
+
+def test_naive_bounds_are_utc(content_index: OpenSearchDocumentIndex) -> None:
+    naive = _request(
+        ["quick brown"],
+        updated_after=_day(5).replace(tzinfo=None),
+        updated_before=_day(6).replace(tzinfo=None),
+    )
+    assert _match_ids(content_index, naive) == ["d1"]
