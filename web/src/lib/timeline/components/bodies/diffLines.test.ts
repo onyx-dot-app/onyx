@@ -1,9 +1,9 @@
 import {
+  computeDiff,
+  countDiffLines,
   formatDiffCount,
   parseApplyPatch,
 } from "@/lib/timeline/components/bodies/diffLines";
-
-const more = (count: number) => `${count} more`;
 
 const PATCH = [
   "*** Begin Patch",
@@ -21,9 +21,15 @@ const PATCH = [
 ].join("\n");
 
 test("a patch splits by file with counts and line types", () => {
-  const [added, updated] = parseApplyPatch(PATCH, more);
-  expect(added).toMatchObject({ path: "new.py", added: 2, removed: 0 });
-  expect(added?.lines).toEqual([
+  const { files, added, removed, omittedLines } = parseApplyPatch(PATCH);
+  const [newFile, updated] = files;
+  expect({ added, removed, omittedLines }).toEqual({
+    added: 4,
+    removed: 1,
+    omittedLines: 0,
+  });
+  expect(newFile).toMatchObject({ path: "new.py", added: 2, removed: 0 });
+  expect(newFile?.lines).toEqual([
     { type: "added", content: "one", newLineNum: 1 },
     { type: "added", content: "two", newLineNum: 2 },
   ]);
@@ -43,22 +49,54 @@ test("a patch splits by file with counts and line types", () => {
 });
 
 test("a heredoc wrapper and a bare @@ add no lines", () => {
-  const [file] = parseApplyPatch(
-    `<<'EOF'\n*** Begin Patch\n*** Update File: a.py\n@@\n-x\n+y\n*** End Patch\nEOF`,
-    more
+  const { files } = parseApplyPatch(
+    `<<'EOF'\n*** Begin Patch\n*** Update File: a.py\n@@\n-x\n+y\n*** End Patch\nEOF`
   );
-  expect(file?.lines.map((line) => line.type)).toEqual(["removed", "added"]);
+  expect(files[0]?.lines.map((line) => line.type)).toEqual([
+    "removed",
+    "added",
+  ]);
 });
 
-test("a long patch is cut with a note, and the counts keep every line", () => {
+test("a long patch is cut, the panels stay bounded, and the totals keep every line", () => {
   const body = Array.from({ length: 2500 }, (_, i) => `+line ${i}`).join("\n");
-  const [file] = parseApplyPatch(`*** Add File: big.txt\n${body}`, more);
-  expect(file?.added).toBe(2500);
-  expect(file?.lines).toHaveLength(2001);
-  expect(file?.lines.at(-1)).toEqual({
-    type: "header",
-    content: expect.stringMatching(/ more$/),
+  const patch = `*** Add File: big.txt\n${body}\n*** Add File: late.txt\n+x`;
+  const parsed = parseApplyPatch(patch);
+  expect(parsed.files).toHaveLength(1);
+  expect(parsed.files[0]?.lines).toHaveLength(2000);
+  expect(parsed.files[0]?.added).toBe(2500);
+  expect(parsed.added).toBe(2501);
+  expect(parsed.omittedLines).toBe(501);
+});
+
+test("a diff counts only the lines that changed", () => {
+  // An inserted line that repeats later is still one addition.
+  expect(
+    countDiffLines(computeDiff("a\nb\nc\nb\n", "a\nb\nx\nc\nb\n"))
+  ).toEqual({ added: 1, removed: 0 });
+  expect(countDiffLines(computeDiff("a\nb\nc", "a\nc"))).toEqual({
+    added: 0,
+    removed: 1,
   });
+});
+
+test("an empty side and a missing final newline add no phantom changes", () => {
+  expect(countDiffLines(computeDiff("", "a\nb"))).toEqual({
+    added: 2,
+    removed: 0,
+  });
+  expect(countDiffLines(computeDiff("a\nb", ""))).toEqual({
+    added: 0,
+    removed: 2,
+  });
+  const lines = computeDiff("a\nb", "a\nc");
+  expect(
+    lines.map((line) => [line.type, line.oldLineNum, line.newLineNum])
+  ).toEqual([
+    ["unchanged", 1, 1],
+    ["removed", 2, undefined],
+    ["added", undefined, 2],
+  ]);
 });
 
 test("large counts are compact", () => {

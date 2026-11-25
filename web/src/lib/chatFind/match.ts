@@ -9,29 +9,24 @@ import type { MarkdownAstNode } from "@/lib/answerText/remarkGithubAlerts";
 import { stripPartialCitations } from "@/lib/timeline/chat/message/messageComponents/markdownUtils";
 import { getMultiModelChildren } from "@/lib/timeline/chat/message/multiModel";
 import { messageRowId } from "@/lib/chat/rowIds";
+import { MENTION_TRIGGER, placeMentions } from "@/lib/chat/mentions";
+import type { ComposedMention } from "@/lib/chat/types";
+import { readToolQuestions } from "@/lib/chat/toolApprovals";
 
-/** Which text of a message find searches: the question or the answer. */
-export type ChatFindKind = "user" | "answer";
-
-/** The matches of one message, in chat order. */
-export interface ChatFindEntry {
-  nodeId: number;
-  /** DOM id of the row that shows the message. */
-  rowId: string;
-  /** Index of the message in the chat. */
-  messageIndex: number;
-  kind: ChatFindKind;
-  /** Index of the message's first match among all matches. */
-  start: number;
-  count: number;
+/**
+ * The `data-chat-find-text` value of a message's text: a user row's text or
+ * an agent message's answer text.
+ */
+export function chatFindTextKey(
+  kind: "user" | "answer",
+  nodeId: number
+): string {
+  return `${kind}:${nodeId}`;
 }
 
-export interface ChatFindMatch {
-  nodeId: number;
-  rowId: string;
-  kind: ChatFindKind;
-  /** The match's index among its message's matches. */
-  occurrence: number;
+/** The `data-chat-find-text` value of a user message shown inside a reply. */
+export function chatFindInlineKey(nodeId: number, messageId: string): string {
+  return `inline:${nodeId}:${messageId}`;
 }
 
 // A typed straight apostrophe finds a curly one: iOS keyboards type "’".
@@ -99,12 +94,12 @@ const BLOCK_TYPES = new Set([
   "tableRow",
   "thematicBreak",
 ]);
-// Not searched: math and citation chips render other text, and the rest
-// render none.
+// Not searched: math and citation chips render other text, footnotes are
+// left out on the page too, and the rest render none.
 const SKIPPED_TYPES = new Set([
   "definition",
+  "footnoteDefinition",
   "footnoteReference",
-  "html",
   "image",
   "imageReference",
   "inlineMath",
@@ -154,7 +149,12 @@ export function answerFindSegments(content: string): string[] {
     }
     const block = BLOCK_TYPES.has(node.type);
     if (block) flush();
-    if (node.type === "text" || node.type === "inlineCode") {
+    // Raw HTML shows as its source text.
+    if (
+      node.type === "text" ||
+      node.type === "inlineCode" ||
+      node.type === "html"
+    ) {
       text += (node.value ?? "").replace(/\r?\n/g, " ");
     }
     for (const child of node.children ?? []) visit(child);
@@ -165,28 +165,51 @@ export function answerFindSegments(content: string): string[] {
   return segments;
 }
 
-// Packets grow in place while a reply streams, so the count keys the entry.
-const answerSegmentsByMessage = new WeakMap<
-  Message,
-  { packetCount: number; segments: string[] }
->();
-
-function messageAnswerSegments(message: Message): string[] {
-  const cached = answerSegmentsByMessage.get(message);
-  if (cached?.packetCount === message.packets.length) return cached.segments;
-  const segments = answerTexts(message).flatMap(cachedAnswerSegments);
-  answerSegmentsByMessage.set(message, {
-    packetCount: message.packets.length,
-    segments,
-  });
-  return segments;
+/** One searched text of a message, in the order the message shows them. */
+interface MessagePart {
+  turn: number;
+  /** The `data-chat-find-text` value of the text on the page. */
+  scopeKey: string;
+  segments: string[];
 }
 
-/** The answer text of each block of an agent message, in order. */
-function answerTexts(message: Message): string[] {
-  const texts = new Map<string, string>();
-  for (const packet of message.packets) {
-    const { obj, placement } = packet;
+/** The user's text as the bubble shows it: each mention is its own chip. */
+function userSegments(
+  text: string,
+  mentions: readonly ComposedMention[] | undefined
+): string[] {
+  const segments: string[] = [];
+  let start = 0;
+  for (const mention of placeMentions(text, mentions ?? [])) {
+    segments.push(text.slice(start, mention.index));
+    segments.push(`${MENTION_TRIGGER}${mention.name}`);
+    start = mention.index + MENTION_TRIGGER.length + mention.name.length;
+  }
+  segments.push(text.slice(start));
+  return segments
+    .map((segment) => segment.replace(/\r?\n/g, " "))
+    .filter((segment) => segment.length > 0);
+}
+
+/**
+ * The texts of an agent message: its answer text, and the messages the user
+ * sent during the reply (also typed answers to its questions), which the
+ * reply shows in place.
+ */
+function agentMessageParts(message: Message): MessagePart[] {
+  const answers = new Map<string, MessagePart & { text: string }>();
+  const parts: MessagePart[] = [];
+  const userTurns = new Set<number>();
+  for (const { obj, placement } of message.packets) {
+    if (obj.type === PacketType.USER_MESSAGE) {
+      userTurns.add(placement.turn_index);
+      parts.push({
+        turn: placement.turn_index,
+        scopeKey: chatFindInlineKey(message.nodeId, obj.id),
+        segments: userSegments(obj.message, obj.mentions),
+      });
+      continue;
+    }
     if (
       obj.type !== PacketType.MESSAGE_START &&
       obj.type !== PacketType.MESSAGE_DELTA
@@ -194,9 +217,53 @@ function answerTexts(message: Message): string[] {
       continue;
     }
     const key = `${placement.turn_index}:${placement.tab_index ?? 0}`;
-    texts.set(key, (texts.get(key) ?? "") + obj.content);
+    const answer = answers.get(key);
+    if (answer) answer.text += obj.content;
+    else {
+      answers.set(key, {
+        turn: placement.turn_index,
+        scopeKey: chatFindTextKey("answer", message.nodeId),
+        segments: [],
+        text: obj.content,
+      });
+    }
   }
-  return [...texts.values()];
+  for (const { turnIndex, request, resolution } of readToolQuestions(
+    message.packets
+  ).entries) {
+    const text = resolution?.outcome === "answered" ? resolution.message : null;
+    if (!text || userTurns.has(turnIndex)) continue;
+    parts.push({
+      turn: turnIndex,
+      scopeKey: chatFindInlineKey(
+        message.nodeId,
+        `question:${request.question_request_id}`
+      ),
+      segments: userSegments(text, []),
+    });
+  }
+  // A user message opens its section, so it comes before text of its turn.
+  for (const { text, ...answer } of answers.values()) {
+    parts.push({ ...answer, segments: cachedAnswerSegments(text) });
+  }
+  return parts
+    .map((part, order) => ({ part, order }))
+    .sort((a, b) => a.part.turn - b.part.turn || a.order - b.order)
+    .map(({ part }) => part);
+}
+
+// Packets grow in place while a reply streams, so the count keys the entry.
+const partsByMessage = new WeakMap<
+  Message,
+  { packetCount: number; parts: MessagePart[] }
+>();
+
+function cachedAgentMessageParts(message: Message): MessagePart[] {
+  const cached = partsByMessage.get(message);
+  if (cached?.packetCount === message.packets.length) return cached.parts;
+  const parts = agentMessageParts(message);
+  partsByMessage.set(message, { packetCount: message.packets.length, parts });
+  return parts;
 }
 
 // Parsing is the slow part, so the runs of each answer text are kept. Rows
@@ -215,66 +282,97 @@ function cachedAnswerSegments(content: string): string[] {
   return segments;
 }
 
-/** The searchable text of one message. */
+/** One searched text of the chat. */
 export interface ChatFindText {
-  nodeId: number;
+  scopeKey: string;
+  /** DOM id of the row that shows the text. */
   rowId: string;
+  /** Index of the row's message in the chat. */
   messageIndex: number;
-  kind: ChatFindKind;
   segments: string[];
 }
 
 /**
- * The searchable text of the chat, one item per message: the user's text and
- * the agent's answer text. Tool steps and thinking are not searched.
+ * The searchable text of the chat, in the order it shows: the user's text
+ * and the agent's answer text. Tool steps and thinking are not searched.
  */
 export function chatFindTexts(
   messages: readonly Message[],
   messageTree: Map<number, Message> | null | undefined
 ): ChatFindText[] {
   const texts: ChatFindText[] = [];
+  const addAgentMessage = (
+    message: Message,
+    rowId: string,
+    messageIndex: number
+  ) => {
+    for (const { scopeKey, segments } of cachedAgentMessageParts(message)) {
+      texts.push({ scopeKey, rowId, messageIndex, segments });
+    }
+  };
   messages.forEach((message, messageIndex) => {
+    const rowId = messageRowId(message);
     if (message.type === "user") {
       texts.push({
-        nodeId: message.nodeId,
-        rowId: messageRowId(message),
+        scopeKey: chatFindTextKey("user", message.nodeId),
+        rowId,
         messageIndex,
-        kind: "user",
-        segments: [message.message.replace(/\r?\n/g, " ")],
+        segments: userSegments(message.message, message.mentions),
       });
+      // Every answer of a multi-model turn shows in its question's row.
+      const answers = messageTree
+        ? getMultiModelChildren(message, messageTree)
+        : null;
+      for (const answer of answers ?? []) {
+        addAgentMessage(answer, rowId, messageIndex);
+      }
       return;
     }
     if (message.type !== "assistant" && message.type !== "error") return;
     const previous = messages[messageIndex - 1];
-    // A multi-model answer shows in its question's row.
-    const row =
+    if (
       previous?.type === "user" &&
       messageTree &&
       getMultiModelChildren(previous, messageTree)
-        ? previous
-        : message;
-    texts.push({
-      nodeId: message.nodeId,
-      rowId: messageRowId(row),
-      messageIndex,
-      kind: "answer",
-      segments: messageAnswerSegments(message),
-    });
+    ) {
+      return;
+    }
+    addAgentMessage(message, rowId, messageIndex);
   });
   return texts;
 }
 
-/** Counts the matches of `query` in each message. */
+/** The matches of one searched text, in chat order. */
+export interface ChatFindEntry {
+  scopeKey: string;
+  rowId: string;
+  messageIndex: number;
+  /** Index of the entry's first match among all matches. */
+  start: number;
+  count: number;
+  /** Index of the entry's first match among its scope's matches. */
+  occurrenceStart: number;
+}
+
+export interface ChatFindMatch {
+  scopeKey: string;
+  rowId: string;
+  /** The match's index among its scope's matches on the page. */
+  occurrence: number;
+}
+
 export interface ChatFindResults {
   entries: ChatFindEntry[];
   total: number;
 }
 
+/** Counts the matches of `query` in each searched text. */
 export function findChatMatches(
   texts: readonly ChatFindText[],
   query: string
 ): ChatFindResults {
   const entries: ChatFindEntry[] = [];
+  const scopeCounts = new Map<string, number>();
   let total = 0;
   if (!query) return { entries, total };
   for (const { segments, ...text } of texts) {
@@ -283,7 +381,9 @@ export function findChatMatches(
       count += findOccurrences(segment, query).length;
     }
     if (count === 0) continue;
-    entries.push({ ...text, start: total, count });
+    const occurrenceStart = scopeCounts.get(text.scopeKey) ?? 0;
+    scopeCounts.set(text.scopeKey, occurrenceStart + count);
+    entries.push({ ...text, start: total, count, occurrenceStart });
     total += count;
   }
   return { entries, total };
@@ -300,9 +400,8 @@ export function chatFindMatchAt(
   );
   if (!entry) return null;
   return {
-    nodeId: entry.nodeId,
+    scopeKey: entry.scopeKey,
     rowId: entry.rowId,
-    kind: entry.kind,
-    occurrence: index - entry.start,
+    occurrence: entry.occurrenceStart + index - entry.start,
   };
 }
