@@ -119,6 +119,10 @@ describe("AgentTimeline's handover to the run card", () => {
       screen.getByRole("button", { name: /Running npm/, expanded: true })
     ).toBeInTheDocument();
     expect(screen.getByText("all tests passed")).toBeVisible();
+    // Focus follows the step into the run card.
+    expect(
+      screen.getByRole("button", { name: /Running command/ })
+    ).toHaveFocus();
   });
 });
 

@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Presence } from "@opal/components";
 import { SvgListTree } from "@opal/icons";
 import { Section } from "@opal/layouts";
@@ -192,6 +198,29 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const boxRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  // The step whose card holds focus: its id, null for no step, or undefined
+  // when focus is outside the step cards.
+  const focusedStepRef = useRef<string | null | undefined>(undefined);
+  // Focus in an outgoing step card moves to the same step in the run card,
+  // or to the run card's fold control.
+  const moveFocusToCard = useCallback((card: HTMLElement) => {
+    const stepId = focusedStepRef.current;
+    if (stepId === undefined) return;
+    focusedStepRef.current = undefined;
+    const row = Array.from(
+      card.querySelectorAll<HTMLElement>("[data-run-step-id]")
+    ).find((element) => element.dataset.runStepId === stepId);
+    (
+      row?.querySelector<HTMLElement>("button") ??
+      card.querySelector<HTMLElement>("button")
+    )?.focus();
+  }, []);
+  // A handover with an open step skips the animation; move focus here.
+  useLayoutEffect(() => {
+    if (layout === "collapsed" && cardRef.current) {
+      moveFocusToCard(cardRef.current);
+    }
+  }, [layout, moveFocusToCard]);
   useLayoutEffect(() => {
     if (layout !== "handover") return;
     const box = boxRef.current;
@@ -201,11 +230,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       setLayout("collapsed");
       return;
     }
-    // Focus inside the outgoing step cards moves to the run card's fold
-    // control; the step cards are inert while they leave.
-    if (stepList.contains(document.activeElement)) {
-      card.querySelector<HTMLElement>("button")?.focus();
-    }
+    // The step cards are inert while they leave.
+    moveFocusToCard(card);
     // The box closes from the step cards' height to the run card's, while
     // each step card slides up into the first one's place and fades.
     const ease = `${HANDOVER_MS}ms ease-in-out`;
@@ -339,6 +365,19 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           }
           aria-hidden={layout === "handover" || undefined}
           inert={layout === "handover" || undefined}
+          onFocus={(event) => {
+            focusedStepRef.current =
+              event.target instanceof Element
+                ? (event.target
+                    .closest("[data-run-step-id]")
+                    ?.getAttribute("data-run-step-id") ?? null)
+                : null;
+          }}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              focusedStepRef.current = undefined;
+            }
+          }}
         >
           {stepCards}
         </div>
