@@ -16,6 +16,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.server.auth import magic_link_api
 from onyx.server.auth.magic_link_api import MAGIC_LINK_INVALID_CODE, router
+from onyx.utils.variable_functionality import global_version
 
 _MODULE = "onyx.server.auth.magic_link_api"
 EMAIL = "Someone@Example.com"
@@ -61,10 +62,14 @@ def address_passes() -> Iterator[dict[str, MagicMock]]:
 
 
 def _playground(hooks: dict[str, Any]) -> Callable[..., Any]:
-    """The EE hooks the routes reach for on the playground."""
+    """The EE helper on the playground: a hook that exists comes back as is.
+    A missing one comes back as a function that returns the fallback, as the
+    real helper does without EE."""
 
-    def fetch(_module: str, attribute: str, noop: Any) -> Any:
-        return hooks.get(attribute, noop)
+    def fetch(_module: str, attribute: str, noop_return_value: Any = None) -> Any:
+        if attribute in hooks:
+            return hooks[attribute]
+        return lambda *_args, **_kwargs: noop_return_value
 
     return fetch
 
@@ -320,20 +325,32 @@ class TestRedeem:
         assert response.json()["detail"] == "PLAYGROUND_ACTIVE_TENANT"
         store.assert_not_awaited()
 
-    def test_off_the_playground_no_refusal_is_a_question(
+    def test_without_ee_a_refusal_stays_a_refusal(
         self, client: TestClient, user_manager: MagicMock
     ) -> None:
+        """The real helper with EE off. Its fallback must answer "not a
+        question", or every refusal would come back as team_choice."""
         first_click = RECORD.model_copy(update={"start_new_team": False})
-        user_manager.magic_link_login.side_effect = TEAM_CHOICE
-        with (
-            patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=first_click)),
-            patch(f"{_MODULE}.store_magic_link", AsyncMock()) as store,
-            # No EE hook: the fetch hands back the module's own no-op.
-            patch(f"{_MODULE}.fetch_ee_implementation_or_noop", _playground({})),
-        ):
-            response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+        user_manager.magic_link_login.side_effect = OnyxError(
+            OnyxErrorCode.UNAUTHORIZED, "You are not invited."
+        )
+        was_ee = global_version.is_ee_version()
+        global_version.unset_ee()
+        try:
+            with (
+                patch(
+                    f"{_MODULE}.consume_magic_link",
+                    AsyncMock(return_value=first_click),
+                ),
+                patch(f"{_MODULE}.store_magic_link", AsyncMock()) as store,
+            ):
+                response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+        finally:
+            if was_ee:
+                global_version.set_ee()
 
-        assert response.status_code == OnyxErrorCode.REGISTRATION_DISABLED.status_code
+        assert response.status_code == OnyxErrorCode.UNAUTHORIZED.status_code
+        assert response.json()["detail"] == "You are not invited."
         store.assert_not_awaited()
 
     def test_a_disabled_account_is_not_signed_in(

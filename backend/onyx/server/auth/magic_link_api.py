@@ -56,16 +56,6 @@ MAGIC_LINK_WEB_PATH = "/auth/magic-link"
 _PLAYGROUND_MODULE = "onyx.server.tenants.provisioning"
 
 
-def _address_passes(_email: str) -> None:
-    """Off the playground every address may ask for a link."""
-    return None
-
-
-def _never_a_team_choice(_error: OnyxError) -> bool:
-    """Off the playground no refusal comes with a question."""
-    return False
-
-
 class MagicLinkRequest(BaseModel):
     email: EmailStr
     # Playground: the person chose "start a new team" on the join-or-new page.
@@ -111,7 +101,7 @@ async def request_magic_link(
     )
     if IS_PLAYGROUND:
         fetch_ee_implementation_or_noop(
-            _PLAYGROUND_MODULE, "check_playground_address", _address_passes
+            _PLAYGROUND_MODULE, "check_playground_address", None
         )(email)
 
     record = MagicLinkRecord(
@@ -154,8 +144,9 @@ async def redeem_magic_link(
             referral_source=record.referral_source,
         )
     except OnyxError as error:
+        # Without EE the helper answers False: no refusal is a question.
         is_team_choice = fetch_ee_implementation_or_noop(
-            _PLAYGROUND_MODULE, "is_team_choice_refusal", _never_a_team_choice
+            _PLAYGROUND_MODULE, "is_team_choice_refusal", False
         )
         if record.start_new_team or not is_team_choice(error):
             raise
