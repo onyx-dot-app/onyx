@@ -14,6 +14,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -24,6 +25,7 @@ from onyx.access.models import DocumentAccess
 from onyx.agents.tools import ToolInvocation
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
+from onyx.context.search.preprocessing import access_filters
 from onyx.db.enums import HierarchyNodeType, VectorQuantization
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -34,11 +36,15 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.postgres_tool import public_cc_pair_ids_for_sources
 from onyx.db.postgres_tool_models import DocumentScope
 from onyx.document_index.interfaces import (
+    ContentMatchKey,
     IndexingMetadata,
     MetadataUpdateRequest,
     TenantState,
 )
-from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
+from onyx.document_index.opensearch.client import (
+    OpenSearchServerSideTimeout,
+    wait_for_opensearch_with_timeout,
+)
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
@@ -91,6 +97,7 @@ class ContentEnv:
     tool: PostgresTool
     ids: dict[str, str]
     cc_pair_id: int
+    index: OpenSearchDocumentIndex
 
 
 def _chunk(
@@ -219,12 +226,23 @@ def content_env(
         tool = PostgresTool(
             user=user, current_chat_session_id=None, scope=DocumentScope()
         )
-        with patch.object(
-            postgres_tool,
-            "get_default_document_index",
-            return_value=opensearch_index,
+        # The private chunk is under the same cc-pair as the others, so the
+        # tests use the document ACLs, not the cc-pair access filter.
+        with (
+            patch.object(
+                postgres_tool,
+                "get_default_document_index",
+                return_value=opensearch_index,
+            ),
+            patch.object(access_filters, "get_cc_pair_access_mode", return_value=None),
         ):
-            yield ContentEnv(tag=tag, tool=tool, ids=ids, cc_pair_id=cc_pair.id)
+            yield ContentEnv(
+                tag=tag,
+                tool=tool,
+                ids=ids,
+                cc_pair_id=cc_pair.id,
+                index=opensearch_index,
+            )
     finally:
         db_session.rollback()
         try:
@@ -295,8 +313,10 @@ def _list_all(env: ContentEnv, **llm_kwargs: JsonValue) -> list[str]:
 def _force_path(postgres_first: bool) -> Generator[None, None, None]:
     with patch.object(
         content,
-        "MAX_POSTGRES_FIRST_CANDIDATES",
-        10**9 if postgres_first else -1,
+        "CONTENT_FIRST",
+        content.ContentFirst.POSTGRES
+        if postgres_first
+        else content.ContentFirst.OPENSEARCH,
     ):
         yield
 
@@ -457,11 +477,76 @@ def test_out_of_time_returns_a_partial_page_that_continues(
         )
         assert "took too long" in first
         assert _listed(content_env, first) == ["fox"]
-        assert _list_all(content_env, title_contains=content_env.tag) == [
-            "fox",
-            "dog",
-            "owl",
-        ]
+        cursor = _next_cursor(first)
+        assert cursor is not None
+        assert _list_all(
+            content_env, title_contains=content_env.tag, cursor=cursor
+        ) == ["dog", "owl"]
+
+
+@pytest.mark.parametrize("postgres_first", [True, False])
+def test_search_timeout_keeps_the_checked_batches(
+    content_env: ContentEnv, postgres_first: bool
+) -> None:
+    index = content_env.index
+    real_match = index.match_documents_by_content
+    calls = 0
+
+    def match_then_time_out(*args: Any, **kwargs: Any) -> list[ContentMatchKey]:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise OpenSearchServerSideTimeout("timed out")
+        return real_match(*args, **kwargs)
+
+    with (
+        _force_path(postgres_first),
+        patch.object(content, "CANDIDATE_BATCH_SIZE", 1),
+        patch.object(content, "MATCH_BATCH_SIZE", 1),
+        patch.object(index, "match_documents_by_content", match_then_time_out),
+    ):
+        first = _run(
+            content_env.tool,
+            table="document",
+            content_contains=_PHRASE,
+            title_contains=content_env.tag,
+        )
+    assert _listed(content_env, first) == ["fox"]
+    cursor = _next_cursor(first)
+    assert cursor is not None
+    assert _list_all(content_env, title_contains=content_env.tag, cursor=cursor) == [
+        "dog",
+        "owl",
+    ]
+
+
+@pytest.mark.parametrize("postgres_first", [True, False])
+def test_auto_picks_the_way_by_candidate_count(
+    content_env: ContentEnv, postgres_first: bool
+) -> None:
+    with (
+        patch.object(content, "CONTENT_FIRST", content.ContentFirst.AUTO),
+        patch.object(
+            content, "MAX_POSTGRES_FIRST_CANDIDATES", 10**9 if postgres_first else -1
+        ),
+    ):
+        text = _run(
+            content_env.tool,
+            table="document",
+            content_contains=_PHRASE,
+            title_contains=content_env.tag,
+            limit=2,
+        )
+    cursor = _next_cursor(text)
+    assert cursor is not None
+    assert (
+        _cursor_path(cursor)
+        == (
+            content.ContentPath.POSTGRES_FIRST
+            if postgres_first
+            else content.ContentPath.OPENSEARCH_FIRST
+        ).value
+    )
 
 
 def test_rejects_unsupported_content_queries(content_env: ContentEnv) -> None:

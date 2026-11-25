@@ -65,6 +65,7 @@ from onyx.document_index.interfaces import (
     ContentMatchRequest,
     DocumentIndex,
 )
+from onyx.document_index.opensearch.client import OpenSearchServerSideTimeout
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
@@ -350,7 +351,15 @@ class ContentFilter:
         position = after
         while True:
             candidates = self._candidates(order, position)
-            matching = self._matching_candidates(candidates) if candidates else set()
+            try:
+                matching = (
+                    self._matching_candidates(candidates) if candidates else set()
+                )
+            except OpenSearchServerSideTimeout:
+                # Keep the batches already checked; with none, the call fails.
+                if position == after:
+                    raise
+                return matched, position, True
             for candidate in candidates:
                 if candidate.document_id not in matching:
                     continue
@@ -414,9 +423,15 @@ class ContentFilter:
         kept: list[DocumentCursor] = []
         position = after
         while True:
-            matches = self._document_index.match_documents_by_content(
-                request, date_field, order.is_descending, position, MATCH_BATCH_SIZE
-            )
+            try:
+                matches = self._document_index.match_documents_by_content(
+                    request, date_field, order.is_descending, position, MATCH_BATCH_SIZE
+                )
+            except OpenSearchServerSideTimeout:
+                # Keep the batches already checked; with none, the call fails.
+                if position is None or position == after:
+                    raise
+                return kept, _as_cursor(position), True
             passing = (
                 self._passing([match.document_id for match in matches])
                 if matches

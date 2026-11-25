@@ -468,8 +468,12 @@ _INVALID_CURSOR_MESSAGE = (
 
 def _document_query_key(args: PostgresQueryArgs, scope: DocumentScope) -> str:
     """Identifies the filters and scope that a cursor belongs to."""
+    filters = _table_filters(args)
+    # Cursors issued before documents took content_contains have no such key.
+    if filters.get("content_contains") is None:
+        filters.pop("content_contains", None)
     query = {
-        "filters": _table_filters(args),
+        "filters": filters,
         "order_by": args.order_by.value,
         "scope": scope.model_dump(mode="json"),
     }
