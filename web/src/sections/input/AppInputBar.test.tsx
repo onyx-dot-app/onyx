@@ -604,6 +604,38 @@ describe("edit a sent message in the composer", () => {
     act(() => useChatSessionStore.getState().setCurrentSession(null));
   });
 
+  test("a reload keeps an edit of a message older than the loaded page", () => {
+    const newer: Message = {
+      nodeId: 30,
+      messageId: 30,
+      type: "user",
+      message: "newer question",
+      files: [],
+      toolCall: null,
+      packets: [],
+      parentNodeId: null,
+      childrenNodeIds: [],
+      latestChildNodeId: null,
+    };
+    const inputBarRef = createRef<AppInputBarHandle>();
+    mockProjectsContext.currentMessageFiles = [];
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    first.unmount();
+    // The first page after a reload holds only the newer messages.
+    const store = useChatSessionStore.getState();
+    store.createSession("paged-session", {
+      messageTree: new Map([[30, newer]]),
+    });
+    store.setCurrentSession("paged-session");
+
+    render(<Composer />);
+
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
   test("a draft file that finished uploading during the edit survives a remount", async () => {
     const uploading = {
       ...projectFile("temp_saved"),
