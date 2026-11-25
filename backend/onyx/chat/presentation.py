@@ -72,7 +72,6 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     ReplayEnd,
     ToolApprovalRequest,
-    ToolApprovalResolved,
     ToolQuestionRequest,
     UserMessagePacket,
 )
@@ -645,9 +644,8 @@ def replay_response(
                 packets.append(
                     Packet(
                         placement=tool_placement,
-                        obj=ToolApprovalResolved(
-                            approval_id=approval_id,
-                            outcome=approval_outcome(ended_answer(approval)),
+                        obj=renderer_of_call.approval_resolved(
+                            approval_id, approval_outcome(ended_answer(approval))
                         ),
                     )
                 )

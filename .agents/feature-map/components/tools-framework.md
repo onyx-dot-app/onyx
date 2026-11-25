@@ -452,7 +452,9 @@ are plain `AgentTool` objects with no `Tool` row, and
    `ToolCallException`) sends a `CustomToolDelta` with `response_type`
    `"error"` (`CUSTOM_TOOL_ERROR_RESPONSE_TYPE`) and no data, so the card shows
    that the call failed; it sends no `error` packet, which would end the
-   widget's stream. Return typed `details`: with `details=None`, the live
+   widget's stream. A call whose approval request ended without an approval
+   (`ToolRenderer.approval_resolved`) gets no marker: its card shows the
+   decision. Return typed `details`: with `details=None`, the live
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed arguments
    show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):

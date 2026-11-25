@@ -766,6 +766,9 @@ class ToolRenderer:
         self._own_end: OwnEndPacket | None = None
         # The call shows on the generic tool card (CustomToolStart).
         self._generic_display = False
+        # An approval request of the call ended without an approval, so its
+        # error result is that decision, not a failure.
+        self._not_approved = False
 
     def consume(
         self,
@@ -800,11 +803,18 @@ class ToolRenderer:
                 else tool_arguments_for_display(call),
             )
         else:
-            obj = packets.ToolApprovalResolved(
-                approval_id=event.request.request_id,
-                outcome=approval_outcome(event.answer),
+            obj = self.approval_resolved(
+                event.request.request_id, approval_outcome(event.answer)
             )
         return [packets.Packet(placement=self.placement, obj=obj)]
+
+    def approval_resolved(
+        self, approval_id: str, outcome: packets.ToolApprovalOutcome
+    ) -> packets.ToolApprovalResolved:
+        """The end of one of the call's approval requests, live or saved."""
+        if outcome not in ("approved", "approved_for_chat"):
+            self._not_approved = True
+        return packets.ToolApprovalResolved(approval_id=approval_id, outcome=outcome)
 
     def start(self) -> list[packets.Packet]:
         if self._started:
@@ -1223,7 +1233,12 @@ class ToolRenderer:
             ]
         if result is None:
             return []
-        if self._generic_display and result.is_error and result.details is None:
+        if (
+            self._generic_display
+            and result.is_error
+            and result.details is None
+            and not self._not_approved
+        ):
             # A rejected call (ToolCallException) has no public error details.
             # Its text goes to the model and can be private, so the card gets
             # only the failure. An error packet would end the widget's stream.
