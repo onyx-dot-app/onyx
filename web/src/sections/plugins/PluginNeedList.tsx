@@ -110,10 +110,10 @@ function NeedActionControl({
           {t("add.label")}
         </Button>
       );
-    case "note":
+    case "askAdmin":
       return (
         <Text font="secondary-body" color="text-03">
-          {t(`note.${action.note}`)}
+          {t("note.askAdmin")}
         </Text>
       );
     default: {
