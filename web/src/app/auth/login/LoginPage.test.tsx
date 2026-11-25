@@ -60,4 +60,15 @@ describe("LoginPage with the magic link", () => {
     expect(screen.getByRole("button", LINK_BUTTON)).toBeInTheDocument();
     expect(screen.getByTestId("password")).toBeInTheDocument();
   });
+
+  test("each form's email label points at its own field", () => {
+    renderLogin(metadata({ magicLinkEnabled: true }));
+
+    // Two "Work Email"/"Email" labels on one page must not share an id.
+    expect(document.querySelectorAll("#email")).toHaveLength(1);
+    expect(screen.getByTestId("magic-link-email")).toHaveAttribute(
+      "id",
+      "magicLinkEmail"
+    );
+  });
 });

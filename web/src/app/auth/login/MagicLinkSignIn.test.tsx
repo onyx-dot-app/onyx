@@ -32,7 +32,10 @@ describe("MagicLinkSignIn", () => {
     render(<MagicLinkSignIn nextUrl="/app?q=1" />);
     await requestLink("  Bob@Acme.com ");
 
-    expect(await screen.findByText("Check your email")).toBeInTheDocument();
+    // Announced: the confirmation lands in a status region.
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Check your email"
+    );
     expect(
       screen.getByText(
         "We sent a sign-in link to bob@acme.com. It works once and expires in 15 minutes."
@@ -64,6 +67,23 @@ describe("MagicLinkSignIn", () => {
       next_url: null,
       start_new_team: true,
     });
+  });
+
+  test("starts from a supplied address and can send it as it is", async () => {
+    const fetchMock = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(jsonResponse(202, { email: "bob@acme.com" }));
+    const user = setupUser();
+
+    render(<MagicLinkSignIn nextUrl={null} defaultEmail="bob@acme.com" />);
+    expect(screen.getByTestId("magic-link-email")).toHaveValue("bob@acme.com");
+    await user.click(
+      screen.getByRole("button", { name: "Get a link by email" })
+    );
+
+    await screen.findByText("Check your email");
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(JSON.parse(String(init?.body)).email).toBe("bob@acme.com");
   });
 
   test("goes back to the form for a different address", async () => {

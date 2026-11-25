@@ -16,20 +16,27 @@ import { MagicLinkRefusal } from "@/lib/auth/types";
 import { FetchError } from "@/lib/fetcher";
 import { useTranslations } from "next-intl";
 
+// Its own field name, so its id does not clash with the password or SSO
+// form's "email" field on the same page.
+const EMAIL_FIELD = "magicLinkEmail";
+
 interface RequestValues {
-  email: string;
+  [EMAIL_FIELD]: string;
 }
 
 interface MagicLinkSignInProps {
   nextUrl: string | null;
   /** Playground: the person chose "start a new team" on /auth/error. */
   startNewTeam?: boolean;
+  /** Prefill, such as the address an invitation was sent to. */
+  defaultEmail?: string | null;
 }
 
 /** "Get a link by email": asks for an address, then says where the link went. */
 export default function MagicLinkSignIn({
   nextUrl,
   startNewTeam = false,
+  defaultEmail = null,
 }: MagicLinkSignInProps) {
   const t = useTranslations("auth");
   const tPlaceholders = useTranslations("common.placeholders");
@@ -38,7 +45,7 @@ export default function MagicLinkSignIn({
 
   const requestSchema = Yup.object({
     // Pasted addresses often carry spaces; the request trims them too.
-    email: Yup.string()
+    [EMAIL_FIELD]: Yup.string()
       .trim()
       .email(t("login.ssoEmailInvalid.error"))
       .required(t("login.ssoEmailRequired.error")),
@@ -62,7 +69,7 @@ export default function MagicLinkSignIn({
 
   async function handleRequest(values: RequestValues) {
     setError(null);
-    const email = values.email.trim().toLowerCase();
+    const email = values[EMAIL_FIELD].trim().toLowerCase();
     try {
       await requestMagicLink(email, { nextUrl, startNewTeam });
       setSentTo(email);
@@ -71,14 +78,20 @@ export default function MagicLinkSignIn({
     }
   }
 
-  if (sentTo !== null) {
-    return (
-      <Section flexDirection="column" gap={4}>
-        <MessageCard
-          variant="success"
-          title={t("magicLink.sent.title")}
-          description={t("magicLink.sent.description", { email: sentTo })}
-        />
+  return (
+    <Section flexDirection="column" gap={4}>
+      {/* Mounted before the request, so screen readers announce what is
+          put into it when the link goes out. */}
+      <div role="status" aria-live="polite">
+        {sentTo !== null && (
+          <MessageCard
+            variant="success"
+            title={t("magicLink.sent.title")}
+            description={t("magicLink.sent.description", { email: sentTo })}
+          />
+        )}
+      </div>
+      {sentTo !== null ? (
         <Button
           prominence="secondary"
           width="full"
@@ -86,42 +99,39 @@ export default function MagicLinkSignIn({
         >
           {t("magicLink.differentEmailButton.label")}
         </Button>
-      </Section>
-    );
-  }
-
-  return (
-    <Section flexDirection="column" gap={4}>
-      <Formik
-        initialValues={{ email: "" }}
-        validationSchema={requestSchema}
-        onSubmit={handleRequest}
-      >
-        {({ isSubmitting, isValid, dirty }) => (
-          <AuthLayouts.FormBody>
-            <AuthLayouts.Fields>
-              <InputVertical
-                title={t("login.workEmailField.label")}
-                withLabel="email"
+      ) : (
+        <Formik
+          initialValues={{ [EMAIL_FIELD]: defaultEmail ?? "" }}
+          validationSchema={requestSchema}
+          onSubmit={handleRequest}
+        >
+          {({ isSubmitting, isValid, dirty }) => (
+            <AuthLayouts.FormBody>
+              <AuthLayouts.Fields>
+                <InputVertical
+                  title={t("login.workEmailField.label")}
+                  withLabel={EMAIL_FIELD}
+                >
+                  <InputTypeInField
+                    name={EMAIL_FIELD}
+                    placeholder={tPlaceholders("email")}
+                    data-testid="magic-link-email"
+                    autoComplete="email"
+                  />
+                </InputVertical>
+              </AuthLayouts.Fields>
+              <AuthLayouts.Submit
+                isSubmitting={isSubmitting}
+                isValid={isValid}
+                // A prefilled address can be sent as it is.
+                dirty={dirty || Boolean(defaultEmail)}
               >
-                <InputTypeInField
-                  name="email"
-                  placeholder={tPlaceholders("email")}
-                  data-testid="magic-link-email"
-                  autoComplete="email"
-                />
-              </InputVertical>
-            </AuthLayouts.Fields>
-            <AuthLayouts.Submit
-              isSubmitting={isSubmitting}
-              isValid={isValid}
-              dirty={dirty}
-            >
-              {t("magicLink.requestButton.label")}
-            </AuthLayouts.Submit>
-          </AuthLayouts.FormBody>
-        )}
-      </Formik>
+                {t("magicLink.requestButton.label")}
+              </AuthLayouts.Submit>
+            </AuthLayouts.FormBody>
+          )}
+        </Formik>
+      )}
       {error && <InputErrorText>{error}</InputErrorText>}
     </Section>
   );
