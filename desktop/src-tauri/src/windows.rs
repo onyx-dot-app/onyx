@@ -128,10 +128,37 @@ fn open_local(
     let size = initial_size(label).ok_or("not a local window")?;
     let window = local_window(app, label, page, title, size);
     // The offline window has its own fallback dialog (`show_offline`).
-    if let (Err(e), false) = (&window, label == OFFLINE) {
-        window_failed(app, e);
+    let failed = match label {
+        ONBOARDING => Some(FailedWindow::Onboarding),
+        LOGIN => Some(FailedWindow::Login),
+        PREFERENCES => Some(FailedWindow::Preferences),
+        _ => None,
+    };
+    if let (Err(e), Some(failed)) = (&window, failed) {
+        window_failed(app, failed, e);
     }
     window
+}
+
+/// The window that did not open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FailedWindow {
+    Onboarding,
+    Login,
+    Preferences,
+    /// The launcher the user asked for (shortcut, menu, tray).
+    Launcher,
+    /// The hidden launcher created at startup: the user did not ask for it.
+    LauncherPreload,
+}
+
+/// What Try Again does: open the same window again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Retry {
+    /// Onboarding and sign-in: routing is what opens them.
+    Route,
+    Preferences,
+    Launcher,
 }
 
 /// What the user sees when a local window or the launcher cannot open.
@@ -140,48 +167,60 @@ pub(crate) enum WindowFailure {
     /// "Close the older version of Onyx" (see `webview_failed`).
     OlderVersion,
     /// The "Could not open Onyx" dialog with Try Again and Quit.
-    CouldNotOpen,
-    /// Already said this run: logged only, so a retry cannot loop.
+    CouldNotOpen(Retry),
+    /// Logged only: a startup window the user did not ask for, or such a
+    /// dialog is open already.
     LogOnly,
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn window_failure(
+    window: FailedWindow,
     webview_error: bool,
     earlier_app_evidence: bool,
-    already_shown: bool,
+    dialog_open: bool,
 ) -> WindowFailure {
     if shows_close_older(webview_error, earlier_app_evidence) {
-        WindowFailure::OlderVersion
-    } else if already_shown {
+        return WindowFailure::OlderVersion;
+    }
+    let retry = match window {
+        FailedWindow::Onboarding | FailedWindow::Login => Retry::Route,
+        FailedWindow::Preferences => Retry::Preferences,
+        FailedWindow::Launcher => Retry::Launcher,
+        FailedWindow::LauncherPreload => return WindowFailure::LogOnly,
+    };
+    if dialog_open {
         WindowFailure::LogOnly
     } else {
-        WindowFailure::CouldNotOpen
+        WindowFailure::CouldNotOpen(retry)
     }
 }
 
 /// A local window or the launcher did not open. On Windows (where a web view
-/// can fail to start) the user is told once per run; macOS and Linux only
-/// log it, as before.
-pub(crate) fn window_failed(app: &AppHandle, error: &str) {
+/// can fail to start) the user is told, one dialog at a time; macOS and
+/// Linux only log it, as before.
+pub(crate) fn window_failed(app: &AppHandle, window: FailedWindow, error: &str) {
     log::warn!("could not open a window: {error}");
     #[cfg(windows)]
     {
         use std::sync::atomic::{AtomicBool, Ordering};
-        static SHOWN: AtomicBool = AtomicBool::new(false);
+        static DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
         let evidence = crate::earlier_install::evidence(app);
         let response = window_failure(
+            window,
             is_webview_start_error(error),
             evidence,
-            SHOWN.load(Ordering::SeqCst),
+            DIALOG_OPEN.load(Ordering::SeqCst),
         );
         match response {
             WindowFailure::OlderVersion => {
                 let _ = webview_failed(app, error);
             }
             WindowFailure::LogOnly => {}
-            WindowFailure::CouldNotOpen => {
-                SHOWN.store(true, Ordering::SeqCst);
+            WindowFailure::CouldNotOpen(retry) => {
+                if DIALOG_OPEN.swap(true, Ordering::SeqCst) {
+                    return;
+                }
                 let dialog = rfd::MessageDialog::new()
                     .set_title("Could not open Onyx")
                     .set_description(crate::dialog::text(error))
@@ -189,18 +228,25 @@ pub(crate) fn window_failed(app: &AppHandle, error: &str) {
                         "Try Again".into(),
                         "Quit".into(),
                     ));
-                crate::dialog::show(app, dialog, |app, choice| {
-                    if choice == rfd::MessageDialogResult::Custom("Try Again".into()) {
-                        route(app);
-                    } else {
+                crate::dialog::show(app, dialog, move |app, choice| {
+                    DIALOG_OPEN.store(false, Ordering::SeqCst);
+                    if choice != rfd::MessageDialogResult::Custom("Try Again".into()) {
                         app.exit(0);
+                        return;
+                    }
+                    match retry {
+                        Retry::Route => route(app),
+                        Retry::Preferences => {
+                            let _ = open_preferences(app);
+                        }
+                        Retry::Launcher => crate::launcher::show(app),
                     }
                 });
             }
         }
     }
     #[cfg(not(windows))]
-    let _ = app;
+    let _ = (app, window);
 }
 
 /// Whether a window error is the web view failing to start.
@@ -588,22 +634,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_window_failure_is_reported_once() {
-        use super::{window_failure, WindowFailure};
+    fn a_window_failure_retries_that_window() {
+        use super::{window_failure, FailedWindow as W, Retry, WindowFailure as F};
         assert_eq!(
-            window_failure(true, true, false),
-            WindowFailure::OlderVersion
+            window_failure(W::Preferences, true, true, false),
+            F::OlderVersion
         );
-        // A fresh install: the usual dialog, once.
+        // A fresh install: the usual dialog, and Try Again opens the same window.
         assert_eq!(
-            window_failure(true, false, false),
-            WindowFailure::CouldNotOpen
+            window_failure(W::Onboarding, true, false, false),
+            F::CouldNotOpen(Retry::Route)
         );
         assert_eq!(
-            window_failure(false, false, false),
-            WindowFailure::CouldNotOpen
+            window_failure(W::Login, false, false, false),
+            F::CouldNotOpen(Retry::Route)
         );
-        assert_eq!(window_failure(true, false, true), WindowFailure::LogOnly);
+        assert_eq!(
+            window_failure(W::Preferences, false, false, false),
+            F::CouldNotOpen(Retry::Preferences)
+        );
+        assert_eq!(
+            window_failure(W::Launcher, true, false, false),
+            F::CouldNotOpen(Retry::Launcher)
+        );
+        // Only while a dialog is open are other failures logged only.
+        assert_eq!(window_failure(W::Onboarding, true, false, true), F::LogOnly);
+        // The hidden launcher at startup is never a dialog.
+        assert_eq!(
+            window_failure(W::LauncherPreload, true, false, false),
+            F::LogOnly
+        );
     }
 
     #[test]

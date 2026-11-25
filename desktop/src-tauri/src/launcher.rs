@@ -457,7 +457,11 @@ pub fn preload(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         if let Err(e) = platform::ensure(&handle, WebviewUrl::App("launcher.html".into())) {
-            crate::windows::window_failed(&handle, &format!("could not create the launcher: {e}"));
+            crate::windows::window_failed(
+                &handle,
+                crate::windows::FailedWindow::LauncherPreload,
+                &format!("could not create the launcher: {e}"),
+            );
         }
     });
 }
@@ -542,10 +546,23 @@ fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
     } else if let Err(e) = platform::ensure(app, WebviewUrl::App("launcher.html".into()))
         .and_then(|()| platform::show(app))
     {
-        log::warn!("could not show launcher: {e}");
+        crate::windows::window_failed(
+            app,
+            crate::windows::FailedWindow::Launcher,
+            &format!("could not show launcher: {e}"),
+        );
     } else {
         crate::aonyx::set_mood(app, crate::aonyx::Mood::Hop);
     }
+}
+
+/// Shows the launcher (Try Again after it did not open).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn show(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        show_now(&handle, crate::windows::route);
+    });
 }
 
 /// Whether the launcher is on screen. Safe to call off the main thread.
