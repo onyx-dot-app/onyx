@@ -87,7 +87,7 @@ def _integration_tools(
             )
         ):
             return []
-        # A preset or a custom app: one tool that asks the user to connect.
+        # A preset, OpenAPI or GraphQL app: one tool that asks the user to connect.
         return [
             AppConnectTool(
                 integration_id=integration.id,
@@ -175,9 +175,10 @@ def build_integration_chat_tools(
 ) -> list[Tool]:
     """The tools of each enabled integration that the turn can use. An
     integration whose credential does not resolve gives no tool, except that
-    a preset or a custom app gives one tool that asks the user to connect. An API
-    integration with neither an ``api_app`` nor a preset gives none. A Blocked
-    action gives no tool; an Ask action carries its approval scope."""
+    a preset, OpenAPI or GraphQL app gives one tool that asks the user to
+    connect. An API integration with neither an ``api_app`` nor a preset
+    gives none. A Blocked action gives no tool; an Ask action carries its
+    approval scope."""
     held = chat_integrations(
         db_session,
         user.id,
