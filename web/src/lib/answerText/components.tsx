@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, memo, useContext, useMemo } from "react";
 import ReactMarkdown, {
   type Components,
   type ExtraProps,
@@ -24,6 +24,7 @@ import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
 import { useInResponse } from "@/lib/timeline/components/Response";
 import { CodeBlockBody } from "@/lib/timeline/components/bodies/CodeBlockBody";
 import { prepareAnswerMarkdown } from "@/lib/answerText/utils";
+import { splitMarkdownBlocks } from "@/lib/answerText/streamBlocks";
 
 // Math is `$$…$$` only (see `prepareAnswerMarkdown`).
 const REMARK_PLUGINS: PluggableList = [
@@ -108,6 +109,29 @@ const BASE_COMPONENTS: Components = {
   ),
 };
 
+interface AnswerMarkdownBlockProps {
+  markdown: string;
+  components: Components;
+  rehypePlugins: PluggableList;
+}
+
+const AnswerMarkdownBlock = memo(function AnswerMarkdownBlock({
+  markdown,
+  components,
+  rehypePlugins,
+}: AnswerMarkdownBlockProps) {
+  return (
+    <ReactMarkdown
+      components={components}
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={rehypePlugins}
+      urlTransform={transformLinkUri}
+    >
+      {markdown}
+    </ReactMarkdown>
+  );
+});
+
 interface AnswerMarkdownProps {
   content: string;
   /** The text still grows: code highlights line by line and math fades in. */
@@ -125,6 +149,8 @@ interface AnswerMarkdownProps {
  * Answer text, the same in chat and Craft: one markdown pipeline (GFM, `$$`
  * math, per-block direction), one look (`prose prose-onyx` on the main
  * content font), code blocks as `CodeBlockBody`, and the streaming cursor.
+ * While streaming, finished blocks keep their render and only the last block
+ * re-renders.
  */
 export function AnswerMarkdown({
   content,
@@ -133,7 +159,7 @@ export function AnswerMarkdown({
   components,
 }: AnswerMarkdownProps) {
   const inResponse = useInResponse();
-  const rehypePlugins = useMemo<PluggableList>(
+  const lastBlockRehypePlugins = useMemo<PluggableList>(
     () =>
       cursor
         ? [...REHYPE_PLUGINS, [rehypeStreamingCursor, { anchor: inResponse }]]
@@ -145,21 +171,33 @@ export function AnswerMarkdown({
     [components]
   );
   const markdown = useMemo(() => prepareAnswerMarkdown(content), [content]);
+  const blocks = (streaming ? splitMarkdownBlocks(markdown) : null) ?? [
+    markdown,
+  ];
 
   return (
     <StreamingContext.Provider value={streaming}>
       {/* dir="auto" backstops renderers that do not forward the per-block
           dir stamped by rehypeDirection. */}
-      <div dir="auto" className={cn(streaming && "streaming-katex")}>
-        <ReactMarkdown
-          className="response-text prose prose-onyx font-main-content-body max-w-full wrap-break-word"
-          components={markdownComponents}
-          remarkPlugins={REMARK_PLUGINS}
-          rehypePlugins={rehypePlugins}
-          urlTransform={transformLinkUri}
-        >
-          {markdown}
-        </ReactMarkdown>
+      <div
+        dir="auto"
+        className={cn(
+          "response-text prose prose-onyx font-main-content-body max-w-full wrap-break-word",
+          streaming && "streaming-katex"
+        )}
+      >
+        {blocks.map((block, index) => (
+          <AnswerMarkdownBlock
+            key={index}
+            markdown={block}
+            components={markdownComponents}
+            rehypePlugins={
+              index === blocks.length - 1
+                ? lastBlockRehypePlugins
+                : REHYPE_PLUGINS
+            }
+          />
+        ))}
       </div>
     </StreamingContext.Provider>
   );
