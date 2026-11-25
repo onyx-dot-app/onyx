@@ -70,7 +70,7 @@ export function parsePluginPageTab(value: string | null): PluginPageTab {
     : "overview";
 }
 
-export type IntegrationPageTab = "overview" | "configuration" | "actions";
+export type IntegrationPageTab = "overview" | "actions";
 
 export function integrationHref(
   integrationId: number,

@@ -32,7 +32,7 @@ test("links the sign-in to the integration that the tool list gives", () => {
   );
   expect(screen.getByRole("link", { name: /connect/i })).toHaveAttribute(
     "href",
-    "/app/customize/integrations/4?tab=configuration"
+    "/app/customize/integrations/4"
   );
 });
 
@@ -43,7 +43,7 @@ test("links the sign-in to the integration that an app tool names", () => {
   );
   expect(screen.getByRole("link", { name: /connect/i })).toHaveAttribute(
     "href",
-    "/app/customize/integrations/9?tab=configuration"
+    "/app/customize/integrations/9"
   );
 });
 

@@ -471,7 +471,7 @@ export default function AddIntegrationModal({
       } else {
         // The member page reads the new integration from the list.
         await mutate(SWR_KEYS.integrations);
-        navigation.go(integrationHref(created.id, "configuration"));
+        navigation.go(integrationHref(created.id));
       }
     } catch (error) {
       if (error instanceof FetchError)

@@ -49,9 +49,7 @@ function CustomToolAuthCard({
         <Button
           prominence="primary"
           icon={SvgArrowExchange}
-          {...navigation.linkTo(
-            integrationHref(integrationId, "configuration")
-          )}
+          {...navigation.linkTo(integrationHref(integrationId))}
         >
           {t("customToolAuth.connectButton.label")}
         </Button>

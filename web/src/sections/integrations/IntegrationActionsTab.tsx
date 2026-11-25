@@ -337,11 +337,7 @@ export default function IntegrationActionsTab({
             individual ? (
               <Button
                 prominence="secondary"
-                onClick={() =>
-                  navigation.go(
-                    integrationHref(integration.id, "configuration")
-                  )
-                }
+                onClick={() => navigation.go(integrationHref(integration.id))}
               >
                 {t("connectFirst.openIntegration")}
               </Button>
