@@ -128,10 +128,13 @@ MCP URL goes through `POST /admin/mcp/probe` for the transport and the
 sign-in. A custom API URL or uploaded spec goes through
 `sections/integrations/detectApi.ts`: `POST /admin/integrations/openapi-import`,
 then `POST /admin/integrations/graphql-introspect`, else a REST base URL that
-takes endpoint lines (`EndpointLinesField`). An import `VALIDATION_ERROR` (a
-spec that Onyx cannot add) stops there and shows under the URL. Step 2 lists
-the endpoints that the import skipped, and asks for the base URL when the
-spec has no single server URL. A catalog tile fills a preset or
+takes endpoint lines (`EndpointLinesField`). Only a 400 answer means "not
+this kind"; any other failure (403, 5xx, no connection) stops detection with
+an error, so a failed check never reads as a REST base URL. An import
+`VALIDATION_ERROR` (a spec that Onyx cannot add) stops there and shows under
+the URL. Step 2 lists the endpoints that the import skipped, and asks for the
+base URL when the spec has no single server URL, or when an uploaded spec has
+a relative one. A catalog tile fills a preset or
 a suggested MCP server. Step 2 shows the sign-in mode; the method, OAuth
 client, header template, transport and owner are under Advanced. The Actions tab
 (`sections/integrations/IntegrationActionsTab.tsx`) is built from

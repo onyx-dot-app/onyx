@@ -19,6 +19,7 @@ import {
 import {
   CardGrid,
   Content,
+  InputErrorText,
   InputVertical,
   Section,
   toast,
@@ -170,6 +171,8 @@ export default function AddIntegrationModal({
   const [name, setName] = useState(prefill?.name ?? "");
   const [url, setUrl] = useState(prefill?.serverUrl ?? "");
   const [file, setFile] = useState<SpecFile | null>(null);
+  const [readingFile, setReadingFile] = useState(false);
+  const [fileError, setFileError] = useState(false);
   const [connectErrors, setConnectErrors] = useState(false);
   const [detectError, setDetectError] = useState<string | null>(null);
   const [detection, setDetection] = useState<Detection | null>(null);
@@ -273,9 +276,9 @@ export default function AddIntegrationModal({
     } catch (error) {
       if (controller.signal.aborted) return;
       setDetectError(
-        error instanceof Error
+        error instanceof FetchError && error.status === 400
           ? t("api.specError", { detail: error.message })
-          : t("api.failed")
+          : t("api.checkFailed")
       );
       setStep("connect");
       return;
@@ -583,15 +586,22 @@ export default function AddIntegrationModal({
                 onFiles={(files) => {
                   const picked = files[0];
                   if (!picked) return;
-                  void picked
+                  setReadingFile(true);
+                  setFileError(false);
+                  picked
                     .text()
-                    .then((text) => setFile({ name: picked.name, text }));
+                    .then((text) => setFile({ name: picked.name, text }))
+                    .catch(() => setFileError(true))
+                    .finally(() => setReadingFile(false));
                 }}
               >
                 {t("api.upload.label")}
               </FilePickerButton>
             )}
           </Section>
+        )}
+        {flow === "api" && fileError && (
+          <InputErrorText type="error">{t("api.failed")}</InputErrorText>
         )}
       </Section>
     );
@@ -838,7 +848,10 @@ export default function AddIntegrationModal({
                     {busy ? t("adding") : t("submit")}
                   </Button>
                 ) : (
-                  <Button disabled={step === "detecting"} onClick={next}>
+                  <Button
+                    disabled={step === "detecting" || readingFile}
+                    onClick={next}
+                  >
                     {t("continue")}
                   </Button>
                 )

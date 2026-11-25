@@ -10483,7 +10483,8 @@
             "remove": "移除规范"
           },
           "failed": "无法读取规范。",
-          "specError": "无法添加该规范：{detail}"
+          "specError": "无法添加该规范：{detail}",
+          "checkFailed": "Onyx 无法检查该 URL。请重试。"
         },
         "detected": {
           "openapi": "REST API，{count, plural, other {# 个端点}}",

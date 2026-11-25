@@ -10483,7 +10483,8 @@
             "remove": "仕様を削除"
           },
           "failed": "仕様を読み取れませんでした。",
-          "specError": "仕様を追加できません: {detail}"
+          "specError": "仕様を追加できません: {detail}",
+          "checkFailed": "Onyx は URL を確認できませんでした。もう一度お試しください。"
         },
         "detected": {
           "openapi": "REST API、{count, plural, other {# 個のエンドポイント}}",

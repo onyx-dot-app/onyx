@@ -10483,7 +10483,8 @@
             "remove": "Retirer la spécification"
           },
           "failed": "Impossible de lire la spécification.",
-          "specError": "Impossible d'ajouter la spécification : {detail}"
+          "specError": "Impossible d'ajouter la spécification : {detail}",
+          "checkFailed": "Onyx n'a pas pu vérifier l'URL. Réessayez."
         },
         "detected": {
           "openapi": "API REST, {count, plural, one {# point de terminaison} other {# points de terminaison}}",

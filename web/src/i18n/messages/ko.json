@@ -10483,7 +10483,8 @@
             "remove": "사양 제거"
           },
           "failed": "사양을 읽을 수 없습니다.",
-          "specError": "사양을 추가할 수 없습니다: {detail}"
+          "specError": "사양을 추가할 수 없습니다: {detail}",
+          "checkFailed": "Onyx가 URL을 확인할 수 없습니다. 다시 시도하세요."
         },
         "detected": {
           "openapi": "REST API, {count, plural, other {엔드포인트 #개}}",

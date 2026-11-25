@@ -36,6 +36,7 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     for example "REST API, 12 endpoints".
 
     If the schema has no server URL, or more than one, Onyx shows a **Base URL** field.
+    It also shows the field for an uploaded schema with a relative server URL.
     Make sure that it is the URL that Onyx must call, or enter a different one.
 
     An imported schema must be OpenAPI 3. Onyx skips each operation that a tool cannot call:
@@ -44,10 +45,12 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     - An operation with no `summary` or `description`. The agent reads it to know when to use the tool.
     - An operation with a request body that is not `application/json`, for example a file upload.
     - An operation with a method other than `GET`, `POST`, `PUT`, `PATCH` or `DELETE`.
+    - An operation with a query parameter name that has a space. An endpoint line cannot hold it.
 
     Onyx shows the number of skipped operations, for example "REST API, 18 endpoints.
     1 skipped." Open **Skipped endpoints** to see each one and the reason. If the schema is not OpenAPI 3,
-    or no operation is left, Onyx shows the error under the URL.
+    or no operation is left, Onyx shows the error under the URL. If Onyx cannot check the URL,
+    for example because the server does not answer, it shows an error. Click **Continue** to try again.
 
     For an API with no schema, Onyx asks for one endpoint on each line in **Endpoints**:
 

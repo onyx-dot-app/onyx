@@ -10483,7 +10483,8 @@
             "remove": "إزالة المواصفة"
           },
           "failed": "تعذّرت قراءة المواصفة.",
-          "specError": "تعذّرت إضافة المواصفة: {detail}"
+          "specError": "تعذّرت إضافة المواصفة: {detail}",
+          "checkFailed": "تعذّر على Onyx التحقق من عنوان URL. حاول مرة أخرى."
         },
         "detected": {
           "openapi": "واجهة REST، {count, plural, one {# نقطة نهاية} other {# نقاط نهاية}}",

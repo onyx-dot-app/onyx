@@ -626,6 +626,85 @@ describe("Custom API", () => {
     );
   });
 
+  test("a failed check is an error, not a REST base URL", async () => {
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": () => failure(400),
+      "POST /api/admin/integrations/graphql-introspect": () => failure(502),
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Billing",
+      add.api.url.title,
+      "https://billing.example.com"
+    );
+
+    expect(await screen.findByText(add.api.checkFailed)).toBeInTheDocument();
+    expect(screen.queryByText(add.detected.rest)).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("an uploaded spec with a relative server takes the URL as its base URL", async () => {
+    mockFetch({
+      "POST /api/admin/integrations/openapi-import": {
+        shape: "openapi",
+        openapi_document: "{}",
+        base_url: "/",
+        endpoints: ["GET /pets List pets"],
+        skipped: [],
+      },
+    });
+    const { user } = open({ kind: "api" });
+    const spec = Object.assign(
+      new File(["{}"], "openapi.json", { type: "application/json" }),
+      { text: async () => "{}" }
+    );
+    await user.upload(screen.getByLabelText(add.api.upload.label), spec);
+    await screen.findByText(
+      add.api.upload.chosen.replace("{file}", "openapi.json")
+    );
+    await fillConnect(
+      user,
+      "Pets",
+      add.api.url.title,
+      "https://pets.example.com/v2"
+    );
+
+    expect(
+      await screen.findByRole("textbox", { name: add.rest.baseUrl.title })
+    ).toHaveValue("https://pets.example.com/v2");
+  });
+
+  test("waits for the spec file and shows a read error", async () => {
+    let finishRead: (text: string) => void = () => undefined;
+    const pending = Object.assign(
+      new File(["{}"], "openapi.json", { type: "application/json" }),
+      {
+        text: () =>
+          new Promise<string>((resolve) => {
+            finishRead = resolve;
+          }),
+      }
+    );
+    const { user } = open({ kind: "api" });
+    await user.upload(screen.getByLabelText(add.api.upload.label), pending);
+    expect(screen.getByRole("button", { name: add.continue })).toBeDisabled();
+    finishRead("{}");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: add.continue })).toBeEnabled()
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: add.api.upload.remove })
+    );
+    const broken = Object.assign(
+      new File(["{}"], "openapi.json", { type: "application/json" }),
+      { text: () => Promise.reject(new Error("unreadable")) }
+    );
+    await user.upload(screen.getByLabelText(add.api.upload.label), broken);
+    expect(await screen.findByText(add.api.failed)).toBeInTheDocument();
+  });
+
   test("a GraphQL endpoint counts its queries and mutations", async () => {
     const schema = `"""Root"""
 type Query {

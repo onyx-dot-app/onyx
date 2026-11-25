@@ -10483,7 +10483,8 @@
             "remove": "Remove the spec"
           },
           "failed": "Could not read the spec.",
-          "specError": "The spec cannot be added: {detail}"
+          "specError": "The spec cannot be added: {detail}",
+          "checkFailed": "Onyx could not check the URL. Try again."
         },
         "detected": {
           "openapi": "REST API, {count, plural, one {# endpoint} other {# endpoints}}",

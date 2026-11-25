@@ -37,8 +37,8 @@ export function isGraphQLFile(name: string): boolean {
  * the URL; another file is an OpenAPI spec. With only a URL: an OpenAPI spec
  * at the URL, else a GraphQL endpoint that answers introspection, else a REST
  * base URL with no spec. Null when the API needs a URL that is missing.
- * Throws when the file is not a spec that Onyx can add, or the URL is a spec
- * that Onyx cannot add.
+ * Throws when the file is not a spec that Onyx can add, the URL is a spec
+ * that Onyx cannot add, or a check fails with no answer.
  */
 export async function detectApi(
   url: string | null,
@@ -67,13 +67,14 @@ export async function detectApi(
     );
     if (result) return result;
   } catch (error) {
-    // A spec that Onyx cannot add stops here. Else it is not a spec; try
-    // GraphQL next.
-    if (isSpecError(error)) throw error;
+    // A spec that Onyx cannot add, or a failed check, stops here. Else it is
+    // not a spec; try GraphQL next.
+    if (!isNotThisKind(error) || isSpecError(error)) throw error;
   }
   try {
     return graphqlResult(await introspectGraphQL(url));
-  } catch {
+  } catch (error) {
+    if (!isNotThisKind(error)) throw error;
     return { shape: "rest", baseUrl: apiBaseUrl(url) };
   }
 }
@@ -82,6 +83,12 @@ function isSpecError(error: unknown): boolean {
   return (
     error instanceof FetchError && error.info?.error_code === "VALIDATION_ERROR"
   );
+}
+
+/** Onyx checked the URL and it is not this kind of API. Any other failure
+ * (no permission, a server error, no connection) is not an answer. */
+function isNotThisKind(error: unknown): boolean {
+  return error instanceof FetchError && error.status === 400;
 }
 
 /** A spec's server URL, resolved against the URL the spec came from when it
@@ -102,13 +109,16 @@ function apiBaseUrl(url: string): string {
 }
 
 /** The spec's server URL resolved against `url`. A spec with no single
- * server URL takes `fallback`, else the root of `url`. */
+ * server URL takes `fallback`, else the root of `url`. With a `fallback`, a
+ * relative server URL takes it too: an uploaded spec has no location. */
 function openApiResult(
   view: OpenApiConfigView,
   url: string | null,
   fallback: string | null
 ): DetectedApi | null {
-  const baseUrlGuessed = !view.base_url.trim();
+  const baseUrlGuessed =
+    !view.base_url.trim() ||
+    (fallback !== null && normalizedUrl(view.base_url) === null);
   const baseUrl =
     (baseUrlGuessed ? fallback : null) ?? specBaseUrl(view.base_url, url);
   return baseUrl
