@@ -73,14 +73,10 @@ def cut_middle(
     )
 
 
-def output_chars(requested: int) -> int:
-    """A requested character budget, clamped to 1..MAX_OUTPUT_CHARS."""
-    return min(max(requested, 1), MAX_OUTPUT_CHARS)
-
-
 def output_chars_from_tokens(requested: int) -> int:
-    """A requested token budget as a clamped character budget."""
-    return output_chars(requested * APPROX_CHARS_PER_TOKEN)
+    """A requested token budget as a character budget, clamped to
+    1..MAX_OUTPUT_CHARS."""
+    return min(max(requested * APPROX_CHARS_PER_TOKEN, 1), MAX_OUTPUT_CHARS)
 
 
 FILE_ASSOCIATED_GUIDANCE = (

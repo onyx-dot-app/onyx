@@ -39,7 +39,6 @@ def process_question(onyx_url: str, question: str, api_key: str | None) -> None:
         # Not specifying any specific docs to chat to, we want to run a search
         "search_doc_ids": None,
         "retrieval_options": {
-            "run_search": "always",
             "real_time": True,
             "enable_auto_detect_filters": False,
             # No filters applied, check all sources, document-sets, time ranges, etc.

@@ -1553,7 +1553,7 @@ def _spawn(call_id: str, name: str, instruction: str) -> ToolCall:
     return ToolCall(
         id=call_id,
         name=SPAWN_AGENT_TOOL_NAME,
-        arguments={"name": name, "instruction": instruction},
+        arguments={"task_name": name, "message": instruction},
     )
 
 

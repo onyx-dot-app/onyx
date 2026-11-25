@@ -523,51 +523,6 @@ def test_description_lists_stubs() -> None:
     assert "[n]" in first.description
 
 
-@pytest.mark.parametrize("deferred", [False, True])
-def test_a_direct_program_function_call_names_only_functions_that_programs_have(
-    deferred: bool,
-) -> None:
-    """A call of any shape's search or describe function, as a tool, names
-    this shape's function; the search exists only with deferred functions."""
-    tools = [
-        FakeTool("echo", lambda *_: ToolResult(content="")),
-        *(
-            [
-                FakeTool(
-                    "lookup",
-                    lambda *_: ToolResult(content=""),
-                    exposure=CodeModeExposure.DEFERRED,
-                )
-            ]
-            if deferred
-            else []
-        ),
-    ]
-
-    def hint(shape: CodeModeShape, name: str) -> str | None:
-        tool = CodeModeTool(tools, cells=CodeCells(shape), limits=LIMITS)
-        return tool.inner_call_hint(name)
-
-    def use(name: str, function: str, run: str) -> str:
-        return (
-            f"`{name}` is not a tool in this chat. Call `await {function}(...)` "
-            f"in `{run}` programs."
-        )
-
-    for name in ("tool_search", "search_tools", "describe_tool"):
-        assert hint(OPENAI_CODE_MODE, name) == (
-            use(name, "tool_search", "exec") if deferred else None
-        )
-    for name in ("tool_search", "search_tools"):
-        assert hint(CLAUDE_CODE_MODE, name) == (
-            use(name, "search_tools", "repl") if deferred else None
-        )
-    # The Claude shape describes listed functions too.
-    assert hint(CLAUDE_CODE_MODE, "describe_tool") == use(
-        "describe_tool", "describe_tool", "repl"
-    )
-
-
 def test_each_shape_s_arguments_become_the_same_requests() -> None:
     """Token budgets convert to the characters that the cells count, capped
     as character budgets are; the Claude shape has the default budget."""

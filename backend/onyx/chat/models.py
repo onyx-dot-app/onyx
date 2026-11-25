@@ -380,7 +380,7 @@ class AgentResultState(BaseModel):
     def is_active(self) -> bool:
         """An active background agent: an unfinished run that delivers this result.
 
-        Only `spawn_agent` runs have result rows, so foreground workers never count.
+        Only the spawn tool's runs have result rows, so foreground workers never count.
         A run that waits for the user without an owner (parked) counts.
         """
         return not self.status.is_terminal
@@ -392,7 +392,7 @@ class AgentResultState(BaseModel):
 
 
 class AgentWait(BaseModel):
-    """A root `wait_agents` call on a branch, as `AgentWaitDetails` records it."""
+    """A root's wait call on a branch, as `AgentWaitDetails` records it."""
 
     response_id: int
     agent_ids: frozenset[UUID] | None
@@ -841,7 +841,9 @@ class AvailableFiles(BaseModel):
 
 
 class ChatReminderContext(BaseModel):
-    has_open_url_tool: bool
+    # The reminder to open pages after a web search, naming the tools as the
+    # model calls them; None without the URL reading tool.
+    open_url_reminder: str | None
     out_of_cycles: bool
     persona_task_prompt: str | None
     has_context_documents: bool

@@ -20,6 +20,7 @@ from onyx.tools.tool_implementations.sandbox.file_copies import (
     TurnSearchFiles,
 )
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
+from onyx.tools.tool_implementations.sandbox.shapes import ShellShape
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -55,12 +56,16 @@ class SandboxTurn:
         chat_session_id: UUID,
         vm_chat_files: Sequence[VmChatFile],
         copy_vm_chat_files: bool,
+        shell: ShellShape,
     ) -> None:
         self._tenant_id = tenant_id
         self._user_id = user_id
         self._chat_session_id = chat_session_id
         self.vm_chat_files = vm_chat_files
         self._copy_vm_chat_files = copy_vm_chat_files
+        # The shell shape of the model's tool family, which the turn's tools
+        # call and name.
+        self.shell = shell
         self._lock = threading.Lock()
         # A call ran.
         self._called = False

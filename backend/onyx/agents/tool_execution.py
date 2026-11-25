@@ -476,18 +476,14 @@ class ToolBatch:
                 if options.tool_choice == ToolChoiceOptions.NONE
                 else f"Tool {call.name} is unavailable for this step."
             )
-            # A call of a tool that runs only inside an offered tool's calls,
-            # such as a code mode function, says how to call it there.
-            if tool is None and options.tool_choice != ToolChoiceOptions.NONE:
-                for offered in self.tools.values():
-                    hint = (
-                        offered.inner_call_hint(call.name)
-                        if offered.inner_call_hint is not None
-                        else None
-                    )
-                    if hint is not None:
-                        content = hint
-                        break
+            # The agent's hint can say what to call instead of an unknown
+            # tool, such as a code mode function or its own name for a tool.
+            if (
+                tool is None
+                and options.tool_choice != ToolChoiceOptions.NONE
+                and self.run.unknown_tool_hint is not None
+            ):
+                content = self.run.unknown_tool_hint(call.name) or content
             return ToolResult(content=content, is_error=True)
         if (
             call.argument_error

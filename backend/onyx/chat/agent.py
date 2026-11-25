@@ -79,13 +79,31 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     WaitCodeTool,
     with_code_mode,
 )
-from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
+from onyx.tools.tool_implementations.code_mode.prompt import (
+    OTHER_OPERATION_MESSAGE,
+    PROGRAM_FUNCTION_USE,
+    RUN_USE,
+    TOOL_USE,
+    WAIT_USE,
+)
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CODE_MODE_SHAPES,
+    RUN_TOOL_NAMES,
+    WAIT_TOOL_NAMES,
+)
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_TOOL_NAMES,
+)
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.question.shapes import (
     QUESTION_SHAPES,
+    QUESTION_TOOL_NAMES,
     QuestionShape,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
+from onyx.tools.tool_implementations.sandbox.shapes import (
+    SHELL_TOOL_NAMES,
+)
 from onyx.tools.tool_implementations.sandbox.spill import spill_large_result
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.models import SearchContext
@@ -93,13 +111,21 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
-from onyx.tools.tool_implementations.skills.skill_tools import skills_catalog_message
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILLS_READ_TOOL_NAMES,
+    skills_catalog_message,
+)
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_SHAPES,
+    SPAWN_TOOL_NAMES,
+    WAIT_AGENT_TOOL_NAMES,
+)
 from onyx.tools.tool_implementations.subagents.subagent_tools import (
     InterruptAgentTool,
     ListAgentsTool,
     SendMessageTool,
     SpawnAgentTool,
-    WaitAgentsTool,
+    WaitAgentTool,
 )
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
@@ -150,16 +176,18 @@ class ChatAgent(Agent, RestorableFeature):
         there (subagents share the root's tools and pass none). Only a root
         agent gets a question tool: `question_tool` builds it in the given
         shape. The model's tool family (LLMConfig.tool_family) selects the
-        shapes of the code mode tools and the question tool."""
+        shapes of the code mode tools, the agent tools and the question tool."""
+        tool_family = llm.config.tool_family
+        agent_shape = AGENT_SHAPES[tool_family]
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
-        self.agent_instructions = (
-            SUBAGENT_INSTRUCTIONS
-            if is_subagent
-            else ROOT_AGENT_INSTRUCTIONS
-            if create_subagent is not None
-            else None
-        )
+        self.agent_instructions: str | None = None
+        if is_subagent:
+            self.agent_instructions = SUBAGENT_INSTRUCTIONS
+        elif create_subagent is not None:
+            self.agent_instructions = ROOT_AGENT_INSTRUCTIONS.format(
+                wait_line=agent_shape.wait_line
+            )
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
         self.context_files = context_files.model_copy(deep=True)
@@ -168,7 +196,6 @@ class ChatAgent(Agent, RestorableFeature):
         # them, and code mode applies per agent.
         self.configured_tools = list(tools)
         self.code_mode = code_mode
-        tool_family = llm.config.tool_family
         # Each agent instance has its own cells, so a restored run has none open;
         # a later run of this instance reopens them at its first step.
         self.application_tools, self.code_cells = (
@@ -179,10 +206,13 @@ class ChatAgent(Agent, RestorableFeature):
         code_tool = next(
             (t for t in self.application_tools if isinstance(t, CodeModeTool)), None
         )
+        # The name that the model calls a tool by: in code mode, its program
+        # function's.
+        self.called_name: Callable[[str], str] = (
+            str if code_tool is None else code_tool.called_name
+        )
         self.skills_catalog_message = skills_catalog_message(
-            self.configured_tools,
-            llm.config.max_input_tokens,
-            str if code_tool is None else code_tool.called_name,
+            self.configured_tools, llm.config.max_input_tokens, self.called_name
         )
         # Programs batch tool calls, so code mode gets its own cap when it applies.
         self.max_steps = (
@@ -244,25 +274,30 @@ class ChatAgent(Agent, RestorableFeature):
             self.application_tools = [
                 *self.application_tools,
                 *(
-                    [SpawnAgentTool(create_subagent, max_steps=self.max_steps)]
+                    [
+                        SpawnAgentTool(
+                            create_subagent, agent_shape, max_steps=self.max_steps
+                        )
+                    ]
                     if can_spawn
                     else []
                 ),
                 ListAgentsTool(),
                 InterruptAgentTool(),
-                SendMessageTool(max_steps=self.max_steps),
+                SendMessageTool(agent_shape, max_steps=self.max_steps),
                 # Subagents wait for their children before they finish.
                 *(
                     []
-                    if is_subagent
+                    if is_subagent or agent_shape.wait_name is None
                     else [
-                        WaitAgentsTool(
+                        WaitAgentTool(
+                            agent_shape,
                             open_cell_wait_name=lambda: (
                                 self.code_cells.shape.wait_name
                                 if self.code_cells is not None
                                 and self.code_cells.has_open
                                 else None
-                            )
+                            ),
                         )
                     ]
                 ),
@@ -272,6 +307,54 @@ class ChatAgent(Agent, RestorableFeature):
                 *self.application_tools,
                 question_tool(QUESTION_SHAPES[tool_family]),
             ]
+        # A call of a tool that the agent does not offer can say what to call
+        # instead (_unknown_tool_hint).
+        self._code_tool = code_tool
+        operation_uses: dict[str, str] = {}
+        if code_tool is not None:
+            code_shape = code_tool.shape
+            # The program search exists only with deferred functions.
+            search = code_shape.search if code_tool.has_search else None
+            describe = code_shape.describe or search
+            operation_uses |= dict.fromkeys(
+                RUN_TOOL_NAMES, RUN_USE.format(run=code_shape.run_name)
+            )
+            operation_uses |= dict.fromkeys(
+                WAIT_TOOL_NAMES, WAIT_USE.format(wait=code_shape.wait_name)
+            )
+            operation_uses |= {
+                function.name: PROGRAM_FUNCTION_USE.format(
+                    function=use.name, arguments="...", run=code_shape.run_name
+                )
+                for shape in CODE_MODE_SHAPES.values()
+                for function, use in (
+                    (shape.search, search),
+                    (shape.describe, describe),
+                )
+                if function is not None and use is not None
+            }
+        # The code mode tools and program functions of every shape.
+        self._code_mode_operation_messages = {
+            name: OTHER_OPERATION_MESSAGE.format(name=name, use=use)
+            for name, use in operation_uses.items()
+        }
+        offered = {tool.name for tool in self.application_tools} | {
+            tool.name for tool in (code_tool.inner_tools if code_tool else [])
+        }
+        # The offered tool for each of its names in the other tool families'
+        # shapes.
+        self._own_names: dict[str, str] = {}
+        for names in (
+            SHELL_TOOL_NAMES,
+            SPAWN_TOOL_NAMES,
+            WAIT_AGENT_TOOL_NAMES,
+            SKILLS_READ_TOOL_NAMES,
+            OPEN_URL_TOOL_NAMES,
+            QUESTION_TOOL_NAMES,
+        ):
+            own = next((name for name in names if name in offered), None)
+            if own is not None:
+                self._own_names |= dict.fromkeys(names - {own}, own)
         # The root agent's sandbox and code mode results end with the file
         # copy status line when it changed. Subagents and the calls inside a
         # code mode program never read it, so they cannot use it up.
@@ -306,10 +389,32 @@ class ChatAgent(Agent, RestorableFeature):
             )
             if self._sandbox_turn is not None
             else None,
+            unknown_tool_hint=self._unknown_tool_hint,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
             on_drained=on_drained,
         )
+
+    def _unknown_tool_hint(self, name: str) -> str | None:
+        """What a call of `name`, a tool that the agent does not offer, says
+        to call instead: a program function from a program, the agent's own
+        name for another tool family's tool, or this shape's code mode
+        operation."""
+        own = self._own_names.get(name)
+        if self._code_tool is not None:
+            hint = self._code_tool.inner_call_hint(name, own)
+            if hint is not None:
+                return hint
+        if own is not None:
+            return OTHER_OPERATION_MESSAGE.format(
+                name=name, use=TOOL_USE.format(name=own)
+            )
+        return self._code_mode_operation_messages.get(name)
+
+    @property
+    def code_mode_run_name(self) -> str | None:
+        """The code mode run tool's name; None without code mode."""
+        return None if self.code_cells is None else self.code_cells.shape.run_name
 
     def _prepare_sandbox_result(
         self, turn: SandboxTurn, context: ToolResultContext
@@ -320,9 +425,8 @@ class ChatAgent(Agent, RestorableFeature):
         result = spill_large_result(
             turn,
             context,
-            code_mode_run_name=None
-            if self.code_cells is None
-            else self.code_cells.shape.run_name,
+            shell_name=self.called_name(turn.shell.name),
+            code_mode_run_name=self.code_mode_run_name,
         )
         if (
             context.amended
@@ -422,6 +526,7 @@ class ChatAgent(Agent, RestorableFeature):
             skip_search_query_expansion=self.has_called_search_tool,
             chat_files=list(self.chat_files),
             url_snippet_map=extract_url_snippet_map(self.gathered_documents),
+            called_name=self.called_name,
             inject_memories_in_prompt=self.inject_memories,
             python_stages_search_files=self.stages_files,
             sandbox_search_files=self._sandbox_turn.search_files.offer
@@ -486,6 +591,8 @@ class ChatAgent(Agent, RestorableFeature):
             is_last_step=state.step.is_last,
             has_history_citations=bool(self.citation_processor.citation_to_doc),
             preferred_tool=self.preferred_tool,
+            called_name=self.called_name,
+            code_mode_run_name=self.code_mode_run_name,
         )
         return PreparedStep(
             input_messages=received.messages,

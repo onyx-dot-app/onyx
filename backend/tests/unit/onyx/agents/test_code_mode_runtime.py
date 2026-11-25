@@ -156,14 +156,6 @@ def test_a_program_reads_an_earlier_program_of_the_same_step(restored: bool) -> 
             "it there: `await tools.echo(value=...)`.",
         )
         for called in ("echo", "tools.echo", "tools_echo")
-    ]
-    # Another shape's code mode tools.
-    + [
-        (called, f"`{called}` is not a tool in this chat. {use}")
-        for called, use in (
-            ("repl", "Run a program with `exec`."),
-            ("poll", "Wait on a running cell with `wait`."),
-        )
     ],
 )
 def test_a_direct_call_of_a_program_function_says_where_it_runs(
@@ -191,6 +183,7 @@ def test_a_direct_call_of_a_program_function_says_where_it_runs(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool.bind(ToolContext)],
+        unknown_tool_hint=tool.inner_call_hint,
     )
     run = agent.start(max_steps=2, messages=[UserMessage(content="Echo")])
     assert run.result(timeout=10).output.text == expected

@@ -253,7 +253,7 @@ def session_relative_path(session_id: UUID, path: str) -> str:
         if not normalized.startswith(root + "/"):
             raise SandboxPathError(
                 f"{path!r} is outside the working directory {root}; use "
-                "exec_command elsewhere"
+                "a shell command elsewhere"
             )
         return normalized[len(root) + 1 :]
     if normalized == ".." or normalized.startswith("../"):

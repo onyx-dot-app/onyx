@@ -19,6 +19,7 @@ from typing import NamedTuple
 from pydantic_core import to_json
 
 from onyx.agents.models import ToolResultContext
+from onyx.chat.citation_utils import CITEABLE_TOOLS_NAMES
 from onyx.llm.cancellation import current_cancellation, wait_for_future
 from onyx.llm.models import ToolResult
 from onyx.microvm.models import FileListing, FileType
@@ -29,9 +30,8 @@ from onyx.server.features.build.sandbox.harness_base import (
 )
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.tools.constants import (
-    CITEABLE_TOOLS_NAMES,
     FILE_READER_TOOL_NAME,
-    SKILLS_READ_TOOL_NAME,
+    WRITE_STDIN_TOOL_NAME,
 )
 from onyx.tools.models import CustomToolCallSummary, SearchResults
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
@@ -42,15 +42,15 @@ from onyx.tools.tool_implementations.sandbox.models import (
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
-    ExecCommandTool,
     LibraryFindTool,
     LibraryListTool,
     LibraryManageLibraryTool,
     LibraryReadTool,
     LibrarySearchTool,
-    WriteStdinTool,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_TOOL_NAMES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from onyx.tools.tool_implementations.skills.skill_tools import SKILLS_READ_TOOL_NAMES
 from onyx.tools.tool_implementations.utils import truncation_marker
 from onyx.tools.tool_implementations.web_search.utils import (
     truncate_search_result_content,
@@ -91,17 +91,17 @@ _ENCODE_CHARS = 1 << 20
 _UNKNOWN_AGE = datetime.max.replace(tzinfo=timezone.utc)
 # Tools whose content the limits of one result and one step do not cut: they
 # cut it themselves (the code mode cells, exec), page through it (read_file,
-# skills_read, and the library tools and the artifact tool, whose results page
-# within ARTIFACT_RESULT_MAX_CHARS or, as a manage result, are short, so a
+# the skill read tools, and the library tools and the artifact tool, whose results
+# page within ARTIFACT_RESULT_MAX_CHARS or, as a manage result, are short, so a
 # spill would only be read back), or the model cites it whole. A full value
 # still spills.
 _OWN_LIMITS = frozenset(
     {
         *CODE_MODE_TOOL_NAMES,
-        ExecCommandTool.NAME,
-        WriteStdinTool.NAME,
+        *SHELL_TOOL_NAMES,
+        WRITE_STDIN_TOOL_NAME,
         FILE_READER_TOOL_NAME,
-        SKILLS_READ_TOOL_NAME,
+        *SKILLS_READ_TOOL_NAMES,
         LibraryListTool.NAME,
         LibraryManageLibraryTool.NAME,
         LibraryReadTool.NAME,
@@ -219,13 +219,15 @@ def _save(
     return _Saved(path=path, size=sum(map(len, parts)), cut=cut)
 
 
-def _envelope(saved: _Saved, body: str, *, code_mode_run_name: str | None) -> str:
+def _envelope(
+    saved: _Saved, body: str, *, shell_name: str, code_mode_run_name: str | None
+) -> str:
     """The note that names a spilled result's file: `body`, which cannot
     close the tag, and how to read the file."""
     exec_call = (
-        ExecCommandTool.NAME
+        shell_name
         if code_mode_run_name is None
-        else f"{ExecCommandTool.NAME} in {code_mode_run_name} programs"
+        else f"{shell_name} in {code_mode_run_name} programs"
     )
     return (
         f'<persisted-output path="{saved.path}" bytes={saved.size}>\n'
@@ -246,24 +248,43 @@ def _head_and_tail(text: str) -> tuple[str, str]:
 
 
 def spill_large_result(
-    turn: SandboxTurn, context: ToolResultContext, *, code_mode_run_name: str | None
+    turn: SandboxTurn,
+    context: ToolResultContext,
+    *,
+    shell_name: str,
+    code_mode_run_name: str | None,
 ) -> ToolResult:
     """The result, or, when it is too large, a bounded view and the path of
     the file in the VM that holds the rest. When the write fails or times
-    out, the model gets the bounded view with SPILL_FAILED_NOTE. `code_mode_run_name`
-    names the code mode run tool, when code mode applies."""
+    out, the model gets the bounded view with SPILL_FAILED_NOTE. `shell_name` is the
+    command tool of the model's shape, and `code_mode_run_name` the code mode
+    run tool, when code mode applies."""
     result = context.result
     full = result.full_value
     if isinstance(full, SandboxExecResult):
         return _spill_full_text(
-            turn, context, full.output, code_mode_run_name=code_mode_run_name
+            turn,
+            context,
+            full.output,
+            shell_name=shell_name,
+            code_mode_run_name=code_mode_run_name,
         )
     if isinstance(full, str):
         return _spill_full_text(
-            turn, context, full, code_mode_run_name=code_mode_run_name
+            turn,
+            context,
+            full,
+            shell_name=shell_name,
+            code_mode_run_name=code_mode_run_name,
         )
     if isinstance(full, SearchResults):
-        return _spill_pages(turn, context, full, code_mode_run_name=code_mode_run_name)
+        return _spill_pages(
+            turn,
+            context,
+            full,
+            shell_name=shell_name,
+            code_mode_run_name=code_mode_run_name,
+        )
     text = result.content
     if (
         context.calls[0].name in _OWN_LIMITS
@@ -293,6 +314,7 @@ def spill_large_result(
             f"Preview (first {PREVIEW_HEAD_CHARS:,} characters):\n{head}\n"
             f"Preview (last {PREVIEW_TAIL_CHARS:,} characters):\n{tail}\n"
             "The file holds the whole output.",
+            shell_name=shell_name,
             code_mode_run_name=code_mode_run_name,
         )
         spilled = SpilledOutput(head=head, tail=tail)
@@ -325,6 +347,7 @@ def _spill_full_text(
     context: ToolResultContext,
     full: str,
     *,
+    shell_name: str,
     code_mode_run_name: str | None,
 ) -> ToolResult:
     """A result whose content is the tool's cut of `full`: `full` goes to
@@ -358,7 +381,12 @@ def _spill_full_text(
     return result.model_copy(
         update={
             "content": f"{result.content}\n\n"
-            + _envelope(saved, FULL_VALUE_NOTE, code_mode_run_name=code_mode_run_name),
+            + _envelope(
+                saved,
+                FULL_VALUE_NOTE,
+                shell_name=shell_name,
+                code_mode_run_name=code_mode_run_name,
+            ),
             "details": details,
         }
     )
@@ -369,6 +397,7 @@ def _spill_pages(
     context: ToolResultContext,
     pages: SearchResults,
     *,
+    shell_name: str,
     code_mode_run_name: str | None,
 ) -> ToolResult:
     """A result whose content holds excerpts of `pages` (open_url): the file
@@ -412,6 +441,7 @@ def _spill_pages(
                 "The pages above are excerpts. The file holds each page whole, "
                 "one JSON object for each line; cite a page by its number:\n"
                 + listed.rstrip("\n"),
+                shell_name=shell_name,
                 code_mode_run_name=code_mode_run_name,
             )
         }

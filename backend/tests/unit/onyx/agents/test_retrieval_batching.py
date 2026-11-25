@@ -14,6 +14,7 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolProgress
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.interfaces import GenerationContext
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     TextContent,
@@ -26,6 +27,7 @@ from onyx.tools.interface import Tool, merge_tool_arguments
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     MAX_URLS_PER_CALL,
+    OPEN_URL_SHAPES,
     OpenURLTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -381,6 +383,7 @@ def test_real_retrieval_bindings_merge_their_public_argument(
         )
     elif kind == "open_url":
         tool = OpenURLTool(
+            shape=OPEN_URL_SHAPES[ToolFamily.OPENAI],
             tool_id=1,
             user=MagicMock(),
             document_index=MagicMock(),
@@ -432,6 +435,7 @@ def test_open_url_batches_preserve_every_requested_page(
     sizes: tuple[int, ...], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tool = OpenURLTool(
+        shape=OPEN_URL_SHAPES[ToolFamily.OPENAI],
         tool_id=1,
         user=MagicMock(),
         document_index=MagicMock(),

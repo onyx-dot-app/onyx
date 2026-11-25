@@ -49,7 +49,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.constants import CODE_MODE_STREAM_TOOL_TYPE
+from onyx.tools.constants import CODE_MODE_STREAM_TOOL_TYPE, WRITE_STDIN_TOOL_NAME
 from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import (
     CustomToolCallSummary,
@@ -83,7 +83,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import OPEN_URL_TOOL_NAMES
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.question.models import QuestionToolDetails
@@ -100,7 +100,6 @@ from onyx.tools.tool_implementations.sandbox.models import (
     PublishFileArgument,
     SandboxExecResult,
     SpilledOutput,
-    WriteStdinArguments,
 )
 from onyx.tools.tool_implementations.sandbox.patch import (
     HUNK_HEADER_MARKERS,
@@ -110,11 +109,13 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
     ArtifactTool,
     EditTool,
-    ExecCommandTool,
     LibraryCreateLibraryFileTool,
     LibraryReplaceLibraryFileTool,
-    WriteStdinTool,
     WriteTool,
+)
+from onyx.tools.tool_implementations.sandbox.shapes import (
+    SHELL_SHAPES_BY_NAME,
+    SHELL_TOOL_NAMES,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -160,8 +161,8 @@ OwnEndPacket = (
 # packet too, so the end never lands on a generic card. A call with the publish
 # card (publish_card_files) ends with PublishFilesEnd.
 OWN_END_PACKETS: dict[str, OwnEndPacket] = {
-    ExecCommandTool.NAME: packets.ExecEnd,
-    WriteStdinTool.NAME: packets.ExecEnd,
+    **dict.fromkeys(SHELL_TOOL_NAMES, packets.ExecEnd),
+    WRITE_STDIN_TOOL_NAME: packets.ExecEnd,
     **dict.fromkeys(FILE_TOOL_ARGUMENTS, packets.ApplyPatchEnd),
 }
 # The arguments that name the file, or the files, of each tool's publish.
@@ -866,7 +867,7 @@ class ToolRenderer:
             queries = _STRINGS.validate_python(args.get("queries", []))
             self._queries.update(queries)
             objects.append(packets.SearchToolQueriesDelta(queries=queries))
-        elif name == OpenURLTool.NAME:
+        elif name in OPEN_URL_TOOL_NAMES:
             objects = [
                 packets.OpenUrlStart(),
                 packets.OpenUrlUrls(
@@ -879,20 +880,32 @@ class ToolRenderer:
                     code=_STRING.validate_python(args.get("code", ""))
                 )
             ]
-        elif name == ExecCommandTool.NAME:
+        elif name in SHELL_TOOL_NAMES:
+            shell = SHELL_SHAPES_BY_NAME[name]
             objects = [
                 packets.ExecCommandStart(
-                    cmd=_STRING.validate_python(args.get("cmd", "")),
-                    workdir=_OPTIONAL_STRING.validate_python(args.get("workdir")),
+                    cmd=_STRING.validate_python(args.get(shell.command_argument, "")),
+                    workdir=None
+                    if shell.workdir_argument is None
+                    else _OPTIONAL_STRING.validate_python(
+                        args.get(shell.workdir_argument)
+                    ),
                 )
             ]
-        elif name == WriteStdinTool.NAME:
-            # Interrupted arguments can lack the session ID.
-            write = parse_tool_arguments(
-                WriteStdinArguments, {"session_id": "", **args}
-            )
+        elif name == WRITE_STDIN_TOOL_NAME:
+            # Every shape names the session ID and the characters alike; the
+            # card reads only those. Interrupted arguments can lack them,
+            # null selects the default as the tool reads it, and models may
+            # send the session ID as a number.
+            session_id = args.get("session_id")
             objects = [
-                packets.WriteStdinStart(session_id=write.session_id, chars=write.chars)
+                packets.WriteStdinStart(
+                    session_id=_OPTIONAL_STRING.validate_python(
+                        str(session_id) if isinstance(session_id, int) else session_id
+                    )
+                    or "",
+                    chars=_OPTIONAL_STRING.validate_python(args.get("chars")) or "",
+                )
             ]
         elif is_file_tool(name):
             text_key, path_key = FILE_TOOL_ARGUMENTS[name]
@@ -945,7 +958,7 @@ class ToolRenderer:
         )
         new_docs = [doc for doc in docs if doc.document_id not in self._documents]
         self._documents.update(doc.document_id for doc in docs)
-        if self.call.name == OpenURLTool.NAME:
+        if self.call.name in OPEN_URL_TOOL_NAMES:
             return (
                 [packets.OpenUrlDocuments(documents=new_docs, urls=details.opened_urls)]
                 if new_docs
@@ -1105,7 +1118,7 @@ class ToolRenderer:
             not in {
                 SearchTool.NAME,
                 WebSearchTool.NAME,
-                OpenURLTool.NAME,
+                *OPEN_URL_TOOL_NAMES,
                 ImageGenerationTool.NAME,
                 MemoryTool.NAME,
                 PostgresTool.NAME,

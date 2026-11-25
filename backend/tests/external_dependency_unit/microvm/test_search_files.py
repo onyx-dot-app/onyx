@@ -40,6 +40,7 @@ from onyx.db.tools import get_builtin_tool
 from onyx.file_store.file_store import get_default_file_store
 from onyx.kg.models import KGStage
 from onyx.llm.cancellation import CancellationSignal, current_cancellation
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -73,14 +74,15 @@ from onyx.tools.tool_implementations.sandbox.models import (
     SearchResultFile,
     VmChatFile,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search import search_tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.search.search_utils import (
     merge_overlapping_sections,
 )
-from tests.external_dependency_unit.chat.test_wait_agents import (
-    ScriptedLLM as WaitAgentsLLM,
+from tests.external_dependency_unit.chat.test_wait_agent import (
+    ScriptedLLM as WaitAgentLLM,
 )
 from tests.external_dependency_unit.code_mode_helpers import (
     ChatLLM,
@@ -665,6 +667,7 @@ def test_the_chat_file_copy_never_deletes_search_or_artifact_files(
                     VmChatFile(file_id=file_id, path="attachments/project/p.txt")
                 ],
                 copy_vm_chat_files=True,
+                shell=SHELL_SHAPES[ToolFamily.OPENAI],
             )
 
         chat_session_id = uuid4()
@@ -722,6 +725,7 @@ def test_a_search_leaves_the_chat_file_copy_of_its_turn_running(
                 VmChatFile(file_id=uploads[1], path="attachments/b.txt"),
             ],
             copy_vm_chat_files=True,
+            shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         ref = turn.start_call()
         _wait_until(lambda: "attachments/a.txt" in node.agent.write_waiting)
@@ -899,6 +903,7 @@ def test_an_earlier_turns_late_search_leaves_the_newer_turn_alone(
             chat_session_id=chat_session_id,
             vm_chat_files=chat_files,
             copy_vm_chat_files=bool(chat_files),
+            shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
 
     def offer(of: SandboxTurn, file: ConnectorFile) -> str:
@@ -1199,12 +1204,12 @@ def test_a_subagent_search_copies_its_file(
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "helper", "instruction": "Task helper"},
+                    arguments={"task_name": "helper", "message": "Task helper"},
                 )
             ]
         )
 
-    model = WaitAgentsLLM(generate)
+    model = WaitAgentLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
@@ -1334,6 +1339,7 @@ def test_a_file_offered_while_the_intake_runs_is_copied(
         chat_session_id=chat_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
 
     def offer(file: ConnectorFile) -> str:
@@ -1382,6 +1388,7 @@ def test_a_write_that_ends_during_the_listing_still_counts_toward_the_cap(
         chat_session_id=chat_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
     ref = turn.copy_target().ref
     sandbox.ensure_running(ref)

@@ -76,12 +76,14 @@ from onyx.prompts.deep_research.orchestration_layer import (
 )
 from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.prompt_utils import get_current_llm_day_time
-from onyx.tools.constants import SKILL_TOOL_NAMES
 from onyx.tools.file_snapshot import SavedContextFiles
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.skills.skill_tools import skills_catalog_message
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_TOOL_NAMES,
+    skills_catalog_message,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 

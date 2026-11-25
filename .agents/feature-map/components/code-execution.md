@@ -45,7 +45,8 @@
   set to an empty value**, the model cannot call `run_python`. When code fails or
   times out, the user sees the error output and the turn continues.
 - **With harness sandboxes** (`SANDBOX_RUNTIME=firecracker` and
-  `SANDBOX_FC_TEMPLATE`), every chat agent gives the model `exec_command`,
+  `SANDBOX_FC_TEMPLATE`), every chat agent gives the model a shell tool
+  (`bash` for Claude models, `exec_command` for all other models),
   `write_stdin` and file tools: `edit` and `write` for Claude models (in
   the shapes of Claude Code's Edit and Write), `apply_patch` for all other
   models. This applies except in anonymous,
@@ -175,8 +176,9 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         STOPPED_CALL_MESSAGE (it may have had effects). A
                                         direct call of another shape's tool or program
                                         function, copied from history, gets a hint that
-                                        names this shape's (CodeModeTool.inner_call_hint;
-                                        the search only with deferred functions)
+                                        names this shape's (chat/agent.py: ChatAgent's
+                                        unknown_tool_hint; the search only with deferred
+                                        functions)
   CodeModeTool.operation_names          how the preference reminder names a preferred tool
                                         that became a function (prompt.py:
                                         program_function_operation)
@@ -287,7 +289,7 @@ run / wait tools (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_read + library_find + library_replace_library_file + library_manage_library + library_search | edit + write + artifact (no tool row; Tool.id is None)
+exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_read + library_find + library_replace_library_file + library_manage_library + library_search | edit + write + artifact (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -300,7 +302,12 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
   chat/execution.py:create_chat_agent   builds the tools with one SandboxTurn for every
                                         agent, as it adds the skill tools; a durable resume
                                         prepares the turn again and builds them the same way.
-                                        SANDBOX_TOOLS[family] owns the set and its order
+                                        SANDBOX_TOOLS[family] (a SandboxToolset) gives the
+                                        family's ShellShape, which the turn carries
+                                        (SandboxTurn.shell; it names the shell tool, takes
+                                        its arguments, and names it in the other tools'
+                                        descriptions and results), and owns the set and
+                                        its order
                                         (LLMConfig.tool_family; the family picks each
                                         tool's shape): for ToolFamily.CLAUDE, EditTool,
                                         WriteTool and ArtifactTool, the tools Claude models
@@ -311,8 +318,9 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         LibraryManageLibraryTool. No turn
                                         gets both sets; a model switch leaves calls of the other
                                         set in the history, which still render. The
-                                        reserved-token prompt (calculate_reserved_tokens) names
-                                        the same set. LibraryManageLibraryTool and ArtifactTool
+                                        reserved-token prompt (calculate_reserved_tokens,
+                                        with the first model's tool_family) names
+                                        the same set and shell. LibraryManageLibraryTool and ArtifactTool
                                         carry ARTIFACTS_DELETE_APPROVAL (no integration,
                                         `onyx:artifacts.delete`, one key for both families, so
                                         a chat grant survives a model switch); a turn whose
@@ -351,12 +359,16 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         command gets AGENT_BROWSER_SESSION=<chat session>, so
                                         chats in one VM keep separate browsers); each
                                         ExecOutputDelta -> ToolProgress, which the tool
-                                        stops at max_output_chars; the result is the exec
+                                        stops at the call's character budget (the request
+                                        of the shape's arguments: max_output_tokens x 4, or
+                                        the default for bash; bash's timeout is the wait,
+                                        run_in_background the shortest wait, and its
+                                        description is ignored); the result is the exec
                                         header text (wall time, exit code or ending,
                                         session ID while it runs, character count) and the
                                         output that the harness kept (head, tail and the
                                         count between them), cut in the middle to
-                                        max_output_chars (40,000 by default, at most
+                                        the budget (40,000 characters by default, at most
                                         160,000) by tool_implementations/utils.py:cut_middle
                                         with one marker (truncation_marker) that
                                         counts every omitted character; SandboxExecResult
@@ -443,9 +455,11 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         publish is a new file and version.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
-  LibraryListTool / LibraryPrepareMaterializeTool  sandbox_tools._LibraryTool, thin
-                                        translators over artifact_operations
-                                        (list_artifacts, materialize): code mode
+  LibraryListTool / LibraryPrepareMaterializeTool  sandbox_tools._LibraryTool: each
+                                        library tool's arguments are the operation's
+                                        typed input (models.py:LibraryRequest), which
+                                        artifact_operations.run_operation runs (list_artifacts,
+                                        materialize, ...) for both families: code mode
                                         DEFERRED in the group `library`
                                         (tools.library__list / __prepare_materialize, found
                                         with the shape's search), JSON_OBJECT results
@@ -712,8 +726,8 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         check in the commit hook, clean-up on failure). A
                                         conflict is a tool error that each tool words (the
                                         conflict_message that it passes to manage; one message per family,
-                                        _library_conflict_message or
-                                        _artifact_conflict_message, as for replace). The name
+                                        _LibraryTool.conflict_message or
+                                        ArtifactTool.conflict_message, as for replace). The name
                                         stays unless the operation's file_name renames it
                                         (save_chat_artifact rename); the title is the
                                         restored version's, or for update the newest
@@ -800,14 +814,22 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         {offset} into the window, and a page keeps to
                                         ARTIFACT_RESULT_MAX_CHARS
   ArtifactTool (`artifact`, SEQUENTIAL)  one tool with an action per artifact operation,
-                                        for Claude models. One flat ArtifactArguments
+                                        for Claude models, in the shape of their trained
+                                        Artifact tool where Onyx has the operation (its
+                                        other arguments are ignored; publish accepts a
+                                        description that it does not show, and up to
+                                        PUBLISH_FILES_MAX_FILES (25) file_paths; read keeps
+                                        its lower limits). One flat ArtifactArguments
                                         model; each action takes only its own arguments
-                                        (models.py:ARTIFACT_ACTION_ARGUMENTS, whose publish
+                                        (shapes.py:ARTIFACT_ACTION_ARGUMENTS, whose publish
                                         paths, ARTIFACT_PUBLISH_PATHS, the renderer reads
                                         too), and delete and rename need url (rename also
                                         name): a model validator, so the approval hook and
-                                        the call refuse the same calls. The tool builds the library tools'
-                                        arguments of its operation: publish (default;
+                                        the call refuse the same calls. Its pure
+                                        ArtifactArguments.request() gives the library
+                                        tools' arguments of its operation, which
+                                        run_operation runs, and approval_details reads
+                                        the same request: publish (default;
                                         file_path with title, or file_paths, all or none)
                                         -> publish, and with url and file_path ->
                                         replace_file (the url's /v<N> is
@@ -835,11 +857,10 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         update, with the url's version rule and the generic
                                         card (renderer publish_card_files gives None). Empty
                                         and too-long lists are
-                                        refused in the tool's own argument names before
-                                        the VM wakes. It inherits _LibraryTool and
+                                        refused before the VM wakes. It inherits _LibraryTool and
                                         _FileTool: execution settings are per tool, so the
                                         whole tool takes turns in sandbox_file_changes and
-                                        keeps INTERRUPTED_SANDBOX_RESULT, as publish needs.
+                                        keeps the interrupted result, as publish needs.
                                         Code mode: DEFERRED function artifact.artifact
                                         (tools.artifact__artifact) in its own group, a
                                         JSON_OBJECT result typed Any with a returns note
@@ -862,7 +883,7 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         than SPILL_MIN_DROPPED_CHARS (PREVIEW_HEAD_CHARS +
                                         PREVIEW_TAIL_CHARS). Exempt
                                         from those two limits (_OWN_LIMITS): the cells,
-                                        exec_command, write_stdin, read_file, skills_read,
+                                        the shell tools, write_stdin, read_file, the skill read tools,
                                         library_list, library_manage_library, library_read,
                                         library_find, library_search, artifact and
                                         CITEABLE_TOOLS_NAMES. A cell's closing record
@@ -1240,7 +1261,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     direct call of a function name, or of its tool's name, also after
     `tools.` or `tools_`, as a tool of its own returns how to call it from a
     program
-    (`Tool.inner_call_hint`, `agents/tool_execution.py`).
+    (`CodeModeTool.inner_call_hint`, through the chat agent's
+    `unknown_tool_hint`).
     `CodeModeResultSpec.usage` adds a code-mode-only
     docstring note; `internal_search` uses it to ask for all queries of one
     need in one call, since each call runs its own retrieval pipeline. Image

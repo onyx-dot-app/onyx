@@ -11,6 +11,12 @@ from pydantic_monty import Monty, MontyTypingError
 
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolResult
+from onyx.tools.constants import (
+    SEND_MESSAGE_TOOL_NAME,
+    SKILLS_LIST_TOOL_NAME,
+    WEB_SEARCH_TOOL_NAME,
+    WRITE_STDIN_TOOL_NAME,
+)
 from onyx.tools.interface import tool_definition_from_arguments
 from onyx.tools.models import (
     CodeModeExposure,
@@ -44,12 +50,33 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
+    OPEN_URL_TOOL_NAMES,
+)
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.question.shapes import (
     QUESTION_SHAPES,
     QUESTION_TOOL_NAMES,
 )
 from onyx.tools.tool_implementations.sandbox.models import LibraryListArguments
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import ArtifactTool
+from onyx.tools.tool_implementations.sandbox.shapes import (
+    SHELL_SHAPES,
+    SHELL_TOOL_NAMES,
+)
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
+    SKILLS_READ_TOOL_NAMES,
+)
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_SHAPES,
+    SPAWN_TOOL_NAMES,
+)
+from onyx.tools.tool_implementations.subagents.subagent_tools import (
+    InterruptAgentTool,
+    ListAgentsTool,
+)
 from tests.unit.onyx.tools.code_mode.fakes import (
     FakeMCPTool,
     FakeTool,
@@ -812,6 +839,22 @@ def test_the_names_of_different_operations_never_overlap() -> None:
             for shape in CODE_MODE_SHAPES.values()
             if shape.describe is not None
         ),
+        SHELL_TOOL_NAMES,
+        frozenset({WRITE_STDIN_TOOL_NAME}),
+        SPAWN_TOOL_NAMES,
+        frozenset({SEND_MESSAGE_TOOL_NAME}),
+        frozenset(
+            shape.wait_name
+            for shape in AGENT_SHAPES.values()
+            if shape.wait_name is not None
+        ),
+        frozenset({ListAgentsTool.name}),
+        frozenset({InterruptAgentTool.name}),
+        SKILLS_READ_TOOL_NAMES,
+        frozenset({SKILLS_LIST_TOOL_NAME}),
+        OPEN_URL_TOOL_NAMES,
+        frozenset({WEB_SEARCH_TOOL_NAME}),
+        frozenset({ArtifactTool.NAME}),
     ]
     names = [name for operation in operations for name in operation]
     assert len(names) == len(set(names))
@@ -821,9 +864,18 @@ def test_the_names_of_different_operations_never_overlap() -> None:
         assert shape.run_name in RUN_TOOL_NAMES
         assert shape.wait_name in WAIT_TOOL_NAMES
         assert QUESTION_SHAPES[family].name in QUESTION_TOOL_NAMES
-    assert len({shape.run_name for shape in CODE_MODE_SHAPES.values()}) == len(
-        ToolFamily
-    )
+        assert SHELL_SHAPES[family].name in SHELL_TOOL_NAMES
+        assert AGENT_SHAPES[family].spawn_name in SPAWN_TOOL_NAMES
+        assert SKILL_READ_SHAPES[family].name in SKILLS_READ_TOOL_NAMES
+        assert OPEN_URL_SHAPES[family].name in OPEN_URL_TOOL_NAMES
+    for names_by_family in (
+        [shape.run_name for shape in CODE_MODE_SHAPES.values()],
+        [shape.name for shape in SHELL_SHAPES.values()],
+        [shape.spawn_name for shape in AGENT_SHAPES.values()],
+        [shape.name for shape in SKILL_READ_SHAPES.values()],
+        [shape.name for shape in OPEN_URL_SHAPES.values()],
+    ):
+        assert len(set(names_by_family)) == len(ToolFamily)
 
 
 def test_tool_search_matches_words_in_any_script() -> None:

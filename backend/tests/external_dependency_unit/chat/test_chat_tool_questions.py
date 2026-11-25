@@ -56,7 +56,7 @@ from onyx.tools.tool_implementations.question.models import (
     ToolQuestionAnswer,
 )
 from onyx.tools.tool_implementations.question.shapes import QUESTION_TOOL_NAMES
-from tests.external_dependency_unit.chat.test_wait_agents import (
+from tests.external_dependency_unit.chat.test_wait_agent import (
     ScriptedLLM,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser

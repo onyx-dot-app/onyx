@@ -944,7 +944,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             # The guest daemon reads mode 0 as "not set" and writes 0644.
             raise HarnessSandboxError(
                 f"cannot write {path!r} with mode 000; change its mode with "
-                "exec_command first"
+                "a shell command first"
             )
         daemon, session_id, target = self._file_target(ref, path)
         _write(daemon, session_id, target, data, mode, timeout_seconds, overwrite=True)

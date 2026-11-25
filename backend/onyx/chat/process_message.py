@@ -158,9 +158,7 @@ from onyx.tools.constants import (
     SEARCH_TOOL_ID,
 )
 from onyx.tools.models import CapabilityEntry, SearchToolUsage
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
-    SANDBOX_TOOLS,
-)
+from onyx.tools.tool_implementations.skills.skill_tools import SKILL_READ_SHAPES
 from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
@@ -732,6 +730,8 @@ def prepare_chat_turn(
             else:
                 custom_prompt = agent_instructions or project_instructions or None
             base_system_prompt = get_default_base_system_prompt(db_session)
+            # The estimate names the tools of the first model's shapes.
+            tool_family = selected_models[0][0].config.tool_family
             # Reserve against the placeholder-substituted text sent to the model,
             # so long directory values cannot invalidate the reservation.
             reserved_tokens = calculate_reserved_tokens(
@@ -750,15 +750,16 @@ def prepare_chat_turn(
                                 llm.config.max_input_tokens
                                 for llm, _ in selected_models
                             ),
+                            read_tool_name=SKILL_READ_SHAPES[tool_family].name,
+                            called_name=str,
                         )
                         or ""
                     ),
                     memory.user_info.placeholder_values,
                 ),
                 token_counter=token_counter,
-                sandbox_tools=SANDBOX_TOOLS[selected_models[0][0].config.tool_family]
-                if sandbox_tools
-                else (),
+                tool_family=tool_family,
+                sandbox_tools=sandbox_tools,
                 files=new_msg_req.file_descriptors,
                 user_memory_context=memory
                 if preferences.use_memories

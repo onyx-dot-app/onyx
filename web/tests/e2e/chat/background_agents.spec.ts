@@ -33,16 +33,16 @@ test("separate background results reach an idle chat and survive reload @code-mo
             id: "spawn-research",
             name: "spawn_agent",
             arguments: {
-              name: "research",
-              instruction: childTask,
+              task_name: "research",
+              message: childTask,
             },
           },
           {
             id: "spawn-verification",
             name: "spawn_agent",
             arguments: {
-              name: "verification",
-              instruction: secondChildTask,
+              task_name: "verification",
+              message: secondChildTask,
             },
           },
         ],
@@ -153,7 +153,7 @@ test("Stop subagents ends background work @code-mode", async ({
           {
             id: "spawn-research",
             name: "spawn_agent",
-            arguments: { name: "research", instruction: childTask },
+            arguments: { task_name: "research", message: childTask },
           },
         ],
       },
@@ -230,18 +230,18 @@ test("a root that waits for its agents answers their results once @code-mode", a
           {
             id: "spawn-research",
             name: "spawn_agent",
-            arguments: { name: "research", instruction: childTask },
+            arguments: { task_name: "research", message: childTask },
           },
           {
             id: "spawn-verification",
             name: "spawn_agent",
-            arguments: { name: "verification", instruction: secondChildTask },
+            arguments: { task_name: "verification", message: secondChildTask },
           },
         ],
       },
       {
         text: status,
-        tool_calls: [{ id: "wait", name: "wait_agents", arguments: {} }],
+        tool_calls: [{ id: "wait", name: "wait_agent", arguments: {} }],
         conditions: {
           has_results_for: ["spawn-research", "spawn-verification"],
         },

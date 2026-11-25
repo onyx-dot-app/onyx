@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.db.models import ChatSession, Persona, User
 from onyx.db.tools import get_builtin_tool
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import Delta
 from onyx.server.features.tool.api import list_tools
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
@@ -20,7 +21,10 @@ from onyx.tools.models import (
     IntegrationEntry,
     ToolOptions,
 )
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_name import normalize_external_tool_name
 from tests.external_dependency_unit.answer.stream_test_utils import final_answer
@@ -158,7 +162,7 @@ def test_without_options_the_chat_offers_each_action_of_each_integration(
     assert {agent.hello, agent.bye, agent.list_orders, agent.create_order} <= set(
         offered
     )
-    assert offered[OpenURLTool.NAME] == OpenURLTool.DESCRIPTION
+    assert offered[OPEN_URL_SHAPES[ToolFamily.OPENAI].name] == OpenURLTool.DESCRIPTION
 
 
 def test_an_integration_entry_with_one_action_offers_only_that_action(
@@ -176,7 +180,7 @@ def test_an_integration_entry_with_one_action_offers_only_that_action(
     assert agent.list_orders in offered
     assert not {agent.hello, agent.bye, agent.create_order} & set(offered)
     # No capability entry: no built-in tool.
-    assert OpenURLTool.NAME not in offered
+    assert OPEN_URL_SHAPES[ToolFamily.OPENAI].name not in offered
 
 
 def test_an_integration_that_is_not_allowed_offers_no_action(
@@ -187,7 +191,7 @@ def test_an_integration_that_is_not_allowed_offers_no_action(
         agent,
         ToolOptions(allowed=[CapabilityEntry(tool_id=agent.open_url_id)]),
     )
-    assert OpenURLTool.NAME in offered
+    assert OPEN_URL_SHAPES[ToolFamily.OPENAI].name in offered
     assert not {
         agent.hello,
         agent.bye,
@@ -211,7 +215,10 @@ def test_open_url_does_not_fetch_from_the_web_when_web_search_is_not_allowed(
         ),
     )
     assert WebSearchTool.NAME not in offered
-    assert offered[OpenURLTool.NAME] == OpenURLTool.DESCRIPTION_NO_WEB_FETCH
+    assert (
+        offered[OPEN_URL_SHAPES[ToolFamily.OPENAI].name]
+        == OpenURLTool.DESCRIPTION_NO_WEB_FETCH
+    )
     assert {agent.hello, agent.bye, agent.list_orders, agent.create_order} <= set(
         offered
     )

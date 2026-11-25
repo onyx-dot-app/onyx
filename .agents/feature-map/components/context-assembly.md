@@ -172,7 +172,7 @@ block goes into a separate message from `build_user_information_prompt`, so the
 system message stays the same for every user. Two callers use
 `build_system_prompt`: `build_chat_prompt` for the live prompt, and
 `calculate_reserved_tokens` for the token estimate with
-`include_all_guidance=True`. A new parameter must reach both, or the
+`all_guidance_family`, the tool family whose names it uses. A new parameter must reach both, or the
 reservation undercounts. A change to the base prompt reaches normal chat turns
 and the Slack bot. It does not reach deep research or its research agents, which
 write their own system messages in `deep_research/agent.py` and
@@ -212,7 +212,7 @@ Failed image calls without images do not add the image reminder.
 `<system-reminder>` tags.
 
 **Budget.** In setup, `calculate_reserved_tokens` reserves a worst-case system
-prompt (`include_all_guidance=True`, so it overshoots on purpose), the
+prompt (`all_guidance_family`, so it overshoots on purpose), the
 replacement and agent prompts, and the files attached to the new message. Then
 `chat/files.py:extract_context_files` uses the window that remains, for the
 smallest model of the turn, to decide whether project files go inline
@@ -380,7 +380,8 @@ counts what is sent, not the stored token counts.
   message get one more message with a line for each image
   (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
   alone (`chat/files.py:place_chat_files`), so a message keeps its lines
-  and the prefix stays cacheable. The `exec_command` description gains the
+  and the prefix stays cacheable. The shell tool's description (`exec_command`,
+  or `bash` for Claude models) gains the
   layout of `attachments/` once, when the chat gets its first file.
   Only user attachments enter the prompt as text, so turn preparation
   extracts text only for the files of user messages
@@ -421,7 +422,7 @@ counts what is sent, not the stored token counts.
 
 - `tool-guidance-section` **A new tool guidance section.** Copy the memory tool: `MEMORY_GUIDANCE` in
   `prompts/tool_prompts.py` appears twice in `build_system_prompt`. Add the new
-  text to both places. The `include_all_guidance` branch returns early with its
+  text to both places. The `all_guidance_family` branch returns early with its
   own list of every section, and only that list reaches the reservation. The
   `has_memory` branch keys the live prompt on the configured tools. List the
   current sections with `git grep -n "_GUIDANCE" backend/onyx/chat/prompt_utils.py`.
