@@ -792,7 +792,9 @@ command step names its program (`web/src/lib/timeline/chat/commandProgramName.ts
 A reasoning step shows a one-line preview of its latest text
 (`reasoningPreview`), which its own step card also shows while it streams. The
 collapsed run card shows this header while it works. Once done, it reads
-"Worked for {duration}", or "You stopped after {duration}". Before
+"Worked for {duration}", or "You stopped after {duration}" when the stop
+ended its work. Only the response's first run uses the response's start and
+duration (`isFirstRun`); a later run times itself. Before
 the first step, the response shows the cursor, not a run card. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a

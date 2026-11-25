@@ -82,6 +82,20 @@ type PresenceSwapProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>> & {
 // fires.
 const TRANSITION_FALLBACK_MS = 400;
 
+/**
+ * The content's size on `axis`. Its own CSS may cap its width at the box's,
+ * which is the previous size, so the width is read uncapped: the box can
+ * then grow to a longer title.
+ */
+function contentSize(content: HTMLElement, axis: PresenceSwapAxis): number {
+  if (axis !== "inline") return content.offsetHeight;
+  const { maxWidth } = content.style;
+  content.style.maxWidth = "none";
+  const width = content.offsetWidth;
+  content.style.maxWidth = maxWidth;
+  return width;
+}
+
 // ---------------------------------------------------------------------------
 // Presence
 // ---------------------------------------------------------------------------
@@ -291,8 +305,7 @@ function PresenceSwap({
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
-    const measure = () =>
-      setSize(axis === "inline" ? content.offsetWidth : content.offsetHeight);
+    const measure = () => setSize(contentSize(content, axis));
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(content);
@@ -309,9 +322,7 @@ function PresenceSwap({
   useLayoutEffect(() => {
     if (phase !== "resizing") return;
     const content = contentRef.current;
-    const contentSize =
-      axis === "inline" ? content?.offsetWidth : content?.offsetHeight;
-    if (!content || contentSize === sizeRef.current) {
+    if (!content || contentSize(content, axis) === sizeRef.current) {
       setPhase("idle");
       return;
     }
