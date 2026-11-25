@@ -17318,10 +17318,6 @@
         "upload": {
           "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
           "title": "Téléverser une compétence"
-        },
-        "marketplace": {
-          "title": "Ajouter un marketplace",
-          "description": "Ajoutez depuis un dépôt et synchronisez ses plugins."
         }
       },
       "empty": {
@@ -17646,8 +17642,7 @@
         "retry": {
           "label": "Réessayer"
         },
-        "readOnlyDescription": "Votre administrateur définit comment chaque action s’exécute.",
-        "readOnlyTitle": "Actions"
+        "readOnlyDescription": "Votre administrateur définit comment chaque action s’exécute."
       },
       "oauthCallback": {
         "processing": "Connexion de votre compte…",
@@ -17948,10 +17943,6 @@
       "errors": {
         "rateLimited": "La limite de l'API GitHub est atteinte. Réessayez dans quelques minutes. Connectez GitHub pour augmenter la limite.",
         "rateLimitedUntil": "La limite de l'API GitHub est atteinte. Elle se réinitialise à {time}. Connectez GitHub pour augmenter la limite."
-      },
-      "empty": {
-        "title": "Aucun marketplace pour l’instant",
-        "description": "Ajoutez un dépôt GitHub pour obtenir ses plugins."
       }
     }
   },
@@ -18047,8 +18038,7 @@
         "upload": "Importer une compétence",
         "create": "Créer une compétence",
         "uploadPlugin": "Importer un plugin",
-        "marketplace": "Ajouter un marketplace",
-        "manageMarketplaces": "Gérer les marketplaces"
+        "marketplace": "Ajouter un marketplace"
       },
       "groups": {
         "mine": "Créées par vous",
@@ -18090,11 +18080,6 @@
         "title": "Aucune compétence correspondante",
         "description": "Essayez une autre recherche ou un autre filtre.",
         "clear": "Afficher toutes les compétences"
-      },
-      "sort": {
-        "label": "Trier",
-        "updated": "Mises à jour récemment",
-        "name": "Nom"
       }
     },
     "integrations": {

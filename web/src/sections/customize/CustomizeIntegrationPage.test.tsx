@@ -269,6 +269,10 @@ test("an action that asks offers Always allow", async () => {
   expect(
     screen.queryByRole("switch", { name: "Always allow List issues" })
   ).not.toBeInTheDocument();
+  // The policy is a tag; only the action that asks gets the labelled switch.
+  expect(screen.getByText("Ask")).toBeVisible();
+  expect(screen.getByText("Allow")).toBeVisible();
+  expect(screen.getAllByText("Don't ask me")).toHaveLength(1);
   await user().click(toggle);
   await waitFor(() =>
     expect(

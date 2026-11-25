@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import {
   Button,
-  Dropdown,
   LineItemButton,
   useCreateModal,
   type DropdownMenuItem,
@@ -15,7 +14,6 @@ import {
   SvgCheckCircle,
   SvgPlus,
   SvgShare,
-  SvgSort,
   SvgTrash,
   SvgXCircle,
 } from "@opal/icons";
@@ -27,7 +25,6 @@ import {
   groupSkills,
   visibleSkills,
   type SkillGroup,
-  type SkillSort,
   type SkillStatusFilter,
 } from "@/lib/customize/skills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -227,7 +224,6 @@ export default function CustomizeSkillsPage() {
   const { data, error, isLoading, refresh } = useUserSkills();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
-  const [sort, setSort] = useState<SkillSort>("updated");
   const removeModal = useCreateModal();
   const [removeTarget, setRemoveTarget] = useState<Skill | null>(null);
   const [removing, setRemoving] = useState(false);
@@ -246,7 +242,6 @@ export default function CustomizeSkillsPage() {
         craftEnabled,
         query,
         status,
-        sort,
         locale,
       })
     : null;
@@ -288,27 +283,6 @@ export default function CustomizeSkillsPage() {
         onChange={setStatus}
         allLabel={t("filter.all")}
       />
-      <Dropdown align="end" width={60}>
-        <Dropdown.Trigger asChild>
-          <Button
-            prominence="tertiary"
-            icon={SvgSort}
-            aria-label={t("sort.label")}
-            tooltip={t("sort.label")}
-          />
-        </Dropdown.Trigger>
-        <Dropdown.Data
-          label={t("sort.label")}
-          items={[
-            { kind: "option", value: "updated", title: t("sort.updated") },
-            { kind: "option", value: "name", title: t("sort.name") },
-          ]}
-          value={sort}
-          onSelect={(option) =>
-            setSort(option.value === "name" ? "name" : "updated")
-          }
-        />
-      </Dropdown>
       <AddSkillMenu />
     </>
   );

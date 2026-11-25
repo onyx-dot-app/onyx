@@ -38,10 +38,6 @@ import {
   SvgUsers,
   SvgXCircle,
 } from "@opal/icons";
-import { SvgGitHub } from "@opal/logos";
-import AddMarketplaceModal from "@/sections/marketplaces/AddMarketplaceModal";
-import MarketplacesSection from "@/sections/marketplaces/MarketplacesSection";
-import { useMarketplaceAdded } from "@/lib/marketplaces/hooks";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -66,11 +62,7 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import { useSkillEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
-import {
-  adminSkillHref,
-  newSkillHref,
-  pluginHref,
-} from "@/lib/customize/paths";
+import { adminSkillHref, newSkillHref } from "@/lib/customize/paths";
 
 export default function AdminSkillsPage() {
   const t = useTranslations("skills");
@@ -101,8 +93,6 @@ export default function AdminSkillsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
-  const onMarketplaceAdded = useMarketplaceAdded();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<CustomSkill | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -147,7 +137,11 @@ export default function AdminSkillsPage() {
   const loadedItems = useMemo<CustomSkill[]>(
     () =>
       (data?.customs ?? [])
-        .filter((skill): skill is CustomSkill => skill.source === "custom")
+        // Plugins have their own admin page.
+        .filter(
+          (skill): skill is CustomSkill =>
+            skill.source === "custom" && skill.kind !== "plugin"
+        )
         .sort((a, b) =>
           a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
         ),
@@ -319,14 +313,6 @@ export default function AdminSkillsPage() {
                   title: t("page.createMenu.upload.title"),
                   description: t("page.createMenu.upload.description"),
                   onSelect: () => setCreateOpen(true),
-                },
-                {
-                  kind: "action",
-                  id: "marketplace",
-                  icon: SvgGitHub,
-                  title: t("page.createMenu.marketplace.title"),
-                  description: t("page.createMenu.marketplace.description"),
-                  onSelect: () => setMarketplaceOpen(true),
                 },
               ]}
             />
@@ -500,11 +486,7 @@ export default function AdminSkillsPage() {
                         void enablement.setEnabled(skill, enabled)
                       }
                       onOpen={(skill) =>
-                        navigation.go(
-                          skill.kind === "plugin"
-                            ? pluginHref(skill.id)
-                            : adminSkillHref(skill.id)
-                        )
+                        navigation.go(adminSkillHref(skill.id))
                       }
                       onShare={setShareTarget}
                       onDelete={(skill) => {
@@ -524,7 +506,6 @@ export default function AdminSkillsPage() {
             )}
           </>
         )}
-        <MarketplacesSection onAdd={() => setMarketplaceOpen(true)} />
         {canManageOrgSkills && <SkillPublishingCard />}
       </SettingsLayouts.Body>
 
@@ -603,15 +584,6 @@ export default function AdminSkillsPage() {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
           navigation.go(newSkillHref(draftId));
-        }}
-      />
-
-      <AddMarketplaceModal
-        open={marketplaceOpen}
-        onClose={() => setMarketplaceOpen(false)}
-        onAdded={(marketplace) => {
-          setMarketplaceOpen(false);
-          onMarketplaceAdded(marketplace);
         }}
       />
 

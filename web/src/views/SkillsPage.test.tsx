@@ -76,21 +76,6 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
     ) : null,
 }));
 
-jest.mock("@/sections/marketplaces/AddMarketplaceModal", () => ({
-  __esModule: true,
-  default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
-    open ? (
-      <button type="button" onClick={onClose}>
-        Add marketplace open
-      </button>
-    ) : null,
-}));
-
-jest.mock("@/sections/marketplaces/MarketplacesTable", () => ({
-  __esModule: true,
-  default: () => <div>Marketplaces table</div>,
-}));
-
 let mockIsManager = false;
 jest.mock("@/lib/permissions/hooks", () => ({
   usePermissionAuthority: () => ({
@@ -223,16 +208,16 @@ describe("SkillsPage preference toggles", () => {
     );
   });
 
-  it("opens an uploaded plugin on its plugin page", async () => {
+  it("leaves plugins out: they have their own admin page", () => {
     skillsData.customs = [
+      customSkill("skill-id", "notes"),
       { ...customSkill("plugin-id", "review-kit"), kind: "plugin" },
     ];
     render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(screen.getByRole("row", { name: "Open review-kit" }));
-    await waitFor(() =>
-      expect(window.location.pathname).toBe("/app/customize/plugins/plugin-id")
-    );
+    expect(screen.getByRole("row", { name: "Open notes" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: "Open review-kit" })
+    ).not.toBeInTheDocument();
   });
 
   it("shows publish requests in the library to a non-admin skill manager", () => {
@@ -651,22 +636,6 @@ describe("SkillsPage preference toggles", () => {
       "/app/customize/skills/new?draft=draft-id"
     );
     expect(mockRefresh).not.toHaveBeenCalled();
-  });
-
-  it("offers Add marketplace from the create menu and lists marketplaces", async () => {
-    const user = setupUser();
-    render(<SkillsPage />);
-
-    expect(screen.getByText("Marketplaces table")).toBeInTheDocument();
-    expect(screen.queryByText("Import from GitHub")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Create skill" }));
-    await user.click(
-      screen.getByRole("menuitem", { name: /^Add marketplace/ })
-    );
-
-    expect(
-      screen.getByRole("button", { name: "Add marketplace open" })
-    ).toBeInTheDocument();
   });
 
   it("optimistically enables and disables only the pending skill switch", async () => {

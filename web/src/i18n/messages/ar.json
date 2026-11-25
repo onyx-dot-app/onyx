@@ -17318,10 +17318,6 @@
         "upload": {
           "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",
           "title": "رفع مهارة"
-        },
-        "marketplace": {
-          "title": "إضافة سوق",
-          "description": "أضف من مستودع وزامن إضافاته."
         }
       },
       "empty": {
@@ -17646,8 +17642,7 @@
         "retry": {
           "label": "حاول مرة أخرى"
         },
-        "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء.",
-        "readOnlyTitle": "الإجراءات"
+        "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء."
       },
       "oauthCallback": {
         "processing": "جارٍ ربط حسابك…",
@@ -17948,10 +17943,6 @@
       "errors": {
         "rateLimited": "تم بلوغ حد واجهة GitHub البرمجية. حاول مرة أخرى بعد بضع دقائق. اربط GitHub لرفع الحد.",
         "rateLimitedUntil": "تم بلوغ حد واجهة GitHub البرمجية. تتم إعادة التعيين في {time}. اربط GitHub لرفع الحد."
-      },
-      "empty": {
-        "title": "لا توجد أسواق بعد",
-        "description": "أضف مستودع GitHub للحصول على إضافاته."
       }
     }
   },
@@ -18047,8 +18038,7 @@
         "upload": "رفع مهارة",
         "create": "إنشاء مهارة",
         "uploadPlugin": "رفع إضافة",
-        "marketplace": "إضافة سوق",
-        "manageMarketplaces": "إدارة الأسواق"
+        "marketplace": "إضافة سوق"
       },
       "groups": {
         "mine": "أنشأتها أنت",
@@ -18090,11 +18080,6 @@
         "title": "لا توجد مهارات مطابقة",
         "description": "جرّب بحثًا أو عامل تصفية آخر.",
         "clear": "عرض كل المهارات"
-      },
-      "sort": {
-        "label": "ترتيب",
-        "updated": "المحدّثة مؤخرًا",
-        "name": "الاسم"
       }
     },
     "integrations": {

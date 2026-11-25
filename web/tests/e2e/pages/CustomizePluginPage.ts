@@ -1,3 +1,4 @@
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 import { type Locator, type Page, expect } from "@playwright/test";
 import type { UploadFile } from "@tests/e2e/utils/plugins";
 
@@ -130,18 +131,26 @@ export class CustomizePluginPage {
     );
   }
 
+  /** The add modal checks the prefilled server at once; Back shows the
+   * prefilled name and URL. */
   async expectIntegrationPrefill(
     name: string,
     serverUrl: string
   ): Promise<void> {
+    const integrations = new AdminIntegrationsPage(this.page);
+    // The modal's accessible name also holds its kind line ("MCP server").
+    const dialog = this.page.getByRole("dialog", {
+      name: new RegExp(
+        `^Add ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`
+      ),
+    });
+    await expect(dialog).toBeVisible();
+    await integrations.openAdvanced();
     await expect(
-      this.page.getByRole("textbox", { name: "Name", exact: true })
-    ).toHaveValue(name);
-    await expect(
-      this.page.getByRole("textbox", { name: "Server URL", exact: true })
-    ).toHaveValue(serverUrl);
-    await expect(
-      this.page.getByRole("combobox", { name: "Owner", exact: true })
+      dialog.getByRole("combobox", { name: "Owner", exact: true })
     ).toHaveValue("For the organization");
+    await dialog.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(integrations.nameInput).toHaveValue(name);
+    await expect(integrations.serverUrlInput).toHaveValue(serverUrl);
   }
 }

@@ -17318,10 +17318,6 @@
         "upload": {
           "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
           "title": "Skill hochladen"
-        },
-        "marketplace": {
-          "title": "Marketplace hinzufügen",
-          "description": "Aus einem Repository hinzufügen und dessen Plugins synchronisieren."
         }
       },
       "empty": {
@@ -17646,8 +17642,7 @@
         "retry": {
           "label": "Erneut versuchen"
         },
-        "readOnlyDescription": "Ihr Administrator legt fest, wie jede Aktion ausgeführt wird.",
-        "readOnlyTitle": "Aktionen"
+        "readOnlyDescription": "Ihr Administrator legt fest, wie jede Aktion ausgeführt wird."
       },
       "oauthCallback": {
         "processing": "Ihr Konto wird verbunden…",
@@ -17948,10 +17943,6 @@
       "errors": {
         "rateLimited": "Das API-Limit von GitHub ist erreicht. Versuchen Sie es in einigen Minuten erneut. Verbinden Sie GitHub, um das Limit zu erhöhen.",
         "rateLimitedUntil": "Das API-Limit von GitHub ist erreicht. Es wird um {time} zurückgesetzt. Verbinden Sie GitHub, um das Limit zu erhöhen."
-      },
-      "empty": {
-        "title": "Noch keine Marketplaces",
-        "description": "Fügen Sie ein GitHub-Repository hinzu, um dessen Plugins zu erhalten."
       }
     }
   },
@@ -18047,8 +18038,7 @@
         "upload": "Skill hochladen",
         "create": "Skill erstellen",
         "uploadPlugin": "Plugin hochladen",
-        "marketplace": "Marketplace hinzufügen",
-        "manageMarketplaces": "Marketplaces verwalten"
+        "marketplace": "Marketplace hinzufügen"
       },
       "groups": {
         "mine": "Von Ihnen erstellt",
@@ -18090,11 +18080,6 @@
         "title": "Keine passenden Skills",
         "description": "Versuchen Sie eine andere Suche oder einen anderen Filter.",
         "clear": "Alle Skills anzeigen"
-      },
-      "sort": {
-        "label": "Sortieren",
-        "updated": "Zuletzt aktualisiert",
-        "name": "Name"
       }
     },
     "integrations": {

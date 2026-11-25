@@ -17318,10 +17318,6 @@
         "upload": {
           "description": "SKILL.md 파일, ZIP 파일 또는 스킬 폴더를 가져오세요.",
           "title": "스킬 업로드"
-        },
-        "marketplace": {
-          "title": "마켓플레이스 추가",
-          "description": "저장소에서 추가하고 해당 플러그인을 동기화합니다."
         }
       },
       "empty": {
@@ -17646,8 +17642,7 @@
         "retry": {
           "label": "다시 시도"
         },
-        "readOnlyDescription": "관리자가 각 작업의 실행 방식을 설정합니다.",
-        "readOnlyTitle": "작업"
+        "readOnlyDescription": "관리자가 각 작업의 실행 방식을 설정합니다."
       },
       "oauthCallback": {
         "processing": "계정을 연결하는 중…",
@@ -17948,10 +17943,6 @@
       "errors": {
         "rateLimited": "GitHub API 사용 한도에 도달했습니다. 몇 분 후에 다시 시도하세요. 한도를 늘리려면 GitHub를 연결하세요.",
         "rateLimitedUntil": "GitHub API 사용 한도에 도달했습니다. {time}에 재설정됩니다. 한도를 늘리려면 GitHub를 연결하세요."
-      },
-      "empty": {
-        "title": "아직 마켓플레이스가 없습니다",
-        "description": "GitHub 저장소를 추가하여 해당 플러그인을 받으세요."
       }
     }
   },
@@ -18047,8 +18038,7 @@
         "upload": "스킬 업로드",
         "create": "스킬 만들기",
         "uploadPlugin": "플러그인 업로드",
-        "marketplace": "마켓플레이스 추가",
-        "manageMarketplaces": "마켓플레이스 관리"
+        "marketplace": "마켓플레이스 추가"
       },
       "groups": {
         "mine": "내가 만든 항목",
@@ -18090,11 +18080,6 @@
         "title": "일치하는 스킬이 없습니다",
         "description": "다른 검색어나 필터를 사용해 보세요.",
         "clear": "모든 스킬 보기"
-      },
-      "sort": {
-        "label": "정렬",
-        "updated": "최근 업데이트",
-        "name": "이름"
       }
     },
     "integrations": {

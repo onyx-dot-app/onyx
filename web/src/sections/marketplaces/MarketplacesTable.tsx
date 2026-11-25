@@ -12,7 +12,7 @@ import {
   type TableColumn,
   useCreateModal,
 } from "@opal/components";
-import { Content, IllustrationContent, Section, toast } from "@opal/layouts";
+import { Content, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgMoreHorizontal,
@@ -22,7 +22,6 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
-import SvgNoResult from "@opal/illustrations/no-result";
 import { fetchErrorDetail } from "@/lib/fetcher";
 import {
   replaceMarketplaceLogin,
@@ -305,23 +304,15 @@ export default function MarketplacesTable() {
   return (
     <Section gap={2} alignItems="stretch" height="auto">
       <Attention marketplaces={attention} busy={busy} onSync={syncNow} />
-      {rows.length > 0 ? (
-        <Table
-          label={t("tableLabel")}
-          items={rows}
-          columns={isMobile ? phoneColumns : columns}
-          getRowId={(row) => row.id}
-          pageSize={false}
-          onRowClick={(row) => setOpenId(row.id)}
-          getRowLabel={(row) => t("open", { name: row.name })}
-        />
-      ) : (
-        <IllustrationContent
-          illustration={SvgNoResult}
-          title={t("empty.title")}
-          description={t("empty.description")}
-        />
-      )}
+      <Table
+        label={t("tableLabel")}
+        items={rows}
+        columns={isMobile ? phoneColumns : columns}
+        getRowId={(row) => row.id}
+        pageSize={false}
+        onRowClick={(row) => setOpenId(row.id)}
+        getRowLabel={(row) => t("open", { name: row.name })}
+      />
       {openId && (
         <MarketplaceDetailModal
           marketplaceId={openId}

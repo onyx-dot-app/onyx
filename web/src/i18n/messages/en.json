@@ -17318,10 +17318,6 @@
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",
           "title": "Upload a skill"
-        },
-        "marketplace": {
-          "title": "Add marketplace",
-          "description": "Add from a repository and sync its plugins."
         }
       },
       "empty": {
@@ -17646,8 +17642,7 @@
         "retry": {
           "label": "Try again"
         },
-        "readOnlyDescription": "Your admin sets how each action runs.",
-        "readOnlyTitle": "Actions"
+        "readOnlyDescription": "Your admin sets how each action runs."
       },
       "oauthCallback": {
         "processing": "Connecting your account…",
@@ -17948,10 +17943,6 @@
       "errors": {
         "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
         "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
-      },
-      "empty": {
-        "title": "No marketplaces yet",
-        "description": "Add a GitHub repository to get its plugins."
       }
     }
   },
@@ -18047,8 +18038,7 @@
         "upload": "Upload skill",
         "create": "Create a skill",
         "uploadPlugin": "Upload plugin",
-        "marketplace": "Add marketplace",
-        "manageMarketplaces": "Manage marketplaces"
+        "marketplace": "Add marketplace"
       },
       "groups": {
         "mine": "Created by you",
@@ -18090,11 +18080,6 @@
         "title": "No matching skills",
         "description": "Try another search or filter.",
         "clear": "Show all skills"
-      },
-      "sort": {
-        "label": "Sort",
-        "updated": "Recently updated",
-        "name": "Name"
       }
     },
     "integrations": {

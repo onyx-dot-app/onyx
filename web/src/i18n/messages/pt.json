@@ -17318,10 +17318,6 @@
         "upload": {
           "description": "Importe um arquivo SKILL.md, um arquivo ZIP ou uma pasta de habilidade.",
           "title": "Enviar uma habilidade"
-        },
-        "marketplace": {
-          "title": "Adicionar marketplace",
-          "description": "Adicione a partir de um repositório e sincronize seus plugins."
         }
       },
       "empty": {
@@ -17646,8 +17642,7 @@
         "retry": {
           "label": "Tentar novamente"
         },
-        "readOnlyDescription": "Seu administrador define como cada ação é executada.",
-        "readOnlyTitle": "Ações"
+        "readOnlyDescription": "Seu administrador define como cada ação é executada."
       },
       "oauthCallback": {
         "processing": "Conectando sua conta…",
@@ -17948,10 +17943,6 @@
       "errors": {
         "rateLimited": "O limite da API do GitHub foi atingido. Tente novamente em alguns minutos. Conecte o GitHub para aumentar o limite.",
         "rateLimitedUntil": "O limite da API do GitHub foi atingido. Ele é redefinido às {time}. Conecte o GitHub para aumentar o limite."
-      },
-      "empty": {
-        "title": "Nenhum marketplace ainda",
-        "description": "Adicione um repositório do GitHub para obter seus plugins."
       }
     }
   },
@@ -18047,8 +18038,7 @@
         "upload": "Enviar habilidade",
         "create": "Criar uma habilidade",
         "uploadPlugin": "Enviar plugin",
-        "marketplace": "Adicionar marketplace",
-        "manageMarketplaces": "Gerenciar marketplaces"
+        "marketplace": "Adicionar marketplace"
       },
       "groups": {
         "mine": "Criadas por você",
@@ -18090,11 +18080,6 @@
         "title": "Nenhuma habilidade correspondente",
         "description": "Tente outra pesquisa ou filtro.",
         "clear": "Mostrar todas as habilidades"
-      },
-      "sort": {
-        "label": "Ordenar",
-        "updated": "Atualizadas recentemente",
-        "name": "Nome"
       }
     },
     "integrations": {

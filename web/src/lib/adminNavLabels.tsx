@@ -30,6 +30,7 @@ export function useAdminNavLabels(): Record<AdminNavItemId, string> {
       customAnalytics: t("adminNav.items.customAnalytics.label"),
       agents: t("adminNav.items.agents.label"),
       integrations: t("adminNav.items.integrations.label"),
+      plugins: t("adminNav.items.plugins.label"),
       indexingStatus: t("adminNav.items.indexingStatus.label"),
       connectors: t("adminNav.items.connectors.label"),
       documentSets: t("adminNav.items.documentSets.label"),

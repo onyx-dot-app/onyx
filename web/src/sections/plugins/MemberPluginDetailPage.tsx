@@ -34,11 +34,13 @@ import {
   pluginSwitch,
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
+import { usePanel } from "@/lib/customize/hooks";
 import {
-  MARKETPLACES_PATH,
-  customizeTabHref,
+  adminSkillHref,
+  marketplacesHref,
   parsePluginPageTab,
   pluginHref,
+  pluginsHref,
   skillHref,
   type PluginPageTab,
 } from "@/lib/customize/paths";
@@ -117,6 +119,7 @@ interface ManagedNoteProps {
 function ManagedNote({ marketplace }: ManagedNoteProps) {
   const t = useTranslations("plugins.member.detail.managed");
   const navigation = useNavigation();
+  const panel = usePanel();
   return (
     <MessageCard
       variant="info"
@@ -130,7 +133,7 @@ function ManagedNote({ marketplace }: ManagedNoteProps) {
         <Button
           prominence="secondary"
           size="sm"
-          {...navigation.linkTo(MARKETPLACES_PATH)}
+          {...navigation.linkTo(marketplacesHref(panel))}
         >
           {t("open")}
         </Button>
@@ -326,6 +329,7 @@ interface MemberPluginDetailPageProps {
   pluginId: string;
 }
 
+/** Its links stay in the panel that the page sits in. */
 export default function MemberPluginDetailPage({
   pluginId,
 }: MemberPluginDetailPageProps) {
@@ -334,6 +338,7 @@ export default function MemberPluginDetailPage({
   const pageCopy = useTranslations("customize.pluginPage");
   const locale = useLocale();
   const navigation = useNavigation();
+  const panel = usePanel();
   const searchParams = useSearchParams();
   const { user } = useUser();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
@@ -371,9 +376,16 @@ export default function MemberPluginDetailPage({
     skills.data && entry !== undefined && !isPlugin && entry.skills.length === 1
       ? entry.skills[0]?.id
       : undefined;
+  const listHref = pluginsHref(panel);
   useEffect(() => {
-    if (skillOnlyId) navigation.go(skillHref(skillOnlyId), { replace: true });
-  }, [navigation, skillOnlyId]);
+    if (skillOnlyId)
+      navigation.go(
+        panel === "admin"
+          ? adminSkillHref(skillOnlyId)
+          : skillHref(skillOnlyId),
+        { replace: true }
+      );
+  }, [panel, navigation, skillOnlyId]);
   const skill = entry?.skills.length === 1 ? entry.skills[0] : undefined;
   const syncedFrom =
     skill?.marketplace?.kind === "github" ? skill.marketplace.repository : null;
@@ -462,7 +474,7 @@ export default function MemberPluginDetailPage({
       await deleteUserSkill(skill.id);
       refreshLists();
       toast.success(removeCopy("done", { name: skill.name }));
-      navigation.go(customizeTabHref("plugins"), { replace: true });
+      navigation.go(listHref, { replace: true });
     } catch (failure) {
       toast.error(
         failure instanceof Error && failure.message
@@ -513,9 +525,7 @@ export default function MemberPluginDetailPage({
 
   return (
     <CustomizeDetailLayout
-      back={
-        <BackLink to={customizeTabHref("plugins")} label={tabCopy("plugins")} />
-      }
+      back={<BackLink to={listHref} label={tabCopy("plugins")} />}
       icon={SvgBlocks}
       title={entry?.name ?? t("title")}
       description={entry?.description ?? undefined}
@@ -540,7 +550,7 @@ export default function MemberPluginDetailPage({
       tabs={tabs}
       tab={tab}
       onTabChange={(next) =>
-        navigation.go(pluginHref(pluginId, next), {
+        navigation.go(pluginHref(pluginId, next, panel), {
           replace: true,
           scroll: false,
         })

@@ -17318,10 +17318,6 @@
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
           "title": "上传技能"
-        },
-        "marketplace": {
-          "title": "添加市场",
-          "description": "从仓库添加并同步其插件。"
         }
       },
       "empty": {
@@ -17646,8 +17642,7 @@
         "retry": {
           "label": "重试"
         },
-        "readOnlyDescription": "管理员设置每个操作的运行方式。",
-        "readOnlyTitle": "操作"
+        "readOnlyDescription": "管理员设置每个操作的运行方式。"
       },
       "oauthCallback": {
         "processing": "正在连接你的账户…",
@@ -17948,10 +17943,6 @@
       "errors": {
         "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
         "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
-      },
-      "empty": {
-        "title": "还没有市场",
-        "description": "添加 GitHub 仓库以获取其插件。"
       }
     }
   },
@@ -18047,8 +18038,7 @@
         "upload": "上传技能",
         "create": "创建技能",
         "uploadPlugin": "上传插件",
-        "marketplace": "添加市场",
-        "manageMarketplaces": "管理市场"
+        "marketplace": "添加市场"
       },
       "groups": {
         "mine": "由你创建",
@@ -18090,11 +18080,6 @@
         "title": "没有匹配的技能",
         "description": "请尝试其他搜索或筛选条件。",
         "clear": "显示所有技能"
-      },
-      "sort": {
-        "label": "排序",
-        "updated": "最近更新",
-        "name": "名称"
       }
     },
     "integrations": {
