@@ -12556,6 +12556,9 @@
           "runningCommand": {
             "label": "Running command..."
           },
+          "runningProgram": {
+            "label": "Running {program}..."
+          },
           "editingFiles": {
             "label": "Editing files..."
           },
@@ -12564,48 +12567,6 @@
           },
           "browsing": {
             "label": "Browsing web pages..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "Doing some work...",
-              "done": "Did some work"
-            },
-            "crunchingDetails": {
-              "working": "Crunching the details...",
-              "done": "Crunched the details"
-            },
-            "connectingDots": {
-              "working": "Connecting the dots...",
-              "done": "Connected the dots"
-            },
-            "runningNumbers": {
-              "working": "Running the numbers...",
-              "done": "Ran the numbers"
-            },
-            "fillingGaps": {
-              "working": "Filling in the gaps...",
-              "done": "Filled in the gaps"
-            },
-            "sortingThingsOut": {
-              "working": "Sorting things out...",
-              "done": "Sorted things out"
-            },
-            "gatheringPieces": {
-              "working": "Gathering the pieces...",
-              "done": "Gathered the pieces"
-            },
-            "workingThroughIt": {
-              "working": "Working through it...",
-              "done": "Worked through it"
-            },
-            "ironingOutDetails": {
-              "working": "Ironing out the details...",
-              "done": "Ironed out the details"
-            },
-            "roundingThingsOut": {
-              "working": "Rounding things out...",
-              "done": "Rounded things out"
-            }
           }
         },
         "internalSearch": {
@@ -12633,8 +12594,11 @@
             "between": "from {start} to {end}"
           }
         },
-        "interruptedThinking": {
-          "label": "Interrupted Thinking"
+        "stoppedDuration": {
+          "label": "You stopped after {duration}"
+        },
+        "stoppedUnknownDuration": {
+          "label": "You stopped this response"
         },
         "memory": {
           "default": {
@@ -12756,11 +12720,11 @@
         "stepsButton": {
           "label": "{count, plural, one {# step} other {# steps}}"
         },
-        "thoughtDuration": {
-          "label": "Thought for {duration}"
+        "workedDuration": {
+          "label": "Worked for {duration}"
         },
-        "thoughtUnknownDuration": {
-          "label": "Thought for some time"
+        "workedUnknownDuration": {
+          "label": "Worked"
         },
         "toggleRow": {
           "ariaLabel": "Toggle timeline"

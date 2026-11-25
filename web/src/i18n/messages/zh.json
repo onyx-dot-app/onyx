@@ -12556,6 +12556,9 @@
           "runningCommand": {
             "label": "正在运行命令..."
           },
+          "runningProgram": {
+            "label": "正在运行 {program}..."
+          },
           "editingFiles": {
             "label": "正在编辑文件..."
           },
@@ -12564,48 +12567,6 @@
           },
           "browsing": {
             "label": "正在浏览网页..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "正在处理...",
-              "done": "已完成处理"
-            },
-            "crunchingDetails": {
-              "working": "正在梳理细节...",
-              "done": "已梳理细节"
-            },
-            "connectingDots": {
-              "working": "正在串联线索...",
-              "done": "已串联线索"
-            },
-            "runningNumbers": {
-              "working": "正在计算数据...",
-              "done": "已计算数据"
-            },
-            "fillingGaps": {
-              "working": "正在填补空白...",
-              "done": "已填补空白"
-            },
-            "sortingThingsOut": {
-              "working": "正在整理思路...",
-              "done": "已整理思路"
-            },
-            "gatheringPieces": {
-              "working": "正在拼凑信息...",
-              "done": "已拼凑信息"
-            },
-            "workingThroughIt": {
-              "working": "正在逐步解决...",
-              "done": "已逐步解决"
-            },
-            "ironingOutDetails": {
-              "working": "正在完善细节...",
-              "done": "已完善细节"
-            },
-            "roundingThingsOut": {
-              "working": "正在收尾...",
-              "done": "已收尾"
-            }
           }
         },
         "internalSearch": {
@@ -12633,8 +12594,11 @@
             "between": "从 {start} 到 {end}"
           }
         },
-        "interruptedThinking": {
-          "label": "思考已中断"
+        "stoppedDuration": {
+          "label": "你在 {duration} 后停止了"
+        },
+        "stoppedUnknownDuration": {
+          "label": "你停止了此回复"
         },
         "memory": {
           "default": {
@@ -12756,11 +12720,11 @@
         "stepsButton": {
           "label": "{count, plural, one {# 个步骤} other {# 个步骤}}"
         },
-        "thoughtDuration": {
-          "label": "思考了 {duration}"
+        "workedDuration": {
+          "label": "工作了 {duration}"
         },
-        "thoughtUnknownDuration": {
-          "label": "思考了一段时间"
+        "workedUnknownDuration": {
+          "label": "已工作"
         },
         "toggleRow": {
           "ariaLabel": "切换时间线"

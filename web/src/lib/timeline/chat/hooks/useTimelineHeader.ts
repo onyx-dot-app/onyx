@@ -7,7 +7,6 @@ import {
   PacketType,
   SearchToolPacket,
   StopReason,
-  CustomToolStart,
 } from "@/app/app/services/streamingModels";
 import {
   formatSearchHeader,
@@ -17,6 +16,11 @@ import {
   firstActivityPacket,
   type TimelineTranslate,
 } from "@/lib/timeline/chat/message/messageComponents/toolDisplayHelpers";
+import { commandProgramName } from "@/lib/timeline/chat/commandProgramName";
+import {
+  reasoningPreview,
+  reasoningText,
+} from "@/lib/timeline/chat/renderers/reasoning/reasoningPreview";
 
 /** Header text for the activity of one step, or null for no tool activity. */
 function stepHeaderText(
@@ -27,7 +31,8 @@ function stepHeaderText(
   const firstPacket = firstActivityPacket(packets);
   if (!firstPacket) return null;
 
-  switch (firstPacket.obj.type) {
+  const obj = firstPacket.obj;
+  switch (obj.type) {
     case PacketType.SEARCH_TOOL_START: {
       const searchState = constructCurrentSearchState(
         packets as SearchToolPacket[]
@@ -53,7 +58,12 @@ function stepHeaderText(
       return t("header.generatingImages.label");
     case PacketType.FILE_READER_START:
       return t("header.readingFile.label");
-    case PacketType.EXEC_COMMAND_START:
+    case PacketType.EXEC_COMMAND_START: {
+      const program = commandProgramName(obj.cmd.trim());
+      return program
+        ? t("header.runningProgram.label", { program })
+        : t("header.runningCommand.label");
+    }
     case PacketType.WRITE_STDIN_START:
       return t("header.runningCommand.label");
     case PacketType.FILE_TOOL_PROGRESS:
@@ -62,7 +72,7 @@ function stepHeaderText(
     case PacketType.PUBLISH_FILES_START:
       return t("header.publishingFiles.label");
     case PacketType.CUSTOM_TOOL_START: {
-      const toolName = (firstPacket.obj as CustomToolStart).display_name;
+      const toolName = obj.display_name;
       return toolName
         ? t("header.executingNamedTool.label", { toolName })
         : t("header.executingTool.label");
@@ -73,7 +83,10 @@ function stepHeaderText(
     case PacketType.POSTGRES_TOOL_START:
       return t("header.queryingKnowledgeBase.label");
     case PacketType.REASONING_START:
-      return t("header.thinking.label");
+    case PacketType.REASONING_DELTA:
+      return (
+        reasoningPreview(reasoningText(packets)) || t("header.thinking.label")
+      );
     case PacketType.DEEP_RESEARCH_PLAN_START:
       return t("header.generatingPlan.label");
     case PacketType.RESEARCH_AGENT_START:

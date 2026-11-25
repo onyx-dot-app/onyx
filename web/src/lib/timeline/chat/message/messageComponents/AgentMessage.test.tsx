@@ -1049,11 +1049,7 @@ test("an expanded step keeps its state when a call is inserted before it", async
   }
 });
 
-// The run card's header is a phrase picked per card.
-const WORKING_PHRASES = Object.values(
-  en.chat.messages.timeline.header.runPhrases
-).map((phrase) => phrase.working);
-const isWorkingPhrase = (text: string) => WORKING_PHRASES.includes(text);
+const WORKING = en.chat.messages.timeline.header.working.label;
 
 test("a program without tool calls shows only a working header", async () => {
   seedSessionAwaitingAnswer();
@@ -1081,7 +1077,7 @@ test("a program without tool calls shows only a working header", async () => {
   );
   const view = render(renderMessage(running));
   try {
-    expect(await screen.findByText(isWorkingPhrase)).toBeInTheDocument();
+    expect(await screen.findByText(WORKING)).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/36|sum\(range|step/i);
 
     // A finished response is no longer working, even with no final delta.
@@ -1095,7 +1091,7 @@ test("a program without tool calls shows only a working header", async () => {
       ])
     );
     await waitFor(() =>
-      expect(screen.queryByText(isWorkingPhrase)).not.toBeInTheDocument()
+      expect(screen.queryByText(WORKING)).not.toBeInTheDocument()
     );
   } finally {
     view.unmount();

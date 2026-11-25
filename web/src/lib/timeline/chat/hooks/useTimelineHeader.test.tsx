@@ -5,8 +5,8 @@ import { useTimelineHeader } from "@/lib/timeline/chat/hooks/useTimelineHeader";
 
 jest.mock("next-intl", () => ({
   useLocale: () => "en",
-  useTranslations: () => (key: string, values?: { toolName?: string }) =>
-    values?.toolName ? `${key}:${values.toolName}` : key,
+  useTranslations: () => (key: string, values?: Record<string, string>) =>
+    values ? `${key}:${Object.values(values).join(",")}` : key,
 }));
 
 const debug: Packet = {
@@ -118,5 +118,44 @@ describe("useTimelineHeader", () => {
       )
     );
     expect(result.current.headerText).toBe("header.working.label");
+  });
+
+  it("names the program a command runs", () => {
+    const { result } = renderHook(() =>
+      useTimelineHeader(
+        group([
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: PacketType.EXEC_COMMAND_START,
+              cmd: "npm test",
+              workdir: null,
+            },
+          },
+        ])
+      )
+    );
+    expect(result.current.headerText).toBe("header.runningProgram.label:npm");
+  });
+
+  it("previews the latest reasoning on one line", () => {
+    const reasoning = (text: string): Packet => ({
+      placement: { turn_index: 0 },
+      obj: { type: PacketType.REASONING_DELTA, reasoning: text },
+    });
+    const start: Packet = {
+      placement: { turn_index: 0 },
+      obj: { type: PacketType.REASONING_START },
+    };
+    const { result, rerender } = renderHook(
+      ({ packets }: { packets: Packet[] }) => useTimelineHeader(group(packets)),
+      { initialProps: { packets: [start] } }
+    );
+    expect(result.current.headerText).toBe("header.thinking.label");
+
+    rerender({
+      packets: [start, reasoning("Check the\n\nlogs "), reasoning(" first.")],
+    });
+    expect(result.current.headerText).toBe("Check the logs first.");
   });
 });

@@ -15,6 +15,7 @@ import {
   splitThinkingTitle,
 } from "@/lib/timeline/components/bodies/ThinkingBody";
 import { STEP_ICONS } from "@/lib/timeline/icons";
+import { reasoningPreview } from "@/lib/timeline/chat/renderers/reasoning/reasoningPreview";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
@@ -60,8 +61,10 @@ export const ReasoningRenderer: MessageRenderer<
     [content]
   );
 
-  // Use extracted title if available, otherwise default
-  const displayStatus = title || thinkingStatus;
+  const preview = useMemo(() => reasoningPreview(content), [content]);
+  const displayStatus = hasEnd
+    ? title || thinkingStatus
+    : preview || thinkingStatus;
   const displayContent = title ? remainingContent : content;
 
   // Track reasoning timing for minimum display duration
@@ -129,6 +132,8 @@ export const ReasoningRenderer: MessageRenderer<
     {
       icon: STEP_ICONS.thinking,
       status: displayStatus,
+      // One key, or each new piece of text would swap the title.
+      statusKey: hasEnd ? undefined : "live",
       // A title from the reasoning itself stays; the default turns past tense.
       doneStatus: title || thoughtStatus,
       // Nothing to open until body text arrives; a heading moves into the

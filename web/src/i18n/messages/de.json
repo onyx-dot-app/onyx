@@ -12556,6 +12556,9 @@
           "runningCommand": {
             "label": "Befehl wird ausgeführt..."
           },
+          "runningProgram": {
+            "label": "{program} wird ausgeführt..."
+          },
           "editingFiles": {
             "label": "Dateien werden bearbeitet..."
           },
@@ -12564,48 +12567,6 @@
           },
           "browsing": {
             "label": "Webseiten werden aufgerufen..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "Arbeitet daran...",
-              "done": "Arbeit erledigt"
-            },
-            "crunchingDetails": {
-              "working": "Wertet die Details aus...",
-              "done": "Details ausgewertet"
-            },
-            "connectingDots": {
-              "working": "Verbindet die Punkte...",
-              "done": "Punkte verbunden"
-            },
-            "runningNumbers": {
-              "working": "Rechnet nach...",
-              "done": "Nachgerechnet"
-            },
-            "fillingGaps": {
-              "working": "Füllt die Lücken...",
-              "done": "Lücken gefüllt"
-            },
-            "sortingThingsOut": {
-              "working": "Sortiert die Dinge...",
-              "done": "Dinge sortiert"
-            },
-            "gatheringPieces": {
-              "working": "Sammelt die Teile...",
-              "done": "Teile gesammelt"
-            },
-            "workingThroughIt": {
-              "working": "Arbeitet es durch...",
-              "done": "Durchgearbeitet"
-            },
-            "ironingOutDetails": {
-              "working": "Feilt an den Details...",
-              "done": "Details ausgefeilt"
-            },
-            "roundingThingsOut": {
-              "working": "Rundet es ab...",
-              "done": "Abgerundet"
-            }
           }
         },
         "internalSearch": {
@@ -12633,8 +12594,11 @@
             "between": "von {start} bis {end}"
           }
         },
-        "interruptedThinking": {
-          "label": "Unterbrochenes Nachdenken"
+        "stoppedDuration": {
+          "label": "Von dir nach {duration} gestoppt"
+        },
+        "stoppedUnknownDuration": {
+          "label": "Du hast diese Antwort gestoppt"
         },
         "memory": {
           "default": {
@@ -12756,11 +12720,11 @@
         "stepsButton": {
           "label": "{count, plural, one {# Schritt} other {# Schritte}}"
         },
-        "thoughtDuration": {
-          "label": "Hat {duration} nachgedacht"
+        "workedDuration": {
+          "label": "Hat {duration} gearbeitet"
         },
-        "thoughtUnknownDuration": {
-          "label": "Hat einige Zeit nachgedacht"
+        "workedUnknownDuration": {
+          "label": "Hat gearbeitet"
         },
         "toggleRow": {
           "ariaLabel": "Zeitleiste umschalten"

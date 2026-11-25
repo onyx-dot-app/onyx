@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import { Line, Presence, Text } from "@opal/components";
 import { SvgSparkle } from "@opal/icons";
 import { formatDurationSeconds } from "@opal/time";
@@ -49,8 +49,6 @@ export interface RunCardProps<S extends RunCardStep> {
   streamingStartTime?: number;
   /** The server's duration, shown for a run that did not work here. */
   durationSeconds?: number;
-  /** The finished header's text, in place of the duration. */
-  doneText?: string | RichStr;
   /** The header's icon while the run works and once it is done. */
   icon?: IconFunctionComponent;
   /**
@@ -78,7 +76,6 @@ export function RunCard<S extends RunCardStep>({
   autoCollapse = false,
   streamingStartTime,
   durationSeconds,
-  doneText,
   icon = SvgSparkle,
   appear = true,
   startFolded = false,
@@ -149,16 +146,18 @@ export function RunCard<S extends RunCardStep>({
   const visible = steps.length > 0 || isRunning;
   const foldable = steps.length > 0;
 
+  const duration = finishedSeconds
+    ? formatDurationSeconds(finishedSeconds)
+    : null;
   const headerTitle = isRunning
     ? workingText
     : stopped
-      ? t("interruptedThinking.label")
-      : (doneText ??
-        (finishedSeconds
-          ? t("thoughtDuration.label", {
-              duration: formatDurationSeconds(finishedSeconds),
-            })
-          : t("thoughtUnknownDuration.label")));
+      ? duration
+        ? t("stoppedDuration.label", { duration })
+        : t("stoppedUnknownDuration.label")
+      : duration
+        ? t("workedDuration.label", { duration })
+        : t("workedUnknownDuration.label");
 
   return (
     <Presence show={visible} appear={arrivedLive} grow>

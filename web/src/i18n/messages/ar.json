@@ -12556,6 +12556,9 @@
           "runningCommand": {
             "label": "جارٍ تشغيل الأمر..."
           },
+          "runningProgram": {
+            "label": "جارٍ تشغيل {program}..."
+          },
           "editingFiles": {
             "label": "جارٍ تعديل الملفات..."
           },
@@ -12564,48 +12567,6 @@
           },
           "browsing": {
             "label": "جارٍ تصفح صفحات الويب..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "جارٍ العمل...",
-              "done": "تم إنجاز العمل"
-            },
-            "crunchingDetails": {
-              "working": "جارٍ تدقيق التفاصيل...",
-              "done": "تم تدقيق التفاصيل"
-            },
-            "connectingDots": {
-              "working": "جارٍ ربط النقاط...",
-              "done": "تم ربط النقاط"
-            },
-            "runningNumbers": {
-              "working": "جارٍ حساب الأرقام...",
-              "done": "تم حساب الأرقام"
-            },
-            "fillingGaps": {
-              "working": "جارٍ سد الثغرات...",
-              "done": "تم سد الثغرات"
-            },
-            "sortingThingsOut": {
-              "working": "جارٍ ترتيب الأمور...",
-              "done": "تم ترتيب الأمور"
-            },
-            "gatheringPieces": {
-              "working": "جارٍ جمع القطع...",
-              "done": "تم جمع القطع"
-            },
-            "workingThroughIt": {
-              "working": "جارٍ العمل على ذلك...",
-              "done": "تم العمل على ذلك"
-            },
-            "ironingOutDetails": {
-              "working": "جارٍ ضبط التفاصيل...",
-              "done": "تم ضبط التفاصيل"
-            },
-            "roundingThingsOut": {
-              "working": "جارٍ استكمال الصورة...",
-              "done": "تم استكمال الصورة"
-            }
           }
         },
         "internalSearch": {
@@ -12633,8 +12594,11 @@
             "between": "من {start} إلى {end}"
           }
         },
-        "interruptedThinking": {
-          "label": "تفكير متقطع"
+        "stoppedDuration": {
+          "label": "أوقفته بعد {duration}"
+        },
+        "stoppedUnknownDuration": {
+          "label": "أوقفت هذا الرد"
         },
         "memory": {
           "default": {
@@ -12756,11 +12720,11 @@
         "stepsButton": {
           "label": "{count, plural, one {خطوة واحدة} other {# خطوات}}"
         },
-        "thoughtDuration": {
-          "label": "فكّر لمدة {duration}"
+        "workedDuration": {
+          "label": "عمل لمدة {duration}"
         },
-        "thoughtUnknownDuration": {
-          "label": "فكّر لبعض الوقت"
+        "workedUnknownDuration": {
+          "label": "عمل"
         },
         "toggleRow": {
           "ariaLabel": "تبديل الخط الزمني"
