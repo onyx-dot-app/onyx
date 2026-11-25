@@ -222,6 +222,7 @@ test("a multi-select question takes several options and a note", async () => {
 });
 
 test("a saved question that repeats a label sends that label once", async () => {
+  const consoleError = jest.spyOn(console, "error");
   const fetchSpy = respond(200, {
     question_request_id: "question-4",
     continuation,
@@ -259,6 +260,8 @@ test("a saved question that repeats a label sends that label once", async () => 
       { question_id: "cadence", option_labels: ["Weekly"], user_note: null },
     ],
   });
+  // Each option row has its own React key.
+  expect(consoleError).not.toHaveBeenCalled();
 });
 
 test("each checkbox of a multi-select question is a tab stop that Space or Enter toggles", async () => {

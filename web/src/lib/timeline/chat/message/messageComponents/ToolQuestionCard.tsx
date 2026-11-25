@@ -390,7 +390,8 @@ function QuestionOptions({
           const isSelected = selected.includes(option.label);
           return (
             <SelectCard
-              key={option.label}
+              // A saved question can repeat a label.
+              key={`${index}-${option.label}`}
               ref={(element: HTMLElement | null) => {
                 refs.current[index] =
                   element instanceof HTMLDivElement ? element : null;
