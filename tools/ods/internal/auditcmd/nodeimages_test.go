@@ -50,6 +50,12 @@ func TestNodeImagesCommand(t *testing.T) {
 	}
 	writeFixture(t, dir, "Dockerfile", "FROM "+image+"\n")
 	gittest.Git(t, dir, "add", "Dockerfile")
+	pinned := image
+	image = "node:24@sha256:" + strings.Repeat("b", 64)
+	if out, err := run(); err == nil || out != "" || !strings.Contains(err.Error(), "absent") {
+		t.Fatalf("missing web digest: output=%q err=%v", out, err)
+	}
+	image = pinned
 	bin := fakeBinDir(t)
 	docker := writeFakeCommand(t, bin, "docker", `[ -n "$TEST_NODE_VERSION" ] || exit 1
 echo "$TEST_NODE_VERSION"`)
