@@ -75,23 +75,25 @@ func nodeRuntimeReport(runtimes []nodeRuntime, advisories map[string]nodeAdvisor
 	if len(runtimes) == 0 || len(advisories) == 0 || len(releases) == 0 {
 		return nil, fmt.Errorf("missing Node runtime inventory, advisory feed or release feed")
 	}
-	published := map[string]bool{}
+	published := map[string]*semver.Version{}
+	lines := map[string][]*semver.Version{}
 	floors := map[string]*semver.Version{}
 	for _, release := range releases {
 		parts := stableNodeRelease.FindStringSubmatch(release.Version)
 		if parts == nil {
 			continue
 		}
-		published[release.Version] = true
-		if release.Security {
-			v, err := semver.NPM.Parse(release.Version[1:])
-			if err != nil {
-				return nil, err
-			}
-			if prev := floors[parts[1]]; prev == nil || v.Compare(prev) > 0 {
-				floors[parts[1]] = v
-			}
+		v, err := semver.NPM.Parse(release.Version[1:])
+		if err != nil {
+			return nil, err
 		}
+		published[release.Version] = v
+		major := parts[1]
+		lines[major] = append(lines[major], v)
+		if prev := floors[major]; release.Security && (prev == nil || v.Compare(prev) > 0) {
+			floors[major] = v
+		}
+
 	}
 	if len(floors) == 0 {
 		return nil, fmt.Errorf("no stable security releases in Node release feed")
@@ -99,14 +101,11 @@ func nodeRuntimeReport(runtimes []nodeRuntime, advisories map[string]nodeAdvisor
 	result := &Result{ScannedPackages: []ScannedPackage{{Ecosystem: "Node.js", Package: "node"}}}
 	for _, runtime := range runtimes {
 		parts := stableNodeRelease.FindStringSubmatch(runtime.Version)
-		if parts == nil || !published[runtime.Version] || runtime.Image == "" || len(runtime.Consumers) == 0 {
+		v := published[runtime.Version]
+		if parts == nil || v == nil || runtime.Image == "" || len(runtime.Consumers) == 0 {
 			return nil, fmt.Errorf("incomplete or unknown Node runtime: %+v", runtime)
 		}
-		v, err := semver.NPM.Parse(runtime.Version[1:])
-		if err != nil {
-			return nil, err
-		}
-		findings, err := nodeAdvisoryFindings(v, advisories)
+		findings, err := nodeAdvisoryFindings(v, lines[parts[1]], advisories)
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +133,7 @@ func nodeRuntimeReport(runtimes []nodeRuntime, advisories map[string]nodeAdvisor
 	return result, nil
 }
 
-func nodeAdvisoryFindings(version *semver.Version, advisories map[string]nodeAdvisory) ([]Finding, error) {
+func nodeAdvisoryFindings(version *semver.Version, releases []*semver.Version, advisories map[string]nodeAdvisory) ([]Finding, error) {
 	var findings []Finding
 	for key, a := range advisories {
 		if len(a.Platforms) > 0 && !slices.Contains(a.Platforms, "all") && !slices.Contains(a.Platforms, "linux") {
@@ -165,6 +164,16 @@ func nodeAdvisoryFindings(version *semver.Version, advisories map[string]nodeAdv
 				return nil, fmt.Errorf("invalid Node advisory CVE %q", cve)
 			}
 		}
+		var firstFix *semver.Version
+		for _, release := range releases {
+			if release.Compare(version) > 0 && patched.MatchVersion(release) && (firstFix == nil || release.Compare(firstFix) < 0) {
+				firstFix = release
+			}
+		}
+		var fixedIn string
+		if firstFix != nil {
+			fixedIn = firstFix.String()
+		}
 		ids := a.CVEs
 		if len(ids) == 0 {
 			ids = []string{"NODE-CORE-" + key}
@@ -175,7 +184,7 @@ func nodeAdvisoryFindings(version *semver.Version, advisories map[string]nodeAdv
 		}
 		for _, id := range ids {
 			findings = append(findings, Finding{
-				ID: id, Title: title, Severity: ParseSeverity(a.Severity),
+				ID: id, Title: title, FixedIn: fixedIn, Severity: ParseSeverity(a.Severity),
 				URL: a.URL, Source: "node-security-wg",
 			})
 		}

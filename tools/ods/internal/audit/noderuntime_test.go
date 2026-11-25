@@ -20,6 +20,11 @@ func TestNodeRuntimeReport(t *testing.T) {
 		if err != nil || len(result.Blocking) != tc.want || len(result.ScannedPackages) != 1 {
 			t.Fatalf("%s: got %+v, %v", tc.version, result, err)
 		}
+		for _, f := range result.Blocking {
+			if f.ID == "CVE-2099-12345" && f.FixedIn != "24.22.1" {
+				t.Fatalf("got fixed version %q, want 24.22.1", f.FixedIn)
+			}
+		}
 	}
 	runtimes := []nodeRuntime{{nodeImagePin{"node@fixture", []string{"web/Dockerfile"}}, "v24.22.3"}}
 	if _, err := nodeRuntimeReport(runtimes, nil, releases); err == nil {
