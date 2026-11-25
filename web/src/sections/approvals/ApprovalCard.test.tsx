@@ -248,12 +248,25 @@ describe("decided", () => {
     ["approved", "Approved: Send message in Slack"],
     ["rejected", "Not approved: Send message in Slack"],
     ["expired", "Timed out: Send message in Slack"],
+    ["disabled", "Disabled: Send message in Slack"],
     ["closed", "No longer waiting: Send message in Slack"],
-  ] as const)("leaves a one-line record of a %s request", (status, text) => {
-    renderCard({ status });
+  ] as const)(
+    "leaves a %s request as a closed step that opens onto its details",
+    async (status, text) => {
+      const user = setupUser();
+      renderCard({ status });
 
-    expect(screen.getByRole("status")).toHaveTextContent(text);
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByText("#general")).not.toBeInTheDocument();
-  });
+      expect(screen.getByRole("status")).toHaveTextContent(text);
+      expect(
+        screen.queryByRole("button", { name: copy.reject.ariaLabel })
+      ).not.toBeInTheDocument();
+      const toggle = screen.getByRole("button", { name: `Expand ${text}` });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+      await user.click(toggle);
+
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByText("#general")).toBeVisible();
+    }
+  );
 });

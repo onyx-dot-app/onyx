@@ -108,8 +108,10 @@
   from their background subagents alike. A multi-model card names its model;
   a subagent's card (`agent_name` set) names the subagent. The request has no
   deadline. The user approves once, approves for the chat, or rejects; the
-  card then becomes a one-line record of the outcome, or of "No longer
-  waiting" when the server returns 409 or 404. The record shows in the region
+  card then becomes a record of the outcome, or of "No longer
+  waiting" when the server returns 409 or 404. The record is a closed
+  timeline step (`RunStep`) titled with the outcome; it opens onto the
+  request details. The record shows in the region
   until the resolution packet arrives; from then on the reply's timeline
   shows it next to its tool call (`AgentMessage:buildSectionSegments`), and
   a reload replays it there. While the turn waits, its stream ends with
@@ -182,7 +184,10 @@
   Other clears the option and picking an option clears Other. A question
   with `multi_select` reads "Choose all that apply." and shows its options
   as checkboxes; the user toggles any of them and can also write in Other.
-  The record joins several chosen options as a list. The user submits on the last page,
+  The record joins several chosen options as a list. The record is a closed
+  timeline step titled with each "Header: answer", joined by " · ", or with
+  the outcome when the card has no answers; it opens onto each question and
+  its answer. The user submits on the last page,
   where Submit replaces Next. Submit stays disabled, with a hint that
   names the unanswered questions, until each question has an answer.
   Waiting cards show in their own region after the approval
