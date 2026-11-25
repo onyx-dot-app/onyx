@@ -2317,6 +2317,55 @@ async def test_a_command_grant_covers_the_same_action_only(
 
 
 @pytest.mark.asyncio
+async def test_a_command_grant_does_not_cover_an_action_that_asks_since(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The grant covers the upload; the message post starts to ask before
+    the recheck, so the request is refused."""
+    upload, post = (a.action_type for a in reversed(_MATCH_MULTI_ASK.actions))
+    resolutions = 0
+
+    def resolve(
+        _db: Session,
+        *,
+        recognized_actions: AllMatchedActions,
+        **_kwargs: object,
+    ) -> dict[str, ActionPolicy]:
+        nonlocal resolutions
+        resolutions += 1
+        return {
+            action: ActionPolicy.ALWAYS
+            if resolutions == 1 and action == post
+            else ActionPolicy.ASK
+            for action in _defaults(recognized_actions)
+        }
+
+    addon, cache = _command_gate(monkeypatch, match=_MATCH_MULTI_ASK)
+    monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
+    approval_cache.grant_command_actions(_COMMAND, 42, [upload], cache)
+    inserted = _spy_approval_insert(monkeypatch)
+    monkeypatch.setattr(
+        gate.action_approval,
+        "get_action_approval",
+        lambda _db, _id: MagicMock(
+            session_id=None,
+            chat_session_id=UUID(_TAG_UUID),
+            command_id=_COMMAND,
+            decision=ApprovalDecision.APPROVED,
+            decided_via=ApprovalDecidedVia.COMMAND_GRANT,
+        ),
+    )
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    assert inserted[0]["decided_via"] == ApprovalDecidedVia.COMMAND_GRANT
+    _assert_403(flow, SandboxProxyError.NOT_AUTHORIZED)
+    assert not spy.dispatched
+
+
+@pytest.mark.asyncio
 async def test_a_command_grant_never_covers_a_request_that_always_asks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

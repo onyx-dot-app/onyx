@@ -581,8 +581,10 @@ class GateAddon:
             ):
                 flow.response = http_403(SandboxProxyError.NOT_AUTHORIZED)
                 return None
+            # A grant covers only the actions that asked when it was given.
             if (
-                approval.decided_via is ApprovalDecidedVia.SESSION_GRANT
+                approval.decided_via
+                in (ApprovalDecidedVia.SESSION_GRANT, ApprovalDecidedVia.COMMAND_GRANT)
                 and current_actions.governing_action.policy is ActionPolicy.ASK
                 and not self._session_grant(db, ctx, current_actions)
             ):
