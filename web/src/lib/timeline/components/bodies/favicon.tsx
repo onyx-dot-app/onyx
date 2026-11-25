@@ -104,6 +104,8 @@ export function faviconIcon(url: string): IconFunctionComponent {
         alt=""
         width={size}
         height={size}
+        // The lookup never tells Google which deployment asked.
+        referrerPolicy="no-referrer"
         className={cn("shrink-0 rounded-full", className)}
         onError={() => setFailed(true)}
       />
