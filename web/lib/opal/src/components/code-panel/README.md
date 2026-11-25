@@ -48,10 +48,12 @@ lines").
 
 ### `CodePanel.Output`
 
-| Prop       | Type      | Default | Description                  |
-| ---------- | --------- | ------- | ---------------------------- |
-| `children` | `string`  | —       | The output text              |
-| `error`    | `boolean` | `false` | Red text on a red tint       |
+| Prop       | Type      | Default | Description                                                     |
+| ---------- | --------- | ------- | --------------------------------------------------------------- |
+| `children` | `string`  | —       | The output text                                                 |
+| `error`    | `boolean` | `false` | Red text on a red tint                                          |
+| `loading`  | `boolean` | `false` | The output is still awaited: a line shimmer in place of the text |
+| `follow`   | `boolean` | `false` | Keeps the newest output in view as it streams, until the user scrolls up |
 
 ### `CodePanel.Footer`
 

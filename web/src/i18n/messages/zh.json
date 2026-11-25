@@ -12245,9 +12245,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName} 无法连接到其服务器"
-        },
-        "waitingIndicator": {
-          "text": "正在等待响应..."
         }
       },
       "customToolAuth": {
@@ -12571,7 +12568,7 @@
             "status": "正在读取..."
           },
           "read": {
-            "label": "已读取"
+            "label": "已读文档"
           },
           "header": {
             "default": "正在搜索内部文档",
@@ -12622,9 +12619,6 @@
           },
           "querying": {
             "status": "正在查询知识库..."
-          },
-          "listed": {
-            "label": "{count, plural, one {已列出 # 个文档} other {已列出 # 个文档}}"
           },
           "query": {
             "table": {
@@ -12685,12 +12679,6 @@
           },
           "ran": {
             "status": "已运行 Python"
-          },
-          "runningCode": {
-            "label": "正在运行代码..."
-          },
-          "writingCode": {
-            "status": "正在编写代码..."
           }
         },
         "reasoning": {
@@ -12749,9 +12737,6 @@
             "noSession": {
               "status": "{kind, select, send {{phase, select, running {正在向会话发送输入...} failed {无法向会话发送输入} canceled {已取消} done {已向会话发送输入} other {已向会话发送输入}}} check {{phase, select, running {正在检查会话...} failed {无法检查会话} canceled {已取消} done {已检查会话} other {已检查会话}}} other {会话}}"
             }
-          },
-          "output": {
-            "title": "输出"
           },
           "exitCode": {
             "label": "退出代码 {exitCode}"

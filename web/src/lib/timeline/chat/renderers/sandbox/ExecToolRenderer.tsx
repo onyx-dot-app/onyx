@@ -1,6 +1,5 @@
-import { type ComponentProps, useMemo } from "react";
+import { type ComponentProps, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Section } from "@opal/layouts";
 import { CodePanel, Text } from "@opal/components";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
@@ -11,7 +10,6 @@ import {
   WriteStdinStart,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
-import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import {
   SandboxCallContent,
@@ -98,26 +96,46 @@ export function ExecToolRenderer({
             phase,
           });
 
+  // The output shares the command's panel: it streams into the output band,
+  // which waits with a loading shimmer until the first output arrives. A
+  // finished command with no output says so, and its exit code closes the
+  // panel.
+  const panelOutput =
+    output ||
+    (end !== null && error === null && !end.session_id
+      ? t("sandbox.noOutput.text")
+      : "");
+  const outputLoading = !isComplete && !output;
+  // Output that streamed in keeps following through the final output, which
+  // can add lines; a call that was already done when shown stays at its top.
+  const [followOutput] = useState(!isComplete);
+  const exitCode =
+    end !== null && end.exit_code !== null
+      ? t("sandbox.exitCode.label", { exitCode: end.exit_code })
+      : undefined;
+
   const content = (
     <SandboxCallContent renderType={renderType}>
       {start.type === PacketType.EXEC_COMMAND_START ? (
-        <Section gap={1} alignItems="stretch" height="fit">
-          <CommandBody
-            command={start.cmd}
-            language="bash"
-            prompt="$ "
-            output=""
-            emptyLabel=""
-          />
-          {start.workdir && (
-            <Text font="secondary-body" color="text-03">
-              {t("sandbox.exec.workdir.label", { workdir: start.workdir })}
-            </Text>
-          )}
-        </Section>
+        <CommandBody
+          command={start.cmd}
+          language="bash"
+          prompt="$ "
+          // Where it ran, when the call names a directory.
+          comment={
+            start.workdir
+              ? t("sandbox.exec.workdir.label", { workdir: start.workdir })
+              : undefined
+          }
+          output={panelOutput}
+          outputLoading={outputLoading}
+          outputFollow={followOutput}
+          emptyLabel=""
+          footer={exitCode}
+        />
       ) : (
-        start.chars && (
-          <CodePanel>
+        <CodePanel>
+          {start.chars && (
             <CodePanel.Lines
               copyText={start.chars}
               lines={[
@@ -133,28 +151,18 @@ export function ExecToolRenderer({
                 },
               ]}
             />
-          </CodePanel>
-        )
+          )}
+          {panelOutput ? (
+            <CodePanel.Output follow={followOutput}>
+              {panelOutput}
+            </CodePanel.Output>
+          ) : (
+            outputLoading && <CodePanel.Output loading />
+          )}
+          {exitCode && <CodePanel.Footer title={exitCode} />}
+        </CodePanel>
       )}
 
-      {output && (
-        <ExpandableTextDisplay
-          title={t("sandbox.output.title")}
-          content={output}
-          maxLines={6}
-          isStreaming={!isComplete}
-          monospace
-        />
-      )}
-
-      {end !== null && end.exit_code !== null && (
-        <Text
-          font="secondary-body"
-          color={end.exit_code === 0 ? "text-03" : "status-error-05"}
-        >
-          {t("sandbox.exitCode.label", { exitCode: end.exit_code })}
-        </Text>
-      )}
       {end?.completion && end.completion !== "exited" && (
         <Text font="secondary-body" color="status-warning-05">
           {t("sandbox.completion.label", { completion: end.completion })}
@@ -171,11 +179,6 @@ export function ExecToolRenderer({
         </Text>
       )}
       {error !== null && <SandboxCallError error={error} />}
-      {end !== null && !output && error === null && !end.session_id && (
-        <Text font="secondary-body" color="text-04">
-          {t("sandbox.noOutput.text")}
-        </Text>
-      )}
     </SandboxCallContent>
   );
 

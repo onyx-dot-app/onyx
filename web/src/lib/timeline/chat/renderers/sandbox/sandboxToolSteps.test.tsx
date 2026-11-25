@@ -168,9 +168,9 @@ test("a command shows its output while it runs and how it ended", async () => {
     ).toBeGreaterThan(0);
     await openRun();
     expect(view.container).toHaveTextContent("$ make test");
-    // While it runs, only the last lines of the output are in the page.
-    expect(screen.getByText(/test_8 ok/)).toBeInTheDocument();
-    expect(view.container).not.toHaveTextContent("collecting");
+    // While it runs, the whole output streams in; the panel follows its
+    // newest line.
+    expect(screen.getByText(/collecting[\s\S]*test_8 ok/)).toBeInTheDocument();
 
     // The saved output is what the model saw, cut by tokens; it replaces the
     // live preview.
@@ -194,9 +194,8 @@ test("a command shows its output while it runs and how it ended", async () => {
     );
     await expandTimeline();
     expect(screen.getByText("Ran command")).toBeInTheDocument();
-    expect(
-      screen.getByText("In /home/onyx/workspaces/abc")
-    ).toBeInTheDocument();
+    // Where it ran is a comment above the command.
+    expect(view.container).toHaveTextContent("# in /home/onyx/workspaces/abc");
     expect(
       screen.getByText(/collecting\s+…12 tokens truncated…\s+1 failed/)
     ).toBeInTheDocument();
@@ -361,13 +360,15 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
   try {
     await expandTimeline();
     expect(screen.getByText("Edited 2 files")).toBeInTheDocument();
-    expect(screen.getByText("new.py")).toBeInTheDocument();
+    // Each patch shows each file's diff under a header with its path.
+    expect(screen.getAllByText("new.py")).toHaveLength(2);
+    expect(screen.getAllByText("old.py → moved.py")).toHaveLength(2);
+    expect(screen.getAllByText("print('hi')")).toHaveLength(2);
+    expect(screen.getAllByText("a = 2")).toHaveLength(2);
+    // The applied patch lists the files it changed, with their change.
     expect(
-      screen.getByText(wholeText("old.py → moved.py"))
+      screen.getByText("A new.py M old.py → moved.py")
     ).toBeInTheDocument();
-    // The card lays out only the head of each patch.
-    expect(screen.getAllByText(/\+print\('hi'\)/)).toHaveLength(2);
-    expect(screen.queryByText(/\+a = 2/)).not.toBeInTheDocument();
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(
       screen.getByText("Failed to find expected lines in old.py")
@@ -435,7 +436,7 @@ test("a write shows its progress while it streams, then the replayed card", asyn
   );
 });
 
-test("a patch names its files while it streams, then matches its replay", async () => {
+test("a patch counts its files while it streams, then matches its replay", async () => {
   const call = at({ turn_index: 0, tab_index: 0 });
   const streaming = [
     call(fileProgress("apply_patch", [])),
@@ -461,9 +462,8 @@ test("a patch names its files while it streams, then matches its replay", async 
   const view = render(renderMessage(streaming));
   try {
     await screen.findAllByText("Patching 2 files…");
-    await openRun();
-    expect(screen.getByText("new.py")).toBeInTheDocument();
-    expect(screen.getByText("old.py")).toBeInTheDocument();
+    // The patch, with its file headers, arrives with the start packet.
+    expect(screen.queryByText("new.py")).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }
@@ -558,20 +558,17 @@ test("sandbox text is isolated in markup, and paths show without bidi controls",
       expect(code).toHaveAttribute("dir", "ltr");
     }
     await openRun();
-    expect(screen.getByText("ab.py", { selector: "span" })).toHaveAttribute(
+    // The patch's file header and the published file's chip.
+    expect(screen.getByText("ab.py", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("notes")).toBeInTheDocument();
+    // The patch and the error keep the sandbox's text, inside an isolate.
+    expect(screen.getByText("x").closest("[dir]")).toHaveAttribute(
       "dir",
       "ltr"
     );
-    expect(screen.getByText("out/ab.py")).toHaveAttribute("dir", "ltr");
-    expect(screen.getByText("notes")).toHaveAttribute("dir", "auto");
-    // The patch and the error keep the sandbox's text, inside an isolate.
     expect(
-      screen.getByText(`*** Add File: ${path}`).closest("[dir]")
+      screen.getByText(`Could not write ${path}`).closest("[dir]")
     ).toHaveAttribute("dir", "ltr");
-    const error = screen.getByText(`Could not write ${path}`);
-    expect(error).toHaveAttribute("dir", "ltr");
-    // The error's paragraph keeps the page's direction.
-    expect(error.closest("p")).not.toHaveAttribute("dir");
   } finally {
     view.unmount();
   }
@@ -633,9 +630,9 @@ test("a patch whose call fails after its progress shows only the error", async (
     await expandTimeline();
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(screen.getByText("Permission denied")).toBeInTheDocument();
-    // The progress file list is gone.
-    expect(screen.queryByText("new.py")).not.toBeInTheDocument();
-    expect(screen.queryByText("old.py")).not.toBeInTheDocument();
+    // The progress title is gone; the patch names its files.
+    expect(screen.queryByText(/Patching/)).not.toBeInTheDocument();
+    expect(screen.getByText("new.py")).toBeInTheDocument();
   } finally {
     view.unmount();
   }
@@ -696,17 +693,15 @@ test("parallel edit and write calls render as separate steps", async () => {
   );
   try {
     await expandTimeline();
-    // Each call is its own step with its own patch head.
-    expect(screen.getAllByText(/\+print\('hi'\)/)).toHaveLength(2);
+    // Each call is its own step with its own patch.
+    expect(screen.getAllByText("print('hi')")).toHaveLength(2);
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }
 });
 
-test("a cut patch head keeps a line past the view when the next line is blank", async () => {
-  // A blank seventh line rendered as nothing, so the card saw no overflow
-  // and hid the expand button.
+test("a patch shows each file's whole diff, blank lines included", async () => {
   const patch = [
     "*** Begin Patch",
     "*** Update File: a.py",
@@ -737,9 +732,9 @@ test("a cut patch head keeps a line past the view when the next line is blank", 
   );
   try {
     await expandTimeline();
-    const lines = screen.getByText("*** Begin Patch").parentElement?.children;
-    expect(lines).toHaveLength(7);
-    expect(screen.queryByText(/three/)).not.toBeInTheDocument();
+    // A bare hunk header is dropped; every other line is a row.
+    expect(screen.getByText("TWO").closest("tbody")?.children).toHaveLength(5);
+    expect(screen.getByText("three")).toBeInTheDocument();
   } finally {
     view.unmount();
   }
@@ -800,7 +795,7 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
     expect(screen.getByText("3 passed")).toBeInTheDocument();
     expect(screen.getByText("Exit code 0")).toBeInTheDocument();
     expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
-    expect(screen.getByText("gone.py")).toBeInTheDocument();
+    expect(screen.getByText("D gone.py")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/await run/);
   } finally {
     view.unmount();
@@ -1072,11 +1067,9 @@ test("published files show in the timeline and as download cards after the answe
     await expandTimeline();
     expect(screen.getAllByText("Published 1 file")).toHaveLength(2);
     expect(screen.getByText("The quarterly numbers")).toBeInTheDocument();
-    // The second call's row and its card
+    // Each call's file chip, and its card
+    expect(screen.getAllByText("Q3 report")).toHaveLength(2);
     expect(screen.getAllByText("report.csv")).toHaveLength(2);
-    expect(
-      screen.getAllByText("/home/onyx/workspaces/abc/out/report.csv")
-    ).toHaveLength(2);
     expect(screen.getByText("Publish failed")).toBeInTheDocument();
     expect(screen.getByText("missing.pdf is not a file")).toBeInTheDocument();
     expect(screen.getByText("missing.pdf")).toBeInTheDocument();

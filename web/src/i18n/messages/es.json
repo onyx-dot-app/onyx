@@ -12245,9 +12245,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName} no pudo conectar con su servidor"
-        },
-        "waitingIndicator": {
-          "text": "Esperando respuesta..."
         }
       },
       "customToolAuth": {
@@ -12571,7 +12568,7 @@
             "status": "Leyendo..."
           },
           "read": {
-            "label": "Leído"
+            "label": "Documentos leídos"
           },
           "header": {
             "default": "Buscando en documentos internos",
@@ -12622,9 +12619,6 @@
           },
           "querying": {
             "status": "Consultando la base de conocimiento..."
-          },
-          "listed": {
-            "label": "{count, plural, one {# documento listado} other {# documentos listados}}"
           },
           "query": {
             "table": {
@@ -12685,12 +12679,6 @@
           },
           "ran": {
             "status": "Python ejecutado"
-          },
-          "runningCode": {
-            "label": "Ejecutando código..."
-          },
-          "writingCode": {
-            "status": "Escribiendo código..."
           }
         },
         "reasoning": {
@@ -12749,9 +12737,6 @@
             "noSession": {
               "status": "{kind, select, send {{phase, select, running {Enviando entrada a la sesión...} failed {No se pudo enviar la entrada a la sesión} canceled {Cancelado} done {Entrada enviada a la sesión} other {Entrada enviada a la sesión}}} check {{phase, select, running {Revisando la sesión...} failed {No se pudo revisar la sesión} canceled {Cancelado} done {Sesión revisada} other {Sesión revisada}}} other {Sesión}}"
             }
-          },
-          "output": {
-            "title": "Salida"
           },
           "exitCode": {
             "label": "Código de salida {exitCode}"

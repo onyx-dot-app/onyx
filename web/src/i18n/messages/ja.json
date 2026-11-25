@@ -12245,9 +12245,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName} はサーバーに接続できませんでした"
-        },
-        "waitingIndicator": {
-          "text": "レスポンスを待っています..."
         }
       },
       "customToolAuth": {
@@ -12571,7 +12568,7 @@
             "status": "読み取り中..."
           },
           "read": {
-            "label": "読み込みました"
+            "label": "読んだドキュメント"
           },
           "header": {
             "default": "社内ドキュメントを検索中",
@@ -12622,9 +12619,6 @@
           },
           "querying": {
             "status": "ナレッジベースを照会中..."
-          },
-          "listed": {
-            "label": "{count, plural, one {# 件のドキュメントを一覧表示} other {# 件のドキュメントを一覧表示}}"
           },
           "query": {
             "table": {
@@ -12685,12 +12679,6 @@
           },
           "ran": {
             "status": "Python を実行しました"
-          },
-          "runningCode": {
-            "label": "コードを実行中..."
-          },
-          "writingCode": {
-            "status": "コードを作成中..."
           }
         },
         "reasoning": {
@@ -12749,9 +12737,6 @@
             "noSession": {
               "status": "{kind, select, send {{phase, select, running {セッションに入力を送信中...} failed {セッションに入力を送信できませんでした} canceled {キャンセルされました} done {セッションに入力を送信しました} other {セッションに入力を送信しました}}} check {{phase, select, running {セッションを確認中...} failed {セッションを確認できませんでした} canceled {キャンセルされました} done {セッションを確認しました} other {セッションを確認しました}}} other {セッション}}"
             }
-          },
-          "output": {
-            "title": "出力"
           },
           "exitCode": {
             "label": "終了コード {exitCode}"

@@ -14,38 +14,21 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { Text } from "@opal/components";
-import { Section } from "@opal/layouts";
-import { SvgFilter, SvgServer } from "@opal/icons";
+import { SvgServer } from "@opal/icons";
 import { OnyxDocument } from "@/lib/search/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { HierarchyNodeSearchSummary } from "@/lib/hierarchy/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { SourceInfo } from "@/lib/timeline/components/bodies/SearchChipList";
+import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
 import {
-  SearchChipList,
-  SourceInfo,
-} from "@/lib/timeline/components/bodies/SearchChipList";
-import {
-  INITIAL_RESULTS_TO_SHOW,
-  RESULTS_PER_EXPANSION,
-} from "@/lib/timeline/chat/renderers/search/searchStateUtils";
-import {
-  PostgresQueryChip,
   postgresQueryChips,
   postgresQueryFolderId,
 } from "./postgresQueryChips";
 
 // A query has a handful of parts; show them all.
-const QUERY_CHIPS_TO_SHOW = 10;
-
-const chipToSourceInfo = (chip: PostgresQueryChip): SourceInfo => ({
-  id: chip.key,
-  title: chip.label,
-  sourceType: ValidSources.Web,
-  icon: SvgFilter,
-});
-
 const documentToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
   id: doc.document_id,
   title: doc.semantic_identifier || doc.document_id,
@@ -59,8 +42,9 @@ function sourceName(source: string): string {
 }
 
 /**
- * PostgresToolRenderer - Renders knowledge-base metadata query steps: the
- * query's parts as chips, then the documents the step listed.
+ * PostgresToolRenderer - Renders knowledge-base metadata query steps as
+ * internal search renders its steps (`RetrievalBody`): the query's parts,
+ * then the documents read.
  */
 export const PostgresToolRenderer: MessageRenderer<PostgresToolPacket, {}> = ({
   packets,
@@ -103,6 +87,10 @@ export const PostgresToolRenderer: MessageRenderer<PostgresToolPacket, {}> = ({
       ),
     [start, t, locale, folder?.title]
   );
+  // A count (or a count grouped by a field) answers with a number.
+  const query = start?.query ?? {};
+  const listsDocuments =
+    !(query.count === true || query.count === "true") && !query.group_by;
   const documents = useMemo(
     () =>
       packets.flatMap((packet) =>
@@ -133,43 +121,22 @@ export const PostgresToolRenderer: MessageRenderer<PostgresToolPacket, {}> = ({
     {
       icon: SvgServer,
       status: statusLabel,
-      supportsCollapsible: documents.length > 0,
+      supportsCollapsible: true,
       timelineLayout: "timeline",
-      // Nothing to open until the query or its documents arrive.
+      // The same body as internal search: the query's parts, then the
+      // documents read, with a shimmer until they arrive. Nothing to open
+      // until the query arrives.
       content:
         chips.length === 0 && documents.length === 0 ? null : (
-          <Section gap={0} alignItems="stretch" height="fit">
-            {chips.length > 0 && (
-              <SearchChipList
-                items={chips}
-                initialCount={QUERY_CHIPS_TO_SHOW}
-                expansionCount={QUERY_CHIPS_TO_SHOW}
-                getKey={(chip) => chip.key}
-                toSourceInfo={chipToSourceInfo}
-                showDetailsCard={false}
-                isQuery={true}
-              />
-            )}
-            {documents.length > 0 && (
-              <>
-                <Text as="p" font="main-ui-muted" color="text-04">
-                  {t("postgres.listed.label", { count: documents.length })}
-                </Text>
-                <SearchChipList
-                  items={documents}
-                  initialCount={INITIAL_RESULTS_TO_SHOW}
-                  expansionCount={RESULTS_PER_EXPANSION}
-                  getKey={(doc, index) => doc.document_id ?? `result-${index}`}
-                  toSourceInfo={documentToSourceInfo}
-                  onClick={(doc) => {
-                    if (doc.link) {
-                      window.open(doc.link, "_blank", "noopener,noreferrer");
-                    }
-                  }}
-                />
-              </>
-            )}
-          </Section>
+          <RetrievalBody
+            queries={chips.map((chip) => chip.label)}
+            // A count returns a number, not documents: it has no
+            // "Documents read" section, so no shimmer and no empty state.
+            results={
+              listsDocuments ? documents.map(documentToSourceInfo) : null
+            }
+            isComplete={isComplete}
+          />
         ),
     },
   ]);
