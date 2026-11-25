@@ -213,6 +213,7 @@ class AppActionTool(Tool):
             is_error=True,
             details=CustomToolCallSummary(
                 tool_name=self._name,
+                integration_id=self._settings.integration_id,
                 response_type="text",
                 tool_result=None,
                 error=CustomToolErrorInfo(
@@ -319,6 +320,7 @@ class AppActionTool(Tool):
             is_error=not response.ok,
             details=CustomToolCallSummary(
                 tool_name=self._name,
+                integration_id=self._settings.integration_id,
                 response_type=response_type,
                 tool_result=tool_result,
                 error=(
@@ -349,6 +351,7 @@ class AppConnectTool(Tool):
         integration_name: str,
         problem: ConnectionProblem,
     ) -> None:
+        self._integration_id = integration_id
         self._integration_name = integration_name
         # The user can sign in. If not, an admin must finish the setup.
         self._user_can_connect = problem.code is not ConnectionState.NOT_SET_UP
@@ -401,6 +404,7 @@ class AppConnectTool(Tool):
             is_error=True,
             details=CustomToolCallSummary(
                 tool_name=self._name,
+                integration_id=self._integration_id,
                 response_type="text",
                 tool_result=None,
                 error=CustomToolErrorInfo(

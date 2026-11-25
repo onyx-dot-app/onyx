@@ -277,3 +277,4 @@ def test_only_a_rejected_sign_in_asks_the_user_to_connect(
 
     assert isinstance(result.details, CustomToolCallSummary)
     assert (result.details.error is not None) is expected
+    assert result.details.integration_id == 7

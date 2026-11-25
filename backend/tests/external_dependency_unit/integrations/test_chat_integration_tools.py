@@ -597,6 +597,7 @@ def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
         )
         assert isinstance(result, ToolResult)
         assert isinstance(result.details, CustomToolCallSummary)
+        assert result.details.integration_id == integration.id
         assert result.details.error is not None
         # The chat shows the connect card only when the user can sign in.
         assert result.details.error.is_auth_error is user_can_connect
