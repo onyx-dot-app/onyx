@@ -1,0 +1,24 @@
+# A Samba Active Directory domain controller with one file share, for the
+# Windows file share (SMB) connector tests. See README.md.
+services:
+  samba:
+    build: ./samba
+    hostname: dc1
+    domainname: onyx.test
+    # Samba needs these to store NT access lists and to run its services.
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      SMB_TEST_REALM: ONYX.TEST
+      SMB_TEST_DOMAIN: ONYXTEST
+      SMB_TEST_PASSWORD: ${SMB_TEST_PASSWORD:-Onyx-Test-Passw0rd}
+    ports:
+      - "${SMB_TEST_PORT:-1445}:445"
+      - "${SMB_TEST_LDAPS_PORT:-1636}:636"
+      - "${SMB_TEST_LDAP_PORT:-1389}:389"
+      # Kerberos needs its standard port.
+      - "88:88"
+      - "88:88/udp"
+    volumes:
+      # The entrypoint writes the test authority's certificate here.
+      - ./.certs:/certs

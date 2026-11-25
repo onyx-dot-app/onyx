@@ -62,6 +62,7 @@ Get company data into the index, keep it fresh, and copy its permissions.
 | [outlook](components/connectors/outlook.md) | The Outlook connector indexes mail as one document per thread, shared across the mailboxes that hold it, plus optional calendar events. Each mailbox decides its part of a thread from its own copy, so mailbox walks share no state. |
 | [slack](components/connectors/slack.md) | The Slack connector indexes channel threads as one document per thread. It reads Slack only through its gateway, the one module that imports `slack_sdk` in the connector and its EE permission sync. |
 | [teams](components/connectors/teams.md) | The Microsoft Teams connector indexes channel threads, channel files, meeting transcripts and the days of meeting chats from one app credential. It reads channel messages through the Graph export API when the tenant allows it, and walks channel by channel when it does not. |
+| [smb](components/connectors/smb.md) | The Windows file share connector indexes the files of one SMB share, with `smb://<host>/<share>/<path>` as the document id. Every run walks the whole folder tree, because SMB has no recursive listing and no change feed. |
 
 ## Configuration surfaces
 
