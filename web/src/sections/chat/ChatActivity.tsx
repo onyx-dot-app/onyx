@@ -112,6 +112,7 @@ function AgentRow({ agent, onStop }: AgentRowProps) {
       rightChildren={
         finished !== null ? (
           <Text
+            as="p"
             font="secondary-body"
             color="text-03"
             wordWrap="whitespace-nowrap"
@@ -128,6 +129,7 @@ function AgentRow({ agent, onStop }: AgentRowProps) {
                     tick would flash */}
                 {startedAt !== undefined && (
                   <Text
+                    as="p"
                     font="secondary-body"
                     color="text-03"
                     wordWrap="whitespace-nowrap"
