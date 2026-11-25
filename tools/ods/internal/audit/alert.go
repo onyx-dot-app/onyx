@@ -45,7 +45,7 @@ const alertIssueLimit = 500
 // alertMarker is the hidden line ending a tracking issue body that ties it to
 // a package and records the advisory ids it has already alerted on. Keys can
 // hold spaces ("GitHub Actions/..."), so the key match is lazy.
-var alertMarker = regexp.MustCompile(`<!-- cve-alert:(.+?) ids=(\S*) -->`)
+var alertMarker = regexp.MustCompile(`<!-- cve-alert:(.+?) ids=(\S*)(?: images=(\S+))? -->`)
 
 // branchUnsafe matches runs of characters a fix branch name leaves out.
 var branchUnsafe = regexp.MustCompile(`[^A-Za-z0-9._/-]+`)
@@ -79,8 +79,8 @@ const (
 // tracking issue, a fix PR, and a Slack post.
 type Alert struct {
 	// ImageFamilies are the base families to refresh for this package.
-	ImageFamilies   []string `json:"image_families,omitempty"`
-	HasPinnedImages bool     `json:"has_pinned_images,omitempty"`
+	ImageFamilies []string `json:"image_families,omitempty"`
+	PinnedImages  []string `json:"pinned_images,omitempty"`
 	// PinnedImagesOnly routes image-only findings involving a pinned image to image triage.
 	PinnedImagesOnly bool       `json:"pinned_images_only,omitempty"`
 	Key              string     `json:"key"`
@@ -103,6 +103,7 @@ type trackedIssue struct {
 	URL     string
 	Key     string
 	IDs     []string
+	Images  []string
 	Pending bool
 }
 
@@ -350,7 +351,7 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 		}
 		// Aggregate the repair owners across all copies of this package.
 		if strings.Contains(f.Image, "@sha256:") {
-			a.HasPinnedImages = true
+			a.PinnedImages = appendUnique(a.PinnedImages, f.Image)
 			name, _, _ := strings.Cut(f.Image, "@")
 			name, _, _ = strings.Cut(filepath.Base(name), ":")
 			a.ImageFamilies = appendUnique(a.ImageFamilies, name)
@@ -388,11 +389,12 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 	alerts := make([]Alert, 0, len(keys))
 	for _, key := range keys {
 		a := byKey[key]
-		a.PinnedImagesOnly = a.HasPinnedImages && a.PinnedImagesOnly
+		a.PinnedImagesOnly = len(a.PinnedImages) > 0 && a.PinnedImagesOnly
 		a.Advisories = mergeLinked(a.Advisories)
 		sort.Strings(a.Versions)
 		sort.Strings(a.Manifests)
 		sort.Strings(a.ImageFamilies)
+		sort.Strings(a.PinnedImages)
 		for i := range a.Advisories {
 			sort.Strings(a.Advisories[i].Images)
 		}
@@ -484,7 +486,10 @@ func planAlerts(alerts []Alert, open []trackedIssue, covered map[string]bool) al
 		}
 		a.Issue, a.IssueURL = is.Number, is.URL
 		switch {
-		case hasNewAdvisory(a, is.IDs):
+		case hasNewAdvisory(a, is.IDs) || slices.ContainsFunc(a.PinnedImages, func(ref string) bool {
+			image, _, _ := strings.Cut(ref, "@")
+			return !slices.Contains(is.Images, image)
+		}):
 			a.Reason = AlertGrown
 			plan.Update = append(plan.Update, a)
 		case is.Pending:
@@ -569,6 +574,12 @@ func renderAlertBody(a Alert) string {
 	if len(a.Versions) > 0 {
 		fmt.Fprintf(&b, "\n**Installed:** %s\n", strings.Join(a.Versions, ", "))
 	}
+	if len(a.PinnedImages) > 0 {
+		b.WriteString("\n**Affected image pins:**\n")
+		for _, ref := range a.PinnedImages {
+			fmt.Fprintf(&b, "- `%s`\n", ref)
+		}
+	}
 	if len(a.Manifests) > 0 {
 		fmt.Fprintf(&b, "\n**Found in:**\n")
 		for _, m := range a.Manifests {
@@ -576,7 +587,16 @@ func renderAlertBody(a Alert) string {
 		}
 	}
 	b.WriteString("\nThis issue closes by itself once the finding is fixed or suppressed in the audit allowlist.\n\n")
-	fmt.Fprintf(&b, "<!-- cve-alert:%s ids=%s -->\n", a.Key, markerIDs(a))
+	fmt.Fprintf(&b, "<!-- cve-alert:%s ids=%s", a.Key, markerIDs(a))
+	if len(a.PinnedImages) > 0 {
+		var names []string
+		for _, ref := range a.PinnedImages {
+			name, _, _ := strings.Cut(ref, "@")
+			names = appendUnique(names, name)
+		}
+		fmt.Fprintf(&b, " images=%s", strings.Join(names, ","))
+	}
+	b.WriteString(" -->\n")
 	return b.String()
 }
 
@@ -603,6 +623,9 @@ func parseTrackedIssue(number int, url, body string, pending bool) (trackedIssue
 	}
 	m := all[len(all)-1]
 	is := trackedIssue{Number: number, URL: url, Key: m[1], Pending: pending}
+	if m[3] != "" {
+		is.Images = strings.Split(m[3], ",")
+	}
 	if m[2] != "" {
 		is.IDs = strings.Split(m[2], ",")
 	}
