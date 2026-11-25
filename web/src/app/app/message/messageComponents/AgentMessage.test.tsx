@@ -8,6 +8,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
+import en from "@/i18n/messages/en.json";
 import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -982,6 +983,12 @@ test("an expanded step keeps its state when a call is inserted before it", async
   }
 });
 
+// The run card's header is a phrase picked per card.
+const WORKING_PHRASES = Object.values(
+  en.chat.messages.timeline.header.runPhrases
+).map((phrase) => phrase.working);
+const isWorkingPhrase = (text: string) => WORKING_PHRASES.includes(text);
+
 test("a program without tool calls shows only a working header", async () => {
   seedSessionAwaitingAnswer();
   const cell = { turn_index: 0, tab_index: 0 };
@@ -1008,7 +1015,7 @@ test("a program without tool calls shows only a working header", async () => {
   );
   const view = render(renderMessage(running));
   try {
-    expect(await screen.findByText("Doing some work...")).toBeInTheDocument();
+    expect(await screen.findByText(isWorkingPhrase)).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/36|sum\(range|step/i);
 
     // A finished response is no longer working, even with no final delta.
@@ -1022,7 +1029,7 @@ test("a program without tool calls shows only a working header", async () => {
       ])
     );
     await waitFor(() =>
-      expect(screen.queryByText("Doing some work...")).not.toBeInTheDocument()
+      expect(screen.queryByText(isWorkingPhrase)).not.toBeInTheDocument()
     );
   } finally {
     view.unmount();

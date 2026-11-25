@@ -1,10 +1,17 @@
 "use client";
 
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useId,
+} from "react";
 import { useTranslations } from "next-intl";
 import { Presence } from "@opal/components";
+import { SvgListTree } from "@opal/icons";
 import { Section } from "@opal/layouts";
-import { prefersReducedMotion } from "@opal/utils";
+import { pick, prefersReducedMotion, seededRandom } from "@opal/utils";
 import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { constructCurrentMemoryState } from "@/lib/timeline/chat/renderers/memory/memoryStateUtils";
 import { isMemoryToolPackets } from "@/lib/timeline/chat/packetHelpers";
@@ -32,6 +39,23 @@ export const MAX_HOISTED_STEPS = 5;
 
 /** How long the hoisted step cards take to fold into the run card, in ms. */
 const HANDOVER_MS = 300;
+
+/**
+ * The collapsed run card's header, one pair picked at random per card: its
+ * text while the run works, and once it is done.
+ */
+const RUN_PHRASES = [
+  "doingWork",
+  "crunchingDetails",
+  "connectingDots",
+  "runningNumbers",
+  "fillingGaps",
+  "sortingThingsOut",
+  "gatheringPieces",
+  "workingThroughIt",
+  "ironingOutDetails",
+  "roundingThingsOut",
+] as const;
 
 /** hoisted → handover → collapsed; a run never goes back. */
 type RunLayout = "hoisted" | "handover" | "collapsed";
@@ -139,6 +163,13 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     useTimelineStepState(turnGroups);
   const streamingStartTime = useStreamingStartTime();
   const t = useTranslations("chat.messages.timeline");
+  // Picked per card, seeded from its id: the same on the server and the
+  // client, and kept from working to done.
+  const cardId = useId();
+  const phrase = useMemo(
+    () => pick(RUN_PHRASES, seededRandom(cardId)),
+    [cardId]
+  );
 
   const steps = useMemo<ChatRunStep[]>(
     () =>
@@ -276,9 +307,12 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             <RunCard
               steps={steps}
               workingText={
-                awaitingUser !== null ? headerText : t("header.doingWork.label")
+                awaitingUser !== null
+                  ? headerText
+                  : t(`header.runPhrases.${phrase}.working`)
               }
-              doneText={t("header.didWork.label")}
+              doneText={t(`header.runPhrases.${phrase}.done`)}
+              icon={SvgListTree}
               appear={!cardHandedOver}
               startFolded={cardHandedOver}
               isActive={isActive}

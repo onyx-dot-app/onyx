@@ -12520,11 +12520,47 @@
           "browsing": {
             "label": "{count, plural, =0 {جارٍ التصفح} one {جارٍ تصفح صفحة واحدة} two {جارٍ تصفح صفحتين} few {جارٍ تصفح # صفحات} many {جارٍ تصفح # صفحة} other {جارٍ تصفح # صفحة}}"
           },
-          "doingWork": {
-            "label": "جارٍ العمل..."
-          },
-          "didWork": {
-            "label": "تم إنجاز العمل"
+          "runPhrases": {
+            "doingWork": {
+              "working": "جارٍ العمل...",
+              "done": "تم إنجاز العمل"
+            },
+            "crunchingDetails": {
+              "working": "جارٍ تدقيق التفاصيل...",
+              "done": "تم تدقيق التفاصيل"
+            },
+            "connectingDots": {
+              "working": "جارٍ ربط النقاط...",
+              "done": "تم ربط النقاط"
+            },
+            "runningNumbers": {
+              "working": "جارٍ حساب الأرقام...",
+              "done": "تم حساب الأرقام"
+            },
+            "fillingGaps": {
+              "working": "جارٍ سد الثغرات...",
+              "done": "تم سد الثغرات"
+            },
+            "sortingThingsOut": {
+              "working": "جارٍ ترتيب الأمور...",
+              "done": "تم ترتيب الأمور"
+            },
+            "gatheringPieces": {
+              "working": "جارٍ جمع القطع...",
+              "done": "تم جمع القطع"
+            },
+            "workingThroughIt": {
+              "working": "جارٍ العمل على ذلك...",
+              "done": "تم العمل على ذلك"
+            },
+            "ironingOutDetails": {
+              "working": "جارٍ ضبط التفاصيل...",
+              "done": "تم ضبط التفاصيل"
+            },
+            "roundingThingsOut": {
+              "working": "جارٍ استكمال الصورة...",
+              "done": "تم استكمال الصورة"
+            }
           }
         },
         "internalSearch": {

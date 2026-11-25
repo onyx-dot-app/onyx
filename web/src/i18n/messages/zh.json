@@ -12520,11 +12520,47 @@
           "browsing": {
             "label": "{count, plural, =0 {正在浏览} other {正在浏览 # 个页面}}"
           },
-          "doingWork": {
-            "label": "正在处理..."
-          },
-          "didWork": {
-            "label": "已完成处理"
+          "runPhrases": {
+            "doingWork": {
+              "working": "正在处理...",
+              "done": "已完成处理"
+            },
+            "crunchingDetails": {
+              "working": "正在梳理细节...",
+              "done": "已梳理细节"
+            },
+            "connectingDots": {
+              "working": "正在串联线索...",
+              "done": "已串联线索"
+            },
+            "runningNumbers": {
+              "working": "正在计算数据...",
+              "done": "已计算数据"
+            },
+            "fillingGaps": {
+              "working": "正在填补空白...",
+              "done": "已填补空白"
+            },
+            "sortingThingsOut": {
+              "working": "正在整理思路...",
+              "done": "已整理思路"
+            },
+            "gatheringPieces": {
+              "working": "正在拼凑信息...",
+              "done": "已拼凑信息"
+            },
+            "workingThroughIt": {
+              "working": "正在逐步解决...",
+              "done": "已逐步解决"
+            },
+            "ironingOutDetails": {
+              "working": "正在完善细节...",
+              "done": "已完善细节"
+            },
+            "roundingThingsOut": {
+              "working": "正在收尾...",
+              "done": "已收尾"
+            }
           }
         },
         "internalSearch": {

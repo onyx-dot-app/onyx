@@ -12520,11 +12520,47 @@
           "browsing": {
             "label": "{count, plural, =0 {Navegando} one {Navegando # página} other {Navegando # páginas}}"
           },
-          "doingWork": {
-            "label": "Trabajando en ello..."
-          },
-          "didWork": {
-            "label": "Trabajo realizado"
+          "runPhrases": {
+            "doingWork": {
+              "working": "Trabajando en ello...",
+              "done": "Trabajo realizado"
+            },
+            "crunchingDetails": {
+              "working": "Analizando los detalles...",
+              "done": "Detalles analizados"
+            },
+            "connectingDots": {
+              "working": "Atando cabos...",
+              "done": "Cabos atados"
+            },
+            "runningNumbers": {
+              "working": "Haciendo cuentas...",
+              "done": "Cuentas hechas"
+            },
+            "fillingGaps": {
+              "working": "Llenando los huecos...",
+              "done": "Huecos llenados"
+            },
+            "sortingThingsOut": {
+              "working": "Poniendo orden...",
+              "done": "Orden puesto"
+            },
+            "gatheringPieces": {
+              "working": "Reuniendo las piezas...",
+              "done": "Piezas reunidas"
+            },
+            "workingThroughIt": {
+              "working": "Resolviéndolo...",
+              "done": "Resuelto"
+            },
+            "ironingOutDetails": {
+              "working": "Puliendo los detalles...",
+              "done": "Detalles pulidos"
+            },
+            "roundingThingsOut": {
+              "working": "Redondeándolo...",
+              "done": "Redondeado"
+            }
           }
         },
         "internalSearch": {

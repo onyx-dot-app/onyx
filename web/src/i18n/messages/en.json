@@ -12520,11 +12520,47 @@
           "browsing": {
             "label": "{count, plural, =0 {Browsing} one {Browsing # page} other {Browsing # pages}}"
           },
-          "doingWork": {
-            "label": "Doing some work..."
-          },
-          "didWork": {
-            "label": "Did some work"
+          "runPhrases": {
+            "doingWork": {
+              "working": "Doing some work...",
+              "done": "Did some work"
+            },
+            "crunchingDetails": {
+              "working": "Crunching the details...",
+              "done": "Crunched the details"
+            },
+            "connectingDots": {
+              "working": "Connecting the dots...",
+              "done": "Connected the dots"
+            },
+            "runningNumbers": {
+              "working": "Running the numbers...",
+              "done": "Ran the numbers"
+            },
+            "fillingGaps": {
+              "working": "Filling in the gaps...",
+              "done": "Filled in the gaps"
+            },
+            "sortingThingsOut": {
+              "working": "Sorting things out...",
+              "done": "Sorted things out"
+            },
+            "gatheringPieces": {
+              "working": "Gathering the pieces...",
+              "done": "Gathered the pieces"
+            },
+            "workingThroughIt": {
+              "working": "Working through it...",
+              "done": "Worked through it"
+            },
+            "ironingOutDetails": {
+              "working": "Ironing out the details...",
+              "done": "Ironed out the details"
+            },
+            "roundingThingsOut": {
+              "working": "Rounding things out...",
+              "done": "Rounded things out"
+            }
           }
         },
         "internalSearch": {
