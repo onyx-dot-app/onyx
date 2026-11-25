@@ -481,8 +481,8 @@ without admitting the send (`CurrentMessageFIFO.acknowledged` resolves to
 `null`) or the send fails before dispatch, `restoreTreeBeforeSend` removes the
 send's nodes and restores the links of their parent. The error goes to the
 session's `uncaughtError`, a `SessionError` with the error code and details.
-`settleChatSession` sets it (`sendError`) in the same update that releases the
-input, so the run status watcher sees the run as Failed.
+The reader returns a rejected send’s error when it finishes. Completion and
+Stop both read that result before releasing the input.
 An automatic follow-up response has a hidden `agent_results` question node as
 its parent. `ChatUI` and the shared chat view render that node with
 `web/src/lib/timeline/chat/message/AgentResultsDivider.tsx`, with no message controls. Checks that

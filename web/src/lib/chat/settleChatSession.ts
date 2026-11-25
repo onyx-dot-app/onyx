@@ -32,8 +32,8 @@ interface SettleChatSessionOptions {
   streamUnavailable?: boolean;
   /** The reader failed before its first batch, so its answers are unread. */
   streamUnread?: boolean;
-  /** The server refused the send; shown when the input is released. */
-  sendError?: SessionError | null;
+  /** A send failed before it attached a reader. */
+  preparationError?: SessionError;
 }
 
 /** The rows a stream writes, in model-index order; null when one is missing. */
@@ -217,7 +217,7 @@ const refreshingSessions = new Map<
   {
     refresh: Promise<void>;
     controller: AbortController;
-    reader: Promise<void> | undefined;
+    reader: Promise<SessionError | void> | undefined;
   }
 >();
 
@@ -349,7 +349,7 @@ export async function settleChatSession({
   refreshHistory = true,
   streamUnavailable = false,
   streamUnread = false,
-  sendError = null,
+  preparationError,
 }: SettleChatSessionOptions): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   const sendAcknowledged = session?.sendAcknowledged;
@@ -374,8 +374,9 @@ export async function settleChatSession({
       }
       if (!ownsSettlement()) return;
     }
+    let sendError: SessionError | void = preparationError;
     if (readerFinished) {
-      await readerFinished;
+      sendError = await readerFinished;
       if (!ownsSettlement()) return;
     }
     // A reader that lost a running stream reattaches: from its saved cursor,

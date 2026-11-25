@@ -1627,3 +1627,47 @@ test("a run the user stops does not show Failed", async () => {
   runs.stop();
   expect(runs.endings).toEqual(["done"]);
 });
+
+test("Stop preserves a rejection when it releases the composer first", async () => {
+  const reject = Promise.withResolvers<void>();
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session", { incognito: true });
+  jest
+    .mocked(sendMessage)
+    .mockReset()
+    .mockImplementationOnce(async function* () {
+      await reject.promise;
+      yield* rejectedSend();
+    });
+  const { result } = renderChatController();
+  let send: Promise<void> | undefined;
+  act(() => {
+    send = result.current.onSubmit({
+      message: "Rejected question",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(sendMessage).toHaveBeenCalled());
+
+  await act(async () => {
+    const stop = result.current.stopGenerating();
+    reject.resolve();
+    await stop;
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "input",
+      uncaughtError: {
+        error: "Rejected before save",
+        errorCode: "BAD_REQUEST",
+      },
+    });
+    await send;
+  });
+});

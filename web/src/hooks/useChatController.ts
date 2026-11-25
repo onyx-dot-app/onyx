@@ -67,10 +67,10 @@ import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
-  SessionError,
   useChatSessionStore,
   useCurrentMessageTree,
   useCurrentMessageHistory,
+  type SessionError,
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
@@ -1001,9 +1001,9 @@ export default function useChatController({
       let streamSucceeded = false;
       let saveFailed = false;
       let stack: CurrentMessageFIFO | null = null;
-      let rejectedSendError: SessionError | null = null;
-      let resolveReaderFinished: () => void = () => {};
-      const readerFinished = new Promise<void>((resolve) => {
+      let rejectedSendError: SessionError | undefined;
+      let resolveReaderFinished: (error?: SessionError) => void = () => {};
+      const readerFinished = new Promise<SessionError | void>((resolve) => {
         resolveReaderFinished = resolve;
       });
       // The send reads its own stream, so a decision that names it as the
@@ -1521,7 +1521,7 @@ export default function useChatController({
           controller.signal.removeEventListener("abort", discardUnsentTurn);
           readerDone = true;
           if (claimedStream !== null) releaseStreamReader(claimedStream);
-          resolveReaderFinished();
+          resolveReaderFinished(rejectedSendError);
         }
       }
 
@@ -1533,7 +1533,7 @@ export default function useChatController({
         controller,
         errorMessage: tReadiness("checkFailed"),
         refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
-        sendError: rejectedSendError,
+        preparationError: stack === null ? rejectedSendError : undefined,
       });
 
       // The server names a new chat while it answers. If its name did not
