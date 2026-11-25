@@ -40,4 +40,18 @@ describe("MinimalMarkdown", () => {
       expect(block.querySelector('span[style*="--shiki"]')).not.toBeNull()
     );
   });
+
+  test("a custom code renderer also renders fenced code", () => {
+    render(
+      <MinimalMarkdown
+        content={"```ts\nconst a = 1;\n```\n"}
+        components={{
+          code: ({ children }) => <kbd data-testid="custom">{children}</kbd>,
+        }}
+      />
+    );
+
+    expect(screen.getByTestId("custom")).toHaveTextContent("const a = 1;");
+    expect(screen.queryByTestId("answer-code-block")).toBeNull();
+  });
 });

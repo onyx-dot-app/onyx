@@ -317,6 +317,44 @@ describe("text formats", () => {
     );
   });
 
+  test("a Windows file keeps one line per gutter number past a slice", async () => {
+    const lineCount = 450;
+    const text = Array.from(
+      { length: lineCount },
+      (_, index) => `const v${index} = ${index};`
+    ).join("\r\n");
+    const { container } = render(
+      <CodeFilePreview text={text} language="typescript" />
+    );
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('code span[style*="--shiki"]')
+      ).not.toBeNull()
+    );
+    const shownLines = container
+      .querySelector("code")
+      ?.textContent?.split("\n");
+    expect(shownLines).toHaveLength(lineCount);
+    expect(shownLines?.[lineCount - 1]).toBe(
+      `const v${lineCount - 1} = ${lineCount - 1};`
+    );
+  });
+
+  test.each([
+    ["apacheconf", "RewriteEngine On"],
+    ["gradle", "apply plugin: 'java'"],
+  ])("a %s file gets Shiki tokens", async (language, text) => {
+    const { container } = render(
+      <CodeFilePreview text={text} language={language} />
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector('code span[style*="--shiki"]')
+      ).not.toBeNull()
+    );
+  });
+
   test("JSON shows indented", async () => {
     jest
       .mocked(fetchChatFile)

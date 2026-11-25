@@ -39,7 +39,10 @@ export default function MinimalMarkdown({
       p: ({ dir, children }) => (
         <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
       ),
-      pre: AnswerCodeBlock,
+      // A caller's own `code` renderer also renders fenced code.
+      pre: components?.code
+        ? ({ children }) => <>{children}</>
+        : AnswerCodeBlock,
       code: InlineCode,
     };
 
