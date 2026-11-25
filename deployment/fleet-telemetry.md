@@ -22,6 +22,12 @@ gives the key to `/v1/enroll`, and the fleet service answers with the deployment
 A copy of the database reports as the same deployment. To make the copy a new deployment, delete
 that row in the copy before it starts.
 
+A deployment upgraded from before v5 also has the instance UUID that the old anonymous telemetry
+sent (encrypted key-value `customer_uuid`). The sender adds it to `/v1/enroll` as
+`legacy_customer_uuid`, so the fleet service can link the deployment to its pre-v5 records. Onyx
+never creates this UUID for enrollment. If the service answers 422, the sender enrolls again
+without the field.
+
 Onyx Cloud derives its key from `WEB_DOMAIN`. Each Cloud tenant reports as a separate customer
 inside the Cloud deployment.
 

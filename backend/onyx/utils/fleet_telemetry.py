@@ -447,6 +447,19 @@ def deployment_key() -> str:
     return get_or_create_deployment_key()
 
 
+def legacy_customer_uuid() -> str | None:
+    """The install ID that Onyx before v5 sent, so the service can link this deployment
+    to its pre-v5 records. None when there is none or it cannot be read."""
+    if MULTI_TENANT:
+        return None
+    try:
+        from onyx.db.fleet_enrollment import get_legacy_customer_uuid
+
+        return get_legacy_customer_uuid()
+    except Exception:
+        return None
+
+
 class FailureCounts:
     """Failures outside queries, counted in memory under fixed keys.
 
@@ -570,6 +583,8 @@ class BoundedTelemetry:
         self._session: requests.Session | None = None
         # The sender thread reads the key and enrolls before its first delivery.
         self._key: str | None = None
+        # The pre-v5 install ID. "" after the service rejects it, so enrollment goes on without it.
+        self._legacy: str | None = None
         self._customer: str | None = None
         self._deployment: str | None = None
         self._stage_sums: dict[tuple[str, ...], dict[str, Any]] = {}
@@ -810,21 +825,35 @@ class BoundedTelemetry:
         """Register the deployment key. The service answers with this deployment's IDs."""
         if self._key is None:
             self._key = deployment_key()
-        response: requests.Response = transport(
-            _ENDPOINT + "/v1/enroll",
-            headers={
-                "Authorization": "Bearer " + self._key,
-                "Accept-Encoding": "identity",
-            },
-            json={"is_cloud": MULTI_TENANT},
-            timeout=(1, 2),
-            allow_redirects=False,
-            stream=True,
-        )
-        with response:
-            if response.status_code != 200:
-                raise ValueError("Fleet enrollment unavailable")
-            result: Any = read_json_body(response, 4096)
+        if self._legacy is None:
+            self._legacy = legacy_customer_uuid() or ""
+        result: Any = None
+        # At most two requests: a service that predates `legacy_customer_uuid` answers 422,
+        # and this call enrolls again at once without it, so a short-lived process still
+        # delivers its queued events. Any other failure goes to the caller's backoff.
+        for _ in range(2):
+            body: dict[str, Any] = {"is_cloud": MULTI_TENANT}
+            if self._legacy:
+                body["legacy_customer_uuid"] = self._legacy
+            response: requests.Response = transport(
+                _ENDPOINT + "/v1/enroll",
+                headers={
+                    "Authorization": "Bearer " + self._key,
+                    "Accept-Encoding": "identity",
+                },
+                json=body,
+                timeout=(1, 2),
+                allow_redirects=False,
+                stream=True,
+            )
+            with response:
+                if response.status_code == 422 and self._legacy:
+                    self._legacy = ""
+                    continue
+                if response.status_code != 200:
+                    raise ValueError("Fleet enrollment unavailable")
+                result = read_json_body(response, 4096)
+            break
         deployment: Any = result["deployment_id"]
         if not isinstance(deployment, str) or not _OPAQUE.fullmatch(deployment):
             raise ValueError("Invalid fleet deployment ID")
