@@ -446,6 +446,7 @@ describe("ProjectsContext beginUpload cancel", () => {
     mockDeleteUserFile.mockReset();
     mockDeleteUserFile.mockResolvedValue({ deleted: true });
     const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const onSuccess = jest.fn();
 
     let optimisticFiles: ProjectFile[] = [];
     await act(async () => {
@@ -454,7 +455,8 @@ describe("ProjectsContext beginUpload cancel", () => {
           new File(["a"], "kept.txt", { type: "text/plain" }),
           new File(["b"], "removed.txt", { type: "text/plain" }),
         ],
-        null
+        null,
+        onSuccess
       );
     });
     const [kept, removed] = optimisticFiles.map((f) => f.temp_id ?? "");
@@ -483,6 +485,10 @@ describe("ProjectsContext beginUpload cancel", () => {
     expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
       removed
     );
+    expect(onSuccess).toHaveBeenCalledWith({
+      user_files: [serverFile(kept, "user-kept")],
+      rejected_files: [],
+    });
     expect(mockToastError).not.toHaveBeenCalled();
   });
   it("deletes a file cancelled after its whole body was sent", async () => {
