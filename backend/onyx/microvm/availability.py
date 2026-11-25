@@ -11,9 +11,6 @@ shared cache (no agent call), and each process reuses its answer for
 import threading
 import time
 from collections.abc import Callable
-from enum import Enum
-
-from pydantic import BaseModel
 
 from onyx.cache.factory import get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -21,7 +18,12 @@ from onyx.microvm.configs import (
     HARNESS_SANDBOX_ENABLED,
     SANDBOX_FC_TEMPLATE,
 )
-from onyx.microvm.models import NodeInfo
+from onyx.microvm.models import (
+    NodeInfo,
+    SandboxNodeStatus,
+    SandboxStatus,
+    SandboxToolsOffReason,
+)
 from onyx.microvm.registry import (
     get_node_info,
     get_node_last_report,
@@ -36,39 +38,6 @@ logger = setup_logger()
 
 # Below one node report interval (20 s), so tools follow a node within a report.
 SANDBOX_FC_AVAILABILITY_CACHE_SECONDS = 15.0
-
-
-class SandboxToolsOffReason(str, Enum):
-    # SANDBOX_RUNTIME is pod or off.
-    RUNTIME_WITHOUT_FIRECRACKER = "RUNTIME_WITHOUT_FIRECRACKER"
-    TEMPLATE_NOT_CONFIGURED = "TEMPLATE_NOT_CONFIGURED"
-    NO_REGISTERED_NODE = "NO_REGISTERED_NODE"
-    # Nodes registered, but none is live with a compatible template.
-    NO_LIVE_NODE_WITH_TEMPLATE = "NO_LIVE_NODE_WITH_TEMPLATE"
-    NODE_STATE_UNREADABLE = "NODE_STATE_UNREADABLE"
-
-
-class SandboxNodeStatus(BaseModel):
-    node_id: str
-    # False when the node's reports stopped.
-    live: bool
-    draining: bool
-    has_template: bool
-    last_report_age_seconds: int | None
-    # From the node's last report pass that read its info; None before one.
-    agent_version: str | None
-    templates: list[str]
-    vm_count: int | None
-    # 0 is no cap.
-    max_vms: int | None
-
-
-class SandboxStatus(BaseModel):
-    runtime: SandboxRuntime
-    template: str
-    tools_offered: bool
-    tools_off_reason: SandboxToolsOffReason | None
-    nodes: list[SandboxNodeStatus]
 
 
 def _has_template(info: NodeInfo | None) -> bool:
@@ -102,12 +71,12 @@ def _serving(node: SandboxNodeStatus) -> bool:
     return node.live and node.has_template
 
 
-def _static_off_reason() -> SandboxToolsOffReason | None:
-    if not SANDBOX_RUNTIME.uses_firecracker:
-        return SandboxToolsOffReason.RUNTIME_WITHOUT_FIRECRACKER
-    if not HARNESS_SANDBOX_ENABLED:
-        return SandboxToolsOffReason.TEMPLATE_NOT_CONFIGURED
-    return None
+# Why tools are off from the configuration alone; None when nodes decide.
+STATIC_OFF_REASON: SandboxToolsOffReason | None = None
+if not SANDBOX_RUNTIME.uses_firecracker:
+    STATIC_OFF_REASON = SandboxToolsOffReason.RUNTIME_WITHOUT_FIRECRACKER
+elif not HARNESS_SANDBOX_ENABLED:
+    STATIC_OFF_REASON = SandboxToolsOffReason.TEMPLATE_NOT_CONFIGURED
 
 
 def get_sandbox_status(
@@ -115,7 +84,7 @@ def get_sandbox_status(
 ) -> SandboxStatus:
     """The current status, read fresh (no process cache)."""
     now = int(time.time()) if now is None else now
-    reason = _static_off_reason()
+    reason = STATIC_OFF_REASON
     nodes: list[SandboxNodeStatus] = []
     if SANDBOX_RUNTIME.uses_firecracker:
         cache = shared_cache or get_shared_cache_backend()
@@ -189,7 +158,7 @@ def _check_live_node() -> bool:
 
 def sandbox_tools_available() -> bool:
     """Whether this deployment offers chat sandbox tools now."""
-    if _static_off_reason() is not None:
+    if STATIC_OFF_REASON is not None:
         return False
     if SANDBOX_RUNTIME is not SandboxRuntime.AUTO:
         return True

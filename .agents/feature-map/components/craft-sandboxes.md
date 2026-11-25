@@ -270,7 +270,7 @@ sandbox it re-mints only when `has_active_craft_pat` is false, for example
 after a password change revoked it ([[auth-and-identity]]). The proxy reads
 the stored token on each request, so a new token takes effect at once.
 
-**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` only).**
+**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` or `auto` only).**
 `backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
 - `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
   agent, with session saves (capture, upload, discard, restore) and the

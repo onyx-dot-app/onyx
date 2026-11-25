@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from onyx.server.features.build.configs import SandboxRuntime
+
 
 class HostAgentErrorReason(str, Enum):
     """`ErrorReason` names from hostagent.proto."""
@@ -648,3 +650,39 @@ class ManagedSwapResult(BaseModel):
     ms: int
     # A guest process still has a file open on the old drive.
     previous_in_use: bool
+
+
+# Admin sandbox status (`microvm/availability.py`).
+
+
+class SandboxToolsOffReason(str, Enum):
+    # SANDBOX_RUNTIME is pod or off.
+    RUNTIME_WITHOUT_FIRECRACKER = "RUNTIME_WITHOUT_FIRECRACKER"
+    TEMPLATE_NOT_CONFIGURED = "TEMPLATE_NOT_CONFIGURED"
+    NO_REGISTERED_NODE = "NO_REGISTERED_NODE"
+    # Nodes registered, but none is live with a compatible template.
+    NO_LIVE_NODE_WITH_TEMPLATE = "NO_LIVE_NODE_WITH_TEMPLATE"
+    NODE_STATE_UNREADABLE = "NODE_STATE_UNREADABLE"
+
+
+class SandboxNodeStatus(BaseModel):
+    node_id: str
+    # False when the node's reports stopped.
+    live: bool
+    draining: bool
+    has_template: bool
+    last_report_age_seconds: int | None
+    # From the node's last report pass that read its info; None before one.
+    agent_version: str | None
+    templates: list[str]
+    vm_count: int | None
+    # 0 is no cap.
+    max_vms: int | None
+
+
+class SandboxStatus(BaseModel):
+    runtime: SandboxRuntime
+    template: str
+    tools_offered: bool
+    tools_off_reason: SandboxToolsOffReason | None
+    nodes: list[SandboxNodeStatus]

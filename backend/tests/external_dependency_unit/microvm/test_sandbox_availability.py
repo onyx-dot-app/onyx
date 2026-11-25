@@ -16,12 +16,8 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.microvm import availability
-from onyx.microvm.availability import (
-    SandboxToolsOffReason,
-    get_sandbox_status,
-    sandbox_tools_available,
-)
-from onyx.microvm.models import NodeStateReport
+from onyx.microvm.availability import get_sandbox_status, sandbox_tools_available
+from onyx.microvm.models import NodeStateReport, SandboxToolsOffReason
 from onyx.microvm.node_report import reconcile_node_report
 from onyx.server.features.build.configs import SandboxRuntime
 from onyx.server.features.microvm import admin_api
@@ -45,8 +41,12 @@ def set_runtime(monkeypatch: pytest.MonkeyPatch) -> Generator[SetRuntime, None, 
         monkeypatch.setattr(availability, "SANDBOX_FC_TEMPLATE", template)
         monkeypatch.setattr(
             availability,
-            "HARNESS_SANDBOX_ENABLED",
-            runtime.uses_firecracker and bool(template),
+            "STATIC_OFF_REASON",
+            SandboxToolsOffReason.RUNTIME_WITHOUT_FIRECRACKER
+            if not runtime.uses_firecracker
+            else None
+            if template
+            else SandboxToolsOffReason.TEMPLATE_NOT_CONFIGURED,
         )
         availability._availability.clear()
 

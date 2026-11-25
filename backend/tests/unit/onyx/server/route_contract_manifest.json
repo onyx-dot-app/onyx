@@ -119,6 +119,7 @@
   "GET /admin/query-history/download": "read:query_history",
   "GET /admin/query-history/export-status": "read:query_history",
   "GET /admin/query-history/list": "read:query_history",
+  "GET /admin/sandbox/status": "admin",
   "GET /admin/security": "admin",
   "GET /admin/security/pinned-fields": "admin",
   "GET /admin/service-status/opensearch": "admin",
