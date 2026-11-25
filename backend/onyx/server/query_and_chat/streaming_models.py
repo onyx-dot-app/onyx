@@ -340,6 +340,8 @@ class CustomToolDelta(BaseObj):
 
     tool_name: str
     tool_id: int | None = None
+    # Set for a tool with no tool row: the integration of the action.
+    integration_id: int | None = None
     response_type: str
     # For non-file responses
     data: dict | list | str | int | float | bool | None = None
@@ -595,6 +597,8 @@ class ToolApprovalRequest(BaseObj):
     tool_name: str
     display_name: str
     arguments: dict[str, JsonValue]
+    # Whether the card offers "approve for this chat".
+    can_approve_for_chat: bool = True
     # The background agent that asks; its request shows in the reply's call
     # that started the agent and waits whether or not the reply ended. None for
     # the reply's own runs.

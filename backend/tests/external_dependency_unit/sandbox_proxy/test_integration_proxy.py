@@ -31,6 +31,7 @@ from onyx.db.enums import (
 from onyx.db.models import (
     ActionApproval,
     BuildSession,
+    ChatSession,
     Integration,
     IntegrationActionPolicy,
     MCPServer,
@@ -61,12 +62,17 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
 )
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.db.agent_sharing_helpers import (
+    create_test_persona,
+)
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
+    link_persona,
     make_app_integration,
     make_mcp_integration,
     make_openapi_integration,
+    set_policy,
     turn_off_integrations,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
@@ -182,6 +188,14 @@ class _UnusedIdentity(SandboxIdentityResolver):
         raise AssertionError("not used")
 
     def resolve_session_by_id(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
+        raise AssertionError("not used")
+
+    def resolve_chat_session(
         self,
         session_id: UUID,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
@@ -726,3 +740,62 @@ def test_the_task_catalog_keeps_an_integration_that_an_admin_turned_off(
     settings = views[mcp.id].action_settings
     assert settings is not None
     assert settings.actions == {"update": LinkValue.ALLOW}
+
+
+def test_a_chat_session_takes_the_policies_of_its_chat(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    """A command of a chat gets the policies of the agent of that chat, which
+    a Craft session does not read. A request that is no operation stays Ask
+    even with a saved Always allow, so the gate refuses it, and an admin
+    block stays a block."""
+    host = _host()
+    rest, _ = make_openapi_integration(
+        db_session,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Items", "description": "Items", "version": "1"},
+            "servers": [{"url": f"https://{host}"}],
+            "paths": {
+                "/items": {"post": {"operationId": "createItem", "summary": "Create"}},
+                "/items/{id}": {
+                    "get": {"operationId": "readItem", "summary": "Read"},
+                    "delete": {"operationId": "deleteItem", "summary": "Delete"},
+                },
+            },
+        },
+    )
+    created.append(rest.id)
+    _run(db_session, [rest])
+    set_policy(db_session, rest.id, "createItem", IntegrationActionPolicyValue.BLOCKED)
+    set_policy(
+        db_session,
+        rest.id,
+        "unspecified",
+        IntegrationActionPolicyValue.ALLOW,
+        user_id=user.id,
+    )
+    agent = create_test_persona(db_session, user)
+    link_persona(db_session, agent.id, rest.id, {"actions": {"readItem": "blocked"}})
+    chat = ChatSession(
+        id=uuid4(),
+        user_id=user.id,
+        persona_id=agent.id,
+        description="proxy chat",
+    )
+    db_session.add(chat)
+    db_session.commit()
+    ctx = _sandbox(user).with_session(chat.id)
+    addon = _addon()
+
+    def policy(method: str, path: str, from_chat: bool = True) -> ActionPolicy:
+        matched = _evaluate(_request(f"https://{host}{path}", method=method), user)
+        assert matched.target.api_app
+        resolved = addon._resolve_request_policies(ctx, matched, from_chat)
+        return resolved.governing_action.policy
+
+    assert policy("GET", "/items/7") is ActionPolicy.DENY
+    assert policy("GET", "/items/7", from_chat=False) is ActionPolicy.ALWAYS
+    assert policy("POST", "/items") is ActionPolicy.DENY
+    assert policy("DELETE", "/items/7") is ActionPolicy.ASK
+    assert policy("GET", "/other") is ActionPolicy.ASK

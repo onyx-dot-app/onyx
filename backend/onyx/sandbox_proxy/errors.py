@@ -28,6 +28,7 @@ class SandboxProxyError(str, Enum):
     POLICY_DENIED = "policy_denied"
     CREDENTIAL_ERROR = "credential_error"
     DESTINATION_BLOCKED = "destination_blocked"
+    APPROVAL_NEEDS_TOOL = "approval_needs_tool"
 
     @property
     def message(self) -> str:
@@ -98,6 +99,12 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "the public internet and the Onyx API server are reachable from here. "
         "This is a fixed security boundary, not a transient error — do not retry "
         "against internal hosts (databases, caches, metadata endpoints, etc.)."
+    ),
+    SandboxProxyError.APPROVAL_NEEDS_TOOL: (
+        "This request needs the user's approval, and a request from a command "
+        "cannot ask for it, so it was not performed. Do not retry it from a "
+        "command. Send the same request through the tool of this app, which "
+        "asks the user in the chat."
     ),
 }
 

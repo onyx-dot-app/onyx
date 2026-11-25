@@ -8,6 +8,7 @@ a resolvable session:
   sandbox pods may egress".
 - `resolve_session_by_id()` — validate the in-band session tag against its owner
   to route the approval card.
+- `resolve_chat_session()` — validate the tag of a command of a chat.
 
 There is deliberately no most-recent-active fallback: a gated request with no
 verifiable session tag fails closed rather than routing to a guessed session.
@@ -18,6 +19,7 @@ from typing import Protocol
 from uuid import UUID
 
 from onyx.db.build_session import get_build_session_id_for_user
+from onyx.db.chat import get_chat_session_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.sandbox import get_sandbox_owner_id
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
@@ -70,6 +72,10 @@ class SandboxIdentityResolver(Protocol):
         self, session_id: UUID, user_id: UUID, tenant_id: str
     ) -> UUID | None: ...
 
+    def resolve_chat_session(
+        self, session_id: UUID, user_id: UUID, tenant_id: str
+    ) -> UUID | None: ...
+
 
 class IdentityResolver(SandboxIdentityResolver):
     def __init__(self, ip_lookup: SandboxIPLookup) -> None:
@@ -115,6 +121,20 @@ class IdentityResolver(SandboxIdentityResolver):
         """
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             return get_build_session_id_for_user(db, session_id, user_id)
+
+    def resolve_chat_session(
+        self, session_id: UUID, user_id: UUID, tenant_id: str
+    ) -> UUID | None:
+        """Validates a chat session id that a command in the sandbox sent: a
+        chat of the owner of the sandbox that is not deleted.
+
+        The id is the user name of the proxy URL of the command. Each chat of
+        a user runs its commands as one user in one VM, so a command can send
+        the id of a second chat of the same user. The gate therefore never
+        gives a chat request more than the Allow actions of that chat.
+        """
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
+            return get_chat_session_id_for_user(db, session_id, user_id)
 
 
 def build_ip_lookup() -> SandboxIPLookup:

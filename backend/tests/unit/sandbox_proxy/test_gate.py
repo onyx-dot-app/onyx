@@ -1985,3 +1985,136 @@ async def test_mcp_protocol_without_session_is_blocked() -> None:
     flow = make_flow()
     await addon.request(flow)
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
+
+
+# ---------------------------------------------------------------------------
+# A request from a command of a chat
+# ---------------------------------------------------------------------------
+
+
+def _chat_policies(
+    monkeypatch: pytest.MonkeyPatch, policy: ActionPolicy
+) -> list[UUID | None]:
+    """Give each action ``policy`` and record the chat of each policy read."""
+    chats: list[UUID | None] = []
+
+    def resolve(
+        _db: Session,
+        *,
+        recognized_actions: AllMatchedActions,
+        chat_session_id: UUID | None = None,
+        **_kwargs: object,
+    ) -> dict[str, ActionPolicy]:
+        chats.append(chat_session_id)
+        return dict.fromkeys(_defaults(recognized_actions), policy)
+
+    monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
+    return chats
+
+
+@pytest.mark.asyncio
+async def test_an_ask_from_a_chat_is_refused_and_names_the_app_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No run waits for a command of a chat, so the gate opens no approval."""
+    chat_id = UUID(_TAG_UUID)
+    chats = _chat_policies(monkeypatch, ActionPolicy.ASK)
+    addon = _build(
+        resolver=StubResolver(sandbox=make_resolved_sandbox(), chat_session=chat_id),
+        matcher=_StubMatcher(result=_MATCH),
+    )
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
+    assert flow.response is not None and flow.response.content is not None
+    assert (
+        "app__42__slack_messages_write" in json.loads(flow.response.content)["detail"]
+    )
+    assert chats == [chat_id]
+    assert not spy.persisted and not spy.awaited and not spy.dispatched
+
+
+@pytest.mark.parametrize(
+    ("action_type", "hint"),
+    [
+        ("create_ticket", "custom__51__create_ticket"),
+        ("unspecified", "Tickets has no tool for this request."),
+    ],
+)
+@pytest.mark.asyncio
+async def test_an_ask_from_a_chat_names_the_tool_of_a_rest_app(
+    monkeypatch: pytest.MonkeyPatch, action_type: str, hint: str
+) -> None:
+    _chat_policies(monkeypatch, ActionPolicy.ASK)
+    match = AllMatchedActions(
+        actions=(
+            MatchedAction(
+                action_type=action_type,
+                display_name="Create a ticket",
+                description="Create a ticket.",
+                policy=ActionPolicy.ASK,
+            ),
+        ),
+        target=GatedTarget(
+            integration_id=51,
+            kind=IntegrationKind.API,
+            app_name="Tickets",
+            api_app=True,
+        ),
+    )
+    addon = _build(
+        resolver=StubResolver(
+            sandbox=make_resolved_sandbox(), chat_session=UUID(_TAG_UUID)
+        ),
+        matcher=_StubMatcher(result=match),
+    )
+    _spy_pipeline(addon, monkeypatch)
+    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
+    assert flow.response is not None and flow.response.content is not None
+    assert hint in json.loads(flow.response.content)["detail"]
+
+
+@pytest.mark.asyncio
+async def test_an_allowed_request_from_a_chat_gets_the_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat_id = UUID(_TAG_UUID)
+    chats = _chat_policies(monkeypatch, ActionPolicy.ALWAYS)
+    addon = _build(
+        resolver=StubResolver(sandbox=make_resolved_sandbox(), chat_session=chat_id),
+        matcher=_StubMatcher(result=_MATCH),
+    )
+    spy = _spy_pipeline(addon, monkeypatch)
+    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert chats == [chat_id]
+    assert len(spy.dispatched) == 1
+    assert not spy.persisted
+
+
+@pytest.mark.asyncio
+async def test_a_craft_session_does_not_take_chat_policies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chats = _chat_policies(monkeypatch, ActionPolicy.ALWAYS)
+    addon = _build(
+        resolver=StubResolver(
+            sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
+        ),
+        matcher=_StubMatcher(result=_MATCH),
+    )
+    _spy_pipeline(addon, monkeypatch)
+
+    await addon.request(make_flow(proxy_auth=_basic_auth(_TAG_UUID)))
+
+    assert chats == [None]

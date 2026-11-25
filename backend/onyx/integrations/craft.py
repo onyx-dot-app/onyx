@@ -12,6 +12,7 @@ from onyx.db.enums import ExternalAppType, IntegrationKind
 from onyx.db.integration import (
     get_external_app_for_integration,
     list_enabled_integrations_by_id,
+    list_external_apps_by_integration,
     list_integrations_by_ids,
 )
 from onyx.db.integration_access import load_user_integration_states
@@ -119,23 +120,13 @@ def resolve_craft_action_policies(
     )
 
 
-def _shown_policy(
-    integration: Integration, action_key: str, policy: EffectivePolicy
-) -> EffectivePolicy:
-    if (
-        always_asks(integration.kind, action_key)
-        and policy is not EffectivePolicy.BLOCKED
-    ):
-        return EffectivePolicy.ASK
-    return policy
-
-
 def _integration_view(
     db_session: Session,
     integration: Integration,
     actions: Sequence[IntegrationAction],
     user: User,
     settings: ActionSettings | None,
+    app: ExternalApp | None,
 ) -> TaskIntegrationView:
     # A scheduled run ignores the owner's Always allow choices.
     inherited = _interactive_policies(
@@ -145,11 +136,6 @@ def _integration_view(
         [action.key for action in actions],
         None,
         ActionSettings(),
-    )
-    app = (
-        get_external_app_for_integration(integration.id, db_session)
-        if integration.kind is IntegrationKind.API
-        else None
     )
     return TaskIntegrationView(
         id=integration.id,
@@ -163,15 +149,13 @@ def _integration_view(
             if settings is not None
             else None
         ),
-        runnable=_chat_runnable(integration),
+        runnable=_chat_runnable(integration, app),
         actions=[
             TaskActionView(
                 key=action.key,
                 display_name=action.display_name,
                 description=action.description,
-                integration_policy=_shown_policy(
-                    integration, action.key, inherited[action.key]
-                ),
+                integration_policy=inherited[action.key],
                 locked=inherited[action.key] is EffectivePolicy.BLOCKED
                 or not integration.users_can_save_always_allow
                 or always_asks(integration.kind, action.key),
@@ -181,11 +165,13 @@ def _integration_view(
     )
 
 
-def _chat_runnable(integration: Integration) -> bool:
-    """Chat runs an API integration only through its OpenAPI tool
+def _chat_runnable(integration: Integration, app: ExternalApp | None) -> bool:
+    """Chat runs an API integration through its ``api_app`` or its preset
     (``build_integration_chat_tools``)."""
     return integration.enabled and not (
-        integration.kind is IntegrationKind.API and integration.tool_id is None
+        integration.kind is IntegrationKind.API
+        and integration.api_app_id is None
+        and (app is None or app.app_type == ExternalAppType.CUSTOM)
     )
 
 
@@ -221,6 +207,7 @@ def list_task_integration_views(
         state.integration_id: state
         for state in load_user_integration_states([user.id], db_session)
     }
+    apps = list_external_apps_by_integration(list(states), db_session)
     views = [
         _integration_view(
             db_session,
@@ -228,10 +215,14 @@ def list_task_integration_views(
             integration_actions(integration.id, db_session),
             user,
             links.get(integration.id),
+            apps.get(integration.id),
         )
         for integration in list_integrations_by_ids(list(states), db_session)
         if integration.id in links
-        or (states[integration.id].on and _chat_runnable(integration))
+        or (
+            states[integration.id].on
+            and _chat_runnable(integration, apps.get(integration.id))
+        )
     ]
     return sorted(views, key=lambda view: (view.name.lower(), view.id))
 

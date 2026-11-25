@@ -849,6 +849,11 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         )
         placed, daemon = self._session_vm(ref)
         start_label = {_START_LABEL: secrets.token_hex(16)}
+        # The chat session is the user of the proxy URL, so the egress proxy
+        # applies the app policies of this chat. The image sets the same
+        # address with no user (deployment/craft-fc/rootfs/build-rootfs.sh).
+        # Some clients send no proxy user without a password.
+        proxy_url = f"http://{ref.session_id}:x@127.0.0.1:3128"
         # A Stop that came during the wake starts no command.
         if (cancellation := current_cancellation()) is not None:
             cancellation.check()
@@ -858,6 +863,10 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 ExecCommand(
                     argv=["bash", "-c", cmd],
                     cwd=workdir or "",
+                    env=dict.fromkeys(
+                        ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"),
+                        proxy_url,
+                    ),
                     stdin=True,
                     deadline_seconds=EXEC_DEADLINE_SECONDS,
                     labels=start_label,
