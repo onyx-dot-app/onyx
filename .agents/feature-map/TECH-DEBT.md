@@ -45,9 +45,9 @@ link here from **Known issues** and do not restate the entry.
 
 ## URL-pattern custom apps
 
-- **What:** An old URL-pattern custom app (a CUSTOM `external_app`) can be
-  viewed and deleted only. Create refuses the shape, and chat offers no tool
-  for it.
+- **What:** An old URL-pattern custom app (a CUSTOM `external_app`) keeps
+  its URL patterns: an admin can change its name and sign-in, or delete it.
+  Create refuses the shape, and chat offers no tool for it.
 - **Why:** Existing rows must keep loading until their admins delete them.
 - **Where:** `backend/onyx/integrations/craft.py`,
   `backend/onyx/integrations/chat_tools.py`,
