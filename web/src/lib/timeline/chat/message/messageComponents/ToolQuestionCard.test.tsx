@@ -221,6 +221,39 @@ test("a multi-select question takes several options and a note", async () => {
   ).toBeInTheDocument();
 });
 
+test("each option of a multi-select question shows whether it is chosen with a mark", async () => {
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-5",
+        questions: [
+          {
+            id: "channels",
+            header: "Channels",
+            question: "Where should the update go?",
+            options: [
+              { label: "Email", description: "" },
+              { label: "Wiki", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  const email = screen.getByRole("checkbox", { name: "Email" });
+  const mark = () => email.querySelector("svg")?.innerHTML;
+  const unchecked = mark();
+  expect(unchecked).toBeDefined();
+  await user.click(email);
+  // Not color alone: the mark changes when the option is chosen.
+  expect(mark()).toBeDefined();
+  expect(mark()).not.toEqual(unchecked);
+});
+
 test("a saved question that repeats a label sends that label once", async () => {
   const consoleError = jest.spyOn(console, "error");
   const fetchSpy = respond(200, {
