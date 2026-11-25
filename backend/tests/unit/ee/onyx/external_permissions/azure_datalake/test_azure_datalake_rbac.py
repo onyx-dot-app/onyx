@@ -5,7 +5,7 @@ users or groups are left out."""
 import pytest
 
 from ee.onyx.external_permissions.azure_datalake.directory import GraphDirectory
-from ee.onyx.external_permissions.azure_datalake.principals import (
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
     everyone_term,
     group_term,
     user_term,

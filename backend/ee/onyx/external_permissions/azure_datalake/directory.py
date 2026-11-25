@@ -1,7 +1,7 @@
 """The tenant's users and group members from Microsoft Graph, each read once
 per sync."""
 
-from ee.onyx.external_permissions.azure_datalake.principals import EntraDirectory
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import PrincipalDirectory
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import normalize_email
 from onyx.connectors.azure_datalake.models import AzureDataLakeCredentials
 from onyx.connectors.azure_datalake.source_operations import (
@@ -62,7 +62,7 @@ class GroupMembersUnreadableError(Exception):
     """Microsoft Graph refuses to list a group's members."""
 
 
-class GraphDirectory(EntraDirectory):
+class GraphDirectory(PrincipalDirectory):
     def __init__(self, ops: AzureDataLakeSourceOperations) -> None:
         self._ops = ops
         self._emails: dict[str, str] | None = None

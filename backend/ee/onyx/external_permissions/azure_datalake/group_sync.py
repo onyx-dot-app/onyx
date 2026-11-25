@@ -24,7 +24,7 @@ from ee.onyx.external_permissions.azure_datalake.exclusion_groups import (
     exclusion_group_members,
     parse_exclusion_group_id,
 )
-from ee.onyx.external_permissions.azure_datalake.principals import user_emails
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import user_emails
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
 from onyx.configs.constants import DocumentSource

@@ -1,12 +1,14 @@
-"""Sets of Entra principals, kept at group level where that stays exact.
+"""Sets of directory principals, kept at group level where that stays exact.
 
-A ``PrincipalSet`` is a union of terms. A term is one user, one group, or the
-whole tenant, minus some users and the members of some groups. ACLs produce
-such sets: ``other`` grants "everyone not matched by an earlier entry", and a
-named user without the bit is denied even when one of their groups grants it.
+The principals are Entra objects for Azure Data Lake Storage and Active
+Directory SIDs for Windows file shares. A ``PrincipalSet`` is a union of terms.
+A term is one user, one group, or the whole directory, minus some users and
+the members of some groups. Access lists produce such sets: a POSIX ``other``
+entry grants "everyone not matched by an earlier entry", and a Windows deny
+entry removes its principal from every later allow entry.
 
 Union keeps every term. Intersection keeps group level when one side holds
-the other (the same group, or the whole tenant), and expands to users only
+the other (the same group, or the whole directory), and expands to users only
 where two different groups meet. Document access has no exclusions, so a
 term with exclusions becomes a synced exclusion group (``exclusion_groups``).
 """
@@ -23,7 +25,7 @@ from onyx.access.models import ExternalAccess
 class PrincipalKind(str, Enum):
     USER = "user"
     GROUP = "group"
-    # Every user of the tenant: the ACL ``other`` class.
+    # Every user of the directory, e.g. the POSIX ACL ``other`` class.
     EVERYONE = "everyone"
 
 
@@ -35,7 +37,7 @@ class PrincipalTerm(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     kind: PrincipalKind
-    # The Entra object id. Empty for EVERYONE.
+    # The directory's id of the principal. Empty for EVERYONE.
     principal_id: str = ""
     excluded_users: frozenset[str] = frozenset()
     excluded_groups: frozenset[str] = frozenset()
@@ -51,15 +53,15 @@ PrincipalSet = frozenset[PrincipalTerm]
 EMPTY_SET: PrincipalSet = frozenset()
 
 
-class EntraDirectory(Protocol):
-    """Membership answers for the tenant, each read once per sync."""
+class PrincipalDirectory(Protocol):
+    """Membership answers for one directory, each read once per sync."""
 
     def group_members(self, group_id: str) -> frozenset[str]:
-        """The user object ids in the group, nested groups included."""
+        """The ids of the users in the group, nested groups included."""
         ...
 
     def all_users(self) -> frozenset[str]:
-        """Every user object id the tenant's ``other`` class covers."""
+        """The id of every user that EVERYONE covers."""
         ...
 
     def user_email(self, user_id: str) -> str | None:
@@ -114,7 +116,7 @@ def exclude(
     term: PrincipalTerm,
     excluded_users: frozenset[str],
     excluded_groups: frozenset[str],
-    directory: EntraDirectory,
+    directory: PrincipalDirectory,
 ) -> PrincipalTerm | None:
     """``term`` minus more principals. None when nothing is left that the
     term itself can tell, e.g. a user who is excluded."""
@@ -138,7 +140,7 @@ def exclude(
 
 
 def _intersect_terms(
-    a: PrincipalTerm, b: PrincipalTerm, directory: EntraDirectory
+    a: PrincipalTerm, b: PrincipalTerm, directory: PrincipalDirectory
 ) -> list[PrincipalTerm]:
     """Two group or tenant terms."""
     excluded_users = a.excluded_users | b.excluded_users
@@ -199,7 +201,7 @@ def exclude_from_set(
     principals: PrincipalSet,
     excluded_users: frozenset[str],
     excluded_groups: frozenset[str],
-    directory: EntraDirectory,
+    directory: PrincipalDirectory,
 ) -> PrincipalSet:
     return simplify(
         narrowed
@@ -213,7 +215,7 @@ def union(*sets: PrincipalSet) -> PrincipalSet:
     return simplify(term for principal_set in sets for term in principal_set)
 
 
-def _in_term(user_id: str, term: PrincipalTerm, directory: EntraDirectory) -> bool:
+def _in_term(user_id: str, term: PrincipalTerm, directory: PrincipalDirectory) -> bool:
     """Whether a user is in a group or tenant term."""
     if term.kind is PrincipalKind.GROUP and user_id not in directory.group_members(
         term.principal_id
@@ -228,7 +230,7 @@ def _in_term(user_id: str, term: PrincipalTerm, directory: EntraDirectory) -> bo
 
 
 def intersect(
-    a: PrincipalSet, b: PrincipalSet, directory: EntraDirectory
+    a: PrincipalSet, b: PrincipalSet, directory: PrincipalDirectory
 ) -> PrincipalSet:
     if a == b:
         return a
@@ -266,7 +268,7 @@ def intersect(
     )
 
 
-def user_emails(directory: EntraDirectory, user_ids: Iterable[str]) -> set[str]:
+def user_emails(directory: PrincipalDirectory, user_ids: Iterable[str]) -> set[str]:
     """The emails of the users the directory knows."""
     return {
         email
@@ -276,7 +278,7 @@ def user_emails(directory: EntraDirectory, user_ids: Iterable[str]) -> set[str]:
 
 
 def resolve(
-    principals: PrincipalSet, directory: EntraDirectory, max_users: int
+    principals: PrincipalSet, directory: PrincipalDirectory, max_users: int
 ) -> ResolvedPrincipals:
     """The principals as emails, plain group ids, the whole tenant, and the
     terms with exclusions. Raises when the users pass the cap."""

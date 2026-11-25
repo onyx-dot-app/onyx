@@ -13,9 +13,9 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel
 
-from ee.onyx.external_permissions.azure_datalake.principals import (
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
     EMPTY_SET,
-    EntraDirectory,
+    PrincipalDirectory,
     PrincipalSet,
     PrincipalTerm,
     exclude_from_set,
@@ -156,7 +156,7 @@ def _denies_read(deny: AzureDenyAssignment, scope: str) -> bool:
 
 
 def _apply_deny(
-    readers: PrincipalSet, deny: AzureDenyAssignment, directory: EntraDirectory
+    readers: PrincipalSet, deny: AzureDenyAssignment, directory: PrincipalDirectory
 ) -> PrincipalSet:
     """``readers`` without the principals the deny assignment covers:
     readers - (denied - excluded) = (readers - denied) | (readers & excluded)."""
@@ -185,7 +185,7 @@ def _apply_deny(
 def apply_denies(
     readers: PrincipalSet,
     denies: list[AzureDenyAssignment],
-    directory: EntraDirectory,
+    directory: PrincipalDirectory,
 ) -> PrincipalSet:
     for deny in denies:
         readers = _apply_deny(readers, deny, directory)
@@ -219,7 +219,7 @@ def reading_assignments(
 def rbac_readers(
     ops: AzureDataLakeSourceOperations,
     scope: str,
-    directory: EntraDirectory,
+    directory: PrincipalDirectory,
 ) -> RbacReaders:
     """The principals a role assignment lets read every file under ``scope``,
     the container's ARM id. Readers that are not users or groups, e.g.

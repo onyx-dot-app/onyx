@@ -25,7 +25,7 @@ from ee.onyx.external_permissions.azure_datalake.directory import (
 from ee.onyx.external_permissions.azure_datalake.exclusion_groups import (
     exclusion_group_id,
 )
-from ee.onyx.external_permissions.azure_datalake.principals import (
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
     ExpansionLimitError,
     PrincipalSet,
     ResolvedPrincipals,

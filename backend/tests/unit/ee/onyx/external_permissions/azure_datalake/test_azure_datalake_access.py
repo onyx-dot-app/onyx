@@ -20,7 +20,7 @@ from ee.onyx.external_permissions.azure_datalake.exclusion_groups import (
     parse_exclusion_group_id,
 )
 from ee.onyx.external_permissions.azure_datalake.group_sync import tenant_groups
-from ee.onyx.external_permissions.azure_datalake.principals import (
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
     EVERYONE_TERM,
     PrincipalSet,
     everyone_term,
@@ -51,7 +51,7 @@ from tests.unit.ee.onyx.external_permissions.azure_datalake.azure_datalake_fakes
     file,
 )
 
-PRINCIPALS_MODULE = "ee.onyx.external_permissions.azure_datalake.principals"
+PRINCIPALS_MODULE = "ee.onyx.external_permissions.microsoft_utils.principal_sets"
 EVERYONE_GROUP = f"entra_tenant_everyone:{TENANT}"
 ROOT_ACL = access("user::rwx,group::---,other::--x")
 PRIVATE_FILE = "user::rw-,group::r--,other::---"
