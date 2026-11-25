@@ -595,6 +595,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </div>
               )}
               <AppInputBar
+                // The extension shares this origin's storage with the web
+                // app, so its drafts would overwrite the web app's.
+                persistDraft={false}
                 queue={queue}
                 toolConfiguration={toolConfiguration}
                 ref={chatInputBarRef}
