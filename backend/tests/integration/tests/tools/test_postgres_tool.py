@@ -178,7 +178,8 @@ def test_postgres_tool_matches_document_content(
         if (result := request.tool_result(call_id)) is not None
     ]
     output = "\n".join(results)
-    assert "1 matching documents." in output
+    # The count ends its line with "." and the listing with ":".
+    assert "1 matching documents" in output
     assert f"pgtool-{tag}-0" in output
     assert f"pgtool-{tag}-1" not in output
 
