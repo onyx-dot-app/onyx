@@ -6445,7 +6445,7 @@
       },
       "defaultModel": {
         "description": "Wird standardmäßig für neue Sitzungen verwendet.",
-        "title": "Standardmodell"
+        "title": "Standard-Chatmodell"
       },
       "deleteModal": {
         "defaultProviderWarning": "Der Standardanbieter kann nicht gelöscht werden. Wählen Sie einen anderen Anbieter als Standard, bevor Sie diesen löschen.",
@@ -6862,7 +6862,8 @@
           },
           "submitButton": {
             "invalidTooltip": "Bitte füllen Sie alle Pflichtfelder aus.",
-            "pristineTooltip": "Keine Änderungen zum Speichern."
+            "pristineTooltip": "Keine Änderungen zum Speichern.",
+            "noModelsTooltip": "Wählen Sie mindestens ein Chat- oder Bildmodell aus"
           },
           "title": {
             "configure": "*{provider}* konfigurieren",
@@ -7003,6 +7004,41 @@
         "imageModels": {
           "title": "Bildmodelle",
           "description": "Wählen Sie die Modelle aus, die im Chat Bilder generieren dürfen."
+        }
+      },
+      "defaultChanges": {
+        "title": "Neue Standards wählen",
+        "description": "Diese Änderung entfernt Modelle, die Standards halten. Wählen Sie für jeden ein Ersatzmodell.",
+        "deleteDescription": "Dieser Anbieter hält Standards. Wählen Sie für jeden ein Ersatzmodell.",
+        "current": "Aktuell {model}",
+        "placeholder": "Modell wählen",
+        "confirm": "Weiter",
+        "cleared": "Kein anderes Modell kann dies übernehmen. Der Standard wird entfernt.",
+        "flows": {
+          "chat": {
+            "title": "Standard-Chatmodell",
+            "lost": "Kein anderes Chatmodell ist ausgewählt. Der Chat wird deaktiviert."
+          },
+          "image": {
+            "title": "Standardmodell für Bildgenerierung",
+            "lost": "Kein anderes Bildmodell ist verbunden. Die Bildgenerierung wird deaktiviert."
+          },
+          "vision": {
+            "title": "Modell für Bildverarbeitung"
+          },
+          "chatNaming": {
+            "title": "Modell für Chat-Benennung"
+          },
+          "searchSelection": {
+            "title": "Modell für Suchentscheidungen"
+          },
+          "decision": {
+            "title": "Entscheidungsmodell",
+            "lost": "Kein anderes Entscheidungsmodell ist ausgewählt. Entscheidungen werden deaktiviert."
+          },
+          "craft": {
+            "title": "Craft-Standardmodell"
+          }
         }
       }
     },

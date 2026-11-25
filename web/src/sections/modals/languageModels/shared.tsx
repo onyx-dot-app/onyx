@@ -9,7 +9,16 @@ import type { ImageGenerationProviderModel } from "@/lib/imageGeneration/types";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
-import type { FormikConfig } from "formik";
+import type { FormikConfig, FormikHelpers } from "formik";
+import {
+  DefaultChoiceRows,
+  buildDefaultChanges,
+  choicesComplete,
+  useCurrentDefaults,
+  useDefaultCandidates,
+  type CurrentDefault,
+  type DefaultChoices,
+} from "@/sections/modals/languageModels/defaults";
 import { cn, countryCodeToFlag } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
@@ -33,6 +42,7 @@ import { Text } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import {
+  ConfirmationModalLayout,
   Content,
   InputDivider,
   InputHorizontal,
@@ -67,7 +77,12 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard, type BadgeProps } from "@opal/components";
+import {
+  Card,
+  EmptyMessageCard,
+  useCreateModal,
+  type BadgeProps,
+} from "@opal/components";
 import { useModelTypeBadge } from "@/lib/badges/components";
 import { ContentAction } from "@opal/layouts";
 import type { ContentEditHandle } from "@opal/layouts";
@@ -1209,25 +1224,149 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
   children,
   description,
 }: ModalWrapperProps<T>) {
+  const t = useTranslations("admin.languageModels");
+  const currentDefaults = useCurrentDefaults();
+  const { configs: imageConfigs } = useImageGenerationConfigs();
+  const confirmModal = useCreateModal();
+  // A save waiting for its defaults to be chosen, with what it touches.
+  const [pending, setPending] = useState<{
+    values: T;
+    helpers: FormikHelpers<T>;
+    affected: CurrentDefault[];
+  } | null>(null);
+  const [choices, setChoices] = useState<DefaultChoices>({});
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  const disconnecting = new Set(
+    Object.entries(pending?.values.image_model_changes ?? {})
+      .filter(([, change]) => !change.connect)
+      .map(([name]) => name)
+  );
+  const candidates = useDefaultCandidates({
+    override:
+      llmProvider && pending
+        ? {
+            ...llmProvider,
+            model_configurations: pending.values.model_configurations,
+          }
+        : undefined,
+    disconnecting,
+  });
+
+  /** The defaults a save takes from their models: a chat-side default whose
+   *  model it unchecks, or the image default whose model it disconnects. */
+  function affectedBy(values: T): CurrentDefault[] {
+    if (!llmProvider) return [];
+    const wasChecked = new Set(
+      initialValues.model_configurations
+        .filter((m) => m.is_visible)
+        .map((m) => m.name)
+    );
+    const isChecked = new Set(
+      values.model_configurations.filter((m) => m.is_visible).map((m) => m.name)
+    );
+    return currentDefaults.filter(
+      (current) =>
+        current.providerId === llmProvider.id &&
+        (current.flow === "image"
+          ? values.image_model_changes?.[current.modelName]?.connect === false
+          : wasChecked.has(current.modelName) &&
+            !isChecked.has(current.modelName))
+    );
+  }
+
+  const handleSubmit: FormikConfig<T>["onSubmit"] = (values, helpers) => {
+    const affected = affectedBy(values);
+    if (affected.length > 0) {
+      setChoices({});
+      setPending({ values, helpers, affected });
+      confirmModal.toggle(true);
+      helpers.setSubmitting(false);
+      return;
+    }
+    return onSubmit(values, helpers);
+  };
+
+  async function handleConfirm() {
+    if (!pending) return;
+    const { defaultChanges, imageDefault } = buildDefaultChanges(
+      pending.affected,
+      candidates,
+      choices,
+      imageConfigs ?? []
+    );
+    setIsConfirming(true);
+    try {
+      await onSubmit(
+        {
+          ...pending.values,
+          default_changes: defaultChanges,
+          image_default_choice: imageDefault,
+        },
+        pending.helpers
+      );
+    } finally {
+      setIsConfirming(false);
+      confirmModal.toggle(false);
+      setPending(null);
+    }
+  }
+
   return (
-    <Formik
-      initialValues={initialValues}
-      validationSchema={validationSchema}
-      validateOnMount
-      onSubmit={onSubmit}
-    >
-      {() => (
-        <ModalWrapperInner
-          providerName={providerName}
-          llmProvider={llmProvider}
-          onClose={onClose}
-          modelConfigurations={initialValues.model_configurations}
-          description={description}
+    <>
+      <Formik
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        validateOnMount
+        onSubmit={handleSubmit}
+      >
+        {() => (
+          <ModalWrapperInner
+            providerName={providerName}
+            llmProvider={llmProvider}
+            onClose={onClose}
+            modelConfigurations={initialValues.model_configurations}
+            description={description}
+          >
+            {children}
+          </ModalWrapperInner>
+        )}
+      </Formik>
+      <confirmModal.Provider>
+        <ConfirmationModalLayout
+          icon={SvgArrowExchange}
+          title={t("defaultChanges.title")}
+          description={t("defaultChanges.description")}
+          onClose={() => {
+            confirmModal.toggle(false);
+            setPending(null);
+          }}
+          submit={
+            <Button
+              disabled={
+                isConfirming ||
+                !pending ||
+                !choicesComplete(pending.affected, candidates, choices)
+              }
+              onClick={() => void handleConfirm()}
+            >
+              {t("defaultChanges.confirm")}
+            </Button>
+          }
         >
-          {children}
-        </ModalWrapperInner>
-      )}
-    </Formik>
+          {pending && (
+            <DefaultChoiceRows
+              affected={pending.affected}
+              candidates={candidates}
+              choices={choices}
+              onChange={(flow, id) =>
+                setChoices((prev) => ({ ...prev, [flow]: id }))
+              }
+            />
+          )}
+        </ConfirmationModalLayout>
+      </confirmModal.Provider>
+    </>
   );
 }
 
@@ -1248,8 +1387,33 @@ function ModalWrapperInner({
   description: descriptionOverride,
 }: ModalWrapperInnerProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
-    useFormikContext<BaseLLMFormValues>();
+  const {
+    isValid,
+    errors,
+    dirty,
+    isSubmitting,
+    status,
+    setFieldValue,
+    values,
+  } = useFormikContext<BaseLLMFormValues>();
+  const { providers: imageProviders } = useImageGenerationProviders();
+  // A save needs at least one chat or image model checked, after the
+  // staged image changes.
+  const hasChatModel = values.model_configurations.some((m) => m.is_visible);
+  const hasImageModel = (
+    imageProviders?.find((p) => p.llm_provider_id === llmProvider?.id)
+      ?.models ?? []
+  ).some(
+    (m) =>
+      values.image_model_changes?.[m.name]?.connect ??
+      m.image_provider_id !== null
+  );
+  const hasModel = hasChatModel || hasImageModel;
+  // Without a chat model there is nothing to test with, so the derived test
+  // model does not block an image-only provider.
+  const formValid = hasChatModel
+    ? isValid
+    : Object.keys(errors).every((key) => key === "test_model_name");
 
   // When SWR resolves after mount, populate model_configurations if still
   // empty. test_model_name is then derived automatically by
@@ -1281,11 +1445,13 @@ function ModalWrapperInner({
 
   const disabledTooltip = busy
     ? undefined
-    : !isValid
-      ? t("setup.submitButton.invalidTooltip")
-      : !dirty
-        ? t("setup.submitButton.pristineTooltip")
-        : undefined;
+    : !hasModel
+      ? t("setup.submitButton.noModelsTooltip")
+      : !formValid
+        ? t("setup.submitButton.invalidTooltip")
+        : !dirty
+          ? t("setup.submitButton.pristineTooltip")
+          : undefined;
 
   const providerEntry = getProvider(providerName);
   const providerIcon = providerEntry.icon;
@@ -1331,7 +1497,7 @@ function ModalWrapperInner({
               {t("setup.cancelButton.label")}
             </Button>
             <Button
-              disabled={!isValid || !dirty || busy}
+              disabled={!hasModel || !formValid || !dirty || busy}
               type="submit"
               icon={busy ? IconLoader : undefined}
               tooltip={disabledTooltip}

@@ -1,5 +1,6 @@
 import {
   LLMProviderName,
+  type DefaultModel,
   type LLMProviderView,
   type WellKnownLLMProviderDescriptor,
   type ModelConfiguration,
@@ -145,6 +146,14 @@ export interface BaseLLMFormValues {
    * the provider, and never sent with it.
    */
   image_model_changes?: Record<string, ImageModelChange>;
+  /**
+   * Defaults this save moves or clears, by the backend's flow name, set by
+   * the confirmation that a save unchecking a default's model asks for.
+   * Sent with the provider.
+   */
+  default_changes?: Record<string, DefaultModel | null>;
+  /** The image default's new config, null when it is lost; never sent. */
+  image_default_choice?: string | null;
 }
 
 /** A staged change to one image model of the provider. */

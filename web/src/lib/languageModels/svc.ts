@@ -195,6 +195,24 @@ export async function deleteDefaultSearchSelectionModel(): Promise<void> {
 }
 
 /**
+ * Moves (a model) or clears (null) several deployment defaults at once, by
+ * the backend's flow name, e.g. before deleting the provider that holds them.
+ */
+export async function updateDefaults(
+  defaultChanges: Record<string, DefaultModel | null>
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/defaults", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ default_changes: defaultChanges }),
+  });
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
+/**
  * Delete an LLM provider.
  * @param providerId - The provider ID to delete
  * @param force - Force delete even if this is the default provider

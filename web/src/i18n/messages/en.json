@@ -6445,7 +6445,7 @@
       },
       "defaultModel": {
         "description": "Used for new sessions by default.",
-        "title": "Default Model"
+        "title": "Default Chat Model"
       },
       "deleteModal": {
         "defaultProviderWarning": "Cannot delete the default provider. Select another provider as the default prior to deleting this one.",
@@ -6862,7 +6862,8 @@
           },
           "submitButton": {
             "invalidTooltip": "Please fill in all required fields.",
-            "pristineTooltip": "No changes to save."
+            "pristineTooltip": "No changes to save.",
+            "noModelsTooltip": "Select at least one chat or image model"
           },
           "title": {
             "configure": "Configure *{provider}*",
@@ -7003,6 +7004,41 @@
         "imageModels": {
           "title": "Image Models",
           "description": "Select models to allow for generating images in chat."
+        }
+      },
+      "defaultChanges": {
+        "title": "Choose New Defaults",
+        "description": "This change removes models that hold defaults. Choose a model to take over each one.",
+        "deleteDescription": "This provider holds defaults. Choose a model to take over each one.",
+        "current": "Currently {model}",
+        "placeholder": "Choose a model",
+        "confirm": "Continue",
+        "cleared": "No other model can take this over. The default is cleared.",
+        "flows": {
+          "chat": {
+            "title": "Default Chat Model",
+            "lost": "No other chat model is selected. Chat turns off."
+          },
+          "image": {
+            "title": "Default Image Generation Model",
+            "lost": "No other image model is connected. Image generation turns off."
+          },
+          "vision": {
+            "title": "Image Processing Model"
+          },
+          "chatNaming": {
+            "title": "Chat Naming Model"
+          },
+          "searchSelection": {
+            "title": "Search Decision Model"
+          },
+          "decision": {
+            "title": "Decision Model",
+            "lost": "No other decision model is selected. Decisions turn off."
+          },
+          "craft": {
+            "title": "Craft Default Model"
+          }
         }
       }
     },

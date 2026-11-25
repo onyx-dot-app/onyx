@@ -6445,7 +6445,7 @@
       },
       "defaultModel": {
         "description": "Se usa de forma predeterminada en las sesiones nuevas.",
-        "title": "Modelo predeterminado"
+        "title": "Modelo de chat predeterminado"
       },
       "deleteModal": {
         "defaultProviderWarning": "No se puede eliminar el proveedor predeterminado. Selecciona otro proveedor como predeterminado antes de eliminar este.",
@@ -6862,7 +6862,8 @@
           },
           "submitButton": {
             "invalidTooltip": "Rellena todos los campos obligatorios.",
-            "pristineTooltip": "No hay cambios que guardar."
+            "pristineTooltip": "No hay cambios que guardar.",
+            "noModelsTooltip": "Selecciona al menos un modelo de chat o de imagen"
           },
           "title": {
             "configure": "Configurar *{provider}*",
@@ -7003,6 +7004,41 @@
         "imageModels": {
           "title": "Modelos de imagen",
           "description": "Selecciona los modelos que pueden generar imágenes en el chat."
+        }
+      },
+      "defaultChanges": {
+        "title": "Elige nuevos valores predeterminados",
+        "description": "Este cambio quita modelos que son predeterminados. Elige un modelo que sustituya a cada uno.",
+        "deleteDescription": "Este proveedor tiene modelos predeterminados. Elige un modelo que sustituya a cada uno.",
+        "current": "Actualmente {model}",
+        "placeholder": "Elige un modelo",
+        "confirm": "Continuar",
+        "cleared": "Ningún otro modelo puede sustituirlo. Se quita el valor predeterminado.",
+        "flows": {
+          "chat": {
+            "title": "Modelo de chat predeterminado",
+            "lost": "No hay otro modelo de chat seleccionado. El chat se desactiva."
+          },
+          "image": {
+            "title": "Modelo predeterminado de generación de imágenes",
+            "lost": "No hay otro modelo de imagen conectado. La generación de imágenes se desactiva."
+          },
+          "vision": {
+            "title": "Modelo de procesamiento de imágenes"
+          },
+          "chatNaming": {
+            "title": "Modelo para nombrar chats"
+          },
+          "searchSelection": {
+            "title": "Modelo de decisión de búsqueda"
+          },
+          "decision": {
+            "title": "Modelo de decisión",
+            "lost": "No hay otro modelo de decisión seleccionado. Las decisiones se desactivan."
+          },
+          "craft": {
+            "title": "Modelo predeterminado de Craft"
+          }
         }
       }
     },

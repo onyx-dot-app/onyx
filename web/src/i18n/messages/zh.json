@@ -6445,7 +6445,7 @@
       },
       "defaultModel": {
         "description": "默认用于新会话。",
-        "title": "默认模型"
+        "title": "默认聊天模型"
       },
       "deleteModal": {
         "defaultProviderWarning": "无法删除默认提供商。请先将其他提供商设为默认，再删除此提供商。",
@@ -6862,7 +6862,8 @@
           },
           "submitButton": {
             "invalidTooltip": "请填写所有必填字段。",
-            "pristineTooltip": "没有需要保存的更改。"
+            "pristineTooltip": "没有需要保存的更改。",
+            "noModelsTooltip": "请至少选择一个聊天模型或图像模型"
           },
           "title": {
             "configure": "配置 *{provider}*",
@@ -7003,6 +7004,41 @@
         "imageModels": {
           "title": "图像模型",
           "description": "选择可在聊天中生成图像的模型。"
+        }
+      },
+      "defaultChanges": {
+        "title": "选择新的默认模型",
+        "description": "此更改会移除用作默认的模型。请为每项选择一个替代模型。",
+        "deleteDescription": "此提供商包含默认模型。请为每项选择一个替代模型。",
+        "current": "当前为 {model}",
+        "placeholder": "选择模型",
+        "confirm": "继续",
+        "cleared": "没有其他模型可以替代。该默认项将被清除。",
+        "flows": {
+          "chat": {
+            "title": "默认聊天模型",
+            "lost": "没有选中其他聊天模型。聊天将关闭。"
+          },
+          "image": {
+            "title": "默认图像生成模型",
+            "lost": "没有连接其他图像模型。图像生成将关闭。"
+          },
+          "vision": {
+            "title": "图像处理模型"
+          },
+          "chatNaming": {
+            "title": "聊天命名模型"
+          },
+          "searchSelection": {
+            "title": "搜索决策模型"
+          },
+          "decision": {
+            "title": "决策模型",
+            "lost": "没有选中其他决策模型。决策功能将关闭。"
+          },
+          "craft": {
+            "title": "Craft 默认模型"
+          }
         }
       }
     },

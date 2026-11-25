@@ -6445,7 +6445,7 @@
       },
       "defaultModel": {
         "description": "Utilisé par défaut pour les nouvelles sessions.",
-        "title": "Modèle par défaut"
+        "title": "Modèle de chat par défaut"
       },
       "deleteModal": {
         "defaultProviderWarning": "Impossible de supprimer le fournisseur par défaut. Sélectionnez un autre fournisseur par défaut avant de supprimer celui-ci.",
@@ -6862,7 +6862,8 @@
           },
           "submitButton": {
             "invalidTooltip": "Veuillez remplir tous les champs obligatoires.",
-            "pristineTooltip": "Aucune modification à enregistrer."
+            "pristineTooltip": "Aucune modification à enregistrer.",
+            "noModelsTooltip": "Sélectionnez au moins un modèle de chat ou d'image"
           },
           "title": {
             "configure": "Configurer *{provider}*",
@@ -7003,6 +7004,41 @@
         "imageModels": {
           "title": "Modèles d'image",
           "description": "Sélectionnez les modèles autorisés à générer des images dans le chat."
+        }
+      },
+      "defaultChanges": {
+        "title": "Choisir de nouveaux modèles par défaut",
+        "description": "Cette modification retire des modèles utilisés par défaut. Choisissez un modèle pour remplacer chacun.",
+        "deleteDescription": "Ce fournisseur porte des modèles par défaut. Choisissez un modèle pour remplacer chacun.",
+        "current": "Actuellement {model}",
+        "placeholder": "Choisissez un modèle",
+        "confirm": "Continuer",
+        "cleared": "Aucun autre modèle ne peut le remplacer. Le modèle par défaut est retiré.",
+        "flows": {
+          "chat": {
+            "title": "Modèle de chat par défaut",
+            "lost": "Aucun autre modèle de chat n'est sélectionné. Le chat est désactivé."
+          },
+          "image": {
+            "title": "Modèle de génération d'images par défaut",
+            "lost": "Aucun autre modèle d'image n'est connecté. La génération d'images est désactivée."
+          },
+          "vision": {
+            "title": "Modèle de traitement des images"
+          },
+          "chatNaming": {
+            "title": "Modèle de nommage des chats"
+          },
+          "searchSelection": {
+            "title": "Modèle de décision de recherche"
+          },
+          "decision": {
+            "title": "Modèle de décision",
+            "lost": "Aucun autre modèle de décision n'est sélectionné. Les décisions sont désactivées."
+          },
+          "craft": {
+            "title": "Modèle par défaut de Craft"
+          }
         }
       }
     },

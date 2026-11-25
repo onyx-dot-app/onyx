@@ -6445,7 +6445,7 @@
       },
       "defaultModel": {
         "description": "新しいセッションで既定で使用されます。",
-        "title": "デフォルトモデル"
+        "title": "デフォルトのチャットモデル"
       },
       "deleteModal": {
         "defaultProviderWarning": "デフォルトのプロバイダーは削除できません。削除する前に、別のプロバイダーをデフォルトに設定してください。",
@@ -6862,7 +6862,8 @@
           },
           "submitButton": {
             "invalidTooltip": "必須項目をすべて入力してください。",
-            "pristineTooltip": "保存する変更はありません。"
+            "pristineTooltip": "保存する変更はありません。",
+            "noModelsTooltip": "チャットモデルまたは画像モデルを 1 つ以上選択してください"
           },
           "title": {
             "configure": "*{provider}* を設定",
@@ -7003,6 +7004,41 @@
         "imageModels": {
           "title": "画像モデル",
           "description": "チャットで画像の生成に使用できるモデルを選択します。"
+        }
+      },
+      "defaultChanges": {
+        "title": "新しいデフォルトを選択",
+        "description": "この変更により、デフォルトのモデルが外れます。それぞれの代わりになるモデルを選択してください。",
+        "deleteDescription": "このプロバイダーにはデフォルトのモデルがあります。それぞれの代わりになるモデルを選択してください。",
+        "current": "現在: {model}",
+        "placeholder": "モデルを選択",
+        "confirm": "続行",
+        "cleared": "代わりになるモデルがありません。デフォルトは解除されます。",
+        "flows": {
+          "chat": {
+            "title": "デフォルトのチャットモデル",
+            "lost": "ほかに選択されたチャットモデルがありません。チャットは無効になります。"
+          },
+          "image": {
+            "title": "デフォルトの画像生成モデル",
+            "lost": "ほかに接続された画像モデルがありません。画像生成は無効になります。"
+          },
+          "vision": {
+            "title": "画像処理モデル"
+          },
+          "chatNaming": {
+            "title": "チャット名付けモデル"
+          },
+          "searchSelection": {
+            "title": "検索判断モデル"
+          },
+          "decision": {
+            "title": "判断モデル",
+            "lost": "ほかに選択された判断モデルがありません。判断は無効になります。"
+          },
+          "craft": {
+            "title": "Craft のデフォルトモデル"
+          }
         }
       }
     },

@@ -18,6 +18,7 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   deleteImageGenerationConfig,
   linkImageGenerationModel,
+  setDefaultImageGenerationConfig,
 } from "@/lib/imageGeneration/svc";
 
 /**
@@ -168,6 +169,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
     api_key,
     name: rawName,
     image_model_changes: imageModelChanges,
+    image_default_choice: imageDefaultChoice,
     ...rest
   } = values;
   const testModelName =
@@ -213,7 +215,9 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   };
 
   // Skip test on updates where api_key is absent (credentials not changing)
+  // A provider kept only for image models has no chat model to test with.
   if (
+    testModelName !== "" &&
     (!existingLlmProvider || apiKeyForRequest !== undefined) &&
     !isEqual(finalValues, initialValues)
   ) {
@@ -297,9 +301,14 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   }
 
   // ── Image models ────────────────────────────────────────────────────
-  if (existingLlmProvider && imageModelChanges) {
+  if (existingLlmProvider && (imageModelChanges || imageDefaultChoice)) {
     try {
-      await saveImageModelChanges(existingLlmProvider.id, imageModelChanges);
+      if (imageModelChanges) {
+        await saveImageModelChanges(existingLlmProvider.id, imageModelChanges);
+      }
+      if (imageDefaultChoice) {
+        await setDefaultImageGenerationConfig(imageDefaultChoice);
+      }
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("toasts.imageModelsUpdateFailed")

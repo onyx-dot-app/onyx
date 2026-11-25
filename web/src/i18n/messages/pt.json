@@ -6445,7 +6445,7 @@
       },
       "defaultModel": {
         "description": "Usado por padrão em novas sessões.",
-        "title": "Modelo padrão"
+        "title": "Modelo de chat padrão"
       },
       "deleteModal": {
         "defaultProviderWarning": "Não é possível excluir o provedor padrão. Selecione outro provedor como padrão antes de excluir este.",
@@ -6862,7 +6862,8 @@
           },
           "submitButton": {
             "invalidTooltip": "Preencha todos os campos obrigatórios.",
-            "pristineTooltip": "Nenhuma alteração para salvar."
+            "pristineTooltip": "Nenhuma alteração para salvar.",
+            "noModelsTooltip": "Selecione pelo menos um modelo de chat ou de imagem"
           },
           "title": {
             "configure": "Configurar *{provider}*",
@@ -7003,6 +7004,41 @@
         "imageModels": {
           "title": "Modelos de imagem",
           "description": "Selecione os modelos que podem gerar imagens no chat."
+        }
+      },
+      "defaultChanges": {
+        "title": "Escolha novos padrões",
+        "description": "Esta alteração remove modelos que são padrão. Escolha um modelo para substituir cada um.",
+        "deleteDescription": "Este provedor tem modelos padrão. Escolha um modelo para substituir cada um.",
+        "current": "Atualmente {model}",
+        "placeholder": "Escolha um modelo",
+        "confirm": "Continuar",
+        "cleared": "Nenhum outro modelo pode substituí-lo. O padrão é removido.",
+        "flows": {
+          "chat": {
+            "title": "Modelo de chat padrão",
+            "lost": "Nenhum outro modelo de chat está selecionado. O chat é desativado."
+          },
+          "image": {
+            "title": "Modelo padrão de geração de imagens",
+            "lost": "Nenhum outro modelo de imagem está conectado. A geração de imagens é desativada."
+          },
+          "vision": {
+            "title": "Modelo de processamento de imagens"
+          },
+          "chatNaming": {
+            "title": "Modelo de nomeação de chats"
+          },
+          "searchSelection": {
+            "title": "Modelo de decisão de pesquisa"
+          },
+          "decision": {
+            "title": "Modelo de decisão",
+            "lost": "Nenhum outro modelo de decisão está selecionado. As decisões são desativadas."
+          },
+          "craft": {
+            "title": "Modelo padrão do Craft"
+          }
         }
       }
     },

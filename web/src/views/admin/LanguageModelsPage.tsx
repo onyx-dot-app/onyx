@@ -41,6 +41,7 @@ import {
 } from "@/lib/languageModels/cache";
 import {
   deleteLlmProvider,
+  updateDefaults,
   updateModelRouting,
 } from "@/lib/languageModels/svc";
 import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
@@ -60,6 +61,15 @@ import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
 import { DefaultImageModelSetting } from "@/lib/imageGeneration/components";
+import { setDefaultImageGenerationConfig } from "@/lib/imageGeneration/svc";
+import {
+  DefaultChoiceRows,
+  buildDefaultChanges,
+  choicesComplete,
+  useCurrentDefaults,
+  useDefaultCandidates,
+  type DefaultChoices,
+} from "@/sections/modals/languageModels/defaults";
 import { useImageGenerationConfigs } from "@/lib/imageGeneration/hooks";
 
 // Settings toggles that gate per-chat model controls in the model picker.
@@ -142,9 +152,34 @@ function ExistingProviderCard({
     });
   }, [fullProviderError, provider.id, mutate, t]);
 
+  // Defaults this provider holds: each moves to a chosen model, or, when no
+  // other model can take it over, is cleared with the provider.
+  const affectedDefaults = useCurrentDefaults().filter(
+    (current) => current.providerId === provider.id
+  );
+  const defaultCandidates = useDefaultCandidates({ exclude: provider.id });
+  const [defaultChoices, setDefaultChoices] = useState<DefaultChoices>({});
+  const { configs: imageConfigs } = useImageGenerationConfigs();
+  const canDelete = choicesComplete(
+    affectedDefaults,
+    defaultCandidates,
+    defaultChoices
+  );
+
   const handleDelete = async () => {
     try {
-      await deleteLlmProvider(provider.id, isLastProvider);
+      const { defaultChanges, imageDefault } = buildDefaultChanges(
+        affectedDefaults,
+        defaultCandidates,
+        defaultChoices,
+        imageConfigs ?? []
+      );
+      if (Object.keys(defaultChanges).length > 0) {
+        await updateDefaults(defaultChanges);
+      }
+      if (imageDefault) await setDefaultImageGenerationConfig(imageDefault);
+      // The defaults are moved or cleared, so nothing holds the delete.
+      await deleteLlmProvider(provider.id, true);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
     } catch (e) {
@@ -176,31 +211,38 @@ function ExistingProviderCard({
             <Button
               variant="danger"
               onClick={handleDelete}
-              disabled={isDefaultText && !isLastProvider}
+              disabled={!canDelete}
             >
               {t("deleteModal.submit.label")}
             </Button>
           }
         >
           <Section alignItems="start" gap={2}>
-            {isDefaultText && !isLastProvider ? (
+            <Text font="main-ui-body" color="text-03">
+              {markdown(
+                t("deleteModal.description", {
+                  provider: displayName,
+                })
+              )}
+            </Text>
+            {isLastProvider && (
               <Text font="main-ui-body" color="text-03">
-                {t("deleteModal.defaultProviderWarning")}
+                {t("deleteModal.lastProviderNote")}
               </Text>
-            ) : (
+            )}
+            {affectedDefaults.length > 0 && (
               <>
                 <Text font="main-ui-body" color="text-03">
-                  {markdown(
-                    t("deleteModal.description", {
-                      provider: displayName,
-                    })
-                  )}
+                  {t("defaultChanges.deleteDescription")}
                 </Text>
-                {isLastProvider && (
-                  <Text font="main-ui-body" color="text-03">
-                    {t("deleteModal.lastProviderNote")}
-                  </Text>
-                )}
+                <DefaultChoiceRows
+                  affected={affectedDefaults}
+                  candidates={defaultCandidates}
+                  choices={defaultChoices}
+                  onChange={(flow, id) =>
+                    setDefaultChoices((prev) => ({ ...prev, [flow]: id }))
+                  }
+                />
               </>
             )}
           </Section>
