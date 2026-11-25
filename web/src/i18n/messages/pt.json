@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} não conseguiu alcançar o servidor"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} falhou"
         }
       },
       "customToolAuth": {

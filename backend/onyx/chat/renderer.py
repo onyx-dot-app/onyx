@@ -733,6 +733,10 @@ def question_resolved(
     )
 
 
+# The response type of a generic card's call that failed without details.
+CUSTOM_TOOL_ERROR_RESPONSE_TYPE = "error"
+
+
 class ToolRenderer:
     """Project tool progress and final results without sending private tool state."""
 
@@ -760,6 +764,8 @@ class ToolRenderer:
         self._finished = False
         # The end packet of a failed call, chosen with the start packet.
         self._own_end: OwnEndPacket | None = None
+        # The call shows on the generic tool card (CustomToolStart).
+        self._generic_display = False
 
     def consume(
         self,
@@ -826,6 +832,7 @@ class ToolRenderer:
             else OWN_END_PACKETS.get(name)
         )
         if not objects:
+            self._generic_display = True
             objects = [
                 packets.CustomToolStart(
                     tool_name=name,
@@ -1214,11 +1221,25 @@ class ToolRenderer:
             return [
                 packets.Packet(placement=self.placement, obj=end(error=result.text))
             ]
-        if result is not None:
-            return self._detail_packets(
-                result.details, "" if result.is_error else result.text
-            )
-        return []
+        if result is None:
+            return []
+        if self._generic_display and result.is_error and result.details is None:
+            # A rejected call (ToolCallException) has no public error details.
+            # Its text goes to the model and can be private, so the card gets
+            # only the failure. An error packet would end the widget's stream.
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.CustomToolDelta(
+                        tool_name=self.call.name,
+                        tool_id=self.tool_id,
+                        response_type=CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+                    ),
+                )
+            ]
+        return self._detail_packets(
+            result.details, "" if result.is_error else result.text
+        )
 
     def amend(self, result: ToolResultFields) -> list[packets.Packet]:
         """Render the result that a release hook set for the call.

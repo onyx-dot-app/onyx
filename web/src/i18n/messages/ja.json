@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} はサーバーに接続できませんでした"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} が失敗しました"
         }
       },
       "customToolAuth": {

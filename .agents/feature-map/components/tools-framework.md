@@ -448,7 +448,11 @@ are plain `AgentTool` objects with no `Tool` row, and
    delta by the type of `details`. A tool with no branch renders as a custom
    tool: `CustomToolStart` and `CustomToolArgs`, then its `content` as text for
    a successful result only. An error shows no text unless its details are
-   `ToolExecutionError`. Return typed `details`: with `details=None`, the live
+   `ToolExecutionError`. An error result without details (a
+   `ToolCallException`) sends a `CustomToolDelta` with `response_type`
+   `"error"` (`CUSTOM_TOOL_ERROR_RESPONSE_TYPE`) and no data, so the card shows
+   that the call failed; it sends no `error` packet, which would end the
+   widget's stream. Return typed `details`: with `details=None`, the live
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed arguments
    show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):

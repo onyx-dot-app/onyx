@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} 无法连接到其服务器"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} 失败"
         }
       },
       "customToolAuth": {

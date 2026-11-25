@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} 실패"
         }
       },
       "customToolAuth": {

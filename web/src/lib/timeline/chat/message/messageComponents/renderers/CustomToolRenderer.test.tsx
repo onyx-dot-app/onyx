@@ -3,6 +3,7 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   CustomToolErrorInfo,
   CustomToolPacket,
+  CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
   PacketType,
 } from "@/app/app/services/streamingModels";
 import { RenderType } from "@/lib/timeline/chat/message/messageComponents/types";
@@ -11,9 +12,10 @@ import { CustomToolRenderer } from "@/lib/timeline/chat/message/messageComponent
 const placement = { turn_index: 0, tab_index: 0 };
 
 function packets(
-  error: CustomToolErrorInfo,
+  error: CustomToolErrorInfo | null,
   toolName = "get_meta_data",
-  displayName = "get_meta_data"
+  displayName = "get_meta_data",
+  responseType = "text"
 ): CustomToolPacket[] {
   return [
     {
@@ -29,7 +31,7 @@ function packets(
       obj: {
         type: PacketType.CUSTOM_TOOL_DELTA,
         tool_name: toolName,
-        response_type: "text",
+        response_type: responseType,
         error,
       },
     },
@@ -38,11 +40,12 @@ function packets(
 }
 
 function renderStatus(
-  error: CustomToolErrorInfo,
+  error: CustomToolErrorInfo | null,
   toolName?: string,
-  displayName?: string
+  displayName?: string,
+  responseType?: string
 ) {
-  const toolPackets = packets(error, toolName, displayName);
+  const toolPackets = packets(error, toolName, displayName, responseType);
   render(
     <CustomToolRenderer
       packets={toolPackets}
@@ -124,6 +127,13 @@ describe("CustomToolRenderer", () => {
     expect(screen.queryByText(/completed/)).not.toBeInTheDocument();
     expect(screen.queryByText(/was blocked/)).not.toBeInTheDocument();
     expect(screen.getByText(/502/)).toBeInTheDocument();
+  });
+
+  test("shows a call rejected without details as failed, not executed", () => {
+    renderStatus(null, undefined, undefined, CUSTOM_TOOL_ERROR_RESPONSE_TYPE);
+
+    expect(screen.getByText("get_meta_data failed")).toBeInTheDocument();
+    expect(screen.queryByText(/Executed/)).not.toBeInTheDocument();
   });
 
   test.each([

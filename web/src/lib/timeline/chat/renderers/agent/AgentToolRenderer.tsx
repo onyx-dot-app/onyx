@@ -3,6 +3,7 @@ import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { codeSpan, markdown } from "@opal/utils";
 import {
+  isFailedCustomToolDelta,
   PacketType,
   type CustomToolPacket,
   type Packet,
@@ -75,7 +76,10 @@ export function AgentToolRenderer({
         // The Claude family names the target `to`.
         (tool.action === "send" ? stringArg(obj.tool_args, "to") : "");
       if (tool.messageArg) message = stringArg(obj.tool_args, tool.messageArg);
-    } else if (obj.type === PacketType.CUSTOM_TOOL_DELTA && obj.error) {
+    } else if (
+      obj.type === PacketType.CUSTOM_TOOL_DELTA &&
+      isFailedCustomToolDelta(obj)
+    ) {
       failed = true;
     } else if (obj.type === PacketType.ERROR) {
       failed = true;

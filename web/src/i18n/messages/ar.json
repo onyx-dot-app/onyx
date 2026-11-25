@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"
+        },
+        "callFailedStatus": {
+          "text": "فشل {toolName}"
         }
       },
       "customToolAuth": {

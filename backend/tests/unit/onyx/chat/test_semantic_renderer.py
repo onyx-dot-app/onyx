@@ -35,7 +35,12 @@ from onyx.chat.models import (
     ResponseRecord,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
-from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
+from onyx.chat.renderer import (
+    CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+    MessageRenderer,
+    ResponseLayout,
+    ToolRenderer,
+)
 from onyx.chat.response import response_record
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
@@ -847,6 +852,62 @@ def test_tool_errors_only_display_explicit_public_details(
         ["Please reconnect this tool"] if public_error else []
     )
     assert result.text == "Private provider exception"
+
+
+@pytest.mark.parametrize("live", [False, True])
+@pytest.mark.parametrize("is_error", [False, True])
+def test_generic_card_marks_a_failed_call_without_details(
+    live: bool, is_error: bool
+) -> None:
+    """A call that raised ToolCallException has no error details. Its card
+    still says that it failed, without the text the model got and without an
+    error packet."""
+    call = ToolCall(id="call", name="skills_read", arguments={"name": "missing"})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="No skill is named 'missing'.",
+        is_error=is_error,
+    )
+    if live:
+        renderer = ToolRenderer(call, Placement(turn_index=0))
+        output = renderer.start() + renderer.complete(result)
+    else:
+        output = replay_response(
+            ResponseRecord(
+                run_id="r",
+                status=RunStatus.COMPLETE,
+                steps=[
+                    StepRecord(
+                        message=AssistantMessage(id="m", content=[call]),
+                        generation_status=ExecutionStatus.COMPLETE,
+                        tools={
+                            call.id: ToolExecutionRecord(
+                                status=ExecutionStatus.COMPLETE, result=result
+                            )
+                        },
+                    )
+                ],
+            ),
+            {},
+            {},
+            {},
+        )
+    failures = [
+        packet.obj
+        for packet in output
+        if isinstance(packet.obj, CustomToolDelta)
+        and packet.obj.response_type == CUSTOM_TOOL_ERROR_RESPONSE_TYPE
+    ]
+    assert len(failures) == int(is_error)
+    assert all(failure.data is None for failure in failures)
+    assert not any(isinstance(packet.obj, PacketException) for packet in output)
+    assert all(
+        "No skill is named" not in packet.model_dump_json()
+        for packet in output
+        if is_error
+    )
+    assert any(isinstance(packet.obj, SectionEnd) for packet in output)
 
 
 @pytest.mark.parametrize("live", [False, True])

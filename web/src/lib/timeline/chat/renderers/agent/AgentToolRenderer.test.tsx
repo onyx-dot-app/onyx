@@ -2,6 +2,7 @@ import { render, screen } from "@tests/setup/test-utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   type CustomToolPacket,
+  CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
   PacketType,
 } from "@/app/app/services/streamingModels";
 import { RenderType } from "@/lib/timeline/chat/message/messageComponents/types";
@@ -13,7 +14,7 @@ import { AgentToolRenderer } from "@/lib/timeline/chat/renderers/agent/AgentTool
 const placement = { turn_index: 0, tab_index: 0 };
 const prompt = "Wait idly for about one minute.\nThen write a limerick.";
 
-type End = "running" | "done" | "error" | "toolError";
+type End = "running" | "done" | "error" | "toolError" | "rejected";
 
 function call(
   toolName: string,
@@ -52,6 +53,15 @@ function call(
           status_code: 500,
           message: "Agent name exceeds 256 bytes.",
         },
+      },
+    });
+  if (end === "rejected")
+    packets.push({
+      placement,
+      obj: {
+        type: PacketType.CUSTOM_TOOL_DELTA,
+        tool_name: toolName,
+        response_type: CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
       },
     });
   if (end === "error")
@@ -166,7 +176,7 @@ test("a finished interrupt names the agent and has no body", () => {
   expect(screen.getByTestId("body")).toBeEmptyDOMElement();
 });
 
-test.each(["error", "toolError"] as const)(
+test.each(["error", "toolError", "rejected"] as const)(
   "a failed spawn (%s) says so",
   (end) => {
     renderStep(call("spawn_agent", spawnArgs, end));
