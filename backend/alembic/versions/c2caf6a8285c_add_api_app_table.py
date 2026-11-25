@@ -42,39 +42,52 @@ _RETRY_DELAY_S = 2
 _LOCK_NOT_AVAILABLE = "55P03"
 
 # The id of each copied row is the id of its integration, so the link needs
-# no lookup. base_url is the value openapi_to_url gives: the one non-empty
-# string url among the servers. Where openapi_to_url raises (no such url,
-# several, a server that is not an object, a url that is not a string), the
-# spec cannot make a call and the copy gives ''.
-_COPY_OPENAPI_TOOLS = """
-    INSERT INTO api_app (
-        id, api_type, base_url, openapi_document, graphql_schema
-    )
-    SELECT i.id, 'rest',
-        coalesce((
-            SELECT min(s.value ->> 'url') FILTER (
-                WHERE jsonb_typeof(s.value -> 'url') = 'string'
-                AND s.value ->> 'url' <> ''
-            )
-            FROM jsonb_array_elements(
-                CASE WHEN jsonb_typeof(t.openapi_schema -> 'servers') = 'array'
-                THEN t.openapi_schema -> 'servers' ELSE '[]'::jsonb END
-            ) AS s
-            HAVING count(*) FILTER (
-                WHERE jsonb_typeof(s.value -> 'url') = 'string'
-                AND s.value ->> 'url' <> ''
-            ) = 1
-            AND count(*) FILTER (
-                WHERE jsonb_typeof(s.value) <> 'object'
-                OR jsonb_typeof(s.value -> 'url') NOT IN ('string', 'null')
-            ) = 0
-        ), ''),
-        t.openapi_schema::text, NULL
+# no lookup.
+_SELECT_OPENAPI_TOOLS = """
+    SELECT i.id, t.openapi_schema, t.openapi_schema::text
     FROM integration i
     JOIN tool t ON t.id = i.tool_id
     WHERE t.openapi_schema IS NOT NULL
     ORDER BY i.id
 """
+
+_INSERT_API_APP = """
+    INSERT INTO api_app (id, api_type, base_url, openapi_document, graphql_schema)
+    VALUES (:id, 'rest', :base_url, :document, NULL)
+"""
+
+
+def _base_url(spec: object) -> str:
+    """The value openapi_to_url gives: the one non-empty string url among the
+    servers. Where openapi_to_url raises, the spec cannot make a call, so ''.
+    A copy, because a migration must not import app code."""
+    servers = spec.get("servers") if isinstance(spec, dict) else None
+    if not isinstance(servers, list):
+        return ""
+    urls: list[str] = []
+    for server in servers:
+        if not isinstance(server, dict):
+            return ""
+        url = server.get("url")
+        if url is not None and not isinstance(url, str):
+            return ""
+        if url:
+            urls.append(url)
+    return urls[0] if len(urls) == 1 else ""
+
+
+def _copy_openapi_tools() -> None:
+    bind = op.get_bind()
+    rows = bind.execute(sa.text(_SELECT_OPENAPI_TOOLS)).all()
+    if rows:
+        bind.execute(
+            sa.text(_INSERT_API_APP),
+            [
+                {"id": id_, "base_url": _base_url(spec), "document": document}
+                for id_, spec, document in rows
+            ],
+        )
+
 
 # A GraphQL app has api_app_id and no tool_id. The old schema has no kind row
 # for it.
@@ -199,7 +212,7 @@ def _create_api_app_and_copy() -> None:
             name="ck_api_app_definition",
         ),
     )
-    op.execute(_COPY_OPENAPI_TOOLS)
+    _copy_openapi_tools()
     op.execute(_SET_API_APP_SEQUENCE)
     # integration stays locked from the ALTER to the commit, so it is altered
     # last, with only the link after it.

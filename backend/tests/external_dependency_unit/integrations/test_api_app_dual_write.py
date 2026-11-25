@@ -117,27 +117,30 @@ def test_a_spec_change_adds_the_row_that_older_code_did_not_write(
         admin,
         db_session,
     )
-    integration = db_session.get(Integration, detail.id)
-    assert integration is not None
-    old_app = db_session.get(ApiApp, integration.api_app_id)
-    integration.api_app_id = None
-    db_session.delete(old_app)
-    db_session.commit()
+    try:
+        integration = db_session.get(Integration, detail.id)
+        assert integration is not None
+        old_app = db_session.get(ApiApp, integration.api_app_id)
+        integration.api_app_id = None
+        db_session.delete(old_app)
+        db_session.commit()
 
-    admin_api.update_integration(
-        detail.id,
-        IntegrationUpdate(
-            config=OpenApiConfigInput(
-                openapi_spec=_spec("https://v2.weather.example.com", "get_v2")
-            )
-        ),
-        admin,
-        db_session,
-    )
-    assert (
-        _assert_matches_tool(db_session, detail.id).base_url
-        == "https://v2.weather.example.com"
-    )
+        admin_api.update_integration(
+            detail.id,
+            IntegrationUpdate(
+                config=OpenApiConfigInput(
+                    openapi_spec=_spec("https://v2.weather.example.com", "get_v2")
+                )
+            ),
+            admin,
+            db_session,
+        )
+        assert (
+            _assert_matches_tool(db_session, detail.id).base_url
+            == "https://v2.weather.example.com"
+        )
+    finally:
+        admin_api.delete_integration(detail.id, admin, db_session)
 
 
 def test_the_legacy_tool_route_writes_the_api_app_row(
