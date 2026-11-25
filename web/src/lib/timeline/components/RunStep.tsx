@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { Line, Presence } from "@opal/components";
 import { LineLoader } from "@opal/loaders";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -8,7 +8,17 @@ import { STEP_ICONS } from "@/lib/timeline/icons";
 import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
 
+/** The open steps of a run card, kept while the card folds and reopens. */
+export interface RunStepOpenState {
+  openIds: ReadonlySet<string>;
+  setOpen: (id: string, open: boolean) => void;
+}
+
+export const RunStepOpenContext = createContext<RunStepOpenState | null>(null);
+
 export interface RunStepProps {
+  /** Keeps the step's open state in its run card. Such a step starts closed. */
+  id?: string;
   status: TimelineEntryStatus;
   /** The step kind's icon; a running or failed step shows its status. */
   icon?: IconFunctionComponent;
@@ -48,6 +58,7 @@ function statusIcon(
  * finishes), with a chevron that opens its body.
  */
 export function RunStep({
+  id,
   status,
   icon,
   title,
@@ -59,12 +70,16 @@ export function RunStep({
   hideHeader = false,
   loading = false,
 }: RunStepProps) {
-  const [open, setOpen] = useState(defaultExpanded);
+  const [localOpen, setLocalOpen] = useState(defaultExpanded);
+  const openState = useContext(RunStepOpenContext);
   const { rowRef, onToggle } = useRevealOnOpen();
   if (hideHeader) return <>{body}</>;
+  const open =
+    openState && id !== undefined ? openState.openIds.has(id) : localOpen;
   const toggle = () => {
     onToggle(!open);
-    setOpen(!open);
+    if (openState && id !== undefined) openState.setOpen(id, !open);
+    else setLocalOpen(!open);
   };
 
   // A failed step has finished too: it shows how it ended, e.g. "failed

@@ -189,7 +189,11 @@ and chat's `AgentTimeline` only map their steps onto them. Both are an Opal
 command or path in it as a code span, and a running title ends with "..."),
 trailing content and the chevron. Only the header folds a card, so a click or
 a text selection in the body never folds it. A step inside a run card has no
-padding of its own. A chat run of at most `MAX_HOISTED_STEPS` steps shows each
+padding of its own. The open card's step list scrolls inside a capped height
+(T3 Code's work group cap). While the run works, it follows new steps only if
+the user was at its end. The card keeps the ids of its open steps
+(`RunStepOpenContext`), so a step stays open when the card folds and reopens.
+A chat run of at most `MAX_HOISTED_STEPS` steps shows each
 step as its own card instead of one run card. Every other block folds, even
 with one entry, once
 a text reply follows. A whole response is laid out by the shared `Response`
