@@ -450,7 +450,10 @@ export default function useChatController({
           toast.error(t("createSessionFailed.toast"));
           // The user moved to a different page while the request was pending.
           // Do not take them back or put the message into that page.
-          if (!stillOnComposer() || !isStillOnLocation([startUrl], window.location)) {
+          if (
+            !stillOnComposer() ||
+            !isStillOnLocation([startUrl], window.location)
+          ) {
             return;
           }
           restoreSubmittedInput();
@@ -462,7 +465,7 @@ export default function useChatController({
           (controller.signal.aborted ||
             !stillOnComposer() ||
             !incognitoEnabledRef.current ||
-            !isStillOnLocation([startUrl, urlWithoutProject], window.location))
+            !isStillOnLocation([startUrl], window.location))
         ) {
           try {
             await endIncognitoSession(currChatSessionId);

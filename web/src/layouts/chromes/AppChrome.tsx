@@ -37,7 +37,10 @@ import {
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/navigation/hooks";
+import {
+  getNewSessionNavigation,
+  useAppPosition,
+} from "@/lib/navigation/hooks";
 import { PendingRoute, useNavigation } from "@opal/navigation";
 import { AppChromeLoader } from "@/layouts/chromes/AppChromeLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -101,6 +104,7 @@ function Header() {
   // itself, including any that landed late.
   const handleExitIncognito = useCallback(async () => {
     const sessionId = currentChatSessionId ?? incognitoSessionId;
+    const navigationAtExit = getNewSessionNavigation();
     if (sessionId) {
       let tornDown = false;
       try {
@@ -116,9 +120,15 @@ function Header() {
       }
       if (currentChatSessionId) removeSession(currentChatSessionId);
     }
+    if (navigationAtExit !== getNewSessionNavigation()) return;
+    const liveChatId = useChatSessionStore.getState().currentSessionId;
+    if (!currentChatSessionId && liveChatId === sessionId && liveChatId) {
+      removeSession(liveChatId);
+      useChatSessionStore.getState().setCurrentSession(null);
+    }
     setIncognitoEnabled(false);
     setCurrentMessageFiles([]);
-    if (currentChatSessionId) {
+    if (currentChatSessionId || (liveChatId && liveChatId === sessionId)) {
       navigation.go("/app", { replace: true });
     }
   }, [

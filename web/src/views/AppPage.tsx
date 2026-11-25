@@ -378,7 +378,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useEffect(() => {
     const sessionId = currentChatSessionId ?? incognitoSessionId;
     if (!incognitoEnabled || !sessionId) return;
-    const handlePageHide = () => {
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) return;
       navigator.sendBeacon(`/api/chat/end-incognito-session/${sessionId}`);
     };
     window.addEventListener("pagehide", handlePageHide);
