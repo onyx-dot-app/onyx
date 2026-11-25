@@ -289,7 +289,14 @@ const HumanMessage = React.memo(function HumanMessage({
 
   const copyEditButtonContent = useMemo(
     () => (
-      <div className="flex flex-row items-center shrink px-1">
+      <Section
+        flexDirection="row"
+        alignItems="center"
+        width="fit"
+        height="fit"
+        gap={0}
+        className="shrink px-1"
+      >
         <CopyButton
           getCopyText={() => content}
           prominence="tertiary"
@@ -304,7 +311,7 @@ const HumanMessage = React.memo(function HumanMessage({
             data-testid="HumanMessage/edit-button"
           />
         )}
-      </div>
+      </Section>
     ),
     [content, onEdit, t]
   );
@@ -356,6 +363,7 @@ const HumanMessage = React.memo(function HumanMessage({
           justifyContent="end"
           alignItems="center"
           height="fit"
+          gap={0}
           className="pt-1"
         >
           {!isEditing && isMobile && copyEditButton}

@@ -418,7 +418,7 @@ const ChatButton = memo(
           {!renaming && runStatusMarker && (
             <span
               data-touch-run-marker
-              className="hidden no-hover:block absolute end-6 top-1/2 -translate-y-1/2"
+              className="pointer-events-none hidden no-hover:block absolute end-6 top-1/2 -translate-y-1/2"
             >
               {runStatusMarker}
             </span>

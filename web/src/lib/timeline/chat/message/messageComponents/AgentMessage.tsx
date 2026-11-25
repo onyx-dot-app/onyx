@@ -793,7 +793,13 @@ const AgentMessage = React.memo(function AgentMessage({
 
           {/* Feedback buttons - only show when streaming and rendering complete */}
           {isComplete && (!hideFooter || timeSent) && (
-            <Section flexDirection="row" alignItems="center" height="fit">
+            <Section
+              flexDirection="row"
+              alignItems="center"
+              height="fit"
+              gap={0}
+              wrap
+            >
               {!hideFooter && (
                 <MessageToolbar
                   nodeId={nodeId}
