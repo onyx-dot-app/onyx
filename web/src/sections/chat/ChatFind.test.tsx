@@ -109,3 +109,28 @@ test("Ctrl+F finds text in the whole chat and Enter steps to the next match", as
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("search")).not.toBeInTheDocument();
 });
+
+test("Escape after Next closes the bar at once and returns focus", async () => {
+  const user = setupUser();
+  render(
+    <ChatScrollContainer sessionId="chat-1" overlay={<ChatFind />}>
+      <button type="button">Before find</button>
+    </ChatScrollContainer>
+  );
+  const before = screen.getByRole("button", { name: "Before find" });
+  before.focus();
+
+  await user.keyboard("{Control>}f{/Control}");
+  await user.type(
+    screen.getByRole("textbox", { name: "Find in session" }),
+    "foo"
+  );
+  await waitFor(() => expect(screen.getByText("1 of 3")).toBeInTheDocument());
+
+  await user.click(screen.getByRole("button", { name: "Next match" }));
+  expect(screen.getByText("2 of 3")).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+
+  expect(screen.queryByRole("search")).not.toBeInTheDocument();
+  expect(before).toHaveFocus();
+});

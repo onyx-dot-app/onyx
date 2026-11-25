@@ -195,25 +195,29 @@ function ChatFindBar() {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Enter") {
-      event.preventDefault();
-      step(event.shiftKey ? -1 : 1);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      close();
-    }
+    if (event.nativeEvent.isComposing || event.key !== "Enter") return;
+    event.preventDefault();
+    step(event.shiftKey ? -1 : 1);
+  }
+
+  // On the bar, so Escape closes it from its buttons too.
+  function handleBarKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.nativeEvent.isComposing || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
   }
 
   const hasQuery = query.trim().length > 0;
   const navigationDisabled = results.total === 0;
 
   return (
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the search landmark only catches Escape that bubbles up from its own field and buttons
     <div
       ref={barRef}
       role="search"
       aria-label={t("label")}
+      onKeyDown={handleBarKeyDown}
       className="absolute top-3 end-3 z-sticky w-[min(24rem,calc(100%-1.5rem))] rounded-08 shadow-box-01"
     >
       <InputTypeIn
