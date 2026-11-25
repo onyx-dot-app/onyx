@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQueryController } from "@/providers/QueryControllerProvider";
+import {
+  type AppMode,
+  useQueryController,
+} from "@/providers/QueryControllerProvider";
 import { useUser } from "@/providers/UserProvider";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useAppPosition } from "@/lib/navigation/hooks";
@@ -27,10 +30,10 @@ export function useChatShortcutActions(): ChatShortcutActions {
   const { chatSessions } = useChatSessions();
   const { reset, setAppMode } = useQueryController();
   const { user } = useUser();
-  const defaultMode =
-    user?.preferences?.default_app_mode?.toLowerCase() === "search"
-      ? "search"
-      : "chat";
+  // The saved mode as the query provider reads it: Auto and Search stay.
+  const savedMode = user?.preferences?.default_app_mode?.toLowerCase();
+  const defaultMode: AppMode =
+    savedMode === "auto" || savedMode === "search" ? savedMode : "chat";
 
   return useMemo(() => {
     const chatIds = chatSessions.map((session) => session.id);

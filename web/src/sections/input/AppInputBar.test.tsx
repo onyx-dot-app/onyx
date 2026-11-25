@@ -123,10 +123,11 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
 }));
+let mockChatId: string | null = null;
 jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
-    isNewSession: () => true,
-    chat: () => null,
+    isNewSession: () => mockChatId === null,
+    chat: () => mockChatId,
     agent: () => null,
     project: () => null,
   }),
@@ -256,6 +257,7 @@ beforeEach(() => {
   mockMicrophone = null;
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
+  mockChatId = null;
 });
 
 test("incognito greys out Deep Research and explains why", async () => {
@@ -318,6 +320,22 @@ test("an immediate reload restores draft text and completed uploads", async () =
   expect(restoreFiles([])).toEqual([projectFile("draft-file"), processing]);
   const currentFiles = [projectFile("new-attachment")];
   expect(restoreFiles(currentFiles)).toBe(currentFiles);
+});
+
+test("a composer for another chat drops the files a left composer kept", async () => {
+  mockChatId = "chat-a";
+  mockProjectsContext.currentMessageFiles = [projectFile("chat-a-file")];
+  const first = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "draft for A");
+  // Chat A's composer unmounts (e.g. a visit to Settings); the shared
+  // attachment list keeps chat A's file.
+  first.unmount();
+
+  mockChatId = "chat-b";
+  render(<Composer />);
+  const restoreFiles =
+    mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+  expect(restoreFiles([projectFile("chat-a-file")])).toEqual([]);
 });
 
 test("keeps the query in the editor when an auto-routed search returns", async () => {

@@ -178,6 +178,13 @@ function isChatDraftEmpty(draft: StoredChatDraft): boolean {
   return !message.trim() && !files?.length;
 }
 
+/**
+ * The composer scope that the shared attachment list belongs to. The list
+ * lives in `ProjectsProvider`, which outlives each composer, so a composer
+ * that mounts for another chat must not keep or save the files it finds.
+ */
+let attachmentsScope: string | null = null;
+
 const AppInputBar = React.memo(
   ({
     initialMessage = "",
@@ -424,6 +431,7 @@ const AppInputBar = React.memo(
     useEffect(() => {
       if (previousScopeRef.current === editorScope) return;
       previousScopeRef.current = editorScope;
+      attachmentsScope = editorScope;
       setHeldSendKey(null);
       clearMessage();
       setCurrentMessageFiles([]);
@@ -437,8 +445,14 @@ const AppInputBar = React.memo(
       const draft = chatDraft === null ? null : toChatDraft(chatDraft);
       const hasMessage = Boolean(composedRef.current.message.trim());
       skipNextDraftSaveRef.current = !hasMessage;
+      // Files left by a composer of another chat (e.g. before a visit to
+      // Settings) give way to this chat's draft files.
+      const ownsFiles = attachmentsScope === editorScope;
+      attachmentsScope = editorScope;
       setCurrentMessageFiles((files) =>
-        files.length > 0 || hasMessage ? files : (draft?.files ?? [])
+        ownsFiles && (files.length > 0 || hasMessage)
+          ? files
+          : (draft?.files ?? [])
       );
       if (draft && !initialMessage && !hasMessage) {
         setMessage(draft.message, draft.mentions, { focus: false });
@@ -446,6 +460,7 @@ const AppInputBar = React.memo(
     }, [
       chatDraftLoaded,
       chatDraft,
+      editorScope,
       initialMessage,
       setMessage,
       setCurrentMessageFiles,
