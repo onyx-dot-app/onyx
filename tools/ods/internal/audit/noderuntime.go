@@ -25,6 +25,7 @@ type NodeRuntime struct {
 }
 
 type nodeAdvisory struct {
+	Overview    string   `json:"overview"`
 	CVEs        []string `json:"cve"`
 	Vulnerable  string   `json:"vulnerable"`
 	Patched     string   `json:"patched"`
@@ -154,14 +155,20 @@ func nodeAdvisoryFindings(version *semver.Version, advisories map[string]nodeAdv
 				return nil, fmt.Errorf("invalid Node advisory CVE %q", cve)
 			}
 		}
-		id := "NODE-CORE-" + key
-		if len(a.CVEs) > 0 {
-			id = a.CVEs[0]
+		ids := a.CVEs
+		if len(ids) == 0 {
+			ids = []string{"NODE-CORE-" + key}
 		}
-		findings = append(findings, Finding{
-			ID: id, Aliases: a.CVEs, Title: a.Description,
-			Severity: ParseSeverity(a.Severity), URL: a.URL, Source: "node-security-wg",
-		})
+		title := a.Description
+		if title == "" {
+			title = truncate(strings.Join(strings.Fields(a.Overview), " "), 200)
+		}
+		for _, id := range ids {
+			findings = append(findings, Finding{
+				ID: id, Title: title, Severity: ParseSeverity(a.Severity),
+				URL: a.URL, Source: "node-security-wg",
+			})
+		}
 	}
 	return findings, nil
 }

@@ -1,6 +1,10 @@
 package audit
 
-import "testing"
+import (
+	"encoding/json"
+	"slices"
+	"testing"
+)
 
 func TestNodeRuntimeReport(t *testing.T) {
 	advisories := map[string]nodeAdvisory{
@@ -23,5 +27,27 @@ func TestNodeRuntimeReport(t *testing.T) {
 	}
 	if _, err := nodeRuntimeReport(runtimes, advisories, []nodeRelease{{"v26.13.1", true}}); err == nil {
 		t.Fatal("accepted unknown runtime version")
+	}
+}
+
+func TestNodeGroupedCVEsRemainIndependent(t *testing.T) {
+	const feed = `{"62":{"cve":["CVE-2019-9511","CVE-2019-9512"],"vulnerable":"24.x","patched":"^24.22.3","overview":"Two distinct flaws","severity":"high"}}`
+	var advisories map[string]nodeAdvisory
+	if err := json.Unmarshal([]byte(feed), &advisories); err != nil {
+		t.Fatal(err)
+	}
+	result, err := nodeRuntimeReport([]NodeRuntime{{"node@fixture", "v24.16.0", []string{"release.yml"}}}, advisories, []nodeRelease{{"v24.16.0", true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := []string{}
+	for _, f := range result.Blocking {
+		if len(f.Aliases) > 0 || f.Title != "Two distinct flaws" {
+			t.Fatalf("unexpected advisory %+v", f)
+		}
+		ids = append(ids, f.ID)
+	}
+	if !slices.Equal(ids, []string{"CVE-2019-9511", "CVE-2019-9512"}) {
+		t.Fatalf("got %v", ids)
 	}
 }
