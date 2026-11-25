@@ -48,7 +48,9 @@
   `awaiting_user`, and the response waits, saved, with no server holding
   it and no time limit. The user picks Approve once, Approve for this chat, or
   Reject. Approve once runs the exact call. Approve for this chat also runs
-  later calls of that tool in the chat session with no card. Reject gives the
+  later calls of that tool in the chat session with no card. An action that
+  always asks (`integrations/policy.py:always_asks`) has no Approve for this
+  chat, and `decide_approval` refuses it. Reject gives the
   model a "did not run" result. Once no request of the response waits, the
   response continues in a new stream, on any server, and the answer continues.
   A policy change applies from the next message.
@@ -338,8 +340,11 @@ admin value is not Ask.
   an `api_app` row (`integration.api_app_id`) with the spec as JSON text and
   its server URL. For one release each create and spec change writes both
   the `tool` row and the `api_app` row
-  (`db/integration.py:write_openapi_document__no_commit`); the readers still
-  read the `tool` row, and nothing reads `api_app` yet. Migration
+  (`db/integration.py:write_openapi_document__no_commit`). The readers read
+  `api_app`. An integration with only its `tool` row, which an older server
+  writes during a rolling deploy, reads as an unsaved REST app built from
+  that row (`db/integration.py:_rest_app_from_tool`); its next spec save
+  writes the `api_app` row. Migration
   `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
   sets the install setting AVAILABLE; else the integration is private and
   starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
@@ -637,7 +642,7 @@ default agent, is Blocked.
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
    setting resets connections.** `integrations/connections.py:sign_in_settings_for`
    includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL, the
-   app URL patterns and the preset host values. An admin PATCH that changes it
+   GraphQL endpoint URL, the app URL patterns and the preset host values. An admin PATCH that changes it
    sets every connection to Needs reconnect. A new destination must never
    receive credentials that were given for the old one. Only a global action
    manager can change the destination or headers of an Onyx login
