@@ -323,6 +323,39 @@ describe("ToolQuestionCard", () => {
     });
   });
 
+  it("sends a label that a saved question repeats once", async () => {
+    postMock.mockResolvedValue({ question_request_id: "q1", continuation });
+    const value: ToolQuestion = {
+      turnIndex: 0,
+      request: {
+        ...request,
+        questions: [
+          {
+            id: "cadence",
+            header: "Cadence",
+            question: "How often?",
+            options: [
+              { label: "Weekly", description: "" },
+              { label: "Weekly", description: "" },
+              { label: "Daily", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      },
+      resolution: null,
+    };
+    const view = render(<ToolQuestionCard question={value} showsTypedAnswer />);
+
+    fireEvent.press(view.getAllByText("Weekly")[0]!);
+    fireEvent.press(view.getByLabelText("Submit your answers"));
+
+    await waitFor(() => expect(recoverMock).toHaveBeenCalled());
+    expect(postMock).toHaveBeenCalledWith("q1", {
+      answers: [{ question_id: "cadence", option_labels: ["Weekly"] }],
+    });
+  });
+
   it("reads no inherited value for a question ID such as constructor", () => {
     const [first, second] = request.questions;
     const value: ToolQuestion = {

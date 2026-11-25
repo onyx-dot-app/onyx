@@ -74,9 +74,10 @@ function questionAnswer(
   choice: Choice,
   note: string | undefined,
 ): ToolQuestionAnswer | null {
-  const labels = question.options
-    .map((option) => option.label)
-    .filter((label) => choice.labels.includes(label));
+  // A saved question can repeat a label; each label counts once.
+  const labels = [
+    ...new Set(question.options.map((option) => option.label)),
+  ].filter((label) => choice.labels.includes(label));
   const text = choice.other ? note?.trim() : undefined;
   if (labels.length === 0 && !text) return null;
   return text

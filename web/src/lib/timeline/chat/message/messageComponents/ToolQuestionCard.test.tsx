@@ -221,6 +221,46 @@ test("a multi-select question takes several options and a note", async () => {
   ).toBeInTheDocument();
 });
 
+test("a saved question that repeats a label sends that label once", async () => {
+  const fetchSpy = respond(200, {
+    question_request_id: "question-4",
+    continuation,
+  });
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-4",
+        questions: [
+          {
+            id: "cadence",
+            header: "Cadence",
+            question: "How often?",
+            options: [
+              { label: "Weekly", description: "" },
+              { label: "Weekly", description: "" },
+              { label: "Daily", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  await user.click(screen.getAllByRole("checkbox", { name: "Weekly" })[0]!);
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+
+  await waitFor(() => expect(followChatStream).toHaveBeenCalled());
+  const [, init] = fetchSpy.mock.calls[0]!;
+  expect(JSON.parse(String(init?.body))).toEqual({
+    answers: [
+      { question_id: "cadence", option_labels: ["Weekly"], user_note: null },
+    ],
+  });
+});
+
 test("each checkbox of a multi-select question is a tab stop that Space or Enter toggles", async () => {
   const user = setupUser();
   render(
