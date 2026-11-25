@@ -947,6 +947,83 @@ test("a question waits with a header, then a typed answer shows as the user's me
   }
 });
 
+test("the cursor waits under a question that the user answered on its card", async () => {
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  const packets: Packet[] = [
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: PacketType.MESSAGE_START,
+        id: "intro",
+        content: "",
+        final_documents: null,
+      },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: PacketType.MESSAGE_DELTA, content: "Let me ask first." },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: PacketType.SECTION_END },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_REQUEST,
+        question_request_id: "question",
+        tool_call_id: "call",
+        questions: [
+          {
+            id: "scope",
+            header: "Scope",
+            question: "Which files should I change?",
+            options: [{ label: "Docs", description: "Only the docs." }],
+            multi_select: false,
+          },
+        ],
+      },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_RESOLVED,
+        question_request_id: "question",
+        outcome: "answered",
+        answered_via: "card",
+        answers: [{ question_id: "scope", option_labels: ["Docs"] }],
+        message: null,
+      },
+    },
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    const record = await screen.findByTestId("tool-question-card");
+    const markers = view.container.querySelectorAll("[data-response-cursor]");
+    const last = markers.item(markers.length - 1);
+    expect(last).not.toBeNull();
+    expect(
+      record.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  } finally {
+    view.unmount();
+  }
+});
+
 test("a running program shows working over a parallel turn", async () => {
   seedSessionAwaitingAnswer();
   const packets: Packet[] = [0, 1].map((tab_index) => ({

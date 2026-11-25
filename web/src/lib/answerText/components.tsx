@@ -32,11 +32,17 @@ import { ScrollableTable } from "@/lib/timeline/chat/message/messageComponents/m
 import { tableToCopyContent } from "@/lib/timeline/chat/message/tableCopyUtils";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
-import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
+import {
+  RESPONSE_CURSOR_ANCHOR_ATTRIBUTE,
+  rehypeStreamingCursor,
+} from "@/lib/rehypeStreamingCursor";
 import { useInResponse } from "@/lib/timeline/components/Response";
 import { CodeBlockBody } from "@/lib/timeline/components/bodies/CodeBlockBody";
 import { prepareAnswerMarkdown } from "@/lib/answerText/utils";
-import { splitMarkdownBlocks } from "@/lib/answerText/streamBlocks";
+import {
+  endsInOpenCodeFence,
+  splitMarkdownBlocks,
+} from "@/lib/answerText/streamBlocks";
 import { remarkDetails } from "@/lib/answerText/remarkDetails";
 import { remarkGithubAlerts } from "@/lib/answerText/remarkGithubAlerts";
 
@@ -340,13 +346,6 @@ export function AnswerMarkdown({
   components,
 }: AnswerMarkdownProps) {
   const inResponse = useInResponse();
-  const lastBlockRehypePlugins = useMemo<PluggableList>(
-    () =>
-      cursor
-        ? [...REHYPE_PLUGINS, [rehypeStreamingCursor, { anchor: inResponse }]]
-        : REHYPE_PLUGINS,
-    [cursor, inResponse]
-  );
   const markdownComponents = useMemo<Components>(
     () => ({ ...BASE_COMPONENTS, ...components }),
     [components]
@@ -357,6 +356,16 @@ export function AnswerMarkdown({
   const blocks = useMemo(
     () => splitMarkdownBlocks(markdown) ?? [markdown],
     [markdown]
+  );
+  // The cursor would sit under an open code block, as code never holds it.
+  const cursorHidden =
+    cursor && endsInOpenCodeFence(blocks[blocks.length - 1] ?? "");
+  const lastBlockRehypePlugins = useMemo<PluggableList>(
+    () =>
+      cursor && !cursorHidden
+        ? [...REHYPE_PLUGINS, [rehypeStreamingCursor, { anchor: inResponse }]]
+        : REHYPE_PLUGINS,
+    [cursor, cursorHidden, inResponse]
   );
 
   return (
@@ -382,6 +391,11 @@ export function AnswerMarkdown({
             }
           />
         ))}
+        {/* The response's cursor fades out here instead of holding its
+            place above the code. */}
+        {cursorHidden && inResponse && (
+          <span hidden {...{ [RESPONSE_CURSOR_ANCHOR_ATTRIBUTE]: "hidden" }} />
+        )}
       </div>
     </StreamingContext.Provider>
   );
