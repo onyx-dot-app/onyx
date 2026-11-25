@@ -1249,7 +1249,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     a later message can edit it. Action preferences are advisory:
     `build_chat_prompt` asks each offered tool for `Tool.operation_names`, and
     `CodeModeTool` answers with its functions, so the reminder names a nested
-    tool as a function of `exec` programs.
+    tool as a function of the active model's run tool (`exec`, or `repl` for
+    Claude models).
     Nested calls get the run's `before_tool_call` hook and approval gate as
     direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
     `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
@@ -1347,7 +1348,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     code mode result's documents and citations from its calls' search details,
     in every window; [[citations]] reads them through that accessor.
 16. `code-mode-store` **Only `store()` values outlive a program, and the
-    conversation holds them.** Each `exec` call runs in a fresh
+    conversation holds them.** Each run call (`exec` or `repl`) runs in a fresh
     interpreter, so variables, functions and imports do not carry over. A
     program keeps JSON values with `store(key, value)` and reads them with
     `load(key)` (None when missing); both are plain functions, declared in
@@ -1475,8 +1476,9 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   Onyx and the model's tool stubs.
 - **A code mode program can outlive its step, as a Codex cell does.** A
   program that waits on slow tools or sleeps would otherwise hold the model
-  step until it ends. `exec` returns at `yield_time_ms` and the cell
-  keeps running; the model works on and gets the rest with `wait`. A cell
+  step until it ends. The run tool returns at its yield time (`exec`
+  `yield_time_ms`, `repl` `timeout`) and the cell keeps running; the model
+  works on and gets the rest with `wait` or `poll`. A cell
   never outlives its response: `CodeCells.finish` stops it, and a closing
   record saves what it did after its last observation, so the saved history
   and the next turn see its side effects. Its driver and tool call threads join

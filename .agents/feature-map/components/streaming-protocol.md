@@ -255,8 +255,8 @@ lists `stored_keys`, the keys the program saved with `store()`, and
 `tool_call_count`, the calls the cell started so far (the model's text reports
 the same count). Each call of the run or wait tool is its own code
 mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
-arguments (`None` and 0 for `exec`, the cell id and 1 for
-`wait`, whose `code` is empty), so live and replay send the same start.
+arguments (`None` and 0 for the run tool, `exec` or `repl`, the cell id and
+1 for the wait tool, `wait` or `poll`, whose `code` is empty), so live and replay send the same start.
 The final delta of a saved observation carries the exact `cell_id` and
 `observation`; a call that failed or was cancelled before it saved one leaves
 them `None`. Its `status` adds `running` (the cell still runs; the final delta
