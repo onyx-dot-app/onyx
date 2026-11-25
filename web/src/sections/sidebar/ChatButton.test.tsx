@@ -8,6 +8,7 @@ import {
 import { ChatSessionSharedStatus, type ChatSession } from "@/app/app/types";
 import { useUnseenRuns } from "@/lib/chat/runStatus";
 import ChatButton from "@/sections/sidebar/ChatButton";
+import { takeRecentChatShortcutTarget } from "@/lib/shortcuts/utils";
 
 const mockRename = jest.fn();
 const mockRefresh = jest.fn();
@@ -141,6 +142,12 @@ test("double-click on the row starts the rename", () => {
   render(<ChatButton chatSession={chatSession} />);
   fireEvent.doubleClick(screen.getByTestId("ChatButton"));
   expect(screen.getByRole("textbox")).toBeInTheDocument();
+});
+
+test("double-click keeps the opened chat from taking focus off the rename", () => {
+  render(<ChatButton chatSession={chatSession} />);
+  fireEvent.doubleClick(screen.getByTestId("ChatButton"));
+  expect(takeRecentChatShortcutTarget("chat-1")).toBe(true);
 });
 
 test("the menu opened from the row takes focus on its trigger", async () => {

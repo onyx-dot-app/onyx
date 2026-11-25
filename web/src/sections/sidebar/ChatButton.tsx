@@ -52,6 +52,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
+import { markRecentChatShortcutTarget } from "@/lib/shortcuts/utils";
 import { usePinChatAgent } from "@/lib/agents/hooks";
 import { useChatExportMenu, useChatRunStatus } from "@/lib/chat/hooks";
 import { useUnseenRuns, type ChatRunStatus } from "@/lib/chat/runStatus";
@@ -398,6 +399,9 @@ const ChatButton = memo(
       )
         return;
       event.preventDefault();
+      // The first click opens the chat, which focuses the composer on load
+      // and would blur the rename input.
+      markRecentChatShortcutTarget(chatSession.id);
       setRenaming(true);
     }
 
