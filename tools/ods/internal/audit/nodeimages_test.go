@@ -1,4 +1,4 @@
-package auditcmd
+package audit
 
 import (
 	"reflect"
