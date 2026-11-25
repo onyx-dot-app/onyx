@@ -1,11 +1,12 @@
 """A whole suggested-questions run against real Postgres, OpenSearch and the
-cache. Only the models are stubbed: the decision client, the writing LLM and
-the query embedder (CI has no model server).
+cache. Only the models are stubbed: the writing LLM and the query embedder
+(CI has no model server).
 
 Each test document gets its own one-hot vector, and the fake query embedder
 points each test question at the vector of the document it is about, so hybrid
-search ranks that document first. An off-topic question points at three decoy
-documents instead and must fail the search test.
+search ranks that document first. An off-topic question about the parking
+document points at three decoy documents instead and must fail the search
+test.
 """
 
 import json
@@ -36,19 +37,9 @@ from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.indexing.models import ChunkEmbedding
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.llm.decisions.models import (
-    ChoiceAnswer,
-    DecisionAnswer,
-    DecisionProvider,
-    DecisionRequest,
-    DecisionResponse,
-    PredicateAnswer,
-    ScoreAnswer,
-)
 from onyx.server.features.suggested_questions import scheduling, verification
 from onyx.server.features.suggested_questions.models import RefreshReason
 from onyx.server.features.suggested_questions.store import load_pool, pool_lock
-from onyx.tracing.flows import LLMFlow
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.document_index.conftest import (
     make_chunk,
@@ -78,9 +69,9 @@ DOCS = [
         "Production deploys on Fridays need approval from the on-call engineering lead. Open the release checklist, confirm the rollback plan and post in the deploys channel before merging. Hotfixes for an active incident may skip the Friday approval but still need a reviewed pull request. Deploys are frozen during the last week of each quarter entirely.",
     ),
     (
-        "salary",
-        4,
-        "Confidential salary review for 2026: Jordan Reyes moves to a base of 151,000 dollars with an eight percent bonus, and Priya Nair moves to 180,000 dollars with ten percent. The new amounts start with the April payroll run and must not be shared outside the compensation committee. Questions about this review go only to the head of people directly.",
+        "parking",
+        5,
+        "Staff parking permits are issued by facilities for one quarter at a time. Apply in the permit portal before the first Monday of the quarter, choose the level you want, and attach your licence plate. Electric vehicle bays on level two have chargers that may be used for four hours at most per day, so move the car once it is charged.",
     ),
     (
         "decoy-a",
@@ -141,7 +132,7 @@ def seeded(
             chunk = make_chunk(doc_id, content=text)
             chunk = chunk.model_copy(
                 update={
-                    # The title the triage and writing prompts show.
+                    # The title the writing prompt shows.
                     "source_document": chunk.source_document.model_copy(
                         update={"semantic_identifier": doc_id}
                     ),
@@ -181,35 +172,11 @@ def _clear_pool() -> None:
 
 @pytest.fixture
 def models(seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """Stub the decision client, the writing LLM and the query embedder."""
+    """Stub the writing LLM and the query embedder."""
     ids, dim = seeded["ids"], seeded["dim"]
     name_by_id = {doc_id: name for name, doc_id in ids.items()}
     slot = {name: s for name, s, _ in DOCS}
     state: dict[str, Any] = {"prompts": []}
-
-    def decide(request: DecisionRequest, flow: LLMFlow) -> DecisionResponse:  # noqa: ARG001
-        answers: list[DecisionAnswer] = []
-        for index, doc_id in re.findall(r"\[(\d+)\] Document: (\S+)", request.input):
-            name = name_by_id.get(doc_id, "")
-            useful = 0.0 if name.startswith("decoy") or not name else 3.0
-            answers += [
-                ScoreAnswer(
-                    name=f"usable_{index}", score=useful, confidence=1, probabilities=[]
-                ),
-                PredicateAnswer(
-                    name=f"sensitive_{index}",
-                    probability=1.0 if name == "salary" else 0.0,
-                ),
-                ChoiceAnswer(
-                    name=f"topic_{index}", choice="hr", confidence=1, probabilities=[]
-                ),
-                PredicateAnswer(name=f"fact_{index}", probability=1.0),
-            ]
-        return DecisionResponse(model="fake", answers=answers)
-
-    decision_client = MagicMock()
-    decision_client.provider = DecisionProvider.OPENAI
-    decision_client.decide.side_effect = decide
 
     def write(request: Any, context: Any) -> Any:  # noqa: ARG001
         prompt = request.messages[-1].text
@@ -225,8 +192,10 @@ def models(seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str,
                         "best_for": "hr",
                     }
                 )
-        if written:
-            written.append({"passage": 1, "question": OFF_TOPIC, "best_for": "any"})
+            elif name == "parking":
+                written.append(
+                    {"passage": int(number), "question": OFF_TOPIC, "best_for": "any"}
+                )
         return MagicMock(text=json.dumps({"questions": written}))
 
     llm = MagicMock()
@@ -255,7 +224,6 @@ def models(seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str,
         return chunks
 
     monkeypatch.setattr(verification, "_search_everything", spy)
-    monkeypatch.setattr(tasks, "build_triage_clients", lambda: [decision_client])
     monkeypatch.setattr(tasks, "build_writing_llms", lambda: [llm])
     monkeypatch.setattr(tasks, "is_enabled", lambda: True)
     state["llm"] = llm
@@ -271,7 +239,7 @@ def _pool_run() -> None:
     )
 
 
-def test_a_pool_run_keeps_answerable_questions_and_never_shows_private_text(
+def test_a_pool_run_keeps_only_questions_that_find_their_document(
     seeded: dict[str, Any], models: dict[str, Any]
 ) -> None:
     _pool_run()
@@ -287,13 +255,12 @@ def test_a_pool_run_keeps_answerable_questions_and_never_shows_private_text(
     top_three = list(dict.fromkeys(models["searched"][OFF_TOPIC]))[:3]
     assert set(top_three) == {ids[n] for n in ("decoy-a", "decoy-b", "decoy-c")}
     assert OFF_TOPIC not in {q.text for q in pool.questions}
-    # Triage dropped the salary chunk before the writing call.
-    assert all("Jordan Reyes" not in prompt for prompt in models["prompts"])
     assert len(pool.runs) == 1
 
     # A second run right after is too soon: no model call.
+    calls = models["llm"].invoke.call_count
     _pool_run()
-    assert models["llm"].invoke.call_count == 1
+    assert models["llm"].invoke.call_count == calls
 
 
 def test_a_topup_waits_while_a_pool_run_holds_the_pool(
