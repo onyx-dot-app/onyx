@@ -22,7 +22,9 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { Button } from "@opal/components";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import type { ChatState } from "@/app/app/types";
+import type { ChatState, Message } from "@/app/app/types";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { SYSTEM_NODE_ID } from "@/app/app/services/messageTree";
 import type { PickerSections } from "@/lib/skills/picker";
 import { useChatSkills } from "@/lib/skills/hooks";
 import type { ChatSkill } from "@/lib/skills/types";
@@ -490,6 +492,55 @@ describe("edit a sent message in the composer", () => {
     await setupUser().keyboard("{Escape}");
 
     expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  test("switching to another version of the edited message ends the edit", async () => {
+    const node = (nodeId: number, fields: Partial<Message> = {}): Message => ({
+      nodeId,
+      messageId: nodeId,
+      type: "user",
+      message: `version ${nodeId}`,
+      files: [],
+      toolCall: null,
+      packets: [],
+      parentNodeId: SYSTEM_NODE_ID,
+      childrenNodeIds: [],
+      latestChildNodeId: null,
+      ...fields,
+    });
+    const tree = (shown: number) =>
+      new Map([
+        [
+          SYSTEM_NODE_ID,
+          node(SYSTEM_NODE_ID, {
+            type: "system",
+            parentNodeId: null,
+            childrenNodeIds: [5, 6],
+            latestChildNodeId: shown,
+          }),
+        ],
+        [5, node(5)],
+        [6, node(6)],
+      ]);
+    const store = useChatSessionStore.getState();
+    store.createSession("edit-session", { messageTree: tree(5) });
+    store.setCurrentSession("edit-session");
+    const { inputBarRef } = startEdit();
+    await setupUser().type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+
+    act(() =>
+      useChatSessionStore
+        .getState()
+        .updateSessionMessageTree("edit-session", tree(6))
+    );
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
   });
 
   test("a draft file that finished uploading during the edit survives a remount", async () => {
