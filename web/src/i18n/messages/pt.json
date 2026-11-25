@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "Rastreador de issues e gestão de projetos"
         },
+        "dealcloud": {
+          "description": "Negócios, empresas e contatos"
+        },
         "canvas": {
           "description": "Cursos, páginas e avisos"
         },
@@ -2994,6 +2997,19 @@
             }
           }
         },
+        "dealcloud": {
+          "description": "Configurar o conector do DealCloud",
+          "fields": {
+            "base_url": {
+              "label": "URL do site do DealCloud",
+              "description": "O endereço do seu site do DealCloud, por ex. https://example.dealcloud.com."
+            },
+            "entry_types": {
+              "label": "Objetos",
+              "description": "Nomes de API dos objetos a indexar (por ex. Company, Deal). Deixe vazio para indexar todos os objetos que o usuário de API pode ler, exceto Attachment."
+            }
+          }
+        },
         "github": {
           "description": "Configurar conector do GitHub",
           "fields": {
@@ -4364,6 +4380,7 @@
         "secretAccessKey": "Chave de acesso secreta de {source}",
         "accountId": "ID da conta do {source}",
         "apiToken": "Token de API",
+        "apiKey": "Chave de API do {source}",
         "clientId": "ID do cliente do {source}",
         "clientSecret": "Segredo do cliente do {source}",
         "clientToken": "Token do cliente do {source}",
@@ -4415,6 +4432,7 @@
         "jiraUserEmail": "Obrigatório para o Jira Cloud.",
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
         "youtrackToken": "Um token permanente de um usuário do YouTrack que pode ler todos os projetos a indexar. Crie-o no seu perfil do YouTrack, em Segurança da conta.",
+        "dealcloudApiKey": "A chave de API de um usuário do DealCloud que pode ler todos os objetos a indexar. Ative-a e copie-a no perfil do DealCloud do usuário, em API Key. O grupo do usuário precisa da capacidade API.",
         "azureDatalakeAccountKey": "No portal do Azure, abra a conta de armazenamento, depois Segurança + rede, depois Chaves de acesso.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",

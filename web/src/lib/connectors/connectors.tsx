@@ -484,6 +484,26 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  dealcloud: {
+    description: "connectors.dealcloud.description",
+    values: [
+      {
+        type: "text",
+        label: "connectors.dealcloud.fields.base_url.label",
+        name: "base_url",
+        optional: false,
+        description: "connectors.dealcloud.fields.base_url.description",
+      },
+      {
+        type: "list",
+        label: "connectors.dealcloud.fields.entry_types.label",
+        name: "entry_types",
+        optional: true,
+        description: "connectors.dealcloud.fields.entry_types.description",
+      },
+    ],
+    advanced_values: [],
+  },
   github: {
     description: "connectors.github.description",
     values: [

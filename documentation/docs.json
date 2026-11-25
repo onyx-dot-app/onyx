@@ -246,6 +246,7 @@
                       "admins/connectors/official/confluence-data-center"
                     ]
                   },
+                  "admins/connectors/official/dealcloud",
                   "admins/connectors/official/discord",
                   "admins/connectors/official/discourse",
                   "admins/connectors/official/document360",

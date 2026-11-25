@@ -382,6 +382,15 @@ export const CREDENTIAL_SPECS = {
     brandName: "Linear",
     fields: { linear_api_key: secret("apiToken") },
   }),
+  dealcloud: defineCredentialSpec({
+    brandName: "DealCloud",
+    fields: {
+      dealcloud_client_id: text("clientId"),
+      dealcloud_api_key: secret("apiKey", {
+        hint: { key: "dealcloudApiKey" },
+      }),
+    },
+  }),
   hubspot: defineCredentialSpec({
     brandName: "HubSpot",
     fields: { hubspot_access_token: secret("apiToken") },

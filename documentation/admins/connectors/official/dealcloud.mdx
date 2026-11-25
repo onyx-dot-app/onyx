@@ -1,0 +1,123 @@
+---
+title: "DealCloud"
+description: "Access deals, companies, and other records from DealCloud"
+---
+
+## How it works
+
+The DealCloud connector indexes the entries of the objects on your DealCloud site, such as **Company**, **Deal**,
+and **Contact**. Each DealCloud site defines its own objects and fields, so the connector reads them from the site.
+
+Each entry becomes one document. The entry's name is the document title.
+Most other fields with a value become one line of text, in the form `Field: value`.
+The user who created the entry is recorded as the document's owner.
+
+Onyx checks DealCloud for new and changed entries on the connector's refresh schedule.
+The default is every **30** minutes.
+
+| Content     | Notes                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------- |
+| Entries     | Fields with a value. A reference, choice, or user field shows the name it points to.                          |
+| Files       | File contents are not indexed. The connector skips the **Attachment** object unless you name it, and it leaves out binary and image fields. |
+| Scope       | Optional. Limit the index to specific objects by API name. Names are not case-sensitive.                      |
+| Permissions | Permission sync is not available for DealCloud. See [Document access](#document-access).                      |
+
+## Setting up
+
+### Authorization
+
+The connector signs in as one DealCloud user, with that user's client ID and API key.
+Onyx reads only what that user's group can read through the API,
+so use a user who can read every object you want to index.
+
+<Steps>
+  <Step title="Give the user's group API access">
+    In DealCloud, go to **Admin > User Management** and select the user's group. Under **Capabilities > Site Areas**,
+    enable **API**. Check that the group can read the objects you want to index.
+  </Step>
+
+  <Step title="Enable the API key">
+    Sign in to DealCloud as the user. Select the user icon and open **Profile**. In the **API Key** section,
+    select **Enable**, then **Copy API Key to Clipboard**.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Enter the DealCloud site URL">
+    In the Admin Panel, go to **Connectors** and select **DealCloud**.
+    Enter your site address in **DealCloud Site URL**, for example `https://example.dealcloud.com`.
+  </Step>
+
+  <Step title="Connect a DealCloud account">
+    Select **New DealCloud Account** and enter the user's **DealCloud Client ID** and **DealCloud API Key**.
+  </Step>
+
+  <Step title="Choose what to index">
+    Leave **Objects** empty to index every object the user can read, except **Attachment**. To narrow the index,
+    enter object API names, for example `Company` and `Deal`.
+
+    Onyx checks every name before you create the connector and names any object DealCloud does not list.
+    That means the API name is wrong, or the user's group has no access to the object.
+  </Step>
+
+  <Step title="Choose who can see the entries">
+    Under **Document Access**, select who can see the indexed entries. See [Document access](#document-access).
+  </Step>
+
+  <Step title="Run the connection checks">
+    Once the site URL is entered and an account is selected, select **Start Checks**.
+    Onyx runs its checks against DealCloud and lists each one in the form.
+    **Create Connector** is enabled once the required checks pass. A failed check names what to fix.
+  </Step>
+</Steps>
+
+### Connection checks
+
+Each check reads from DealCloud as the API user, so a failure points at that user's access.
+
+| Check                                            | Passes when                                       | Fails when                                                                                      |
+| ------------------------------------------------ | ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| DealCloud accepts the URL, client ID and API key | DealCloud lists the site's objects for the user   | The URL, client ID, or API key is wrong, or the user's group does not have the **API** capability |
+| Configured objects are readable                  | Every API name you entered exists for the user    | An API name is misspelled, or the user's group has no access to the object                      |
+| Entries are readable                             | One entry from the first 5 objects in scope returns its row | The user's group cannot read the data of the objects in scope |
+
+All checks need the site URL. The other two run only after the first passes,
+and the second only when **Objects** has names.
+
+If no object in scope has an entry yet, the entries check is skipped.
+The check does not finish if the scope has more than 5 objects and the first 5 have no entries,
+or if DealCloud lists an entry but returns no row for it. None of these cases stops you from creating the connector.
+
+## Document access
+
+<Warning>
+  The connector does not apply DealCloud permissions.
+  Every Onyx user who can see the connector's documents can see every indexed entry and every indexed field,
+  including the entries and fields DealCloud hides from that user.
+</Warning>
+
+To limit who sees the entries, select **Specific Groups** under **Document Access**,
+and index only the objects those groups are allowed to read. **Specific Groups** is a paid feature:
+the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+
+## Sync behavior
+
+- **Changed entries.** After the first run, Onyx reads only the entries DealCloud reports as changed.
+  DealCloud keeps this change history for 6 months. If the last successful run started more than 150 days ago,
+  the next run reads every entry again.
+  An entry that was reverted in DealCloud during that time keeps its earlier text in Onyx until it changes again.
+- **Deleted entries.** Onyx removes the document of a deleted entry when the connector next prunes.
+- **Removed objects.** If DealCloud no longer lists an object you named, Onyx stops indexing it and removes its
+  documents when the connector next prunes. If DealCloud lists none of the objects you named,
+  the run fails and Onyx pauses the connector, because the user has probably lost access.
+  Restore the access or correct the names, and then resume the connector.
+- **Large objects.** A full index and a prune fail if an object has more than 5,000,000 entries.
+- **Large entries.** Onyx does not index an entry whose data is larger than 64 MB. It records the entry as a failed
+  document and indexes the other entries.
+- **Rate limit.** DealCloud allows 5 data requests per second. Each index run and each prune paces its own
+  requests to this limit, and an index run reads up to 5 batches of entries at a time.
+  When DealCloud refuses a request for its rate, Onyx waits until the time DealCloud names.
+  A run stops if DealCloud refuses one request more than 30 times, or if the request waits more than 5 minutes in total.
+  The next run continues from where it stopped.

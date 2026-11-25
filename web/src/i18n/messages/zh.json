@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "问题跟踪与项目管理"
         },
+        "dealcloud": {
+          "description": "交易、公司与联系人"
+        },
         "canvas": {
           "description": "课程、页面和公告"
         },
@@ -2994,6 +2997,19 @@
             }
           }
         },
+        "dealcloud": {
+          "description": "配置 DealCloud 连接器",
+          "fields": {
+            "base_url": {
+              "label": "DealCloud 站点 URL",
+              "description": "您的 DealCloud 站点地址，例如 https://example.dealcloud.com。"
+            },
+            "entry_types": {
+              "label": "对象",
+              "description": "要索引的对象的 API 名称（例如 Company、Deal）。留空则索引 API 用户可读取的所有对象（Attachment 除外）。"
+            }
+          }
+        },
         "github": {
           "description": "配置 GitHub 连接器",
           "fields": {
@@ -4364,6 +4380,7 @@
         "secretAccessKey": "{source} 秘密访问密钥",
         "accountId": "{source} 账户 ID",
         "apiToken": "API 令牌",
+        "apiKey": "{source} API 密钥",
         "clientId": "{source} 客户端 ID",
         "clientSecret": "{source} 客户端密钥",
         "clientToken": "{source} 客户端令牌",
@@ -4415,6 +4432,7 @@
         "jiraUserEmail": "Jira Cloud 必填。",
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "youtrackToken": "可读取所有待索引项目的 YouTrack 用户的永久令牌。请在 YouTrack 个人资料的“账户安全”中创建。",
+        "dealcloudApiKey": "可读取所有待索引对象的 DealCloud 用户的 API 密钥。请在该用户的 DealCloud 个人资料的“API Key”中启用并复制。该用户所在的组需要 API 功能。",
         "azureDatalakeAccountKey": "在 Azure 门户中打开存储帐户,然后打开“安全性 + 网络”,再打开“访问密钥”。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",

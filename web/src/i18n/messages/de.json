@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "Issue-Tracker und Projektmanagement"
         },
+        "dealcloud": {
+          "description": "Deals, Unternehmen und Kontakte"
+        },
         "canvas": {
           "description": "Kurse, Seiten und Ankündigungen"
         },
@@ -2994,6 +2997,19 @@
             }
           }
         },
+        "dealcloud": {
+          "description": "DealCloud-Konnektor konfigurieren",
+          "fields": {
+            "base_url": {
+              "label": "DealCloud-Site-URL",
+              "description": "Die Adresse Ihrer DealCloud-Site, z. B. https://example.dealcloud.com."
+            },
+            "entry_types": {
+              "label": "Objekte",
+              "description": "API-Namen der zu indexierenden Objekte (z. B. Company, Deal). Leer lassen, um alle Objekte zu indexieren, die der API-Benutzer lesen kann, außer Attachment."
+            }
+          }
+        },
         "github": {
           "description": "GitHub-Konnektor konfigurieren",
           "fields": {
@@ -4364,6 +4380,7 @@
         "secretAccessKey": "Geheimer {source}-Zugriffsschlüssel",
         "accountId": "{source}-Konto-ID",
         "apiToken": "API-Token",
+        "apiKey": "{source}-API-Schlüssel",
         "clientId": "{source}-Client-ID",
         "clientSecret": "{source}-Client-Secret",
         "clientToken": "{source}-Client-Token",
@@ -4415,6 +4432,7 @@
         "jiraUserEmail": "Erforderlich für Jira Cloud.",
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indexiert wird.",
         "youtrackToken": "Ein permanentes Token eines YouTrack-Benutzers, der alle zu indexierenden Projekte lesen kann. Erstellen Sie es in Ihrem YouTrack-Profil unter Kontosicherheit.",
+        "dealcloudApiKey": "Der API-Schlüssel eines DealCloud-Benutzers, der alle zu indexierenden Objekte lesen kann. Aktivieren und kopieren Sie ihn im DealCloud-Profil des Benutzers unter API Key. Die Gruppe des Benutzers benötigt die Berechtigung API.",
         "azureDatalakeAccountKey": "Öffnen Sie im Azure-Portal das Speicherkonto, dann Sicherheit + Netzwerkbetrieb, dann Zugriffsschlüssel.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder Ihre selbst gehostete URL.",
         "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",

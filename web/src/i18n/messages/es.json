@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "Gestor de incidencias y de proyectos"
         },
+        "dealcloud": {
+          "description": "Operaciones, empresas y contactos"
+        },
         "canvas": {
           "description": "Cursos, páginas y anuncios"
         },
@@ -2994,6 +2997,19 @@
             }
           }
         },
+        "dealcloud": {
+          "description": "Configurar el conector de DealCloud",
+          "fields": {
+            "base_url": {
+              "label": "URL del sitio de DealCloud",
+              "description": "La dirección de su sitio de DealCloud, p. ej. https://example.dealcloud.com."
+            },
+            "entry_types": {
+              "label": "Objetos",
+              "description": "Nombres de API de los objetos que se indexarán (p. ej. Company, Deal). Déjelo vacío para indexar todos los objetos que el usuario de API puede leer, excepto Attachment."
+            }
+          }
+        },
         "github": {
           "description": "Configurar conector de GitHub",
           "fields": {
@@ -4364,6 +4380,7 @@
         "secretAccessKey": "Clave de acceso secreta de {source}",
         "accountId": "ID de cuenta de {source}",
         "apiToken": "Token de API",
+        "apiKey": "Clave de API de {source}",
         "clientId": "ID de cliente de {source}",
         "clientSecret": "Secreto de cliente de {source}",
         "clientToken": "Token de cliente de {source}",
@@ -4415,6 +4432,7 @@
         "jiraUserEmail": "Obligatorio para Jira Cloud.",
         "lumappsServiceUser": "El usuario en cuyo nombre se indexa.",
         "youtrackToken": "Un token permanente de un usuario de YouTrack que puede leer todos los proyectos que se indexarán. Créelo en su perfil de YouTrack, en Seguridad de la cuenta.",
+        "dealcloudApiKey": "La clave de API de un usuario de DealCloud que puede leer todos los objetos que se indexarán. Actívela y cópiela en el perfil de DealCloud del usuario, en API Key. El grupo del usuario necesita la capacidad API.",
         "azureDatalakeAccountKey": "En Azure Portal, abra la cuenta de almacenamiento, luego Seguridad y redes, luego Claves de acceso.",
         "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
         "pfxFile": "Sube el archivo `.pfx` que contiene la clave privada del registro de la aplicación. Debe ocupar menos de 10 KB.",

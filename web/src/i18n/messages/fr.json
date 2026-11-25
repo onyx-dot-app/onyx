@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "Suivi des tickets et gestion de projets"
         },
+        "dealcloud": {
+          "description": "Transactions, entreprises et contacts"
+        },
         "canvas": {
           "description": "Cours, pages et annonces"
         },
@@ -2994,6 +2997,19 @@
             }
           }
         },
+        "dealcloud": {
+          "description": "Configurer le connecteur DealCloud",
+          "fields": {
+            "base_url": {
+              "label": "URL du site DealCloud",
+              "description": "L'adresse de votre site DealCloud, par ex. https://example.dealcloud.com."
+            },
+            "entry_types": {
+              "label": "Objets",
+              "description": "Noms d'API des objets à indexer (par ex. Company, Deal). Laissez vide pour indexer tous les objets que l'utilisateur d'API peut lire, sauf Attachment."
+            }
+          }
+        },
         "github": {
           "description": "Configurer le connecteur GitHub",
           "fields": {
@@ -4364,6 +4380,7 @@
         "secretAccessKey": "Clé d'accès secrète {source}",
         "accountId": "ID de compte {source}",
         "apiToken": "Jeton d'API",
+        "apiKey": "Clé d'API {source}",
         "clientId": "ID client {source}",
         "clientSecret": "Secret client {source}",
         "clientToken": "Jeton client {source}",
@@ -4415,6 +4432,7 @@
         "jiraUserEmail": "Obligatoire pour Jira Cloud.",
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "youtrackToken": "Un jeton permanent d'un utilisateur YouTrack qui peut lire tous les projets à indexer. Créez-le dans votre profil YouTrack, sous Sécurité du compte.",
+        "dealcloudApiKey": "La clé d'API d'un utilisateur DealCloud qui peut lire tous les objets à indexer. Activez-la et copiez-la dans le profil DealCloud de l'utilisateur, sous API Key. Le groupe de l'utilisateur doit avoir la capacité API.",
         "azureDatalakeAccountKey": "Dans le portail Azure, ouvrez le compte de stockage, puis Sécurité + mise en réseau, puis Clés d'accès.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
