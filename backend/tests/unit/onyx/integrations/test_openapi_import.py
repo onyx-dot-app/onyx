@@ -9,6 +9,11 @@ import yaml
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.openapi_endpoints import (
+    EndpointLinesError,
+    apply_endpoint_lines,
+    endpoint_lines,
+)
 from onyx.integrations.service import import_openapi_document
 from onyx.server.features.integrations.models import OpenApiEndpointsRequest
 from onyx.tools.models import DynamicSchemaInfo
@@ -17,6 +22,7 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
+    openapi_to_url,
     parse_openapi_document,
     validate_openapi_schema,
 )
@@ -120,7 +126,8 @@ def test_import_drops_an_operation_without_a_json_body() -> None:
     assert json.loads(view.openapi_document) == _callable_spec()
     assert view.endpoints == [
         "GET /pets/{petId}?verbose Read a pet",
-        "DELETE /pets/{petId} Delete a pet",
+        # The path item gives each operation ?verbose.
+        "DELETE /pets/{petId}?verbose Delete a pet",
     ]
     validate_openapi_schema(json.loads(view.openapi_document))
 
@@ -198,3 +205,62 @@ def test_yaml_timestamps_stay_text() -> None:
     assert spec["info"]["x-added"] == "2015-02-22T20:00:45.000Z"
     assert spec["info"]["x-day"] == "2015-02-22"
     json.dumps(spec)
+
+
+def _apply(spec: dict[str, Any], lines: list[str]) -> dict[str, Any]:
+    return parse_openapi_document(
+        apply_endpoint_lines(
+            json.dumps(spec),
+            title="Pets",
+            description=None,
+            base_url="https://pets.example.com/v2",
+            lines=lines,
+        )
+    )
+
+
+def test_the_base_url_replaces_each_imported_server() -> None:
+    spec = _callable_spec()
+    spec["servers"] = [
+        {"url": "https://eu.pets.example.com"},
+        {"url": "https://us.pets.example.com"},
+    ]
+    applied = _apply(spec, endpoint_lines(spec))
+    assert openapi_to_url(applied) == "https://pets.example.com/v2"
+
+
+def test_lines_show_and_keep_shared_query_parameters() -> None:
+    spec = _callable_spec()
+    spec["components"]["parameters"]["limit"] = {
+        "name": "limit",
+        "in": "query",
+        "schema": {"type": "integer"},
+    }
+    spec["paths"]["/pets"] = {
+        "get": {
+            "operationId": "listPets",
+            "summary": "List pets",
+            "parameters": [{"$ref": "#/components/parameters/limit"}],
+        }
+    }
+    lines = endpoint_lines(spec)
+    assert "GET /pets?limit List pets" in lines
+    assert "GET /pets/{petId}?verbose Read a pet" in lines
+
+    added = _apply(
+        spec,
+        [line.replace("/pets?limit", "/pets?limit&name") for line in lines]
+        + ["PUT /pets/{petId} Replace a pet"],
+    )
+    assert added["paths"]["/pets"]["get"]["parameters"] == [
+        {"$ref": "#/components/parameters/limit"},
+        {"name": "name", "in": "query", "required": False, "schema": {"type": "string"}},
+    ]
+    # The path item defines petId, so the new operation adds no string copy.
+    assert "parameters" not in added["paths"]["/pets/{petId}"]["put"]
+
+    removed = _apply(spec, [line.replace("/pets?limit", "/pets") for line in lines])
+    assert "parameters" not in removed["paths"]["/pets"]["get"]
+
+    with pytest.raises(EndpointLinesError, match="Each operation of /pets/{petId}"):
+        _apply(spec, [line.replace("?verbose", "") for line in lines])

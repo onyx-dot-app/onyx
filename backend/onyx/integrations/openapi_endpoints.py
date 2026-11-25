@@ -15,7 +15,9 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     check_unique_name,
     openapi_operations,
     openapi_to_method_spec,
+    operation_parameters,
     parse_openapi_document,
+    resolve_ref,
 )
 
 _LINE_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
@@ -44,14 +46,30 @@ def _line_name(operation: dict[str, Any]) -> str:
     )
 
 
-def _query_names(operation: dict[str, Any]) -> list[str]:
-    return [
-        param["name"]
-        for param in operation.get("parameters") or []
-        if isinstance(param, dict)
+def _is_query(param: Any) -> bool:
+    return (
+        isinstance(param, dict)
         and param.get("in") == "query"
         and isinstance(param.get("name"), str)
+    )
+
+
+def _query_names(
+    spec: dict[str, Any], path_item: dict[str, Any], operation: dict[str, Any]
+) -> list[str]:
+    """The query parameters of the operation, with the ones of its path item
+    and with references resolved."""
+    return [
+        param["name"]
+        for param in operation_parameters(spec, path_item, operation)
+        if _is_query(param)
     ]
+
+
+def _path_item(spec: dict[str, Any], path: str) -> dict[str, Any]:
+    paths = spec.get("paths")
+    item = paths.get(path) if isinstance(paths, dict) else None
+    return item if isinstance(item, dict) else {}
 
 
 def _string_param(name: str, location: str) -> dict[str, Any]:
@@ -82,7 +100,7 @@ def _remove_operation(paths: dict[str, Any], path: str, method_key: str) -> None
 def endpoint_lines(spec: dict[str, Any]) -> list[str]:
     lines = []
     for (method, path), operation in _operations(spec).items():
-        query = _query_names(operation)
+        query = _query_names(spec, _path_item(spec, path), operation)
         query_text = f"?{'&'.join(query)}" if query else ""
         lines.append(f"{method} {path}{query_text} {_line_name(operation)}")
     return lines
@@ -117,6 +135,7 @@ def _parse_line(text: str) -> tuple[str, str, list[str], str]:
 
 
 def _operation(
+    spec: dict[str, Any],
     method: str,
     path: str,
     query: list[str],
@@ -124,10 +143,24 @@ def _operation(
     old: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """A new minimal operation, or ``old`` with the name and query of the
-    line."""
+    line. A parameter that the spec defines keeps its definition. Raises
+    ``ValueError`` when the line leaves out a query parameter of the path
+    item."""
+    path_item = _path_item(spec, path)
     if old is None:
-        params = [_string_param(p, "path") for p in _PATH_PARAM.findall(path)]
-        params += [_string_param(q, "query") for q in query]
+        defined = {
+            (param.get("name"), param.get("in"))
+            for param in operation_parameters(spec, path_item, {})
+            if isinstance(param, dict)
+        }
+        params = [
+            _string_param(p, "path")
+            for p in _PATH_PARAM.findall(path)
+            if (p, "path") not in defined
+        ]
+        params += [
+            _string_param(q, "query") for q in query if (q, "query") not in defined
+        ]
         operation: dict[str, Any] = {
             "operationId": re.sub(r"[^a-z0-9]+", "_", f"{method}_{path}".lower()).strip(
                 "_"
@@ -149,15 +182,20 @@ def _operation(
     operation = copy.deepcopy(old)
     if name != _line_name(old):
         operation["summary"] = name
-    old_query = _query_names(old)
+    old_query = _query_names(spec, path_item, old)
     if query != old_query:
+        for inherited in _query_names(spec, path_item, {}):
+            if inherited not in query:
+                raise ValueError(
+                    f"Each operation of {path} has ?{inherited}. "
+                    "Remove it from the path in the spec."
+                )
         params = [
             param
             for param in operation.get("parameters") or []
             if not (
-                isinstance(param, dict)
-                and param.get("in") == "query"
-                and param.get("name") not in query
+                _is_query(resolved := resolve_ref(spec, param))
+                and resolved["name"] not in query
             )
         ]
         params += [_string_param(q, "query") for q in query if q not in old_query]
@@ -202,21 +240,16 @@ def apply_endpoint_lines(
             continue
         try:
             method, path, query, name = _parse_line(text)
+            key = (method, path)
+            if key in wanted:
+                raise ValueError(f"Another line already has {method} {path}.")
+            old = existing.get(key)
+            wanted[key] = _operation(spec, method, path, query, name, old)
         except ValueError as e:
             errors.append(EndpointLineError(line=index, message=str(e)))
             continue
-        key = (method, path)
-        if key in wanted:
-            errors.append(
-                EndpointLineError(
-                    line=index, message=f"Another line already has {method} {path}."
-                )
-            )
-            continue
-        old = existing.get(key)
         if old is None:
             new_lines[key] = index
-        wanted[key] = _operation(method, path, query, name, old)
     for key, index in new_lines.items():
         new_id = wanted[key]["operationId"]
         if any(
@@ -245,7 +278,8 @@ def apply_endpoint_lines(
         item[stored_key or method.lower()] = operation
     servers = spec.get("servers")
     if isinstance(servers, list) and servers and isinstance(servers[0], dict):
-        servers[0]["url"] = base_url
+        # A tool calls one server: the base URL replaces the others.
+        spec["servers"] = [{**servers[0], "url": base_url}]
     else:
         spec["servers"] = [{"url": base_url}]
 

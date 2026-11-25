@@ -135,7 +135,7 @@ class MethodSpec(BaseModel):
             raise ValueError(f"HTTP method '{self.method}' is not supported.")
 
 
-def _resolve_ref(openapi_spec: dict[str, Any], value: Any) -> Any:
+def resolve_ref(openapi_spec: dict[str, Any], value: Any) -> Any:
     """What the local ``$ref`` (``#/components/...``) of ``value`` points to,
     else ``value``."""
     ref = value.get("$ref") if isinstance(value, dict) else None
@@ -150,7 +150,7 @@ def _resolve_ref(openapi_spec: dict[str, Any], value: Any) -> Any:
     return target
 
 
-def _parameters(
+def operation_parameters(
     openapi_spec: dict[str, Any], path_item: dict[str, Any], operation: dict[str, Any]
 ) -> list[Any]:
     """The path item's parameters and the operation's, with local references
@@ -159,7 +159,7 @@ def _parameters(
     merged: dict[tuple[Any, Any], Any] = {}
     for source in (path_item, operation):
         for param in source.get("parameters") or []:
-            resolved = _resolve_ref(openapi_spec, param)
+            resolved = resolve_ref(openapi_spec, param)
             key = (
                 (resolved.get("name"), resolved.get("in"))
                 if isinstance(resolved, dict)
@@ -187,7 +187,7 @@ def openapi_to_method_spec(
         raise ValueError(f"Summary is not specified for {method_name.upper()} {path}")
 
     spec = dict(method)
-    if parameters := _parameters(openapi_spec, path_item, method):
+    if parameters := operation_parameters(openapi_spec, path_item, method):
         spec["parameters"] = parameters
     return MethodSpec(
         name=sanitize_tool_name(raw_name),
