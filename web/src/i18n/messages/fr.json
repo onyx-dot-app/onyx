@@ -6881,7 +6881,8 @@
           "setNewDefaultFailed": "Échec de la définition du nouveau fournisseur par défaut",
           "testApiKeyFailed": "Une erreur est survenue pendant le test de la clé d'API.",
           "testCustomProviderFailed": "Une erreur est survenue pendant le test du fournisseur personnalisé.",
-          "testProviderFailed": "Une erreur est survenue pendant le test du fournisseur."
+          "testProviderFailed": "Une erreur est survenue pendant le test du fournisseur.",
+          "imageModelsUpdateFailed": "Le fournisseur a été enregistré, mais ses modèles d'image n'ont pas pu être mis à jour"
         },
         "validation": {
           "apiBaseRequired": "L'URL de base de l'API est obligatoire",
@@ -7001,8 +7002,7 @@
         },
         "imageModels": {
           "title": "Modèles d'image",
-          "description": "Activez les modèles que ce fournisseur peut utiliser pour générer des images.",
-          "error": "Impossible de modifier le modèle d'image"
+          "description": "Activez les modèles que ce fournisseur peut utiliser pour générer des images."
         }
       }
     },

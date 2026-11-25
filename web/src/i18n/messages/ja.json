@@ -6881,7 +6881,8 @@
           "setNewDefaultFailed": "新しいプロバイダーをデフォルトに設定できませんでした",
           "testApiKeyFailed": "API キーのテスト中にエラーが発生しました。",
           "testCustomProviderFailed": "カスタムプロバイダーのテスト中にエラーが発生しました。",
-          "testProviderFailed": "プロバイダーのテスト中にエラーが発生しました。"
+          "testProviderFailed": "プロバイダーのテスト中にエラーが発生しました。",
+          "imageModelsUpdateFailed": "プロバイダーは保存されましたが、画像モデルを更新できませんでした"
         },
         "validation": {
           "apiBaseRequired": "API ベース URL は必須です",
@@ -7001,8 +7002,7 @@
         },
         "imageModels": {
           "title": "画像モデル",
-          "description": "このプロバイダーが画像の生成に使用できるモデルを有効にします。",
-          "error": "画像モデルを変更できませんでした"
+          "description": "このプロバイダーが画像の生成に使用できるモデルを有効にします。"
         }
       }
     },

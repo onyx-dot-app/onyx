@@ -6881,7 +6881,8 @@
           "setNewDefaultFailed": "새 제공자를 기본으로 설정하지 못했습니다",
           "testApiKeyFailed": "API 키를 테스트하는 중 오류가 발생했습니다.",
           "testCustomProviderFailed": "사용자 지정 제공자를 테스트하는 중 오류가 발생했습니다.",
-          "testProviderFailed": "제공자를 테스트하는 중 오류가 발생했습니다."
+          "testProviderFailed": "제공자를 테스트하는 중 오류가 발생했습니다.",
+          "imageModelsUpdateFailed": "제공자는 저장되었지만 이미지 모델을 업데이트할 수 없습니다"
         },
         "validation": {
           "apiBaseRequired": "API 기본 URL은 필수입니다",
@@ -7001,8 +7002,7 @@
         },
         "imageModels": {
           "title": "이미지 모델",
-          "description": "이 제공자가 이미지 생성에 사용할 수 있는 모델을 켭니다.",
-          "error": "이미지 모델을 변경할 수 없습니다"
+          "description": "이 제공자가 이미지 생성에 사용할 수 있는 모델을 켭니다."
         }
       }
     },

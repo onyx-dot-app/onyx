@@ -5,10 +5,6 @@ import {
   useImageGenerationConfigs,
   useImageGenerationProviders,
 } from "@/lib/imageGeneration/hooks";
-import {
-  deleteImageGenerationConfig,
-  linkImageGenerationModel,
-} from "@/lib/imageGeneration/svc";
 import type { ImageGenerationProviderModel } from "@/lib/imageGeneration/types";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -58,7 +54,6 @@ import {
 } from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -761,29 +756,26 @@ function ModelRow({
 
 interface ImageModelRowProps {
   model: ImageGenerationProviderModel;
+  checked: boolean;
   isDefaultModel: boolean;
-  disabled: boolean;
   onToggle: (connect: boolean) => void;
 }
 
 /** One image model, laid out like a chat model's `ModelRow`. */
 function ImageModelRow({
   model,
+  checked,
   isDefaultModel,
-  disabled,
   onToggle,
 }: ImageModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const isConnected = model.image_provider_id !== null;
   const title = model.display_name || model.name;
-  const toggle = () => {
-    if (!disabled) onToggle(!isConnected);
-  };
+  const toggle = () => onToggle(!checked);
 
   return (
     <Interactive.Stateful
       variant="select-heavy"
-      state={isConnected ? "selected" : "empty"}
+      state={checked ? "selected" : "empty"}
       onClick={toggle}
       role="button"
       tabIndex={0}
@@ -801,7 +793,7 @@ function ImageModelRow({
             font="main-ui-action"
             color="interactive"
             center
-            icon={() => <InputCheckbox checked={isConnected} />}
+            icon={() => <InputCheckbox checked={checked} />}
             title={title}
             description={title === model.name ? undefined : model.name}
             rightChildren={
@@ -832,17 +824,15 @@ interface ImageModelsFieldProps {
 
 /**
  * A provider's image models: the recommended ones and any already connected.
- * Checking one connects it at once, outside the form's save; the first
- * connected model becomes the default image model.
+ * A click stages the change in the form (`image_model_changes`), which saves
+ * it after the provider on Update; the first model connected becomes the
+ * default image model.
  */
 function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
   const t = useTranslations("admin.languageModels.imageGeneration");
-  const { providers, refetch: refetchProviders } =
-    useImageGenerationProviders();
-  const { defaultConfig, refetch: refetchConfigs } =
-    useImageGenerationConfigs();
-  const [isPending, setIsPending] = useState(false);
-  const { mutate } = useSWRConfig();
+  const { values, setValues } = useFormikContext<BaseLLMFormValues>();
+  const { providers } = useImageGenerationProviders();
+  const { defaultConfig } = useImageGenerationConfigs();
 
   const provider = providers?.find((p) => p.llm_provider_id === llmProviderId);
   const models =
@@ -851,33 +841,33 @@ function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
     ) ?? [];
   if (!provider || models.length === 0) return null;
 
-  async function handleToggle(
-    model: ImageGenerationProviderModel,
-    connect: boolean
-  ) {
-    setIsPending(true);
-    try {
-      if (connect) {
-        await linkImageGenerationModel(
-          llmProviderId,
-          model.name,
-          defaultConfig === null
-        );
-      } else if (model.image_provider_id) {
-        await deleteImageGenerationConfig(model.image_provider_id);
-      }
-      await Promise.all([
-        refetchProviders(),
-        refetchConfigs(),
-        mutate(SWR_KEYS.adminLlmProvidersWithImageModels),
-      ]);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("imageModels.error")
-      );
-    } finally {
-      setIsPending(false);
-    }
+  const changes = values.image_model_changes ?? {};
+  const isChecked = (model: ImageGenerationProviderModel) =>
+    changes[model.name]?.connect ?? model.image_provider_id !== null;
+
+  function handleToggle(model: ImageGenerationProviderModel, connect: boolean) {
+    const { [model.name]: _previous, ...rest } = changes;
+    const next =
+      connect === (model.image_provider_id !== null)
+        ? rest
+        : {
+            ...rest,
+            [model.name]: {
+              connect,
+              imageProviderId: model.image_provider_id,
+              makeDefault:
+                connect &&
+                defaultConfig === null &&
+                !Object.values(rest).some((change) => change.makeDefault),
+            },
+          };
+    // No staged change leaves the field out, so the form is pristine again.
+    const { image_model_changes: _changes, ...others } = values;
+    void setValues(
+      Object.keys(next).length === 0
+        ? others
+        : { ...others, image_model_changes: next }
+    );
   }
 
   return (
@@ -895,12 +885,12 @@ function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
               <ImageModelRow
                 key={model.name}
                 model={model}
+                checked={isChecked(model)}
                 isDefaultModel={
                   model.image_provider_id !== null &&
                   defaultConfig?.image_provider_id === model.image_provider_id
                 }
-                disabled={isPending}
-                onToggle={(connect) => void handleToggle(model, connect)}
+                onToggle={(connect) => handleToggle(model, connect)}
               />
             ))}
           </OpalSection>

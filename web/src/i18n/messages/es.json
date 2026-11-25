@@ -6881,7 +6881,8 @@
           "setNewDefaultFailed": "No se pudo establecer el nuevo proveedor como predeterminado",
           "testApiKeyFailed": "Ocurrió un error al probar la clave de API.",
           "testCustomProviderFailed": "Ocurrió un error al probar el proveedor personalizado.",
-          "testProviderFailed": "Ocurrió un error al probar el proveedor."
+          "testProviderFailed": "Ocurrió un error al probar el proveedor.",
+          "imageModelsUpdateFailed": "Se guardó el proveedor, pero no se pudieron actualizar sus modelos de imagen"
         },
         "validation": {
           "apiBaseRequired": "La URL base de la API es obligatoria",
@@ -7001,8 +7002,7 @@
         },
         "imageModels": {
           "title": "Modelos de imagen",
-          "description": "Activa los modelos que este proveedor puede usar para generar imágenes.",
-          "error": "No se pudo cambiar el modelo de imagen"
+          "description": "Activa los modelos que este proveedor puede usar para generar imágenes."
         }
       }
     },

@@ -22,9 +22,11 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   images too, and they show the same way.
 - **An admin** opens the Chat & Image Models page (`/admin/chat-image-models`).
   A provider's edit modal lists its recommended catalog image models and any
-  connected ones, each a checkbox row like the chat models. A row links or
-  unlinks the model at once, with the provider's credentials; the first linked model becomes the
-  default. The page's "Default Image Generation Model" select picks the
+  connected ones, each a checkbox row like the chat models. A click stages
+  the change in the form (`image_model_changes`); **Update** saves the
+  provider, then links or unlinks the staged models with the provider's
+  credentials (`sections/modals/languageModels/svc.ts:submitProvider`). The
+  first linked model becomes the default. The page's "Default Image Generation Model" select picks the
   default, and "No Default" turns image generation off. Provider cards tag the
   default text and image providers. Any provider can serve image models. The
   default image model follows its provider's access: the tool and

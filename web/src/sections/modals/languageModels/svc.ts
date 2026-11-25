@@ -10,10 +10,40 @@ import {
 } from "@/lib/analytics/utils";
 import {
   BaseLLMFormValues,
+  ImageModelChange,
   LlmModalsTranslator,
   TestApiKeyResult,
 } from "@/sections/modals/languageModels/utils";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import {
+  deleteImageGenerationConfig,
+  linkImageGenerationModel,
+} from "@/lib/imageGeneration/svc";
+
+/**
+ * Applies a provider's staged image model changes. Disconnects run first,
+ * so swapping models never leaves two defaults.
+ */
+async function saveImageModelChanges(
+  llmProviderId: number,
+  changes: Record<string, ImageModelChange>
+): Promise<void> {
+  const entries = Object.entries(changes);
+  for (const [, change] of entries) {
+    if (!change.connect && change.imageProviderId) {
+      await deleteImageGenerationConfig(change.imageProviderId);
+    }
+  }
+  for (const [modelName, change] of entries) {
+    if (change.connect) {
+      await linkImageGenerationModel(
+        llmProviderId,
+        modelName,
+        change.makeDefault
+      );
+    }
+  }
+}
 
 // ─── Test helpers ─────────────────────────────────────────────────────────
 
@@ -133,7 +163,13 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 }: SubmitProviderParams<T>): Promise<void> {
   setSubmitting(true);
 
-  const { test_model_name, api_key, name: rawName, ...rest } = values;
+  const {
+    test_model_name,
+    api_key,
+    name: rawName,
+    image_model_changes: imageModelChanges,
+    ...rest
+  } = values;
   const testModelName =
     test_model_name ||
     values.model_configurations.find((m) => m.is_visible)?.name ||
@@ -257,6 +293,19 @@ export async function submitProvider<T extends BaseLLMFormValues>({
       }
     } catch {
       toast.error(t("toasts.setNewDefaultFailed"));
+    }
+  }
+
+  // ── Image models ────────────────────────────────────────────────────
+  if (existingLlmProvider && imageModelChanges) {
+    try {
+      await saveImageModelChanges(existingLlmProvider.id, imageModelChanges);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.imageModelsUpdateFailed")
+      );
+      setSubmitting(false);
+      return;
     }
   }
 

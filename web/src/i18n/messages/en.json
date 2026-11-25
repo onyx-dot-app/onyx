@@ -6881,7 +6881,8 @@
           "setNewDefaultFailed": "Failed to set new provider as default",
           "testApiKeyFailed": "An error occurred while testing the API key.",
           "testCustomProviderFailed": "An error occurred while testing the custom provider.",
-          "testProviderFailed": "An error occurred while testing the provider."
+          "testProviderFailed": "An error occurred while testing the provider.",
+          "imageModelsUpdateFailed": "Saved the provider, but could not update its image models"
         },
         "validation": {
           "apiBaseRequired": "API Base URL is required",
@@ -7001,8 +7002,7 @@
         },
         "imageModels": {
           "title": "Image Models",
-          "description": "Turn on the models that this provider can use to generate images.",
-          "error": "Could not change the image model"
+          "description": "Turn on the models that this provider can use to generate images."
         }
       }
     },

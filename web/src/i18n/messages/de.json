@@ -6881,7 +6881,8 @@
           "setNewDefaultFailed": "Der neue Anbieter konnte nicht als Standard festgelegt werden",
           "testApiKeyFailed": "Beim Testen des API-Schlüssels ist ein Fehler aufgetreten.",
           "testCustomProviderFailed": "Beim Testen des benutzerdefinierten Anbieters ist ein Fehler aufgetreten.",
-          "testProviderFailed": "Beim Testen des Anbieters ist ein Fehler aufgetreten."
+          "testProviderFailed": "Beim Testen des Anbieters ist ein Fehler aufgetreten.",
+          "imageModelsUpdateFailed": "Der Anbieter wurde gespeichert, aber seine Bildmodelle konnten nicht aktualisiert werden"
         },
         "validation": {
           "apiBaseRequired": "Die API-Basis-URL ist erforderlich",
@@ -7001,8 +7002,7 @@
         },
         "imageModels": {
           "title": "Bildmodelle",
-          "description": "Aktivieren Sie die Modelle, mit denen dieser Anbieter Bilder generieren kann.",
-          "error": "Das Bildmodell konnte nicht geändert werden"
+          "description": "Aktivieren Sie die Modelle, mit denen dieser Anbieter Bilder generieren kann."
         }
       }
     },

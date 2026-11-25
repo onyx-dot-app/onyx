@@ -6881,7 +6881,8 @@
           "setNewDefaultFailed": "فشل تعيين الموفر الجديد كافتراضي",
           "testApiKeyFailed": "حدث خطأ أثناء اختبار مفتاح API.",
           "testCustomProviderFailed": "حدث خطأ أثناء اختبار الموفر المخصص.",
-          "testProviderFailed": "حدث خطأ أثناء اختبار الموفر."
+          "testProviderFailed": "حدث خطأ أثناء اختبار الموفر.",
+          "imageModelsUpdateFailed": "تم حفظ المزوّد، لكن تعذّر تحديث نماذج الصور الخاصة به"
         },
         "validation": {
           "apiBaseRequired": "عنوان URL الأساسي لـ API مطلوب",
@@ -7001,8 +7002,7 @@
         },
         "imageModels": {
           "title": "نماذج الصور",
-          "description": "فعّل النماذج التي يمكن لهذا المزوّد استخدامها لإنشاء الصور.",
-          "error": "تعذّر تغيير نموذج الصور"
+          "description": "فعّل النماذج التي يمكن لهذا المزوّد استخدامها لإنشاء الصور."
         }
       }
     },

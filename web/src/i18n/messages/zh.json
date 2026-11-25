@@ -6881,7 +6881,8 @@
           "setNewDefaultFailed": "无法将新提供商设为默认",
           "testApiKeyFailed": "测试 API 密钥时出错。",
           "testCustomProviderFailed": "测试自定义提供商时出错。",
-          "testProviderFailed": "测试提供商时出错。"
+          "testProviderFailed": "测试提供商时出错。",
+          "imageModelsUpdateFailed": "已保存提供商，但无法更新其图像模型"
         },
         "validation": {
           "apiBaseRequired": "API 基础 URL 为必填项",
@@ -7001,8 +7002,7 @@
         },
         "imageModels": {
           "title": "图像模型",
-          "description": "开启此提供商可用于生成图像的模型。",
-          "error": "无法更改图像模型"
+          "description": "开启此提供商可用于生成图像的模型。"
         }
       }
     },
