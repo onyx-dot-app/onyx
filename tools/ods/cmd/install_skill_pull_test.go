@@ -160,7 +160,9 @@ func TestPullSourceWarnsWhenTheCheckoutCannotBeInspected(t *testing.T) {
 	var errOut strings.Builder
 	cmd.SetErr(&errOut)
 
-	pullSource(cmd, source)
+	if err := pullSource(cmd, source); err != nil {
+		t.Fatal(err)
+	}
 
 	if !strings.Contains(errOut.String(), "Warning: could not inspect "+source) {
 		t.Fatalf("expected an inspection warning, got %q", errOut.String())
