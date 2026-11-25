@@ -1,5 +1,6 @@
 import json
 from collections.abc import Collection, Mapping
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import Integer, column, delete, exists, func, inspect, select, values
@@ -398,6 +399,14 @@ def save_chat_response_to_db(
             else None
         )
         dumps = finish_checkpoint__no_commit(session, message_id)
+        processing_time = response.pre_answer_processing_time
+        # A run stopped before its answer has no answer start; it worked
+        # until the stop, so keep that time for the stopped header.
+        if response.cancelled and processing_time is None:
+            processing_time = max(
+                0.0,
+                (datetime.now(timezone.utc) - message.time_sent).total_seconds(),
+            )
         save_chat_turn(
             message_text=answer,
             reasoning_tokens=response.reasoning,
@@ -411,7 +420,7 @@ def save_chat_response_to_db(
             emitted_citations={
                 citation.citation_number for citation in response.citation_info
             },
-            pre_answer_processing_time=response.pre_answer_processing_time,
+            pre_answer_processing_time=processing_time,
             persist_content=keeps_content,
             response_record=response.response,
             presentation=response.presentation,

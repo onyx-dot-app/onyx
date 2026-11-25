@@ -93,4 +93,16 @@ describe("full image gallery", () => {
     );
     expect(screen.getByText("1 / 2")).toHaveClass("text-text-light-05");
   });
+
+  test("focuses the dialog, not a button, so Escape closes it at once", async () => {
+    const user = userEvent.setup();
+    renderAnswer(["a", "b"]);
+    await user.click(
+      screen.getAllByRole("button", { name: "View the full image" })[0]!
+    );
+    expect(screen.getByRole("dialog")).toHaveFocus();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
