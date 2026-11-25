@@ -14,6 +14,7 @@ function chatWithOlderPages(pages: number) {
   let left = pages;
   useChatSessionStore.getState().updateSessionData(SESSION, {
     hasOlderMessages: left > 0,
+    olderMessagesFailed: false,
     isLoadingOlderMessages: false,
   });
   mockLoad.mockImplementation(async () => {
@@ -50,5 +51,18 @@ test("stops when cancelled", async () => {
     cancelled = true;
   });
   await loadOlderPagesForFind(SESSION, () => cancelled);
+  expect(mockLoad).toHaveBeenCalledTimes(1);
+});
+
+test("a page that fails to load stops and reports messages missing", async () => {
+  chatWithOlderPages(5);
+  // Like `loadOlderChatMessages` on a failed request.
+  mockLoad.mockImplementation(async () => {
+    useChatSessionStore.getState().updateSessionData(SESSION, {
+      hasOlderMessages: false,
+      olderMessagesFailed: true,
+    });
+  });
+  await expect(loadOlderPagesForFind(SESSION, () => false)).resolves.toBe(true);
   expect(mockLoad).toHaveBeenCalledTimes(1);
 });
