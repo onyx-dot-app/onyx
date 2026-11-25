@@ -90,6 +90,10 @@ class RecordedRequest(BaseModel):
     reply_index: int | None = None
     used_default_reply: bool = False
     error: str | None = None
+    # time.monotonic() of this server: the request arrived, and the first text
+    # chunk left. For callers in the same process, such as a benchmark.
+    received_at: float = 0.0
+    first_text_at: float | None = None
 
     @property
     def prompt_text(self) -> str:

@@ -1,0 +1,26 @@
+{
+  "long-history": {
+    "cache_commands": 87.3,
+    "first_request_digest": "9f31fc9aa51908b2f3c7b0c6d1b8e27eec5631e1d8ddb05bfd49072879d66318",
+    "sql_commits": 5.0,
+    "sql_statements": 100.167,
+    "threads_started": 4.0,
+    "transcript_digest": "8dc16b595a4edb56b47273bf16b9b284dc2ff0e98d9a4d2e698224df82cd980b"
+  },
+  "new-session": {
+    "cache_commands": 86.6,
+    "first_request_digest": "d940a0306490635fb12fce4d49976a1e35a36281080514fe4ba33435ad2cd0a1",
+    "sql_commits": 7.0,
+    "sql_statements": 96.167,
+    "threads_started": 4.0,
+    "transcript_digest": "8dc16b595a4edb56b47273bf16b9b284dc2ff0e98d9a4d2e698224df82cd980b"
+  },
+  "warm": {
+    "cache_commands": 86.3,
+    "first_request_digest": "415fad5a3f7bee7a1959a82002579a4c4a16ce8d8645a9dbf99eb10ae4e183a3",
+    "sql_commits": 5.0,
+    "sql_statements": 100.033,
+    "threads_started": 4.0,
+    "transcript_digest": "8dc16b595a4edb56b47273bf16b9b284dc2ff0e98d9a4d2e698224df82cd980b"
+  }
+}
