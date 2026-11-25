@@ -1,4 +1,4 @@
-"""Unit tests for the generalized audit-event subsystem (``onyx.utils.audit``).
+"""Unit tests for the EE audit-event subsystem (``ee.onyx.utils.audit``).
 
 These cover the invariants the subsystem must never violate: a stable
 OCSF-shaped schema, never logging a secret, never raising on missing context,
@@ -13,18 +13,22 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.utils import audit
-from onyx.utils.audit import (
+from ee.onyx.utils import audit
+from ee.onyx.utils.audit import (
     _OCSF_CLASS_BY_ACTION,
     AUDIT_HANDLER_NAME,
     AUDIT_LOGGER_ROOT,
+    OCSFEventClass,
+    emit_audit_event,
+)
+from onyx.utils import audit as audit_surface
+from onyx.utils.audit import (
     AuditAction,
     AuditActor,
     AuditOutcome,
-    OCSFEventClass,
     actor_from_user,
-    emit_audit_event,
 )
+from onyx.utils.variable_functionality import global_version
 from tests.utils.audit import audit_events
 
 
@@ -255,3 +259,24 @@ def test_actor_from_user_never_raises() -> None:
     broken = MagicMock()
     type(broken).id = property(lambda _self: (_ for _ in ()).throw(RuntimeError()))
     assert actor_from_user(broken) is None
+
+
+def test_surface_forwards_to_ee(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        audit_surface.emit_audit_event(
+            AuditAction.LOGOUT, AuditOutcome.SUCCESS, resource_id=7
+        )
+
+    events = audit_events(caplog)
+    assert len(events) == 1
+    assert events[0]["action"] == "auth.logout"
+    assert events[0]["resource_id"] == "7"
+
+
+def test_surface_is_a_noop_without_ee(caplog: pytest.LogCaptureFixture) -> None:
+    global_version.unset_ee()
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        audit_surface.emit_audit_event(AuditAction.LOGOUT, AuditOutcome.SUCCESS)
+
+    assert audit_events(caplog) == []
