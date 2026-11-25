@@ -1,4 +1,4 @@
-"""Windows file share gateway: every SMB and LDAP call lives here.
+"""Windows file share gateway: every SMB, LDAP and Kerberos call lives here.
 
 The connector reads one share of one file server with a domain service
 account. The session never uses SMB 1, needs SMB 2.1 or later, and requires
@@ -11,6 +11,7 @@ Permission sync also asks the domain's Active Directory about users and
 groups, over LDAP with TLS and the same service account.
 """
 
+import importlib
 import os
 import socket
 import ssl
@@ -19,10 +20,21 @@ import threading
 import weakref
 from collections.abc import Callable
 from datetime import datetime, timezone
+from types import ModuleType
 from typing import Any, ClassVar, TypeVar
 
 import smbclient
-from ldap3 import BASE, NONE, SAFE_SYNC, SIMPLE, SUBTREE, Server, Tls
+from ldap3 import (
+    BASE,
+    KERBEROS,
+    NONE,
+    SAFE_SYNC,
+    SASL,
+    SIMPLE,
+    SUBTREE,
+    Server,
+    Tls,
+)
 from ldap3 import Connection as LdapConnection
 from ldap3.core.exceptions import (
     LDAPBindError,
@@ -54,6 +66,7 @@ from smbprotocol.open import (
     SMB2QueryInfoResponse,
 )
 from smbprotocol.session import Session
+from spnego.exceptions import SpnegoError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
@@ -69,13 +82,16 @@ from onyx.connectors.smb.config import (
     SmbConnectorConfig,
     SmbCredentialBinding,
 )
+from onyx.connectors.smb.kerberos_config import register_realm
 from onyx.connectors.smb.models import (
     DirectoryGroup,
     DirectoryGroupPage,
     DirectoryInfo,
     DirectoryUser,
     DirectoryUserPage,
+    KerberosTicket,
     LdapTlsMode,
+    SmbAuthMethod,
     SmbCredentials,
     SmbEntry,
     SmbFile,
@@ -188,6 +204,32 @@ _USER_ATTRIBUTES = ["objectSid", "mail", "userPrincipalName", "userAccountContro
 _GROUP_ATTRIBUTES = ["objectSid", "cn"]
 
 T = TypeVar("T")
+
+
+def _load_kerberos_errors() -> tuple[type[Exception], ...]:
+    """The error types of the Kerberos libraries. They are in the backend
+    image and not in each development setup, since they compile against
+    system headers. Without them only NTLM works."""
+    errors: list[type[Exception]] = [SpnegoError]
+    try:
+        errors.append(importlib.import_module("gssapi.exceptions").GSSError)
+        errors.append(importlib.import_module("krb5").Krb5Error)
+    except ImportError:
+        logger.debug("The Kerberos libraries are not installed")
+    return tuple(errors)
+
+
+_KERBEROS_ERRORS: tuple[type[Exception], ...] = _load_kerberos_errors()
+
+
+def _kerberos_library(name: str) -> ModuleType:
+    try:
+        return importlib.import_module(name)
+    except ImportError as e:
+        raise ConnectorValidationError(
+            "This Onyx deployment has no Kerberos libraries (gssapi and krb5), "
+            "so only NTLM works. The Onyx backend image holds them."
+        ) from e
 
 
 class SmbRequestError(SourceApiError):
@@ -370,7 +412,7 @@ def _directory_group(entry: dict[str, Any]) -> DirectoryGroup | None:
 
 class SmbSourceOperations(SourceOperations):
     source = DocumentSource.SMB
-    sdk_modules = ("smbclient", "smbprotocol", "spnego", "ldap3")
+    sdk_modules = ("smbclient", "smbprotocol", "spnego", "ldap3", "gssapi", "krb5")
     config_keys = frozenset(
         {CONFIG_HOST, CONFIG_SHARE, CONFIG_PORT, CONFIG_REQUIRE_ENCRYPTION}
     )
@@ -440,8 +482,13 @@ class SmbSourceOperations(SourceOperations):
     def _session_kwargs(self) -> dict[str, Any]:
         """The connection arguments every smbclient call takes."""
         credentials: SmbCredentials = self._credentials()
+        kerberos: bool = credentials.authentication_method is SmbAuthMethod.KERBEROS
+        if kerberos:
+            self._prepare_kerberos(credentials)
         return {
-            "username": credentials.account_name,
+            "username": (
+                credentials.kerberos_principal if kerberos else credentials.account_name
+            ),
             "password": credentials.smb_password,
             "port": self._port(),
             # None lets the server decide.
@@ -451,6 +498,24 @@ class SmbSourceOperations(SourceOperations):
             "auth_protocol": credentials.authentication_method.value,
             "require_signing": True,
         }
+
+    def _prepare_kerberos(self, credentials: SmbCredentials) -> None:
+        """Makes the realm known to the Kerberos library. Onyx gets a ticket
+        with the account's password, so the password proof goes to the KDC,
+        which follows the network policy like each other server."""
+        _kerberos_library("gssapi")
+        if credentials.kerberos_kdc:
+            validate_network_host(credentials.kerberos_kdc, "Kerberos KDC")
+        try:
+            register_realm(
+                credentials.kerberos_realm,
+                credentials.kerberos_kdc or None,
+                [self._host(), credentials.ldap_host],
+            )
+        except ValueError as e:
+            raise CredentialInvalidError(
+                f"The Kerberos settings are not valid: {e}"
+            ) from e
 
     def _session(self) -> Session:
         """The signed-in session, made once. smbclient reuses it for every
@@ -480,6 +545,9 @@ class SmbSourceOperations(SourceOperations):
     def _map_error(self, error: Exception, target: str) -> Exception:
         host: str = self._host()
         status: int | None = _status(error)
+        kerberos_error: Exception | None = _kerberos_error(error, host)
+        if kerberos_error is not None:
+            return kerberos_error
         if isinstance(error, SMBAuthenticationError) or status in _LOGON_STATUSES:
             return CredentialInvalidError(
                 f"The file server '{host}' rejected the service account: {error}"
@@ -529,7 +597,7 @@ class SmbSourceOperations(SourceOperations):
             except (ConnectorValidationError, SourceApiError):
                 raise
             # smbprotocol raises ValueError for a failed TCP connection.
-            except (SMBException, OSError, ValueError) as e:
+            except (SMBException, OSError, ValueError, *_KERBEROS_ERRORS) as e:
                 raise self._map_error(e, target) from e
         raise RuntimeError("Bug: the retry loop always returns or raises.")
 
@@ -659,6 +727,37 @@ class SmbSourceOperations(SourceOperations):
         return self._call(download, f"the file '{unc}'")
 
     @source_operation(
+        capabilities=(CredentialCapability.INDEXING,),
+        consumes=OperationConsumes.BOTH,
+    )
+    def get_kerberos_ticket(self) -> KerberosTicket | None:
+        """Asks the KDC for a ticket-granting ticket with the service
+        account's password. The ticket is not kept. None for a credential
+        that does not use Kerberos."""
+        credentials: SmbCredentials = self._credentials()
+        if credentials.authentication_method is not SmbAuthMethod.KERBEROS:
+            return None
+        self._prepare_kerberos(credentials)
+        krb5: ModuleType = _kerberos_library("krb5")
+        try:
+            context = krb5.init_context()
+            principal = krb5.parse_name_flags(
+                context, credentials.kerberos_principal.encode()
+            )
+            krb5.get_init_creds_password(
+                context,
+                principal,
+                krb5.get_init_creds_opt_alloc(context),
+                password=credentials.smb_password.encode(),
+            )
+        except _KERBEROS_ERRORS as e:
+            raise (
+                _kerberos_error(e, self._host())
+                or CredentialInvalidError(f"The KDC issued no ticket: {e}")
+            ) from e
+        return KerberosTicket(principal=credentials.kerberos_principal)
+
+    @source_operation(
         capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
         consumes=OperationConsumes.BOTH,
     )
@@ -731,19 +830,35 @@ class SmbSourceOperations(SourceOperations):
             get_info=NONE,
             connect_timeout=_CONNECTION_TIMEOUT_SECONDS,
         )
+        kerberos: bool = credentials.authentication_method is SmbAuthMethod.KERBEROS
         connection = LdapConnection(
             server,
-            user=credentials.account_name,
-            password=credentials.smb_password,
-            authentication=SIMPLE,
             client_strategy=SAFE_SYNC,
             auto_bind=False,
             # A referral names another server. Following it would send the
-            # password there.
+            # account's proof there.
             auto_referrals=False,
             read_only=True,
             raise_exceptions=True,
             receive_timeout=_LDAP_RECEIVE_TIMEOUT_SECONDS,
+            **(
+                {
+                    "authentication": SASL,
+                    "sasl_mechanism": KERBEROS,
+                    # The server's name, no other identity, and the ticket.
+                    "sasl_credentials": (
+                        None,
+                        None,
+                        self._kerberos_credentials(credentials),
+                    ),
+                }
+                if kerberos
+                else {
+                    "authentication": SIMPLE,
+                    "user": credentials.account_name,
+                    "password": credentials.smb_password,
+                }
+            ),
         )
         connection.open()
         try:
@@ -763,6 +878,20 @@ class SmbSourceOperations(SourceOperations):
             raise
         return connection
 
+    def _kerberos_credentials(self, credentials: SmbCredentials) -> Any:
+        """A ticket-granting ticket for the service account, from its
+        password. It lives in this process's memory only."""
+        self._prepare_kerberos(credentials)
+        gssapi: ModuleType = _kerberos_library("gssapi")
+        return gssapi.raw.acquire_cred_with_password(
+            gssapi.Name(
+                credentials.kerberos_principal, gssapi.NameType.kerberos_principal
+            ),
+            credentials.smb_password.encode(),
+            usage="initiate",
+            mechs=[gssapi.MechType.kerberos],
+        ).creds
+
     def _ldap(self) -> LdapConnection:
         if self._ldap_connection is None:
             with self._session_lock:
@@ -779,6 +908,9 @@ class SmbSourceOperations(SourceOperations):
 
     def _map_ldap_error(self, error: Exception, target: str) -> Exception:
         host: str = self._credentials().ldap_host
+        kerberos_error: Exception | None = _kerberos_error(error, host)
+        if kerberos_error is not None:
+            return kerberos_error
         if isinstance(error, LDAPInvalidCredentialsResult | LDAPBindError):
             return CredentialInvalidError(
                 f"The domain controller '{host}' rejected the service account."
@@ -840,7 +972,7 @@ class SmbSourceOperations(SourceOperations):
                 continue
             except (ConnectorValidationError, SourceApiError):
                 raise
-            except (LDAPException, OSError) as e:
+            except (LDAPException, OSError, *_KERBEROS_ERRORS) as e:
                 self._drop_ldap()
                 raise self._map_ldap_error(e, target) from e
             entries: list[dict[str, Any]] = [
@@ -1012,6 +1144,35 @@ class SmbSourceOperations(SourceOperations):
             if cookie is None:
                 return sids
         raise RuntimeError(f"The members of {group.sid} passed {_MAX_LDAP_PAGES} pages")
+
+
+def _kerberos_error(error: Exception, host: str) -> Exception | None:
+    """A Kerberos failure as the error an admin can act on. None for an error
+    that is not from Kerberos. The libraries give no error codes that are the
+    same on each platform, so the message decides."""
+    if not isinstance(error, _KERBEROS_ERRORS):
+        return None
+    message: str = str(error)
+    lowered: str = message.lower()
+    if "cannot contact any kdc" in lowered or "cannot find kdc" in lowered:
+        return UnreachableValidationError(
+            f"Onyx cannot reach a Kerberos KDC of the realm: {message}. Set the "
+            "KDC host of the credential, and open port 88 from Onyx to it."
+        )
+    if "clock skew" in lowered:
+        return ConnectorValidationError(
+            "The clocks of Onyx and the KDC differ by more than Kerberos "
+            f"allows: {message}"
+        )
+    if (
+        "server not found in kerberos database" in lowered
+        or "unknown server" in lowered
+    ):
+        return ConnectorValidationError(
+            f"The realm has no service ticket for '{host}'. Enter the server's "
+            "fully qualified DNS name, not an IP address or an alias."
+        )
+    return CredentialInvalidError(f"Kerberos refused the service account: {message}")
 
 
 def _close_ldap(connection: LdapConnection) -> None:

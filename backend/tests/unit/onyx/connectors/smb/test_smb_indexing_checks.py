@@ -7,11 +7,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckNotApplicableError,
     CheckOutput,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.smb.capability_checks import (
     FILE_READ_CHECK_ID,
+    KERBEROS_TICKET_CHECK_ID,
     PATH_PREFIX_CHECK_ID,
     SHARE_CHECK_ID,
     SIGN_IN_CHECK_ID,
@@ -21,6 +23,7 @@ from onyx.connectors.smb.capability_checks import (
 from onyx.connectors.smb.models import (
     FILE_ATTRIBUTE_DIRECTORY,
     FILE_ATTRIBUTE_REPARSE_POINT,
+    KerberosTicket,
     SmbEntry,
     SmbSessionInfo,
 )
@@ -74,7 +77,7 @@ def test_sign_in_names_the_account_and_never_the_password() -> None:
     output = _check(SIGN_IN_CHECK_ID).run(_context(_gateway()))
 
     assert isinstance(output, CheckOutput)
-    assert output.summary == "Signed in as CORP\\svc-onyx"
+    assert output.summary == "Signed in as CORP\\svc-onyx with NTLM"
 
 
 def test_transport_reports_encryption_and_warns_without_it() -> None:
@@ -157,3 +160,25 @@ def test_file_read_says_when_there_was_nothing_to_read() -> None:
 
     assert isinstance(output, CheckOutput) and len(output.advisories) == 1
     gateway.read_file.assert_not_called()
+
+
+def test_kerberos_ticket_check_does_not_apply_to_an_ntlm_credential() -> None:
+    gateway = _gateway()
+    gateway.get_kerberos_ticket.return_value = None
+
+    with pytest.raises(CheckNotApplicableError):
+        _check(KERBEROS_TICKET_CHECK_ID).run(_context(gateway))
+
+
+def test_kerberos_ticket_check_warns_when_the_server_is_an_ip_address() -> None:
+    gateway = _gateway()
+    gateway.get_kerberos_ticket.return_value = KerberosTicket(principal="svc@CORP")
+    by_ip = _context(gateway)
+    by_ip.connector_specific_config = {"host": "10.1.2.3", "share": "Plans"}
+
+    by_name_output = _check(KERBEROS_TICKET_CHECK_ID).run(_context(gateway))
+    by_ip_output = _check(KERBEROS_TICKET_CHECK_ID).run(by_ip)
+
+    assert isinstance(by_name_output, CheckOutput) and not by_name_output.advisories
+    assert isinstance(by_ip_output, CheckOutput)
+    assert "fully qualified DNS name" in by_ip_output.advisories[0].message

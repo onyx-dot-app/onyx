@@ -47,7 +47,9 @@ EXT
         -out "${TLS_DIR}/dc.pem" -extfile "${TLS_DIR}/dc.ext"
     chmod 600 "${TLS_DIR}/dc.key" "${TLS_DIR}/ca.key"
 
-    sed -i "s|^\[global\]|[global]\n\ttls enabled = yes\n\ttls keyfile = ${TLS_DIR}/dc.key\n\ttls certfile = ${TLS_DIR}/dc.pem\n\ttls cafile = ${TLS_DIR}/ca.pem|" \
+    # Active Directory takes a Kerberos bind with no signing layer on a TLS
+    # connection. Samba needs this setting to do the same.
+    sed -i "s|^\[global\]|[global]\n\ttls enabled = yes\n\ttls keyfile = ${TLS_DIR}/dc.key\n\ttls certfile = ${TLS_DIR}/dc.pem\n\ttls cafile = ${TLS_DIR}/ca.pem\n\tldap server require strong auth = allow_sasl_over_tls|" \
         /etc/samba/smb.conf
     mkdir -p "${SHARE_PATH}"
     cat >> /etc/samba/smb.conf <<CONF

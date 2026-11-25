@@ -90,6 +90,7 @@ from onyx.connectors.smb.models import (
     DirectoryInfo,
     DirectoryUser,
     DirectoryUserPage,
+    KerberosTicket,
     SmbEntry,
     SmbSessionInfo,
 )
@@ -464,6 +465,7 @@ def _configure_smb_spy(spy: MagicMock) -> None:
     spy.connect.return_value = SmbSessionInfo(
         dialect="3.1.1", signing_required=True, encrypted=True
     )
+    spy.get_kerberos_ticket.return_value = KerberosTicket(principal="svc@EXAMPLE.COM")
     spy.stat.return_value = SmbEntry(
         name="docs",
         attributes=FILE_ATTRIBUTE_DIRECTORY,

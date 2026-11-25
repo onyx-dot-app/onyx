@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.connectors.models import ConnectorCheckpoint
 
@@ -22,6 +22,8 @@ OFFLINE_ATTRIBUTES = (
 
 class SmbAuthMethod(str, Enum):
     NTLM = "ntlm"
+    # For a network that turns NTLM off. Needs the server's DNS name.
+    KERBEROS = "kerberos"
 
 
 class LdapTlsMode(str, Enum):
@@ -59,6 +61,37 @@ class SmbCredentials(BaseModel):
     # PEM certificates of the authority that signed the domain controller's
     # certificate. Empty uses the system's trusted authorities.
     ldap_ca_cert: str = ""
+    # The Active Directory domain's DNS name in upper case. For Kerberos only.
+    kerberos_realm: str = ""
+    # A domain controller that issues tickets. Empty finds one through DNS.
+    kerberos_kdc: str = ""
+
+    @field_validator("kerberos_realm", mode="before")
+    @classmethod
+    def _upper_realm(cls, value: Any) -> Any:
+        return value.strip().upper() if isinstance(value, str) else (value or "")
+
+    @field_validator("kerberos_kdc", mode="before")
+    @classmethod
+    def _strip_kdc(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else (value or "")
+
+    @model_validator(mode="after")
+    def _kerberos_names_a_realm(self) -> "SmbCredentials":
+        if (
+            self.authentication_method is SmbAuthMethod.KERBEROS
+            and not self.kerberos_realm
+        ):
+            raise ValueError("Kerberos needs the realm of the domain.")
+        return self
+
+    @property
+    def kerberos_principal(self) -> str:
+        """``user@REALM``. A domain prefix on the username is dropped: the
+        realm names the domain."""
+        if "@" in self.smb_username:
+            return self.smb_username
+        return f"{self.smb_username.rsplit('\\', 1)[-1]}@{self.kerberos_realm}"
 
     @field_validator("ldap_tls", mode="before")
     @classmethod
@@ -142,6 +175,12 @@ class SmbFile(BaseModel):
     size: int
     # None when the file is larger than the caller's limit.
     content: bytes | None
+
+
+class KerberosTicket(BaseModel):
+    """A ticket-granting ticket that the KDC issued for the service account."""
+
+    principal: str
 
 
 class SmbSessionInfo(BaseModel):

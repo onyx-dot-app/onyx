@@ -15,6 +15,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab2
 
 # System dependencies for compiling the Python wheels.
 # cmake/libxmlsec1-dev/pkg-config/gcc needed to compile native wheels (e.g. xmlsec)
+# libkrb5-dev needed to compile gssapi and krb5 (Kerberos for the Windows file share connector)
 # ca-certificates for HTTPS when fetching from PyPI
 RUN apt-get update && \
     apt-get install -y \
@@ -27,6 +28,7 @@ RUN apt-get update && \
         libsmartcols1 \
         libuuid1 \
         libxmlsec1-dev \
+        libkrb5-dev \
         pkg-config \
         gcc \
         && \
@@ -36,6 +38,7 @@ RUN apt-get update && \
 # Install Python dependencies
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
+COPY ./requirements/kerberos.txt /tmp/kerberos-requirements.txt
 # requirements/*.txt are a complete, pre-resolved lock export, so --no-deps installs them as-is
 # without re-resolving. It is also required, not just an optimization: mitmproxy pins tight
 # transitive caps (e.g. hyperframe<=6.0.1) that are only loosened by [tool.uv] override-dependencies
@@ -46,7 +49,8 @@ RUN --mount=type=secret,id=build_ca_bundle \
     fi && \
     uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
-        -r /tmp/ee-requirements.txt && \
+        -r /tmp/ee-requirements.txt \
+        -r /tmp/kerberos-requirements.txt && \
     # https://github.com/tornadoweb/tornado/issues/3107
     rm -f /usr/local/lib/python3.13/site-packages/tornado/test/test.key && \
     rm -rf ~/.cache/uv /tmp/*.txt
@@ -65,6 +69,7 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7249d5587b78209a006d
 # builds and scans it on its own before the full build.
 # ca-certificates for HTTPS
 # libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
+# libgssapi-krb5-2 is the runtime counterpart to the build-time libkrb5-dev
 # Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
 # shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
 RUN apt-get update && \
@@ -76,6 +81,7 @@ RUN apt-get update && \
         libsmartcols1 \
         libuuid1 \
         libjemalloc2 \
+        libgssapi-krb5-2 \
         libxmlsec1-openssl \
         && \
     rm -rf /var/lib/apt/lists/* && \

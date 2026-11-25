@@ -6,6 +6,7 @@ that signs in, a signed session, a share the account can list, the path prefix
 inside it, and files the account can read.
 """
 
+import ipaddress
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -15,6 +16,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckAdvisory,
+    CheckNotApplicableError,
     CheckOutput,
     CredentialCapability,
     sign_in_timeout_text,
@@ -30,7 +32,13 @@ from onyx.connectors.smb.connector import (
     is_skipped_entry,
     join_path,
 )
-from onyx.connectors.smb.models import SmbCredentials, SmbEntry, SmbSessionInfo
+from onyx.connectors.smb.models import (
+    KerberosTicket,
+    SmbAuthMethod,
+    SmbCredentials,
+    SmbEntry,
+    SmbSessionInfo,
+)
 from onyx.connectors.smb.source_operations import (
     SmbRequestError,
     SmbSourceOperations,
@@ -39,6 +47,7 @@ from onyx.connectors.smb.source_operations import (
 T = TypeVar("T")
 
 REACHABLE_CHECK_ID = "smb_reachable"
+KERBEROS_TICKET_CHECK_ID = "smb_kerberos_ticket"
 SIGN_IN_CHECK_ID = "smb_sign_in"
 TRANSPORT_CHECK_ID = "smb_transport"
 SHARE_CHECK_ID = "smb_share"
@@ -181,6 +190,54 @@ class _ReachableCheck(_SmbCheck):
         gateway_from_context(context).check_reachable()
 
 
+def _is_ip_address(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
+class _KerberosTicketCheck(_SmbCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            check_id=KERBEROS_TICKET_CHECK_ID,
+            display_name="Kerberos issues a ticket",
+            remediation=(
+                "Check the realm, the username and the password. Set the KDC "
+                "host if DNS does not name one, open port 88 from Onyx to it, "
+                "and make sure that the clocks agree."
+            ),
+            requires_fields=HOST_FIELDS,
+            config_fields=HOST_FIELDS,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        gateway = gateway_from_context(context)
+        ticket: KerberosTicket | None = probe(
+            gateway.get_kerberos_ticket, "The ticket could not be requested."
+        )
+        if ticket is None:
+            raise CheckNotApplicableError("The credential does not use Kerberos.")
+        host: str = self.config(context).host
+        if not _is_ip_address(host):
+            return CheckOutput(
+                summary=f"The KDC issued a ticket for {ticket.principal}"
+            )
+        return CheckOutput(
+            summary=f"The KDC issued a ticket for {ticket.principal}",
+            advisories=[
+                CheckAdvisory(
+                    message=(
+                        f"The file server '{host}' is an IP address. Kerberos "
+                        "needs the server's fully qualified DNS name, so the "
+                        "sign-in to the file server fails."
+                    )
+                )
+            ],
+        )
+
+
 class _SignInCheck(_SmbCheck):
     def __init__(self) -> None:
         super().__init__(
@@ -201,7 +258,11 @@ class _SignInCheck(_SmbCheck):
         gateway = gateway_from_context(context)
         probe(gateway.connect, "The sign-in could not be checked.")
         credentials = SmbCredentials.model_validate(context.credential_json)
-        return CheckOutput(summary=f"Signed in as {credentials.account_name}")
+        if credentials.authentication_method is SmbAuthMethod.KERBEROS:
+            return CheckOutput(
+                summary=f"Signed in as {credentials.kerberos_principal} with Kerberos"
+            )
+        return CheckOutput(summary=f"Signed in as {credentials.account_name} with NTLM")
 
 
 class _TransportCheck(_SmbCheck):
@@ -354,6 +415,7 @@ class _FileReadCheck(_SmbCheck):
 def build_smb_indexing_checks() -> list[CapabilityCheck]:
     return [
         _ReachableCheck(),
+        _KerberosTicketCheck(),
         _SignInCheck(),
         _TransportCheck(),
         _ShareCheck(),

@@ -79,7 +79,8 @@ it to emails, group SIDs and exclusion groups.
    server before the connection and the address the socket reached before the
    sign-in. It depends on the order in which `smbclient.register_session` reads
    and writes the cache, so check it when the pinned `smbprotocol` changes. The
-   LDAP connection does not follow referrals for the same reason.
+   LDAP connection does not follow referrals for the same reason. A KDC host
+   that DNS names is not checked: only the KDC host of the credential is.
 2. `slim-walk-raises` **The slim walk raises on each listing error except a
    refused one.** A folder left out by mistake loses its documents to pruning,
    and an unchanged file is not indexed again by a later poll.
@@ -114,6 +115,19 @@ it to emails, group SIDs and exclusion groups.
 9. `exclusion-ids-are-lowercase` **Stored group ids are in lower case, SIDs in
    code are in upper case.** `external_permissions/smb/exclusion_groups.py:parse_exclusion_group_id`
    restores the case of the SIDs it reads back.
+10. `kerberos-settings-are-process-wide` **Kerberos settings are one file for
+   the process.** The Kerberos library reads its settings from files, so
+   `connectors/smb/kerberos_config.py:register_realm` writes each realm a
+   credential names into one file and puts it first in `KRB5_CONFIG`. Two
+   credentials that name different KDC hosts for one realm both get their host
+   in the list. The values are checked before they are written, because they
+   come from a credential and go into a settings file.
+11. `kerberos-libraries-are-optional` **The Kerberos libraries are in the
+   backend image only.** `gssapi` and `krb5` compile against system headers, so
+   they are in the `kerberos` dependency group and outside the default groups.
+   `connectors/smb/source_operations.py:_kerberos_library` loads them by name
+   and gives a clear error where they are absent. Do not import them at the
+   top of a module.
 
 ---
 
