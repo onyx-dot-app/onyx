@@ -501,17 +501,17 @@ def run(
     batch_errors: list[str] = []
     lock = threading.Lock()
 
+    profile = cProfile.Profile() if cprofile_out is not None else None
+
     def work() -> None:
-        if cprofile_out is None:
+        if profile is None:
             drain()
             return
-        profile = cProfile.Profile()
         profile.enable()
         try:
             drain()
         finally:
             profile.disable()
-            profile.dump_stats(cprofile_out)
 
     def drain() -> None:
         while True:
@@ -555,6 +555,10 @@ def run(
     sampler.stop()
     heartbeat_stop.set()
     heartbeat_thread.join()
+
+    if profile is not None and cprofile_out is not None:
+        # In this thread, so a write error fails the phase.
+        profile.dump_stats(cprofile_out)
 
     with get_session_with_current_tenant() as db_session:
         attempt = get_index_attempt(db_session, attempt_id)
