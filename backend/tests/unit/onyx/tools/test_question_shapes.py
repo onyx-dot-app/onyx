@@ -35,3 +35,19 @@ def test_each_shape_describes_its_own_limits() -> None:
     assert "Give each question 2-4 options" in (
         QUESTION_SHAPES[ToolFamily.CLAUDE].description
     )
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+def test_each_shape_rejects_repeated_option_labels(family: ToolFamily) -> None:
+    options = [
+        {"label": "Weekly", "description": "Once a week."},
+        {"label": "Weekly", "description": "Every Monday."},
+    ]
+    question = {
+        "id": "cadence",
+        "header": "Cadence",
+        "question": "How often?",
+        "options": options,
+    }
+    with pytest.raises(ValidationError, match="different label"):
+        QUESTION_SHAPES[family].arguments.model_validate({"questions": [question]})

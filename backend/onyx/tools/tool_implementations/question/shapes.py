@@ -3,10 +3,10 @@ that the model sends, and the description with the arguments' limits. Each
 shape's `request()` gives the same `ToolQuestion` list (models.py)."""
 
 from collections.abc import Mapping
-from typing import NamedTuple
+from typing import Annotated, NamedTuple
 
 from annotated_types import MaxLen
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.prompts.question_tool import QUESTION_TOOL_DESCRIPTION
@@ -33,6 +33,20 @@ class QuestionOptionArgument(ToolQuestionOption):
     model_config = ConfigDict(extra="ignore")
 
 
+def _unique_labels(
+    options: list[QuestionOptionArgument],
+) -> list[QuestionOptionArgument]:
+    # An answer names its options by label.
+    if len({option.label for option in options}) < len(options):
+        raise ValueError("Give each option a different label.")
+    return options
+
+
+QuestionOptions = Annotated[
+    list[QuestionOptionArgument], AfterValidator(_unique_labels)
+]
+
+
 class RequestUserInputQuestion(BaseModel):
     id: str = Field(
         pattern=r"^[a-z][a-z0-9_]*$",
@@ -44,7 +58,7 @@ class RequestUserInputQuestion(BaseModel):
         description=HEADER_DESCRIPTION,
     )
     question: str = Field(min_length=1, description="One sentence for the user.")
-    options: list[QuestionOptionArgument] = Field(
+    options: QuestionOptions = Field(
         min_length=2,
         max_length=3,
         description="2-3 choices; put the recommended one first.",
@@ -88,7 +102,7 @@ class AskUserQuestionItem(BaseModel):
         max_length=MAX_QUESTION_HEADER_CHARS,
         description=HEADER_DESCRIPTION,
     )
-    options: list[QuestionOptionArgument] = Field(
+    options: QuestionOptions = Field(
         min_length=2,
         max_length=4,
         description="2-4 choices; put the recommended one first.",
