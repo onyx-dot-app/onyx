@@ -12594,12 +12594,6 @@
             "between": "من {start} إلى {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "أوقفته بعد {duration}"
-        },
-        "interruptedThinking": {
-          "label": "أوقفت هذا الرد"
-        },
         "memory": {
           "default": {
             "status": "الذاكرة"

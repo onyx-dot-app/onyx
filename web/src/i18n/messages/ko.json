@@ -12594,12 +12594,6 @@
             "between": "{start}부터 {end}까지"
           }
         },
-        "stoppedDuration": {
-          "label": "{duration} 후에 중지함"
-        },
-        "interruptedThinking": {
-          "label": "이 응답을 중지함"
-        },
         "memory": {
           "default": {
             "status": "메모리"

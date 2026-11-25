@@ -12594,12 +12594,6 @@
             "between": "{start}から{end}まで"
           }
         },
-        "stoppedDuration": {
-          "label": "{duration} 後に停止しました"
-        },
-        "interruptedThinking": {
-          "label": "この応答を停止しました"
-        },
         "memory": {
           "default": {
             "status": "メモリ"
