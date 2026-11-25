@@ -1078,8 +1078,8 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - `MCPTransport.STDIO` is accepted by `McpServerConfigInput`, but the client
   has no STDIO path and uses `sse_client` for it. Do not remove the enum value:
   the column is a non-native enum, and a stored `STDIO` row would fail to load.
-- A per-tool OAuth token replaces a static `Authorization` header with only a
-  log warning (`tools/tool_implementations/custom/custom_tool.py:ApiTool`).
+- A per-tool OAuth token replaces a static `Authorization` header with no
+  warning (`tools/tool_implementations/custom/custom_tool.py:ApiTool.headers`).
   Save rejects that pair only for `passthrough_auth`
   (`server/features/tool/api.py:_auth_settings`).
 - On CE, `_apply_mcp_server_access` raises `EE_REQUIRED` for a non-public
