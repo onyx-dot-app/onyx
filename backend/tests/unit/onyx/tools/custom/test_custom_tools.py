@@ -23,7 +23,10 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
     validate_openapi_schema,
 )
-from onyx.tools.tool_implementations.http_request import TOOL_REQUEST_TIMEOUT
+from onyx.tools.tool_implementations.http_request import (
+    TOOL_REQUEST_TIMEOUT,
+    ToolResponse,
+)
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.url import SSRFException
 
@@ -978,3 +981,18 @@ def test_call_network_error_returns_clean_message(
     assert response.text == expected_reason
     for internal_detail in ("urllib3", "HTTPConnectionPool", "Max retries", "10.255"):
         assert internal_detail not in response.text
+
+
+@pytest.mark.parametrize(
+    ("content_type", "text"),
+    [
+        ("text/plain; charset=iso-8859-1", "café"),
+        ("text/plain", "caf�"),
+        ("text/plain; charset=no-such-charset", "caf�"),
+    ],
+)
+def test_response_text_follows_the_charset(content_type: str, text: str) -> None:
+    response = ToolResponse(
+        status_code=200, content_type=content_type, body="café".encode("latin-1")
+    )
+    assert response.text == text

@@ -1,6 +1,7 @@
 """The one HTTP sender for the chat tools that call an API integration: the
 OpenAPI tools and the app action tools."""
 
+from email.message import Message
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -93,7 +94,15 @@ class ToolResponse(BaseModel):
 
     @property
     def text(self) -> str:
-        return self.body.decode("utf-8", errors="replace")
+        """The body decoded with the charset of the response, else UTF-8."""
+        header = Message()
+        header["Content-Type"] = self.content_type
+        try:
+            return self.body.decode(
+                header.get_content_charset() or "utf-8", errors="replace"
+            )
+        except LookupError:
+            return self.body.decode("utf-8", errors="replace")
 
 
 def send_tool_request(
