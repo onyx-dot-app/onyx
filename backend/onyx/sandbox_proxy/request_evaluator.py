@@ -21,11 +21,7 @@ from onyx.db.enums import (
     IntegrationActionPolicyValue,
     IntegrationKind,
 )
-from onyx.db.integration import (
-    get_api_app_for_integration,
-    get_external_app_for_integration,
-    list_enabled_integrations_by_id,
-)
+from onyx.db.integration import list_enabled_integrations_by_id
 from onyx.db.models import Integration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -77,8 +73,8 @@ def _matches(
     candidates: list[tuple[Integration, IntegrationMatchTarget]],
     request: ProxiedRequest,
     db_session: Session,
-) -> list[tuple[Integration, RequestMatch]]:
-    matches: list[tuple[Integration, RequestMatch]] = []
+) -> list[tuple[Integration, IntegrationMatchTarget, RequestMatch]]:
+    matches: list[tuple[Integration, IntegrationMatchTarget, RequestMatch]] = []
     for integration, target in candidates:
         # An error blocks the request: skipping the integration could let a
         # broader one claim it with its own credential.
@@ -88,13 +84,13 @@ def _matches(
             integration, target, request, db_session
         )
         if match is not None:
-            matches.append((integration, match))
+            matches.append((integration, target, match))
     return matches
 
 
 def _pick(
-    matches: list[tuple[Integration, RequestMatch]],
-) -> tuple[Integration, RequestMatch] | None:
+    matches: list[tuple[Integration, IntegrationMatchTarget, RequestMatch]],
+) -> tuple[Integration, IntegrationMatchTarget, RequestMatch] | None:
     """An API integration wins over an MCP server on a shared host, and the
     lowest id wins between API integrations. Between MCP servers the longest
     path prefix wins; a tie has no single owner, so nothing is picked and the
@@ -104,12 +100,12 @@ def _pick(
         return min(api, key=lambda match: match[0].id)
     if not matches:
         return None
-    longest = max(match.path_prefix_length for _, match in matches)
-    winners = [m for m in matches if m[1].path_prefix_length == longest]
+    longest = max(match.path_prefix_length for _, _, match in matches)
+    winners = [m for m in matches if m[2].path_prefix_length == longest]
     if len(winners) > 1:
         logger.warning(
             "mcp_target_ambiguous integrations=%s",
-            sorted(integration.id for integration, _ in winners),
+            sorted(integration.id for integration, _, _ in winners),
         )
         return None
     return winners[0]
@@ -169,17 +165,14 @@ class IntegrationRequestEvaluator(RequestEvaluator):
             )
             if picked is None:
                 return None
-            integration, match = picked
-            api_app = (
-                integration.kind is IntegrationKind.API
-                and get_api_app_for_integration(integration.id, db) is not None
-            )
+            integration, match_target, match = picked
             target = GatedTarget(
                 integration_id=integration.id,
                 kind=integration.kind,
                 app_name=integration.name,
-                api_app=api_app,
-                chat_tools=api_app or _has_chat_tools(integration, db),
+                api_app=integration.kind is IntegrationKind.API
+                and match_target.endpoint is not None,
+                chat_tools=match_target.app_type is not ExternalAppType.CUSTOM,
             )
         if not match.actions:
             return McpProtocolRequest(target=target)
@@ -207,14 +200,6 @@ class IntegrationRequestEvaluator(RequestEvaluator):
                 if get_chat_session_id_for_user(db, session_tag, user_id) is not None:
                     return chat_session_integrations(db, user_id, session_tag).keys()
         return self._usable.get(tenant_id, user_id).on
-
-
-def _has_chat_tools(integration: Integration, db_session: Session) -> bool:
-    """A CUSTOM external app has no chat tools."""
-    if integration.kind is not IntegrationKind.API:
-        return True
-    app = get_external_app_for_integration(integration.id, db_session)
-    return app is None or app.app_type is not ExternalAppType.CUSTOM
 
 
 def _request_payload(request: http.Request) -> dict[str, Any]:
