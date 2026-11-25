@@ -107,8 +107,9 @@ def validate_issuer_owns_config_url(
 
 class VerifiedEmailOpenID(OpenID):
     """OpenID client that guards the email claim. Any present email_verified
-    value other than true is rejected, since a mutable, unverified email
-    claim is exactly the nOAuth account-takeover vector. An absent claim
+    value other than true (or Amazon Cognito's string "true") is rejected,
+    since a mutable, unverified email claim is exactly the nOAuth
+    account-takeover vector. An absent claim
     (optional per OIDC and omitted by some IdPs such as Microsoft Entra ID)
     is tolerated unless require_verified_email opts this provider into
     requiring it. A response with no email at all is passed through
@@ -201,6 +202,10 @@ class VerifiedEmailOpenID(OpenID):
                     "Userinfo 'email' was not a string", response=response
                 )
             email_verified = data.get("email_verified")
+            # Amazon Cognito's userinfo endpoint returns email_verified as a
+            # string. Only its exact "true" counts as verified.
+            if email_verified == "true":
+                email_verified = True
             if email is not None and email_verified is not True:
                 if email_verified is False:
                     raise GetIdEmailError(
