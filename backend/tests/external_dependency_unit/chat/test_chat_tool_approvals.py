@@ -74,6 +74,7 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
 from onyx.file_store.file_store import (
     FileStore,
@@ -2133,3 +2134,32 @@ def test_an_action_with_no_integration_needs_a_builtin_key() -> None:
     with pytest.raises(ValidationError):
         ToolApprovalScope(integration_id=None, action_id=ACTION)
     assert ToolApprovalScope(integration_id=None, action_id=BUILTIN_ACTION)
+
+
+def test_an_action_that_always_asks_takes_no_chat_grant(
+    db_session: Session, chat: ApprovalChat
+) -> None:
+    """A chat grant would approve the other waiting requests of the action
+    without a look at each."""
+    approval_ids = [
+        create_approval_request__no_commit(
+            db_session,
+            chat_session_id=chat.chat_session_id,
+            chat_message_id=chat.response_id,
+            integration_id=chat.integration_id,
+            action_id=WHOLE_DOMAIN_ACTION_TYPE,
+            tool_call_id=call_id,
+            tool_name="request",
+            display_name="Any other request",
+            arguments={},
+        )
+        for call_id in ("first", "second")
+    ]
+    db_session.commit()
+
+    with pytest.raises(OnyxError) as refused:
+        chat.decide(db_session, approval_ids[0], ApprovalChoice.APPROVE_SESSION)
+
+    assert refused.value.error_code is OnyxErrorCode.INVALID_INPUT
+    db_session.rollback()
+    assert [row.decision for row in chat.rows(db_session)] == [None, None]

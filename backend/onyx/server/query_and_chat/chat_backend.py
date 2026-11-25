@@ -186,6 +186,7 @@ from onyx.file_store.serving import (
 )
 from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
 from onyx.integrations.models import ApprovalMode
+from onyx.integrations.policy import always_asks
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
     get_llm_for_persona,
@@ -2190,6 +2191,13 @@ def decide_approval(
     approval = get_approval_request_for_user(db_session, approval_id, user.id)
     if approval is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
+    if body.decision == ApprovalChoice.APPROVE_SESSION and always_asks(
+        approval.action_id
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This action asks for approval for each request. Approve it once.",
+        )
     rejected = body.decision == ApprovalChoice.REJECT
     upgrades_to_grant = (
         body.decision == ApprovalChoice.APPROVE_SESSION
