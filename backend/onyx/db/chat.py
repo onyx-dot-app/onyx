@@ -1018,6 +1018,8 @@ def get_chat_messages_by_session(
     prefetch_tool_call_search_docs: bool = False,
     # Load only these messages (one page of the session); None loads all.
     message_ids: Collection[int] | None = None,
+    # Also a subagent's session, which the caller authorized through its root
+    agent_session: bool = False,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -1028,12 +1030,12 @@ def get_chat_messages_by_session(
     stmt = (
         select(ChatMessage)
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
-        .where(
-            ChatSession.spawned_by_message_id.is_(None), visible_chat_messages_filter()
-        )
+        .where(visible_chat_messages_filter())
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
+    if not agent_session:
+        stmt = stmt.where(ChatSession.spawned_by_message_id.is_(None))
     if message_ids is not None:
         stmt = stmt.where(ChatMessage.id.in_(message_ids))
 

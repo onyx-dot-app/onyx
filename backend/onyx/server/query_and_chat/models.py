@@ -530,6 +530,19 @@ class ChatSubagent(BaseModel):
     stopped_by_user: bool
     # When its current or latest run started
     started_at: datetime | None = None
+    # The live stream of its running response (`.../agents/{id}/stream`)
+    stream_id: int | None = None
+    # The tool that its running response last called
+    activity_tool: str | None = None
+
+
+class ChatSubagentHistory(BaseModel):
+    """A background agent's saved conversation, as a chat session's."""
+
+    messages: list[ChatMessageDetail]
+    packets: list[list[Packet]]
+    # The live stream of its running response; its saved packets lag it
+    stream: CurrentStreamInfo | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):

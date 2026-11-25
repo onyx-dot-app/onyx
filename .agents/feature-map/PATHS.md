@@ -38,7 +38,7 @@ covers new files that match it.
 | `backend/onyx/chat/chat_utils.py` | context-assembly, chat-persistence |
 | `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/deep_research/` | core-chat-loop, tools-framework |
-| `backend/onyx/chat/emitter.py`, `backend/onyx/chat/stream_buffer.py` | core-chat-loop, streaming-protocol |
+| `backend/onyx/chat/emitter.py`, `backend/onyx/chat/stream_buffer.py`, `backend/onyx/chat/agent_stream.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/incognito.py`, `backend/onyx/db/incognito.py` | chat-persistence |
 | `backend/onyx/chat/incognito_context.py` | chat-persistence, context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |

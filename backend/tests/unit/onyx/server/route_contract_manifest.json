@@ -196,6 +196,8 @@
   "GET /build/user-library/tree": "basic",
   "GET /chat/artifacts/{artifact_id}": "basic",
   "GET /chat/chat-session/{session_id}/agents": "read:chat +anonymous",
+  "GET /chat/chat-session/{session_id}/agents/{agent_id}/history": "read:chat +anonymous",
+  "GET /chat/chat-session/{session_id}/agents/{agent_id}/stream": "read:chat +anonymous",
   "GET /chat/chat-session/{session_id}/pending-messages": "read:chat",
   "GET /chat/chat-session/{session_id}/resume-stream": "read:chat +anonymous",
   "GET /chat/chat-session/{session_id}/status": "read:chat +anonymous",

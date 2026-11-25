@@ -574,6 +574,16 @@ def agent_metadata(
     )
 
 
+def latest_agent_response_id(db_session: Session, agent_id: UUID) -> int | None:
+    """The agent's newest response."""
+    return db_session.scalar(
+        select(func.max(ChatMessage.id)).where(
+            ChatMessage.chat_session_id == agent_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    )
+
+
 def load_run_start_times(run_ids: Collection[int]) -> dict[int, datetime]:
     """Each run's start time, by response id."""
     if not run_ids:

@@ -1,6 +1,6 @@
 import datetime
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from datetime import timedelta
 from typing import Annotated
@@ -26,6 +26,8 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
+from onyx.chat.agent_stream import read_agent_stream_pointer
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     current_turn_owner,
@@ -132,6 +134,7 @@ from onyx.db.chat_response import (
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.chat_subagents import (
+    latest_agent_response_id,
     load_run_start_times,
     load_session_agent_metadata,
 )
@@ -203,6 +206,7 @@ from onyx.server.query_and_chat.models import (
     ChatArtifactAccess,
     ChatArtifactFile,
     ChatFeedbackRequest,
+    ChatMessageDetail,
     ChatMessageIdentifier,
     ChatQuestionAnswersRequest,
     ChatRenameRequest,
@@ -216,6 +220,7 @@ from onyx.server.query_and_chat.models import (
     ChatSessionSummary,
     ChatSessionUpdateRequest,
     ChatSubagent,
+    ChatSubagentHistory,
     CurrentStreamInfo,
     MessageOrigin,
     PendingChatMessageRequest,
@@ -573,46 +578,9 @@ def get_chat_session(
             if before_message_id is None
             else (),
         )
-    session_messages = get_chat_messages_by_session(
-        chat_session_id=session_id,
-        user_id=user_id,
-        db_session=db_session,
-        message_ids=page_message_ids,
-        # we already did a permission check above with the call to
-        # `get_chat_session_by_id`, so we can skip it here
-        skip_permission_check=True,
-        # we need the tool call objs anyways, so just fetch them in a single call
-        prefetch_top_two_level_tool_calls=True,
-        prefetch_message_details=True,
-        # the replay builds search and fetch packets from these
-        prefetch_tool_call_search_docs=True,
+    chat_message_details, replay_packet_lists = _session_messages_and_packets(
+        db_session, session_id, user_id, page_message_ids
     )
-
-    # Convert messages to ChatMessageDetail format
-    chat_message_details = [
-        translate_db_message_to_chat_message_detail(msg) for msg in session_messages
-    ]
-
-    # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
-    # Each list is the set of tool calls for the given assistant message.
-    tools_by_id = load_session_tools(session_messages, db_session)
-    responses = [
-        msg for msg in session_messages if msg.message_type == MessageType.ASSISTANT
-    ]
-    chat_approvals = load_chat_approvals(
-        db_session, session_id, [msg.id for msg in responses]
-    )
-    child_responses = load_child_responses(db_session, responses)
-    replay_packet_lists: list[list[Packet]] = [
-        translate_assistant_message_to_packets(
-            chat_message=msg,
-            tools_by_id=tools_by_id,
-            chat_approvals=chat_approvals,
-            child_responses=child_responses,
-            db_session=db_session,
-        )
-        for msg in responses
-    ]
     # The client keeps the list from a latest-page load, and the shared view
     # from its full load; an older page does not need it. Read after the
     # replay, so the list holds every file that a replayed call published.
@@ -1566,6 +1534,53 @@ def get_chat_session_processing_status(
     return status
 
 
+def _session_messages_and_packets(
+    db_session: Session,
+    session_id: UUID,
+    user_id: UUID | None,
+    message_ids: set[int] | None = None,
+    agent_session: bool = False,
+) -> tuple[list[ChatMessageDetail], list[list[Packet]]]:
+    """A session's messages and each response's replay packets. The caller
+    checked access to the session."""
+    session_messages = get_chat_messages_by_session(
+        chat_session_id=session_id,
+        user_id=user_id,
+        db_session=db_session,
+        message_ids=message_ids,
+        agent_session=agent_session,
+        skip_permission_check=True,
+        # we need the tool call objs anyways, so just fetch them in a single call
+        prefetch_top_two_level_tool_calls=True,
+        prefetch_message_details=True,
+        # the replay builds search and fetch packets from these
+        prefetch_tool_call_search_docs=True,
+    )
+    details = [
+        translate_db_message_to_chat_message_detail(msg) for msg in session_messages
+    ]
+    # Each response replays its tool calls for the frontend.
+    tools_by_id = load_session_tools(session_messages, db_session)
+    responses = [
+        msg for msg in session_messages if msg.message_type == MessageType.ASSISTANT
+    ]
+    chat_approvals = load_chat_approvals(
+        db_session, session_id, [msg.id for msg in responses]
+    )
+    child_responses = load_child_responses(db_session, responses)
+    packets = [
+        translate_assistant_message_to_packets(
+            chat_message=msg,
+            tools_by_id=tools_by_id,
+            chat_approvals=chat_approvals,
+            child_responses=child_responses,
+            db_session=db_session,
+        )
+        for msg in responses
+    ]
+    return details, packets
+
+
 @router.get("/chat-session/{session_id}/agents")
 def get_chat_session_agents(
     session_id: UUID,
@@ -1596,18 +1611,107 @@ def get_chat_session_agents(
     started = load_run_start_times(
         [int(agent.latest_run_id) for agent in agents if agent.latest_run_id]
     )
-    return [
-        ChatSubagent(
-            id=UUID(agent.id),
-            path=agent.path,
-            status=agent.status,
-            stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
-            started_at=started.get(int(agent.latest_run_id))
-            if agent.latest_run_id
-            else None,
+    cache = get_cache_backend()
+    subagents: list[ChatSubagent] = []
+    for agent in agents:
+        run_id = int(agent.latest_run_id) if agent.latest_run_id else None
+        live = run_id is not None and (
+            agent.status is None or not agent.status.is_terminal
         )
-        for agent in agents
-    ]
+        pointer = (
+            read_agent_stream_pointer(cache, run_id)
+            if live and run_id is not None
+            else None
+        )
+        subagents.append(
+            ChatSubagent(
+                id=UUID(agent.id),
+                path=agent.path,
+                status=agent.status,
+                stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
+                started_at=started.get(run_id) if run_id is not None else None,
+                stream_id=pointer.stream_id if pointer else None,
+                activity_tool=pointer.activity_tool if pointer else None,
+            )
+        )
+    return subagents
+
+
+def _authorized_agent(session_id: UUID, agent_id: UUID, user: User) -> None:
+    """404 unless the agent is below the root of the user's chat."""
+    with get_session_with_current_tenant() as db_session:
+        try:
+            get_chat_session_by_id(
+                chat_session_id=session_id, user_id=user.id, db_session=db_session
+            )
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
+        if not agent_subtree_ids(db_session, session_id, agent_id):
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Agent not found")
+
+
+@router.get("/chat-session/{session_id}/agents/{agent_id}/history")
+def get_chat_subagent_history(
+    session_id: UUID,
+    agent_id: UUID,
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> ChatSubagentHistory:
+    """A background agent's saved conversation, in the chat page's format,
+    with the live stream of its running response."""
+    _authorized_agent(session_id, agent_id, user)
+    with get_session_with_current_tenant() as db_session:
+        # Read the stream before the messages: a run releases its stream
+        # after its terminal save, so a missing stream means saved output.
+        response_id = latest_agent_response_id(db_session, agent_id)
+        pointer = (
+            read_agent_stream_pointer(get_cache_backend(), response_id)
+            if response_id is not None
+            else None
+        )
+        messages, packets = _session_messages_and_packets(
+            db_session, agent_id, user.id, agent_session=True
+        )
+    return ChatSubagentHistory(
+        messages=messages,
+        packets=packets,
+        stream=CurrentStreamInfo(
+            stream_id=pointer.stream_id, response_ids=[response_id]
+        )
+        if pointer is not None and response_id is not None
+        else None,
+    )
+
+
+@router.get("/chat-session/{session_id}/agents/{agent_id}/stream")
+def stream_chat_subagent(
+    session_id: UUID,
+    agent_id: UUID,
+    stream_id: int = Query(..., gt=0),
+    cursor: int = Query(0, ge=0),
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> StreamingResponse:
+    """Replay a background agent's live stream from ``cursor`` and tail it,
+    as ``resume-stream`` does for the root turn."""
+    _authorized_agent(session_id, agent_id, user)
+    with get_session_with_current_tenant() as db_session:
+        response_id = latest_agent_response_id(db_session, agent_id)
+    cache = get_cache_backend()
+
+    def live() -> bool:
+        pointer = (
+            read_agent_stream_pointer(cache, response_id)
+            if response_id is not None
+            else None
+        )
+        return pointer is not None and pointer.stream_id == stream_id
+
+    if not live():
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No live stream for this agent")
+    return _tail_stream_buffer(cache, agent_id, stream_id, cursor, live)
 
 
 @router.get("/chat-session/{session_id}/resume-stream", tags=PUBLIC_API_TAGS)
@@ -1640,25 +1744,38 @@ def resume_chat_stream(
 
     cache = get_cache_backend()
     stream = get_processing_stream(session_id, cache)
-    stream_id = stream.stream_id if stream is not None else None
-    first_read = (
-        None
-        if stream_id is None
-        or (expected_stream_id is not None and expected_stream_id != stream_id)
-        else read_stream_chunks(
-            cache,
-            session_id,
-            stream_id,
-            cursor,
-            max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
-        )
-    )
-    if (
-        stream_id is None
-        or first_read is None
-        or first_read.gap
-        or cursor > first_read.chunk_count
+    if stream is None or (
+        expected_stream_id is not None and expected_stream_id != stream.stream_id
     ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, "No resumable stream for this chat session"
+        )
+    return _tail_stream_buffer(
+        cache,
+        session_id,
+        stream.stream_id,
+        cursor,
+        lambda: is_chat_session_processing(session_id, cache),
+    )
+
+
+def _tail_stream_buffer(
+    cache: CacheBackend,
+    buffer_session_id: UUID,
+    stream_id: int,
+    cursor: int,
+    writer_live: Callable[[], bool],
+) -> StreamingResponse:
+    """Replay a stream buffer from ``cursor`` and tail it while ``writer_live``.
+    404 when the buffer is missing or has a gap at ``cursor``."""
+    first_read = read_stream_chunks(
+        cache,
+        buffer_session_id,
+        stream_id,
+        cursor,
+        max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+    )
+    if first_read is None or first_read.gap or cursor > first_read.chunk_count:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "No resumable stream for this chat session"
         )
@@ -1692,7 +1809,7 @@ def resume_chat_stream(
                 last_emit = time.monotonic()
             elif read.done or writer_stopped:
                 return
-            elif not is_chat_session_processing(session_id, cache):
+            elif not writer_live():
                 # Drain once more after ownership ends to catch the writer's
                 # last flush.
                 writer_stopped = True
@@ -1704,7 +1821,7 @@ def resume_chat_stream(
                 time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
             next_read = read_stream_chunks(
                 cache,
-                session_id,
+                buffer_session_id,
                 stream_id,
                 chunk_cursor,
                 max_chunks=(
