@@ -77,9 +77,7 @@ test.describe("Chat Search Command Menu", () => {
   }) => {
     const dialog = await openCommandMenu(page);
 
-    await expect(
-      dialog.getByPlaceholder("Search chat sessions...")
-    ).toBeFocused();
+    await expect(new ChatSearchCommandMenu(page).input).toBeFocused();
     await expect(
       dialog.locator('[data-command-item="new-session"]')
     ).toBeVisible();
@@ -126,7 +124,7 @@ test.describe("Chat Search Command Menu", () => {
     await dialog.locator('[data-command-item="recent-sessions"]').click();
     await expect(dialog.getByText("Sessions")).toBeVisible();
 
-    const input = dialog.getByPlaceholder("Search chat sessions...");
+    const input = new ChatSearchCommandMenu(page).input;
     await input.focus();
     await page.keyboard.press("Backspace");
 
@@ -218,7 +216,7 @@ test.describe("Chat Search Command Menu", () => {
     await dialog.locator('[data-command-item="recent-sessions"]').click();
     await expect(dialog.getByText("Sessions")).toBeVisible();
 
-    const input = dialog.getByPlaceholder("Search chat sessions...");
+    const input = new ChatSearchCommandMenu(page).input;
     await input.fill("test query");
 
     await page.keyboard.press("Escape");
@@ -226,9 +224,7 @@ test.describe("Chat Search Command Menu", () => {
 
     dialog = await openCommandMenu(page);
 
-    await expect(
-      dialog.getByPlaceholder("Search chat sessions...")
-    ).toHaveValue("");
+    await expect(new ChatSearchCommandMenu(page).input).toHaveValue("");
     await expect(
       dialog.locator('[data-command-item="new-session"]')
     ).toBeVisible();

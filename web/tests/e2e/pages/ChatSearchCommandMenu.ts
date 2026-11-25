@@ -2,10 +2,12 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 export class ChatSearchCommandMenu {
   readonly dialog: Locator;
-  private readonly input: Locator;
+  readonly input: Locator;
 
   constructor(private readonly page: Page) {
-    this.dialog = page.locator('[role="dialog"]:has([data-command-menu-list])');
+    this.dialog = page
+      .getByRole("dialog")
+      .filter({ has: page.getByPlaceholder("Search chat sessions...") });
     this.input = this.dialog.getByPlaceholder("Search chat sessions...");
   }
 
