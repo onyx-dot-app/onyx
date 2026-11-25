@@ -51,7 +51,11 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 )
 from onyx.indexing.models import ChunkEmbedding, DocMetadataAwareIndexChunk
 from onyx.kg.models import KGStage
-from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.cancellation import (
+    AgentCancelled,
+    CancellationSignal,
+    cancellation_scope,
+)
 from onyx.llm.models import ToolResult
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.postgres import content, postgres_tool
@@ -483,6 +487,8 @@ def test_out_of_time_returns_a_partial_page_that_continues(
             title_contains=content_env.tag,
         )
         assert "took too long" in first
+        assert "More documents may match" in first
+        assert "more match;" not in first
         assert _listed(content_env, first) == ["fox"]
         cursor = _next_cursor(first)
         assert cursor is not None
@@ -558,6 +564,49 @@ def test_count_timeout_keeps_the_counted_batches(
             count=True,
         )
     assert text.startswith("At least 1 matching documents")
+
+
+@pytest.mark.parametrize("count", [True, False])
+@pytest.mark.parametrize("postgres_first", [True, False])
+def test_stop_ends_the_scan_between_batches(
+    content_env: ContentEnv, postgres_first: bool, count: bool
+) -> None:
+    index = content_env.index
+    real_match = index.match_documents_by_content
+    signal = CancellationSignal()
+    calls = 0
+
+    def match_then_stop(*args: Any, **kwargs: Any) -> list[ContentMatchKey]:
+        nonlocal calls
+        calls += 1
+        signal.cancel()
+        return real_match(*args, **kwargs)
+
+    with (
+        _force_path(postgres_first),
+        patch.object(content, "CANDIDATE_BATCH_SIZE", 1),
+        patch.object(content, "MATCH_BATCH_SIZE", 1),
+        patch.object(index, "match_documents_by_content", match_then_stop),
+        # The chat loop runs tools inside the turn's cancellation scope.
+        cancellation_scope(signal),
+        pytest.raises(AgentCancelled),
+    ):
+        content_env.tool.run(
+            ToolInvocation(
+                call_id="call",
+                arguments={
+                    "table": "document",
+                    "content_contains": _PHRASE,
+                    "title_contains": content_env.tag,
+                    "count": count,
+                },
+                call_index=0,
+                cancellation=signal,
+                update=lambda _: None,
+            ),
+            ToolContext(),
+        )
+    assert calls == 1
 
 
 @pytest.mark.parametrize("postgres_first", [True, False])

@@ -62,6 +62,7 @@ from onyx.db.postgres_tool_models import (
 )
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
+from onyx.llm.cancellation import check_cancelled
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import POSTGRES_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
@@ -675,9 +676,11 @@ def _format_document_page(
     continued: bool,
     next_cursor: str | None,
     order: DocumentOrder,
+    partial: bool = False,
 ) -> str:
     """`total` is set on a first page that has more pages after it, when the
-    count finished in time."""
+    count finished in time. `partial` marks a page cut short by the time
+    budget: its cursor only shows that more documents remain to check."""
     if not lines:
         if continued:
             return "No more matching documents."
@@ -692,6 +695,8 @@ def _format_document_page(
     label = _ORDER_LABELS[order]
     if continued:
         header = f"The next {len(lines)} matching documents, {label}:"
+    elif partial:
+        header = f"The first {len(lines)} matching documents, {label}:"
     elif total is None:
         header = (
             f"The first {len(lines)} matching documents, {label} (more match; "
@@ -700,9 +705,9 @@ def _format_document_page(
     else:
         header = f"Showing {len(lines)} of {total} matching documents, {label}:"
     footer = (
-        "More documents match. To get the next page, call again with the same "
-        "filters, order_by and cursor set to this next_cursor value.\n"
-        f"next_cursor: {next_cursor}"
+        f"{'More documents may match' if partial else 'More documents match'}. "
+        "To get the next page, call again with the same filters, order_by and "
+        f"cursor set to this next_cursor value.\nnext_cursor: {next_cursor}"
     )
     return header + "\n" + "\n".join(lines) + "\n" + footer
 
@@ -978,6 +983,7 @@ class PostgresTool(Tool):
             phrases=phrases,
         )
         for phrase in phrases:
+            check_cancelled()
             if document_index.count_phrase_terms(phrase) == 0:
                 raise _reject(
                     f"'content_contains' value {phrase!r} has no searchable words "
@@ -1029,6 +1035,7 @@ class PostgresTool(Tool):
                 continued=after is not None,
                 next_cursor=next_cursor,
                 order=args.order_by,
+                partial=page.is_partial,
             )
             if not page.is_partial:
                 return text

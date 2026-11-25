@@ -66,6 +66,7 @@ from onyx.document_index.interfaces import (
     DocumentIndex,
 )
 from onyx.document_index.opensearch.client import SEARCH_TIMEOUT_ERRORS
+from onyx.llm.cancellation import check_cancelled
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
@@ -350,6 +351,7 @@ class ContentFilter:
         matched: list[DocumentCursor] = []
         position = after
         while True:
+            check_cancelled()
             candidates = self._candidates(order, position)
             try:
                 matching = (
@@ -423,6 +425,7 @@ class ContentFilter:
         kept: list[DocumentCursor] = []
         position = after
         while True:
+            check_cancelled()
             try:
                 matches = self._document_index.match_documents_by_content(
                     request, date_field, order.is_descending, position, MATCH_BATCH_SIZE
@@ -453,6 +456,7 @@ class ContentFilter:
         count = 0
         position: DocumentCursor | None = None
         while True:
+            check_cancelled()
             if self._out_of_time() or count >= MAX_COUNT:
                 return ContentMatchCount(count=count, is_complete=False)
             candidates = self._candidates(DocumentOrder.UPDATED_DESC, position)
@@ -473,6 +477,7 @@ class ContentFilter:
         count = 0
         position: ContentMatchKey | None = None
         while True:
+            check_cancelled()
             if self._out_of_time() or count >= MAX_COUNT:
                 return ContentMatchCount(count=count, is_complete=False)
             try:
