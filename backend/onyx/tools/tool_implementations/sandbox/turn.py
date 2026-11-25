@@ -170,3 +170,9 @@ class SandboxTurn:
     def user_id(self) -> UUID:
         """The user whose sandbox it is; reading it never starts a call."""
         return self._user_id
+
+    @property
+    def chat_session_id(self) -> UUID:
+        """The chat whose session directory the calls use; reading it never
+        starts a call."""
+        return self._chat_session_id

@@ -57,9 +57,9 @@ CHAT_FILES_DIR = "attachments"
 # The chat's project files and its agent's files, in CHAT_FILES_DIR.
 PROJECT_FILES_DIR = f"{CHAT_FILES_DIR}/project"
 AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
-# Published files that the model downloaded from the user's chats
-# (artifacts_download), in CHAT_FILES_DIR. The chat file copies never clean
-# it up.
+# Published files that the model copied from the user's chats
+# (library_prepare_materialize), in CHAT_FILES_DIR. The chat file copies never
+# clean it up.
 ARTIFACT_FILES_DIR = f"{CHAT_FILES_DIR}/artifacts"
 # The original files of the chat's search results, in CHAT_FILES_DIR.
 SEARCH_FILES_DIR = f"{CHAT_FILES_DIR}/search"
@@ -125,18 +125,16 @@ def _strip_trailing_spaces_and_dots(text: str) -> str:
     return text[:end]
 
 
-def chat_file_name(file_id: str, name: str | None) -> str:
-    """The name of a file store file in a directory of chat files, a function
-    of the file alone, so it never names another file: `<the first 8 hex
-    digits of the file ID>-<name>`. The name is the last part of `name` (the
-    file ID without one, "file" without either), NFC, with control
-    characters and _REPLACED_CHARACTERS replaced by `_`, and without
-    trailing whitespace or dots. Its stem is cut so that the whole name fits
-    _MAX_NAME_CHARS and _MAX_NAME_BYTES; it keeps its extension unless the
-    extension takes more than half of either. The Python tool stages each
-    such name unchanged."""
-    prefix = "".join(c for c in file_id if c in string.hexdigits)[:8].lower() + "-"
-    for raw in (name or "", file_id):
+def safe_file_name(names: Sequence[str], *, prefix: str = "", suffix: str = "") -> str:
+    """`prefix` and the first of `names` that keeps a name after this rule:
+    the last part of the name, NFC, with control characters and
+    _REPLACED_CHARACTERS replaced by `_`, and without trailing whitespace or
+    dots, with `suffix` after its stem. Its stem is cut so that the whole
+    name fits _MAX_NAME_CHARS and _MAX_NAME_BYTES; it keeps its extension
+    unless the extension takes more than half of either. `prefix` + "file"
+    when none keeps a name. The Python tool stages each such name
+    unchanged."""
+    for raw in names:
         base = _strip_trailing_spaces_and_dots(
             "".join(
                 "_"
@@ -153,14 +151,26 @@ def chat_file_name(file_id: str, name: str | None) -> str:
             or len(extension.encode()) > _MAX_NAME_BYTES // 2
         ):
             stem, extension = base, ""
-        stem = stem.encode()[
-            : _MAX_NAME_BYTES - len(f"{prefix}{extension}".encode())
-        ].decode(errors="ignore")[: _MAX_NAME_CHARS - len(f"{prefix}{extension}")]
+        kept = f"{prefix}{suffix}{extension}"
+        stem = stem.encode()[: _MAX_NAME_BYTES - len(kept.encode())].decode(
+            errors="ignore"
+        )[: _MAX_NAME_CHARS - len(kept)]
         # A cut stem without an extension can end in whitespace or dots.
-        tail = _strip_trailing_spaces_and_dots(f"{stem}{extension}")
+        tail = _strip_trailing_spaces_and_dots(f"{stem}{suffix}{extension}")
         if tail:
             return f"{prefix}{tail}"
     return f"{prefix}file"
+
+
+def chat_file_name(file_id: str, name: str | None) -> str:
+    """The name of a file store file in a directory of chat files, a function
+    of the file alone, so it never names another file: `<the first 8 hex
+    digits of the file ID>-<name>`, by safe_file_name of `name`, else of the
+    file ID."""
+    return safe_file_name(
+        (name or "", file_id),
+        prefix="".join(c for c in file_id if c in string.hexdigits)[:8].lower() + "-",
+    )
 
 
 def search_file_name(file_id: str, title: str) -> str:
@@ -232,10 +242,10 @@ class SandboxFileNotFoundError(HarnessSandboxError):
         super().__init__(f"{path!r} does not exist")
 
 
-def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
+def session_relative_path(session_id: UUID, path: str) -> str:
     """The session-relative form of `path` ("" = the session directory).
     Accepts a relative path or an absolute path in the session directory."""
-    root = session_workspace(ref.session_id)
+    root = session_workspace(session_id)
     normalized = posixpath.normpath(path or ".")
     if posixpath.isabs(normalized):
         if normalized == root:
@@ -266,10 +276,14 @@ class SessionFiles(abc.ABC):
     relative to the session directory. Safe to call from several threads."""
 
     @abc.abstractmethod
-    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+    def write(
+        self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+    ) -> None:
         """write_file, mode 0644, on this instance. A write makes a missing
         session directory; a write that finds the session purged deletes
-        that directory again and raises HarnessSandboxError."""
+        that directory again and raises HarnessSandboxError. Without
+        `overwrite`, a file at the path raises SandboxDaemonError
+        FILE_EXISTS and stays."""
 
     @abc.abstractmethod
     def delete(self, path: str) -> bool:
@@ -279,9 +293,13 @@ class SessionFiles(abc.ABC):
         nothing."""
 
     @abc.abstractmethod
-    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+    def list_files(
+        self, directory: str, *, max_entries: int, include_hidden: bool = False
+    ) -> FileListing:
         """The entries directly in `directory`, not those of its
-        subdirectories; none for a missing directory."""
+        subdirectories; none for a missing directory. Hidden entries, such
+        as the daemon's temporary file of a write in progress, only with
+        `include_hidden`."""
 
     @abc.abstractmethod
     def mark_busy(self, seconds: float | None) -> None:

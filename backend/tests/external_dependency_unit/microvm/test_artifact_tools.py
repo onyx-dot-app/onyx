@@ -1,20 +1,21 @@
-"""library_list and artifacts_download against FirecrackerHarnessSandbox
-with a fake host agent, Postgres and the file store: where a download lands,
-the cache, refusals that never start the VM, Stop, the timeout, the size cap,
-the chat file cleanup, and chat turns through the chat flow (the generic
-card, live and replayed, and the code mode group `library`)."""
+"""library_list and library_prepare_materialize against
+FirecrackerHarnessSandbox with a fake host agent, Postgres and the file
+store: where a copy lands, the cache, the conflict policies, refusals that
+never start the VM, item errors, Stop, the write slots and tries, the chat
+file cleanup, and chat turns through the chat flow (the generic card, live
+and replayed, and the code mode group `library`)."""
 
 import base64
 import json
 import threading
 import time
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from typing import IO
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel, JsonValue
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import ToolInvocation
@@ -28,7 +29,8 @@ from onyx.db.chat import (
     get_user_published_files,
     save_chat_artifact,
 )
-from onyx.db.models import ChatSession, FileRecord, User
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import ChatArtifactVersion, ChatSession, User
 from onyx.db.sandbox import get_or_create_sandbox
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -41,11 +43,15 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
+from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
 )
-from onyx.server.features.build.sandbox.harness_base import ARTIFACT_FILES_DIR
+from onyx.server.features.build.sandbox.harness_base import (
+    ARTIFACT_FILES_DIR,
+    SessionFiles,
+)
 from onyx.server.features.build.sandbox.models import (
     HarnessSandboxRef,
     session_workspace,
@@ -58,13 +64,12 @@ from onyx.tools.tool_implementations.sandbox import file_copies, sandbox_tools
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
-    PUBLISH_FILES_MAX_BYTES,
     LibraryListFilters,
     VmChatFile,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
-    ArtifactsDownloadTool,
     LibraryListTool,
+    LibraryPrepareMaterializeTool,
     PublishFilesTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -88,6 +93,7 @@ from tests.external_dependency_unit.microvm.fake_agent import (
     InsecureClientFactory,
     RunningFakeAgent,
 )
+from tests.external_dependency_unit.microvm.test_file_copies import _wrap, _Wrapped
 from tests.external_dependency_unit.microvm.test_sandbox_tools import (
     SandboxChat,
     _forget_sandboxes,
@@ -125,7 +131,7 @@ def user(
 ) -> Generator[User, None, None]:
     user = make_test_user("artifact_tools")
     yield user
-    # A turn's last calls and saves, and a download's copy after a timeout or
+    # A turn's last calls and saves, and a copy's write after a timeout or
     # a Stop, run on their own threads.
     assert chat_turn_work.wait_idle(timeout=30)
     _wait_until(idle)
@@ -151,6 +157,15 @@ def _publish(chat_session_id: UUID, name: str, data: bytes) -> str:
     ).file_id
 
 
+def _artifact_id(file_id: str) -> UUID:
+    with get_session_with_current_tenant() as db_session:
+        return db_session.scalars(
+            select(ChatArtifactVersion.artifact_id).where(
+                ChatArtifactVersion.file_id == file_id
+            )
+        ).one()
+
+
 def _turn(owner: User, chat_session_id: UUID) -> SandboxTurn:
     return SandboxTurn(
         tenant_id=TENANT_ID,
@@ -170,7 +185,7 @@ def _ref(db_session: Session, owner: User, chat_session_id: UUID) -> HarnessSand
 
 
 def _call(
-    tool: LibraryListTool | ArtifactsDownloadTool,
+    tool: LibraryListTool | LibraryPrepareMaterializeTool,
     arguments: dict[str, JsonValue],
     cancellation: CancellationSignal | None = None,
 ) -> ToolResult:
@@ -187,12 +202,35 @@ def _call(
     return outcome
 
 
+def _copy(
+    tool: LibraryPrepareMaterializeTool,
+    items: list[JsonValue],
+    destination: dict[str, JsonValue] | None = None,
+    cancellation: CancellationSignal | None = None,
+) -> ToolResult:
+    arguments: dict[str, JsonValue] = {"items": items}
+    if destination is not None:
+        arguments["destination"] = destination
+    return _call(tool, arguments, cancellation)
+
+
+def _items(result: ToolResult) -> list[dict[str, JsonValue]]:
+    assert not result.is_error, result.content
+    return json.loads(result.content)["items"]
+
+
 def _landed(file_id: str, name: str) -> str:
     return f"{ARTIFACT_FILES_DIR}/{file_id[:8]}-{name}"
 
 
 def _vm_file(node: RunningFakeAgent, ref: HarnessSandboxRef, path: str) -> bytes | None:
     return node.agent.files.get((str(ref.sandbox_id), str(ref.session_id), path))
+
+
+def _put_vm_file(
+    node: RunningFakeAgent, ref: HarnessSandboxRef, path: str, data: bytes
+) -> None:
+    node.agent.files[(str(ref.sandbox_id), str(ref.session_id), path)] = data
 
 
 @pytest.fixture
@@ -202,7 +240,7 @@ def chats(db_session: Session, user: User) -> tuple[UUID, UUID]:
 
 
 @pytest.mark.usefixtures("sandbox")
-def test_a_download_lands_in_the_calling_chats_attachments_and_is_then_cached(
+def test_a_copy_lands_in_the_calling_chats_attachments_and_is_then_cached(
     db_session: Session,
     node: RunningFakeAgent,
     user: User,
@@ -211,38 +249,342 @@ def test_a_download_lands_in_the_calling_chats_attachments_and_is_then_cached(
     source, calling = chats
     data = b"a,b\n1,2\n"
     file_id = _publish(source, "report.csv", data)
-    tool = ArtifactsDownloadTool(_turn(user, calling))
+    artifact_id = _artifact_id(file_id)
+    tool = LibraryPrepareMaterializeTool(_turn(user, calling))
     ref = _ref(db_session, user, calling)
     path = _landed(file_id, "report.csv")
 
-    first = _call(tool, {"file_id": file_id})
-    assert not first.is_error
-    assert json.loads(first.content) == {
-        "path": path,
-        "file_id": file_id,
-        "name": "report.csv",
-        "size": len(data),
-        "mime_type": "text/plain",
-        "chat_id": str(source),
-        "cached": False,
-    }
+    assert _items(_copy(tool, [{"file_id": file_id}])) == [
+        {
+            "library_file_id": str(artifact_id),
+            "file_id": file_id,
+            "version_number": 1,
+            "file_name": f"{file_id[:8]}-report.csv",
+            "path": path,
+            "file_size_bytes": len(data),
+            "mime_type": "text/plain",
+            "status": "written",
+        }
+    ]
     assert _vm_file(node, ref, path) == data
     # Nothing lands in the chat that published the file.
     assert _vm_file(node, _ref(db_session, user, source), path) is None
 
-    # A regular file of the record's size is in place: nothing is written.
-    assert json.loads(_call(tool, {"file_id": file_id}).content)["cached"] is True
+    # A regular file of the record's size is in place: nothing is written,
+    # under every policy.
+    for policy in ("dedupe", "overwrite", "error"):
+        [item] = _items(
+            _copy(tool, [{"file_id": file_id}], {"conflict_policy": policy})
+        )
+        assert (item["status"], item["path"]) == ("cached", path)
     assert node.agent.write_paths.count(path) == 1
 
-    # A file of another size is written again.
-    node.agent.files[(str(ref.sandbox_id), str(ref.session_id), path)] = b"x"
-    assert json.loads(_call(tool, {"file_id": file_id}).content)["cached"] is False
+    # A file of another size at the file's own name is written over.
+    _put_vm_file(node, ref, path, b"x")
+    [item] = _items(_copy(tool, [{"file_id": file_id}], {"conflict_policy": "error"}))
+    assert item["status"] == "written"
     assert _vm_file(node, ref, path) == data
     assert node.agent.write_paths.count(path) == 2
 
 
 @pytest.mark.usefixtures("sandbox")
-def test_a_refused_file_never_starts_the_vm(
+def test_a_library_file_id_copies_its_newest_version_and_a_file_id_its_own(
+    db_session: Session,
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    source, calling = chats
+    first = _publish(source, "notes.md", b"first")
+    second = _publish(source, "notes.md", b"second version")
+    artifact_id = _artifact_id(first)
+    tool = LibraryPrepareMaterializeTool(_turn(user, calling))
+
+    by_artifact, by_file = _items(
+        _copy(tool, [{"library_file_id": str(artifact_id)}, {"file_id": first}])
+    )
+    assert (by_artifact["file_id"], by_artifact["version_number"]) == (second, 2)
+    assert (by_file["file_id"], by_file["version_number"]) == (first, 1)
+    ref = _ref(db_session, user, calling)
+    assert _vm_file(node, ref, _landed(second, "notes.md")) == b"second version"
+    assert _vm_file(node, ref, _landed(first, "notes.md")) == b"first"
+
+    # An item gives exactly one of them.
+    for item in ({}, {"file_id": first, "library_file_id": str(artifact_id)}):
+        result = _copy(tool, [item])
+        assert result.is_error
+        assert "exactly one of file_id and library_file_id" in result.content
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_each_conflict_policy_outside_the_default_names(
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    source, calling = chats
+    file_id = _publish(source, "report.csv", b"new")
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    # The VM starts empty, so the file goes in after it starts.
+    ref = turn.start_call()
+    turn.sandbox.ensure_running(ref)
+    _put_vm_file(node, ref, "work/report.csv", b"old")
+
+    # dedupe, the default, takes the first free name, also against the
+    # names that the call itself wrote.
+    first, second = _items(
+        _copy(tool, [{"file_id": file_id}] * 2, {"directory": "work"})
+    )
+    assert (first["path"], second["path"]) == (
+        "work/report (1).csv",
+        "work/report (2).csv",
+    )
+    assert first["file_name"] == "report (1).csv"
+    assert _vm_file(node, ref, "work/report.csv") == b"old"
+    assert _vm_file(node, ref, "work/report (2).csv") == b"new"
+
+    failed = _copy(
+        tool, [{"file_id": file_id}], {"directory": "work", "conflict_policy": "error"}
+    )
+    assert failed.is_error
+    assert failed.content == "No file was copied:\n- work/report.csv already exists"
+
+    [item] = _items(
+        _copy(
+            tool,
+            [{"file_id": file_id}],
+            {"directory": "work", "conflict_policy": "overwrite"},
+        )
+    )
+    assert (item["path"], item["status"]) == ("work/report.csv", "written")
+    assert _vm_file(node, ref, "work/report.csv") == b"new"
+
+    # file_name and relative_directory choose the place; parents are made,
+    # and a name keeps only its last part, in its shell-safe form.
+    [named] = _items(
+        _copy(
+            tool,
+            [
+                {
+                    "file_id": file_id,
+                    "file_name": "sub/Q3 $report.csv",
+                    "relative_directory": "a/b",
+                }
+            ],
+            {"directory": "."},
+        )
+    )
+    assert named["path"] == "a/b/Q3 _report.csv"
+    assert _vm_file(node, ref, "a/b/Q3 _report.csv") == b"new"
+    # A subdirectory of the default directory is not the default naming.
+    [nested] = _items(_copy(tool, [{"file_id": file_id, "relative_directory": "x"}]))
+    assert nested["path"] == f"{ARTIFACT_FILES_DIR}/x/report.csv"
+
+    # An absolute directory in the working directory is that directory.
+    [absolute] = _items(
+        _copy(
+            tool,
+            [{"file_id": file_id}],
+            {
+                "directory": f"{session_workspace(calling)}/work",
+                "conflict_policy": "overwrite",
+            },
+        )
+    )
+    assert absolute["path"] == "work/report.csv"
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_deduped_name_cuts_its_stem_to_fit_the_name_limit(
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    source, calling = chats
+    name = "\u00e9" * 125 + ".csv"
+    file_id = _publish(source, name, b"new")
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    ref = turn.start_call()
+    turn.sandbox.ensure_running(ref)
+    _put_vm_file(node, ref, f"work/{name}", b"old")
+
+    [deduped] = _items(_copy(tool, [{"file_id": file_id}], {"directory": "work"}))
+
+    written = deduped["file_name"]
+    assert isinstance(written, str)
+    assert len(written.encode()) <= 255
+    assert written.endswith(" (1).csv")
+    assert _vm_file(node, ref, f"work/{written}") == b"new"
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_the_conflict_check_sees_hidden_files_and_a_cut_listing(
+    monkeypatch: pytest.MonkeyPatch,
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    source, calling = chats
+    file_id = _publish(source, "report.csv", b"new")
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    ref = turn.start_call()
+    turn.sandbox.ensure_running(ref)
+    _put_vm_file(node, ref, "work/.env", b"secret")
+
+    hidden = _copy(
+        tool,
+        [{"file_id": file_id, "file_name": ".env"}],
+        {"directory": "work", "conflict_policy": "error"},
+    )
+    assert hidden.content == "No file was copied:\n- work/.env already exists"
+    assert _vm_file(node, ref, "work/.env") == b"secret"
+
+    # A listing cut before the name may miss a file there.
+    _put_vm_file(node, ref, "work/a.txt", b"a")
+    monkeypatch.setattr(file_copies, "MAX_LISTED", 1)
+    cut = _copy(
+        tool, [{"file_id": file_id}], {"directory": "work", "conflict_policy": "error"}
+    )
+    assert cut.content == "No file was copied:\n- work/report.csv may already exist"
+    [deduped] = _items(_copy(tool, [{"file_id": file_id}], {"directory": "work"}))
+    assert deduped["path"] == "work/report (1).csv"
+    assert _vm_file(node, ref, "work/report.csv") is None
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_copy_never_replaces_a_file_that_its_listing_missed(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    """The listing is a snapshot: a parallel copy can take a name after it.
+    The write then refuses the name; error reports it, and dedupe tries the
+    next free name, a bounded number of times."""
+    source, calling = chats
+    file_id = _publish(source, "report.csv", b"new")
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    ref = turn.start_call()
+    turn.sandbox.ensure_running(ref)
+    _put_vm_file(node, ref, "work/report.csv", b"old")
+    _put_vm_file(node, ref, "work/report (1).csv", b"old 1")
+
+    class _EmptyListing(_Wrapped):
+        def list_files(
+            self,
+            directory: str,  # noqa: ARG002
+            *,
+            max_entries: int,  # noqa: ARG002
+            include_hidden: bool = False,  # noqa: ARG002
+        ) -> FileListing:
+            return FileListing(entries=[], truncated=False)
+
+    _wrap(monkeypatch, sandbox, _EmptyListing)
+    failed = _copy(
+        tool, [{"file_id": file_id}], {"directory": "work", "conflict_policy": "error"}
+    )
+    assert failed.content == "No file was copied:\n- work/report.csv already exists"
+    [deduped] = _items(_copy(tool, [{"file_id": file_id}], {"directory": "work"}))
+    assert deduped["path"] == "work/report (2).csv"
+    assert _vm_file(node, ref, "work/report.csv") == b"old"
+    assert _vm_file(node, ref, "work/report (1).csv") == b"old 1"
+    assert _vm_file(node, ref, "work/report (2).csv") == b"new"
+
+    monkeypatch.setattr(sandbox_tools, "_MATERIALIZE_NAME_TRIES", 3)
+    exhausted = _copy(tool, [{"file_id": file_id}], {"directory": "work"})
+    assert exhausted.content == (
+        "No file was copied:\n- work/report (2).csv and the names before it are "
+        "taken; try again"
+    )
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+def test_a_listing_that_times_out_stops_the_remaining_items(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    """A listing past its deadline ends the copy, as a write does: the later
+    items fail without another listing."""
+    source, calling = chats
+    file_ids = [_publish(source, f"f{index}.txt", b"x") for index in range(3)]
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    turn.start_call()
+    listed: list[str] = []
+
+    class _HungListing(_Wrapped):
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            if directory != "work":
+                return super().list_files(
+                    directory, max_entries=max_entries, include_hidden=include_hidden
+                )
+            listed.append(directory)
+            raise TimeoutError("the listing timed out")
+
+    _wrap(monkeypatch, sandbox, _HungListing)
+    failed = _copy(
+        tool, [{"file_id": file_id} for file_id in file_ids], {"directory": "work"}
+    )
+    stopped = "- The copy failed: the sandbox did not respond; try again"
+    assert failed.content == (
+        f"No file was copied:\n- The copy timed out; try again\n{stopped}\n{stopped}"
+    )
+    assert listed == ["work"]
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_only_an_item_that_needs_the_listing_lists_its_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    """An overwrite outside the chat file names lists nothing; a chat file
+    name lists its directory once, for the cache."""
+    source, calling = chats
+    file_ids = [_publish(source, f"f{index}.txt", b"x") for index in range(2)]
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    ref = turn.start_call()
+    listed: list[str] = []
+
+    class _CountedListing(_Wrapped):
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            listed.append(directory)
+            return super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
+
+    _wrap(monkeypatch, sandbox, _CountedListing)
+    written = _items(
+        _copy(
+            tool,
+            [{"file_id": file_id} for file_id in file_ids],
+            {"directory": "work", "conflict_policy": "overwrite"},
+        )
+    )
+    assert [item["status"] for item in written] == ["written", "written"]
+    assert _vm_file(node, ref, "work/f1.txt") == b"x"
+    assert listed == []
+
+    _items(_copy(tool, [{"file_id": file_id} for file_id in file_ids]))
+    assert listed == [ARTIFACT_FILES_DIR]
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_bad_destinations_and_refused_files_never_start_the_vm(
     db_session: Session,
     node: RunningFakeAgent,
     user: User,
@@ -250,6 +592,7 @@ def test_a_refused_file_never_starts_the_vm(
     make_test_user: MakeTestUser,
 ) -> None:
     source, calling = chats
+    file_id = _publish(source, "a.txt", b"a")
     stranger = make_test_user("artifact_tools_stranger")
     theirs = _publish(_chat(db_session, stranger), "theirs.txt", b"theirs")
     deleted_chat = _chat(db_session, user)
@@ -257,25 +600,118 @@ def test_a_refused_file_never_starts_the_vm(
     db_session.execute(
         update(ChatSession).where(ChatSession.id == deleted_chat).values(deleted=True)
     )
-    big = _publish(source, "big.bin", b"big")
-    db_session.execute(
-        update(FileRecord)
-        .where(FileRecord.file_id == big)
-        .values(file_size=PUBLISH_FILES_MAX_BYTES + 1)
-    )
     db_session.commit()
-    tool = ArtifactsDownloadTool(_turn(user, calling))
+    tool = LibraryPrepareMaterializeTool(_turn(user, calling))
 
-    for file_id in (theirs, in_deleted, str(uuid4())):
-        result = _call(tool, {"file_id": file_id})
+    for directory, refusal in (
+        ("../up", "leaves the working directory"),
+        ("a/../../b", "leaves the working directory"),
+        ("/tmp/onyx", "is outside the working directory"),
+        ("attachments", "is not a destination"),
+        ("attachments/project", "is not a destination"),
+        ("attachments/search/x", "is not a destination"),
+        (f"{session_workspace(calling)}/attachments/agent", "is not a destination"),
+    ):
+        result = _copy(tool, [{"file_id": file_id}], {"directory": directory})
         assert result.is_error
-        assert result.content == f"No published file {file_id} in your chats"
-    over = _call(tool, {"file_id": big})
-    assert over.is_error
-    assert over.content == "big.bin is larger than 100 MiB"
+        assert result.content.startswith(f"{directory!r} "), result.content
+        assert refusal in result.content
+
+    # In the working directory, attachments/ is refused below it too.
+    inside = _copy(
+        tool,
+        [{"file_id": file_id, "relative_directory": "attachments/project"}],
+        {"directory": "."},
+    )
+    assert inside.is_error
+    assert "'attachments/project' is not a destination" in inside.content
+
+    unknown = str(uuid4())
+    unknown_library = str(uuid4())
+    refused = _copy(
+        tool,
+        [
+            {"file_id": theirs},
+            {"file_id": in_deleted},
+            {"file_id": unknown},
+            {"library_file_id": unknown_library},
+            {"file_id": file_id, "relative_directory": "../../../x"},
+            {"file_id": file_id, "relative_directory": "/abs"},
+        ],
+    )
+    assert refused.is_error
+    lines = refused.content.splitlines()
+    assert lines[0] == "No file was copied:"
+    assert lines[1:5] == [
+        f"- No published file {theirs} in your chats",
+        f"- No published file {in_deleted} in your chats",
+        f"- No published file {unknown} in your chats",
+        f"- No published file {unknown_library} in your chats",
+    ]
+    assert [line.split("' ", 1)[1] for line in lines[5:]] == [
+        "leaves the working directory",
+        f"is outside the working directory {session_workspace(calling)}; use "
+        "exec_command elsewhere",
+    ]
     # Listing reads the database only.
     assert not _call(LibraryListTool(_turn(user, calling)), {}).is_error
     assert node.agent.create_calls == 0
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_failed_item_does_not_stop_the_others(
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    source, calling = chats
+    first = _publish(source, "one.txt", b"one")
+    second = _publish(source, "two.txt", b"two")
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    ref = turn.start_call()
+    turn.sandbox.ensure_running(ref)
+    _put_vm_file(node, ref, "out/one.txt", b"taken")
+    unknown = str(uuid4())
+
+    items = _items(
+        _copy(
+            tool,
+            [
+                {"file_id": first},
+                {"file_id": unknown},
+                {"file_id": second, "relative_directory": "../../x"},
+                {"file_id": second},
+            ],
+            {"directory": "out", "conflict_policy": "error"},
+        )
+    )
+    assert items == [
+        {"file_id": first, "status": "error", "error": "out/one.txt already exists"},
+        {
+            "file_id": unknown,
+            "status": "error",
+            "error": f"No published file {unknown} in your chats",
+        },
+        {
+            "file_id": second,
+            "status": "error",
+            "error": items[2]["error"],
+        },
+        {
+            "library_file_id": str(_artifact_id(second)),
+            "file_id": second,
+            "version_number": 1,
+            "file_name": "two.txt",
+            "path": "out/two.txt",
+            "file_size_bytes": 3,
+            "mime_type": "text/plain",
+            "status": "written",
+        },
+    ]
+    assert "leaves the working directory" in str(items[2]["error"])
+    assert _vm_file(node, ref, "out/one.txt") == b"taken"
+    assert _vm_file(node, ref, "out/two.txt") == b"two"
 
 
 @pytest.mark.usefixtures("sandbox")
@@ -287,20 +723,21 @@ def test_a_stop_ends_the_wait_and_the_write_lands_on_its_own(
 ) -> None:
     source, calling = chats
     file_id = _publish(source, "slow.txt", b"slow")
+    later = _publish(source, "later.txt", b"later")
     path = _landed(file_id, "slow.txt")
     gate = threading.Event()
     node.agent.write_gates[path] = gate
-    tool = ArtifactsDownloadTool(_turn(user, calling))
+    tool = LibraryPrepareMaterializeTool(_turn(user, calling))
     signal = CancellationSignal()
     raised: list[BaseException] = []
 
-    def download() -> None:
+    def copy() -> None:
         try:
-            _call(tool, {"file_id": file_id}, signal)
+            _copy(tool, [{"file_id": file_id}, {"file_id": later}], cancellation=signal)
         except BaseException as error:
             raised.append(error)
 
-    thread = threading.Thread(target=download)
+    thread = threading.Thread(target=copy)
     thread.start()
     try:
         _wait_until(lambda: path in node.agent.write_waiting)
@@ -310,62 +747,254 @@ def test_a_stop_ends_the_wait_and_the_write_lands_on_its_own(
         assert [type(error) for error in raised] == [AgentCancelled]
     finally:
         gate.set()
-    _wait_until(
-        lambda: _vm_file(node, _ref(db_session, user, calling), path) == b"slow"
-    )
-    assert json.loads(_call(tool, {"file_id": file_id}).content)["cached"] is True
+    ref = _ref(db_session, user, calling)
+    _wait_until(lambda: _vm_file(node, ref, path) == b"slow")
+    # The Stop came before the next item.
+    assert _vm_file(node, ref, _landed(later, "later.txt")) is None
+    [item] = _items(_copy(tool, [{"file_id": file_id}]))
+    assert item["status"] == "cached"
 
 
 @pytest.mark.usefixtures("sandbox")
-def test_a_failed_or_timed_out_download_is_a_tool_error_without_details(
+def test_a_stop_before_the_next_item_ends_the_copy_without_writing(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    """Stop is checked at the start of each item, so an item that writes
+    nothing (here a cached one) does not let the next item list its folder."""
+    source, calling = chats
+    cached = _publish(source, "cached.txt", b"cached")
+    later = _publish(source, "later.txt", b"later")
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    ref = turn.start_call()
+    turn.sandbox.ensure_running(ref)
+    _put_vm_file(node, ref, _landed(cached, "cached.txt"), b"cached")
+    signal = CancellationSignal()
+    listed: list[str] = []
+
+    class _StopWhileListing(_Wrapped):
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            listed.append(directory)
+            listing = super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
+            signal.cancel("user")
+            return listing
+
+    _wrap(monkeypatch, sandbox, _StopWhileListing)
+    with pytest.raises(AgentCancelled):
+        _copy(
+            tool,
+            [
+                {"file_id": cached},
+                {"file_id": later, "relative_directory": "later"},
+            ],
+            cancellation=signal,
+        )
+    assert listed == [ARTIFACT_FILES_DIR]
+    assert _vm_file(node, ref, f"{ARTIFACT_FILES_DIR}/later/later.txt") is None
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_a_sandbox_that_stops_responding_fails_the_remaining_items(
+    db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
     node: RunningFakeAgent,
     user: User,
     chats: tuple[UUID, UUID],
 ) -> None:
+    """A write past its deadline ends the copy, as in the chat file copies:
+    no retry, and the later items fail without a write. The gRPC error
+    stays in the log."""
     source, calling = chats
-    tool = ArtifactsDownloadTool(_turn(user, calling))
-    monkeypatch.setattr(sandbox_tools, "COPY_BASE_SECONDS", 0.2)
-
-    # The write passes its own deadline: the gRPC error stays in the log.
+    tool = LibraryPrepareMaterializeTool(_turn(user, calling))
+    monkeypatch.setattr(file_copies, "COPY_BASE_SECONDS", 0.2)
     hung = _publish(source, "hung.txt", b"hung")
+    later = _publish(source, "later.txt", b"later")
+    hung_path = _landed(hung, "hung.txt")
     gate = threading.Event()
-    node.agent.write_gates[_landed(hung, "hung.txt")] = gate
+    node.agent.write_gates[hung_path] = gate
     try:
-        failed = _call(tool, {"file_id": hung})
+        failed = _copy(tool, [{"file_id": hung}, {"file_id": later}])
     finally:
         gate.set()
-    assert failed.is_error
-    assert failed.content == "The download failed; try again"
+    no_response = "- The copy failed: the sandbox did not respond; try again"
+    assert failed.content == f"No file was copied:\n{no_response}\n{no_response}"
+    ref = _ref(db_session, user, calling)
+    assert _vm_file(node, ref, _landed(later, "later.txt")) is None
 
-    # The file store read does not end before the wait does.
-    slow = _publish(source, "slow.txt", b"slow")
-    released = threading.Event()
-    store = get_default_file_store()
 
-    class SlowStore:
-        def read_file(self, file_id: str, *, use_tempfile: bool) -> IO[bytes]:
-            released.wait(10)
-            return store.read_file(file_id, use_tempfile=use_tempfile)
+def test_a_vm_that_is_gone_fails_the_remaining_items(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    """A VM that is gone from its node ends the copy as a sandbox that stops
+    responding does: a later file that the listing showed in place is not
+    reported cached."""
+    source, calling = chats
+    first = _publish(source, "first.txt", b"first")
+    second = _publish(source, "second.txt", b"second")
+    cached = _publish(source, "cached.txt", b"cached")
+    turn = _turn(user, calling)
+    tool = LibraryPrepareMaterializeTool(turn)
+    ref = turn.start_call()
+    turn.sandbox.ensure_running(ref)
+    _put_vm_file(node, ref, _landed(cached, "cached.txt"), b"cached")
+    first_path = _landed(first, "first.txt")
 
-    monkeypatch.setattr(sandbox_tools, "get_default_file_store", SlowStore)
-    try:
-        timed_out = _call(tool, {"file_id": slow})
-    finally:
-        released.set()
-    assert timed_out.is_error
-    assert timed_out.content == "The download timed out; try again"
+    class _GoneAfterFirst(_Wrapped):
+        def write(
+            self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+        ) -> None:
+            super().write(
+                path, data, timeout_seconds=timeout_seconds, overwrite=overwrite
+            )
+            if path == first_path:
+                node.agent.vms.pop(str(ref.sandbox_id))
+
+    _wrap(monkeypatch, sandbox, _GoneAfterFirst)
+    items = _items(
+        _copy(tool, [{"file_id": first}, {"file_id": second}, {"file_id": cached}])
+    )
+    no_response = "The copy failed: the sandbox did not respond; try again"
+    assert [(item["status"], item.get("error")) for item in items] == [
+        ("written", None),
+        ("error", no_response),
+        ("error", no_response),
+    ]
+
+
+@pytest.mark.usefixtures("node")
+def test_the_next_items_write_keeps_its_busy_mark(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    """The end of one item's write never clears the busy mark that the next
+    item's write set. A clear that comes after the item was reported waits
+    for the next item's mark, as a slow clear would."""
+    source, calling = chats
+    first = _publish(source, "first.txt", b"first")
+    second = _publish(source, "second.txt", b"second")
+    second_path = _landed(second, "second.txt")
+    events: list[str] = []
+    reported = threading.Event()
+    next_mark = threading.Event()
+
+    class _Recorded(_Wrapped):
+        def write(
+            self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+        ) -> None:
+            events.append(f"write {path}")
+            super().write(
+                path, data, timeout_seconds=timeout_seconds, overwrite=overwrite
+            )
+
+        def mark_busy(self, seconds: float | None) -> None:
+            if seconds is None and reported.is_set():
+                next_mark.wait(10)
+            events.append("set" if seconds is not None else "clear")
+            if seconds is not None and reported.is_set():
+                next_mark.set()
+            super().mark_busy(seconds)
+
+    class _Reported(file_copies.FileWrites):
+        def __init__(
+            self,
+            ref: HarnessSandboxRef,
+            pool: file_copies.FileCopyPool,
+            files: SessionFiles,
+            writes: Sequence[file_copies.FileWrite],
+            superseded: Callable[[], bool],
+            on_end: Callable[
+                [Sequence[file_copies.FileWrite], file_copies.CopyFailure | None],
+                None,
+            ],
+        ) -> None:
+            def end(
+                ended: Sequence[file_copies.FileWrite],
+                failure: file_copies.CopyFailure | None,
+            ) -> None:
+                reported.set()
+                on_end(ended, failure)
+
+            super().__init__(ref, pool, files, writes, superseded, end)
+
+    _wrap(monkeypatch, sandbox, _Recorded)
+    monkeypatch.setattr(file_copies, "FileWrites", _Reported)
+    tool = LibraryPrepareMaterializeTool(_turn(user, calling))
+
+    items = _items(_copy(tool, [{"file_id": first}, {"file_id": second}]))
+    assert [item["status"] for item in items] == ["written", "written"]
+    before_second = events[: events.index(f"write {second_path}")]
+    assert [event for event in before_second if event in ("set", "clear")][-1] == "set"
 
 
 @pytest.mark.usefixtures("sandbox")
-def test_parallel_downloads_take_the_vms_write_slots(
+def test_the_same_file_twice_in_one_call_is_written_once(
+    db_session: Session,
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+) -> None:
+    source, calling = chats
+    file_id = _publish(source, "report.csv", b"a,b\n")
+    path = _landed(file_id, "report.csv")
+    tool = LibraryPrepareMaterializeTool(_turn(user, calling))
+
+    items = _items(_copy(tool, [{"file_id": file_id}, {"file_id": file_id}]))
+    assert [(item["status"], item["path"]) for item in items] == [
+        ("written", path),
+        ("cached", path),
+    ]
+    assert node.agent.write_paths.count(path) == 1
+    assert _vm_file(node, _ref(db_session, user, calling), path) == b"a,b\n"
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_pod_shutdown_fails_the_later_items_without_a_listing(
+    node: RunningFakeAgent,
+    user: User,
+    chats: tuple[UUID, UUID],
+    new_file_copy_pool: NewFileCopyPool,
+) -> None:
+    source, calling = chats
+    new_file_copy_pool().shutdown()
+    first = _publish(source, "first.txt", b"first")
+    later = _publish(source, "later.txt", b"later")
+    tool = LibraryPrepareMaterializeTool(_turn(user, calling))
+
+    failed = _copy(
+        tool, [{"file_id": first}, {"file_id": later, "relative_directory": "later"}]
+    )
+    shutdown = "the server is shutting down; try again"
+    assert failed.content == (
+        f"No file was copied:\n- The copy stopped: {shutdown}\n"
+        f"- The copy failed: {shutdown}"
+    )
+    assert [path for path, _ in node.agent.list_requests] == [ARTIFACT_FILES_DIR]
+    assert node.agent.write_paths == []
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_parallel_copies_take_the_vms_write_slots(
     monkeypatch: pytest.MonkeyPatch,
     node: RunningFakeAgent,
     user: User,
     chats: tuple[UUID, UUID],
     new_file_copy_pool: NewFileCopyPool,
 ) -> None:
-    """Downloads read and write in the chat file copies' slots: at most
+    """Copies read and write in the chat file copies' slots: at most
     VM_COPY_WRITES of one VM at a time."""
     source, calling = chats
     new_file_copy_pool()
@@ -388,13 +1017,13 @@ def test_parallel_downloads_take_the_vms_write_slots(
                 with lock:
                     active[0] -= 1
 
-    monkeypatch.setattr(sandbox_tools, "get_default_file_store", CountingStore)
+    monkeypatch.setattr(file_copies, "get_default_file_store", CountingStore)
     turn = _turn(user, calling)
     results: list[ToolResult] = []
     threads = [
         threading.Thread(
             target=lambda file_id=file_id: results.append(
-                _call(ArtifactsDownloadTool(turn), {"file_id": file_id})
+                _copy(LibraryPrepareMaterializeTool(turn), [{"file_id": file_id}])
             )
         )
         for file_id in file_ids
@@ -402,7 +1031,7 @@ def test_parallel_downloads_take_the_vms_write_slots(
     for thread in threads:
         thread.start()
     try:
-        # Every download got past its checks; two hold the slots.
+        # Every copy got past its checks; two hold the slots.
         _wait_until(
             lambda: (
                 node.agent.list_requests.count((ARTIFACT_FILES_DIR, False)) == 5
@@ -423,18 +1052,18 @@ def test_parallel_downloads_take_the_vms_write_slots(
 
 
 @pytest.mark.usefixtures("sandbox", "node")
-def test_a_queued_download_waits_for_its_slot_until_pod_shutdown(
+def test_a_queued_copy_waits_for_its_slot_until_pod_shutdown(
     monkeypatch: pytest.MonkeyPatch,
     user: User,
     chats: tuple[UUID, UUID],
     new_file_copy_pool: NewFileCopyPool,
 ) -> None:
-    """Downloads that hold both write slots past their own timeout do not
-    time out the download queued behind them. Pod shutdown, which drops
-    the queued task, fails it."""
+    """A copy queued behind copies that hold both write slots waits past its
+    own write timeout. Pod shutdown, which drops the queued write, fails it
+    and the copies that wait for theirs."""
     source, calling = chats
     pool = new_file_copy_pool()
-    monkeypatch.setattr(sandbox_tools, "COPY_BASE_SECONDS", 0.3)
+    monkeypatch.setattr(file_copies, "COPY_BASE_SECONDS", 0.3)
     held = [_publish(source, f"held{index}.txt", b"x") for index in range(2)]
     queued = _publish(source, "queued.txt", b"queued")
     dropped = _publish(source, "dropped.txt", b"dropped")
@@ -449,63 +1078,82 @@ def test_a_queued_download_waits_for_its_slot_until_pod_shutdown(
                 release.wait(10)
             return store.read_file(file_id, use_tempfile=use_tempfile)
 
-    monkeypatch.setattr(sandbox_tools, "get_default_file_store", HoldingStore)
+    queued_writes: list[str] = []
+
+    class SeenWrites(file_copies.FileWrites):
+        def __init__(
+            self,
+            ref: HarnessSandboxRef,
+            pool: file_copies.FileCopyPool,
+            files: SessionFiles,
+            writes: Sequence[file_copies.FileWrite],
+            superseded: Callable[[], bool],
+            on_end: Callable[
+                [Sequence[file_copies.FileWrite], file_copies.CopyFailure | None],
+                None,
+            ],
+        ) -> None:
+            super().__init__(ref, pool, files, writes, superseded, on_end)
+            queued_writes.extend(write.file_id for write in writes)
+
+    monkeypatch.setattr(file_copies, "get_default_file_store", HoldingStore)
+    monkeypatch.setattr(file_copies, "FileWrites", SeenWrites)
     turn = _turn(user, calling)
     results: dict[str, ToolResult] = {}
 
-    def download(file_id: str) -> None:
-        results[file_id] = _call(ArtifactsDownloadTool(turn), {"file_id": file_id})
+    def copy(file_id: str) -> None:
+        results[file_id] = _copy(
+            LibraryPrepareMaterializeTool(turn), [{"file_id": file_id}]
+        )
 
-    threads = [threading.Thread(target=download, args=(file_id,)) for file_id in held]
+    threads = [threading.Thread(target=copy, args=(file_id,)) for file_id in held]
     for thread in threads:
         thread.start()
     _wait_until(lambda: len(reading) == 2)
-    queued_thread = threading.Thread(target=download, args=(queued,))
+    queued_thread = threading.Thread(target=copy, args=(queued,))
     queued_thread.start()
     threads.append(queued_thread)
     try:
-        # The held downloads time out (twice 0.3 s from their slot); the
-        # queued one waits longer than its own timeout for a slot.
-        started = time.monotonic()
-        _wait_until(
-            lambda: (
-                all(file_id in results for file_id in held)
-                and time.monotonic() - started > 1.5
-            )
-        )
+        _wait_until(lambda: queued in queued_writes)
+        # Longer than twice the queued write's timeout.
+        time.sleep(1.0)  # test-flakes: allow the wait must outlast a timeout
         assert queued not in results
         release.set()
-        queued_thread.join(timeout=30)
-        assert not results[queued].is_error
+        for thread in threads:
+            thread.join(timeout=30)
+        assert [results[file_id].is_error for file_id in (*held, queued)] == [False] * 3
 
-        # The held files are in place now; two new ones hold the slots.
+        # Two new copies hold the slots, and pod shutdown drops the queued one.
         release.clear()
         reading.clear()
         held[:] = [_publish(source, f"again{index}.txt", b"x") for index in range(2)]
-        threads = [
-            threading.Thread(target=download, args=(file_id,)) for file_id in held
-        ]
+        threads = [threading.Thread(target=copy, args=(file_id,)) for file_id in held]
         for thread in threads:
             thread.start()
         _wait_until(lambda: len(reading) == 2)
-        dropped_thread = threading.Thread(target=download, args=(dropped,))
+        dropped_thread = threading.Thread(target=copy, args=(dropped,))
         dropped_thread.start()
         threads.append(dropped_thread)
-        _wait_until(lambda: all(file_id in results for file_id in held))
+        _wait_until(lambda: dropped in queued_writes)
         pool.shutdown()
         dropped_thread.join(timeout=10)
-        assert results[dropped].content == "The download failed; try again"
+        assert results[dropped].content == (
+            "No file was copied:\n- The copy stopped: the server is shutting "
+            "down; try again"
+        )
+        # The held copies stop on the shutdown while their reads still wait.
+        _wait_until(lambda: all(file_id in results for file_id in held))
+        assert [results[file_id].content for file_id in held] == [
+            results[dropped].content
+        ] * 2
     finally:
         release.set()
         for thread in threads:
             thread.join(timeout=30)
-    assert [results[file_id].content for file_id in held] == [
-        "The download timed out; try again"
-    ] * 2
 
 
 @pytest.mark.usefixtures("sandbox")
-def test_the_chat_file_copies_leave_downloads_alone(
+def test_the_chat_file_copies_leave_copied_artifacts_alone(
     db_session: Session,
     node: RunningFakeAgent,
     user: User,
@@ -516,13 +1164,10 @@ def test_the_chat_file_copies_leave_downloads_alone(
     pool = new_file_copy_pool()
     file_id = _publish(source, "kept.txt", b"kept")
     turn = _turn(user, calling)
-    _call(ArtifactsDownloadTool(turn), {"file_id": file_id})
+    _copy(LibraryPrepareMaterializeTool(turn), [{"file_id": file_id}])
     ref = _ref(db_session, user, calling)
-    files = node.agent.files
     # A project file that left the chat, which the cleanup deletes.
-    files[(str(ref.sandbox_id), str(ref.session_id), "attachments/project/x.txt")] = (
-        b"left"
-    )
+    _put_vm_file(node, ref, "attachments/project/x.txt", b"left")
 
     store = get_default_file_store()
     project_file = _publish(source, "p.txt", b"project")
@@ -578,7 +1223,7 @@ def _sandbox_chat(
 
 
 @pytest.mark.usefixtures("node")
-def test_a_chat_lists_and_downloads_files_published_in_other_chats(
+def test_a_chat_lists_and_copies_files_published_in_other_chats(
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
     sandbox: FirecrackerHarnessSandbox,
@@ -586,7 +1231,7 @@ def test_a_chat_lists_and_downloads_files_published_in_other_chats(
     user: User,
 ) -> None:
     """Chat A publishes a report, a subagent of chat B publishes its notes,
-    and chat C finds both with a query and a cursor, then downloads the
+    and chat C finds both with a query and a cursor, then copies the
     report. The generic cards stream as the reload replays them."""
     chat_a = _sandbox_chat(db_session, user, monkeypatch, "Quarter")
     chat_b = _sandbox_chat(db_session, user, monkeypatch, "Notes")
@@ -687,7 +1332,9 @@ def test_a_chat_lists_and_downloads_files_published_in_other_chats(
                 {"query": "REPORT", "limit": 1, "cursor": cursor},
             ),
             tool_step(
-                ArtifactsDownloadTool.NAME, "download", {"file_id": report.file_id}
+                LibraryPrepareMaterializeTool.NAME,
+                "copy",
+                {"items": [{"file_id": report.file_id}]},
             ),
             Delta(content="Done."),
         ]
@@ -700,9 +1347,9 @@ def test_a_chat_lists_and_downloads_files_published_in_other_chats(
     following = json.loads(last_tool_text(llm, "next"))
     assert [entry["file_id"] for entry in following["files"]] == [report.file_id]
     assert following["next_cursor"] is None
-    downloaded = json.loads(last_tool_text(llm, "download"))
+    [copied] = json.loads(last_tool_text(llm, "copy"))["items"]
     path = _landed(report.file_id, "report.csv")
-    assert downloaded["path"] == path
+    assert copied["path"] == path
     assert _vm_file(node, chat_c.ref(db_session), path) == b"a,b\n1,2\n"
 
     live = _card_packets(parts)
@@ -711,7 +1358,7 @@ def test_a_chat_lists_and_downloads_files_published_in_other_chats(
     ] == [
         LibraryListTool.display_name,
         LibraryListTool.display_name,
-        ArtifactsDownloadTool.display_name,
+        LibraryPrepareMaterializeTool.display_name,
     ]
     [replayed] = chat_c.replayed(db_session)
     assert _card_packets(replayed) == live
@@ -731,10 +1378,12 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
         [
             code_step(
                 "code",
-                "matches = await tool_search('download a published file')\n"
+                "matches = await tool_search('copy a published file')\n"
                 "print([match['name'] for match in matches])\n"
-                f"r = await tools.library__download(file_id='{file_id}')\n"
-                "print(r['path'], r['cached'])\n",
+                "r = await tools.library__prepare_materialize(\n"
+                f"    items=[{{'file_id': '{file_id}'}}]\n"
+                ")\n"
+                "print(r['items'][0]['path'], r['items'][0]['status'])\n",
             ),
             Delta(content="Done."),
         ]
@@ -747,14 +1396,14 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
         if tool["function"]["name"] == "execute_code"
     ]
     assert (
-        "\n  - library: Find and download the files that you published in this "
-        "chat and the user's other chats.\n" in description
+        "\n  - library: Find the files that you published in this chat and the "
+        "user's other chats, and copy them into this chat.\n" in description
     )
-    assert "library__download" not in description
+    assert "library__prepare_materialize" not in description
     text = last_tool_text(llm, "code")
-    assert "'library__download'" in text
+    assert "'library__prepare_materialize'" in text
     path = _landed(file_id, "report.csv")
-    assert f"{path} False" in text
+    assert f"{path} written" in text
     assert _vm_file(node, chat.ref(db_session), path) == b"a,b\n"
 
 

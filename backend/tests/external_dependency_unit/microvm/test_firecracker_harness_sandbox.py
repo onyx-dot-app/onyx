@@ -833,7 +833,7 @@ def test_stat_files_maps_the_daemon_facts_of_each_path(
 def test_file_paths_outside_the_session_directory_are_refused(path: str) -> None:
     ref = HarnessSandboxRef(tenant_id=TENANT_ID, sandbox_id=uuid4(), session_id=uuid4())
     with pytest.raises(SandboxPathError):
-        session_relative_path(ref, path)
+        session_relative_path(ref.session_id, path)
 
 
 @pytest.mark.usefixtures("node")
