@@ -13599,6 +13599,14 @@
         "title": "Arquivos",
         "viewAll": "{count, plural, one {Ver # arquivo} other {Ver todos os # arquivos}}"
       }
+    },
+    "find": {
+      "close": "Fechar localização",
+      "count": "{current} de {total}",
+      "label": "Localizar na sessão",
+      "next": "Próximo resultado",
+      "placeholder": "Localizar na sessão",
+      "previous": "Resultado anterior"
     }
   },
   "common": {
@@ -16765,6 +16773,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "Trocar modelo"
+        },
+        "findInChat": {
+          "label": "Localizar na sessão"
         },
         "nextChat": {
           "label": "Próxima sessão"

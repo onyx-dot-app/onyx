@@ -1,7 +1,7 @@
 /**
  * Every app-wide chat shortcut, in `useHotkey` syntax. `toggleSidebar` is
- * bound by Opal's `SidebarLayouts.Root`; it is listed here so the shortcut
- * list stays complete.
+ * bound by Opal's `SidebarLayouts.Root`, and `find` by `ChatFind` while a chat
+ * is shown; they are listed here so the shortcut list stays complete.
  */
 export const CHAT_SHORTCUTS = {
   commandPalette: "mod+k",
@@ -10,6 +10,7 @@ export const CHAT_SHORTCUTS = {
   openModelPicker: "mod+/",
   previousChat: "alt+ArrowUp",
   nextChat: "alt+ArrowDown",
+  find: "mod+f",
 } as const;
 
 /** ⌘⌥1–9 on macOS, Ctrl+Alt+1–9 elsewhere: ⌘1–9 and Alt+1–9 switch browser tabs. */

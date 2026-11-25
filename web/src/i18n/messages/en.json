@@ -13599,6 +13599,14 @@
         "title": "Files",
         "viewAll": "{count, plural, one {View # file} other {View all # files}}"
       }
+    },
+    "find": {
+      "close": "Close find",
+      "count": "{current} of {total}",
+      "label": "Find in session",
+      "next": "Next match",
+      "placeholder": "Find in session",
+      "previous": "Previous match"
     }
   },
   "common": {
@@ -16765,6 +16773,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "Change Model"
+        },
+        "findInChat": {
+          "label": "Find in Session"
         },
         "nextChat": {
           "label": "Next Session"

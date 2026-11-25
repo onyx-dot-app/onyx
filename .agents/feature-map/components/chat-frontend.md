@@ -59,6 +59,20 @@
   Sessions and Shortcuts. Search matches chat sessions and shortcut labels.
   Shortcuts includes New Session and shows the keys for the user's platform.
   Each shortcut action runs after the menu closes.
+- **A user finds text in the open chat.** Cmd/Ctrl+F opens a find bar
+  (`sections/chat/ChatFind.tsx`) in the `overlay` slot of the chat's
+  `ChatScrollContainer`; with no chat open, the browser's find stays. It
+  searches the loaded messages' data, not the DOM: user text and answer
+  text, without tool steps or thinking (`lib/chatFind/match.ts`). It parses
+  answers with `AnswerMarkdown`'s remark plugins
+  (`lib/answerText/remarkPlugins.ts`), so the counts match the page. So it also
+  finds rows that the windowed list has unmounted. A step scrolls the row
+  near the view so it mounts, then the CSS Custom Highlight API paints the
+  matches inside rows marked `data-chat-find-text`
+  (`lib/chatFind/highlights.ts`, `lib/chatFind/hooks.ts`). Citation chips and
+  callout titles are marked `data-chat-find-ignore`. A match in a closed
+  `<details>` opens it. A search starts at the top row of the view.
+  Enter and Shift+Enter step; Escape closes and returns focus.
 - **A user types or pastes with no field focused.** On the chat page, a
   printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and
   the browser types the character there. A paste goes to the input too. Keys

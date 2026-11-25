@@ -13599,6 +13599,14 @@
         "title": "ファイル",
         "viewAll": "{count, plural, other {#件のファイルをすべて表示}}"
       }
+    },
+    "find": {
+      "close": "検索を閉じる",
+      "count": "{current} / {total}",
+      "label": "セッション内を検索",
+      "next": "次の一致",
+      "placeholder": "セッション内を検索",
+      "previous": "前の一致"
     }
   },
   "common": {
@@ -16765,6 +16773,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "モデルを変更"
+        },
+        "findInChat": {
+          "label": "セッション内を検索"
         },
         "nextChat": {
           "label": "次のセッション"

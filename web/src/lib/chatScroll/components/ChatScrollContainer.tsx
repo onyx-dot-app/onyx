@@ -87,6 +87,10 @@ export interface ChatScrollContainerProps {
    *  the bottom" ignores it. */
   footer?: React.ReactNode;
 
+  /** Rendered over the view, outside the scroll element: it never scrolls
+   *  and has the scroll container's context. */
+  overlay?: React.ReactNode;
+
   /** Fade content opacity at the top and bottom edges. */
   fadeEdges?: boolean;
 
@@ -174,6 +178,7 @@ const ChatScrollContainer = React.memo(
         hideScrollbar = false,
         wide = false,
         footer,
+        overlay,
         fadeEdges = true,
         className,
         scrollClassName,
@@ -556,6 +561,14 @@ const ChatScrollContainer = React.memo(
         };
       }, []);
 
+      // A jump the app makes for the user, such as to a find match: the
+      // view stays where it lands.
+      const releaseFollowing = useCallback(() => {
+        cancelGlide();
+        pendingRevealRef.current = null;
+        modeRef.current = "reading";
+      }, [cancelGlide]);
+
       useEffect(
         () => () => {
           cancelGlide();
@@ -862,64 +875,66 @@ const ChatScrollContainer = React.memo(
             "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden"
           }
         >
-          <div
-            key={sessionId}
-            ref={scrollContainerRef}
-            data-testid={testId}
-            data-chat-scroll
-            className={
-              scrollClassName ??
-              cn(
-                // A size container: the latest turn's min-height is in cqh.
-                // Focus and scrollIntoView keep clear of a composer laid
-                // over the view.
-                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size] scroll-pb-(--app-composer-height)",
-                hideScrollbar ? "no-scrollbar" : "default-scrollbar",
-                // The wide width (and every width below md) drops the
-                // reserved gutters so content gets the room; the reading
-                // width keeps both-edges to avoid shift.
-                !wide && "md:[scrollbar-gutter:stable_both-edges]"
-              )
-            }
-            onScroll={() => {
-              handleScroll();
-              savePosition();
-            }}
-            style={
-              fadeEdges
-                ? {
-                    // Apply mask to fade content opacity at edges
-                    maskImage: contentMask,
-                    WebkitMaskImage: contentMask,
-                  }
-                : undefined
-            }
+          <ScrollContainerProvider
+            scrollContainerRef={scrollContainerRef}
+            contentWrapperRef={contentWrapperRef}
+            sessionId={sessionId}
+            prepareReveal={prepareReveal}
+            releaseFollowing={releaseFollowing}
           >
             <div
-              ref={contentWrapperRef}
+              key={sessionId}
+              ref={scrollContainerRef}
+              data-testid={testId}
+              data-chat-scroll
               className={
-                contentClassName ??
-                cn("w-full flex-1 flex flex-col items-center", CHAT_GUTTER)
+                scrollClassName ??
+                cn(
+                  // A size container: the latest turn's min-height is in cqh.
+                  // Focus and scrollIntoView keep clear of a composer laid
+                  // over the view.
+                  "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size] scroll-pb-(--app-composer-height)",
+                  hideScrollbar ? "no-scrollbar" : "default-scrollbar",
+                  // The wide width (and every width below md) drops the
+                  // reserved gutters so content gets the room; the reading
+                  // width keeps both-edges to avoid shift.
+                  !wide && "md:[scrollbar-gutter:stable_both-edges]"
+                )
               }
-              data-scroll-ready={isScrollReady}
-              style={{
-                visibility: isScrollReady ? "visible" : "hidden",
+              onScroll={() => {
+                handleScroll();
+                savePosition();
               }}
+              style={
+                fadeEdges
+                  ? {
+                      // Apply mask to fade content opacity at edges
+                      maskImage: contentMask,
+                      WebkitMaskImage: contentMask,
+                    }
+                  : undefined
+              }
             >
-              <ScrollContainerProvider
-                scrollContainerRef={scrollContainerRef}
-                contentWrapperRef={contentWrapperRef}
-                sessionId={sessionId}
-                prepareReveal={prepareReveal}
+              <div
+                ref={contentWrapperRef}
+                className={
+                  contentClassName ??
+                  cn("w-full flex-1 flex flex-col items-center", CHAT_GUTTER)
+                }
+                data-scroll-ready={isScrollReady}
+                style={{
+                  visibility: isScrollReady ? "visible" : "hidden",
+                }}
               >
                 {children}
-              </ScrollContainerProvider>
 
-              {/* End marker to measure content end */}
-              <div ref={endDivRef} />
+                {/* End marker to measure content end */}
+                <div ref={endDivRef} />
+              </div>
+              {footer}
             </div>
-            {footer}
-          </div>
+            {overlay}
+          </ScrollContainerProvider>
         </div>
       );
     }

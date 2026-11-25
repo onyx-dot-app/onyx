@@ -7,8 +7,6 @@ import ReactMarkdown, {
 } from "react-markdown";
 import type { Element, ElementContent } from "hast";
 import type { PluggableList } from "unified";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { useTranslations } from "next-intl";
@@ -41,17 +39,9 @@ import { useInResponse } from "@/lib/timeline/components/Response";
 import { CodeBlockBody } from "@/lib/timeline/components/bodies/CodeBlockBody";
 import { prepareAnswerMarkdown } from "@/lib/answerText/utils";
 import { splitMarkdownBlocks } from "@/lib/answerText/streamBlocks";
-import { remarkDetails } from "@/lib/answerText/remarkDetails";
-import { remarkGithubAlerts } from "@/lib/answerText/remarkGithubAlerts";
+import { ANSWER_REMARK_PLUGINS } from "@/lib/answerText/remarkPlugins";
 import { parseCodeFence } from "@/lib/answerText/codeFence";
 
-// Math is `$$…$$` only (see `prepareAnswerMarkdown`).
-const REMARK_PLUGINS: PluggableList = [
-  remarkGfm,
-  [remarkMath, { singleDollarTextMath: false }],
-  remarkGithubAlerts,
-  remarkDetails,
-];
 const REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
 
 const StreamingContext = createContext(false);
@@ -170,7 +160,7 @@ function AnswerBlockquote({
         callout.border
       )}
     >
-      <div className="not-prose">
+      <div className="not-prose" data-chat-find-ignore>
         <Content
           icon={callout.icon}
           title={t(`${kind}.title`)}
@@ -292,7 +282,7 @@ const AnswerMarkdownBlock = memo(function AnswerMarkdownBlock({
   return (
     <ReactMarkdown
       components={components}
-      remarkPlugins={REMARK_PLUGINS}
+      remarkPlugins={ANSWER_REMARK_PLUGINS}
       rehypePlugins={rehypePlugins}
       urlTransform={transformLinkUri}
     >

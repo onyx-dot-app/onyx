@@ -212,8 +212,9 @@ export const MemoizedLink = memo(
       CITATION_LABEL_PATTERN.test(plainLabel)
     ) {
       const sourceInfo = documentSourceInfo || questionSourceInfo;
+      // Find in chat skips citations: it searches the answer's own text.
       if (!sourceInfo) {
-        return <>{rest.children}</>;
+        return <span data-chat-find-ignore>{rest.children}</span>;
       }
 
       const displayName = document
@@ -221,14 +222,16 @@ export const MemoizedLink = memo(
         : question?.question || t("memoizedLink.questionFallback.label");
 
       return (
-        <SourceTag
-          variant="inlineCitation"
-          displayName={displayName}
-          sources={[sourceInfo]}
-          onSourceClick={handleSourceClick}
-          showDetailsCard
-          className="me-0.5"
-        />
+        <span data-chat-find-ignore>
+          <SourceTag
+            variant="inlineCitation"
+            displayName={displayName}
+            sources={[sourceInfo]}
+            onSourceClick={handleSourceClick}
+            showDetailsCard
+            className="me-0.5"
+          />
+        </span>
       );
     }
 

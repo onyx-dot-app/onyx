@@ -27,7 +27,9 @@ import {
   SvgCpu,
   SvgChevronUp,
   SvgChevronDown,
+  SvgSearch,
 } from "@opal/icons";
+import { openChatFind } from "@/lib/chatFind/store";
 import type { IconFunctionComponent } from "@opal/types";
 
 /**
@@ -230,6 +232,17 @@ export default function ChatSearchCommandMenu({
       hotkey: CHAT_SHORTCUTS.nextChat,
       run: shortcutActions.nextChat,
     },
+    ...(appPosition.isChat() && appPosition.chat()
+      ? [
+          {
+            value: "find-in-chat",
+            icon: SvgSearch,
+            label: t("chatSearch.shortcuts.findInChat.label"),
+            hotkey: CHAT_SHORTCUTS.find,
+            run: openChatFind,
+          },
+        ]
+      : []),
   ];
   const searchTerm = searchValue.trim().toLowerCase();
   const visibleShortcutItems =

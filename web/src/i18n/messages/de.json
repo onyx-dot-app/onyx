@@ -13599,6 +13599,14 @@
         "title": "Dateien",
         "viewAll": "{count, plural, one {# Datei anzeigen} other {Alle # Dateien anzeigen}}"
       }
+    },
+    "find": {
+      "close": "Suche schließen",
+      "count": "{current} von {total}",
+      "label": "In Sitzung suchen",
+      "next": "Nächster Treffer",
+      "placeholder": "In Sitzung suchen",
+      "previous": "Vorheriger Treffer"
     }
   },
   "common": {
@@ -16765,6 +16773,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "Modell wechseln"
+        },
+        "findInChat": {
+          "label": "In Sitzung suchen"
         },
         "nextChat": {
           "label": "Nächste Sitzung"

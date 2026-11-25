@@ -13599,6 +13599,14 @@
         "title": "파일",
         "viewAll": "{count, plural, other {파일 #개 모두 보기}}"
       }
+    },
+    "find": {
+      "close": "찾기 닫기",
+      "count": "{current}/{total}",
+      "label": "세션에서 찾기",
+      "next": "다음 일치 항목",
+      "placeholder": "세션에서 찾기",
+      "previous": "이전 일치 항목"
     }
   },
   "common": {
@@ -16765,6 +16773,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "모델 변경"
+        },
+        "findInChat": {
+          "label": "세션에서 찾기"
         },
         "nextChat": {
           "label": "다음 세션"

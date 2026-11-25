@@ -13599,6 +13599,14 @@
         "title": "文件",
         "viewAll": "{count, plural, other {查看全部 # 个文件}}"
       }
+    },
+    "find": {
+      "close": "关闭查找",
+      "count": "第 {current} 个，共 {total} 个",
+      "label": "在会话中查找",
+      "next": "下一个匹配项",
+      "placeholder": "在会话中查找",
+      "previous": "上一个匹配项"
     }
   },
   "common": {
@@ -16765,6 +16773,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "更换模型"
+        },
+        "findInChat": {
+          "label": "在会话中查找"
         },
         "nextChat": {
           "label": "下一个会话"
