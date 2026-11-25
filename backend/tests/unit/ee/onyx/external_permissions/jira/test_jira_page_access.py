@@ -75,18 +75,38 @@ def test_dc_direct_user_holder_accepts_email_without_account_id() -> None:
     assert external_access.is_public is False
 
 
-def test_direct_group_holders_preserve_value_and_parameter_shapes() -> None:
+def test_direct_group_holders_use_the_group_name() -> None:
+    """Cloud sends the group id in `value` and the name in `parameter`. Data
+    Center sends only `parameter`. Group sync stores names."""
     gateway = _gateway(is_cloud=False)
     gateway.get_project_permission_scheme.return_value = _project_permissions(
-        _permission({"type": "group", "value": "cloud-group"}),
+        _permission(
+            {
+                "type": "group",
+                "parameter": "cloud-group",
+                "value": "ca85fac0-d974-40ca-a615-7af99c48d24f",
+                "expand": "group",
+            }
+        ),
         _permission({"type": "group", "parameter": "dc-group"}),
+        _permission(
+            {
+                "type": "group",
+                "value": "6b2a1d4e-0000-4000-8000-000000000000",
+                "group": {"name": "expanded-group"},
+            }
+        ),
     )
 
     external_access = get_project_permissions(gateway, PROJECT_KEY)
 
     assert external_access is not None
     assert external_access.external_user_emails == set()
-    assert external_access.external_user_group_ids == {"cloud-group", "dc-group"}
+    assert external_access.external_user_group_ids == {
+        "cloud-group",
+        "dc-group",
+        "expanded-group",
+    }
     assert external_access.is_public is False
 
 
