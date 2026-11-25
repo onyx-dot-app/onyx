@@ -48,6 +48,13 @@ WITH_SERVERS = {
     ],
     "paths": {"/a": {"get": {"operationId": "getA"}}},
 }
+# Only the orphan tool has this title, so a copy of it is easy to find.
+ORPHAN = {
+    "openapi": "3.0.0",
+    "info": {"title": "api-app-orphan-marker", "version": "1"},
+    "servers": [{"url": "https://orphan.example.com"}],
+    "paths": {},
+}
 EMPTY_FIRST_URL = {
     "openapi": "3.0.0",
     "info": {"title": "t", "version": "1"},
@@ -179,7 +186,7 @@ def seeded(engine: Engine) -> Generator[dict[int, int], None, None]:
         _insert_tool(conn, TOOL_WITH_SERVERS, WITH_SERVERS)
         _insert_tool(conn, TOOL_NO_SERVERS, NO_SERVERS)
         _insert_tool(conn, TOOL_PASSTHROUGH, PASSTHROUGH, passthrough_auth=True)
-        _insert_tool(conn, TOOL_ORPHAN, WITH_SERVERS)
+        _insert_tool(conn, TOOL_ORPHAN, ORPHAN)
         _insert_tool(conn, TOOL_NOT_OPENAPI, None)
         _insert_tool(conn, TOOL_EMPTY_FIRST_URL, EMPTY_FIRST_URL)
         _insert_tool(conn, TOOL_SERVERS_NOT_A_LIST, SERVERS_NOT_A_LIST)
@@ -303,7 +310,7 @@ def _assert_copied(conn: Connection, seeded: dict[int, int]) -> None:
     assert (
         conn.execute(
             text("SELECT count(*) FROM api_app WHERE openapi_document LIKE :url"),
-            {"url": "%orphan%"},
+            {"url": "%api-app-orphan-marker%"},
         ).scalar_one()
         == 0
     )
