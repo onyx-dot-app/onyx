@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
     IntegrationActionSource,
+    IntegrationAuthMethod,
     IntegrationAuthMode,
     PluginInstallationPolicy,
 )
@@ -22,9 +23,11 @@ from onyx.integrations.models import ActionSettings, ApprovalMode
 from onyx.sandbox_proxy.usable_integrations import load_match_targets
 from onyx.server.features.integrations import admin_api
 from onyx.server.features.integrations.models import (
+    ConnectionFieldsRequest,
     GraphQLConfigInput,
     IntegrationCreate,
     IntegrationShape,
+    IntegrationUpdate,
 )
 from onyx.tools.models import (
     IntegrationChatRequest,
@@ -187,3 +190,38 @@ def test_proxy_matches_a_script_request_by_root_field(
         )
         is None
     )
+
+
+def test_an_endpoint_change_needs_a_new_connection(
+    db_session: Session, admin: User
+) -> None:
+    """The saved key was for the old endpoint; it must not go to the new one."""
+    detail = admin_api.create_integration(
+        IntegrationCreate(
+            name=f"tickets-{uuid4().hex[:8]}",
+            auth_mode=IntegrationAuthMode.SHARED,
+            auth_method=IntegrationAuthMethod.API_KEY,
+            header_template={"X-Api-Key": "{api_key}"},
+            config=GraphQLConfigInput(endpoint_url=ENDPOINT, graphql_schema=SDL),
+        ),
+        admin,
+        db_session,
+    )
+    admin_api.save_organization_connection(
+        detail.id, ConnectionFieldsRequest(fields={"api_key": "k"}), admin, db_session
+    )
+
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            config=GraphQLConfigInput(
+                endpoint_url="https://other.example.com/graphql", graphql_schema=SDL
+            )
+        ),
+        admin,
+        db_session,
+    )
+
+    view = admin_api.get_integration_admin(detail.id, admin, db_session)
+    assert view.organization_status is not None
+    assert view.organization_status.state.value == "needs_reconnect"
