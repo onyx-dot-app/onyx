@@ -13081,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# línea} other {# líneas}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# palabra} other {# palabras}}"
-      },
       "copyButton": {
         "tooltip": "Copiar el contenido"
       },
@@ -13155,30 +13152,6 @@
         },
         "error": {
           "description": "No se pudo cargar el archivo PDF."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Controles de presentación"
-        },
-        "thumbnails": {
-          "toggle": "Mostrar u ocultar miniaturas de diapositivas",
-          "resize": "Cambiar el tamaño de las miniaturas"
-        },
-        "slides": {
-          "label": "Diapositivas"
-        },
-        "previous": {
-          "label": "Diapositiva anterior"
-        },
-        "next": {
-          "label": "Diapositiva siguiente"
-        },
-        "slide": {
-          "counter": "Diapositiva {current} de {total}"
-        },
-        "empty": {
-          "label": "Esta presentación no tiene diapositivas"
         }
       }
     },

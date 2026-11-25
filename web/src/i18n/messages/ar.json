@@ -13081,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# سطر} other {# أسطر}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# كلمة} other {# كلمات}}"
-      },
       "copyButton": {
         "tooltip": "نسخ المحتوى"
       },
@@ -13155,30 +13152,6 @@
         },
         "error": {
           "description": "تعذّر تحميل ملف PDF."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "عناصر التحكم في العرض التقديمي"
-        },
-        "thumbnails": {
-          "toggle": "إظهار الصور المصغّرة للشرائح أو إخفاؤها",
-          "resize": "تغيير حجم الصور المصغّرة للشرائح"
-        },
-        "slides": {
-          "label": "الشرائح"
-        },
-        "previous": {
-          "label": "الشريحة السابقة"
-        },
-        "next": {
-          "label": "الشريحة التالية"
-        },
-        "slide": {
-          "counter": "الشريحة {current} من {total}"
-        },
-        "empty": {
-          "label": "لا توجد شرائح في هذا العرض التقديمي"
         }
       }
     },

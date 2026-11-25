@@ -226,62 +226,6 @@ export class ChatPage {
     await expect(this.rightPanelDownload).toBeVisible();
   }
 
-  /**
-   * Opens a reply card's PowerPoint deck in the right panel and checks its
-   * slides: the first shows `firstSlideText`, and the arrows step through
-   * the rest.
-   */
-  async expectPptxPreview(
-    title: string,
-    slideCount: number,
-    firstSlideText: string
-  ): Promise<void> {
-    await this.publishedFileCard(title).click();
-    const preview = this.publishedFilePreview(title);
-    const controls = preview.getByRole("toolbar", {
-      name: "Presentation controls",
-    });
-    await expect(controls).toContainText(`Slide 1 of ${slideCount}`);
-    await expect(
-      preview.getByRole("region", { name: `Slide 1 of ${slideCount}` })
-    ).toContainText(firstSlideText);
-    await expect(
-      preview
-        .getByRole("toolbar", { name: "Slides" })
-        .getByRole("button", { name: /^Slide \d+ of/ })
-    ).toHaveCount(slideCount);
-    for (let slide = 2; slide <= slideCount; slide++) {
-      await controls.getByRole("button", { name: "Next slide" }).click();
-      await expect(controls).toContainText(`Slide ${slide} of ${slideCount}`);
-    }
-    await expect(this.rightPanelDownload).toBeVisible();
-  }
-
-  /**
-   * Opens a reply card's Word file in the right panel and checks that its
-   * first page fits the panel's width. The page scale settles after the
-   * pages insert, so the width is read again on each try.
-   */
-  async expectDocxPreviewFitsPanel(title: string): Promise<void> {
-    await this.publishedFileCard(title).click();
-    const preview = this.publishedFilePreview(title);
-    const firstPage = preview.locator("section.docx").first();
-    await expect(firstPage).toBeVisible();
-    await expect
-      .poll(async () => {
-        const [previewBox, pageBox] = await Promise.all([
-          preview.boundingBox(),
-          firstPage.boundingBox(),
-        ]);
-        return (
-          previewBox !== null &&
-          pageBox !== null &&
-          pageBox.width <= previewBox.width
-        );
-      })
-      .toBe(true);
-  }
-
   /** Checks that the right panel's resize handle is the top element at its center. */
   async expectResizeHandleOnTop(): Promise<void> {
     const handle = this.rightPanelResizeHandle();

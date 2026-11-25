@@ -13081,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# Zeile} other {# Zeilen}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# Wort} other {# Wörter}}"
-      },
       "copyButton": {
         "tooltip": "Inhalt kopieren"
       },
@@ -13155,30 +13152,6 @@
         },
         "error": {
           "description": "Die PDF-Datei konnte nicht geladen werden."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Präsentationssteuerung"
-        },
-        "thumbnails": {
-          "toggle": "Folienminiaturen ein-/ausblenden",
-          "resize": "Folienminiaturen skalieren"
-        },
-        "slides": {
-          "label": "Folien"
-        },
-        "previous": {
-          "label": "Vorherige Folie"
-        },
-        "next": {
-          "label": "Nächste Folie"
-        },
-        "slide": {
-          "counter": "Folie {current} von {total}"
-        },
-        "empty": {
-          "label": "Keine Folien in dieser Präsentation"
         }
       }
     },

@@ -315,8 +315,8 @@ covers new files that match it.
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx`, `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-frontend |
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts`, `web/src/app/craft/services/outputInventorySnapshots.ts`, `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts`, `web/src/app/craft/services/filePreview.ts` | craft-frontend |
 | `web/tools/prepare-pdf-assets.cjs`, `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts`, `web/src/lib/spreadsheetPreview.ts` | craft-frontend |
-| `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
-| `web/src/lib/pptx/` | chat-frontend |
+| `web/src/lib/docx/` | craft-frontend |
+| `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
 | `web/src/app/app/scheduled-tasks/`, `web/src/sections/scheduledTasks/`, `web/src/lib/scheduledTasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |

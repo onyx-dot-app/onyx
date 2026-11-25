@@ -1,6 +1,7 @@
 import { test, expect, Page } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
 import { FilePreviewModalPage } from "@tests/e2e/pages/FilePreviewModalPage";
+import { mockChatFilePdfPreview } from "@tests/e2e/utils/chatMock";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -232,12 +233,10 @@ test.describe("File preview modal from chat file links", () => {
     expect(download.suggestedFilename()).toContain("data.csv");
   });
 
-  test("clicking a .docx file link opens the preview modal and renders content", async ({
+  test("clicking a .docx file link opens the preview modal and shows the server's PDF", async ({
     page,
   }) => {
     const mockContent = `Here is your document: [report.docx](/api/chat/file/${MOCK_FILE_ID})`;
-
-    // Serve a real .docx fixture so docx-preview can parse it
     const docxBuffer = fs.readFileSync(
       path.join(__dirname, "../fixtures/three_images.docx")
     );
@@ -250,6 +249,7 @@ test.describe("File preview modal from chat file links", () => {
         body: docxBuffer,
       });
     });
+    await mockChatFilePdfPreview(page);
 
     await sendMessageWithMockResponse(
       page,
@@ -260,7 +260,7 @@ test.describe("File preview modal from chat file links", () => {
     const previewModal = new FilePreviewModalPage(page);
     await previewModal.openFromLastAnswer("report.docx");
     await previewModal.expectFileWithDownload("report.docx");
-    await previewModal.expectDocxPages();
+    await previewModal.expectPdfPage(1, 2);
   });
 
   test("clicking a PDF file link opens the preview modal and pages through it", async ({

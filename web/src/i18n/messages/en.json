@@ -13081,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# line} other {# lines}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# word} other {# words}}"
-      },
       "copyButton": {
         "tooltip": "Copy content"
       },
@@ -13155,30 +13152,6 @@
         },
         "error": {
           "description": "The PDF file could not be loaded."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Presentation controls"
-        },
-        "thumbnails": {
-          "toggle": "Toggle slide thumbnails",
-          "resize": "Resize slide thumbnails"
-        },
-        "slides": {
-          "label": "Slides"
-        },
-        "previous": {
-          "label": "Previous slide"
-        },
-        "next": {
-          "label": "Next slide"
-        },
-        "slide": {
-          "counter": "Slide {current} of {total}"
-        },
-        "empty": {
-          "label": "No slides in this presentation"
         }
       }
     },

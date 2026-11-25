@@ -1,4 +1,5 @@
 import { fetchChatFile } from "@/lib/chat/svc";
+import { FetchError } from "@/lib/fetcher";
 import { loadChatFilePreview } from "@/lib/filePreview/loadChatFilePreview";
 
 jest.mock("@/lib/chat/svc", () => ({
@@ -57,7 +58,7 @@ test("a text file reads its body; the response names the file and its type", asy
 
   const data = await loadChatFilePreview("file-1", "shown name", signal);
 
-  expect(fetchChatFile).toHaveBeenCalledWith("file-1", false, signal);
+  expect(fetchChatFile).toHaveBeenCalledWith("file-1", "original", signal);
   expect(data).toEqual({
     name: "stored.py",
     mimeType: "text/x-python",
@@ -90,7 +91,7 @@ test("a spreadsheet name loads only the parsed sheets", async () => {
   const data = await loadChatFilePreview("file-1", "book.xlsx", signal);
 
   expect(fetchChatFile).toHaveBeenCalledTimes(1);
-  expect(fetchChatFile).toHaveBeenCalledWith("file-1", true, signal);
+  expect(fetchChatFile).toHaveBeenCalledWith("file-1", "parsed", signal);
   expect(data).toMatchObject({ kind: "spreadsheet", sheets: SHEETS.sheets });
 });
 
@@ -112,8 +113,80 @@ test("a spreadsheet type drops the workbook and loads the parsed sheets", async 
   const data = await loadChatFilePreview("file-1", "renamed", signal);
 
   expect(workbook.cancelled()).toBe(true);
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-1", true, signal);
+  expect(fetchChatFile).toHaveBeenLastCalledWith("file-1", "parsed", signal);
   expect(data).toMatchObject({ kind: "spreadsheet", name: "renamed.xlsx" });
+});
+
+const PPTX_TYPE =
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+test("a Word or PowerPoint name loads only the server's PDF", async () => {
+  jest
+    .mocked(fetchChatFile)
+    .mockResolvedValue(
+      fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
+    );
+
+  const data = await loadChatFilePreview("file-1", "deck.pptx", signal);
+
+  expect(fetchChatFile).toHaveBeenCalledTimes(1);
+  expect(fetchChatFile).toHaveBeenCalledWith("file-1", "pdf", signal);
+  if (data.kind !== "pdf") throw new Error(`Expected a PDF, got ${data.kind}`);
+  expect(data.name).toBe("deck.pptx");
+  expect(data.mimeType).toBe(PPTX_TYPE);
+  expect(data.blob.type).toBe("application/pdf");
+});
+
+test("a PowerPoint type drops the original and loads the server's PDF", async () => {
+  const original = trackedBody([new Uint8Array(10)]);
+  jest
+    .mocked(fetchChatFile)
+    .mockResolvedValueOnce(fileResponse(original.stream, PPTX_TYPE, "renamed"))
+    .mockResolvedValueOnce(
+      fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
+    );
+
+  const data = await loadChatFilePreview("file-1", "renamed", signal);
+
+  expect(original.cancelled()).toBe(true);
+  expect(fetchChatFile).toHaveBeenLastCalledWith("file-1", "pdf", signal);
+  expect(data).toMatchObject({ kind: "pdf", name: "renamed.pptx" });
+});
+
+test("the server's PDF stops at the PDF limit", async () => {
+  const body = trackedBody([new Uint8Array(10)]);
+  const response = fileResponse(body.stream, "application/pdf");
+  response.headers.set("Content-Length", String(200 * MB));
+  jest.mocked(fetchChatFile).mockResolvedValue(response);
+
+  const data = await loadChatFilePreview("file-1", "letter.docx", signal);
+
+  expect(data).toMatchObject({
+    kind: "tooLarge",
+    limitMB: 100,
+    name: "letter.docx",
+  });
+  expect(body.cancelled()).toBe(true);
+});
+
+test("a file the server cannot convert has no preview; other failures fail the load", async () => {
+  jest.mocked(fetchChatFile).mockRejectedValueOnce(
+    new FetchError("Failed to load document.", 422, {
+      error_code: "PREVIEW_UNAVAILABLE",
+    })
+  );
+  await expect(
+    loadChatFilePreview("file-1", "deck.pptx", signal)
+  ).resolves.toMatchObject({ kind: "unavailable", name: "deck.pptx" });
+
+  jest
+    .mocked(fetchChatFile)
+    .mockRejectedValueOnce(
+      new FetchError("Failed to load document.", 503, null)
+    );
+  await expect(
+    loadChatFilePreview("file-1", "deck.pptx", signal)
+  ).rejects.toThrow("Failed to load document.");
 });
 
 test("a malformed sheets payload fails the load", async () => {

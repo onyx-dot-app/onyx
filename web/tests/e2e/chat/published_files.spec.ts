@@ -14,6 +14,7 @@ import {
   buildMockPublishFilesStream,
   MockPublishedFile,
   mockChatEndpoint,
+  mockChatFilePdfPreview,
   publishFilesPackets,
   resetTurnCounter,
 } from "@tests/e2e/utils/chatMock";
@@ -256,7 +257,7 @@ test.describe("Published files", () => {
     await expect(chatPage.publishedFilesPanelCards()).toHaveCount(6);
   });
 
-  test("a file tab shows markdown as a document, a CSV as a grid, a PDF and a Word file as pages, and a deck as slides", async ({
+  test("a file tab shows markdown as a document, a CSV as a grid, and a PDF, a Word file and a deck as pages", async ({
     page,
     chatPage,
   }) => {
@@ -320,6 +321,7 @@ test.describe("Published files", () => {
       deck,
       readFileSync(join(__dirname, "../fixtures/two_slides.pptx"))
     );
+    await mockChatFilePdfPreview(page);
     const firstPage = readFileSync(
       join(__dirname, "../fixtures/first_page.jpg")
     );
@@ -343,10 +345,10 @@ test.describe("Published files", () => {
     // A quoted comma stays inside its cell
     await chatPage.expectSpreadsheetPreview("Q3 sales", "Smith, Jane");
     await chatPage.expectPdfPreview("Q3 slides", 2);
-    await chatPage.expectPptxPreview("Q3 deck", 2, "Q3 review");
-
-    // The pages fit the panel, and the resize handle stays over them
-    await chatPage.expectDocxPreviewFitsPanel("Q3 letter");
+    // The server converts a deck and a Word file to a PDF
+    await chatPage.expectPdfPreview("Q3 deck", 2);
+    await chatPage.expectPdfPreview("Q3 letter", 2);
+    // The resize handle stays over the pages
     await chatPage.expectResizeHandleOnTop();
 
     // The Files list shows the first pages that the server drew at publish

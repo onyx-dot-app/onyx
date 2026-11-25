@@ -10,6 +10,7 @@ import {
   buildMockImageGenStream,
   buildMockStream,
   mockChatEndpoint,
+  mockChatFilePdfPreview,
   resetTurnCounter,
 } from "@tests/e2e/utils/chatMock";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
@@ -363,52 +364,40 @@ test.describe("Chat File Uploads", () => {
     });
   });
 
-  test.describe("Docx Preview Modal", () => {
-    // Exercises the full pipeline: a real .docx is uploaded and stored, then
-    // previewed by fetching the *actually stored* bytes from /api/chat/file —
-    // deliberately NOT mocked, unlike file_preview_modal.spec.ts which serves a
-    // pristine binary. Guards against upload-time storage that strips the .docx
-    // binary (e.g. converting to text), which leaves docx-preview unable to
-    // parse it and surfaces the fallback error.
-    test("uploaded docx is previewable", async ({ page }) => {
+  test.describe("Deck Preview Modal", () => {
+    // The server converts an uploaded deck to a PDF in the sandbox, which a
+    // test stack may not have, so the PDF is mocked.
+    test("an uploaded deck shows the server's PDF pages", async ({ page }) => {
       await chat.goto();
       await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
+      await mockChatFilePdfPreview(page);
 
-      const fileName = "sample_text.docx";
-      const docxBuffer = fs.readFileSync(
-        path.join(__dirname, "../fixtures/sample_text.docx")
-      );
-
+      const fileName = "two_slides.pptx";
       await uploadFilesToChat(page, [
         {
           name: fileName,
           mimeType:
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          buffer: docxBuffer,
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          buffer: fs.readFileSync(
+            path.join(__dirname, "../fixtures/two_slides.pptx")
+          ),
         },
       ]);
 
-      await sendMessage(page, "Preview this document");
+      await sendMessage(page, "Preview this deck");
 
       const userMessage = page.locator("#onyx-human-message").first();
       const fileDisplay = userMessage.locator("#onyx-file");
       await expect(fileDisplay).toBeVisible();
+      await fileDisplay
+        .getByRole("button", { name: "Expand document" })
+        .click();
 
-      const expandButton = fileDisplay.locator(
-        'button[aria-label="Expand document"]'
-      );
-      await expect(expandButton).toBeVisible();
-      await expandButton.click();
-
-      const modal = page.getByRole("dialog");
-      await expect(modal).toBeVisible({ timeout: 5000 });
-      await expect(modal.getByText(fileName)).toBeVisible();
-
-      // The original .docx binary must round-trip through storage so
-      // docx-preview can render it — never the error card.
-      await new FilePreviewModalPage(page).expectDocxPages(
-        "PINEAPPLE-QUASAR-42"
-      );
+      const previewModal = new FilePreviewModalPage(page);
+      await previewModal.expectFileWithDownload(fileName);
+      await previewModal.expectPdfPage(1, 2);
+      await previewModal.nextPdfPage();
+      await previewModal.expectPdfPage(2, 2);
     });
   });
 });

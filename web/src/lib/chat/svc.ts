@@ -9,31 +9,42 @@ import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 const CHAT_FILE_PREFIX = "/api/chat/file";
 
 /**
+ * The form of a chat file to fetch: the stored bytes, a spreadsheet's sheets
+ * as a JSON payload of per-sheet CSV text, or a Word or PowerPoint file as a
+ * PDF that the server converts. The server ignores `parsed` for a file that is
+ * not a spreadsheet.
+ */
+export type ChatFileVariant = "original" | "parsed" | "pdf";
+
+const CHAT_FILE_VARIANT_QUERY: Record<ChatFileVariant, string> = {
+  original: "",
+  parsed: "?parsed=true",
+  pdf: "?preview=pdf",
+};
+
+/**
  * Fetch a chat file by its ID, returning the raw Response.
  *
  * The caller is responsible for consuming the body (e.g. `.blob()`,
  * `.text()`) since different consumers need different formats.
  *
- * When `parsed` is true, spreadsheet files (xlsx) are returned as a JSON
- * payload of per-sheet CSV text instead of raw binary bytes; the param is a
- * no-op for all other file types.
+ * Throws a `FetchError`. With `pdf`, status 422 and error code
+ * `PREVIEW_UNAVAILABLE` mean that the server cannot make a PDF of the file.
  */
 export async function fetchChatFile(
   fileId: string,
-  parsed: boolean = false,
+  variant: ChatFileVariant = "original",
   signal?: AbortSignal
 ): Promise<Response> {
   const response = await fetch(
-    `${CHAT_FILE_PREFIX}/${encodeURIComponent(fileId)}${
-      parsed ? "?parsed=true" : ""
-    }`,
+    `${CHAT_FILE_PREFIX}/${encodeURIComponent(fileId)}${CHAT_FILE_VARIANT_QUERY[variant]}`,
     // The server marks a file immutable; the default cache mode reuses it
     // and fetches a failed load again.
     { method: "GET", signal }
   );
 
   if (!response.ok) {
-    throw new Error("Failed to load document.");
+    throw await fetchErrorFrom(response, "Failed to load document.");
   }
 
   return response;

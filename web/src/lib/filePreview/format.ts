@@ -7,7 +7,8 @@ import {
 
 /**
  * How a file previews. Code, text and data files share `code`; HTML and SVG
- * also render, with their source a toggle away.
+ * also render, with their source a toggle away. A Word or PowerPoint file
+ * (`office`) previews as a PDF that the server converts.
  */
 export type FilePreviewFormat =
   | { kind: "code"; language: string; render?: "html" | "svg" }
@@ -15,8 +16,7 @@ export type FilePreviewFormat =
   | { kind: "csv" }
   | { kind: "spreadsheet" }
   | { kind: "pdf" }
-  | { kind: "docx" }
-  | { kind: "pptx" }
+  | { kind: "office" }
   | { kind: "image" }
   | { kind: "unsupported" };
 
@@ -24,10 +24,10 @@ const SPREADSHEET_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.ms-excel.sheet.macroenabled.12",
 ];
-const DOCX_MIME_TYPE =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const PPTX_MIME_TYPE =
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+const OFFICE_MIME_TYPES = [
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+];
 const MARKDOWN_MIME_TYPES = [
   "text/markdown",
   "text/x-markdown",
@@ -71,8 +71,7 @@ export function resolveFilePreviewFormat(
   if (name.endsWith(".csv")) return { kind: "csv" };
   if (/\.xls[xm]$/.test(name)) return { kind: "spreadsheet" };
   if (isMarkdownFile(name)) return { kind: "markdown" };
-  if (name.endsWith(".docx")) return { kind: "docx" };
-  if (name.endsWith(".pptx")) return { kind: "pptx" };
+  if (/\.(docx|pptx)$/.test(name)) return { kind: "office" };
   if (TEXT_EXTENSIONS.test(name))
     return { kind: "code", language: "plaintext" };
   const dataLanguage = getDataLanguage(name);
@@ -85,8 +84,7 @@ export function resolveFilePreviewFormat(
   if (mime === "text/csv") return { kind: "csv" };
   if (SPREADSHEET_MIME_TYPES.includes(mime)) return { kind: "spreadsheet" };
   if (MARKDOWN_MIME_TYPES.includes(mime)) return { kind: "markdown" };
-  if (mime === DOCX_MIME_TYPE) return { kind: "docx" };
-  if (mime === PPTX_MIME_TYPE) return { kind: "pptx" };
+  if (OFFICE_MIME_TYPES.includes(mime)) return { kind: "office" };
   if (TEXT_MIME_TYPES.includes(mime))
     return { kind: "code", language: "plaintext" };
   const mimeLanguage = getLanguageByMime(mime);

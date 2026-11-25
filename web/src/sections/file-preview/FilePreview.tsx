@@ -25,8 +25,6 @@ import {
 } from "@/sections/file-preview/CodeFilePreview";
 import { MarkdownFilePreview } from "@/sections/file-preview/MarkdownFilePreview";
 import { SpreadsheetPreview } from "@/sections/file-preview/SpreadsheetPreview";
-import { DocxPreview } from "@/sections/file-preview/DocxPreview";
-import { PptxPreview } from "@/sections/file-preview/PptxPreview";
 import { ImagePreview } from "@/sections/file-preview/ImagePreview";
 
 // An HTML preview is a static page: its inline styles and its data or blob
@@ -107,7 +105,7 @@ export const FilePreviewBody = memo(function FilePreviewBody({
         onRetry={retry}
       />
     );
-  } else if (renderFailed) {
+  } else if (renderFailed || data.kind === "unavailable") {
     content = (
       <PreviewUnavailable
         fileName={data.name}
@@ -227,19 +225,6 @@ export const FilePreviewBody = memo(function FilePreviewBody({
         break;
       case "pdf":
         content = <PdfViewer blob={data.blob} onError={failRender} />;
-        footer = <FloatingFooter right={download} />;
-        break;
-      case "docx":
-        content = (
-          <DocxPreview
-            bytes={data.bytes}
-            actions={(text) => (text === null ? download : textActions(text))}
-            onError={failRender}
-          />
-        );
-        break;
-      case "pptx":
-        content = <PptxPreview bytes={data.bytes} onError={failRender} />;
         footer = <FloatingFooter right={download} />;
         break;
       case "image":

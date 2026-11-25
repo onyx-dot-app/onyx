@@ -9,8 +9,7 @@ import {
 } from "@tests/setup/test-utils";
 import { fileResponse } from "@tests/setup/fileResponse";
 import { fetchChatFile } from "@/lib/chat/svc";
-import { renderDocx } from "@/lib/docx/renderDocx";
-import { pptxToHtml } from "@jvmr/pptx-to-html";
+import { FetchError } from "@/lib/fetcher";
 import { useChatFilePreview } from "@/lib/filePreview/hooks";
 import {
   FilePreviewBody,
@@ -20,16 +19,6 @@ import { CodeFilePreview } from "@/sections/file-preview/CodeFilePreview";
 
 jest.mock("@/lib/chat/svc", () => ({
   fetchChatFile: jest.fn(),
-}));
-
-jest.mock("@/lib/docx/renderDocx", () => ({
-  renderDocx: jest.fn(),
-}));
-
-// jsdom cannot run the parser's namespaced selectors; the tests give its
-// slide markup
-jest.mock("@jvmr/pptx-to-html", () => ({
-  pptxToHtml: jest.fn(),
 }));
 
 const mockPdfLoad: { fail: boolean; pageFail: "load" | "render" | null } = {
@@ -491,7 +480,7 @@ describe("documents", () => {
     expect(await screen.findByText("North")).toBeVisible();
     expect(fetchChatFile).toHaveBeenCalledWith(
       "file-1",
-      true,
+      "parsed",
       expect.any(AbortSignal)
     );
     fireEvent.click(screen.getByRole("button", { name: "Detail" }));
@@ -559,99 +548,51 @@ describe("documents", () => {
     }
   );
 
-  const PPTX_TYPE =
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-  const slideRoot = (region: HTMLElement) =>
-    Array.from(region.querySelectorAll("div")).find(
-      (element) => element.shadowRoot
-    )?.shadowRoot;
-  const slideMarkup = (text: string) =>
-    `<div class="slide" style="position: relative; width: 960px; height: 540px;"><div>${text}</div></div>`;
+  test.each([
+    [
+      "deck.pptx",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ],
+    [
+      "letter.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ],
+  ])(
+    "%s shows as the PDF pages that the server converts it to, and downloads the original",
+    async (name, mimeType) => {
+      jest
+        .mocked(fetchChatFile)
+        .mockImplementation(async (_fileId, variant) =>
+          variant === "pdf"
+            ? fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
+            : fileResponse("original", mimeType, name)
+        );
+      renderPreview(name);
 
-  test("a PowerPoint deck shows a loader, then its slides with a slide list and arrows", async () => {
-    let respond: (slides: string[]) => void = () => undefined;
-    jest.mocked(pptxToHtml).mockReturnValue(
-      new Promise((resolve) => {
-        respond = resolve;
+      expect(await screen.findByText("1 / 3")).toBeVisible();
+      expect(fetchChatFile).toHaveBeenCalledTimes(1);
+      expect(fetchChatFile).toHaveBeenCalledWith(
+        "file-1",
+        "pdf",
+        expect.any(AbortSignal)
+      );
+      expect(screen.getByTestId("pdf-page")).toHaveAttribute("data-page", "1");
+      expectDownloadLink("Download", name);
+    }
+  );
+
+  test("a deck that the server cannot convert offers one download and no retry", async () => {
+    jest.mocked(fetchChatFile).mockRejectedValue(
+      new FetchError("Failed to load document.", 422, {
+        error_code: "PREVIEW_UNAVAILABLE",
+        detail: "No preview",
       })
     );
-    jest
-      .mocked(fetchChatFile)
-      .mockResolvedValue(fileResponse("deck", PPTX_TYPE, "deck.pptx"));
     renderPreview("deck.pptx");
-
-    expect(
-      await screen.findByRole("status", { name: "Loading" })
-    ).toBeVisible();
-    await act(async () =>
-      respond([slideMarkup("Q3 review"), slideMarkup("Next steps")])
-    );
-
-    const toolbar = await screen.findByRole("toolbar", {
-      name: "Presentation controls",
-    });
-    expect(within(toolbar).getByText("Slide 1 of 2")).toBeVisible();
-    const shown = () => screen.getByRole("region", { name: /^Slide \d of 2$/ });
-    expect(slideRoot(shown())?.textContent).toBe("Q3 review");
-    fireEvent.click(screen.getByRole("button", { name: "Next slide" }));
-    expect(within(toolbar).getByText("Slide 2 of 2")).toBeVisible();
-    expect(slideRoot(shown())?.textContent).toBe("Next steps");
-    expect(screen.getByRole("button", { name: "Next slide" })).toBeDisabled();
-    // The slide list selects a slide, and the arrow keys move in it. It is
-    // one tab stop, the current slide, and focus follows the arrow keys.
-    const first = screen.getByRole("button", { name: "Slide 1 of 2" });
-    const second = screen.getByRole("button", { name: "Slide 2 of 2" });
-    fireEvent.click(first);
-    expect(within(toolbar).getByText("Slide 1 of 2")).toBeVisible();
-    expect(first).toHaveAttribute("tabindex", "0");
-    expect(second).toHaveAttribute("tabindex", "-1");
-    act(() => first.focus());
-    fireEvent.keyDown(first, { key: "ArrowDown" });
-    expect(within(toolbar).getByText("Slide 2 of 2")).toBeVisible();
-    expect(second).toHaveFocus();
-    expect(second).toHaveAttribute("tabindex", "0");
-    expectDownloadLink("Download", "deck.pptx");
-  });
-
-  test("a PowerPoint deck that does not parse offers one download", async () => {
-    jest.mocked(pptxToHtml).mockRejectedValue(new Error("corrupt"));
-    jest
-      .mocked(fetchChatFile)
-      .mockResolvedValue(fileResponse("broken", PPTX_TYPE, "bad.pptx"));
-    renderPreview("bad.pptx");
 
     await screen.findByText("Cannot preview this file");
-    expectUnavailableCard("bad.pptx");
-  });
-
-  test("a slide runs no script and loads nothing from outside the deck", async () => {
-    const ran = jest.fn();
-    Object.assign(window, { mockSlideScriptRan: ran });
-    jest
-      .mocked(pptxToHtml)
-      .mockResolvedValue([
-        slideMarkup(
-          '<script>window.mockSlideScriptRan()</script><img src="x" onerror="window.mockSlideScriptRan()"><img src="https://tracker.example/p.png"><img src="data:image/png;base64,AAAA"><div style="background-image: url(\'https://tracker.example/bg.png\'); color: red;">Safe text</div>'
-        ),
-      ]);
-    jest
-      .mocked(fetchChatFile)
-      .mockResolvedValue(fileResponse("deck", PPTX_TYPE, "deck.pptx"));
-    renderPreview("deck.pptx");
-
-    const region = await screen.findByRole("region", { name: "Slide 1 of 1" });
-    const root = slideRoot(region);
-    expect(root?.textContent).toContain("Safe text");
-    expect(root?.querySelector("script")).toBeNull();
-    expect(root?.querySelector("[onerror]")).toBeNull();
-    const sources = Array.from(root?.querySelectorAll("img") ?? []).map(
-      (image) => image.getAttribute("src")
-    );
-    expect(sources).toEqual([null, null, "data:image/png;base64,AAAA"]);
-    const styled = root?.querySelector<HTMLElement>("[style*='color']");
-    expect(styled?.style.backgroundImage).toBe("");
-    expect(styled?.style.color).toBe("red");
-    expect(ran).not.toHaveBeenCalled();
+    expectUnavailableCard("deck.pptx");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   /** Observed elements, each resized through its observer's callback. */
@@ -668,22 +609,23 @@ describe("documents", () => {
     return observed;
   }
 
-  async function renderDeck() {
-    jest.mocked(pptxToHtml).mockResolvedValue([slideMarkup("Q3 review")]);
+  async function renderPdf() {
     jest
       .mocked(fetchChatFile)
-      .mockResolvedValue(fileResponse("deck", PPTX_TYPE, "deck.pptx"));
-    renderPreview("deck.pptx");
-    await screen.findByRole("region", { name: "Slide 1 of 1" });
+      .mockResolvedValue(
+        fileResponse("%PDF-1.4", "application/pdf", "report.pdf")
+      );
+    renderPreview("report.pdf");
+    await screen.findByText("1 / 3");
   }
 
   const separator = () =>
-    screen.queryByRole("separator", { name: "Resize slide thumbnails" });
+    screen.queryByRole("separator", { name: "Resize page thumbnails" });
 
-  test("a deck's thumbnail column follows the width of the row that holds it, and keeps its state at width 0", async () => {
+  test("a PDF's thumbnail column follows the width of the row that holds it, and keeps its state at width 0", async () => {
     const observed = observeResizes();
     try {
-      await renderDeck();
+      await renderPdf();
       const column = separator();
       if (!column) throw new Error("the column shows before a measurement");
       // The observed row holds the column and its resize separator
@@ -712,7 +654,7 @@ describe("documents", () => {
       expect(separator()).toBeInTheDocument();
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Toggle slide thumbnails" })
+        screen.getByRole("button", { name: "Toggle page thumbnails" })
       );
       expect(separator()).not.toBeInTheDocument();
       // The toggle wins over a later width
@@ -723,144 +665,21 @@ describe("documents", () => {
     }
   });
 
-  test("a deck on a phone-width preview mounts without its thumbnail column", async () => {
+  test("a PDF on a phone-width preview mounts without its thumbnail column", async () => {
     // The observer never reports: the row's width comes from its mount
     observeResizes();
     jest
       .spyOn(HTMLElement.prototype, "clientWidth", "get")
       .mockReturnValue(390);
     try {
-      await renderDeck();
+      await renderPdf();
       expect(separator()).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Toggle slide thumbnails" })
+        screen.getByRole("button", { name: "Toggle page thumbnails" })
       ).toHaveAttribute("aria-pressed", "false");
     } finally {
       jest.restoreAllMocks();
     }
-  });
-
-  test("a Word document shows a loader, then its pages in a shadow root", async () => {
-    const body = document.createElement("div");
-    body.innerHTML = "<section class='docx'><p>Project proposal</p></section>";
-    let rendered: (
-      value: Awaited<ReturnType<typeof renderDocx>>
-    ) => void = () => undefined;
-    jest.mocked(renderDocx).mockReturnValue(
-      new Promise((resolve) => {
-        rendered = resolve;
-      })
-    );
-    jest
-      .mocked(fetchChatFile)
-      .mockResolvedValue(
-        fileResponse(
-          "docx",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "proposal.docx"
-        )
-      );
-    const view = renderPreview("proposal.docx");
-
-    await waitFor(() => expect(renderDocx).toHaveBeenCalled());
-    expect(screen.getByRole("status", { name: "Loading" })).toBeVisible();
-    await act(async () =>
-      rendered({ body, styles: document.createElement("div") })
-    );
-    await waitFor(() =>
-      expect(
-        Array.from(view.container.querySelectorAll("div")).some((element) =>
-          element.shadowRoot?.textContent?.includes("Project proposal")
-        )
-      ).toBe(true)
-    );
-    expect(screen.getByText("2 words")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Copy content" })).toBeVisible();
-    expectDownloadLink("Download", "proposal.docx");
-  });
-
-  test("a Word document that renders in a hidden tab counts and copies its words", async () => {
-    const writeText = jest.fn(async () => undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-    const body = document.createElement("div");
-    body.innerHTML =
-      "<section class='docx'><p>Quarterly plan</p><table><tr><td><p>Revenue up</p></td></tr></table></section>";
-    // A hidden subtree has no laid-out text
-    Object.defineProperty(body, "innerText", { value: "" });
-    jest
-      .mocked(renderDocx)
-      .mockResolvedValue({ body, styles: document.createElement("div") });
-    jest
-      .mocked(fetchChatFile)
-      .mockResolvedValue(
-        fileResponse(
-          "docx",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "plan.docx"
-        )
-      );
-    render(
-      <div style={{ visibility: "hidden" }}>
-        <FilePreviewScope>
-          <PreviewOf name="plan.docx" />
-        </FilePreviewScope>
-      </div>
-    );
-
-    expect(await screen.findByText("4 words")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("Copy content"));
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith("Quarterly plan\nRevenue up")
-    );
-  });
-
-  test("a Word document's manual line break separates words", async () => {
-    const writeText = jest.fn(async () => undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-    const body = document.createElement("div");
-    body.innerHTML = "<section class='docx'><p>First<br>Second</p></section>";
-    jest
-      .mocked(renderDocx)
-      .mockResolvedValue({ body, styles: document.createElement("div") });
-    jest
-      .mocked(fetchChatFile)
-      .mockResolvedValue(
-        fileResponse(
-          "docx",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "lines.docx"
-        )
-      );
-    renderPreview("lines.docx");
-
-    expect(await screen.findByText("2 words")).toBeVisible();
-    fireEvent.click(screen.getByLabelText("Copy content"));
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith("First\nSecond")
-    );
-  });
-
-  test("a Word document that does not render offers one download", async () => {
-    jest.mocked(renderDocx).mockRejectedValue(new Error("corrupt"));
-    jest
-      .mocked(fetchChatFile)
-      .mockResolvedValue(
-        fileResponse(
-          "docx",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "bad.docx"
-        )
-      );
-    renderPreview("bad.docx");
-
-    await screen.findByText("Cannot preview this file");
-    expectUnavailableCard("bad.docx");
   });
 });
 

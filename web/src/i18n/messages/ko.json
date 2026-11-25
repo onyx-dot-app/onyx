@@ -13081,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {#줄} other {#줄}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {단어 #개} other {단어 #개}}"
-      },
       "copyButton": {
         "tooltip": "내용 복사"
       },
@@ -13155,30 +13152,6 @@
         },
         "error": {
           "description": "PDF 파일을 불러올 수 없습니다."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "프레젠테이션 컨트롤"
-        },
-        "thumbnails": {
-          "toggle": "슬라이드 썸네일 표시 전환",
-          "resize": "슬라이드 썸네일 크기 조정"
-        },
-        "slides": {
-          "label": "슬라이드"
-        },
-        "previous": {
-          "label": "이전 슬라이드"
-        },
-        "next": {
-          "label": "다음 슬라이드"
-        },
-        "slide": {
-          "counter": "슬라이드 {current} / {total}"
-        },
-        "empty": {
-          "label": "이 프레젠테이션에 슬라이드가 없습니다"
         }
       }
     },
