@@ -760,6 +760,8 @@ class ToolRenderer:
         # An approval request of the call ended without an approval, so its
         # error result is that decision, not a failure.
         self._not_approved = False
+        # The command approval cards of the call that wait for a resolution.
+        self._open_command_approvals: dict[str, None] = {}
 
     def consume(
         self,
@@ -1007,6 +1009,7 @@ class ToolRenderer:
         """Render result details; content already rendered is skipped."""
         objects: list[packets.PacketObj] = []
         if isinstance(details, CommandApprovalRequest):
+            self._open_command_approvals[details.approval_id] = None
             return [
                 packets.Packet(
                     placement=self.placement,
@@ -1023,6 +1026,7 @@ class ToolRenderer:
                 )
             ]
         if isinstance(details, CommandApprovalResolved):
+            self._open_command_approvals.pop(details.approval_id, None)
             return [
                 packets.Packet(
                     placement=self.placement,
@@ -1219,6 +1223,17 @@ class ToolRenderer:
         output = self.start()
         output.extend(self._result_packets(result))
         self._finished = True
+        # A stopped call reports no more progress, so its open cards close here.
+        output.extend(
+            packets.Packet(
+                placement=self.placement,
+                obj=packets.ToolApprovalResolved(
+                    approval_id=approval_id, outcome="cancelled"
+                ),
+            )
+            for approval_id in self._open_command_approvals
+        )
+        self._open_command_approvals.clear()
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
                 packets.Packet(

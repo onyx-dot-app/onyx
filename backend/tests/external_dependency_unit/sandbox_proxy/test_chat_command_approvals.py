@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections.abc import Callable, Generator
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Session
 from onyx.agents.tools import ToolProgress
 from onyx.cache.factory import get_cache_backend
 from onyx.db.chat import create_chat_session
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
@@ -34,11 +36,13 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
+from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import parse_destination_policy
 from onyx.sandbox_proxy.sandbox_identity.models import SessionContext
 from onyx.server.features.action_policies.models import ApprovalChoice
+from onyx.server.query_and_chat import command_approvals
 from onyx.server.query_and_chat.chat_backend import decide_approval
 from onyx.server.query_and_chat.models import ChatApprovalDecisionRequest
 from onyx.tools.tool_implementations.sandbox.command_approvals import (
@@ -224,6 +228,8 @@ def _command(chat: _Chat) -> tuple[UUID, _Reports, CommandApprovals]:
     ("choice", "expected", "outcome"),
     [
         (ApprovalChoice.APPROVE_ONCE, ApprovalDecision.APPROVED, "approved"),
+        # Clients that know no command scope offer a chat approval.
+        (ApprovalChoice.APPROVE_SESSION, ApprovalDecision.APPROVED, "approved"),
         (ApprovalChoice.REJECT, ApprovalDecision.REJECTED, "rejected"),
     ],
 )
@@ -310,3 +316,132 @@ def test_a_stop_refuses_the_requests_that_wait(
     row = db_session.get(ActionApproval, held.approval_id)
     assert row is not None and row.decided_via == ApprovalDecidedVia.USER
     assert not gate._command_in_foreground(ctx)
+
+
+def test_the_end_reports_a_decision_that_the_watcher_did_not_read(
+    db_session: Session, chat: _Chat
+) -> None:
+    """The command exits right after the approval: the card still ends with
+    the decision."""
+    command_id, reports, approvals = _command(chat)
+    gate = _gate()
+    held = _HeldRequest(gate, _ctx(chat, command_id), _matched(chat.integration_id))
+    reports.wait_for(lambda: bool(reports.cards()))
+    # The watcher stops before it reads the decision.
+    approvals._stop.set()
+    assert approvals._thread is not None
+    approvals._thread.join(timeout=_WAIT_S)
+
+    _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_ONCE)
+    approvals.end(cancelled=False, exited=True)
+
+    assert held.result() == ApprovalDecision.APPROVED
+    assert reports.outcomes() == {str(held.approval_id): "approved"}
+
+
+def test_a_call_that_ends_leaves_the_requests_to_another_call_of_the_command(
+    db_session: Session, chat: _Chat
+) -> None:
+    """Two parallel write_stdin calls wait on one command: the first to end
+    leaves its requests waiting for the other."""
+    command_id, reports, first = _command(chat)
+    second = CommandApprovals(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA,
+        chat_session_id=chat.chat_session_id,
+        update=reports,
+    )
+    second.begin(command_id)
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    try:
+        held = _HeldRequest(gate, ctx, _matched(chat.integration_id))
+        reports.wait_for(lambda: bool(reports.cards()))
+
+        first.end(cancelled=False, exited=False)
+
+        assert gate._command_in_foreground(ctx)
+        assert second.holds()
+        _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_ONCE)
+        assert held.result() == ApprovalDecision.APPROVED
+    finally:
+        second.end(cancelled=False, exited=True)
+    assert not gate._command_in_foreground(ctx)
+
+
+def _matched_actions(integration_id: int, *action_types: str) -> AllMatchedActions:
+    return _matched(integration_id).model_copy(
+        update={
+            "actions": tuple(
+                MatchedAction(
+                    action_type=action_type,
+                    display_name=action_type,
+                    description=action_type,
+                    policy=ActionPolicy.ASK,
+                )
+                for action_type in action_types
+            )
+        }
+    )
+
+
+def test_the_command_grants_together_cover_a_waiting_request(
+    db_session: Session, chat: _Chat
+) -> None:
+    """The proxy checks a request against all the command's grants, so the
+    decision that completes them also approves a waiting request."""
+    command_id, reports, approvals = _command(chat)
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    create, remove = "issues.create", "issues.delete"
+    try:
+        first = _HeldRequest(gate, ctx, _matched_actions(chat.integration_id, create))
+        both = _HeldRequest(
+            gate, ctx, _matched_actions(chat.integration_id, create, remove)
+        )
+        last = _HeldRequest(gate, ctx, _matched_actions(chat.integration_id, remove))
+        reports.wait_for(lambda: len(reports.cards()) == 3)
+
+        _decide(db_session, chat, first.approval_id, ApprovalChoice.APPROVE_COMMAND)
+        assert first.result() == ApprovalDecision.APPROVED
+        _decide(db_session, chat, last.approval_id, ApprovalChoice.APPROVE_COMMAND)
+
+        assert last.result() == ApprovalDecision.APPROVED
+        assert both.result() == ApprovalDecision.APPROVED
+    finally:
+        approvals.end(cancelled=False, exited=True)
+
+
+def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A request that checks the grant before it is saved has committed its
+    row, so the scan after the save approves it. The decision is committed
+    before the scan locks other rows, so two decisions cannot deadlock."""
+    command_id = uuid4()
+    gate = _gate()
+    approval_id = gate._persist_approval_row(
+        _ctx(chat, command_id), _matched(chat.integration_id), {}
+    )
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    seen: list[tuple[bool, ApprovalDecision | None]] = []
+    original = command_approvals.action_approval.list_command_action_approvals
+
+    def scan(db: Session, **kwargs: Any) -> list[ActionApproval]:
+        with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as other:
+            row = other.get(ActionApproval, approval_id)
+            assert row is not None
+            covered = approval_cache.command_grants_cover(
+                command_id, chat.integration_id, ["issues.create"], cache
+            )
+            seen.append((covered, row.decision))
+        return original(db, **kwargs)
+
+    monkeypatch.setattr(
+        command_approvals.action_approval, "list_command_action_approvals", scan
+    )
+    try:
+        _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_COMMAND)
+    finally:
+        approval_cache.drop_command_grants(command_id, cache)
+
+    assert seen == [(True, ApprovalDecision.APPROVED)]

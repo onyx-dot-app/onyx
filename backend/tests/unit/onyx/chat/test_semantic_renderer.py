@@ -94,6 +94,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ReasoningDelta,
     SearchToolStart,
     SectionEnd,
+    ToolApprovalResolved,
     ToolCallArgumentDelta,
 )
 from onyx.tools.models import (
@@ -102,6 +103,10 @@ from onyx.tools.models import (
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.sandbox.models import (
+    CommandApprovalRequest,
+    CommandApprovalResolved,
+)
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
@@ -1319,3 +1324,30 @@ def test_stop_reason_is_the_same_live_and_on_replay(
     for packets in (output, replay):
         stops = [p.obj for p in packets if isinstance(p.obj, OverallStop)]
         assert [stop.stop_reason for stop in stops] == [reason]
+
+
+def test_a_completed_call_closes_its_open_command_approval_cards() -> None:
+    """A stopped call reports no resolution of its own, so its open cards
+    close when the call completes."""
+    renderer = ToolRenderer(
+        ToolCall(id="call", name="exec_command", arguments={"cmd": "x"}),
+        Placement(turn_index=0),
+    )
+    for approval_id in ("open", "resolved"):
+        renderer.update(
+            CommandApprovalRequest(
+                approval_id=approval_id,
+                app_name="Tracker",
+                action_type="issues.create",
+                display_name="Create an issue",
+                arguments={},
+                can_approve_for_command=True,
+            )
+        )
+    renderer.update(CommandApprovalResolved(approval_id="resolved", outcome="approved"))
+
+    output = renderer.complete(None)
+
+    resolved = [p.obj for p in output if isinstance(p.obj, ToolApprovalResolved)]
+    assert [(r.approval_id, r.outcome) for r in resolved] == [("open", "cancelled")]
+    assert isinstance(output[-1].obj, SectionEnd)

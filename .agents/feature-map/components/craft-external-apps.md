@@ -381,13 +381,25 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     `HarnessSandbox._collect` does not yield while a row of the command waits.
     The user decides through `POST /chat/approvals/{id}/decision`
     (`server/query_and_chat/command_approvals.py:decide_command_approval`):
-    approve once, `approve_command` (`decided_via` COMMAND_GRANT, a cache set
+    approve once (also `approve_session`, from clients with no command
+    scope), `approve_command` (`decided_via` COMMAND_GRANT, a cache set
     of `integration:action` per command that the gate checks before it holds,
-    which also approves the command's other waiting rows that it covers), or
-    reject. A grant applies only in the foreground, never to an action that
-    always asks, and is deleted when the command exits. When the call ends,
-    `CommandApprovals.end` refuses the command's waiting rows: REJECTED by the
-    user on a Stop, EXPIRED otherwise. These rows are not in
+    which also approves the command's other waiting rows that the command's
+    grants together cover), or reject. The decision commits its own row, then
+    saves the grant, then scans the waiting rows: a request that misses the
+    grant committed its row before that check, and two decisions never lock
+    each other's rows. A grant applies only in the foreground, never to an
+    action that always asks, and is deleted when the command exits. The
+    recheck before forwarding checks a COMMAND_GRANT row against the current
+    policy, as a SESSION_GRANT row. Only a call whose `ToolContext.
+    shows_command_approvals` is set holds: a root agent of a streamed turn
+    (`chat/agent.py:build_chat_agent`); a background agent or a
+    `run_chat_turn` caller gets `approval_needs_tool`. When the last call of
+    this process that waits on the command ends, `CommandApprovals.end`
+    refuses the command's waiting rows: REJECTED by the user on a Stop,
+    EXPIRED otherwise. Each card ends with its row's outcome; a stopped call
+    reports no progress, so `chat/renderer.py:ToolRenderer.complete` closes
+    its open cards as `cancelled`. These rows are not in
     `approval_request`, so the chat run state, replay and Stop routes never
     read them.
 

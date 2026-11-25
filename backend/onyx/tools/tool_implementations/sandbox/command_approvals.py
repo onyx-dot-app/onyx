@@ -9,9 +9,15 @@ held request as an approval card on the call, and its end as the card's
 resolution. The user decides through `POST /chat/approvals/{id}/decision`,
 which wakes the proxy. The call does not yield while a card waits (`holds`).
 
-When the call ends, the command leaves the foreground and its requests that
-still wait end: rejected by the user on a Stop, expired otherwise. A command
-that exited drops its "approve for this command" grants.
+When the last call that waits on the command ends, the command leaves the
+foreground and its requests that still wait end: rejected by the user on a
+Stop, expired otherwise. A command that exited drops its "approve for this
+command" grants. Each card that a call shows ends with its request's
+outcome; the renderer closes the cards of a stopped call.
+
+Only a call that a client streams holds requests (`ToolContext.
+shows_command_approvals`); a background agent or a non-streaming caller
+holds none, so the proxy refuses the command's Ask requests.
 """
 
 import threading
@@ -45,6 +51,11 @@ logger = setup_logger()
 # foreground mark and reads the decisions of the cards it shows.
 _POLL_SECONDS = 1
 _JOIN_SECONDS = 5.0
+
+# The calls of this process that wait on each command. Parallel write_stdin
+# calls can wait on one command; only the last one to end ends its requests.
+_WAITING_LOCK = threading.Lock()
+_waiting: dict[UUID, int] = {}
 
 
 def _outcome(row: ActionApproval) -> CommandApprovalOutcome:
@@ -95,6 +106,8 @@ class CommandApprovals:
 
     def begin(self, command_id: UUID) -> None:
         self._command_id = command_id
+        with _WAITING_LOCK:
+            _waiting[command_id] = _waiting.get(command_id, 0) + 1
         try:
             approval_cache.mark_command_foreground(
                 command_id, self._chat_session_id, self._cache()
@@ -137,14 +150,59 @@ class CommandApprovals:
         return bool(rows)
 
     def end(self, *, cancelled: bool, exited: bool) -> None:
-        """The call returned: the command leaves the foreground, and its
-        requests that wait end."""
+        """The call returned. When no other call waits on the command, it
+        leaves the foreground and its requests that wait end."""
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=_JOIN_SECONDS)
         command_id = self._command_id
         if command_id is None:
             return
+        with _WAITING_LOCK:
+            _waiting[command_id] -= 1
+            last = _waiting[command_id] == 0
+            if last:
+                del _waiting[command_id]
+        decision = ApprovalDecision.REJECTED if cancelled else ApprovalDecision.EXPIRED
+        ended: list[UUID] = []
+        if last:
+            ended = self._end_command(command_id, decision, exited=exited)
+        # Every card on screen ends with its request's outcome, also one that
+        # the user decided after the watcher's last read.
+        with self._lock:
+            shown = set(self._shown)
+            self._shown.clear()
+        if not shown:
+            return
+        try:
+            with get_session_with_tenant(tenant_id=self._tenant_id) as db:
+                rows = action_approval.list_command_action_approvals(
+                    db,
+                    chat_session_id=self._chat_session_id,
+                    command_id=command_id,
+                    approval_ids=shown,
+                )
+            for row in rows:
+                self._report(
+                    CommandApprovalResolved(
+                        approval_id=str(row.approval_id),
+                        outcome="cancelled"
+                        if row.approval_id in ended
+                        else _outcome(row),
+                    )
+                )
+        except AgentCancelled:
+            # A stopped call reports nothing more; the renderer closes its
+            # open cards (`chat/renderer.py:ToolRenderer.complete`).
+            pass
+        except Exception:
+            logger.exception("command_approvals_report_failed command=%s", command_id)
+
+    def _end_command(
+        self, command_id: UUID, decision: ApprovalDecision, *, exited: bool
+    ) -> list[UUID]:
+        """Take the command out of the foreground and end its requests that
+        wait with `decision`; the IDs of the requests that it ended."""
         cache: CacheBackend | None = None
         try:
             cache = self._cache()
@@ -153,7 +211,6 @@ class CommandApprovals:
                 approval_cache.drop_command_grants(command_id, cache)
         except Exception:
             logger.exception("command_foreground_clear_failed command=%s", command_id)
-        decision = ApprovalDecision.REJECTED if cancelled else ApprovalDecision.EXPIRED
         ended: list[UUID] = []
         try:
             with get_session_with_tenant(tenant_id=self._tenant_id) as db:
@@ -170,7 +227,9 @@ class CommandApprovals:
                         db,
                         approval_id=row.approval_id,
                         decision=decision,
-                        decided_via=ApprovalDecidedVia.USER if cancelled else None,
+                        decided_via=ApprovalDecidedVia.USER
+                        if decision == ApprovalDecision.REJECTED
+                        else None,
                     )
                 ]
                 db.commit()
@@ -182,21 +241,7 @@ class CommandApprovals:
                     approval_cache.send_wake(approval_id, decision, cache)
             except Exception:
                 logger.warning("command_approval_wake_failed approval=%s", approval_id)
-        for approval_id in ended:
-            with self._lock:
-                shown = approval_id in self._shown
-                self._shown.discard(approval_id)
-            if not shown:
-                continue
-            try:
-                self._report(
-                    CommandApprovalResolved(
-                        approval_id=str(approval_id), outcome="cancelled"
-                    )
-                )
-            except AgentCancelled:
-                # A stopped call reports nothing more; the stream ends.
-                break
+        return ended
 
     def _watch(self, command_id: UUID) -> None:
         cache = self._cache()

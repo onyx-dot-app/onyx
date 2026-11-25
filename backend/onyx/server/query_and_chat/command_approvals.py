@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db import action_approval
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import ActionApproval
@@ -50,10 +50,9 @@ def decide_command_approval(
     if row.chat_session_id is None or command_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
     if choice == ApprovalChoice.APPROVE_SESSION:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "A request of a command is approved once or for the command",
-        )
+        # Clients that know no command scope offer a chat approval; the proxy
+        # keeps no chat grants, so it is a single approval.
+        choice = ApprovalChoice.APPROVE_ONCE
     for_command = choice == ApprovalChoice.APPROVE_COMMAND
     granted = approval_cache.command_grant_actions(row.actions) if for_command else []
     if for_command and not granted:
@@ -88,8 +87,43 @@ def decide_command_approval(
             "This request was already decided or is no longer waiting",
         )
 
+    # Commit before the scan below locks other rows of the command, so two
+    # decisions of one command never wait on each other's rows.
+    db_session.commit()
+
     approved_ids = [row.approval_id]
     integration_id = row.integration_id
+    cache: CacheBackend | None = None
+    try:
+        cache = get_cache_backend(tenant_id=get_current_tenant_id())
+        if for_command and integration_id is not None:
+            # Saved before the scan: a request that misses the grant in the
+            # cache committed its row before that check, so the scan sees it.
+            approval_cache.grant_command_actions(
+                command_id, integration_id, granted, cache
+            )
+    except CACHE_TRANSIENT_ERRORS as error:
+        # A missed grant asks again.
+        logger.warning(
+            "command_approval_grant_failed approval_id=%s error=%s",
+            row.approval_id,
+            error,
+        )
+
+    def covered(required: list[str]) -> bool:
+        """The command's grants, this one with the earlier ones, cover the
+        Ask actions of a waiting request, as the proxy checks them."""
+        if not required or integration_id is None:
+            return False
+        if set(required).issubset(granted):
+            return True
+        try:
+            return cache is not None and approval_cache.command_grants_cover(
+                command_id, integration_id, required, cache
+            )
+        except CACHE_TRANSIENT_ERRORS:
+            return False
+
     if for_command and integration_id is not None:
         for other in action_approval.list_command_action_approvals(
             db_session,
@@ -98,11 +132,8 @@ def decide_command_approval(
             pending_only=True,
             created_after=cutoff,
         ):
-            required = approval_cache.command_grant_actions(other.actions)
-            if (
-                other.integration_id != integration_id
-                or not required
-                or not set(required).issubset(granted)
+            if other.integration_id != integration_id or not covered(
+                approval_cache.command_grant_actions(other.actions)
             ):
                 continue
             if action_approval.try_record_decision(
@@ -113,22 +144,17 @@ def decide_command_approval(
                 created_after=cutoff,
             ):
                 approved_ids.append(other.approval_id)
-    # Commit the decisions before the proxy wakes and reads them.
-    db_session.commit()
+        # Commit the decisions before the proxy wakes and reads them.
+        db_session.commit()
 
     try:
-        cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        if for_command and integration_id is not None:
-            approval_cache.grant_command_actions(
-                command_id, integration_id, granted, cache
-            )
-        for approval_id in approved_ids:
-            approval_cache.send_wake(approval_id, decision, cache)
+        if cache is not None:
+            for approval_id in approved_ids:
+                approval_cache.send_wake(approval_id, decision, cache)
     except CACHE_TRANSIENT_ERRORS as error:
-        # A missed wake leaves the proxy to its wait timeout; a missed grant
-        # asks again.
+        # A missed wake leaves the proxy to its wait timeout.
         logger.warning(
-            "command_approval_cache_failed approval_id=%s error=%s",
+            "command_approval_wake_failed approval_id=%s error=%s",
             row.approval_id,
             error,
         )
