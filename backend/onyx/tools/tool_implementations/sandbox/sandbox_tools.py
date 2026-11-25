@@ -1,6 +1,6 @@
 """Tools that run commands, edit files and publish files in the user's
 private sandbox (`server/features/build/sandbox/harness_base.py:HarnessSandbox`).
-`sandbox_tools_for_model` gives the set that a turn's model gets.
+`SANDBOX_TOOLS` gives the set that a turn's model gets.
 
 They have no tool row: a chat turn builds them when it offers the sandbox
 (`chat/execution.py:create_chat_agent`), and they share a `SandboxTurn`. The
@@ -1019,7 +1019,7 @@ def _artifact_conflict_message(error: ArtifactVersionConflict) -> str:
 class ArtifactTool(_LibraryTool, _FileTool):
     """One tool with an action for each artifact operation
     (artifact_operations.py), which Claude models get instead of the
-    library tools (sandbox_tools_for_model), for
+    library tools (SANDBOX_TOOLS), for
     compatibility with how they work with artifacts. Each action builds the
     library tools' arguments of its operation, so both families publish,
     list and copy alike, and a publish gives the same PublishedFiles card.

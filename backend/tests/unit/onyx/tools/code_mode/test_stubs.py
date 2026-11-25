@@ -278,7 +278,10 @@ def test_an_object_with_properties_and_a_combinator_lists_its_keys() -> None:
         },
     }
     stub = (
-        build_tool_stubs([FakeTool("create_ticket", _unused, parameters=parameters)])
+        build_tool_stubs(
+            OPENAI_CODE_MODE,
+            [FakeTool("create_ticket", _unused, parameters=parameters)],
+        )
         .functions["create_ticket"]
         .stub
     )
@@ -300,7 +303,10 @@ def test_an_object_with_properties_and_a_ref_lists_its_own_keys() -> None:
         },
     }
     stub = (
-        build_tool_stubs([FakeTool("create_ticket", _unused, parameters=parameters)])
+        build_tool_stubs(
+            OPENAI_CODE_MODE,
+            [FakeTool("create_ticket", _unused, parameters=parameters)],
+        )
         .functions["create_ticket"]
         .stub
     )
