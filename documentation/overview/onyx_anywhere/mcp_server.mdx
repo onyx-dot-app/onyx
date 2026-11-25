@@ -227,8 +227,9 @@ A `*_before` date is not included in the range.
 
 For documents, `content_contains` matches whole words or phrases in the text, the start of the title,
 and the metadata values that are included in the indexed text. With contextual retrieval on,
-AI-generated summaries also count as text. With the default settings, case and word forms (such as plurals)
-do not change the match. It searches Salesforce only under public connectors.
+AI-generated summaries also count as text. These parts are matched together as one string,
+so a phrase can start at the end of the title and continue in the text. With the default settings,
+case and word forms (such as plurals) do not change the match. It searches Salesforce only under public connectors.
 It matches each indexed section of a document on its own, so a phrase that crosses two sections can be missed.
 It is slower than the other filters, so add date, source, or folder filters when you can.
 Document lists with `content_contains` sort by date only, and `group_by` does not work with it.

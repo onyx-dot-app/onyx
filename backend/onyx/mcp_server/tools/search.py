@@ -519,7 +519,7 @@ async def query_metadata(
       `order_by` for the next page. `group_by`: `source` or `owner` (with `count`).
       `content_contains` matches whole words or phrases in the text, the start
       of the title, the metadata values in the indexed text, and any AI-generated
-      summaries; with the default settings, case and word form do not
+      summaries, matched together as one string; with the default settings, case and word form do not
       matter. It searches Salesforce only under public connectors. Each
       indexed section of a document is matched on its own, so a phrase that
       crosses two sections can be missed. Each value takes at most 200
