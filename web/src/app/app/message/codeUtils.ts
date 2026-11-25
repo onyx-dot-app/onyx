@@ -189,7 +189,7 @@ export const labelBareCodeFences = (content: string): string => {
 
 // Replaces each fenced code block, including an unclosed trailing one
 // (mid-stream), with the string from `replace`.
-const replaceFencedCodeBlocks = (
+export const replaceFencedCodeBlocks = (
   content: string,
   replace: (block: string) => string
 ): string => {
@@ -281,10 +281,11 @@ export const preprocessLaTeX = (content: string) => {
     (_, equation) => `$$${equation}$$`
   );
 
-  // Replace inline LaTeX delimiters \( \) with $ $
+  // Replace inline LaTeX delimiters \( \) with inline $$ $$, which renders
+  // whether or not single-dollar math is on.
   const inlineProcessed = blockProcessed.replace(
     /\\\(([\s\S]*?)\\\)/g,
-    (_, equation) => `$${equation}$`
+    (_, equation) => `$$${equation}$$`
   );
 
   // Restore original dollar signs in code contexts

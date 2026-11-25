@@ -734,8 +734,16 @@ export class ChatPage {
     ).toHaveCount(1);
   }
 
+  /** The answer's markdown tables: a code block's lines are a table too,
+   * without column headers. */
+  private answerTables() {
+    return this.aiMessage()
+      .getByRole("table")
+      .filter({ has: this.page.getByRole("columnheader") });
+  }
+
   async expectAnswerTable(headers: string[], rows: number): Promise<void> {
-    const table = this.aiMessage().getByRole("table");
+    const table = this.answerTables();
     await expect(table.getByRole("columnheader")).toHaveText(headers);
     await expect(table.getByRole("row")).toHaveCount(rows);
   }
@@ -746,8 +754,7 @@ export class ChatPage {
    * answer, and whether the table's last cell wraps onto several lines.
    */
   private answerTableLayout(index: number) {
-    return this.aiMessage()
-      .getByRole("table")
+    return this.answerTables()
       .nth(index)
       .evaluate((table) => {
         const scroller = table.parentElement!;
@@ -905,7 +912,9 @@ export class ChatPage {
   }
 
   async expectAnswerCode(text: string): Promise<void> {
-    await expect(this.aiMessage().getByRole("code")).toContainText(text);
+    await expect(this.aiMessage().getByTestId("code-block")).toContainText(
+      text
+    );
   }
 
   /** Inline citations must fit the text line: no taller than its line height. */

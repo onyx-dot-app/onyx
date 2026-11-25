@@ -52,6 +52,11 @@ interface CodePanelLinesProps {
    * this text. For a panel without a header; a header has its own.
    */
   copyText?: string;
+  /**
+   * Grow with the lines instead of scrolling past 24rem, e.g. for code in
+   * answer text, whose page scrolls. @default false
+   */
+  grow?: boolean;
 }
 
 interface CodePanelColumnsProps {
@@ -144,10 +149,11 @@ function CodePanelLines({
   lineNumbers = false,
   markers = false,
   copyText,
+  grow = false,
 }: CodePanelLinesProps) {
   const columns = 1 + (lineNumbers ? 1 : 0) + (markers ? 1 : 0);
   const table = (
-    <div className="opal-code-panel-lines">
+    <div className="opal-code-panel-lines" data-grow={grow || undefined}>
       <table>
         <tbody>
           {lines.map((line, index) => {
