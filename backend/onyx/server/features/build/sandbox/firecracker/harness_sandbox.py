@@ -167,6 +167,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     RENDER_PREVIEW_SIZE_PX,
     RENDER_PREVIEW_SUFFIXES,
     BrowserStream,
+    CommandHold,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
@@ -212,6 +213,9 @@ WAKE_RETRY_SECONDS = 10.0
 TURN_LEASE_SECONDS = 15 * 60.0
 # A parked approval keeps the sandbox busy for at most this long.
 APPROVAL_PARK_SECONDS = 24 * 3600.0
+# While a command's request waits for approval, its call checks the wait this
+# often after its own window ends.
+_HOLD_WINDOW_SECONDS = 1.0
 # One Init per VM instance across API pods: a second Init resets egress
 # connections that a command of the first may already use.
 _INIT_LOCK_PREFIX = "sandbox_fc_harness_init:"
@@ -270,6 +274,13 @@ def _find_started(
 def _clamp_ms(value: int | None, default: int, low: int, high: int) -> float:
     ms = default if value is None else value
     return min(max(ms, low), high) / 1000.0
+
+
+def command_proxy_user(chat_session_id: UUID, command_id: UUID) -> str:
+    """The proxy URL user of a command: its chat session and its command ID
+    (`sandbox_proxy/addons/gate.py:parse_session_tag`). The host relay
+    forwards it as the session hint, so it stays plain visible ASCII."""
+    return f"{chat_session_id}.{command_id.hex}"
 
 
 class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
@@ -838,6 +849,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         *,
         workdir: str | None = None,
         yield_time_ms: int | None = None,
+        hold: CommandHold | None = None,
     ) -> Generator[ExecEvent]:
         """Starts the command when the iterator is first read."""
         buffer = ExecOutputBuffer()
@@ -849,14 +861,20 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         )
         placed, daemon = self._session_vm(ref)
         start_label = {_START_LABEL: secrets.token_hex(16)}
-        # The chat session is the user of the proxy URL, so the egress proxy
-        # applies the app policies of this chat. The image sets the same
-        # address with no user (deployment/craft-fc/rootfs/build-rootfs.sh).
-        # Some clients send no proxy user without a password.
-        proxy_url = f"http://{ref.session_id}:x@127.0.0.1:3128"
+        command_id = uuid4()
+        # The chat session and the command are the user of the proxy URL, so
+        # the egress proxy applies the app policies of this chat and can ask
+        # the call that waits on the command. The image sets the same address
+        # with no user (deployment/craft-fc/rootfs/build-rootfs.sh). Some
+        # clients send no proxy user without a password.
+        proxy_url = (
+            f"http://{command_proxy_user(ref.session_id, command_id)}:x@127.0.0.1:3128"
+        )
         # A Stop that came during the wake starts no command.
         if (cancellation := current_cancellation()) is not None:
             cancellation.check()
+        if hold is not None:
+            hold.begin(command_id)
         try:
             # The daemon makes the session directory, the default cwd.
             execution_id = daemon.start(
@@ -886,6 +904,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             exec_session_id=secrets.token_hex(4),
             chat_session_id=str(ref.session_id),
             execution_id=execution_id,
+            command_id=command_id,
             attempt=placed.vm.attempt,
             generation=placed.vm.generation,
             last_used=time.time(),
@@ -901,7 +920,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             daemon.cancel(record.execution_id)
             raise
         yield from self._collect(
-            tenant_cache, ref, daemon, record, until=until, buffer=buffer
+            tenant_cache, ref, daemon, record, until=until, buffer=buffer, hold=hold
         )
 
     def write_stdin(
@@ -911,6 +930,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         chars: str = "",
         *,
         yield_time_ms: int | None = None,
+        hold: CommandHold | None = None,
     ) -> Generator[ExecEvent]:
         """Writes when the iterator is first read."""
         buffer = ExecOutputBuffer()
@@ -945,6 +965,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         # A Stop that came before the write writes nothing.
         if (cancellation := current_cancellation()) is not None:
             cancellation.check()
+        if hold is not None and record.command_id is not None:
+            hold.begin(record.command_id)
         try:
             if text:
                 daemon.interact(record.execution_id, data=text.encode())
@@ -965,6 +987,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             # From the write, as for exec_command.
             until=time.monotonic() + yield_seconds,
             buffer=buffer,
+            hold=hold,
         )
 
     def _collect(
@@ -976,9 +999,11 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         *,
         until: float,
         buffer: ExecOutputBuffer,
+        hold: CommandHold | None = None,
     ) -> Generator[ExecEvent]:
         """Stream new output into `buffer` until the command ends or `until`
-        passes, then yield the result and save the read offsets. A cancel of
+        passes, then yield the result and save the read offsets. While `hold`
+        holds, the wait goes on past `until` in short windows. A cancel of
         the current signal (a Stop, or the end of the calling code mode cell)
         ends the wait and kills the command, however the wait ends (also when
         the consumer drops this iterator), then raises AgentCancelled."""
@@ -992,29 +1017,41 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         cancellation = current_cancellation()
         stopped = False
         try:
-            for event in daemon.stream(
-                record.execution_id,
-                stdout_offset=offsets[OutputStream.STDOUT],
-                stderr_offset=offsets[OutputStream.STDERR],
-                window_seconds=max(until - time.monotonic(), 0.001),
-                on_cancel=None if cancellation is None else cancellation.on_cancel,
-            ):
-                text = ""
-                if isinstance(event, ExecOutput):
-                    skip = max(offsets[event.stream] - event.offset, 0)
-                    offsets[event.stream] = max(
-                        offsets[event.stream], event.offset + len(event.data)
-                    )
-                    text = buffer.add(event.stream, event.data[skip:])
-                elif isinstance(event, ExecGap):
-                    if event.end > offsets[event.stream]:
-                        lost = event.end - max(offsets[event.stream], event.start)
-                        offsets[event.stream] = event.end
-                        text = buffer.add_gap(event.stream, lost)
-                elif isinstance(event, ExecResult):
-                    result = event
-                if text:
-                    yield ExecOutputDelta(text=text)
+            window_end = until
+            while True:
+                for event in daemon.stream(
+                    record.execution_id,
+                    stdout_offset=offsets[OutputStream.STDOUT],
+                    stderr_offset=offsets[OutputStream.STDERR],
+                    window_seconds=max(window_end - time.monotonic(), 0.001),
+                    on_cancel=None if cancellation is None else cancellation.on_cancel,
+                ):
+                    text = ""
+                    if isinstance(event, ExecOutput):
+                        skip = max(offsets[event.stream] - event.offset, 0)
+                        offsets[event.stream] = max(
+                            offsets[event.stream], event.offset + len(event.data)
+                        )
+                        text = buffer.add(event.stream, event.data[skip:])
+                    elif isinstance(event, ExecGap):
+                        if event.end > offsets[event.stream]:
+                            lost = event.end - max(offsets[event.stream], event.start)
+                            offsets[event.stream] = event.end
+                            text = buffer.add_gap(event.stream, lost)
+                    elif isinstance(event, ExecResult):
+                        result = event
+                    if text:
+                        yield ExecOutputDelta(text=text)
+                # A card waits on the call: returning now would leave it on a
+                # call that ended.
+                if (
+                    result is not None
+                    or hold is None
+                    or (cancellation is not None and cancellation.cancelled)
+                    or not hold.holds()
+                ):
+                    break
+                window_end = time.monotonic() + _HOLD_WINDOW_SECONDS
         except SandboxDaemonError as e:
             if e.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND:
                 remove_exec_session(

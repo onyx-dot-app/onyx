@@ -95,6 +95,8 @@ from onyx.tools.tool_implementations.question.shapes import (
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_PUBLISH_PATHS,
     ApplyPatchResult,
+    CommandApprovalRequest,
+    CommandApprovalResolved,
     FileToolName,
     PublishedFiles,
     PublishedFileView,
@@ -1004,6 +1006,31 @@ class ToolRenderer:
     ) -> list[packets.Packet]:
         """Render result details; content already rendered is skipped."""
         objects: list[packets.PacketObj] = []
+        if isinstance(details, CommandApprovalRequest):
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.ToolApprovalRequest(
+                        approval_id=details.approval_id,
+                        tool_call_id=self.call.id,
+                        tool_name=details.action_type,
+                        display_name=details.display_name,
+                        arguments=details.arguments,
+                        can_approve_for_chat=False,
+                        can_approve_for_command=details.can_approve_for_command,
+                        app_name=details.app_name,
+                    ),
+                )
+            ]
+        if isinstance(details, CommandApprovalResolved):
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.ToolApprovalResolved(
+                        approval_id=details.approval_id, outcome=details.outcome
+                    ),
+                )
+            ]
         if isinstance(
             details,
             (SandboxOutputDelta, SandboxExecResult, ApplyPatchResult, PublishedFiles),

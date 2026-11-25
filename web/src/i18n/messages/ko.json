@@ -14402,6 +14402,10 @@
         "button": "이 채팅에서 승인",
         "tooltip": "지금 승인하고 이 채팅의 나머지 동안 이 도구를 다시 묻지 않고 실행합니다"
       },
+      "approveCommand": {
+        "button": "이 명령에 대해 승인",
+        "tooltip": "지금 승인하고 명령이 끝날 때까지 다시 묻지 않고 이 작업을 허용합니다"
+      },
       "approveOnce": {
         "ariaLabel": "이 작업을 한 번만 승인",
         "button": "한 번 승인"
@@ -14429,6 +14433,7 @@
         "expired": "시간 초과: {headline}",
         "rejected": "승인되지 않음: {headline}",
         "approvedForChat": "이 채팅에서 승인됨: {headline}",
+        "approvedForCommand": "이 명령에 대해 승인됨: {headline}",
         "approvedForSession": "이 세션에서 승인됨: {headline}"
       },
       "submitError": "결정을 제출할 수 없습니다. 다시 시도하세요.",

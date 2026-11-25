@@ -29,6 +29,10 @@ Exec contract (`exec_command` / `write_stdin`):
   kills the command (SIGKILL), however the wait ends; the call raises
   `AgentCancelled`. A call cancelled before it starts its command, or writes
   its input, does neither.
+- Each command has a command ID, which its app requests carry to the egress
+  proxy. With a `CommandHold`, the call calls `begin` with the ID before it
+  starts the command or writes to it, and does not yield while `holds` is
+  true (a request of the command waits for the user's approval).
 """
 
 import abc
@@ -38,7 +42,7 @@ import posixpath
 import string
 import unicodedata
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
-from typing import IO
+from typing import IO, Protocol
 from uuid import UUID
 
 from pydantic import JsonValue
@@ -366,6 +370,17 @@ class BrowserStream(abc.ABC):
         pass
 
 
+class CommandHold(Protocol):
+    """A call's link to the proxy approvals of the command it waits on
+    (`tools/tool_implementations/sandbox/command_approvals.py`)."""
+
+    def begin(self, command_id: UUID) -> None:
+        """The call waits on the command from now on."""
+
+    def holds(self) -> bool:
+        """A request of the command waits for the user's decision."""
+
+
 class HarnessSandbox(abc.ABC):
     """What the harness calls. All methods block; see the module docstring."""
 
@@ -394,6 +409,7 @@ class HarnessSandbox(abc.ABC):
         *,
         workdir: str | None = None,
         yield_time_ms: int | None = None,
+        hold: CommandHold | None = None,
     ) -> Generator[ExecEvent]:
         """Run `cmd` with bash in `workdir` (default: the session
         directory)."""
@@ -406,6 +422,7 @@ class HarnessSandbox(abc.ABC):
         chars: str = "",
         *,
         yield_time_ms: int | None = None,
+        hold: CommandHold | None = None,
     ) -> Generator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 

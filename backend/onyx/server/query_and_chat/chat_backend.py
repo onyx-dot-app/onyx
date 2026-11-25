@@ -90,6 +90,7 @@ from onyx.configs.constants import (
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.db.access import user_can_read_chat_session
+from onyx.db.action_approval import get_chat_action_approval_for_user
 from onyx.db.approval_request import (
     approvals_version,
     close_pending_approval_requests__no_commit,
@@ -211,6 +212,7 @@ from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
     parse_spreadsheet_for_preview,
 )
+from onyx.server.query_and_chat.command_approvals import decide_command_approval
 from onyx.server.query_and_chat.models import (
     ApprovalDecisionResponse,
     ChatApprovalDecisionRequest,
@@ -2187,10 +2189,24 @@ def decide_approval(
     request that is no longer waiting, is a conflict. Approving an action that
     the current action policies block saves a rejection by the policy
     (`decided_via` POLICY). The headers are not saved.
+
+    An app request of a command in the chat's VM takes `approve_once`,
+    `approve_command` (also its command's later requests of the same action,
+    until the command exits; `decided_via` COMMAND_GRANT) or `reject`. Its
+    decision continues no response: the command's call waits on it.
     """
     approval = get_approval_request_for_user(db_session, approval_id, user.id)
     if approval is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
+        command_approval = get_chat_action_approval_for_user(
+            db_session, approval_id, user.id
+        )
+        if command_approval is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
+        return decide_command_approval(db_session, command_approval, body.decision)
+    if body.decision == ApprovalChoice.APPROVE_COMMAND:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "A tool call has no command to approve for"
+        )
     rejected = body.decision == ApprovalChoice.REJECT
     # An action that asks each time takes a chat approval as a single one.
     standing = (

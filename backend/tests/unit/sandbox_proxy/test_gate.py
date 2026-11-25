@@ -40,7 +40,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
-from onyx.sandbox_proxy import destination_policy
+from onyx.sandbox_proxy import approval_cache, destination_policy
 from onyx.sandbox_proxy.addons import gate
 from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
 from onyx.sandbox_proxy.credential_injection import (
@@ -57,6 +57,7 @@ from onyx.sandbox_proxy.models import (
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
+from tests.unit.fakes import FakeCache
 from tests.unit.sandbox_proxy.conftest import (
     RecordingCredentialResolver,
     StubResolver,
@@ -499,7 +500,11 @@ def _spy_pipeline(
     """
     spy = _PipelineSpy(persisted=[], awaited=[], dispatched=[])
 
-    def _persist(ctx: SessionContext, matched_actions: AllMatchedActions) -> UUID:
+    def _persist(
+        ctx: SessionContext,
+        matched_actions: AllMatchedActions,
+        _payload: dict[str, Any] | None = None,
+    ) -> UUID:
         spy.persisted.append((ctx, matched_actions))
         return uuid4()
 
@@ -795,7 +800,9 @@ async def test_session_grant_recheck_after_persist_skips_park(
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.REJECTED)
     approval_id = uuid4()
 
-    def _persist(ctx: SessionContext, _match: AllMatchedActions) -> UUID:
+    def _persist(
+        ctx: SessionContext, _match: AllMatchedActions, _payload: dict[str, Any]
+    ) -> UUID:
         addon._parked.add(ctx.tenant_id, approval_id)
         return approval_id
 
@@ -2039,7 +2046,8 @@ def _chat_policies(
 async def test_an_ask_from_a_chat_is_refused_and_names_the_app_tool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """No run waits for a command of a chat, so the gate opens no approval."""
+    """A tag with no command names no call that could show a card, so the
+    gate opens no approval."""
     chat_id = UUID(_TAG_UUID)
     chats = _chat_policies(monkeypatch, ActionPolicy.ASK)
     addon = _build(
@@ -2164,3 +2172,252 @@ async def test_a_craft_session_does_not_take_chat_policies(
     await addon.request(make_flow(proxy_auth=_basic_auth(_TAG_UUID)))
 
     assert chats == [None]
+
+
+# ---------------------------------------------------------------------------
+# A request of a command that a call of the chat waits on
+# ---------------------------------------------------------------------------
+
+_COMMAND = UUID("55555555-5555-5555-5555-555555555555")
+_COMMAND_TAG = f"{_TAG_UUID}.{_COMMAND.hex}"
+
+
+class _CommandCache(FakeCache):
+    """FakeCache with the announce list that a held request pushes to."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.pushed: list[tuple[str, str | bytes]] = []
+
+    def rpush(self, key: str, value: str | bytes) -> None:
+        self.pushed.append((key, value))
+
+
+def _command_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    policy: ActionPolicy = ActionPolicy.ASK,
+    match: AllMatchedActions = _MATCH,
+    foreground: bool = True,
+) -> tuple[GateAddon, _CommandCache]:
+    _chat_policies(monkeypatch, policy)
+    cache = _CommandCache()
+    if foreground:
+        approval_cache.mark_command_foreground(_COMMAND, UUID(_TAG_UUID), cache)
+    addon = _build(
+        resolver=StubResolver(
+            sandbox=make_resolved_sandbox(), chat_session=UUID(_TAG_UUID)
+        ),
+        matcher=_StubMatcher(result=match),
+        cache_factory=lambda _tenant_id: cache,
+    )
+    _approved_command_row(monkeypatch)
+    return addon, cache
+
+
+def _approved_command_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The row that the recheck reads after an approval."""
+    monkeypatch.setattr(
+        gate.action_approval,
+        "get_action_approval",
+        lambda _db, _id: MagicMock(
+            session_id=None,
+            chat_session_id=UUID(_TAG_UUID),
+            command_id=_COMMAND,
+            decision=ApprovalDecision.APPROVED,
+            decided_via=ApprovalDecidedVia.USER,
+        ),
+    )
+
+
+def test_parse_session_tag() -> None:
+    assert gate.parse_session_tag(_TAG_UUID) == (UUID(_TAG_UUID), None)
+    assert gate.parse_session_tag(_COMMAND_TAG) == (UUID(_TAG_UUID), _COMMAND)
+    with pytest.raises(ValueError):
+        gate.parse_session_tag(f"{_TAG_UUID}.not-a-command")
+
+
+@pytest.mark.asyncio
+async def test_a_command_ask_without_a_foreground_call_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A background process: no call waits on its command, so no card."""
+    addon, _ = _command_gate(monkeypatch, foreground=False)
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
+    assert not spy.persisted and not spy.dispatched
+
+
+@pytest.mark.parametrize(
+    ("decision", "expected"),
+    [
+        (ApprovalDecision.APPROVED, None),
+        (ApprovalDecision.REJECTED, SandboxProxyError.USER_REJECTED),
+        (ApprovalDecision.EXPIRED, SandboxProxyError.NOT_AUTHORIZED),
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_foreground_command_ask_is_held_until_the_decision(
+    monkeypatch: pytest.MonkeyPatch,
+    decision: ApprovalDecision,
+    expected: SandboxProxyError | None,
+) -> None:
+    """Approve once sends the request; a rejection or the wait timeout
+    refuses it with a 403."""
+    addon, _ = _command_gate(monkeypatch)
+    spy = _spy_pipeline(addon, monkeypatch, decision=decision)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    assert len(spy.persisted) == 1
+    ctx, _ = spy.persisted[0]
+    assert (ctx.session_id, ctx.chat_command_id) == (UUID(_TAG_UUID), _COMMAND)
+    assert spy.awaited == [_MATCH]
+    if expected is None:
+        assert flow.response is None
+        assert len(spy.dispatched) == 1
+    else:
+        _assert_403(flow, expected)
+        assert not spy.dispatched
+
+
+@pytest.mark.asyncio
+async def test_a_command_grant_covers_the_same_action_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ "Approve for this command" lets the same action through with no card;
+    another action of the app is held."""
+    addon, cache = _command_gate(monkeypatch)
+    approval_cache.grant_command_actions(_COMMAND, 42, ["slack.messages.write"], cache)
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    inserted = _spy_approval_insert(monkeypatch)
+    _approved_command_row(monkeypatch)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert not spy.persisted and not spy.awaited
+    assert len(spy.dispatched) == 1
+    assert inserted[0]["decided_via"] == ApprovalDecidedVia.COMMAND_GRANT
+    assert inserted[0]["chat_command"] == (UUID(_TAG_UUID), _COMMAND)
+    assert inserted[0]["session_id"] is None
+
+    other, _ = _command_gate(
+        monkeypatch, match=make_matched_actions(action_type="slack.channels.write")
+    )
+    other_spy = _spy_pipeline(other, monkeypatch, decision=ApprovalDecision.APPROVED)
+    await other.request(make_flow(proxy_auth=_basic_auth(_COMMAND_TAG)))
+    assert len(other_spy.persisted) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_command_grant_never_covers_a_request_that_always_asks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon, cache = _command_gate(
+        monkeypatch, match=make_matched_actions(action_type="unspecified")
+    )
+    approval_cache.grant_command_actions(_COMMAND, 42, ["unspecified"], cache)
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+
+    await addon.request(make_flow(proxy_auth=_basic_auth(_COMMAND_TAG)))
+
+    assert len(spy.persisted) == 1
+
+
+@pytest.mark.asyncio
+async def test_blocked_wins_over_a_command_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon, cache = _command_gate(monkeypatch, policy=ActionPolicy.DENY)
+    approval_cache.grant_command_actions(_COMMAND, 42, ["slack.messages.write"], cache)
+    spy = _spy_pipeline(addon, monkeypatch)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.POLICY_DENIED)
+    assert not spy.persisted and not spy.dispatched
+
+
+@pytest.mark.parametrize("foreground", [True, False])
+@pytest.mark.asyncio
+async def test_a_saved_always_allow_passes_a_command(
+    monkeypatch: pytest.MonkeyPatch, foreground: bool
+) -> None:
+    addon, _ = _command_gate(
+        monkeypatch, policy=ActionPolicy.ALWAYS, foreground=foreground
+    )
+    spy = _spy_pipeline(addon, monkeypatch)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert not spy.persisted
+    assert len(spy.dispatched) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_call_that_ends_during_persistence_refuses_the_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No card can show a row written after the call ended, so the gate
+    expires it instead of waiting."""
+    addon, cache = _command_gate(monkeypatch)
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    original_persist = addon._persist_approval_row
+
+    def persist_then_end(*args: Any) -> UUID:
+        approval_cache.clear_command_foreground(_COMMAND, cache)
+        return original_persist(*args)
+
+    claimed: list[UUID] = []
+    monkeypatch.setattr(addon, "_persist_approval_row", persist_then_end)
+    monkeypatch.setattr(
+        addon,
+        "_claim_expired_or_read_winner",
+        lambda approval_id, _tenant: (
+            claimed.append(approval_id) or ApprovalDecision.EXPIRED
+        ),
+    )
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
+    assert len(claimed) == 1
+    assert not spy.awaited and not spy.dispatched
+
+
+def test_a_command_row_names_the_request_and_is_announced_to_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon, cache = _command_gate(monkeypatch)
+    inserted = _spy_approval_insert(monkeypatch)
+    notified: list[dict[str, Any]] = []
+    monkeypatch.setattr(gate, "create_notification", lambda **kw: notified.append(kw))
+    ctx = _ctx(session_id=UUID(_TAG_UUID)).model_copy(
+        update={"chat_command_id": _COMMAND}
+    )
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+    flow.request.path = "/api/chat.postMessage?x=1"
+
+    approval_id = addon._persist_approval_row(
+        ctx, _MATCH, gate._approval_payload(flow, ctx, _MATCH)
+    )
+
+    assert inserted[0]["chat_command"] == (UUID(_TAG_UUID), _COMMAND)
+    assert inserted[0]["payload"] == {
+        "method": "POST",
+        "path": "/api/chat.postMessage?x=1",
+        "body": {"text": "hi"},
+    }
+    assert cache.pushed == [(approval_cache.announce_key(_COMMAND), str(approval_id))]
+    assert notified == []

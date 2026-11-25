@@ -30,8 +30,11 @@ export interface ApprovalCardProps {
   payload: Record<string, unknown>;
   /** ISO 8601 deadline shown while the request waits. */
   expiresAt?: string | null;
-  /** What "approve for session" covers: a Craft session or a chat. */
-  sessionScope?: "session" | "chat";
+  /**
+   * What "approve for session" covers: a Craft session, a chat, or the rest of
+   * a VM command, which submits "approve_command".
+   */
+  sessionScope?: "session" | "chat" | "command";
   canApproveForSession?: boolean;
   status: ApprovalStatus;
   /**
@@ -98,22 +101,35 @@ export default function ApprovalCard({
           count: actions.length,
           app: appName ?? "",
         });
-  const sessionCopy =
-    sessionScope === "chat" ? "approveChat" : "approveSession";
+  const scopeCopy = {
+    session: {
+      decision: "approve_session",
+      button: "approveSession",
+      record: "approvedForSession",
+    },
+    chat: {
+      decision: "approve_session",
+      button: "approveChat",
+      record: "approvedForChat",
+    },
+    command: {
+      decision: "approve_command",
+      button: "approveCommand",
+      record: "approvedForCommand",
+    },
+  } as const satisfies Record<
+    NonNullable<ApprovalCardProps["sessionScope"]>,
+    { decision: ApprovalSubmitDecision; button: string; record: string }
+  >;
+  const scope = scopeCopy[sessionScope];
+  const sessionCopy = scope.button;
   // A decided request leaves a one-line record in the timeline.
   const record =
     status === "pending"
       ? null
-      : t(
-          `record.${
-            status !== "approvedForSession"
-              ? status
-              : sessionScope === "chat"
-                ? "approvedForChat"
-                : "approvedForSession"
-          }`,
-          { headline }
-        );
+      : t(`record.${status !== "approvedForSession" ? status : scope.record}`, {
+          headline,
+        });
 
   const single = actions.length === 1;
 
@@ -235,7 +251,7 @@ export default function ApprovalCard({
                       prominence="secondary"
                       size="sm"
                       disabled={submitting}
-                      onClick={() => void decide("approve_session")}
+                      onClick={() => void decide(scope.decision)}
                       aria-label={t(`${sessionCopy}.tooltip`)}
                     >
                       {t(`${sessionCopy}.button`)}

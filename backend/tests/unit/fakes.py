@@ -90,6 +90,7 @@ class FakeCache(CacheBackend):
 
     def delete(self, key: str) -> None:
         self.store.pop(key, None)
+        self.sets.pop(key, None)
         self.expiries.pop(key, None)
 
     def delete_if_value(self, key: str, expected: bytes) -> bool:

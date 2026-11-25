@@ -3,6 +3,7 @@
 `try_record_decision`'s conditional UPDATE is the only race arbiter.
 """
 
+from collections.abc import Collection
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -16,7 +17,7 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
 )
-from onyx.db.models import ActionApproval, BuildSession
+from onyx.db.models import ActionApproval, BuildSession, ChatSession
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -25,13 +26,14 @@ logger = setup_logger()
 def insert_action_approval(
     db_session: Session,
     *,
-    session_id: UUID,
+    session_id: UUID | None,
     actions: list[dict[str, Any]],
     app_name: str,
     payload: dict[str, Any],
     integration_id: int | None = None,
     decision: ApprovalDecision | None = None,
     decided_via: ApprovalDecidedVia | None = None,
+    chat_command: tuple[UUID, UUID] | None = None,
 ) -> ActionApproval:
     """Commit an approval row. ``actions`` is the JSONB list of
     ``MatchedAction``-shaped dicts; must be non-empty. Re-sorted
@@ -39,12 +41,17 @@ def insert_action_approval(
     ``integration_id`` attributes the row to an integration; a row with no
     integration (e.g. a bash gate) leaves it NULL.
 
+    The row belongs to the Craft session ``session_id``, or to the chat VM
+    command ``chat_command`` (chat session ID, command ID); exactly one is set.
+
     Defaults to a pending row (``decision IS NULL``). Passing ``decision``
     inserts it pre-decided — safe to bypass ``try_record_decision``'s
     arbiter because nothing parks on a pre-decided row.
     """
     if not actions:
         raise ValueError("actions must be non-empty")
+    if (session_id is None) == (chat_command is None):
+        raise ValueError("set exactly one of session_id and chat_command")
     sorted_actions = sorted(
         actions,
         key=lambda a: POLICY_SEVERITY[ActionPolicy(a["policy"])],
@@ -52,6 +59,8 @@ def insert_action_approval(
     )
     row = ActionApproval(
         session_id=session_id,
+        chat_session_id=chat_command[0] if chat_command is not None else None,
+        command_id=chat_command[1] if chat_command is not None else None,
         actions=sorted_actions,
         app_name=app_name,
         payload=payload,
@@ -215,3 +224,47 @@ def list_session_grant_action_approvals(
         .order_by(ActionApproval.decided_at.desc())
     )
     return list(db_session.scalars(stmt))
+
+
+def get_chat_action_approval_for_user(
+    db_session: Session, approval_id: UUID, user_id: UUID
+) -> ActionApproval | None:
+    """A chat command's row, only if the caller owns its chat, which is not
+    deleted. `None` for a missing row and for another user's row."""
+    return db_session.scalar(
+        select(ActionApproval)
+        .join(ChatSession, ChatSession.id == ActionApproval.chat_session_id)
+        .where(ActionApproval.approval_id == approval_id)
+        .where(ChatSession.user_id == user_id)
+        .where(ChatSession.deleted.is_(False))
+    )
+
+
+def list_command_action_approvals(
+    db_session: Session,
+    *,
+    chat_session_id: UUID,
+    command_id: UUID,
+    approval_ids: Collection[UUID] | None = None,
+    pending_only: bool = False,
+    created_after: datetime | None = None,
+) -> list[ActionApproval]:
+    """The rows of one chat command, oldest first, optionally only the given
+    IDs, the pending rows, or the rows created at or after `created_after`."""
+    stmt = select(ActionApproval).where(
+        ActionApproval.chat_session_id == chat_session_id,
+        ActionApproval.command_id == command_id,
+    )
+    if approval_ids is not None:
+        stmt = stmt.where(ActionApproval.approval_id.in_(approval_ids))
+    if pending_only:
+        stmt = stmt.where(ActionApproval.decision.is_(None))
+    if created_after is not None:
+        stmt = stmt.where(ActionApproval.created_at >= created_after)
+    return list(
+        db_session.scalars(
+            stmt.order_by(ActionApproval.created_at, ActionApproval.approval_id)
+            # Readers poll the decisions of rows that they read before.
+            .execution_options(populate_existing=True)
+        )
+    )

@@ -17,6 +17,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     StringConstraints,
     TypeAdapter,
     computed_field,
@@ -139,6 +140,32 @@ class SandboxExecResult(ExecCommandOutput):
     truncated: bool = False
     # Set, with an empty `output`, when the output went to the sandbox VM.
     spilled: Annotated[SpilledOutput | None, OMITTED_WHEN_NONE] = None
+
+
+class CommandApprovalRequest(BaseModel):
+    """Progress of an exec_command or write_stdin call: an app request of
+    its command waits in the egress proxy for the user's decision
+    (command_approvals.py)."""
+
+    approval_id: str
+    app_name: str
+    action_type: str
+    display_name: str
+    # Method, path and body of the request.
+    arguments: dict[str, JsonValue]
+    can_approve_for_command: bool
+
+
+CommandApprovalOutcome = Literal[
+    "approved", "approved_for_command", "rejected", "cancelled"
+]
+
+
+class CommandApprovalResolved(BaseModel):
+    """Progress of the call: a request of its command stopped waiting."""
+
+    approval_id: str
+    outcome: CommandApprovalOutcome
 
 
 # The names of the file tools (sandbox_tools.py), which the patch card shows.

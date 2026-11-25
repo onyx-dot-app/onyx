@@ -249,8 +249,8 @@ def test_rendered_files_withhold_secret_credential_fields(
 
 
 def test_each_app_skill_tells_the_model_when_to_use_the_app_tools() -> None:
-    """A command cannot ask for approval, so the skill sends each such
-    request to the tool of the action."""
+    """A background command cannot ask for approval, so the skill sends
+    such a request to the foreground or to the tool of the action."""
     for skill_id in ("github", "linear", "slack"):
         template = (BUILTIN_SKILLS_PATH / skill_id / "SKILL.md.template").read_text()
         app_type = ExternalAppType(skill_id.upper())

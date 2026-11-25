@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable, Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import grpc
 import pytest
@@ -154,6 +154,23 @@ def _output(result: ExecCommandResult) -> str:
 def _session_ref(ref: HarnessSandboxRef) -> HarnessSandboxRef:
     """Another chat session of the same sandbox."""
     return ref.model_copy(update={"session_id": uuid4()})
+
+
+class _Hold:
+    """A `CommandHold` that records the command and holds `holds` times."""
+
+    def __init__(self, holds: int = 0) -> None:
+        self.begun: list[UUID] = []
+        self._holds = holds
+
+    def begin(self, command_id: UUID) -> None:
+        self.begun.append(command_id)
+
+    def holds(self) -> bool:
+        if self._holds <= 0:
+            return False
+        self._holds -= 1
+        return True
 
 
 # Lifecycle
@@ -321,7 +338,8 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     new_ref: NewRef,
 ) -> None:
     ref = new_ref()
-    deltas, result = _run(sandbox.exec_command(ref, "echo hi there"))
+    hold = _Hold()
+    deltas, result = _run(sandbox.exec_command(ref, "echo hi there", hold=hold))
 
     assert result.exit_code == 0
     assert result.completion == "exited"
@@ -336,8 +354,10 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     assert command.session_id == str(ref.session_id)
     assert command.cwd == ""
     # The proxy URL of the command carries the chat session, so the egress
-    # proxy applies the app policies of that chat.
-    proxy_url = f"http://{ref.session_id}:x@127.0.0.1:3128"
+    # proxy applies the app policies of that chat, and the command, which the
+    # call began before the start.
+    assert len(hold.begun) == 1
+    proxy_url = f"http://{ref.session_id}.{hold.begun[0].hex}:x@127.0.0.1:3128"
     assert command.env == {
         "HTTP_PROXY": proxy_url,
         "HTTPS_PROXY": proxy_url,
@@ -426,6 +446,29 @@ def test_an_empty_write_polls_until_the_command_ends(
     assert ended.exit_code == 0 and _output(ended) == "bye"
     assert ended.session_id is None
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
+
+
+def test_a_held_command_waits_past_its_window_and_keeps_its_command_id(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,  # noqa: ARG001
+    new_ref: NewRef,
+) -> None:
+    """A request of the command that waits for approval keeps the call open,
+    and a later poll of the command reports the same command ID."""
+    monkeypatch.setattr(harness_sandbox, "_HOLD_WINDOW_SECONDS", 0.2)
+    ref = new_ref()
+    hold = _Hold(holds=2)
+
+    started = time.monotonic()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250, hold=hold))
+
+    assert time.monotonic() - started >= 0.25 + 2 * 0.2
+    session = result.session_id
+    assert session is not None and result.completion is None
+    poll = _Hold()
+    _run(sandbox.write_stdin(ref, session, "x", hold=poll))
+    assert poll.begun == hold.begun
 
 
 def test_a_stream_reset_at_the_agent_deadline_ends_the_yield_cleanly(

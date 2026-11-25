@@ -226,7 +226,9 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
     monkeypatch.setattr(approval_cache, "announce_approval", _announce)
     addon = _build_addon(cache_factory=lambda _tenant_id: cache)
 
-    approval_id = addon._persist_approval_row(ctx, matched_actions)
+    approval_id = addon._persist_approval_row(
+        ctx, matched_actions, matched_actions.payload
+    )
 
     assert announced == [(approval_id, session_id)]
     if not announce_fails:

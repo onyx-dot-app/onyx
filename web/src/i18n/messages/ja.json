@@ -14402,6 +14402,10 @@
         "button": "このチャットで承認",
         "tooltip": "今すぐ承認し、このチャットの残りの間はこのツールを確認なしで実行します"
       },
+      "approveCommand": {
+        "button": "このコマンドで承認",
+        "tooltip": "今すぐ承認し、コマンドが終了するまでこの操作を再確認せずに許可します"
+      },
       "approveOnce": {
         "ariaLabel": "このアクションを1回だけ承認",
         "button": "1回だけ承認"
@@ -14429,6 +14433,7 @@
         "expired": "タイムアウト: {headline}",
         "rejected": "未承認: {headline}",
         "approvedForChat": "このチャットで承認済み: {headline}",
+        "approvedForCommand": "このコマンドで承認済み: {headline}",
         "approvedForSession": "このセッションで承認済み: {headline}"
       },
       "submitError": "決定を送信できませんでした。もう一度お試しください。",

@@ -14402,6 +14402,10 @@
         "button": "Approve for this chat",
         "tooltip": "Approve now and run this tool without asking again for the rest of this chat"
       },
+      "approveCommand": {
+        "button": "Approve for this command",
+        "tooltip": "Approve now and allow this action without asking again until the command ends"
+      },
       "approveOnce": {
         "ariaLabel": "Approve this action once",
         "button": "Approve once"
@@ -14429,6 +14433,7 @@
         "expired": "Timed out: {headline}",
         "rejected": "Not approved: {headline}",
         "approvedForChat": "Approved for this chat: {headline}",
+        "approvedForCommand": "Approved for this command: {headline}",
         "approvedForSession": "Approved for this session: {headline}"
       },
       "submitError": "Could not submit your decision. Try again.",

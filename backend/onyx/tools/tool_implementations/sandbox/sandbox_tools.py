@@ -84,6 +84,11 @@ from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.errors import (
     sandbox_errors_as_tool_errors,
     tool_error,
+from onyx.tools.tool_implementations.sandbox import file_copies
+from onyx.tools.tool_implementations.sandbox.command_approvals import CommandApprovals
+from onyx.tools.tool_implementations.sandbox.file_copies import (
+    COPY_BASE_SECONDS,
+    COPY_MIN_BYTES_PER_SECOND,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchArguments,
@@ -197,6 +202,31 @@ def _exec_tool_result(
     if result is None:
         raise RuntimeError("The exec stream ended without a result")
     return _exec_result(result, max_chars)
+
+
+def _held_exec_result(
+    ref: HarnessSandboxRef,
+    invocation: ToolInvocation,
+    max_chars: int,
+    start: Callable[[CommandApprovals], Generator[ExecEvent]],
+) -> ToolResult:
+    """`_exec_tool_result` of a call that shows the approvals of its
+    command's app requests (command_approvals.py)."""
+    approvals = CommandApprovals(
+        tenant_id=ref.tenant_id,
+        chat_session_id=ref.session_id,
+        update=invocation.update,
+    )
+    exited = False
+    try:
+        result = _exec_tool_result(start(approvals), invocation, max_chars)
+        exited = (
+            isinstance(result.details, SandboxExecResult)
+            and result.details.session_id is None
+        )
+        return result
+    finally:
+        approvals.end(cancelled=invocation.cancellation.cancelled, exited=exited)
 
 
 def _exec_result(result: ExecCommandResult, max_chars: int) -> ToolResult:
@@ -354,15 +384,18 @@ class ExecCommandTool(SandboxTool):
         request = parse_tool_arguments(
             self._turn.shell.arguments, invocation.arguments
         ).request()
-        return _exec_tool_result(
-            self._turn.sandbox.exec_command(
-                self._turn.start_call(),
+        ref = self._turn.start_call()
+        return _held_exec_result(
+            ref,
+            invocation,
+            request.max_chars,
+            lambda hold: self._turn.sandbox.exec_command(
+                ref,
                 request.cmd,
                 workdir=request.workdir,
                 yield_time_ms=request.yield_time_ms,
+                hold=hold,
             ),
-            invocation,
-            request.max_chars,
         )
 
 
@@ -385,15 +418,18 @@ class WriteStdinTool(SandboxTool):
         request = parse_tool_arguments(
             self._turn.shell.write_stdin_arguments, invocation.arguments
         ).request()
-        return _exec_tool_result(
-            self._turn.sandbox.write_stdin(
-                self._turn.start_call(),
+        ref = self._turn.start_call()
+        return _held_exec_result(
+            ref,
+            invocation,
+            request.max_chars,
+            lambda hold: self._turn.sandbox.write_stdin(
+                ref,
                 request.session_id,
                 request.chars,
                 yield_time_ms=request.yield_time_ms,
+                hold=hold,
             ),
-            invocation,
-            request.max_chars,
         )
 
 

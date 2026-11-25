@@ -8,6 +8,7 @@ import asyncio
 import base64
 import binascii
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from mitmproxy import connection, http
@@ -442,7 +443,11 @@ class GateAddon:
                     self._apply_session_grant, ctx, matched_actions
                 )
                 if approval_id is None:
-                    approval_id = self._persist_approval_row(ctx, matched_actions)
+                    approval_id = self._persist_approval_row(
+                        ctx,
+                        matched_actions,
+                        _approval_payload(flow, ctx, matched_actions),
+                    )
                     # Close the race with a session grant created during persistence.
                     if (
                         await asyncio.to_thread(
@@ -455,6 +460,20 @@ class GateAddon:
                     ):
                         self._parked.remove(ctx.tenant_id, approval_id)
                         decision = ApprovalDecision.APPROVED
+                    elif ctx.chat_command_id is not None and not (
+                        await asyncio.to_thread(self._command_in_foreground, ctx)
+                    ):
+                        # The command's call ended during persistence, so no
+                        # card can show this request.
+                        self._parked.remove(ctx.tenant_id, approval_id)
+                        decision = await asyncio.to_thread(
+                            self._claim_expired_or_read_winner,
+                            approval_id,
+                            ctx.tenant_id,
+                        )
+                        if decision is not ApprovalDecision.APPROVED:
+                            flow.response = _approval_needs_tool(matched_actions)
+                            return
                     else:
                         decision = await self._await_decision(
                             approval_id, ctx, matched_actions
@@ -540,15 +559,24 @@ class GateAddon:
         ):
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
-        current_actions = self._resolve_request_policies(ctx, recognized)
+        from_chat = ctx.chat_command_id is not None
+        current_actions = self._resolve_request_policies(ctx, recognized, from_chat)
         if current_actions.governing_action.policy is ActionPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             approval = action_approval.get_action_approval(db, approval_id)
+            owned = approval is not None and (
+                (
+                    approval.chat_session_id == ctx.session_id
+                    and approval.command_id == ctx.chat_command_id
+                )
+                if from_chat
+                else approval.session_id == ctx.session_id
+            )
             if (
                 approval is None
-                or approval.session_id != ctx.session_id
+                or not owned
                 or approval.decision is not ApprovalDecision.APPROVED
             ):
                 flow.response = http_403(SandboxProxyError.NOT_AUTHORIZED)
@@ -675,8 +703,10 @@ class GateAddon:
                 flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             return None
 
-        session_id, from_chat = session
-        ctx = sandbox.with_session(session_id)
+        session_id, from_chat, command_id = session
+        ctx = sandbox.with_session(
+            session_id, chat_command_id=command_id if from_chat else None
+        )
         try:
             matched_actions = await asyncio.to_thread(
                 self._resolve_request_policies, ctx, matched_actions, from_chat
@@ -688,18 +718,19 @@ class GateAddon:
         if matched_actions.governing_action.policy is ActionPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
-        if from_chat and matched_actions.governing_action.policy is ActionPolicy.ASK:
-            # No run waits for a command of a chat, so a card here would
-            # have nobody to continue after the answer.
+        if (
+            from_chat
+            and matched_actions.governing_action.policy is ActionPolicy.ASK
+            and not await asyncio.to_thread(self._command_in_foreground, ctx)
+        ):
+            # Only a call that waits on the command can show a card; a
+            # background process has none.
             logger.info(
                 "egress_block " + EGRESS_TARGET_FIELDS + " reason=%s",
                 *egress_target_args(flow, sandbox),
                 SandboxProxyError.APPROVAL_NEEDS_TOOL.value,
             )
-            flow.response = http_403(
-                SandboxProxyError.APPROVAL_NEEDS_TOOL,
-                detail=_app_tool_hint(matched_actions),
-            )
+            flow.response = _approval_needs_tool(matched_actions)
             return None
         logger.debug(
             "approval_match tenant=%s sandbox=%s session=%s host=%s "
@@ -754,10 +785,58 @@ class GateAddon:
             payload=recognized_actions.payload,
         )
 
+    def _command_in_foreground(self, ctx: SessionContext) -> bool:
+        """A call of the chat's run waits on the command that sent the
+        request, so a card can show it. False on a cache error."""
+        if ctx.chat_command_id is None:
+            return False
+        try:
+            return approval_cache.command_in_foreground(
+                ctx.chat_command_id, ctx.session_id, self._cache_factory(ctx.tenant_id)
+            )
+        except CACHE_TRANSIENT_ERRORS as e:
+            logger.warning(
+                "approval_foreground_cache_error tenant=%s session=%s error=%r",
+                ctx.tenant_id,
+                short_log_id(ctx.session_id),
+                str(e),
+            )
+            return False
+
+    def _command_grant(
+        self, ctx: SessionContext, matched_actions: AllMatchedActions
+    ) -> bool:
+        """The user approved these actions for the rest of the command."""
+        command_id = ctx.chat_command_id
+        action_types = approval_cache.command_grant_actions(matched_actions.actions)
+        if command_id is None or not action_types:
+            return False
+        try:
+            return approval_cache.command_grants_cover(
+                command_id,
+                matched_actions.target.integration_id,
+                action_types,
+                self._cache_factory(ctx.tenant_id),
+            )
+        except CACHE_TRANSIENT_ERRORS as e:
+            logger.warning(
+                "approval_grant_cache_error tenant=%s session=%s "
+                "integration=%s operation=%s error=%r",
+                ctx.tenant_id,
+                short_log_id(ctx.session_id),
+                matched_actions.target.integration_id,
+                "command_check",
+                str(e),
+            )
+            return False
+
     def _session_grant(
         self, db: Session, ctx: SessionContext, matched_actions: AllMatchedActions
     ) -> bool:
-        """The user approved these identified actions for the session."""
+        """The user approved these identified actions for the session, or
+        for the rest of the command of a chat request."""
+        if ctx.chat_command_id is not None:
+            return self._command_grant(ctx, matched_actions)
         if any(
             always_asks(matched_actions.target.kind, action.action_type)
             for action in matched_actions.actions
@@ -808,7 +887,13 @@ class GateAddon:
         *,
         approval_id: UUID | None = None,
     ) -> UUID | None:
-        """Apply an existing session grant in the caller's worker thread."""
+        """Apply an existing session grant (or, for a chat request, command
+        grant) in the caller's worker thread."""
+        grant = (
+            ApprovalDecidedVia.SESSION_GRANT
+            if ctx.chat_command_id is None
+            else ApprovalDecidedVia.COMMAND_GRANT
+        )
         try:
             with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
                 if not self._session_grant(db, ctx, matched_actions):
@@ -816,7 +901,7 @@ class GateAddon:
                 if approval_id is None:
                     row = action_approval.insert_action_approval(
                         db,
-                        session_id=ctx.session_id,
+                        **_approval_owner(ctx),
                         actions=[
                             a.model_dump(mode="json") for a in matched_actions.actions
                         ],
@@ -824,7 +909,7 @@ class GateAddon:
                         payload=matched_actions.payload,
                         integration_id=matched_actions.target.integration_id,
                         decision=ApprovalDecision.APPROVED,
-                        decided_via=ApprovalDecidedVia.SESSION_GRANT,
+                        decided_via=grant,
                     )
                     applied_approval_id = row.approval_id
                 else:
@@ -832,7 +917,7 @@ class GateAddon:
                         db,
                         approval_id=approval_id,
                         decision=ApprovalDecision.APPROVED,
-                        decided_via=ApprovalDecidedVia.SESSION_GRANT,
+                        decided_via=grant,
                     )
                     if decided is None:
                         return None
@@ -847,7 +932,7 @@ class GateAddon:
                     matched_actions,
                     decision=ApprovalDecision.APPROVED.value,
                     wake="-",
-                    source=ApprovalDecidedVia.SESSION_GRANT.value,
+                    source=grant.value,
                 ),
             )
             return applied_approval_id
@@ -868,21 +953,25 @@ class GateAddon:
             return None
 
     def _persist_approval_row(
-        self, ctx: SessionContext, matched_actions: AllMatchedActions
+        self,
+        ctx: SessionContext,
+        matched_actions: AllMatchedActions,
+        payload: dict[str, Any],
     ) -> UUID:
         """Commits the row, register it for the drain, announce to the chat.
 
         Announce is best-effort: a miss degrades to the FE surfacing the card on
-        the next `/live` refetch, so we don't fail the request.
+        the next `/live` refetch, so we don't fail the request. A chat
+        command's row is announced to the call that waits on the command.
         """
         actions_payload = [a.model_dump(mode="json") for a in matched_actions.actions]
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             row = action_approval.insert_action_approval(
                 db,
-                session_id=ctx.session_id,
+                **_approval_owner(ctx),
                 actions=actions_payload,
                 app_name=matched_actions.app_name,
-                payload=matched_actions.payload,
+                payload=payload,
                 integration_id=matched_actions.target.integration_id,
             )
             approval_id = row.approval_id
@@ -892,7 +981,7 @@ class GateAddon:
         try:
             approval_cache.announce_approval(
                 approval_id,
-                ctx.session_id,
+                ctx.chat_command_id or ctx.session_id,
                 self._cache_factory(ctx.tenant_id),
             )
         except CACHE_TRANSIENT_ERRORS as e:
@@ -921,7 +1010,9 @@ class GateAddon:
         )
 
         try:
-            self._notify_approval_requested(approval_id, ctx, matched_actions)
+            # The chat already shows the card on the call that waits.
+            if ctx.chat_command_id is None:
+                self._notify_approval_requested(approval_id, ctx, matched_actions)
         except Exception as e:
             logger.warning(
                 "approval_notify_error approval=%s error=%r approval_id=%s",
@@ -1326,9 +1417,10 @@ class GateAddon:
 
     def _resolve_gated_session(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox, tag: str | None
-    ) -> tuple[UUID, bool] | None:
+    ) -> tuple[UUID, bool, UUID | None] | None:
         """Resolves the originating session from the Proxy-Authorization tag:
-        the session id, and whether it is a chat (not a Craft session).
+        the session id, whether it is a chat (not a Craft session), and the
+        chat VM command that the tag names, if any.
 
         Returns None (caller fails closed) if the tag is absent, malformed, or
         doesn't resolve to one of this user's sessions. DB errors propagate to
@@ -1343,7 +1435,7 @@ class GateAddon:
             )
             return None
         try:
-            tagged_id = UUID(tag)
+            tagged_id, command_id = parse_session_tag(tag)
         except ValueError:
             logger.warning(
                 "session_malformed tenant=%s sandbox=%s host=%s",
@@ -1378,7 +1470,7 @@ class GateAddon:
             from_chat,
             flow.request.host,
         )
-        return exact, from_chat
+        return exact, from_chat, command_id
 
     def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
         """The originating session tag, or None.
@@ -1403,6 +1495,43 @@ class GateAddon:
         # still blocked by the src-IP-pinned sandbox identity in resolve_sandbox.
         mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
         return mcp_header or cached or direct
+
+
+def parse_session_tag(tag: str) -> tuple[UUID, UUID | None]:
+    """The session of a tag, and the chat VM command that it names. A chat
+    command sends `<chat session>.<command hex>`
+    (`harness_sandbox.py:command_proxy_user`); a Craft tag is the session
+    alone. Raises ValueError for a malformed tag."""
+    session, separator, command = tag.partition(".")
+    return UUID(session), UUID(command) if separator else None
+
+
+def _approval_owner(ctx: SessionContext) -> dict[str, Any]:
+    """The `insert_action_approval` arguments that own a request's row."""
+    if ctx.chat_command_id is None:
+        return {"session_id": ctx.session_id}
+    return {"session_id": None, "chat_command": (ctx.session_id, ctx.chat_command_id)}
+
+
+def _approval_payload(
+    flow: http.HTTPFlow, ctx: SessionContext, matched_actions: AllMatchedActions
+) -> dict[str, Any]:
+    """What the card shows. A chat card also names the method and path."""
+    if ctx.chat_command_id is None:
+        return matched_actions.payload
+    payload: dict[str, Any] = {
+        "method": flow.request.method,
+        "path": flow.request.path,
+    }
+    if matched_actions.payload:
+        payload["body"] = matched_actions.payload
+    return payload
+
+
+def _approval_needs_tool(matched_actions: AllMatchedActions) -> http.Response:
+    return http_403(
+        SandboxProxyError.APPROVAL_NEEDS_TOOL, detail=_app_tool_hint(matched_actions)
+    )
 
 
 def _app_tool_hint(matched_actions: AllMatchedActions) -> str:

@@ -555,7 +555,7 @@ def test_an_ask_action_in_a_session_opens_an_approval_with_the_integration(
     resolved = addon._resolve_request_policies(ctx, matched)
     assert resolved.governing_action.policy is ActionPolicy.ASK
 
-    approval_id = addon._persist_approval_row(ctx, resolved)
+    approval_id = addon._persist_approval_row(ctx, resolved, resolved.payload)
     addon._parked.remove(TENANT, approval_id)
     db_session.expire_all()
     row = db_session.get(ActionApproval, approval_id)

@@ -8,6 +8,15 @@ here is best-effort over `CacheBackend`. Two lists:
   stream. A miss degrades to the FE's next `/live` refetch.
 * `approval:wake:{approval_id}` — api-server RPUSHes when a decision is
   recorded; the parked proxy BLPOPs to wake before the wait timeout.
+
+A command that a chat runs in its VM uses the announce list under its command
+ID, and two more keys:
+
+* `approval:command:{command_id}:foreground` — the chat session of a command
+  that a call of the chat's run waits on. The call sets and renews it; the
+  proxy holds an Ask request of the command only while it is set.
+* `approval:command:{command_id}:grants` — the `integration:action` members
+  that the user approved for the rest of the command.
 """
 
 import asyncio
@@ -17,8 +26,9 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
-from onyx.db.enums import ApprovalDecision
-from onyx.external_apps.matching.engine import actions_requiring_approval
+from onyx.db.enums import ApprovalDecision, IntegrationKind
+from onyx.external_apps.matching.engine import ActionLike, actions_requiring_approval
+from onyx.integrations.policy import always_asks
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -33,6 +43,14 @@ WAKE_TTL_S = 30
 # Session grant cache keys are an acceleration layer. The durable grant source is
 # the action_approval row whose decision was recorded via SESSION_GRANT.
 SESSION_GRANT_TTL_S = 60 * 60
+
+# The call that waits on a command renews the key each second; a lost API
+# process leaves it for this long.
+COMMAND_FOREGROUND_TTL_S = 60
+# A command grant applies only while the command is in the foreground, and the
+# call deletes it when the command exits. The TTL covers a command that is
+# never polled again; it matches the VM's command deadline.
+COMMAND_GRANT_TTL_S = 4 * 60 * 60
 
 
 def announce_key(session_id: UUID) -> str:
@@ -176,6 +194,83 @@ def send_wake(
     """Wake the parked proxy. A miss just means it waits out the wait timeout."""
     cache.rpush(_wake_key(approval_id), decision.value)
     cache.expire(_wake_key(approval_id), WAKE_TTL_S)
+
+
+def _command_foreground_key(command_id: UUID) -> str:
+    return f"approval:command:{command_id}:foreground"
+
+
+def _command_grants_key(command_id: UUID) -> str:
+    return f"approval:command:{command_id}:grants"
+
+
+def _grant_member(integration_id: int, action_type: str) -> str:
+    return f"{integration_id}:{action_type}"
+
+
+def mark_command_foreground(
+    command_id: UUID, chat_session_id: UUID, cache: CacheBackend
+) -> None:
+    """Set or renew the mark of a command that a call waits on."""
+    cache.set(
+        _command_foreground_key(command_id),
+        str(chat_session_id),
+        ex=COMMAND_FOREGROUND_TTL_S,
+    )
+
+
+def clear_command_foreground(command_id: UUID, cache: CacheBackend) -> None:
+    cache.delete(_command_foreground_key(command_id))
+
+
+def command_in_foreground(
+    command_id: UUID, chat_session_id: UUID, cache: CacheBackend
+) -> bool:
+    """Whether a call of `chat_session_id` waits on the command now."""
+    value = cache.get(_command_foreground_key(command_id))
+    return value is not None and value.decode() == str(chat_session_id)
+
+
+def command_grant_actions(actions: Iterable[ActionLike]) -> list[str]:
+    """The action types that approving a request for the rest of its command
+    covers: its Ask actions. None when one of its actions could always ask:
+    the row has no integration kind, so this takes the strict API rule."""
+    action_types = actions_requiring_approval(actions)
+    if any(always_asks(IntegrationKind.API, t) for t in action_types):
+        return []
+    return action_types
+
+
+def grant_command_actions(
+    command_id: UUID,
+    integration_id: int,
+    action_types: Iterable[str],
+    cache: CacheBackend,
+) -> None:
+    key = _command_grants_key(command_id)
+    for action_type in set(action_types):
+        cache.set_add(key, _grant_member(integration_id, action_type))
+    cache.expire(key, COMMAND_GRANT_TTL_S)
+
+
+def command_grants_cover(
+    command_id: UUID,
+    integration_id: int,
+    action_types: Iterable[str],
+    cache: CacheBackend,
+) -> bool:
+    """Whether the user approved every one of `action_types` (non-empty) for
+    the rest of the command."""
+    key = _command_grants_key(command_id)
+    unique = set(action_types)
+    return bool(unique) and all(
+        cache.set_contains(key, _grant_member(integration_id, action_type))
+        for action_type in unique
+    )
+
+
+def drop_command_grants(command_id: UUID, cache: CacheBackend) -> None:
+    cache.delete(_command_grants_key(command_id))
 
 
 def pop_announcement(

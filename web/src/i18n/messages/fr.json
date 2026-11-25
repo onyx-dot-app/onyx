@@ -14402,6 +14402,10 @@
         "button": "Approuver pour ce chat",
         "tooltip": "Approuver maintenant et exécuter cet outil sans redemander pendant le reste de ce chat"
       },
+      "approveCommand": {
+        "button": "Approuver pour cette commande",
+        "tooltip": "Approuver maintenant et autoriser cette action sans redemander jusqu'à la fin de la commande"
+      },
       "approveOnce": {
         "ariaLabel": "Approuver cette action une fois",
         "button": "Approuver une fois"
@@ -14429,6 +14433,7 @@
         "expired": "Délai dépassé : {headline}",
         "rejected": "Non approuvé : {headline}",
         "approvedForChat": "Approuvé pour ce chat : {headline}",
+        "approvedForCommand": "Approuvé pour cette commande : {headline}",
         "approvedForSession": "Approuvé pour cette session : {headline}"
       },
       "submitError": "Impossible d'envoyer votre décision. Réessayez.",
