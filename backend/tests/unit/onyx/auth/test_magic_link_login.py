@@ -244,7 +244,7 @@ async def test_the_allowlist_is_read_strictly(tenant_work: _TenantWork) -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_unreadable_allowlist_is_a_retryable_refusal(
+async def test_an_unreadable_allowlist_asks_for_a_new_link(
     tenant_work: _TenantWork,
 ) -> None:
     tenant_work.get_settings.side_effect = RuntimeError("db down")
@@ -253,5 +253,7 @@ async def test_an_unreadable_allowlist_is_a_retryable_refusal(
         await tenant_work.manager.magic_link_login(EMAIL, None)
 
     assert excinfo.value.error_code is OnyxErrorCode.SERVICE_UNAVAILABLE
+    # The link is used up by now, so only a new one can work.
+    assert "new link" in excinfo.value.detail
     tenant_work.user_db.get_by_email.assert_not_awaited()
     tenant_work.insert.assert_not_awaited()

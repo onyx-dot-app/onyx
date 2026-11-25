@@ -1425,9 +1425,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 logger.exception(
                     "Could not read the security settings for %s", tenant_id
                 )
+                # The token is already used up, so the same link cannot work.
                 raise OnyxError(
                     OnyxErrorCode.SERVICE_UNAVAILABLE,
-                    "Could not check the sign-in settings. Try again in a moment.",
+                    "Could not check the sign-in settings. "
+                    "Request a new link in a moment.",
                 ) from e
             valid_email_domains = security_settings.valid_email_domains
             verify_email_domain(email, valid_email_domains=valid_email_domains)
