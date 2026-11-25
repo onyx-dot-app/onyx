@@ -325,7 +325,12 @@ class HarnessSandbox(abc.ABC):
     ) -> bool:
         """Put the skill's files (`<name>/<path>` to bytes) in the read-only
         folder `chat_skill_folder(name)`, unless the VM already has
-        `version`. True when it copied."""
+        `version`; then it sends nothing. True when it copied."""
+
+    @abc.abstractmethod
+    def installed_skill_version(self, ref: HarnessSandboxRef, name: str) -> str | None:
+        """The version of the skill in `chat_skill_folder(name)`; None when
+        the VM has no such skill."""
 
     @abc.abstractmethod
     def exec_command(

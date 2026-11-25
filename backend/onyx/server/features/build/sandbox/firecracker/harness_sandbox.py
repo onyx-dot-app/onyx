@@ -169,6 +169,7 @@ from onyx.server.features.build.sandbox.models import (
     SandboxPathFault,
     SandboxPathInfo,
     SandboxProvisionContentionError,
+    chat_skill_folder,
     session_workspace,
 )
 from onyx.utils.logger import setup_logger
@@ -193,6 +194,10 @@ _INIT_LOCK_SECONDS = 30.0
 # covers a restore at the agent's 15 min transfer deadline.
 _SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
 _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
+# The file in a skill's folder that holds its installed version, and the
+# guest daemon's limit on its size (files/skills.go).
+_SKILL_VERSION_FILE = ".version"
+_SKILL_VERSION_MAX_BYTES = 256
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
 # The daemon refuses Start and Run with these while it keeps its most commands.
@@ -232,6 +237,21 @@ def _find_started(
         logger.warning("sandbox_fc_start_reconcile_failed", exc_info=True)
         return None
     return found[0].execution_id if found else None
+
+
+def _installed_skill_version(daemon: SandboxDaemonClient, name: str) -> str | None:
+    """The version in the skill's folder; None without one."""
+    try:
+        _, chunks = daemon.read_file(
+            session_id="",
+            path=f"{chat_skill_folder(name)}/{_SKILL_VERSION_FILE}",
+            length=_SKILL_VERSION_MAX_BYTES,
+        )
+        return b"".join(chunks).decode(errors="replace")
+    except SandboxDaemonError as e:
+        if e.reason is not SandboxDaemonErrorReason.FILE_NOT_FOUND:
+            raise
+        return None
 
 
 def _clamp_ms(value: int | None, default: int, low: int, high: int) -> float:
@@ -274,27 +294,38 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             raise HarnessSandboxError(f"bad skill name {name!r}")
         if any(not path.startswith(f"{name}/") for path in files):
             raise HarnessSandboxError(f"skill {name!r} has files outside its folder")
-        buffer = io.BytesIO()
-        with tarfile.open(fileobj=buffer, mode="w", format=tarfile.PAX_FORMAT) as tar:
-            for path in sorted(files):
-                data = files[path]
-                info = tarfile.TarInfo(path)
-                info.size = len(data)
-                # FileSet keeps no modes: a script or a binary runs directly.
-                info.mode = 0o755 if data.startswith((b"#!", b"\x7fELF")) else 0o644
-                tar.addfile(info, io.BytesIO(data))
         daemon = sandbox_daemon(self._client_factory, self._place(ref))
-        installed = daemon.install_skill(
-            name=name, version=version, tar=buffer.getvalue()
-        )
+        # The daemon also skips a version it has, but only after the tar
+        # arrived: check first, so a VM that has the skill gets no tar.
+        copied = False
+        if _installed_skill_version(daemon, name) != version:
+            buffer = io.BytesIO()
+            with tarfile.open(
+                fileobj=buffer, mode="w", format=tarfile.PAX_FORMAT
+            ) as tar:
+                for path in sorted(files):
+                    data = files[path]
+                    info = tarfile.TarInfo(path)
+                    info.size = len(data)
+                    # FileSet keeps no modes: a script or a binary runs directly.
+                    info.mode = 0o755 if data.startswith((b"#!", b"\x7fELF")) else 0o644
+                    tar.addfile(info, io.BytesIO(data))
+            copied = daemon.install_skill(
+                name=name, version=version, tar=buffer.getvalue()
+            )
         logger.info(
             "Skill %s (version %s) %s sandbox %s",
             name,
             version,
-            "copied into" if installed else "already in",
+            "copied into" if copied else "already in",
             ref.sandbox_id,
         )
-        return installed
+        return copied
+
+    def installed_skill_version(self, ref: HarnessSandboxRef, name: str) -> str | None:
+        return _installed_skill_version(
+            sandbox_daemon(self._client_factory, self._place(ref)), name
+        )
 
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not

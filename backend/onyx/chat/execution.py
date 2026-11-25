@@ -1099,6 +1099,7 @@ def create_chat_agent(
                 chat_session_id=setup.chat_session_id,
                 vm_chat_files=setup.vm_chat_files,
                 copy_vm_chat_files=setup.copy_vm_chat_files,
+                built_in_skills=setup.built_in_skills,
                 shell=sandbox.shell,
             )
             if setup.sandbox_tools
@@ -1112,7 +1113,7 @@ def create_chat_agent(
                 for tool in sandbox_tools:
                     tool.approval = None
             tools += sandbox_tools
-            if setup.has_chat_skills:
+            if setup.has_custom_skill_files:
                 tools.append(LoadSkillTool(turn))
         return build_chat_agent(
             AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),

@@ -77,6 +77,7 @@ class _FakeVMTurn(SandboxTurn):
             chat_session_id=uuid4(),
             vm_chat_files=[],
             copy_vm_chat_files=False,
+            built_in_skills=(),
             shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         self.files: dict[str, bytes] = {}

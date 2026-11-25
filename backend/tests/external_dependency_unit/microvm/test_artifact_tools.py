@@ -265,6 +265,7 @@ def _turn(
         chat_session_id=chat_session_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        built_in_skills=(),
         shell=SHELL_SHAPES[family],
     )
 

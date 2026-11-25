@@ -359,9 +359,9 @@ class ChatAgent(Agent, RestorableFeature):
         # The model reads the tools in tool order, whatever order the
         # configuration, code mode and the agent tools add them in.
         self.application_tools = sorted(self.application_tools, key=tool_order)
-        # The root agent's sandbox and code mode results end with the file
-        # copy status line when it changed. Subagents and the calls inside a
-        # code mode program never read it, so they cannot use it up.
+        # The root agent's sandbox and code mode results end with the copy
+        # status lines that changed. Subagents and the calls inside a
+        # code mode program never read them, so they cannot use them up.
         self._file_status_tools = (
             frozenset(
                 tool.name
@@ -423,9 +423,10 @@ class ChatAgent(Agent, RestorableFeature):
     def _prepare_sandbox_result(
         self, turn: SandboxTurn, context: ToolResultContext
     ) -> ToolResult:
-        """Spill a large result, then add the file copy status line to a
-        successful result that the root model gets. An amendment or a failed
-        result gets no status line; the line waits for the next result."""
+        """Spill a large result, then add the copy status lines (chat files,
+        built-in skills) to a successful result that the root model gets. An
+        amendment or a failed result gets no status line; the line waits for
+        the next result."""
         result = spill_large_result(
             turn,
             context,
@@ -438,11 +439,18 @@ class ChatAgent(Agent, RestorableFeature):
             or not any(call.name in self._file_status_tools for call in context.calls)
         ):
             return result
-        line = None if turn.file_copies is None else turn.file_copies.status.line()
-        if line is None:
+        lines = [
+            line
+            for copies in (turn.file_copies, turn.skill_copies)
+            if copies is not None and (line := copies.status.line()) is not None
+        ]
+        if not lines:
             return result
         return result.model_copy(
-            update={"content": f"{result.content}\n\n{line}", "estimated_tokens": None}
+            update={
+                "content": "\n\n".join([result.content, *lines]),
+                "estimated_tokens": None,
+            }
         )
 
     def capture_state(self) -> ChatFeatureState:

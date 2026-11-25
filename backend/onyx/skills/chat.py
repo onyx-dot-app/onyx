@@ -26,10 +26,7 @@ from onyx.prompts.skill_prompts import (
 )
 from onyx.skills.content import read_chat_skills_md
 from onyx.skills.models import ChatSkill, ChatSkillFiles
-from onyx.tools.constants import (
-    LOAD_SKILL_TOOL_NAME,
-    SKILLS_LIST_TOOL_NAME,
-)
+from onyx.tools.constants import SKILLS_LIST_TOOL_NAME
 
 # Codex limits: the catalog's skill lines use at most 2% of the context
 # window, at four UTF-8 bytes a token counted for each line with its newline;
@@ -101,7 +98,6 @@ def render_skills_catalog(
             skills="\n".join(lines),
             read_tool=called_name(read_tool_name),
             list_tool=called_name(SKILLS_LIST_TOOL_NAME),
-            load_tool=called_name(LOAD_SKILL_TOOL_NAME),
         )
 
     def line(index: int, chars: int) -> str:
@@ -181,6 +177,8 @@ def accept_picked_skills(
         user_id,
         db_session,
         with_sandbox=with_sandbox,
+        # Saved with the message, which a turn of another shape can read.
+        called_name=str,
     )
     # Stored counts use one tokenizer, as question counts do.
     tokenizer = get_tokenizer(None, None)

@@ -23,8 +23,8 @@ def session_workspace(session_id: UUID) -> str:
     return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
 
 
-# The chat skills in the VM: one read-only folder per skill, which
-# load_skill copies in.
+# The chat skills in the VM: one read-only folder per skill. The turn's
+# first sandbox call copies the built-ins in; load_skill copies a custom one.
 CHAT_SKILLS_PATH = "/var/lib/onyx/skills"
 
 

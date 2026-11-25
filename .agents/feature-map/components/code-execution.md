@@ -348,13 +348,16 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         each call: HarnessSandbox.begin_turn (an error is
                                         logged, the call still runs)
   LoadSkillTool                         the load_skill tool (sandbox_tools.py; code mode
-                                        DEFERRED; only for users with chat skills):
+                                        DEFERRED; only when the user has custom skills
+                                        with files, ChatTurnSetup.has_custom_skill_files):
                                         skills/chat.py:load_chat_skill_files resolves the
                                         skill at the version the user runs now and builds its
                                         files (skills/push.py:build_chat_skill_files);
-                                        HarnessSandbox.install_skill then sends them as one tar
-                                        to the daemon's InstallSkill and waits (guest-daemon
-                                        README "Skills").
+                                        HarnessSandbox.install_skill reads the folder's
+                                        .version first and, when it differs, sends them as
+                                        one tar to the daemon's InstallSkill and waits
+                                        (guest-daemon README "Skills"). Built-ins reach the
+                                        VM through TurnSkillCopies.
   ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
                                         command gets AGENT_BROWSER_SESSION=<chat session>, so
                                         chats in one VM keep separate browsers); each
@@ -926,10 +929,22 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         (stubs.py:program_value)
   ChatAgent._prepare_sandbox_result     Wraps the spill. After it, the root agent's
                                         successful sandbox and code mode results end
-                                        with the turn's TurnFileCopies.status.line() when
-                                        it changed; failed results, amendments,
+                                        with the turn's TurnFileCopies and
+                                        TurnSkillCopies status lines that changed
+                                        ([files], [skills]); failed results, amendments,
                                         subagents and calls inside a program never get
                                         it
+  TurnSkillCopies (sandbox/file_copies) SandboxTurn.skill_copies: the turn's first sandbox
+                                        call starts it with the turn's built-in skills
+                                        (ChatTurnSetup.built_in_skills). In the VM's write
+                                        slots, each skill with files besides SKILL.md
+                                        whose folder lacks its version
+                                        (HarnessSandbox.installed_skill_version) is
+                                        installed (install_skill). No call waits for it;
+                                        the [skills] line names a skill while it copies
+                                        and once when it is done, so a VM that has them
+                                        gets no line. A new VM instance has none, so its
+                                        first turn copies them.
   TurnFileCopies (sandbox/file_copies)  SandboxTurn.file_copies: the turn's background copy
                                         of chat files into the chat's attachments/, and
                                         the [files] status line (in memory, per turn).

@@ -1,13 +1,22 @@
-"""Background copies of chat files and of search result files into the
-chat's sandbox VM, in the chat's working directory. No call waits for a copy.
+"""Background copies into the chat's sandbox VM: chat files and search
+result files in the chat's working directory, and the built-in skills in
+their read-only folders. No call waits for a copy.
 
-Two roots, each with its own copy:
+Three roots, each with its own copy:
 - Chat files: at the turn's first sandbox call, `SandboxTurn` starts the
   turn's `TurnFileCopies` with the chat's complete set of chat files in
   attachments/, attachments/project/ and attachments/agent/.
 - Search result files: when a search returns, `TurnSearchFiles.offer` takes
   the files of the results that the model is shown and copies them into
   attachments/search/.
+- Built-in skills: at the turn's first sandbox call, `SandboxTurn` starts
+  the turn's `TurnSkillCopies` with the turn's built-in skills. Each skill
+  with files besides SKILL.md that the VM lacks at its version (`.version`
+  in its folder) goes into
+  CHAT_SKILLS_PATH/<name>/ (`HarnessSandbox.install_skill`). A new VM
+  instance has none (a stop removes its disk), so the first turn on it
+  copies them. A call that runs before a copy ends does not wait for it;
+  the `[skills]` line tells the model.
 
 The rules:
 
@@ -75,8 +84,11 @@ The rules:
 - No response. A write, delete or listing that times out, or finds the VM
   instance gone, fails the copy's remaining files at once. Per-VM slot caps
   keep a hung VM from holding the other VMs' copies.
-- Status. Only chat files have the `[files]` status line; the search result
-  is the only place that names search files.
+- Status. Chat files have the `[files]` status line and built-in skills the
+  `[skills]` line; the search result is the only place that names search
+  files. The `[skills]` line names only the built-in skills that a turn
+  copies: a result during their copy says so, and the next result after it
+  says that they are done.
 - Session saves skip attachments/, since the copies come from the file store
   again after a restart.
 - Pod shutdown stops the copies before their next try; a write in flight
@@ -134,8 +146,14 @@ from onyx.server.features.build.sandbox.harness_base import (
     search_file_name,
     session_relative_path,
 )
-from onyx.server.features.build.sandbox.models import HarnessSandboxRef
+from onyx.server.features.build.sandbox.models import (
+    CHAT_SKILLS_PATH,
+    HarnessSandboxRef,
+)
 from onyx.server.settings.store import load_settings
+from onyx.skills.content import has_other_files
+from onyx.skills.models import ChatSkill, ChatSkillFiles
+from onyx.skills.push import chat_built_in_skill_files
 from onyx.tools.tool_implementations.sandbox.models import (
     SEARCH_FILE_MAX_BYTES,
     SearchResultFile,
@@ -333,6 +351,7 @@ _NO_START = CopyFailure("the sandbox did not start")
 _ERROR = CopyFailure("the copy stopped on an error")
 _NO_DOWNLOAD = CopyFailure("the file store did not return the file")
 _NOT_TAKEN = CopyFailure("the sandbox did not take the file")
+_SKILL_NOT_INSTALLED = CopyFailure("the sandbox did not install the skill")
 # A write without overwrite found a file at its path.
 EXISTS = CopyFailure("a file is already at the path")
 
@@ -460,11 +479,22 @@ def _named(names: Iterable[str], count: int, separator: str = ", ") -> str:
 
 
 class CopyStatus:
-    """The states of the turn's files, and the `[files]` status line. Each
-    file is in one state; the line counts every file and names at most
-    _NAMED_FILES of each state."""
+    """The states of the turn's files, and their status line: `[files]` for
+    chat files in CHAT_FILES_DIR, or another `kind` of `noun` in another
+    `folder`. Each file is in one state; the line counts every file and
+    names at most _NAMED_FILES of each state."""
 
-    def __init__(self, paths: Iterable[str]) -> None:
+    def __init__(
+        self,
+        paths: Iterable[str],
+        *,
+        kind: str = "files",
+        noun: str = "files",
+        folder: str = CHAT_FILES_DIR,
+    ) -> None:
+        self.kind = kind
+        self._noun = noun
+        self._folder = folder
         self._lock = threading.Lock()
         # By path, in the order that the files got their states: the state
         # and the text that the line names.
@@ -507,7 +537,7 @@ class CopyStatus:
         self.update((path, CopyState.FAILED, reason) for path in copying)
 
     def line(self) -> str | None:
-        """The `[files]` line when it differs from the last line given; the
+        """The status line when it differs from the last line given; the
         model sees it now (also when the result that it goes into is then
         cancelled). Files that were all in place have nothing to say, unless
         the model saw files copying."""
@@ -543,12 +573,12 @@ class CopyStatus:
                 lines.append(f"Done since last status: {named}.")
             if done and not copying:
                 lines.append(
-                    f"All files are in {CHAT_FILES_DIR}/."
+                    f"All {self._noun} are in {self._folder}/."
                     if len(done) == len(self._files)
-                    else f"All other files are in {CHAT_FILES_DIR}/."
+                    else f"All other {self._noun} are in {self._folder}/."
                 )
             self._new_done, self._new_done_count = [], 0
-            line = "[files] " + _INDENT.join(lines) if lines else None
+            line = f"[{self.kind}] " + _INDENT.join(lines) if lines else None
             if line is None or line == self._last:
                 return None
             self._last = line
@@ -888,6 +918,126 @@ class TurnFileCopies:
                     return
         if writes:
             FileWrites(ref, self._pool, files, writes, self._superseded, self._written)
+
+
+class TurnSkillCopies:
+    """The built-in skill copies of one turn: each skill with files besides
+    SKILL.md that the VM lacks at its version goes into its read-only folder
+    in CHAT_SKILLS_PATH, in the VM's write slots. Creating it starts the copy
+    and returns at once; `status` has its progress, as the `[skills]` line.
+    The line names a skill from when its check finds it missing, and once
+    more when its copy is done; a VM that has them all gets no line, so a
+    turn on a VM that has them says nothing."""
+
+    def __init__(
+        self,
+        ref: HarnessSandboxRef,
+        sandbox: HarnessSandbox,
+        skills: Sequence[ChatSkill],
+        *,
+        generation: int,
+    ) -> None:
+        self._ref = ref
+        self._sandbox = sandbox
+        self._pool = file_copy_pool()
+        self._superseded = partial(
+            _superseded,
+            get_cache_backend(
+                tenant_id=ref.tenant_id, operation_timeout_s=COPY_CACHE_SECONDS
+            ),
+            ref.session_id,
+            generation,
+        )
+        # By skill: its files. A skill with only SKILL.md has nothing to copy:
+        # the read tool gives its SKILL.md.
+        self._files: dict[str, ChatSkillFiles] = {}
+        for skill in skills:
+            files = chat_built_in_skill_files(
+                skill.built_in_skill_id or "", skill.path, skill.name
+            )
+            if has_other_files(
+                path.removeprefix(f"{skill.name}/") for path in files.files
+            ):
+                self._files[skill.name] = files
+        self.status = CopyStatus(
+            (),
+            kind="skills",
+            noun="built-in skills",
+            folder=CHAT_SKILLS_PATH,
+        )
+        self._lock = threading.Lock()
+        self._pending = deque(self._files)
+        # A call timed out or found the VM instance gone: no more tries.
+        self._no_response = False
+        self._pool.writes.want(ref.sandbox_id, self._next_copy)
+
+    def _next_copy(self) -> Task | None:
+        """The next skill's copy task, if any (for the pool)."""
+        with self._lock:
+            if not self._pending:
+                return None
+            name = self._pending.popleft()
+
+        def copy() -> None:
+            """Copy the skill. A failure that ends the copy fails the
+            waiting skills too."""
+            try:
+                failure = self._install(name)
+            except Exception:
+                logger.exception("sandbox_skill_copy_failed skill=%s", name)
+                failure = _ERROR
+            if failure is None:
+                return
+            ended = [name]
+            if failure.ends_copy:
+                with self._lock:
+                    ended += self._pending
+                    self._pending.clear()
+            self.status.update(
+                (skill, CopyState.FAILED, failure.reason) for skill in ended
+            )
+
+        return copy
+
+    def _install(self, name: str) -> CopyFailure | None:
+        """Install the skill unless the VM has its version, with its tries;
+        None, or why it failed."""
+        files = self._files[name]
+        checked = False
+        failure = _ERROR
+        for attempt in range(COPY_TRIES):
+            if attempt:
+                time.sleep(RETRY_PAUSE_SECONDS)
+            if self._no_response:
+                return NO_RESPONSE
+            if self._pool.stopped.is_set() or self._superseded():
+                return _SUPERSEDED
+            try:
+                if not checked:
+                    if (
+                        self._sandbox.installed_skill_version(self._ref, name)
+                        == files.version
+                    ):
+                        return None
+                    checked = True
+                    self.status.update([(name, CopyState.COPYING, None)])
+                self._sandbox.install_skill(self._ref, name, files.version, files.files)
+            except Exception as error:
+                logger.warning(
+                    "sandbox_skill_install_failed sandbox=%s skill=%s try=%d",
+                    self._ref.sandbox_id,
+                    name,
+                    attempt + 1,
+                    exc_info=True,
+                )
+                if no_response(error):
+                    self._no_response = True
+                    return NO_RESPONSE
+                failure = _SKILL_NOT_INSTALLED
+                continue
+            self.status.update([(name, CopyState.DONE, None)], written=True)
+            return None
+        return failure
 
 
 def _evictions(

@@ -401,6 +401,7 @@ def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> 
         chat_session_id=uuid4(),
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        built_in_skills=(),
         shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
     prefix = "tools." if code_mode else ""
@@ -458,6 +459,7 @@ def test_tool_guidance_follows_the_tool_order_in_both_prompt_variants() -> None:
         chat_session_id=uuid4(),
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        built_in_skills=(),
         shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
     # Offered in another order than the ranks.
@@ -523,6 +525,7 @@ def test_the_search_guidance_opens_the_tools_section(
         chat_session_id=uuid4(),
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        built_in_skills=(),
         shell=sandbox.shell,
     )
     functions: list[Tool] = [

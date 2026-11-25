@@ -667,6 +667,7 @@ def test_the_chat_file_copy_never_deletes_search_or_artifact_files(
                     VmChatFile(file_id=file_id, path="attachments/project/p.txt")
                 ],
                 copy_vm_chat_files=True,
+                built_in_skills=(),
                 shell=SHELL_SHAPES[ToolFamily.OPENAI],
             )
 
@@ -725,6 +726,7 @@ def test_a_search_leaves_the_chat_file_copy_of_its_turn_running(
                 VmChatFile(file_id=uploads[1], path="attachments/b.txt"),
             ],
             copy_vm_chat_files=True,
+            built_in_skills=(),
             shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         ref = turn.start_call()
@@ -903,6 +905,7 @@ def test_an_earlier_turns_late_search_leaves_the_newer_turn_alone(
             chat_session_id=chat_session_id,
             vm_chat_files=chat_files,
             copy_vm_chat_files=bool(chat_files),
+            built_in_skills=(),
             shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
 
@@ -1339,6 +1342,7 @@ def test_a_file_offered_while_the_intake_runs_is_copied(
         chat_session_id=chat_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        built_in_skills=(),
         shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
 
@@ -1388,6 +1392,7 @@ def test_a_write_that_ends_during_the_listing_still_counts_toward_the_cap(
         chat_session_id=chat_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        built_in_skills=(),
         shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
     ref = turn.copy_target().ref

@@ -1308,7 +1308,12 @@ def test_a_skill_copies_once_per_version_and_vm(
         path: node.agent.file_modes[(*folder[:2], f"{folder[2]}/{path}")]
         for path in ("SKILL.md", "scripts/run.sh", "data.bin")
     } == {"SKILL.md": 0o644, "scripts/run.sh": 0o755, "data.bin": 0o755}
+    assert sandbox.installed_skill_version(ref, "report") == "v1"
+    assert sandbox.installed_skill_version(ref, "other") is None
+    # The VM has the version: no tar goes to the daemon.
+    calls = list(node.agent.skill_install_calls)
     assert not sandbox.install_skill(ref, "report", "v1", v1)
+    assert node.agent.skill_install_calls == calls
 
     assert sandbox.install_skill(ref, "report", "v2", {"report/SKILL.md": b"# v2"})
     assert copied() == {"report/SKILL.md": b"# v2", "report/.version": b"v2"}

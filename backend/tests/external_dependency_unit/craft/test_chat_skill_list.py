@@ -32,10 +32,15 @@ from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.models import CHAT_SKILLS_PATH
 from onyx.skills.built_in import CHAT_BUILT_IN_SKILL_IDS
-from onyx.skills.content import read_chat_skills_md, read_versions_skill_md
+from onyx.skills.content import (
+    custom_skills_with_files,
+    read_chat_skills_md,
+    read_versions_skill_md,
+)
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
 from onyx.skills.models import ChatSkill, ChatSkillFiles
 from onyx.skills.push import build_chat_skill_files
+from onyx.tools.constants import LOAD_SKILL_TOOL_NAME
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
@@ -312,10 +317,14 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     )
 
     pptx = built_ins["pptx"]
-    skill_md = read_chat_skills_md([pptx], user.id, db_session, with_sandbox=True)[
-        (pptx.version_id, pptx.path)
-    ]
-    assert skill_md.startswith(f"Skill files: {CHAT_SKILLS_PATH}/pptx/")
+    skill_md = read_chat_skills_md(
+        [pptx], user.id, db_session, with_sandbox=True, called_name=str
+    )[(pptx.version_id, pptx.path)]
+    # The sandbox gets the built-ins without load_skill.
+    assert skill_md.startswith(
+        f"Skill files: {CHAT_SKILLS_PATH}/pptx/ (read-only), in the sandbox. "
+    )
+    assert LOAD_SKILL_TOOL_NAME not in skill_md
     assert f"python {CHAT_SKILLS_PATH}/pptx/scripts/lint.py" in skill_md
 
     # A skill with no other files has nothing to load.
@@ -327,9 +336,9 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     ]
     assert only_md
     for skill in only_md:
-        text = read_chat_skills_md([skill], user.id, db_session, with_sandbox=True)[
-            (skill.version_id, skill.path)
-        ]
+        text = read_chat_skills_md(
+            [skill], user.id, db_session, with_sandbox=True, called_name=str
+        )[(skill.version_id, skill.path)]
         assert not text.startswith("Skill files:")
 
 
@@ -372,12 +381,22 @@ def test_a_custom_chat_skill_copies_its_folder_and_names_it(
 
     key = (skill.version_id, skill.path)
     with_sandbox = read_chat_skills_md(
-        [skill], author.id, db_session, with_sandbox=True
+        [skill],
+        author.id,
+        db_session,
+        with_sandbox=True,
+        called_name=lambda name: f"tools.{name}",
     )
-    assert with_sandbox[key].startswith(f"Skill files: {folder}/ (read-only). ")
+    # The line names load_skill as the agent calls it, here in code mode.
+    assert with_sandbox[key].startswith(
+        f"Skill files: {folder}/ (read-only). Call tools.{LOAD_SKILL_TOOL_NAME} "
+    )
+    assert custom_skills_with_files([skill], db_session) == {key}
     assert f"Run python {folder}/scripts/run.py." in with_sandbox[key]
     assert f"Run python {folder}/scripts/run.py." in copied_md
-    without = read_chat_skills_md([skill], author.id, db_session, with_sandbox=False)
+    without = read_chat_skills_md(
+        [skill], author.id, db_session, with_sandbox=False, called_name=str
+    )
     assert without[key].startswith(f"---\nname: {name}\n")
 
     # A skill with only SKILL.md has nothing to load.
@@ -387,5 +406,8 @@ def test_a_custom_chat_skill_copies_its_folder_and_names_it(
         author,
         {"SKILL.md": f"---\nname: only-{name}\ndescription: Only\n---\n\nHi.\n"},
     )
-    text = read_chat_skills_md([only_md], author.id, db_session, with_sandbox=True)
+    text = read_chat_skills_md(
+        [only_md], author.id, db_session, with_sandbox=True, called_name=str
+    )
     assert text[(only_md.version_id, only_md.path)].startswith("---\nname: only-")
+    assert not custom_skills_with_files([only_md], db_session)

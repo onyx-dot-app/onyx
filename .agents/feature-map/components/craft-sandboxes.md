@@ -86,7 +86,8 @@ In a Firecracker VM, managed content mounts on read-only, noexec drives at
 `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the same A/B slot
 mechanism); scripts run through interpreters. Skills go to the guest daemon's
 root-owned folder `/var/lib/onyx/skills`, shared by every session, which
-`InstallSkill` fills when chat's `load_skill` runs ([[skills]]). It is on the
+`InstallSkill` fills with the built-ins at a chat turn's first sandbox call,
+and with a custom skill when chat's `load_skill` runs ([[skills]]). It is on the
 writable `/var` overlay, outside the sandbox user's home, so the sandbox user
 can read it but not change it; a VM restart empties it. Each session has
 `/home/onyx/workspaces/<session-id>`, the default working directory of its
@@ -273,7 +274,8 @@ the stored token on each request, so a new token takes effect at once.
   managed drive (put, swap). Chat does not use the managed drive for skills:
   `FirecrackerHarnessSandbox.install_skill` sends one skill's files as a plain
   tar to the daemon's `InstallSkill` (rules in the guest-daemon README,
-  "Skills"). The backend keeps no record of what a VM has. Stubs in `backend/onyx/microvm/generated/`; the
+  "Skills"), after it reads the folder's `.version`, so a VM that has the
+  version gets no tar. The backend keeps no record of what a VM has. Stubs in `backend/onyx/microvm/generated/`; the
   `microvm-python-stubs` pre-commit hook fails when they differ from
   `microvm/proto` (`regenerate.sh --check`).
 - `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through

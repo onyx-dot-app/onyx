@@ -13,11 +13,13 @@ from onyx.server.features.build.sandbox.file_copy_state import (
 )
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
+from onyx.skills.models import ChatSkill
 from onyx.tools.tool_implementations.sandbox.file_copies import (
     COPY_CACHE_SECONDS,
     CopyTarget,
     TurnFileCopies,
     TurnSearchFiles,
+    TurnSkillCopies,
 )
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.tools.tool_implementations.sandbox.shapes import ShellShape
@@ -42,10 +44,11 @@ class SandboxTurn:
 
     `vm_chat_files` are the chat's files in the VM. In a turn that copies
     them (`copy_vm_chat_files`), the first call starts `file_copies`, their
-    background copy; the root chat agent adds its status line to sandbox and
-    code mode results (`chat/agent.py`). `search_files` copies the files of
-    the turn's search results (`file_copies.py`). Creating the turn takes the
-    chat's next copy generation, which both copies use.
+    background copy. The first call also starts `skill_copies`, the copy of
+    `built_in_skills`. The root chat agent adds their status lines to sandbox
+    and code mode results (`chat/agent.py`). `search_files` copies the files
+    of the turn's search results (`file_copies.py`). Creating the turn takes
+    the chat's next copy generation, which every copy uses.
     """
 
     def __init__(
@@ -56,6 +59,7 @@ class SandboxTurn:
         chat_session_id: UUID,
         vm_chat_files: Sequence[VmChatFile],
         copy_vm_chat_files: bool,
+        built_in_skills: Sequence[ChatSkill],
         shell: ShellShape,
     ) -> None:
         self._tenant_id = tenant_id
@@ -63,6 +67,7 @@ class SandboxTurn:
         self._chat_session_id = chat_session_id
         self.vm_chat_files = vm_chat_files
         self._copy_vm_chat_files = copy_vm_chat_files
+        self._built_in_skills = built_in_skills
         # The shell shape of the model's tool family, which the turn's tools
         # call and name.
         self.shell = shell
@@ -83,6 +88,7 @@ class SandboxTurn:
                 "sandbox_copy_generation_failed session=%s", chat_session_id
             )
         self.file_copies: TurnFileCopies | None = None
+        self.skill_copies: TurnSkillCopies | None = None
         self.search_files = TurnSearchFiles(self.copy_target, user_id)
 
     @property
@@ -149,6 +155,22 @@ class SandboxTurn:
             except Exception:
                 logger.exception(
                     "sandbox_file_copies_start_failed sandbox=%s session=%s",
+                    ref.sandbox_id,
+                    ref.session_id,
+                )
+        if first and self._built_in_skills:
+            # A copy that fails to start leaves the skills to the next turn.
+            try:
+                target = self.copy_target()
+                self.skill_copies = TurnSkillCopies(
+                    target.ref,
+                    target.sandbox,
+                    self._built_in_skills,
+                    generation=target.generation,
+                )
+            except Exception:
+                logger.exception(
+                    "sandbox_skill_copies_start_failed sandbox=%s session=%s",
                     ref.sandbox_id,
                     ref.session_id,
                 )

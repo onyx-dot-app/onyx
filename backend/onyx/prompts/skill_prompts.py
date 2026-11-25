@@ -1,8 +1,8 @@
-# Codex's skills instructions, adapted to chat: SKILL.md comes from the read
-# tool, and a skill's other files reach the sandbox only through the load
-# tool. The steps address the agent that reads the catalog, which can be a
-# Deep Research research agent, and name the skill tools as that agent calls
-# them.
+# The skills instructions of chat: SKILL.md comes from the read
+# tool, and the `Skill files:` line of a SKILL.md says where its other files
+# are in the sandbox. The steps address the agent that reads the catalog,
+# which can be a Deep Research research agent, and name the skill tools as
+# that agent calls them.
 SKILLS_CATALOG_PROMPT = """<skills_instructions>
 ## Skills
 A skill is a set of instructions provided through a `SKILL.md` source. Below \
@@ -29,12 +29,9 @@ after you have read its result. If `{read_tool}` says the file continues, \
 call it again with `start_char` until the end. A skill in a <skill> block is \
 already loaded; do not read it again unless its block says it continues.
   2) When a `SKILL.md` starts with a `Skill files:` line, the skill has other \
-files, such as scripts. They are not in the sandbox until you call \
-`{load_tool}` with the skill's name. Call it before you read them or run its \
-scripts; then they are read-only at that folder. Do not decide that a \
-skill's files are missing before you load it. You cannot open the other \
-files of any other skill or run its scripts. \
-Follow its instructions as far as your tools allow, and tell the user when a \
+files, such as scripts, in the read-only folder that the line names. The line \
+says how to use them. A skill without that line has no other files that you \
+can open here: follow its instructions as far as your tools allow, and tell the user when a \
 step needs a bundled file or script.
   3) Read each selected skill yourself before acting on it. Do not delegate \
 reading, summarizing, or interpreting skill instructions to another agent. \
@@ -52,11 +49,22 @@ instructions, a step needs a file or script you cannot open), state the issue, \
 pick the next-best approach, and continue.
 </skills_instructions>"""
 
-SKILL_FILES_LINE = (
-    "Skill files: {folder}/ (read-only). Call {load_tool} before you use "
-    "them. Run its scripts with their interpreter, for example "
+_SKILL_FILES_USE = (
+    "Run its scripts with their interpreter, for example "
     "`python {folder}/scripts/<name>.py`. To change a file, copy the skill "
     "into your working directory first.\n\n"
+)
+
+# The sandbox gets the built-in skills at the turn's first sandbox call
+# (file_copies.py:TurnSkillCopies).
+BUILT_IN_SKILL_FILES_LINE = (
+    "Skill files: {folder}/ (read-only), in the sandbox. A `[skills]` line on "
+    "a tool result reports a copy of them in progress. " + _SKILL_FILES_USE
+)
+
+CUSTOM_SKILL_FILES_LINE = (
+    "Skill files: {folder}/ (read-only). Call {load_tool} with this skill's "
+    "name to copy them into the sandbox, then use them. " + _SKILL_FILES_USE
 )
 
 SKILLS_UNAVAILABLE_INTEGRATIONS_LINE = (

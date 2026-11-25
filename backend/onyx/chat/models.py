@@ -74,6 +74,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolApprovalRequest,
     ToolQuestionRequest,
 )
+from onyx.skills.models import ChatSkill
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
     ChatFile,
@@ -947,6 +948,9 @@ class ChatTurnSetup(BaseModel):
     vm_chat_files: list[VmChatFile]
     # The turn's first sandbox call copies them (SandboxTurn).
     copy_vm_chat_files: bool
+    # The chat built-in skills, which the turn's first sandbox call copies
+    # into the VM (SandboxTurn); none without the sandbox tools.
+    built_in_skills: list[ChatSkill]
     # The root agent gets the question tool (question_tool.py).
     question_tool: bool = False
     research_tool_id: int | None
@@ -984,6 +988,9 @@ class ChatTurnSetup(BaseModel):
     # The turn offers the skill tools when the user had custom skills as it
     # started; the tools and each agent's catalog read the current skills.
     has_chat_skills: bool
+    # The turn offers load_skill: it has the sandbox tools, and the user has
+    # custom skills with files besides SKILL.md.
+    has_custom_skill_files: bool
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool
     cache: CacheBackend

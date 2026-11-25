@@ -180,11 +180,19 @@
   does not change what earlier turns see. A skill that cannot be read when
   the message is accepted is not applied. In a turn with the sandbox tools,
   the SKILL.md (from `skills_read` or a pick) of a skill with other files
-  starts with a `Skill files: /var/lib/onyx/skills/<name>/ (read-only)` line that tells
-  the model to call `load_skill` first (`skills/content.py:read_chat_skills_md`;
-  a custom version with no `file_manifest` keeps the line).
-  `load_skill` copies the skill's files, built-in or custom, at the version
-  the user runs then, into that folder; reads and picks copy nothing. The
+  starts with a `Skill files: /var/lib/onyx/skills/<name>/ (read-only)` line
+  (`skills/content.py:read_chat_skills_md`). For a built-in, the line says
+  the files are in the sandbox: the turn's first sandbox call copies the
+  built-ins with other files that the VM lacks
+  (`tools/tool_implementations/sandbox/file_copies.py:TurnSkillCopies`, with
+  a `[skills]` status line while it copies). For a custom skill, the line tells
+  the model to call `load_skill` first, by the name the model calls it
+  (`tools.load_skill` in code mode; a pick, saved with the message, names
+  `load_skill`). `custom_skills_with_files` decides which custom skills have
+  files (a version with no `file_manifest` counts), and the turn offers
+  `load_skill` only when the user has one. `load_skill` copies the skill's
+  files at the version the user runs then, into that folder; reads and
+  picks copy nothing. The
   folder is shared by the user's chats on the VM, one copy per skill; a new
   version replaces it. To change a file, the agent copies the skill into its
   working directory. Without the sandbox tools, chat cannot open a custom
@@ -373,7 +381,7 @@ chat gets: the custom skills the sandbox loads for the user
 order and a version that is not invalid), with the name, description,
 `metadata.short-description` and id of the version the user runs. With
 `with_sandbox`, it also lists `list_chat_built_in_skills`, the built-ins that
-`load_skill` copies into the VM; they do not depend on the user. Anonymous users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
+each turn's first sandbox call copies into the VM; they do not depend on the user. Anonymous users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
 turn's picks and reservation, each agent reads it once when it is built (for
 its catalog), each skill tool call reads it, and so does each accepted
 mid-run message with picks. The `@` picker reads it through

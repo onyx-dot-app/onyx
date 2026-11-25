@@ -166,6 +166,14 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.file_times: dict[tuple[str, str, str], float] = {}
         # InstallSkill calls that copied a skill: (sandbox_id, name).
         self.skill_installs: list[tuple[str, str]] = []
+        # Every InstallSkill call, also one that copied nothing: the name.
+        self.skill_install_calls: list[str] = []
+        # By path as the daemon takes it: ReadFile waits for the event
+        # before it reads.
+        self.read_gates: dict[str, threading.Event] = {}
+        # By skill name: InstallSkill waits for the event after the tar
+        # arrived, before it stores.
+        self.skill_install_gates: dict[str, threading.Event] = {}
         # (sandbox_id, session_id, path) -> target of a symlink, as stored.
         self.links: dict[tuple[str, str, str], str] = {}
         # StatFiles facts of a path, as the guest daemon's os.Root reports
@@ -1316,6 +1324,9 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     def ReadFile(  # noqa: N802
         self, request: sandboxd_pb2.ReadFileRequest, context: grpc.ServicerContext
     ) -> Iterator[sandboxd_pb2.ReadFileResponse]:
+        gate = self.agent.read_gates.get(request.path)
+        if gate is not None:
+            gate.wait()
         with self.agent.lock:
             sandbox_id = self._ready(context)
             key = self._file_key(context, sandbox_id, request.session_id, request.path)
@@ -1570,6 +1581,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         folder = f"{CHAT_SKILLS_PATH}/{header.name}"
         with self.agent.lock:
             sandbox_id = self._ready(context)
+            self.agent.skill_install_calls.append(header.name)
             version_key = (sandbox_id, "", f"{folder}/.version")
             if self.agent.files.get(version_key) == header.version.encode():
                 # As the daemon does: answer without reading the tar.
@@ -1582,6 +1594,9 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             abort_daemon(
                 context, SandboxDaemonErrorReason.ARCHIVE_INVALID, "size or sha256"
             )
+        gate = self.agent.skill_install_gates.get(header.name)
+        if gate is not None:
+            gate.wait()
         with self.agent.lock:
             staged: dict[tuple[str, str, str], tuple[bytes, int]] = {}
             with tarfile.open(fileobj=io.BytesIO(data)) as tar:

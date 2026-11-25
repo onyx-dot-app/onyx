@@ -151,6 +151,7 @@ def new_turn(
             chat_session_id=chat or chat_session_id,
             vm_chat_files=chat_files or [],
             copy_vm_chat_files=chat_files is not None,
+            built_in_skills=(),
             shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         refs.append(turn.start_call())

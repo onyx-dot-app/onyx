@@ -1,6 +1,6 @@
 """Helpers for reading skill source content."""
 
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -14,7 +14,10 @@ from onyx.db.plugin import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
-from onyx.prompts.skill_prompts import SKILL_FILES_LINE
+from onyx.prompts.skill_prompts import (
+    BUILT_IN_SKILL_FILES_LINE,
+    CUSTOM_SKILL_FILES_LINE,
+)
 from onyx.server.features.build.sandbox.models import chat_skill_folder
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
@@ -130,19 +133,38 @@ def read_versions_skill_md(
     return skill_md
 
 
-def _has_other_files(paths: Iterable[str]) -> bool:
-    """Whether a skill folder's paths, relative to it, name a file that only
-    load_skill brings into the sandbox."""
+def has_other_files(paths: Iterable[str]) -> bool:
+    """Whether a skill folder's paths, relative to it, name a file besides
+    SKILL.md."""
     return any(
         path not in (SKILL_MD_NAME, f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}")
         for path in paths
     )
 
 
-def _files_line(skill: ChatSkill) -> str:
-    return SKILL_FILES_LINE.format(
-        folder=chat_skill_folder(skill.name), load_tool=LOAD_SKILL_TOOL_NAME
-    )
+def custom_skills_with_files(
+    skills: Collection[ChatSkill], db_session: Session
+) -> set[SkillKey]:
+    """The custom skills among `skills` with files besides SKILL.md, which
+    load_skill copies into the sandbox. A version with no file list may have
+    files, so it counts."""
+    keys = {
+        (skill.version_id, skill.path)
+        for skill in skills
+        if skill.built_in_skill_id is None
+    }
+    if not keys:
+        return set()
+    bundle_paths = get_skills_bundle_paths(keys, db_session)
+    with_files: set[SkillKey] = set()
+    for key in keys:
+        paths = bundle_paths.get(key)
+        prefix = f"{key[1]}/" if key[1] else ""
+        if paths is None or has_other_files(
+            path.removeprefix(prefix) for path in paths if path.startswith(prefix)
+        ):
+            with_files.add(key)
+    return with_files
 
 
 def read_chat_skills_md(
@@ -151,35 +173,34 @@ def read_chat_skills_md(
     db_session: Session,
     *,
     with_sandbox: bool,
+    called_name: Callable[[str], str],
 ) -> dict[SkillKey, str]:
     """``with_sandbox`` (a chat with the sandbox tools): a custom skill's text
     names its VM folder, and a skill with files besides SKILL.md starts with
-    the line that says to load them."""
+    the line that says where they are and how to use them. That line names
+    load_skill by `called_name`."""
     custom_keys = {
         (skill.version_id, skill.path)
         for skill in skills
         if skill.built_in_skill_id is None
     }
     skill_md = read_versions_skill_md(custom_keys, user_id, db_session)
-    bundle_paths = (
-        get_skills_bundle_paths(custom_keys, db_session) if with_sandbox else {}
-    )
+    with_files = custom_skills_with_files(skills, db_session) if with_sandbox else set()
     for skill in skills:
+        folder = chat_skill_folder(skill.name)
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id or "")
         if definition is None:
             key = (skill.version_id, skill.path)
             if with_sandbox and key in skill_md:
-                folder = chat_skill_folder(skill.name)
                 text = resolve_skill_dir_placeholder(skill_md[key], folder)
-                paths = bundle_paths.get(key)
-                prefix = f"{skill.path}/" if skill.path else ""
-                # A version with no file list may have files: keep the line.
-                if paths is None or _has_other_files(
-                    path.removeprefix(prefix)
-                    for path in paths
-                    if path.startswith(prefix)
-                ):
-                    text = _files_line(skill) + text
+                if key in with_files:
+                    text = (
+                        CUSTOM_SKILL_FILES_LINE.format(
+                            folder=folder,
+                            load_tool=called_name(LOAD_SKILL_TOOL_NAME),
+                        )
+                        + text
+                    )
                 skill_md[key] = text
             continue
         try:
@@ -188,10 +209,12 @@ def read_chat_skills_md(
             logger.warning("Could not read built-in skill %s", skill.name)
             continue
         source_dir = definition.source_dir / skill.path
-        if _has_other_files(
+        if has_other_files(
             path.relative_to(source_dir).as_posix()
             for path in iter_builtin_skill_files(source_dir)
         ):
-            instructions = _files_line(skill) + instructions
+            instructions = (
+                BUILT_IN_SKILL_FILES_LINE.format(folder=folder) + instructions
+            )
         skill_md[(skill.version_id, skill.path)] = instructions
     return skill_md

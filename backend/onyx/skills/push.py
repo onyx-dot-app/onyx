@@ -463,10 +463,9 @@ def build_chat_skill_files(
     read. A built-in's key is the hash of its files, which change only with
     a deploy; a custom skill's is its version and folder."""
     if skill.built_in_skill_id is not None:
-        files, digest = _chat_built_in_skill_files(
+        return chat_built_in_skill_files(
             skill.built_in_skill_id, skill.path, skill.name
         )
-        return ChatSkillFiles(version=digest, files=dict(files))
     runtime_skill = next(
         (
             runtime_skill
@@ -499,9 +498,12 @@ def build_chat_skill_files(
 
 
 @cache
-def _chat_built_in_skill_files(
+def chat_built_in_skill_files(
     built_in_skill_id: str, path: str, name: str
-) -> tuple[tuple[tuple[str, bytes], ...], str]:
+) -> ChatSkillFiles:
+    """A chat built-in's files, each under `<name>/`, read once per process
+    and shared by every tenant: callers must not change them. The version is
+    the hash of the files, which change only with a deploy."""
     files: FileSet = {}
     _add_static_builtin(
         files,
@@ -512,7 +514,7 @@ def _chat_built_in_skill_files(
     for file_path, data in sorted(files.items()):
         digest.update(f"{file_path}\0{len(data)}\0".encode())
         digest.update(data)
-    return tuple(sorted(files.items())), digest.hexdigest()
+    return ChatSkillFiles(version=digest.hexdigest(), files=files)
 
 
 def push_skill_to_affected_sandboxes(skill: Plugin, db_session: Session) -> None:

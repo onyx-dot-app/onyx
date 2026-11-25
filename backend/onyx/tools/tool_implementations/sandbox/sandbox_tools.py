@@ -1036,15 +1036,18 @@ class LoadSkillArguments(BaseModel):
 
 
 class LoadSkillTool(SandboxTool):
-    """Copies one of the user's skills into its read-only sandbox folder."""
+    """Copies one of the user's custom skills into its read-only sandbox
+    folder. The turn offers it when the user has custom skills with files;
+    the built-ins reach the VM through file_copies.py:TurnSkillCopies."""
 
     rank = ToolRank.SKILLS_LOAD
     NAME = LOAD_SKILL_TOOL_NAME
     USE = None
     DESCRIPTION = (
-        "Copy a skill's files into the sandbox, read-only, at "
-        f"{CHAT_SKILLS_PATH}/<name>/. Call it before you run the skill's "
-        "scripts or open its other files. It returns when the copy is done."
+        "Copy the files of one of the user's own skills into the sandbox, "
+        f"read-only, at {CHAT_SKILLS_PATH}/<name>/. Call it before you run "
+        "that skill's scripts or open its other files. It returns when the "
+        "copy is done."
     )
     arguments = LoadSkillArguments
     display_name = "Load skill"

@@ -1,4 +1,5 @@
 from collections.abc import Callable, Generator
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -9,6 +10,7 @@ from onyx.microvm import reconcile, registry
 from onyx.microvm.registry import set_node_agent_address
 from onyx.tools.tool_implementations.sandbox import file_copies
 from onyx.tools.tool_implementations.sandbox.file_copies import FileCopyPool
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.microvm.fake_agent import (
     FakeHostAgent,
@@ -24,6 +26,24 @@ def forget_sandbox_keys(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
     registry.clear_sandbox_placement(tenant_cache, sandbox_id)
     registry.clear_sandbox_daemon_key(tenant_cache, sandbox_id)
     registry.clear_sandbox_reservation(tenant_cache, sandbox_id)
+
+
+@pytest.fixture(autouse=True)
+def no_built_in_skill_copies(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Turns copy no built-in skills, so their results get no `[skills]`
+    line, whatever the timing. A test marked `copies_built_in_skills` keeps
+    the copies."""
+    if request.node.get_closest_marker("copies_built_in_skills") is not None:
+        return
+    init = SandboxTurn.__init__
+
+    def without_built_ins(turn: SandboxTurn, **kwargs: Any) -> None:
+        kwargs["built_in_skills"] = ()
+        init(turn, **kwargs)
+
+    monkeypatch.setattr(SandboxTurn, "__init__", without_built_ins)
 
 
 @pytest.fixture

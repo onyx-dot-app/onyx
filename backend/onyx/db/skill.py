@@ -437,23 +437,23 @@ def list_runtime_skills_for_user(
     ]
 
 
-def list_chat_built_in_skills(db_session: Session) -> list[RuntimeSkill]:
-    """The available built-ins that chat shows and that load_skill copies
-    into the VM. They do not depend on the user."""
+def list_chat_built_in_skills(db_session: Session) -> list[ChatSkill]:
+    """The available built-ins that chat shows and that every chat VM gets
+    when it starts. They do not depend on the user."""
     return [
-        RuntimeSkill(
-            id=row.id,
+        ChatSkill(
+            name=plugin_skill.name if plugin_skill.path else row.name,
+            description=plugin_skill.description,
+            version_id=row.id,
+            path=plugin_skill.path,
             built_in_skill_id=row.built_in_skill_id,
-            name=row.name,
-            plugin_skills=_built_in_skill_folders(
-                BUILT_IN_SKILLS[row.built_in_skill_id or ""]
-            ),
         )
         for row in db_session.scalars(
             _built_in_skill_select(db_session, include_unavailable=False).where(
                 Skill.built_in_skill_id.in_(CHAT_BUILT_IN_SKILL_IDS)
             )
         )
+        for plugin_skill in BUILT_IN_SKILLS[row.built_in_skill_id or ""].skills
     ]
 
 
@@ -463,19 +463,7 @@ def list_chat_skills(
     """Built-ins only ``with_sandbox``: when the turn has the sandbox tools."""
     if user.is_anonymous:
         return []
-    skills: list[ChatSkill] = []
-    if with_sandbox:
-        skills += [
-            ChatSkill(
-                name=plugin_skill.name if plugin_skill.path else built_in.name,
-                description=plugin_skill.description,
-                version_id=built_in.id,
-                path=plugin_skill.path,
-                built_in_skill_id=built_in.built_in_skill_id,
-            )
-            for built_in in list_chat_built_in_skills(db_session)
-            for plugin_skill in BUILT_IN_SKILLS[built_in.built_in_skill_id or ""].skills
-        ]
+    skills = list_chat_built_in_skills(db_session) if with_sandbox else []
     version_ids = [
         state.version_id for state in _user_skill_selection(user, db_session).loaded()
     ]

@@ -199,7 +199,11 @@ class SkillsReadTool(_SkillTool):
                     ),
                 )
             skill_md = read_chat_skills_md(
-                [skill], self.user.id, db_session, with_sandbox=self.with_sandbox
+                [skill],
+                self.user.id,
+                db_session,
+                with_sandbox=self.with_sandbox,
+                called_name=context.called_name,
             ).get((skill.version_id, skill.path))
         if skill_md is None:
             raise ToolCallException(

@@ -231,7 +231,10 @@ from onyx.tools.tool_implementations.sandbox import (
     sandbox_tools,
     spill,
 )
-from onyx.tools.tool_implementations.sandbox.file_copies import CopyStatus
+from onyx.tools.tool_implementations.sandbox.file_copies import (
+    CopyStatus,
+    file_copy_pool,
+)
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_FILES,
     ApplyPatchFileChange,
@@ -258,6 +261,7 @@ from onyx.tools.tool_implementations.sandbox.spill import (
     SPILL_FAILED_NOTE,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from onyx.tools.tool_implementations.skills.skill_tools import SKILL_READ_SHAPES
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from onyx.tools.tool_implementations.web_search.utils import (
     TRUNCATED_CONTENT_PREFIX,
@@ -402,6 +406,7 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
                 chat_session_id=session_id,
                 vm_chat_files=[],
                 copy_vm_chat_files=False,
+                built_in_skills=(),
                 shell=SHELL_SHAPES[family],
             )
             for family in (ToolFamily.OPENAI, ToolFamily.CLAUDE)
@@ -3846,11 +3851,14 @@ def test_a_cell_that_closes_after_a_large_observation_spills_both_records(
 
 
 def _scripted_status(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Each read of the file copy status gives a new line; returns the lines
-    given, in order."""
+    """Each read of the chat file copy status gives a new line; returns the
+    lines given, in order. Other statuses keep their lines."""
     given: list[str] = []
+    real_line = CopyStatus.line
 
-    def line(_status: CopyStatus) -> str:
+    def line(status: CopyStatus) -> str | None:
+        if status.kind != "files":
+            return real_line(status)
         given.append(f"[files] Copying: attachments/{len(given)}.txt.")
         return given[-1]
 
@@ -5558,10 +5566,154 @@ def test_open_url_without_a_sandbox_keeps_its_page_excerpts(
     ]
 
 
-@pytest.mark.usefixtures("node")
-def test_only_load_skill_puts_the_skill_files_in_the_vm(
-    db_session: Session, chat: SandboxChat, node: RunningFakeAgent
+def _skills_line(text: str) -> str:
+    """The `[skills]` status line of a tool result."""
+    return "[skills] " + text.split("[skills] ", 1)[1].split("\n", 1)[0]
+
+
+def _vm_skill_files(node: RunningFakeAgent, ref: HarnessSandboxRef) -> set[str]:
+    return {
+        path
+        for sandbox_id, session_id, path in node.agent.files
+        if (sandbox_id, session_id) == (str(ref.sandbox_id), "")
+        and path.startswith(f"{CHAT_SKILLS_PATH}/")
+    }
+
+
+@pytest.mark.copies_built_in_skills
+def test_the_first_sandbox_call_copies_the_built_in_skills_once_per_vm(
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
 ) -> None:
+    lint = f"{CHAT_SKILLS_PATH}/pptx/scripts/lint.py"
+    # The version check of pptx waits until the first result is back.
+    gate = threading.Event()
+    node.agent.read_gates[f"{CHAT_SKILLS_PATH}/pptx/.version"] = gate
+
+    def release() -> None:
+        gate.set()
+        _wait_until(file_copy_pool().idle)
+
+    # A call that runs before the check returns at once; the next result
+    # says that the copy is done.
+    llm = ChatLLM(
+        [
+            tool_step(EXEC_COMMAND_TOOL_NAME, "during", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "after", {"cmd": "echo hi"}),
+            Delta(content="Done."),
+        ],
+        gates={1: release},
+    )
+    chat.send(llm)
+    assert "[skills]" not in last_tool_text(llm, "during")
+    assert last_tool_text(llm, "after").endswith(
+        "[skills] Done since last status: pptx."
+        f"\n        All built-in skills are in {CHAT_SKILLS_PATH}/."
+    )
+    ref = chat.ref(db_session)
+    assert lint in _vm_skill_files(node, ref)
+    # browser has only SKILL.md: nothing to copy.
+    assert node.agent.skill_install_calls == ["pptx"]
+    node.agent.read_gates.clear()
+
+    # The VM has them: a later turn sends nothing and says nothing.
+    calls = list(node.agent.skill_install_calls)
+    llm = ChatLLM(
+        [
+            tool_step(EXEC_COMMAND_TOOL_NAME, "again", {"cmd": "echo hi"}),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+    _wait_until(file_copy_pool().idle)
+    assert node.agent.skill_install_calls == calls
+    assert "[skills]" not in last_tool_text(llm, "again")
+
+    # A new VM instance starts with none, and its first turn copies them.
+    # A result during the copy says that pptx is copying.
+    vm = node.agent.vms[str(ref.sandbox_id)]
+    sandbox._client_factory.client(node.address).stop(
+        sandbox_id=str(ref.sandbox_id), attempt=vm.attempt, generation=vm.generation
+    )
+    assert lint not in _vm_skill_files(node, ref)
+    installing = threading.Event()
+    node.agent.skill_install_gates["pptx"] = installing
+
+    def install_started() -> None:
+        _wait_until(lambda: len(node.agent.skill_install_calls) > len(calls))
+
+    def install_done() -> None:
+        installing.set()
+        _wait_until(file_copy_pool().idle)
+
+    llm = ChatLLM(
+        [
+            tool_step(EXEC_COMMAND_TOOL_NAME, "new_vm", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "copying", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "copied", {"cmd": "echo hi"}),
+            Delta(content="Done."),
+        ],
+        gates={1: install_started, 2: install_done},
+    )
+    chat.send(llm)
+    assert "[skills] Copying: pptx." in (
+        last_tool_text(llm, "new_vm") + last_tool_text(llm, "copying")
+    )
+    assert "[skills] Done since last status: pptx." in last_tool_text(llm, "copied")
+    assert node.agent.skill_install_calls[len(calls) :] == ["pptx"]
+    assert lint in _vm_skill_files(node, ref)
+
+
+@pytest.mark.usefixtures("node")
+@pytest.mark.parametrize("shape", ["openai", "claude", "code_mode"])
+def test_load_skill_comes_only_with_custom_skill_files(
+    db_session: Session, node: RunningFakeAgent, chat: SandboxChat, shape: str
+) -> None:
+    """Built-in skills are in the sandbox without load_skill. A custom skill
+    with files gets load_skill, which its SKILL.md names as the model calls
+    it."""
+    code_mode = shape == "code_mode"
+    read_shape = SKILL_READ_SHAPES[
+        ToolFamily.CLAUDE if shape == "claude" else ToolFamily.OPENAI
+    ]
+    load_name = f"tools.{LOAD_SKILL_TOOL_NAME}" if code_mode else LOAD_SKILL_TOOL_NAME
+
+    def read_and_load(name: str, *, load: bool) -> list[Delta]:
+        if code_mode:
+            program = f"print(await tools.{SKILLS_READ_TOOL_NAME}(name={name!r}))\n"
+            if load:
+                program += f"print(await tools.{LOAD_SKILL_TOOL_NAME}(name={name!r}))\n"
+            return [code_step(OPENAI_CODE_MODE, f"read_{name}", program)]
+        argument = "skill" if shape == "claude" else "name"
+        steps = [tool_step(read_shape.name, f"read_{name}", {argument: name})]
+        if load:
+            steps += [
+                tool_step(LOAD_SKILL_TOOL_NAME, "load", {"name": name}),
+                tool_step(LOAD_SKILL_TOOL_NAME, "missing", {"name": "nope"}),
+            ]
+        return steps
+
+    def model(steps: list[Delta]) -> ChatLLM:
+        if shape == "claude":
+            return NamedChatLLM(
+                steps,
+                model_name="team-default",
+                deployment_name="anthropic/claude-opus-4-5",
+            )
+        return ChatLLM(steps)
+
+    llm = model([*read_and_load("pptx", load=False), Delta(content="Done.")])
+    chat.send(llm, code_mode=code_mode)
+    pptx_md = last_tool_text(llm, "read_pptx")
+    assert (
+        f"Skill files: {CHAT_SKILLS_PATH}/pptx/ (read-only), in the sandbox. "
+        in pptx_md
+    )
+    # Without custom skill files, no request names load_skill.
+    assert all(LOAD_SKILL_TOOL_NAME not in str(request) for request in llm.requests)
+
     custom = f"tool-{chat.user.id.hex[:8]}"
     _, plugin, _ = make_chat_custom_skill(
         db_session,
@@ -5571,27 +5723,23 @@ def test_only_load_skill_puts_the_skill_files_in_the_vm(
             "scripts/run.py": "print(1)\n",
         },
     )
-    llm = ChatLLM(
-        [
-            tool_step(SKILLS_READ_TOOL_NAME, "read", {"name": "pptx"}),
-            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi"}),
-            tool_step(LOAD_SKILL_TOOL_NAME, "load", {"name": "pptx"}),
-            tool_step(LOAD_SKILL_TOOL_NAME, "again", {"name": "pptx"}),
-            tool_step(LOAD_SKILL_TOOL_NAME, "custom", {"name": custom}),
-            tool_step(LOAD_SKILL_TOOL_NAME, "missing", {"name": "nope"}),
-            Delta(content="Done."),
-        ]
-    )
     try:
-        chat.send(llm)
+        llm = model([*read_and_load(custom, load=True), Delta(content="Done.")])
+        chat.send(llm, code_mode=code_mode)
     finally:
         db_session.refresh(plugin)
         for bundle_id in delete_skill(plugin, db_session):
             delete_bundle_blob(get_default_file_store(), bundle_id)
         db_session.commit()
-    assert [name for _, name in node.agent.skill_installs] == ["pptx", custom]
-    files = {path for _, _, path in node.agent.files}
-    assert f"{CHAT_SKILLS_PATH}/pptx/scripts/lint.py" in files
-    assert f"{CHAT_SKILLS_PATH}/{custom}/scripts/run.py" in files
-    assert f"{CHAT_SKILLS_PATH}/pptx/" in last_tool_text(llm, "again")
-    assert "No skill is named 'nope'" in last_tool_text(llm, "missing")
+    folder = f"{CHAT_SKILLS_PATH}/{custom}"
+    assert (
+        f"Skill files: {folder}/ (read-only). Call {load_name} with this skill's name"
+        in last_tool_text(llm, f"read_{custom}")
+    )
+    assert f"{folder}/scripts/run.py" in _vm_skill_files(node, chat.ref(db_session))
+    if not code_mode:
+        assert "No skill is named 'nope'" in last_tool_text(llm, "missing")
+        offered = {
+            tool["function"]["name"] for tool in llm.requests[0].get("tools") or []
+        }
+        assert LOAD_SKILL_TOOL_NAME in offered

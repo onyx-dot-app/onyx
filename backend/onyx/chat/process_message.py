@@ -153,6 +153,7 @@ from onyx.server.query_and_chat.token_limit import (
 )
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.skills.chat import accept_picked_skills, render_skills_catalog
+from onyx.skills.content import custom_skills_with_files
 from onyx.tools.constants import (
     FILE_READER_TOOL_ID,
     SEARCH_TOOL_ID,
@@ -571,6 +572,10 @@ def prepare_chat_turn(
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
             chat_skills = list_chat_skills(db_session, user, with_sandbox=sandbox_tools)
+            # The turn offers load_skill for custom skills with files.
+            has_custom_skill_files = sandbox_tools and bool(
+                custom_skills_with_files(chat_skills, db_session)
+            )
             # A question records its picks when it is accepted, after the
             # checks that can reject it; regeneration reuses the record.
             accepts_question = queued_turn is not None or (
@@ -991,6 +996,10 @@ def prepare_chat_turn(
             use_memories=preferences.use_memories,
             enable_memory_tool=preferences.enable_memory_tool,
             has_chat_skills=bool(chat_skills),
+            has_custom_skill_files=has_custom_skill_files,
+            built_in_skills=[
+                skill for skill in chat_skills if skill.built_in_skill_id is not None
+            ],
             skip_clarification=skip_clarification,
             cache=get_cache_backend(),
             admission=admission,
