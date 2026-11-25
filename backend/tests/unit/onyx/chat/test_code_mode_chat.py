@@ -410,7 +410,8 @@ def test_code_mode_shows_a_python_call_where_the_model_reads_first(
     family: ToolFamily,
 ) -> None:
     """The run tool's first line and the code mode section's first line say
-    that programs are Python and show a Python tool call."""
+    that programs are Python and show a Python tool call; the run tool's
+    also says that each call starts a fresh interpreter."""
     shape = CODE_MODE_SHAPES[family]
     offered = with_code_mode([MemoryTool(tool_id=1, llm=MagicMock())], shape)[0]
     [code_tool] = [tool for tool in offered if isinstance(tool, CodeModeTool)]
@@ -422,6 +423,12 @@ def test_code_mode_shows_a_python_call_where_the_model_reads_first(
     ):
         assert "Python program" in first_line
         assert python_call in first_line
+    # The run tool's opening also says that no state carries over by itself.
+    assert (
+        f"Each `{shape.run_name}` call starts a fresh Python interpreter: variables, "
+        "functions and imports from earlier calls are gone. Keep values across "
+        "calls with `store(key, value)` and `load(key)`."
+    ) in code_tool.tool_definition().description.split("\n", 1)[0]
 
 
 def _unused(*_: object) -> ToolResult:
