@@ -3038,10 +3038,8 @@ def find_summary_for_branch(
     )
 
 
-def get_selected_branch(
-    session: Session, chat_session_id: UUID
-) -> tuple[ChatMessage | None, ChatBranch]:
-    """Return the selected latest response and the message IDs on its branch."""
+def _selected_branch_cte(chat_session_id: UUID) -> CTE:
+    """The messages on the selected branch, with their depth from the root."""
     branch = (
         select(
             ChatMessage.id,
@@ -3054,7 +3052,7 @@ def get_selected_branch(
         )
         .cte("selected_branch", recursive=True)
     )
-    branch = branch.union_all(
+    return branch.union_all(
         select(
             ChatMessage.id,
             ChatMessage.latest_child_message_id,
@@ -3066,6 +3064,43 @@ def get_selected_branch(
             branch.c.depth < MAX_CONVERSATION_MESSAGES,
         )
     )
+
+
+def selected_response_status_for_user(
+    db_session: Session, chat_session_id: UUID, user_id: UUID | None
+) -> RunStatus | None:
+    """The status of the chat's selected latest response, in one read.
+
+    None when `get_chat_session_by_id` rejects the chat for the user, or when
+    the latest selected message is not a response (`get_selected_branch`)."""
+    branch = _selected_branch_cte(chat_session_id)
+    # Keep equal to the checks of `get_chat_session_by_id`.
+    readable = select(ChatSession.id).where(
+        ChatSession.id == chat_session_id,
+        ChatSession.spawned_by_message_id.is_(None),
+        ChatSession.deleted.is_not(True),
+    )
+    if user_id is not None:
+        readable = readable.where(
+            or_(ChatSession.user_id == user_id, ChatSession.user_id.is_(None))
+        )
+    latest = db_session.execute(
+        select(ChatMessage.message_type, ChatMessage.response_status)
+        .join(branch, ChatMessage.id == branch.c.id)
+        .where(readable.exists())
+        .order_by(branch.c.depth.desc())
+        .limit(1)
+    ).first()
+    if latest is None or latest.message_type != MessageType.ASSISTANT:
+        return None
+    return latest.response_status
+
+
+def get_selected_branch(
+    session: Session, chat_session_id: UUID
+) -> tuple[ChatMessage | None, ChatBranch]:
+    """Return the selected latest response and the message IDs on its branch."""
+    branch = _selected_branch_cte(chat_session_id)
     # Follow only IDs; queue checks do not need response content or tool results.
     # The join gives the deepest message, when it is a response, in the same
     # statement as the IDs.
