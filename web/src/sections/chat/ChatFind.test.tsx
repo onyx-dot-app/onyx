@@ -40,6 +40,7 @@ jest.mock("@/app/app/stores/useChatSessionStore", () => ({
   useCurrentMessageHistory: () => mockMessages,
   useCurrentMessageTree: () => null,
   useHasOlderMessages: () => mockHasOlderMessages,
+  useOlderMessagesFailed: () => false,
 }));
 
 const mockLoadOlderPages = jest.fn<Promise<boolean>, [string]>();
