@@ -18,6 +18,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, ModelRole, Permission
 from onyx.db.llm import (
     ModelConfigurationWindow,
+    apply_default_changes__no_commit,
     can_user_access_llm_provider,
     clear_role,
     fetch_existing_llm_provider_by_id,
@@ -112,6 +113,7 @@ from onyx.server.manage.llm.models import (
     DecisionProviderConnection,
     DecisionProviderUpsertRequest,
     DefaultModel,
+    DefaultModelChanges,
     LitellmFinalModelResponse,
     LitellmModelDetails,
     LitellmModelsRequest,
@@ -1279,6 +1281,22 @@ def delete_llm_provider(
         resource_type="llm_provider",
         resource_id=provider_id,
     )
+    invalidate_provider_listing_cache()
+
+
+@admin_router.post("/defaults")
+def update_defaults(
+    changes: DefaultModelChanges,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Move or clear several deployment defaults at once."""
+    try:
+        apply_default_changes__no_commit(db_session, changes.default_changes)
+        db_session.commit()
+    except ValueError as e:
+        db_session.rollback()
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     invalidate_provider_listing_cache()
 
 

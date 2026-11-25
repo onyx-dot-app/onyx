@@ -48,6 +48,7 @@ from onyx.server.manage.embedding.models import (
 )
 from onyx.server.manage.llm.models import (
     DecisionProviderUpsertRequest,
+    DefaultModel,
     LLMProviderUpsertRequest,
     LLMProviderView,
     SyncModelEntry,
@@ -817,13 +818,7 @@ def upsert_llm_provider(
 
     if default_changes:
         db_session.flush()
-    for role, new_model in default_changes.items():
-        if new_model is None:
-            clear_role__no_commit(db_session, role)
-        else:
-            set_role_model__no_commit(
-                db_session, role, new_model.provider_id, new_model.model_name
-            )
+        apply_default_changes__no_commit(db_session, default_changes)
 
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
@@ -1940,6 +1935,20 @@ def update_model_configuration__no_commit(
         )
 
     db_session.flush()
+
+
+def apply_default_changes__no_commit(
+    db_session: Session,
+    default_changes: dict[ModelRole, DefaultModel | None],
+) -> None:
+    """Moves each listed role to its model, or clears it (None)."""
+    for role, new_model in default_changes.items():
+        if new_model is None:
+            clear_role__no_commit(db_session, role)
+        else:
+            set_role_model__no_commit(
+                db_session, role, new_model.provider_id, new_model.model_name
+            )
 
 
 def set_role_model__no_commit(

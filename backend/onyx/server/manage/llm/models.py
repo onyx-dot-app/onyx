@@ -759,6 +759,13 @@ class DefaultModel(BaseModel):
         )
 
 
+class DefaultModelChanges(BaseModel):
+    """Roles to move (a model) or clear (None) in one transaction: e.g.
+    before a provider that holds them is deleted."""
+
+    default_changes: dict[ModelRole, DefaultModel | None]
+
+
 class LLMProviderResponse(BaseModel, Generic[T]):
     providers: list[T]
     default_text: DefaultModel | None = None
