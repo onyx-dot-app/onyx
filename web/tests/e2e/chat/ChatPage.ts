@@ -621,6 +621,11 @@ export class ChatPage {
     return this.aiMessage(index).getByText(text, { exact: true });
   }
 
+  /** Clicks an artifact link, named `name`, in the answer at `index`. */
+  async clickArtifactLink(name: string, index = 0): Promise<void> {
+    await this.aiMessage(index).getByRole("link", { name }).click();
+  }
+
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
   async goto(sessionId?: string, { skills = false } = {}): Promise<void> {

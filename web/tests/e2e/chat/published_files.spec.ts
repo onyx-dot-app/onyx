@@ -4,6 +4,12 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { test, expect } from "@tests/e2e/chat/fixtures";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { ArtifactLinkPage } from "@tests/e2e/pages/ArtifactLinkPage";
+import type {
+  ChatArtifactAccess,
+  ChatArtifactFile,
+} from "@/lib/chat/publishedFiles";
 import {
   buildMockPublishFilesStream,
   MockPublishedFile,
@@ -119,15 +125,16 @@ function savedMessage(
 }
 
 /**
- * Serves a saved chat of one reply, whose replay packets publish files: the
- * route stays through a reload. `published` is the load's list of the chat's
- * files.
+ * Serves a saved chat of one reply, `answer`, whose replay packets publish
+ * files: the route stays through a reload. `published` is the load's list of
+ * the chat's files.
  */
 async function routeSavedChat(
   page: Page,
   sessionId: string,
   replay: Record<string, unknown>[],
-  published: MockPublishedFile[]
+  published: MockPublishedFile[],
+  answer: string = MESSAGE
 ): Promise<void> {
   await page.route(
     `**/api/chat/get-chat-session/${sessionId}*`,
@@ -152,7 +159,7 @@ async function routeSavedChat(
               message_type: "assistant",
               parent_message: 1,
               latest_child_message: null,
-              message: MESSAGE,
+              message: answer,
               files: [],
             }),
           ],
@@ -164,7 +171,7 @@ async function routeSavedChat(
                 obj: {
                   type: "message_start",
                   id: "saved-answer",
-                  content: MESSAGE,
+                  content: answer,
                   final_documents: null,
                 },
               },
@@ -785,5 +792,180 @@ test.describe("Published file tabs on a touch screen", () => {
 
     await chatPage.mouseDragRightPanelTab(titles[0]!, titles[1]!);
     await chatPage.expectRightPanelTabs(order);
+  });
+});
+
+test.describe("Artifact links", () => {
+  // An artifact of another chat, as the artifact tools link it
+  const ARTIFACT_ID = "5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b";
+  const file: MockPublishedFile = {
+    ...report("artifact-link-file", "Q3 report"),
+    artifactId: ARTIFACT_ID,
+  };
+  const LINK = `/app/artifacts/${ARTIFACT_ID}/v1`;
+
+  /**
+   * Serves the artifact's metadata as the chat `chatId`'s, with the user's
+   * `access`, in the route's response type.
+   */
+  async function mockArtifact(
+    page: Page,
+    chatId: string,
+    access: ChatArtifactAccess = "owner"
+  ): Promise<void> {
+    const body: ChatArtifactFile = {
+      file_id: file.fileId,
+      name: file.name,
+      title: file.title,
+      path: file.path,
+      display_path: file.displayPath,
+      size: file.size,
+      mime_type: file.mimeType,
+      artifact_id: file.artifactId,
+      version: file.version,
+      thumbnail_file_id: null,
+      chat_id: chatId,
+      access,
+    };
+    await page.route(`**/api/chat/artifacts/${ARTIFACT_ID}*`, (route) =>
+      route.fulfill({ status: 200, json: body })
+    );
+  }
+
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+
+  test("a link in a reply opens another chat's file in this chat's panel", async ({
+    page,
+    chatPage,
+    api,
+  }) => {
+    let sessionId: string | undefined;
+    try {
+      sessionId = await api.createChatSession("Artifact link");
+      await mockFile(page, file);
+      await mockArtifact(page, "another-chat");
+      await routeSavedChat(
+        page,
+        sessionId,
+        [],
+        [],
+        `See [the report](${LINK}).`
+      );
+      await chatPage.goto(sessionId);
+
+      await chatPage.clickArtifactLink("the report");
+      await expect(chatPage.publishedFilePreview("Q3 report")).toContainText(
+        REPORT_TEXT
+      );
+      await expect(chatPage.rightPanelTab("Q3 report")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+      // The click opened the panel, not the link.
+      expect(new URL(page.url()).searchParams.get("chatId")).toBe(sessionId);
+      await expect(page).toHaveURL(/\/app\?chatId=/);
+    } finally {
+      await cleanUp(() =>
+        sessionId ? api.deleteChatSession(sessionId) : undefined
+      );
+    }
+  });
+
+  test("an opened link lands in its chat with the panel on the file", async ({
+    page,
+    chatPage,
+    api,
+  }) => {
+    let sessionId: string | undefined;
+    try {
+      sessionId = await api.createChatSession("Artifact owner");
+      await mockFile(page, file);
+      await mockArtifact(page, sessionId);
+      await routeSavedChat(page, sessionId, [], [file]);
+
+      await new ArtifactLinkPage(page).goto(LINK);
+      await expect(chatPage.publishedFilePreview("Q3 report")).toContainText(
+        REPORT_TEXT
+      );
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+      // The chat drops the link's parameters once it opened the file.
+      await expect
+        .poll(() => new URL(page.url()).search)
+        .toBe(`?chatId=${sessionId}`);
+    } finally {
+      await cleanUp(() =>
+        sessionId ? api.deleteChatSession(sessionId) : undefined
+      );
+    }
+  });
+
+  test("an opened link of a publicly shared chat lands a reader in its shared view with the panel on the file", async ({
+    browser,
+    page,
+    chatPage,
+  }) => {
+    let ownerContext: BrowserContext | undefined;
+    let owner: OnyxApiClient | undefined;
+    let sessionId: string | undefined;
+    try {
+      // Another user's chat, shared with everyone
+      ownerContext = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      owner = new OnyxApiClient(ownerContext.request);
+      const ownerPage = await ownerContext.newPage();
+      await new ChatPage(ownerPage).goto();
+      await sendMessage(ownerPage, "Write the quarterly report");
+      sessionId =
+        new URL(ownerPage.url()).searchParams.get("chatId") ?? undefined;
+      if (!sessionId) throw new Error("The owner's chat has no ID");
+      const shared = await ownerContext.request.patch(
+        `/api/chat/chat-session/${sessionId}`,
+        { data: { sharing_status: "public" } }
+      );
+      expect(shared.ok()).toBe(true);
+      await mockFile(page, file);
+      await mockArtifact(page, sessionId, "chat_reader");
+
+      await new ArtifactLinkPage(page).goto(LINK);
+      await expect(chatPage.publishedFilePreview("Q3 report")).toContainText(
+        REPORT_TEXT
+      );
+      // The shared view drops the link's parameters once it opened the file.
+      await expect
+        .poll(() => {
+          const url = new URL(page.url());
+          return `${url.pathname}${url.search}`;
+        })
+        .toBe(`/app/shared/${sessionId}`);
+    } finally {
+      await cleanUp(
+        () => (sessionId ? owner?.deleteChatSession(sessionId) : undefined),
+        () => ownerContext?.close()
+      );
+    }
+  });
+
+  test("an opened link that the user may open only as a file shows the file alone", async ({
+    page,
+  }) => {
+    const linkPage = new ArtifactLinkPage(page);
+    await mockFile(page, file);
+    await mockArtifact(page, "a-chat-of-another-user", "file_only");
+
+    expect(await linkPage.goto(LINK)).toBe(200);
+    await expect(linkPage.filePreview("Q3 report")).toContainText(REPORT_TEXT);
+    await expect(linkPage.download).toHaveAttribute("download", file.name);
+    // No chat opens: the page stays on the link.
+    await expect(page).toHaveURL((url) => url.pathname === LINK);
+  });
+
+  test("another user gets not-found from a link", async ({ page }) => {
+    const linkPage = new ArtifactLinkPage(page);
+    // The real route: no artifact of this ID is the user's to open.
+    expect(await linkPage.goto(LINK)).toBe(404);
+    await linkPage.expectNotFound(LINK, "Q3 report");
   });
 });

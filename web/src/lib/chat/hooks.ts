@@ -66,8 +66,10 @@ import {
   useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
+  type ChatArtifactFile,
   chatPublishedFiles,
   type LoadedPublishedFiles,
+  parseArtifactLink,
 } from "@/lib/chat/publishedFiles";
 import {
   awaitsDecision,
@@ -1044,6 +1046,65 @@ export function useChatSubagents(
     }
   );
   return data ?? [];
+}
+
+/**
+ * Opens, with `openFile`, the artifact version that the URL names
+ * (SEARCH_PARAM_NAMES.ARTIFACT_ID and ARTIFACT_VERSION, which the artifact
+ * link page sets) once its chat is `loadedChatId`, the chat that the page
+ * shows and has loaded, then drops the parameters so a reload does not open
+ * it again. A URL that names a version pins the file's tab to it.
+ */
+export function useOpenArtifactFromUrl(
+  loadedChatId: string | null,
+  openFile: (file: PublishedFile, pinVersion: boolean) => void
+): void {
+  const searchParams = useSearchParams();
+  const navigation = useNavigation();
+  const artifactId = searchParams?.get(SEARCH_PARAM_NAMES.ARTIFACT_ID);
+  const version = searchParams?.get(SEARCH_PARAM_NAMES.ARTIFACT_VERSION);
+  // Read as the link that sets them, so only a UUID and a whole version
+  // number reach the request URL.
+  const link = artifactId
+    ? parseArtifactLink(
+        `/app/artifacts/${artifactId}${version ? `/v${version}` : ""}`
+      )
+    : null;
+  const {
+    data: file,
+    error,
+    isValidating,
+  } = useSWR<ChatArtifactFile, Error>(
+    link ? SWR_KEYS.chatArtifact(link.artifactId, link.version) : null,
+    errorHandlingFetcher
+  );
+  const pinVersion = link?.version != null;
+  useEffect(() => {
+    // A cached response of an earlier visit can name an older version, or a
+    // file that is gone, which SWR keeps when its reload fails
+    if (
+      !file ||
+      isValidating ||
+      error ||
+      file.chat_id !== loadedChatId ||
+      !searchParams
+    )
+      return;
+    openFile(file, pinVersion);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(SEARCH_PARAM_NAMES.ARTIFACT_ID);
+    params.delete(SEARCH_PARAM_NAMES.ARTIFACT_VERSION);
+    navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
+  }, [
+    file,
+    error,
+    isValidating,
+    pinVersion,
+    loadedChatId,
+    openFile,
+    searchParams,
+    navigation,
+  ]);
 }
 
 /**

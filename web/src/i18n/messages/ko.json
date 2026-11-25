@@ -12367,6 +12367,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "질문"
+        },
+        "artifactError": {
+          "message": "이 파일을 사용할 수 없습니다."
         }
       },
       "messageEditing": {
