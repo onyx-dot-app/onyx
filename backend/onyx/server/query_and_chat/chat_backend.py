@@ -1993,7 +1993,8 @@ def answer_questions(
     """Answer the questions that a chat response's agent asked the user.
 
     `answers` answer this request's questions from its card: each question
-    once, with one of its option labels, a note, or both. A `message` is text
+    once, with its option labels, a note, or both. A question takes one option
+    label at most, or several when its `multi_select` is true. A `message` is text
     that the user typed in the chat instead: it answers every question of the
     response that waits, and the agent reads it as the user typed it. A
     message is a conflict (APPROVAL_PENDING) while an approval request of the
