@@ -48,7 +48,9 @@ See [Terraform](/deployment/local/terraform) for the full module.
     ```
 
     `craft_sandbox_runtime = "auto"` picks Firecracker when every type in `craft_sandbox_node_instance_types` can run
-    it, and the pod runtime when one cannot. Set `"firecracker"` to make the plan fail on a type that cannot run it.
+    it, and the pod runtime when one cannot.
+    A list that mixes `.metal` and nested virtualization types also gets the pod runtime, so use one kind of type.
+    Set `"firecracker"` to make the plan fail on a type or a mix that cannot run it.
 
     {/* depends: #17838 (manage_core_addons) */} This block is for a new cluster. Set `manage_core_addons = true`:
     the EKS module v21 makes a cluster without vpc-cni, kube-proxy, and CoreDNS,

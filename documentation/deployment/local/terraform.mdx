@@ -170,6 +170,9 @@ output "sandbox_helm_values" {
 }
 ```
 
+{/* depends: the first tf/ tag after tf/v1.0.2. Pin it in the examples above when it exists. */}
+The `sandbox_helm_values` output needs a module tag later than `tf/v1.0.2`. With an older tag, remove this output.
+
 Apply it:
 
 ```bash
