@@ -67,7 +67,10 @@ export function RunStep({
     setOpen(!open);
   };
 
-  const shownTitle = status === "done" ? (doneTitle ?? title) : title;
+  // A failed step has finished too: it shows how it ended, e.g. "failed
+  // (HTTP 401)".
+  const shownTitle =
+    status === "done" || status === "error" ? (doneTitle ?? title) : title;
   // A running step can always be opened (it still starts closed): before its
   // first content arrives, its body is a loading shimmer. A finished step
   // with nothing to show is a static row, so a click cannot open it.
@@ -96,6 +99,8 @@ export function RunStep({
         title={shownTitle ?? ""}
         titleKey={titleKey}
         shimmer={status === "streaming"}
+        // A failed step is tinted red, as its icon already is.
+        variant={status === "error" ? "error-heavy" : "default"}
         rightChildren={headerAccessory}
         // Filled while open; otherwise only on hover.
         filled={hasBody && open}

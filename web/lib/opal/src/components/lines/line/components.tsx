@@ -6,6 +6,7 @@ import { Presence } from "@opal/components/presence/components";
 import {
   LineRoot,
   type LineExpandableProps,
+  type LineVariant,
 } from "@opal/components/lines/line-base/components";
 import { ContentIcon } from "@opal/layouts/content/components";
 import { TextLoader } from "@opal/loaders/text-loader/components";
@@ -48,6 +49,11 @@ type LineProps = LineExpandableProps &
     rightChildren?: React.ReactNode;
     /** Fills the card with `background-tint-00`, e.g. while it is open. */
     filled: boolean;
+    /**
+     * Status and weight: colours the icon and the title; heavy also tints
+     * the card, e.g. `error-heavy` for a failed step. @default "default"
+     */
+    variant?: LineVariant;
     /**
      * The fold button's label, e.g. "3 steps": the header's own button, which
      * lights up while the header is hovered. Without one, a card with
@@ -123,10 +129,11 @@ function Line({
   expanded,
   expandedContent,
   bodyInset = "flush",
+  variant = "default",
 }: LineProps) {
   return (
     <LineRoot
-      variant="default"
+      variant={variant}
       padding={0}
       card
       filled={filled}

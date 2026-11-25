@@ -193,7 +193,7 @@ test("a command shows its output while it runs and how it ended", async () => {
       ])
     );
     await expandTimeline();
-    expect(screen.getByText("Ran command")).toBeInTheDocument();
+    expect(screen.getByText("Command failed")).toBeInTheDocument();
     // Where it ran is a comment above the command.
     expect(view.container).toHaveTextContent("# in /home/onyx/workspaces/abc");
     expect(
@@ -202,6 +202,10 @@ test("a command shows its output while it runs and how it ended", async () => {
     expect(view.container).not.toHaveTextContent("test_9 ok");
     expect(screen.getByText("Exit code 2")).toBeInTheDocument();
     expect(screen.getByText("Output truncated")).toBeInTheDocument();
+    // A failed command is a failed step: red, as failed Python is.
+    expect(
+      screen.getByText("Command failed").closest(".opal-line")
+    ).toHaveAttribute("data-opal-line-status", "error");
   } finally {
     view.unmount();
   }
@@ -279,7 +283,7 @@ test("session input shows typed keys, and polls show the session state", async (
     expect(screen.getByText("Sent input to session 7")).toBeInTheDocument();
     expect(screen.getByText("^C")).toBeInTheDocument();
     expect(screen.getByText("Still running (session 7)")).toBeInTheDocument();
-    expect(screen.getByText("Checked session 7")).toBeInTheDocument();
+    expect(screen.queryByText("Checked session 7")).not.toBeInTheDocument();
     expect(screen.getByText("Stopped by a signal")).toBeInTheDocument();
     expect(screen.getByText("Command failed")).toBeInTheDocument();
     expect(screen.getByText("Sandbox is unavailable")).toBeInTheDocument();
@@ -290,6 +294,38 @@ test("session input shows typed keys, and polls show the session state", async (
     // A command still running at its end has only started.
     expect(screen.getByText("Started command")).toBeInTheDocument();
     expect(screen.getByText("Still running (session 12)")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a poll that reports a command deadline shows the time limit in its title", async () => {
+  const poll = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      poll({ type: PacketType.WRITE_STDIN_START, session_id: "7", chars: "" }),
+      poll({
+        type: PacketType.EXEC_END,
+        completion: "deadline_exceeded",
+        exit_code: null,
+        session_id: null,
+        wall_time_seconds: 1,
+        truncated: false,
+        output: "",
+        error: null,
+      }),
+      poll(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getByText("Stopped at its time limit");
+    expect(screen.queryByText("Checked session 7")).not.toBeInTheDocument();
+    expect(title.closest(".opal-line")).toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
   } finally {
     view.unmount();
   }
@@ -793,7 +829,7 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
     expect(screen.getByText("Ran command")).toBeInTheDocument();
     expect(view.container).toHaveTextContent("$ pytest");
     expect(screen.getByText("3 passed")).toBeInTheDocument();
-    expect(screen.getByText("Exit code 0")).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent(/Exit code/);
     expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
     expect(screen.getByText("D gone.py")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/await run/);
@@ -1103,6 +1139,78 @@ test("a publish_files call with invalid arguments still shows its step and error
     expect(
       screen.queryByRole("button", { name: /^Preview / })
     ).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a Ctrl+C that stops a running process is not a failure", async () => {
+  const stop = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      stop({
+        type: PacketType.WRITE_STDIN_START,
+        session_id: "4",
+        chars: "\u0003",
+      }),
+      stop({
+        type: PacketType.EXEC_END,
+        exit_code: 130,
+        completion: "exited",
+        session_id: null,
+        wall_time_seconds: 0.2,
+        truncated: false,
+        output: "^C\n",
+        error: null,
+      }),
+      stop(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getByText("Sent input to session 4");
+    expect(title.closest(".opal-line")).not.toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
+    expect(view.container).not.toHaveTextContent("Exit code 130");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("input that ends the command with a failure names it in a red title", async () => {
+  const input = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      input({
+        type: PacketType.WRITE_STDIN_START,
+        session_id: "4",
+        chars: "exit 1\n",
+      }),
+      input({
+        type: PacketType.EXEC_END,
+        exit_code: 1,
+        completion: "exited",
+        session_id: null,
+        wall_time_seconds: 0.2,
+        truncated: false,
+        output: "",
+        error: null,
+      }),
+      input(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getAllByText("Exit code 1")[0]!;
+    expect(title.closest(".opal-line")).toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
+    expect(view.container).not.toHaveTextContent("Sent input to session 4");
   } finally {
     view.unmount();
   }

@@ -4,6 +4,7 @@ import useChatController from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   createChatSession,
+  endIncognitoSession,
   processRawChatHistory,
   resumeStream,
   sendMessage,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import type { Message } from "@/app/app/types";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { StopReason } from "@/app/app/services/streamingModels";
 
 jest.mock("next/navigation", () => {
@@ -76,10 +78,12 @@ jest.mock("@/lib/projects/providers", () => ({
   }),
 }));
 const mockIncognitoEnabledRef = { current: false };
+const mockIncognitoSessionIdRef: { current: string | null } = { current: null };
 jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({
     incognitoEnabledRef: mockIncognitoEnabledRef,
-    incognitoSessionId: null,
+    incognitoSessionId: mockIncognitoSessionIdRef.current,
+    incognitoSessionIdRef: mockIncognitoSessionIdRef,
   }),
 }));
 jest.mock("@/app/app/services/lib", () => {
@@ -91,6 +95,7 @@ jest.mock("@/app/app/services/lib", () => {
     resumeStream: jest.fn(),
     setPreferredResponse: jest.fn(),
     createChatSession: jest.fn(),
+    endIncognitoSession: jest.fn(async () => true),
     buildChatUrl: () => "/app?chatId=session",
     ChatSendRejectedError,
     ApprovalPendingError: class extends ChatSendRejectedError {},
@@ -146,6 +151,7 @@ const toolConfiguration: ToolConfigurationHandle = {
 const originalFetch = global.fetch;
 afterEach(() => {
   mockIncognitoEnabledRef.current = false;
+  mockIncognitoSessionIdRef.current = null;
   global.fetch = originalFetch;
   jest.restoreAllMocks();
   jest.clearAllMocks();
@@ -235,6 +241,101 @@ test.each([false, true])(
     }
   }
 );
+
+test.each([false, true])(
+  "New Session handles a pending first send (private: %s)",
+  async (incognito) => {
+    mockIncognitoEnabledRef.current = incognito;
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
+    });
+    const creation = Promise.withResolvers<string>();
+    jest.mocked(createChatSession).mockReturnValueOnce(creation.promise);
+    if (!incognito) {
+      jest.mocked(sendMessage).mockImplementationOnce(async function* () {
+        yield sentTurn;
+        yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+      });
+    }
+    const resetInputBar = jest.fn();
+    const { result } = renderHook(() => ({
+      position: useAppPosition(),
+      controller: useChatController({
+        llmManager: createLlmManager(),
+        toolConfiguration,
+        activeAgent: undefined,
+        availableAgents: [],
+        existingChatSessionId: null,
+        selectedDocuments: [],
+        searchParams: new ReadonlyURLSearchParams(),
+        resetInputBar,
+        restoreInputBar: jest.fn(),
+      }),
+    }));
+
+    await act(async () => {
+      const send = result.current.controller.onSubmit({
+        message: "Send before opening a fresh session",
+        mentions: [],
+        currentMessageFiles: [],
+        deepResearch: false,
+      });
+      result.current.position.openNewSession();
+      creation.resolve("session");
+      await send;
+    });
+
+    if (incognito) {
+      expect(endIncognitoSession).toHaveBeenCalledWith("session");
+      expect(sendMessage).not.toHaveBeenCalled();
+    } else {
+      expect(endIncognitoSession).not.toHaveBeenCalled();
+      expect(sendMessage).toHaveBeenCalled();
+    }
+    expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+    expect(resetInputBar).not.toHaveBeenCalled();
+  }
+);
+
+test("a private chat created for a replaced private session never opens", async () => {
+  mockIncognitoEnabledRef.current = true;
+  mockIncognitoSessionIdRef.current = "private-a";
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  const creation = Promise.withResolvers<string>();
+  jest.mocked(createChatSession).mockReturnValueOnce(creation.promise);
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: null,
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+
+  await act(async () => {
+    const send = result.current.onSubmit({
+      message: "private text",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+    // A back/forward restore, or Exit and a new private session, mints a new
+    // private session while private mode stays on.
+    mockIncognitoSessionIdRef.current = "private-b";
+    creation.resolve("session");
+    await send;
+  });
+
+  expect(endIncognitoSession).toHaveBeenCalledWith("session");
+  expect(sendMessage).not.toHaveBeenCalled();
+  expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+});
 
 test.each([
   { isNewSession: false, stop: true },

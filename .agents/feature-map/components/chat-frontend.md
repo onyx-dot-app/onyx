@@ -456,7 +456,10 @@ history API first, so the tabs follow the click, then asks Next to render a new
 route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
 `web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
 `AppPage` renders itself, so writing the URL is the whole switch; in-app links
-use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
+use its `linkTo*` props. A send from a new session makes its chat current
+before the URL changes, so a switch to a new session in that gap writes no new
+URL; `openNewSession` and `linkToNewSession` clear the current chat for that
+case. `AppChrome`'s `PendingRoute` loader is
 `web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
 URL's page loader (the agents catalog, the agent editor, the page loader, or
 blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same
@@ -940,8 +943,8 @@ approval or Question waiting (`lib/chat/runStatus.ts:liveRunStatus`, from
 Failed or Done for a run that ended while its chat was not on screen.
 `lib/chat/hooks.ts:useTrackChatRuns`, which `AppSidebar` mounts, watches the
 store for runs that stop working and records Failed or Done in
-`useUnseenRuns`; opening the chat clears the record. The record lives only in
-the tab, and a chat that the store does not hold shows no status.
+`useUnseenRuns`. Tab storage keeps the 50 newest records across reloads.
+Opening or deleting the chat clears its record. Signing out clears all records.
 
 ## Contracts and traps
 

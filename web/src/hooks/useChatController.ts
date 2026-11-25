@@ -16,6 +16,7 @@ import {
 import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
+import { getNewSessionNavigation } from "@/lib/navigation/hooks";
 import {
   getLatestMessageChain,
   MessageTreeState,
@@ -45,7 +46,7 @@ import {
   UserKnowledgeFilePacket,
 } from "@/app/app/types";
 import { StreamStopReason } from "@/lib/search/types";
-import { createChatSession } from "@/app/app/services/lib";
+import { createChatSession, endIncognitoSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
   modelSupportsImageInput,
@@ -158,7 +159,8 @@ export default function useChatController({
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
-  const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
+  const { incognitoEnabledRef, incognitoSessionId, incognitoSessionIdRef } =
+    useIncognito();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -243,7 +245,8 @@ export default function useChatController({
 
   const updateStatesWithNewSessionId = (
     newSessionId: string,
-    incognito = false
+    incognito = false,
+    select = true
   ) => {
     // Create new session in store if it doesn't exist
     const existingSession = sessions.get(newSessionId);
@@ -254,7 +257,7 @@ export default function useChatController({
     }
 
     // Set as current session
-    setCurrentSession(newSessionId);
+    if (select) setCurrentSession(newSessionId);
   };
 
   const handleNewSessionNavigation = (chatSessionId: string) => {
@@ -374,6 +377,9 @@ export default function useChatController({
           "input") !== "input"
       )
         return;
+      const newSessionAtSubmit = getNewSessionNavigation();
+      const stillOnComposer = () =>
+        getNewSessionNavigation() === newSessionAtSubmit;
       const controller = new AbortController();
       const submissionSessionId = getCurrentSessionId();
       if (submissionSessionId) {
@@ -445,13 +451,33 @@ export default function useChatController({
           toast.error(t("createSessionFailed.toast"));
           // The user moved to a different page while the request was pending.
           // Do not take them back or put the message into that page.
-          if (!isStillOnLocation([startUrl], window.location)) {
+          if (
+            !stillOnComposer() ||
+            !isStillOnLocation([startUrl], window.location)
+          ) {
             return;
           }
           restoreSubmittedInput();
           return;
         }
 
+        if (
+          incognito &&
+          (controller.signal.aborted ||
+            !stillOnComposer() ||
+            !incognitoEnabledRef.current ||
+            // Back/forward restore or a new private session replaced the one
+            // this send created its chat for.
+            incognitoSessionIdRef.current !== incognitoSessionId ||
+            !isStillOnLocation([startUrl], window.location))
+        ) {
+          try {
+            await endIncognitoSession(currChatSessionId);
+          } catch (error) {
+            console.error("Failed to end abandoned incognito session:", error);
+          }
+          return;
+        }
         if (controller.signal.aborted) return;
 
         // This send is what created the chat, so the configuration chosen for
@@ -501,10 +527,14 @@ export default function useChatController({
       );
 
       // mark the session as the current session
-      updateStatesWithNewSessionId(currChatSessionId, incognito);
+      updateStatesWithNewSessionId(
+        currChatSessionId,
+        incognito,
+        stillOnComposer()
+      );
 
       // Navigate immediately for new sessions (before streaming starts)
-      if (isNewSession) {
+      if (isNewSession && stillOnComposer()) {
         handleNewSessionNavigation(currChatSessionId);
       }
 
@@ -714,7 +744,7 @@ export default function useChatController({
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
-      if (!messageToResend) resetInputBar();
+      if (stillOnComposer() && !messageToResend) resetInputBar();
       // The server saved nothing for this turn: drop its nodes, restore the
       // links of the node they hung from, and give the text back for a retry.
       // Other live changes, such as a preference pick, stay.
@@ -745,6 +775,7 @@ export default function useChatController({
         currentMessageTreeLocal = restored;
         store.updateSessionMessageTree(frozenSessionId, restored);
         if (
+          stillOnComposer() &&
           store.currentSessionId === frozenSessionId &&
           !regenerationRequest
         ) {
@@ -1294,7 +1325,7 @@ export default function useChatController({
                 isRetryable = streamingError.is_retryable ?? true;
                 errorDetails = streamingError.details || null;
 
-                updateSubmittedMessage(getCurrentSessionId(), "");
+                updateSubmittedMessage(frozenSessionId, "");
 
                 throw new Error(streamingError.error);
               }
@@ -1554,6 +1585,7 @@ export default function useChatController({
       activeAgent,
       availableAgents,
       existingChatSessionId,
+      incognitoSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
@@ -1613,7 +1645,7 @@ export default function useChatController({
         updateChatStateAction(uploadSessionId, "input");
       }
     },
-    [activeAgent, llmManager, toolConfiguration]
+    [activeAgent, beginUpload, llmManager, toolConfiguration]
   );
 
   useEffect(() => {

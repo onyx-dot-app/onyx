@@ -4,7 +4,11 @@ import {
   NestedCall,
   isGroupEndPacket,
 } from "@/lib/timeline/chat/packetHelpers";
-import { PacketType } from "@/app/app/services/streamingModels";
+import {
+  type ExecEnd,
+  type Packet,
+  PacketType,
+} from "@/app/app/services/streamingModels";
 import type {
   TimelineEntry,
   TimelineEntryStatus,
@@ -78,12 +82,71 @@ export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
     .map((step) => ({ turnIndex: step.turnIndex, steps: [step] }));
 }
 
-function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
-  // An error packet fails a step, and so does Python output on stderr.
-  const failed = step.packets.some(
+/**
+ * A packet that shows its step failed. A failed step is red (`RunStep`), so a
+ * new error packet only needs a case here.
+ */
+function isFailurePacket(packet: Packet, interrupted: boolean): boolean {
+  const obj = packet.obj;
+  switch (obj.type) {
+    case PacketType.ERROR:
+      return true;
+    case PacketType.PYTHON_TOOL_DELTA:
+      return !!obj.stderr;
+    case PacketType.EXEC_END:
+      return didExecFail(obj, interrupted);
+    case PacketType.APPLY_PATCH_END:
+    case PacketType.PUBLISH_FILES_END:
+      return obj.error !== null;
+    // Auth, unreachable, blocked and HTTP errors of an external tool.
+    case PacketType.CUSTOM_TOOL_DELTA:
+      return !!obj.error;
+    default:
+      return false;
+  }
+}
+
+/** Input that holds Ctrl+C, e.g. to stop a running dev server. */
+export function isInterruptInput(chars: string): boolean {
+  return chars.includes("\u0003");
+}
+
+export function isExpectedInterrupt(
+  end: ExecEnd | null,
+  sentInterrupt: boolean
+): boolean {
+  return (
+    sentInterrupt &&
+    end !== null &&
+    end.error === null &&
+    end.completion === "exited" &&
+    (end.exit_code === 130 || end.exit_code === -2)
+  );
+}
+
+export function didExecFail(end: ExecEnd, sentInterrupt: boolean): boolean {
+  if (end.error !== null || end.completion === "deadline_exceeded") return true;
+  return (
+    end.completion !== "canceled" &&
+    !isExpectedInterrupt(end, sentInterrupt) &&
+    ((end.exit_code !== null && end.exit_code !== 0) ||
+      end.completion === "signaled")
+  );
+}
+
+/** The step sent Ctrl+C to a running process. */
+function sendsInterrupt(step: TransformedStep): boolean {
+  return step.packets.some(
     (packet) =>
-      packet.obj.type === PacketType.ERROR ||
-      (packet.obj.type === PacketType.PYTHON_TOOL_DELTA && !!packet.obj.stderr)
+      packet.obj.type === PacketType.WRITE_STDIN_START &&
+      isInterruptInput(packet.obj.chars)
+  );
+}
+
+function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
+  const interrupted = sendsInterrupt(step);
+  const failed = step.packets.some((packet) =>
+    isFailurePacket(packet, interrupted)
   );
   if (failed) return "error";
   return step.packets.some(isGroupEndPacket) ? "done" : "streaming";

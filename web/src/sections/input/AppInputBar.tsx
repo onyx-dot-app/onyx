@@ -208,7 +208,7 @@ const AppInputBar = React.memo(
     queue,
   }: AppInputBarProps) => {
     const t = useTranslations("chat.input");
-    const { incognitoEnabled } = useIncognito();
+    const { incognitoEnabled, incognitoSessionId } = useIncognito();
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
@@ -384,6 +384,7 @@ const AppInputBar = React.memo(
       draftConversation,
       draftOwner,
       incognitoEnabled,
+      incognitoEnabled ? incognitoSessionId : null,
     ]);
     const submitScope = JSON.stringify([editorScope, isSearchMode]);
     const {

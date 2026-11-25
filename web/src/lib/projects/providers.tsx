@@ -15,6 +15,7 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
+import { endIncognitoSession } from "@/app/app/services/lib";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import {
   UserFileStatus,
@@ -141,6 +142,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const incognitoSessionId = incognitoUploadsEnabled
     ? (incognitoCtx?.incognitoSessionId ?? null)
     : null;
+  const incognitoUploadSessionRef = useRef(incognitoSessionId);
+  useEffect(() => {
+    incognitoUploadSessionRef.current = incognitoSessionId;
+  }, [incognitoSessionId]);
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
   const [currentProjectDetails, setCurrentProjectDetails] =
     useState<ProjectDetails | null>(null);
@@ -393,6 +398,18 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       }
       svcUploadFiles(validFiles, projectId, tempIds, incognitoSessionId)
         .then((uploaded) => {
+          if (
+            incognitoSessionId &&
+            incognitoUploadSessionRef.current !== incognitoSessionId
+          ) {
+            void endIncognitoSession(incognitoSessionId).catch((error) =>
+              console.error(
+                "Failed to clean up discarded private upload:",
+                error
+              )
+            );
+            return;
+          }
           const uploadedFiles = uploaded.user_files || [];
           const tempIdToUploadedFileMap = new Map(
             uploadedFiles.map((f) => [f.temp_id, f])
@@ -489,7 +506,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       removeOptimisticFilesByTempIds,
       userFileMaxUploadSizeMb,
       incognitoUploadsEnabled,
-      incognitoUploadsEnabled,
+      incognitoSessionId,
       t,
     ]
   );

@@ -9,6 +9,8 @@ import {
   invalidateChatDraftWrites,
   type DraftStorage,
 } from "@/hooks/useDraft";
+import { useUnseenRuns } from "@/lib/chat/runStatus";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -60,6 +62,8 @@ export async function logout(): Promise<Response> {
       draftKey("craft", ""),
       CHAT_PANEL_STORAGE_PREFIX,
     ]);
+    useChatSessionStore.getState().suppressRunMarkers();
+    useUnseenRuns.getState().clearAll();
     removeStorageKeys("local", [draftKey("chat", "")]);
     // Drop the cached /api/me so any subsequent useCurrentUser read does not
     // hand callers the just-signed-out user from the SWR dedup window.
