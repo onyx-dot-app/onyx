@@ -842,8 +842,7 @@ def sign_in_host(integration: Integration, db_session: Session) -> str | None:
             )
         except ValueError:
             destinations["openapi_url"] = None
-    api_app = get_api_app_for_integration(integration.id, db_session)
-    if api_app is not None and api_app.api_type is ApiAppType.GRAPHQL:
+    elif api_app is not None and api_app.api_type is ApiAppType.GRAPHQL:
         destinations["graphql_url"] = api_app.base_url
     app = get_external_app_for_integration(integration.id, db_session)
     if app is not None:
