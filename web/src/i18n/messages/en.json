@@ -17322,7 +17322,7 @@
           "title": "Start from scratch"
         },
         "trigger": {
-          "label": "Create skill"
+          "label": "Create a skill"
         },
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",
@@ -17555,17 +17555,13 @@
           "versions": "Versions"
         },
         "overview": {
-          "noDescription": "No description.",
           "location": "Location",
           "owner": "Owner",
-          "skills": "Skills",
-          "description": "Description",
           "version": "Version in plugin.json",
           "author": "Author",
           "homepage": "Homepage",
           "license": "License",
-          "notUsed": "Not used in Onyx",
-          "marketplace": "{name} marketplace, {scope, select, personal {personal} other {company}} ({repository})"
+          "notUsed": "Not used in Onyx"
         },
         "skills": {
           "off": "Off",
@@ -17578,12 +17574,7 @@
         "switch": {
           "title": "Use this plugin",
           "label": "Use {name}",
-          "required": "Your admin made this plugin required. You cannot turn it off.",
-          "unavailable": "You cannot turn this plugin on or off.",
-          "failed": "Could not change the plugin.",
-          "on": "On. The default agent can use this plugin.",
-          "off": "Off. Turn it on to let the default agent use this plugin.",
-          "nameHeld": "Off because {names} uses the same skill name. Turn this plugin on to use it instead."
+          "failed": "Could not change the plugin."
         },
         "actions": {
           "share": "Share",
@@ -17599,7 +17590,6 @@
           "done": "Deleted {name}.",
           "failed": "Could not delete the plugin."
         },
-        "syncedFrom": "Synced from {repository}",
         "managed": {
           "title": "Managed by the {name} marketplace",
           "description": "Onyx syncs this plugin from {repository}. Change it in GitHub, then sync the marketplace.",
@@ -17713,10 +17703,7 @@
         "not_supported": "Not supported"
       },
       "note": {
-        "askAdmin": "Ask an admin",
-        "turnedOff": "Turned off by your admin",
-        "moreThanOne": "More than one integration matches",
-        "notSupported": "Not supported in Onyx"
+        "askAdmin": "Ask an admin"
       },
       "localServer": "Local server",
       "noUrl": "No server URL",
@@ -17868,7 +17855,8 @@
         "duplicate": {
           "personal": "You already added this marketplace.",
           "company": "Your organization already gets this marketplace."
-        }
+        },
+        "advanced": "Advanced"
       },
       "sync": {
         "now": "Sync now",
@@ -18081,7 +18069,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Disabled",
+        "off": "Off",
         "required": "Required",
         "pending": "Pending review",
         "invalid": "Not valid"
@@ -18134,14 +18122,13 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin.",
-        "upload": "Upload Plugin"
+        "description": "Upload a plugin or add a marketplace from GitHub.",
+        "upload": "Upload plugin"
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin is a set of skills, and it lists the integrations that those skills need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. A plugin that holds only a SKILL.md at its root is on the Skills tab.",
       "integrations": "{available} of {needed} integrations available",
       "nameHeld": "Off: {names} uses the same skill name"
     },

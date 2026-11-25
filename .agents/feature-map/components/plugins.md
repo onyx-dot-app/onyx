@@ -61,7 +61,8 @@ Group or user restriction needs EE.
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
-  row menu (Turn on/off, Share). The list leaves out skill-kind entries (one
+  row menu (Turn on/off, Share). Its Add menu has Upload plugin and Add
+  marketplace, with no Create a skill. The list leaves out skill-kind entries (one
   SKILL.md at the bundle root; they are on Skills), and an admin's list
   leaves out the plugins that are not `member_visible`. The plugin page
   (`sections/plugins/MemberPluginDetailPage.tsx`) has Share, a "..." menu
@@ -196,8 +197,8 @@ and does not redirect to the skill page. The admin skills table leaves out
 shows each need: `lib/plugins/needs.ts:liveNeedState` reads the state of the
 matched integration from `GET /integrations`, so a row follows a switch or a
 sign-in at once, and `needAction` maps the state to one action (Turn on,
-Connect, Add for your team with `newIntegrationHref` filling the add modal, or a
-note). `lib/plugins/directory.ts:pluginSwitch` gives its switch
+Connect, Add for your team with `newIntegrationHref` filling the add modal, or
+the "Ask an admin" note; other states have only the badge). `lib/plugins/directory.ts:pluginSwitch` gives its switch
 (`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:useSkillEnablement`,
 so a skill name conflict asks to switch in `SkillSwitchModal`); when the response leaves a supported need not
 on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integration row carries `access`; its

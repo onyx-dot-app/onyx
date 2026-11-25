@@ -76,7 +76,23 @@ export default function CustomizeDetailLayout<T extends string>({
         title={title}
         description={description}
         back={back}
-        actions={actions}
+        // One full-width row on a phone starts at the content edge, not the end.
+        actions={
+          actions && actions.length > 0
+            ? [
+                <Section
+                  key="actions"
+                  flexDirection="row"
+                  justifyContent="start"
+                  alignItems="start"
+                  height="auto"
+                  gap={2}
+                >
+                  {actions}
+                </Section>,
+              ]
+            : undefined
+        }
         stackActionsOnMobile
       >
         {tags && (
@@ -129,6 +145,7 @@ export interface DetailFact {
   label: string | RichStr;
   value: string | RichStr;
   mono?: boolean;
+  oneLine?: boolean;
 }
 
 interface DetailOverviewProps {
@@ -168,6 +185,7 @@ export function DetailOverview({
                 label={fact.label}
                 value={fact.value}
                 mono={fact.mono}
+                oneLine={fact.oneLine}
               />
             ))}
             {footer}

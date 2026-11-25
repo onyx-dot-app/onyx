@@ -30,6 +30,10 @@ export class MarketplacesPage {
 
   async enterSource(source: MarketplaceSourceInput): Promise<void> {
     await this.addDialog.getByLabel("Repository").fill(source.repository);
+    if (source.folder || source.ref)
+      await this.addDialog
+        .getByRole("button", { name: "Expand Advanced" })
+        .click();
     if (source.folder)
       await this.addDialog.getByLabel("Folder").fill(source.folder);
     if (source.ref)

@@ -17322,7 +17322,7 @@
           "title": "最初から作成"
         },
         "trigger": {
-          "label": "スキルを作成"
+          "label": "スキルを作成する"
         },
         "upload": {
           "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",
@@ -17555,17 +17555,13 @@
           "versions": "バージョン"
         },
         "overview": {
-          "noDescription": "説明はありません。",
           "location": "場所",
           "owner": "所有者",
-          "skills": "スキル",
-          "description": "説明",
           "version": "plugin.json のバージョン",
           "author": "作成者",
           "homepage": "ホームページ",
           "license": "ライセンス",
-          "notUsed": "Onyx では使用しない部分",
-          "marketplace": "{name} マーケットプレイス、{scope, select, personal {個人} other {会社}}（{repository}）"
+          "notUsed": "Onyx では使用しない部分"
         },
         "skills": {
           "off": "オフ",
@@ -17578,12 +17574,7 @@
         "switch": {
           "title": "このプラグインを使用",
           "label": "{name} を使用",
-          "required": "管理者がこのプラグインを必須にしました。オフにできません。",
-          "unavailable": "このプラグインのオンとオフを切り替えることはできません。",
-          "failed": "プラグインを変更できませんでした。",
-          "on": "オン。デフォルトのエージェントはこのプラグインを使用できます。",
-          "off": "オフ。オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
-          "nameHeld": "{names} が同じスキル名を使用しているため、オフです。代わりにこのプラグインを使うにはオンにしてください。"
+          "failed": "プラグインを変更できませんでした。"
         },
         "actions": {
           "share": "共有",
@@ -17599,7 +17590,6 @@
           "done": "{name} を削除しました。",
           "failed": "プラグインを削除できませんでした。"
         },
-        "syncedFrom": "{repository} から同期",
         "managed": {
           "title": "マーケットプレイス {name} が管理しています",
           "description": "Onyx はこのプラグインを {repository} から同期します。GitHub で変更してから、マーケットプレイスを同期してください。",
@@ -17713,10 +17703,7 @@
         "not_supported": "非対応"
       },
       "note": {
-        "askAdmin": "管理者に依頼してください",
-        "turnedOff": "管理者がオフにしています",
-        "moreThanOne": "複数の連携が一致します",
-        "notSupported": "Onyx では非対応"
+        "askAdmin": "管理者に依頼してください"
       },
       "localServer": "ローカルサーバー",
       "noUrl": "サーバー URL なし",
@@ -17868,7 +17855,8 @@
         "duplicate": {
           "personal": "このマーケットプレイスはすでに追加されています。",
           "company": "組織はすでにこのマーケットプレイスを利用しています。"
-        }
+        },
+        "advanced": "詳細設定"
       },
       "sync": {
         "now": "今すぐ同期",
@@ -18081,7 +18069,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "無効",
+        "off": "オフ",
         "required": "必須",
         "pending": "レビュー待ち",
         "invalid": "無効な形式"
@@ -18134,14 +18122,13 @@
       },
       "empty": {
         "title": "プラグインはまだありません",
-        "description": "プラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを作成します。各スキルは 1 つのプラグインです。",
+        "description": "プラグインをアップロードするか、GitHub からマーケットプレイスを追加します。",
         "upload": "プラグインをアップロード"
       },
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
-      "intro": "プラグインはスキルのまとまりで、それらのスキルに必要な連携を示します。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。ルートに SKILL.md だけがあるプラグインは［スキル］タブに表示されます。",
       "integrations": "{needed} 件中 {available} 件の連携が利用可能",
       "nameHeld": "オフ: {names} が同じスキル名を使用しています"
     },

@@ -17322,7 +17322,7 @@
           "title": "Empezar desde cero"
         },
         "trigger": {
-          "label": "Crear habilidad"
+          "label": "Crear una habilidad"
         },
         "upload": {
           "description": "Importa un archivo SKILL.md, un archivo ZIP o una carpeta de habilidad.",
@@ -17555,17 +17555,13 @@
           "versions": "Versiones"
         },
         "overview": {
-          "noDescription": "Sin descripción.",
           "location": "Ubicación",
           "owner": "Propietario",
-          "skills": "Habilidades",
-          "description": "Descripción",
           "version": "Versión en plugin.json",
           "author": "Autor",
           "homepage": "Página web",
           "license": "Licencia",
-          "notUsed": "No se usa en Onyx",
-          "marketplace": "Marketplace {name}, {scope, select, personal {personal} other {empresa}} ({repository})"
+          "notUsed": "No se usa en Onyx"
         },
         "skills": {
           "off": "Desactivada",
@@ -17578,12 +17574,7 @@
         "switch": {
           "title": "Usar este plugin",
           "label": "Usar {name}",
-          "required": "Tu administrador hizo obligatorio este plugin. No puedes desactivarlo.",
-          "unavailable": "No puedes activar ni desactivar este plugin.",
-          "failed": "No se pudo cambiar el plugin.",
-          "on": "Activado. El agente predeterminado puede usar este plugin.",
-          "off": "Desactivado. Actívalo para que el agente predeterminado pueda usar este plugin.",
-          "nameHeld": "Desactivado porque {names} usa el mismo nombre de habilidad. Activa este plugin para usarlo en su lugar."
+          "failed": "No se pudo cambiar el plugin."
         },
         "actions": {
           "share": "Compartir",
@@ -17599,7 +17590,6 @@
           "done": "Se eliminó {name}.",
           "failed": "No se pudo eliminar el plugin."
         },
-        "syncedFrom": "Sincronizado desde {repository}",
         "managed": {
           "title": "Lo gestiona el marketplace {name}",
           "description": "Onyx sincroniza este plugin desde {repository}. Cámbielo en GitHub y luego sincronice el marketplace.",
@@ -17713,10 +17703,7 @@
         "not_supported": "No compatible"
       },
       "note": {
-        "askAdmin": "Pregunta a un admin",
-        "turnedOff": "Desactivado por tu admin",
-        "moreThanOne": "Coincide más de una integración",
-        "notSupported": "No compatible con Onyx"
+        "askAdmin": "Pregunta a un admin"
       },
       "localServer": "Servidor local",
       "noUrl": "Sin URL de servidor",
@@ -17868,7 +17855,8 @@
         "duplicate": {
           "personal": "Ya agregaste este marketplace.",
           "company": "Tu organización ya recibe este marketplace."
-        }
+        },
+        "advanced": "Avanzado"
       },
       "sync": {
         "now": "Sincronizar ahora",
@@ -18081,7 +18069,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Desactivada",
+        "off": "Apagado",
         "required": "Obligatoria",
         "pending": "Pendiente de revisión",
         "invalid": "No válida"
@@ -18134,14 +18122,13 @@
       },
       "empty": {
         "title": "Aún no hay plugins",
-        "description": "Suba un plugin, agregue un marketplace de GitHub o cree una habilidad. Cada habilidad es un plugin.",
+        "description": "Suba un plugin o agregue un marketplace de GitHub.",
         "upload": "Subir plugin"
       },
       "noMatches": {
         "title": "No hay plugins que coincidan",
         "clear": "Mostrar todos los plugins"
       },
-      "intro": "Un plugin es un conjunto de skills e indica las integraciones que esas skills necesitan. Suba un plugin de Claude Code o Codex, agregue un marketplace de GitHub o agregue una habilidad. Un plugin que solo contiene un SKILL.md en su raíz está en la pestaña Habilidades.",
       "integrations": "{available} de {needed} integraciones disponibles",
       "nameHeld": "Desactivado: {names} usa el mismo nombre de habilidad"
     },

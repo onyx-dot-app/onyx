@@ -104,7 +104,7 @@ test("an uploaded plugin lists its needs and turning it on shows the ones not on
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
   expect(
-    await screen.findByRole("tab", { name: "Integrations · 1" })
+    await screen.findByRole("tab", { name: "Integrations · 2" })
   ).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Skills · 2" })).toBeInTheDocument();
 
@@ -112,7 +112,7 @@ test("an uploaded plugin lists its needs and turning it on shows the ones not on
   const dialog = await screen.findByRole("dialog");
   expect(within(dialog).getByText("review-kit is on")).toBeInTheDocument();
   expect(within(dialog).getByText("Not added")).toBeInTheDocument();
-  expect(within(dialog).getByText("Not supported in Onyx")).toBeInTheDocument();
+  expect(within(dialog).getByText("Not supported")).toBeInTheDocument();
 });
 
 test("turning on a plugin whose skill name is taken asks to switch", async () => {
@@ -279,11 +279,8 @@ test("the owner shares, uploads a new version and deletes the plugin from its pa
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
   expect(
-    await screen.findByText(
-      "Off because company-kit uses the same skill name. Turn this plugin on to use it instead."
-    )
+    await screen.findByRole("button", { name: "Share" })
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "More actions" }));
   expect(
     await screen.findByRole("menuitem", { name: "Upload New Version" })
@@ -389,13 +386,11 @@ test("a synced plugin names its repository and hides restore and publish", async
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
   expect(
-    await screen.findByText("Synced from acme/plugins")
-  ).toBeInTheDocument();
-  expect(
     await screen.findByText(
       "This plugin syncs from GitHub, so you change it in GitHub."
     )
   ).toBeInTheDocument();
+  expect(screen.queryByText("Synced from acme/plugins")).toBeNull();
   expect(await screen.findByText("Version 1")).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Restore version 1" })
@@ -432,9 +427,8 @@ test("a synced plugin names its marketplace and says that GitHub holds it", asyn
   expect(
     await screen.findByText("Managed by the acme-tools marketplace")
   ).toBeInTheDocument();
-  expect(
-    screen.getByText("acme-tools marketplace, personal (acme/plugins)")
-  ).toBeInTheDocument();
+  // The managed card names the marketplace, so no Location fact repeats it.
+  expect(screen.queryByText("Location")).toBeNull();
   expect(
     screen.getByRole("link", { name: "Open Marketplaces" })
   ).toHaveAttribute("href", "/app/customize/plugins#marketplaces");

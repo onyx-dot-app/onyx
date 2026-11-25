@@ -71,10 +71,10 @@ export class CustomizePage {
       .click();
   }
 
-  /** An off skill shows Disabled and a Turn on button in its row. */
+  /** An off skill shows Off and a Turn on button in its row. */
   async expectSkillOff(name: string): Promise<void> {
     const row = this.skillRow(name);
-    await expect(row.getByText("Disabled", { exact: true })).toBeVisible();
+    await expect(row.getByText("Off", { exact: true })).toBeVisible();
     await expect(
       row.getByRole("button", { name: "Turn on", exact: true })
     ).toBeVisible();

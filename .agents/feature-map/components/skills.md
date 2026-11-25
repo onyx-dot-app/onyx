@@ -15,7 +15,7 @@
   you (owner is the user), From your organization (published), Shared with you,
   and Built-in, which shows only with Craft on
   (`lib/customize/skills.ts:groupSkills`). A row has the
-  tag Disabled, Required, Pending review or Unpublished changes, the date, Turn
+  tag Off, Required, Pending review or Unpublished changes, the date, Turn
   on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
   skill (`/app/customize/skills/new`); GitHub skills come in through a
   marketplace ([[#github-marketplaces]]). A custom skill
@@ -46,12 +46,13 @@
   step with the resolved source and each entry's Will install list). A Marketplaces
   section below the plugin list (`CustomizePluginsPage`, `id="marketplaces"`, in
   both panels; `/app/customize/plugins/marketplaces` redirects to the tab) has
-  Add marketplace and the table
-  (`sections/marketplaces/MarketplacesTable.tsx`); after an add the menu goes to
+  the table (`sections/marketplaces/MarketplacesTable.tsx`); Add marketplace is
+  in the Add menu and the empty state only. After an add the menu goes to
   `#marketplaces`, and the section scrolls into view when it mounts under that
   hash. The page holds the one `useMarketplaces` subscription and passes it to
   the table, because each subscription refreshes the skill lists on a sync
-  change. The table has failed syncs above it,
+  change. The table has failed syncs above it with the error (the Sync cell
+  shows only the state and the time),
   a row menu (Sync now, Default Access, Replace login,
   Remove, which names the plugins it deletes) and a detail modal. Members see
   company marketplaces read-only (`can_manage` false: no row menu, no Sync
@@ -60,8 +61,7 @@
   (`lib/plugins/directory.ts`, `lib/customize/plugins.ts`) a synced plugin is
   in "From marketplaces" with "from <marketplace>", and a manager sees another
   user's unshared plugin as "private to <email>", not shared. The plugin page
-  shows "Synced from owner/repo", the marketplace as its Location and a
-  "Managed by the <name> marketplace" note with a link to the Marketplaces section. For `content_locked` the web offers no
+  shows a "Managed by the <name> marketplace" note with a link to the Marketplaces section. For `content_locked` the web offers no
   content change: no Edit on the skill page, no restore or publish on the
   versions tab, and no organization access or ownership transfer in the share
   dialog (`lib/skills/sharing.ts:canChangeOrganizationAccess`); each says

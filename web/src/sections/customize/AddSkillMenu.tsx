@@ -60,13 +60,18 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
                   ? setPluginUploadOpen(true)
                   : setUploadOpen(true),
             },
-            {
-              kind: "action",
-              id: "create",
-              icon: SvgEdit,
-              title: t("create"),
-              onSelect: () => navigation.go(newSkillHref()),
-            },
+            // A plugin is uploaded or synced, not written here.
+            ...(upload === "skill"
+              ? [
+                  {
+                    kind: "action" as const,
+                    id: "create",
+                    icon: SvgEdit,
+                    title: t("create"),
+                    onSelect: () => navigation.go(newSkillHref()),
+                  },
+                ]
+              : []),
             ...marketplaceItems,
           ]}
         />

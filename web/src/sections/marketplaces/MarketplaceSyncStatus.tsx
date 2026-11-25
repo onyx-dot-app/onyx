@@ -53,9 +53,7 @@ export default function MarketplaceSyncStatus({
           maxLines={2}
           overflowTooltip
         >
-          {state === "failed" && marketplace.last_error
-            ? marketplace.last_error
-            : lastSync(marketplace)}
+          {lastSync(marketplace)}
         </Text>
       </Section>
     </Section>

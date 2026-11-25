@@ -1,11 +1,8 @@
 import type { MemberIntegration } from "@/lib/integrations/types";
 import type { PluginNeed, PluginNeedState } from "@/lib/plugins/types";
 
-export type PluginNeedNote =
-  | "askAdmin"
-  | "turnedOff"
-  | "moreThanOne"
-  | "notSupported";
+// The badge shows the other states: only askAdmin adds a note.
+export type PluginNeedNote = "askAdmin";
 
 export type PluginNeedAction =
   | { kind: "none" }
@@ -36,15 +33,13 @@ export function needAction(
     case "no_access":
       return { kind: "note", note: "askAdmin" };
     case "turned_off":
-      return { kind: "note", note: "turnedOff" };
+    case "more_than_one":
+    case "not_supported":
+      return { kind: "none" };
     case "not_added":
       return canAddIntegrations
         ? { kind: "add" }
         : { kind: "note", note: "askAdmin" };
-    case "more_than_one":
-      return { kind: "note", note: "moreThanOne" };
-    case "not_supported":
-      return { kind: "note", note: "notSupported" };
     default: {
       const unhandled: never = state;
       return unhandled;

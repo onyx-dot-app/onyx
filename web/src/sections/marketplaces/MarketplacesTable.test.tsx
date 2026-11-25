@@ -48,6 +48,14 @@ test("lists each marketplace with its source, plugins and sync", async () => {
   expect(within(table).getByText(/^Last sync /)).toBeInTheDocument();
 });
 
+test("a marketplace named after its repository shows no source line", async () => {
+  mockFetch({ "/api/marketplaces": { marketplaces: [summaryFixture()] } });
+  render(<MarketplacesTable />);
+
+  const table = await screen.findByRole("table", { name: "Marketplaces" });
+  expect(within(table).getAllByText("acme/plugins")).toHaveLength(1);
+});
+
 test("a failed sync shows its reason and offers Sync now", async () => {
   const error = "The GitHub connection of me@example.com is gone.";
   const fetchMock = mockFetch({
@@ -61,7 +69,8 @@ test("a failed sync shows its reason and offers Sync now", async () => {
   expect(
     await screen.findByText("The last sync of acme/plugins failed")
   ).toBeInTheDocument();
-  expect(screen.getAllByText(error).length).toBeGreaterThan(0);
+  // The attention card gives the reason; the Sync cell gives the time.
+  expect(screen.getAllByText(error)).toHaveLength(1);
   expect(screen.getByText("Sync failed")).toBeInTheDocument();
 
   await user().click(screen.getByRole("button", { name: "Sync now" }));

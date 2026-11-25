@@ -17322,7 +17322,7 @@
           "title": "Partir de zéro"
         },
         "trigger": {
-          "label": "Créer une compétence"
+          "label": "Créez une compétence"
         },
         "upload": {
           "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
@@ -17555,17 +17555,13 @@
           "versions": "Versions"
         },
         "overview": {
-          "noDescription": "Aucune description.",
           "location": "Emplacement",
           "owner": "Propriétaire",
-          "skills": "Compétences",
-          "description": "Description",
           "version": "Version dans plugin.json",
           "author": "Auteur",
           "homepage": "Page d'accueil",
           "license": "Licence",
-          "notUsed": "Non utilisé dans Onyx",
-          "marketplace": "Marketplace {name}, {scope, select, personal {personnel} other {entreprise}} ({repository})"
+          "notUsed": "Non utilisé dans Onyx"
         },
         "skills": {
           "off": "Désactivée",
@@ -17578,12 +17574,7 @@
         "switch": {
           "title": "Utiliser ce plugin",
           "label": "Utiliser {name}",
-          "required": "Votre administrateur a rendu ce plugin obligatoire. Vous ne pouvez pas le désactiver.",
-          "unavailable": "Vous ne pouvez pas activer ou désactiver ce plugin.",
-          "failed": "Impossible de modifier le plugin.",
-          "on": "Activé. L’agent par défaut peut utiliser ce plugin.",
-          "off": "Désactivé. Activez-le pour que l’agent par défaut puisse utiliser ce plugin.",
-          "nameHeld": "Désactivé, car {names} utilise le même nom de compétence. Activez ce plugin pour l’utiliser à la place."
+          "failed": "Impossible de modifier le plugin."
         },
         "actions": {
           "share": "Partager",
@@ -17599,7 +17590,6 @@
           "done": "{name} a été supprimé.",
           "failed": "Impossible de supprimer le plugin."
         },
-        "syncedFrom": "Synchronisé depuis {repository}",
         "managed": {
           "title": "Géré par la marketplace {name}",
           "description": "Onyx synchronise ce plugin depuis {repository}. Modifiez-le dans GitHub, puis synchronisez la marketplace.",
@@ -17713,10 +17703,7 @@
         "not_supported": "Non pris en charge"
       },
       "note": {
-        "askAdmin": "Demandez à un admin",
-        "turnedOff": "Désactivé par votre admin",
-        "moreThanOne": "Plusieurs intégrations correspondent",
-        "notSupported": "Non pris en charge dans Onyx"
+        "askAdmin": "Demandez à un admin"
       },
       "localServer": "Serveur local",
       "noUrl": "Aucune URL de serveur",
@@ -17868,7 +17855,8 @@
         "duplicate": {
           "personal": "Vous avez déjà ajouté ce marketplace.",
           "company": "Votre organisation reçoit déjà ce marketplace."
-        }
+        },
+        "advanced": "Avancé"
       },
       "sync": {
         "now": "Synchroniser maintenant",
@@ -18081,7 +18069,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Désactivée",
+        "off": "Désactivé",
         "required": "Obligatoire",
         "pending": "En attente de révision",
         "invalid": "Non valide"
@@ -18134,14 +18122,13 @@
       },
       "empty": {
         "title": "Aucun plugin pour le moment",
-        "description": "Importez un plugin, ajoutez une marketplace depuis GitHub ou créez une compétence. Chaque compétence est un plugin.",
+        "description": "Importez un plugin ou ajoutez une marketplace depuis GitHub.",
         "upload": "Importer un plugin"
       },
       "noMatches": {
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
       },
-      "intro": "Un plugin est un ensemble de skills qui indique les intégrations dont ces skills ont besoin. Importez un plugin Claude Code ou Codex, ajoutez une marketplace depuis GitHub ou ajoutez une compétence. Un plugin qui ne contient qu’un fichier SKILL.md à sa racine se trouve dans l’onglet Compétences.",
       "integrations": "{available} intégrations disponibles sur {needed}",
       "nameHeld": "Désactivé : {names} utilise le même nom de compétence"
     },

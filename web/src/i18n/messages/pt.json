@@ -17322,7 +17322,7 @@
           "title": "Começar do zero"
         },
         "trigger": {
-          "label": "Criar habilidade"
+          "label": "Criar uma habilidade"
         },
         "upload": {
           "description": "Importe um arquivo SKILL.md, um arquivo ZIP ou uma pasta de habilidade.",
@@ -17555,17 +17555,13 @@
           "versions": "Versões"
         },
         "overview": {
-          "noDescription": "Sem descrição.",
           "location": "Local",
           "owner": "Proprietário",
-          "skills": "Habilidades",
-          "description": "Descrição",
           "version": "Versão no plugin.json",
           "author": "Autor",
           "homepage": "Página inicial",
           "license": "Licença",
-          "notUsed": "Não usado no Onyx",
-          "marketplace": "Marketplace {name}, {scope, select, personal {pessoal} other {empresa}} ({repository})"
+          "notUsed": "Não usado no Onyx"
         },
         "skills": {
           "off": "Desativada",
@@ -17578,12 +17574,7 @@
         "switch": {
           "title": "Usar este plugin",
           "label": "Usar {name}",
-          "required": "Seu administrador tornou este plugin obrigatório. Você não pode desativá-lo.",
-          "unavailable": "Você não pode ativar nem desativar este plugin.",
-          "failed": "Não foi possível alterar o plugin.",
-          "on": "Ativado. O agente padrão pode usar este plugin.",
-          "off": "Desativado. Ative-o para que o agente padrão possa usar este plugin.",
-          "nameHeld": "Desativado porque {names} usa o mesmo nome de habilidade. Ative este plugin para usá-lo no lugar."
+          "failed": "Não foi possível alterar o plugin."
         },
         "actions": {
           "share": "Compartilhar",
@@ -17599,7 +17590,6 @@
           "done": "{name} foi excluído.",
           "failed": "Não foi possível excluir o plugin."
         },
-        "syncedFrom": "Sincronizado de {repository}",
         "managed": {
           "title": "Gerenciado pelo marketplace {name}",
           "description": "O Onyx sincroniza este plugin de {repository}. Altere-o no GitHub e depois sincronize o marketplace.",
@@ -17713,10 +17703,7 @@
         "not_supported": "Não compatível"
       },
       "note": {
-        "askAdmin": "Peça a um admin",
-        "turnedOff": "Desativado pelo seu admin",
-        "moreThanOne": "Mais de uma integração corresponde",
-        "notSupported": "Não compatível com o Onyx"
+        "askAdmin": "Peça a um admin"
       },
       "localServer": "Servidor local",
       "noUrl": "Sem URL de servidor",
@@ -17868,7 +17855,8 @@
         "duplicate": {
           "personal": "Você já adicionou este marketplace.",
           "company": "Sua organização já recebe este marketplace."
-        }
+        },
+        "advanced": "Avançado"
       },
       "sync": {
         "now": "Sincronizar agora",
@@ -18081,7 +18069,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Desativada",
+        "off": "Desligado",
         "required": "Obrigatória",
         "pending": "Aguardando revisão",
         "invalid": "Inválida"
@@ -18134,14 +18122,13 @@
       },
       "empty": {
         "title": "Nenhum plugin ainda",
-        "description": "Envie um plugin, adicione um marketplace do GitHub ou crie uma habilidade. Cada habilidade é um plugin.",
+        "description": "Envie um plugin ou adicione um marketplace do GitHub.",
         "upload": "Enviar plugin"
       },
       "noMatches": {
         "title": "Nenhum plugin correspondente",
         "clear": "Mostrar todos os plugins"
       },
-      "intro": "Um plugin é um conjunto de skills e lista as integrações de que essas skills precisam. Envie um plugin do Claude Code ou do Codex, adicione um marketplace do GitHub ou adicione uma habilidade. Um plugin que só contém um SKILL.md na raiz fica na aba Habilidades.",
       "integrations": "{available} de {needed} integrações disponíveis",
       "nameHeld": "Desativado: {names} usa o mesmo nome de habilidade"
     },

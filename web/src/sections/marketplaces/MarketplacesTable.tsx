@@ -200,11 +200,16 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
     ];
   }
 
+  // The source repeats the name for a marketplace named after its repository.
+  const sourceLine = (row: MarketplaceSummary) => {
+    const source = marketplaceSource(row);
+    return source === row.name ? undefined : source;
+  };
   const nameCell = (row: MarketplaceSummary) => (
     <Content
       title={row.name}
       titleMaxLines={1}
-      description={marketplaceSource(row)}
+      description={sourceLine(row)}
       descriptionMaxLines={1}
       badge={{ title: t(`scope.${row.scope}`) }}
     />
@@ -243,9 +248,12 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
         <Content
           title={row.name}
           titleMaxLines={1}
-          description={`${marketplaceSource(row)} · ${t("items", {
-            count: row.plugin_count,
-          })}`}
+          description={[
+            sourceLine(row),
+            t("items", { count: row.plugin_count }),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
           descriptionMaxLines={1}
           badge={{
             title: t(`sync.state.${marketplaceSyncState(row)}`),

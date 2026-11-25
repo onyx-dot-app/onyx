@@ -654,7 +654,7 @@ describe("SkillsPage preference toggles", () => {
     const user = setupUser();
     render(<SkillsPage />);
 
-    await user.click(screen.getByRole("button", { name: "Create skill" }));
+    await user.click(screen.getByRole("button", { name: "Create a skill" }));
     await user.click(screen.getAllByText("Upload a skill")[0]!);
     await user.click(screen.getByRole("button", { name: "Continue upload" }));
 

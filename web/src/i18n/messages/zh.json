@@ -17322,7 +17322,7 @@
           "title": "从头开始"
         },
         "trigger": {
-          "label": "创建技能"
+          "label": "创建一个技能"
         },
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
@@ -17555,17 +17555,13 @@
           "versions": "版本"
         },
         "overview": {
-          "noDescription": "无描述。",
           "location": "位置",
           "owner": "所有者",
-          "skills": "技能",
-          "description": "描述",
           "version": "plugin.json 中的版本",
           "author": "作者",
           "homepage": "主页",
           "license": "许可证",
-          "notUsed": "Onyx 不使用的部分",
-          "marketplace": "{name} 市场，{scope, select, personal {个人} other {公司}}（{repository}）"
+          "notUsed": "Onyx 不使用的部分"
         },
         "skills": {
           "off": "已关闭",
@@ -17578,12 +17574,7 @@
         "switch": {
           "title": "使用此插件",
           "label": "使用 {name}",
-          "required": "管理员已将此插件设为必需。你无法将其关闭。",
-          "unavailable": "你无法开启或关闭此插件。",
-          "failed": "无法更改插件。",
-          "on": "已开启。默认智能体可以使用此插件。",
-          "off": "已关闭。开启后，默认智能体即可使用此插件。",
-          "nameHeld": "已关闭，因为 {names} 使用了相同的技能名称。开启此插件即可改用它。"
+          "failed": "无法更改插件。"
         },
         "actions": {
           "share": "分享",
@@ -17599,7 +17590,6 @@
           "done": "已删除 {name}。",
           "failed": "无法删除插件。"
         },
-        "syncedFrom": "同步自 {repository}",
         "managed": {
           "title": "由 {name} 市场管理",
           "description": "Onyx 从 {repository} 同步此插件。请在 GitHub 中更改，然后同步市场。",
@@ -17713,10 +17703,7 @@
         "not_supported": "不支持"
       },
       "note": {
-        "askAdmin": "请询问管理员",
-        "turnedOff": "已被您的管理员关闭",
-        "moreThanOne": "有多个集成匹配",
-        "notSupported": "Onyx 不支持"
+        "askAdmin": "请询问管理员"
       },
       "localServer": "本地服务器",
       "noUrl": "无服务器 URL",
@@ -17868,7 +17855,8 @@
         "duplicate": {
           "personal": "你已添加此市场。",
           "company": "你的组织已经在使用此市场。"
-        }
+        },
+        "advanced": "高级"
       },
       "sync": {
         "now": "立即同步",
@@ -18081,7 +18069,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "已停用",
+        "off": "已关闭",
         "required": "必需",
         "pending": "待审核",
         "invalid": "无效"
@@ -18134,14 +18122,13 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "上传插件、从 GitHub 添加市场，或创建技能。每个技能都是一个插件。",
+        "description": "上传插件，或从 GitHub 添加市场。",
         "upload": "上传插件"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件是一组技能，并列出这些技能需要的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。根目录中仅有一个 SKILL.md 的插件显示在“技能”标签页中。",
       "integrations": "{needed} 个集成中有 {available} 个可用",
       "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },

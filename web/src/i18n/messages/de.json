@@ -17322,7 +17322,7 @@
           "title": "Von Grund auf neu beginnen"
         },
         "trigger": {
-          "label": "Skill erstellen"
+          "label": "Einen Skill erstellen"
         },
         "upload": {
           "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
@@ -17555,17 +17555,13 @@
           "versions": "Versionen"
         },
         "overview": {
-          "noDescription": "Keine Beschreibung.",
           "location": "Ort",
           "owner": "Eigentümer",
-          "skills": "Skills",
-          "description": "Beschreibung",
           "version": "Version in plugin.json",
           "author": "Autor",
           "homepage": "Homepage",
           "license": "Lizenz",
-          "notUsed": "Nicht in Onyx verwendet",
-          "marketplace": "Marketplace {name}, {scope, select, personal {persönlich} other {Unternehmen}} ({repository})"
+          "notUsed": "Nicht in Onyx verwendet"
         },
         "skills": {
           "off": "Aus",
@@ -17578,12 +17574,7 @@
         "switch": {
           "title": "Dieses Plugin verwenden",
           "label": "{name} verwenden",
-          "required": "Ihr Admin hat dieses Plugin als erforderlich festgelegt. Sie können es nicht deaktivieren.",
-          "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren.",
-          "failed": "Das Plugin konnte nicht geändert werden.",
-          "on": "An. Der Standard-Agent kann dieses Plugin verwenden.",
-          "off": "Aus. Aktivieren Sie es, damit der Standard-Agent dieses Plugin verwenden kann.",
-          "nameHeld": "Aus, weil {names} denselben Skill-Namen verwendet. Aktivieren Sie dieses Plugin, um es stattdessen zu verwenden."
+          "failed": "Das Plugin konnte nicht geändert werden."
         },
         "actions": {
           "share": "Teilen",
@@ -17599,7 +17590,6 @@
           "done": "{name} wurde gelöscht.",
           "failed": "Das Plugin konnte nicht gelöscht werden."
         },
-        "syncedFrom": "Synchronisiert aus {repository}",
         "managed": {
           "title": "Vom Marketplace {name} verwaltet",
           "description": "Onyx synchronisiert dieses Plugin aus {repository}. Ändern Sie es in GitHub und synchronisieren Sie dann den Marketplace.",
@@ -17713,10 +17703,7 @@
         "not_supported": "Nicht unterstützt"
       },
       "note": {
-        "askAdmin": "Fragen Sie einen Admin",
-        "turnedOff": "Von Ihrem Admin deaktiviert",
-        "moreThanOne": "Mehr als eine Integration passt",
-        "notSupported": "In Onyx nicht unterstützt"
+        "askAdmin": "Fragen Sie einen Admin"
       },
       "localServer": "Lokaler Server",
       "noUrl": "Keine Server-URL",
@@ -17868,7 +17855,8 @@
         "duplicate": {
           "personal": "Sie haben diesen Marketplace bereits hinzugefügt.",
           "company": "Ihre Organisation erhält diesen Marketplace bereits."
-        }
+        },
+        "advanced": "Erweitert"
       },
       "sync": {
         "now": "Jetzt synchronisieren",
@@ -18081,7 +18069,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Deaktiviert",
+        "off": "Aus",
         "required": "Erforderlich",
         "pending": "Prüfung ausstehend",
         "invalid": "Ungültig"
@@ -18134,14 +18122,13 @@
       },
       "empty": {
         "title": "Noch keine Plugins",
-        "description": "Laden Sie ein Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder erstellen Sie einen Skill. Jeder Skill ist ein Plugin.",
+        "description": "Laden Sie ein Plugin hoch oder fügen Sie einen Marketplace aus GitHub hinzu.",
         "upload": "Plugin hochladen"
       },
       "noMatches": {
         "title": "Keine passenden Plugins",
         "clear": "Alle Plugins anzeigen"
       },
-      "intro": "Ein Plugin ist eine Gruppe von Skills und nennt die Integrationen, die diese Skills brauchen. Laden Sie ein Claude-Code- oder Codex-Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder fügen Sie einen Skill hinzu. Ein Plugin, das nur eine SKILL.md im Stammverzeichnis enthält, finden Sie im Tab „Skills“.",
       "integrations": "{available} von {needed} Integrationen verfügbar",
       "nameHeld": "Aus: {names} verwendet denselben Skill-Namen"
     },

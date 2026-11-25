@@ -20,7 +20,6 @@ import {
 import {
   SvgCheckCircle,
   SvgPlug,
-  SvgPlus,
   SvgShare,
   SvgUploadCloud,
   SvgXCircle,
@@ -295,17 +294,6 @@ export default function CustomizePluginsPage() {
             title={marketplaceCopy("page.title")}
             description={marketplaceCopy("page.description")}
             padding={0}
-            rightChildren={
-              marketplaceList.isLoading ? undefined : (
-                <Button
-                  prominence="secondary"
-                  icon={SvgPlus}
-                  onClick={() => setAddingMarketplace(true)}
-                >
-                  {marketplaceCopy("add.menuItem")}
-                </Button>
-              )
-            }
           />
           <MarketplacesTable list={marketplaceList} />
         </Section>
@@ -502,9 +490,6 @@ export default function CustomizePluginsPage() {
         </>
       }
     >
-      <Text as="p" font="secondary-body" color="text-03">
-        {t("plugins.intro")}
-      </Text>
       {list}
       {marketplaces}
     </CustomizeLayout>
