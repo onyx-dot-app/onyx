@@ -58,6 +58,7 @@ import { Permission } from "@/lib/types";
 import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
 import {
   detectApi,
+  isNotThisKind,
   type DetectedApi,
   type SpecFile,
 } from "@/sections/integrations/detectApi";
@@ -74,6 +75,7 @@ import { EndpointLinesField } from "@/sections/integrations/RestEndpointFields";
 import {
   DEFAULT_SIGN_IN,
   normalizedUrl,
+  presetAuthMethods,
   SIGN_IN_METHODS,
   signInErrors,
   signInPayload,
@@ -127,7 +129,7 @@ function mcpSignIn(probe: McpProbe): SignInDraft {
 }
 
 function presetSignIn(preset: IntegrationPreset): SignInDraft {
-  const first = preset.auth_methods.find((method) => method !== null);
+  const first = presetAuthMethods(preset)[0];
   return {
     ...DEFAULT_SIGN_IN,
     authMode: first ? "individual" : "none",
@@ -173,7 +175,6 @@ export default function AddIntegrationModal({
   const [file, setFile] = useState<SpecFile | null>(null);
   const [readingFile, setReadingFile] = useState(false);
   const [fileError, setFileError] = useState(false);
-  const [connectErrors, setConnectErrors] = useState(false);
   const [detectError, setDetectError] = useState<string | null>(null);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [signIn, setSignIn] = useState<SignInDraft>(DEFAULT_SIGN_IN);
@@ -212,9 +213,7 @@ export default function AddIntegrationModal({
     shape !== "preset"
       ? SIGN_IN_METHODS[shape]
       : detection?.shape === "preset"
-        ? detection.preset.auth_methods.flatMap((method) =>
-            method ? [method] : []
-          )
+        ? presetAuthMethods(detection.preset)
         : [];
 
   function newRun(): AbortController {
@@ -276,7 +275,7 @@ export default function AddIntegrationModal({
     } catch (error) {
       if (controller.signal.aborted) return;
       setDetectError(
-        error instanceof FetchError && error.status === 400
+        isNotThisKind(error)
           ? t("api.specError", { detail: error.message })
           : t("api.checkFailed")
       );
@@ -301,7 +300,7 @@ export default function AddIntegrationModal({
   }
 
   function next() {
-    setConnectErrors(true);
+    setShowErrors(true);
     setDetectError(null);
     if (!name.trim()) return;
     if (flow === "mcp_server") {
@@ -330,9 +329,7 @@ export default function AddIntegrationModal({
           : null;
       }
       case "openapi": {
-        const base = detection.baseUrlGuessed
-          ? normalizedUrl(baseUrl) && baseUrl.trim()
-          : detection.view.base_url;
+        const base = normalizedUrl(baseUrl) && baseUrl.trim();
         if (!base) return null;
         return {
           shape: "openapi",
@@ -521,18 +518,18 @@ export default function AddIntegrationModal({
     const urlKey = flow === "mcp_server" ? "mcp.url" : "api.url";
     const urlError =
       flow === "mcp_server"
-        ? connectErrors && !apiUrl
+        ? showErrors && !apiUrl
           ? t("mcp.url.error")
           : undefined
         : (detectError ??
-          (connectErrors && (url.trim() ? !apiUrl : !file)
+          (showErrors && (url.trim() ? !apiUrl : !file)
             ? t("api.url.error")
             : undefined));
     return (
       <Section gap={4} alignItems="stretch" height="auto">
         <InputVertical
           title={t("name.title")}
-          error={connectErrors && !name.trim() ? t("name.required") : undefined}
+          error={showErrors && !name.trim() ? t("name.required") : undefined}
         >
           <InputTypeIn
             aria-label={t("name.title")}

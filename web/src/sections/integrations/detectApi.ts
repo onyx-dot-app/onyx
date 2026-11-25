@@ -28,7 +28,7 @@ export interface SpecFile {
   text: string;
 }
 
-export function isGraphQLFile(name: string): boolean {
+function isGraphQLFile(name: string): boolean {
   return /\.(graphql|graphqls|gql)$/i.test(name);
 }
 
@@ -87,7 +87,7 @@ function isSpecError(error: unknown): boolean {
 
 /** Onyx checked the URL and it is not this kind of API. Any other failure
  * (no permission, a server error, no connection) is not an answer. */
-function isNotThisKind(error: unknown): boolean {
+export function isNotThisKind(error: unknown): error is FetchError {
   return error instanceof FetchError && error.status === 400;
 }
 
