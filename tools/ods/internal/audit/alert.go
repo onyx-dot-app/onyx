@@ -157,7 +157,7 @@ func Sync(opts SyncAlertsOptions) (SyncResult, error) {
 		}
 		image := resultImage(path)
 		for _, f := range res.Blocking {
-			f.image = image
+			f.Image = cmp.Or(f.Image, image)
 			blocking = append(blocking, f)
 		}
 		scanned = append(scanned, res.Findings...)
@@ -350,7 +350,7 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 			Title:    f.Title,
 			URL:      f.URL,
 			FixedIn:  f.FixedIn,
-			Images:   appendUnique(nil, f.image),
+			Images:   appendUnique(nil, f.Image),
 		})
 		a.Versions = appendUnique(a.Versions, f.Version)
 		a.Manifests = appendUnique(a.Manifests, f.Manifest)

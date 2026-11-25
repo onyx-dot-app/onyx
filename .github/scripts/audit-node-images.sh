@@ -19,6 +19,7 @@ while IFS= read -r image; do
     jq -e '.blocking | length > 0' "${report}" > /dev/null
   }
   jq -e 'has("blocking")' "${report}" > /dev/null
-  reports+=("${report}")
+  jq --arg image "${image}" '.blocking = [.blocking[]? | . + {image: $image}]' "${report}" > "${report}.labeled"
+  reports+=("${report}.labeled")
 done < "${tmp}/refs"
 jq -s '{findings: map(.findings[]?), ignored: map(.ignored[]?), blocking: map(.blocking[]?)}' "${reports[@]}" < /dev/null
