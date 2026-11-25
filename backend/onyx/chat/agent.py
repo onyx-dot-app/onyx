@@ -185,12 +185,16 @@ class ChatFeature(AgentFeature):
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
         question_tool: Callable[[QuestionShape], QuestionTool] | None = None,
+        shows_command_approvals: bool = False,
     ) -> None:
         """`messages` is the history that the agent starts with. Only a root
         agent gets a question tool: `question_tool` builds it in the given
         shape. The model's tool family (LLMConfig.tool_family) selects the
-        shapes of the code mode tools, the agent tools and the question tool."""
+        shapes of the code mode tools, the agent tools and the question tool.
+        `shows_command_approvals`: a client streams this agent's progress
+        (`ToolContext`)."""
         self.llm = llm
+        self.shows_command_approvals = shows_command_approvals
         tool_family = llm.config.tool_family
         agent_shape = AGENT_SHAPES[tool_family]
         # The fixed system block for the agent's role: a subagent, or a root
@@ -555,6 +559,7 @@ class ChatFeature(AgentFeature):
             sandbox_search_files=self._sandbox_turn.search_files.offer
             if self._sandbox_turn is not None
             else None,
+            shows_command_approvals=self.shows_command_approvals,
         )
 
     def _prepare_step(self, state: StepInput) -> PreparedStep:
@@ -797,6 +802,9 @@ def build_chat_agent(
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
         question_tool=question_tool,
+        # A background agent's progress reaches no client, and a
+        # non-streaming caller reads only the final response.
+        shows_command_approvals=setup.new_msg_req.stream and not is_subagent,
     )
     agent = feature.agent(
         state,

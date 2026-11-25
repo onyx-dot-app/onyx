@@ -1656,11 +1656,14 @@ def run_chat_turn(
     """Run one chat turn for in-process, non-streaming callers, to completion
     or until tool calls wait for the user.
 
-    These callers read one response, so the turn offers no agent tools.
+    These callers read one response, so the turn offers no agent tools, and
+    a VM command's app request that asks is refused, not held for a card.
     """
     response_future = Future[ChatResponseOutcome]()
     packets = handle_stream_message_objects(
-        new_msg_req=new_msg_req.model_copy(update={"accepts_follow_ups": False}),
+        new_msg_req=new_msg_req.model_copy(
+            update={"accepts_follow_ups": False, "stream": False}
+        ),
         user=user,
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,

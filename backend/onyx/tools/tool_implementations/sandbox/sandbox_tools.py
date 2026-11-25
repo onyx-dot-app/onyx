@@ -207,11 +207,15 @@ def _exec_tool_result(
 def _held_exec_result(
     ref: HarnessSandboxRef,
     invocation: ToolInvocation,
+    context: ToolContext,
     max_chars: int,
-    start: Callable[[CommandApprovals], Generator[ExecEvent]],
+    start: Callable[[CommandApprovals | None], Generator[ExecEvent]],
 ) -> ToolResult:
     """`_exec_tool_result` of a call that shows the approvals of its
-    command's app requests (command_approvals.py)."""
+    command's app requests (command_approvals.py). A call that no client
+    shows holds nothing, so the proxy refuses those requests."""
+    if not context.shows_command_approvals:
+        return _exec_tool_result(start(None), invocation, max_chars)
     approvals = CommandApprovals(
         tenant_id=ref.tenant_id,
         chat_session_id=ref.session_id,
@@ -380,7 +384,7 @@ class ExecCommandTool(SandboxTool):
     def code_mode_result(self) -> CodeModeResultSpec:
         return _EXEC_RESULT
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         request = parse_tool_arguments(
             self._turn.shell.arguments, invocation.arguments
         ).request()
@@ -388,6 +392,7 @@ class ExecCommandTool(SandboxTool):
         return _held_exec_result(
             ref,
             invocation,
+            context,
             request.max_chars,
             lambda hold: self._turn.sandbox.exec_command(
                 ref,
@@ -414,7 +419,7 @@ class WriteStdinTool(SandboxTool):
     def code_mode_result(self) -> CodeModeResultSpec:
         return _EXEC_RESULT
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         request = parse_tool_arguments(
             self._turn.shell.write_stdin_arguments, invocation.arguments
         ).request()
@@ -422,6 +427,7 @@ class WriteStdinTool(SandboxTool):
         return _held_exec_result(
             ref,
             invocation,
+            context,
             request.max_chars,
             lambda hold: self._turn.sandbox.write_stdin(
                 ref,

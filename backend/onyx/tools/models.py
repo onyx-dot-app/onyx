@@ -460,6 +460,9 @@ class ToolContext(BaseModel):
     # its program function's (ChatFeature.called_name). Results that tell the
     # model to call another tool name it so.
     called_name: Callable[[str], str] = Field(default=str, exclude=True)
+    # A client shows the call's progress as it streams, so an app request of
+    # a VM command can wait for an approval card (sandbox/command_approvals.py).
+    shows_command_approvals: bool = False
 
 
 class ToolCallInfo(BaseModel):
