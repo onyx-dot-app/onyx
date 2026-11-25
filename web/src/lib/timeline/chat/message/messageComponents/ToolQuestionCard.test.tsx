@@ -1,4 +1,10 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import ToolQuestionCard from "@/lib/timeline/chat/message/messageComponents/ToolQuestionCard";
 import { PENDING_QUESTION, useToolRequestUi } from "@/lib/chat/toolApprovals";
 import {
@@ -339,6 +345,11 @@ test("each checkbox of a multi-select question is a tab stop that Space or Enter
   await user.keyboard(" ");
   expect(slack).toHaveAttribute("aria-checked", "false");
   expect(email).toHaveAttribute("aria-checked", "true");
+  // A held key toggles once: its repeats change nothing.
+  for (const key of ["Enter", " "]) {
+    fireEvent.keyDown(slack, { key, repeat: true });
+    expect(slack).toHaveAttribute("aria-checked", "false");
+  }
 });
 
 test("a question that no longer waits shows so and reads the chat status", async () => {
