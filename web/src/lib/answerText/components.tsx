@@ -61,7 +61,9 @@ function AnswerCodeBlock({ node }: React.ComponentProps<"pre"> & ExtraProps) {
       )
     : undefined;
   return (
-    <div data-testid="answer-code-block">
+    // not-prose: the answer's typography styles tables, so without it every
+    // code line gets a row border, cell padding and the answer's font size.
+    <div data-testid="answer-code-block" className="not-prose">
       <CodeBlockBody
         code={code ? textOf(code.children).replace(/\n$/, "") : ""}
         language={languageClass?.slice("language-".length)}

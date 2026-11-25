@@ -71,7 +71,8 @@ export function endedRunStatus(
   )?.obj;
   const failed =
     session.chatState === "unconfirmed" ||
-    session.uncaughtError != null ||
+    (session.uncaughtError != null &&
+      session.uncaughtError.affectsRunStatus !== false) ||
     lastMessage?.type === "error" ||
     (finished?.type === PacketType.STOP &&
       finished.stop_reason === StopReason.TIMED_OUT);

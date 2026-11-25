@@ -1,4 +1,13 @@
-import React, { useCallback, useEffect, useRef, useMemo, JSX } from "react";
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+  useState,
+  JSX,
+} from "react";
 import ReactMarkdown, {
   type Components,
   type ExtraProps,
@@ -26,9 +35,11 @@ import {
 import { CodeBlock } from "@/lib/timeline/chat/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
+import { Text } from "@opal/components";
 import type { TextColor, TextFont } from "@opal/components";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
+import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -130,6 +141,84 @@ export function ScrollableTable({
  * During typewriter animation, [[N]](url) is revealed character by character,
  * and ReactMarkdown can't parse an incomplete link: it would show as raw text.
  */
+const LinkedMarkdownImage = createContext(false);
+
+export function MarkdownLinkContent({ children }: React.PropsWithChildren) {
+  return (
+    <LinkedMarkdownImage.Provider value>
+      {children}
+    </LinkedMarkdownImage.Provider>
+  );
+}
+
+type MarkdownImageProps = React.ComponentProps<"img"> & ExtraProps;
+
+export function MarkdownImage(props: MarkdownImageProps) {
+  return <MarkdownImageContent key={String(props.src ?? "")} {...props} />;
+}
+
+function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
+  const linked = useContext(LinkedMarkdownImage);
+  const t = useTranslations("chat.messages");
+  const tFiles = useTranslations("chat.files");
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const [failed, setFailed] = useState(false);
+  const [fullImageShowing, setFullImageShowing] = useState(false);
+
+  if (typeof src !== "string" || src === "" || failed) {
+    return (
+      <span className="inline-block rounded-lg border border-01 px-2 py-1">
+        <Text font="secondary-body" color="text-03">
+          {alt
+            ? t("markdownImage.unavailable.withAlt", { alt })
+            : t("markdownImage.unavailable.text")}
+        </Text>
+      </span>
+    );
+  }
+
+  const image = (
+    <img
+      src={src}
+      alt={alt ?? ""}
+      title={title}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-auto max-h-[30rem] w-auto max-w-full rounded-lg object-contain"
+    />
+  );
+  if (linked) return image;
+
+  return (
+    <>
+      <span
+        ref={triggerRef}
+        role="button"
+        tabIndex={0}
+        aria-label={alt || tFiles("inMessageImage.viewFullImage.label")}
+        onClick={() => setFullImageShowing(true)}
+        onKeyDown={clickOnKeyDown(() => setFullImageShowing(true))}
+        className="block w-fit max-w-full cursor-zoom-in"
+      >
+        {image}
+      </span>
+      {fullImageShowing && (
+        <FullImageModal
+          src={src}
+          alt={alt}
+          open
+          onOpenChange={setFullImageShowing}
+          onCloseAutoFocus={(event) => {
+            if (!triggerRef.current) return;
+            event.preventDefault();
+            triggerRef.current.focus();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 export const stripPartialCitations = (content: string): string =>
   content
     .replace(/\[\[\d+\]\]\([^)]*$/, "")
@@ -187,15 +276,19 @@ export const useMarkdownComponents = (
         );
       }
       return (
-        <MemoizedAnchor
-          updatePresentingDocument={state?.setPresentingDocument || (() => {})}
-          docs={state?.docs || []}
-          userFiles={state?.userFiles || []}
-          citations={state?.citations}
-          href={props.href}
-        >
-          {props.children}
-        </MemoizedAnchor>
+        <MarkdownLinkContent>
+          <MemoizedAnchor
+            updatePresentingDocument={
+              state?.setPresentingDocument || (() => {})
+            }
+            docs={state?.docs || []}
+            userFiles={state?.userFiles || []}
+            citations={state?.citations}
+            href={props.href}
+          >
+            {props.children}
+          </MemoizedAnchor>
+        </MarkdownLinkContent>
       );
     },
     [
@@ -209,6 +302,7 @@ export const useMarkdownComponents = (
   const markdownComponents = useMemo<Components>(
     () => ({
       a: anchorCallback,
+      img: MarkdownImage,
       p: paragraphCallback,
       pre: ({ node, className, children }) => {
         // Don't render the pre wrapper - CodeBlock handles its own wrapper

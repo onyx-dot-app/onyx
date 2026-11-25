@@ -1012,7 +1012,10 @@ export class ChatPage {
   /** Opens the run card and checks one completed step of the tool that
    * shows `output`. The step's body is a code panel with the request and
    * the response, so the output is matched as text. */
-  async expectCustomToolResult(name: string, output: string): Promise<void> {
+  async expectCustomToolResult(
+    name: string,
+    output: string | readonly string[]
+  ): Promise<void> {
     // A long run folds its steps into a card whose button is named for the
     // step count; a short run shows each step as its own card.
     const fold = this.scrollContainer
@@ -1029,7 +1032,17 @@ export class ChatPage {
     });
     await expect(status).toBeVisible();
     await status.click();
-    await expect(this.scrollContainer.getByText(output).first()).toBeVisible();
+    if (typeof output === "string") {
+      await expect(
+        this.scrollContainer.getByText(output).first()
+      ).toBeVisible();
+      return;
+    }
+    for (const field of output) {
+      await expect(
+        this.scrollContainer.getByText(field, { exact: true }).first()
+      ).toBeVisible();
+    }
   }
 
   async startIncognito(): Promise<void> {

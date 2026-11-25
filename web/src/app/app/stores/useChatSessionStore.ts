@@ -38,6 +38,7 @@ import {
 /** An error that belongs to the session, not to a saved message. */
 export interface SessionError {
   error: string;
+  affectsRunStatus?: false;
   errorCode?: string;
   isRetryable?: boolean;
   details?: Record<string, any>;
@@ -56,8 +57,8 @@ interface ChatSessionData {
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
   sendAcknowledged?: Promise<ChatStream | null>;
-  // Resolves after the reader applies its final packets and message state.
-  readerFinished?: Promise<void>;
+  // Resolves after the reader applies its final packets, with any send rejection.
+  readerFinished?: Promise<SessionError | void>;
   hasPerformedInitialScroll: boolean;
   // The chat's right panel (lib/chat/rightPanel.ts). It stays while the
   // panel is closed, so reopening it, or coming back to the chat, restores

@@ -5,6 +5,7 @@ import { Line, Presence } from "@opal/components";
 import { LineLoader } from "@opal/loaders";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
+import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
 
 export interface RunStepProps {
@@ -59,7 +60,12 @@ export function RunStep({
   loading = false,
 }: RunStepProps) {
   const [open, setOpen] = useState(defaultExpanded);
+  const { rowRef, onToggle } = useRevealOnOpen();
   if (hideHeader) return <>{body}</>;
+  const toggle = () => {
+    onToggle(!open);
+    setOpen(!open);
+  };
 
   const shownTitle = status === "done" ? (doneTitle ?? title) : title;
   // A running step can always be opened (it still starts closed): before its
@@ -84,19 +90,21 @@ export function RunStep({
     : { expandable: false as const };
 
   return (
-    <Line
-      icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
-      title={shownTitle ?? ""}
-      titleKey={titleKey}
-      shimmer={status === "streaming"}
-      rightChildren={headerAccessory}
-      // Filled while open; otherwise only on hover.
-      filled={hasBody && open}
-      onClick={hasBody ? () => setOpen((prev) => !prev) : undefined}
-      // The body starts under the title text.
-      bodyInset="title"
-      {...cardBody}
-    />
+    <div ref={rowRef}>
+      <Line
+        icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
+        title={shownTitle ?? ""}
+        titleKey={titleKey}
+        shimmer={status === "streaming"}
+        rightChildren={headerAccessory}
+        // Filled while open; otherwise only on hover.
+        filled={hasBody && open}
+        onClick={hasBody ? toggle : undefined}
+        // The body starts under the title text.
+        bodyInset="title"
+        {...cardBody}
+      />
+    </div>
   );
 }
 

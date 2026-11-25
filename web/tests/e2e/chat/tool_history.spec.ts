@@ -85,7 +85,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
       if (view === "reloaded") await chatPage.reload();
       await chatPage.expectCompleteAnswers(1);
       await chatPage.expectAnswerParagraph("The health check returned ok.");
-      await chatPage.expectCustomToolResult(operation, '"status": "ok"');
+      await chatPage.expectCustomToolResult(operation, ["status:", "ok"]);
       await expect(chatPage.aiMessage()).not.toContainText(CODE_MODE_TEXT);
     }
   } finally {

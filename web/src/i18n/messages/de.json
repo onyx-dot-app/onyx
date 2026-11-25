@@ -12353,6 +12353,12 @@
           "text": "Bildgenerierung gestoppt"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Bild nicht verfügbar",
+          "withAlt": "{alt} · Bild nicht verfügbar"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "Tabelle kopieren"

@@ -12353,6 +12353,12 @@
           "text": "Se detuvo la generación de imágenes"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Imagen no disponible",
+          "withAlt": "{alt} · Imagen no disponible"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "Copiar tabla"

@@ -10,6 +10,7 @@ import {
   WriteStdinStart,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
+import { stripAnsi } from "@/lib/sandbox/ansi";
 import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import {
   SandboxCallContent,
@@ -64,7 +65,7 @@ export function ExecToolRenderer({
     stopPacketSeen,
     onComplete
   );
-  const output = end === null ? liveOutput : (end.output ?? "");
+  const output = stripAnsi(end === null ? liveOutput : (end.output ?? ""));
 
   if (start === null) {
     return children([{ icon: null, status: null, content: <></> }]);

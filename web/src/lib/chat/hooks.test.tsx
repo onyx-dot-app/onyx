@@ -573,6 +573,19 @@ describe("useJumpToLatestReason", () => {
     expect(endedRunStatus(session)).toBe(expected);
   });
 
+  it("keeps a rejected local send out of the followed run's status", () => {
+    setReply([delta("Hello")]);
+    const store = useChatSessionStore.getState();
+    store.updateChatState(SESSION, "input");
+    store.setUncaughtError(SESSION, {
+      error: "A run is already active",
+      affectsRunStatus: false,
+    });
+    const session = useChatSessionStore.getState().sessions.get(SESSION);
+    if (!session) throw new Error("Expected a chat session");
+    expect(endedRunStatus(session)).toBe("done");
+  });
+
   it("names no new answer for output that loads into an idle chat", () => {
     useChatSessionStore.getState().updateChatState(SESSION, "input");
     const { result, rerender } = renderHook(() => useJumpToLatestReason(true));

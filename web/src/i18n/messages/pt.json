@@ -12353,6 +12353,12 @@
           "text": "Geração de imagens interrompida"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Imagem indisponível",
+          "withAlt": "{alt} · Imagem indisponível"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "Copiar tabela"

@@ -480,8 +480,9 @@ parent and the server parent are the same node. When the server answers
 without admitting the send (`CurrentMessageFIFO.acknowledged` resolves to
 `null`) or the send fails before dispatch, `restoreTreeBeforeSend` removes the
 send's nodes and restores the links of their parent. The error goes to the
-session's `uncaughtError`, a `SessionError` with the error code and details,
-after settlement.
+session's `uncaughtError`, a `SessionError` with the error code and details.
+The reader returns a rejected send’s error when it finishes. Completion and
+Stop both read that result before releasing the input.
 An automatic follow-up response has a hidden `agent_results` question node as
 its parent. `ChatUI` and the shared chat view render that node with
 `web/src/lib/timeline/chat/message/AgentResultsDivider.tsx`, with no message controls. Checks that
@@ -1088,6 +1089,16 @@ the tab, and a chat that the store does not hold shows no status.
     when it ends. Do not write `scrollTop` while the user scrolls: a following
     view catches up once the input settles. Keep native scroll anchoring on: a
     script write stops a trackpad fling.
+    **Opening a step reveals it.** When the user opens a run card or a step,
+    `lib/chatScroll/hooks.ts:useRevealOnOpen` waits `FOLD_OPEN_MS` for the fold
+    to reach its full height, then the action from the container's `prepareReveal` scrolls by the smaller of
+    the part of the row hidden below and the room above it. The footer's height (a
+    spacer the height of the composer laid over the view) counts as hidden.
+    It does nothing while the view follows a streaming reply (`isStreaming`) with
+    auto-scroll on, or when the user closes the row again during the wait, and
+    jumps instead of gliding under reduced motion. Otherwise it makes the view a
+    reading one, so the click's catch-up does not jump a following idle view to
+    the end.
     **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
     user message and its replies) in a `data-chat-turn` element. The latest turn
     has `min-height: calc(100cqh - 3rem - var(--app-composer-height))` (the
