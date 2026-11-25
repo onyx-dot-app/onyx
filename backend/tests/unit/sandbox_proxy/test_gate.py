@@ -2470,3 +2470,33 @@ def test_a_command_row_names_the_request_and_is_announced_to_the_call(
     }
     assert cache.pushed == [(approval_cache.announce_key(_COMMAND), str(approval_id))]
     assert notified == []
+
+
+def test_a_chat_recheck_matches_the_agents_integrations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The recheck of a held chat request evaluates with the chat's tag, as
+    the first match does, so a linked integration that the user turned off
+    still matches."""
+    addon, _cache = _command_gate(monkeypatch)
+    tags: list[UUID | None] = []
+
+    class _Recording(_StubMatcher):
+        def evaluate(
+            self,
+            request: http.Request,  # noqa: ARG002
+            tenant_id: str,  # noqa: ARG002
+            user_id: UUID,  # noqa: ARG002
+            session_tag: UUID | None = None,
+        ) -> AllMatchedActions | McpProtocolRequest | None:
+            tags.append(session_tag)
+            return None
+
+    addon._request_evaluator = _Recording()
+    ctx = _ctx(session_id=UUID(_TAG_UUID)).model_copy(
+        update={"chat_command_id": _COMMAND}
+    )
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    assert addon._recheck_approval(flow, ctx, _MATCH, uuid4()) is None
+    assert tags == [UUID(_TAG_UUID)]

@@ -546,10 +546,12 @@ class GateAddon:
         approval_id: UUID,
     ) -> AllMatchedActions | None:
         """Recheck the original execution and persisted decision before forwarding."""
+        from_chat = ctx.chat_command_id is not None
         recognized = self._request_evaluator.evaluate(
             flow.request,
             ctx.tenant_id,
             ctx.user_id,
+            ctx.session_id if from_chat else None,
         )
         if (
             not isinstance(recognized, AllMatchedActions)
@@ -559,7 +561,6 @@ class GateAddon:
         ):
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
-        from_chat = ctx.chat_command_id is not None
         current_actions = self._resolve_request_policies(ctx, recognized, from_chat)
         if current_actions.governing_action.policy is ActionPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
