@@ -533,7 +533,8 @@ const ChatScrollContainer = React.memo(
             modeRef.current !== "reading"
           )
             return;
-          if (cancelled || !row.isConnected) {
+          // A step whose card closed sits in an inert fold until it unmounts.
+          if (cancelled || !row.isConnected || row.closest("[inert]")) {
             if (reveal.restoreFollowing) modeRef.current = "following";
             return;
           }

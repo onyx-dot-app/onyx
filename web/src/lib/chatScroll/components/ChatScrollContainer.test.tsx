@@ -274,3 +274,25 @@ test.each([false, true])(
       );
   }
 );
+
+test("a step whose run card closed before its reveal does not scroll", () => {
+  const { container, settleInput } = renderChat({
+    children: <OpenableRow />,
+  });
+  jest
+    .spyOn(window, "matchMedia")
+    .mockReturnValue({ matches: false } as MediaQueryList);
+  container.scrollBy = jest.fn();
+  jest
+    .spyOn(container, "getBoundingClientRect")
+    .mockReturnValue(new DOMRect(0, 0, 500, 400));
+  const row = screen.getByTestId("openable-row");
+  jest
+    .spyOn(row, "getBoundingClientRect")
+    .mockReturnValue(new DOMRect(0, 250, 500, 210));
+  fireEvent.click(screen.getByRole("button", { name: "Open" }));
+  // The closed card's fold stays mounted, inert, while it closes.
+  row.setAttribute("inert", "");
+  settleInput();
+  expect(container.scrollBy).not.toHaveBeenCalled();
+});

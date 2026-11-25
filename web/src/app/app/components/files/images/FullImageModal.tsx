@@ -36,7 +36,7 @@ export function FullImageModal({
           onCloseAutoFocus={onCloseAutoFocus}
           className={cn(
             "fixed inset-0 flex items-center justify-center p-4 z-modal",
-            "max-w-(--breakpoint-lg) h-fit top-1/2 left-1/2 -translate-y-2/4 -translate-x-2/4",
+            "w-full max-w-(--breakpoint-lg) h-fit top-1/2 right-auto left-1/2 -translate-y-2/4 -translate-x-2/4",
             "focus:outline-hidden"
           )}
         >
