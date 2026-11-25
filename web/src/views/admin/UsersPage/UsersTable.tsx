@@ -36,7 +36,7 @@ function renderNameColumn(email: string, row: UserRow) {
   return (
     <Content
       font="main-ui-action"
-      title={row.personal_name ?? email}
+      title={row.personal_name || email}
       description={row.personal_name ? email : undefined}
     />
   );
