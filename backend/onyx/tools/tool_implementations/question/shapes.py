@@ -14,7 +14,7 @@ from onyx.tools.constants import (
     ASK_USER_QUESTION_TOOL_NAME,
     REQUEST_USER_INPUT_TOOL_NAME,
 )
-from onyx.tools.interface import ToolArguments
+from onyx.tools.models import ToolArguments
 from onyx.tools.tool_implementations.question.models import (
     MAX_QUESTION_HEADER_CHARS,
     ToolQuestion,
