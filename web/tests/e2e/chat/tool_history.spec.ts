@@ -21,6 +21,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
   const adminApi = new OnyxApiClient(admin.request);
   const nonce = mockLlmNonce();
   const operation = "check_service_health";
+  const summary = "Read service health";
   const created = await adminApi.createIntegration({
     for_organization: true,
     name: `Health ${nonce}`,
@@ -44,7 +45,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
           "/health": {
             get: {
               operationId: operation,
-              summary: "Read service health",
+              summary,
               responses: { "200": { description: "OK" } },
             },
           },
@@ -85,7 +86,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
       if (view === "reloaded") await chatPage.reload();
       await chatPage.expectCompleteAnswers(1);
       await chatPage.expectAnswerParagraph("The health check returned ok.");
-      await chatPage.expectCustomToolResult(operation, ["status:", "ok"]);
+      await chatPage.expectCustomToolResult(summary, ["status:", "ok"]);
       await expect(chatPage.aiMessage()).not.toContainText(CODE_MODE_TEXT);
     }
   } finally {

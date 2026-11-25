@@ -462,7 +462,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
             monkeypatch.setattr(
                 usable, "list_enabled_mcp_server_urls", lambda *_: [(1, server_url)]
             )
-            monkeypatch.setattr(usable, "list_enabled_openapi_schemas", lambda *_: [])
+            monkeypatch.setattr(usable, "list_enabled_openapi_documents", lambda *_: [])
             monkeypatch.setattr(usable, "list_enabled_external_apps", lambda *_: [])
             monkeypatch.setattr(
                 integration_resolver, "get_integration_by_id", lambda *_: integration
