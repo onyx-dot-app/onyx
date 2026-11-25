@@ -777,8 +777,8 @@ A reasoning step shows the title of its latest section, a bold line or a
 heading (`reasoningPreview`), or "Thinking" before the first title. Its own
 step card also shows this title while it streams. The
 collapsed run card shows this header while it works. Once done, it reads
-"Worked for {duration}", or "You stopped after {duration}" when the stop
-ended its work. Only the response's first run uses the response's start and
+"Worked for {duration}", also after a stop: the answer's own notice says it
+stopped. Only the response's first run uses the response's start and
 duration (`isFirstRun`); a later run times itself. Before
 the first step, the response shows the cursor, not a run card. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
