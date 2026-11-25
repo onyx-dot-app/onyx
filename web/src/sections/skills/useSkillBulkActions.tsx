@@ -226,6 +226,9 @@ export function useSkillBulkActions({
   const modals = (
     <>
       <BulkSkillSharingModal
+        // A new selection starts a new draft: a staged publish must not carry
+        // over to other skills.
+        key={[...selectedIds].sort().join(",")}
         noun={noun}
         items={selectedItems}
         open={sharingOpen}

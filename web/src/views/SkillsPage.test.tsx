@@ -1,6 +1,7 @@
 import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import {
   act,
+  fireEvent,
   deferred,
   render,
   screen,
@@ -363,6 +364,32 @@ describe("SkillsPage preference toggles", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "More actions" })).toBeEnabled()
     );
+  });
+
+  it("drops a staged bulk share when the selection changes", async () => {
+    skillsData.customs = skillsData.customs.map((skill) => ({
+      ...skill,
+      public_permission: null,
+      user_permission: "OWNER" as const,
+    }));
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select first-skill" })
+    );
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    await user.click(screen.getByRole("button", { name: "Who can access" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: "Everyone in the organization" })
+    );
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select second-skill" })
+    );
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(
+      await screen.findByRole("button", { name: "Apply to 2 skills" })
+    ).toBeDisabled();
   });
 
   it("lists exactly the skills selected for deletion before confirming", async () => {
