@@ -8,7 +8,7 @@ import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 function OpenableRow() {
   const { rowRef, onToggle } = useRevealOnOpen();
   return (
-    <div ref={rowRef}>
+    <div ref={rowRef} data-testid="openable-row">
       <button onClick={() => onToggle(true)}>Open</button>
     </div>
   );
@@ -220,3 +220,34 @@ test("opening a row in an idle view at the end does not jump to the end after th
   settleInput();
   expect(container.scrollTop).toBe(600);
 });
+
+test.each([false, true])(
+  "reveals the fold unless the user scrolls first (%s)",
+  (scrollsFirst) => {
+    const { container, userScroll, settleInput } = renderChat({
+      children: <OpenableRow />,
+    });
+    jest
+      .spyOn(window, "matchMedia")
+      .mockReturnValue({ matches: false } as MediaQueryList);
+    container.scrollBy = jest.fn();
+    jest
+      .spyOn(container, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 500, 400));
+    const row = screen.getByTestId("openable-row");
+    jest
+      .spyOn(row, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 250, 500, 210));
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    if (scrollsFirst) {
+      act(() => jest.advanceTimersByTime(1));
+      userScroll(500);
+    }
+    settleInput();
+    if (scrollsFirst) expect(container.scrollBy).not.toHaveBeenCalled();
+    else
+      expect(container.scrollBy).toHaveBeenCalledWith(
+        expect.objectContaining({ top: 60 })
+      );
+  }
+);

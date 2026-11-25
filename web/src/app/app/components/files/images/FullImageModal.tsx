@@ -9,12 +9,14 @@ interface FullImageModalProps {
   src: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 export function FullImageModal({
   src,
   open,
   onOpenChange,
+  onCloseAutoFocus,
 }: FullImageModalProps) {
   const t = useTranslations("chat.files");
 
@@ -29,6 +31,7 @@ export function FullImageModal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black bg-opacity-80 z-modal-overlay backdrop-blur-xl" />
         <Dialog.Content
+          onCloseAutoFocus={onCloseAutoFocus}
           className={cn(
             "fixed inset-0 flex items-center justify-center p-4 z-modal",
             "max-w-(--breakpoint-lg) h-fit top-1/2 left-1/2 -translate-y-2/4 -translate-x-2/4",

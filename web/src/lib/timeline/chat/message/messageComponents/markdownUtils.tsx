@@ -161,6 +161,7 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
   const linked = useContext(LinkedMarkdownImage);
   const t = useTranslations("chat.messages");
   const tFiles = useTranslations("chat.files");
+  const triggerRef = useRef<HTMLSpanElement>(null);
   const [failed, setFailed] = useState(false);
   const [fullImageShowing, setFullImageShowing] = useState(false);
 
@@ -168,7 +169,9 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
     return (
       <span className="inline-block rounded-lg border border-01 px-2 py-1">
         <Text font="secondary-body" color="text-03">
-          {t("markdownImage.unavailable.text")}
+          {alt
+            ? `${alt} · ${t("markdownImage.unavailable.text")}`
+            : t("markdownImage.unavailable.text")}
         </Text>
       </span>
     );
@@ -189,6 +192,7 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
   return (
     <>
       <span
+        ref={triggerRef}
         role="button"
         tabIndex={0}
         aria-label={alt || tFiles("inMessageImage.viewFullImage.label")}
@@ -199,7 +203,16 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
         {image}
       </span>
       {fullImageShowing && (
-        <FullImageModal src={src} open onOpenChange={setFullImageShowing} />
+        <FullImageModal
+          src={src}
+          open
+          onOpenChange={setFullImageShowing}
+          onCloseAutoFocus={(event) => {
+            if (!triggerRef.current) return;
+            event.preventDefault();
+            triggerRef.current.focus();
+          }}
+        />
       )}
     </>
   );
@@ -262,15 +275,19 @@ export const useMarkdownComponents = (
         );
       }
       return (
-        <MemoizedAnchor
-          updatePresentingDocument={state?.setPresentingDocument || (() => {})}
-          docs={state?.docs || []}
-          userFiles={state?.userFiles || []}
-          citations={state?.citations}
-          href={props.href}
-        >
-          <MarkdownLinkContent>{props.children}</MarkdownLinkContent>
-        </MemoizedAnchor>
+        <MarkdownLinkContent>
+          <MemoizedAnchor
+            updatePresentingDocument={
+              state?.setPresentingDocument || (() => {})
+            }
+            docs={state?.docs || []}
+            userFiles={state?.userFiles || []}
+            citations={state?.citations}
+            href={props.href}
+          >
+            {props.children}
+          </MemoizedAnchor>
+        </MarkdownLinkContent>
       );
     },
     [

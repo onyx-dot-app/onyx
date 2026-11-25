@@ -174,7 +174,9 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const dataFields = useMemo(() => flatFields(data), [data]);
   const showArgs = !isEmptyPayload(toolArgs);
   // A response that only repeats the arguments adds nothing.
-  const showData = !isEmptyPayload(data) && !isEcho(dataFields, argFields);
+  const hasResult =
+    !isEmptyPayload(data) || (data !== null && typeof data === "object");
+  const showData = hasResult && !isEcho(dataFields, argFields);
   // The response shows once it arrives, and as "waiting" while the tool runs.
   const showResponse = !!error || hasFiles || showData || isRunning;
   const argsLines = useCodeLines(toolArgsJson, "json");

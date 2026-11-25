@@ -516,6 +516,7 @@ function ChatPanelContent({
             {/* Main content area — cross-fades when switching between the main
             agent and a subagent (keyed by the viewed agent). */}
             <ChatScrollContainer
+              isStreaming={isRunning}
               ref={scrollContainerRef}
               sessionId={scrollViewKey}
               anchorSelector={

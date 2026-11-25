@@ -1493,8 +1493,10 @@ function recordRunEndings(): { endings: string[]; stop: () => void } {
   const stop = useChatSessionStore.subscribe((state, prev) => {
     const session = state.sessions.get("session");
     const before = prev.sessions.get("session");
-    if (session && before && isWorking(before) && !isWorking(session))
-      endings.push(endedRunStatus(session));
+    if (session && before && isWorking(before) && !isWorking(session)) {
+      const ended = endedRunStatus(session);
+      if (ended) endings.push(ended);
+    }
   });
   return { endings, stop };
 }

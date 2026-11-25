@@ -494,7 +494,7 @@ const ChatScrollContainer = React.memo(
       // above the composer, without moving its top out of view. A view that
       // follows a streaming reply keeps to the end instead; an idle one stops
       // following, so the click's catch-up does not jump to the end.
-      const revealContent = useCallback((row: Element) => {
+      const prepareReveal = useCallback((row: Element) => {
         const container = scrollContainerRef.current;
         if (
           !container?.isConnected ||
@@ -506,18 +506,23 @@ const ChatScrollContainer = React.memo(
           return;
         }
         modeRef.current = "reading";
-        const viewport = container.getBoundingClientRect();
-        const rect = row.getBoundingClientRect();
-        const hiddenBelow =
-          rect.bottom -
-          (viewport.bottom - footerHeight(contentWrapperRef.current));
-        const roomAbove = rect.top - viewport.top - TURN_TOP_OFFSET_PX;
-        const delta = Math.min(hiddenBelow, roomAbove);
-        if (delta <= 0) return;
-        container.scrollBy({
-          top: delta,
-          behavior: prefersReducedMotion() ? "instant" : "smooth",
-        });
+        const inputAtOpen = userInputAtRef.current;
+        return () => {
+          if (!row.isConnected || userInputAtRef.current !== inputAtOpen)
+            return;
+          const viewport = container.getBoundingClientRect();
+          const rect = row.getBoundingClientRect();
+          const hiddenBelow =
+            rect.bottom -
+            (viewport.bottom - footerHeight(contentWrapperRef.current));
+          const roomAbove = rect.top - viewport.top - TURN_TOP_OFFSET_PX;
+          const delta = Math.min(hiddenBelow, roomAbove);
+          if (delta <= 0) return;
+          container.scrollBy({
+            top: delta,
+            behavior: prefersReducedMotion() ? "instant" : "smooth",
+          });
+        };
       }, []);
 
       useEffect(
@@ -867,7 +872,7 @@ const ChatScrollContainer = React.memo(
                 scrollContainerRef={scrollContainerRef}
                 contentWrapperRef={contentWrapperRef}
                 sessionId={sessionId}
-                revealContent={revealContent}
+                prepareReveal={prepareReveal}
               >
                 {children}
               </ScrollContainerProvider>

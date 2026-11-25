@@ -46,19 +46,20 @@ export function useRevealOnOpen() {
     (open: boolean) => {
       // A row closed again before the wait ends does not scroll.
       clearTimeout(timerRef.current);
-      if (!open || !scroll) return;
+      const row = rowRef.current;
+      if (!open || !row) return;
+      const reveal = scroll?.prepareReveal(row);
+      if (!reveal) return;
       // Measure once the fold has its full height: a scroll is clamped to the
       // height the content has when it starts. A row that unmounts before
       // then has a null ref, so the late timer does nothing.
       timerRef.current = setTimeout(
-        () => {
-          const row = rowRef.current;
-          if (row?.isConnected) scroll.revealContent(row);
-        },
+        reveal,
         prefersReducedMotion() ? 0 : FOLD_OPEN_MS
       );
     },
     [scroll]
   );
+  useEffect(() => () => clearTimeout(timerRef.current), []);
   return { rowRef, onToggle };
 }

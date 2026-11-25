@@ -19,9 +19,8 @@ interface ScrollContainerContextType {
     target: Element,
     onChange: (near: boolean) => void
   ) => () => void;
-  /** Scrolls so a row the user opened shows its bottom, unless the view
-   * follows the end. */
-  revealContent: (row: Element) => void;
+  /** Stops idle following before the fold expands. Returns the scroll to run after expansion. */
+  prepareReveal: (row: Element) => (() => void) | undefined;
 }
 
 const ScrollContainerContext = createContext<
@@ -33,13 +32,13 @@ export function ScrollContainerProvider({
   scrollContainerRef,
   contentWrapperRef,
   sessionId,
-  revealContent,
+  prepareReveal,
 }: {
   children: React.ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   contentWrapperRef: RefObject<HTMLDivElement | null>;
   sessionId?: string;
-  revealContent: (row: Element) => void;
+  prepareReveal: (row: Element) => (() => void) | undefined;
 }) {
   // One observer for every row of the container, rebuilt only when the
   // container's height changes the margin.
@@ -105,14 +104,14 @@ export function ScrollContainerProvider({
       contentWrapperRef,
       sessionId,
       observeNearViewport,
-      revealContent,
+      prepareReveal,
     }),
     [
       scrollContainerRef,
       contentWrapperRef,
       sessionId,
       observeNearViewport,
-      revealContent,
+      prepareReveal,
     ]
   );
 

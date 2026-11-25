@@ -68,7 +68,7 @@ function Chat({ root }: { root: HTMLDivElement }) {
     <ScrollContainerProvider
       scrollContainerRef={scrollContainerRef}
       contentWrapperRef={contentWrapperRef}
-      revealContent={() => {}}
+      prepareReveal={() => undefined}
     >
       <WindowedRow id="message-1" initiallyMounted heightCache={new Map()}>
         First message

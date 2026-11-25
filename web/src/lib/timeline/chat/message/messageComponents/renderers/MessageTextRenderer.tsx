@@ -324,15 +324,17 @@ export const MessageTextRenderer: MessageRenderer<
           );
         }
         return (
-          <MemoizedAnchor
-            updatePresentingDocument={s?.setPresentingDocument || (() => {})}
-            docs={s?.docs || []}
-            userFiles={s?.userFiles || []}
-            citations={s?.citations}
-            href={href}
-          >
-            <MarkdownLinkContent>{children}</MarkdownLinkContent>
-          </MemoizedAnchor>
+          <MarkdownLinkContent>
+            <MemoizedAnchor
+              updatePresentingDocument={s?.setPresentingDocument || (() => {})}
+              docs={s?.docs || []}
+              userFiles={s?.userFiles || []}
+              citations={s?.citations}
+              href={href}
+            >
+              {children}
+            </MemoizedAnchor>
+          </MarkdownLinkContent>
         );
       },
       b: ({ className, children }) => (

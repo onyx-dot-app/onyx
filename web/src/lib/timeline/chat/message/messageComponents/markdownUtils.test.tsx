@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@tests/setup/test-utils";
+import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import {
   MarkdownImage,
@@ -18,6 +18,10 @@ describe("MarkdownImage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Chart" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Chart" })).toHaveFocus()
+    );
   });
 
   test("keeps the link as the only control for a linked image", () => {
@@ -42,7 +46,7 @@ describe("MarkdownImage", () => {
 
     fireEvent.error(screen.getByAltText("Gone"));
 
-    expect(screen.getByText("Image unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Gone · Image unavailable")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
     rerender(<MarkdownImage src="https://example.com/chart.png" alt="Chart" />);
     expect(screen.getByAltText("Chart")).toBeInTheDocument();
