@@ -82,7 +82,12 @@ jest.mock("next/navigation", () => ({
 }));
 let mockChatId: string | null = "session";
 jest.mock("@/lib/navigation/hooks", () => ({
-  useAppPosition: () => ({ isNewSession: () => false, chat: () => mockChatId }),
+  useAppPosition: () => ({
+    isNewSession: () => false,
+    chat: () => mockChatId,
+    project: () => null,
+    agent: () => null,
+  }),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
@@ -113,6 +118,7 @@ jest.mock("@/hooks/usePromptShortcuts", () => ({
   default: () => ({ activePromptShortcuts: [] }),
 }));
 jest.mock("@/hooks/useDraft", () => ({
+  ...jest.requireActual("@/hooks/useDraft"),
   draftKey: (scope: string, id: string) => `${scope}:${id}`,
   writeDraft: (...args: unknown[]) => mockWriteDraft(...args),
   readDraft: () => null,

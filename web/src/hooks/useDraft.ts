@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const STORAGE_PREFIX = "onyx:draft";
+let chatDraftGeneration = 0;
+
+export function getChatDraftGeneration(): number {
+  return chatDraftGeneration;
+}
+
+export function invalidateChatDraftWrites(): void {
+  chatDraftGeneration++;
+}
 
 export function draftKey(scope: string, entityId: string): string {
   return `${STORAGE_PREFIX}:${scope}:${entityId}`;

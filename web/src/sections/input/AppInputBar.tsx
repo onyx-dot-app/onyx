@@ -35,7 +35,13 @@ import type {
   UnsentMessage,
 } from "@/lib/chat/types";
 import { MAX_MENTIONS_PER_MESSAGE } from "@/lib/chat/types";
-import { useDraft, draftKey, readDraft, writeDraft } from "@/hooks/useDraft";
+import {
+  useDraft,
+  draftKey,
+  readDraft,
+  writeDraft,
+  getChatDraftGeneration,
+} from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
@@ -346,18 +352,27 @@ const AppInputBar = React.memo(
               ? t("appInputBar.input.searchPlaceholder")
               : t("appInputBar.input.placeholder");
 
-    // Keyed by chat session id, or "new" until the session is created.
     const chatSessionId = appPosition.chat();
+    const projectIdForDraft = appPosition.project();
+    const agentIdForDraft = appPosition.agent();
+    const draftConversation =
+      chatSessionId ??
+      (projectIdForDraft !== null
+        ? `new:project:${projectIdForDraft}`
+        : agentIdForDraft !== null
+          ? `new:agent:${agentIdForDraft}`
+          : "new");
+    const draftGeneration = useRef(getChatDraftGeneration()).current;
     const draftOwner = user?.id ? `${user.tenant_id ?? ""}:${user.id}` : null;
     const chatDraftStorageKey = draftOwner
-      ? draftKey("chat", `${draftOwner}:${chatSessionId ?? "new"}`)
+      ? draftKey("chat", `${draftOwner}:${draftConversation}`)
       : null;
     const composerScope =
       incognitoEnabled || isSearchMode || initialMessage
         ? null
         : chatDraftStorageKey;
     const editorScope = JSON.stringify([
-      chatSessionId,
+      draftConversation,
       draftOwner,
       incognitoEnabled,
     ]);
@@ -433,13 +448,24 @@ const AppInputBar = React.memo(
     ]);
 
     useEffect(() => {
-      if (!chatDraftLoaded || !draftSeededRef.current) return;
+      if (
+        !chatDraftLoaded ||
+        !draftSeededRef.current ||
+        draftGeneration !== getChatDraftGeneration()
+      )
+        return;
       if (skipNextDraftSaveRef.current) {
         skipNextDraftSaveRef.current = false;
         return;
       }
       saveChatDraft(toStoredChatDraft(composed, currentMessageFiles));
-    }, [composed, currentMessageFiles, chatDraftLoaded, saveChatDraft]);
+    }, [
+      composed,
+      currentMessageFiles,
+      chatDraftLoaded,
+      draftGeneration,
+      saveChatDraft,
+    ]);
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
       const wasRecording = isRecordingRef.current;
@@ -593,6 +619,7 @@ const AppInputBar = React.memo(
     // Returned text goes before any newer text, in the composer or, for a chat
     // that is no longer open, in that chat's own draft.
     function returnText(sessionId: string, returned: ComposedMessage) {
+      if (draftGeneration !== getChatDraftGeneration()) return;
       const isOpen =
         mountedRef.current &&
         previousScopeRef.current === editorScope &&

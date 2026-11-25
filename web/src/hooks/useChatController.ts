@@ -734,7 +734,7 @@ export default function useChatController({
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
-      resetInputBar();
+      if (!messageToResend) resetInputBar();
       // The server saved nothing for this turn: drop its nodes, restore the
       // links of the node they hung from, and give the text back for a retry.
       // Other live changes, such as a preference pick, stay.

@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback, useRef } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useHotkey } from "@opal/hooks";
 import { Section, useSidebarState } from "@opal/layouts";
@@ -79,6 +80,13 @@ export default function ChatSearchCommandMenu({
   const [searchValue, setSearchValue] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | "chats">("all");
   const appPosition = useAppPosition();
+  const { state } = useQueryController();
+  const showingSearch =
+    state.phase === "searching" ||
+    state.phase === "search-results" ||
+    (appPosition.isNewSession() &&
+      state.phase === "idle" &&
+      state.appMode === "search");
 
   // Constants for preview limits
   const PREVIEW_CHATS_LIMIT = 4;
@@ -229,8 +237,10 @@ export default function ChatSearchCommandMenu({
   const searchTerm = searchValue.trim().toLowerCase();
   const visibleShortcutItems =
     activeFilter === "all"
-      ? shortcutItems.filter((item) =>
-          item.label.toLowerCase().includes(searchTerm)
+      ? shortcutItems.filter(
+          (item) =>
+            !(showingSearch && item.value === "change-model") &&
+            item.label.toLowerCase().includes(searchTerm)
         )
       : [];
 

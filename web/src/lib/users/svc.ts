@@ -4,7 +4,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { CustomRefreshTokenResponse } from "@/lib/users/types";
 import { clearOutputThumbnailCache } from "@/app/craft/services/outputThumbnailCache";
 import { CHAT_PANEL_STORAGE_PREFIX } from "@/lib/chat/rightPanel";
-import { draftKey, type DraftStorage } from "@/hooks/useDraft";
+import {
+  draftKey,
+  invalidateChatDraftWrites,
+  type DraftStorage,
+} from "@/hooks/useDraft";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -49,6 +53,7 @@ export async function logout(): Promise<Response> {
     credentials: "include",
   });
   if (response.ok) {
+    invalidateChatDraftWrites();
     clearOutputThumbnailCache();
     removeStorageKeys("session", [
       "onyx:craft:",
