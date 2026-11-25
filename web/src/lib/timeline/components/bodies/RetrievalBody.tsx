@@ -10,6 +10,7 @@ import { getSourceMetadata } from "@/lib/connectors/utils";
 import type { IconFunctionComponent } from "@opal/types";
 import { openExternalLink } from "@/lib/search/utils";
 import type { SourceInfo } from "@/lib/timeline/components/bodies/SearchChipList";
+import { faviconIcon } from "@/lib/timeline/components/bodies/favicon";
 
 export const INITIAL_QUERIES_TO_SHOW = 3;
 export const QUERIES_PER_EXPANSION = 5;
@@ -25,9 +26,13 @@ export function queryToSourceInfo(query: string, index: number): SourceInfo {
   };
 }
 
-/** A source's own icon, else its connector's logo. */
+/** A source's own icon, a web page's favicon, else its connector's logo. */
 function sourceIcon(source: SourceInfo): IconFunctionComponent {
-  return source.icon ?? getSourceMetadata(source.sourceType).icon;
+  if (source.icon) return source.icon;
+  if (source.sourceType === ValidSources.Web && source.sourceUrl) {
+    return faviconIcon(source.sourceUrl);
+  }
+  return getSourceMetadata(source.sourceType).icon;
 }
 
 interface RetrievalBodyProps {
