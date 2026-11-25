@@ -311,7 +311,7 @@ def test_a_topup_waits_while_a_pool_run_holds_the_pool(
 
 
 def test_many_hooks_queue_one_pool_run(
-    tenant_context: None,  # noqa: ARG001
+    seeded: dict[str, Any],  # noqa: ARG001 - enough documents for a first run
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = MagicMock()
@@ -325,7 +325,7 @@ def test_many_hooks_queue_one_pool_run(
     try:
         for _ in range(10):
             scheduling.request_pool_refresh(
-                POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, RefreshReason.GROWTH
+                POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, RefreshReason.FIRST_RUN
             )
     finally:
         scheduling.release_pool_flag(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
