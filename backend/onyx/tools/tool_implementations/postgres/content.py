@@ -65,7 +65,7 @@ from onyx.document_index.interfaces import (
     ContentMatchRequest,
     DocumentIndex,
 )
-from onyx.document_index.opensearch.client import OpenSearchServerSideTimeout
+from onyx.document_index.opensearch.client import SEARCH_TIMEOUT_ERRORS
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
@@ -355,7 +355,7 @@ class ContentFilter:
                 matching = (
                     self._matching_candidates(candidates) if candidates else set()
                 )
-            except OpenSearchServerSideTimeout:
+            except SEARCH_TIMEOUT_ERRORS:
                 # Keep the batches already checked; with none, the call fails.
                 if position == after:
                     raise
@@ -427,7 +427,7 @@ class ContentFilter:
                 matches = self._document_index.match_documents_by_content(
                     request, date_field, order.is_descending, position, MATCH_BATCH_SIZE
                 )
-            except OpenSearchServerSideTimeout:
+            except SEARCH_TIMEOUT_ERRORS:
                 # Keep the batches already checked; with none, the call fails.
                 if position is None or position == after:
                     raise
@@ -459,7 +459,7 @@ class ContentFilter:
             try:
                 if candidates:
                     count += len(self._matching_candidates(candidates))
-            except OpenSearchServerSideTimeout:
+            except SEARCH_TIMEOUT_ERRORS:
                 # Keep the batches already counted; with none, the call fails.
                 if position is None:
                     raise
@@ -483,7 +483,7 @@ class ContentFilter:
                     position,
                     MATCH_BATCH_SIZE,
                 )
-            except OpenSearchServerSideTimeout:
+            except SEARCH_TIMEOUT_ERRORS:
                 # Keep the batches already counted; with none, the call fails.
                 if position is None:
                     raise

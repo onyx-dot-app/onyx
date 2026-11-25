@@ -18,6 +18,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from opensearchpy import ConnectionTimeout
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
@@ -309,6 +310,12 @@ def _list_all(env: ContentEnv, **llm_kwargs: JsonValue) -> list[str]:
             return listed
 
 
+_TIMEOUTS = [
+    OpenSearchServerSideTimeout("timed out"),
+    ConnectionTimeout("TIMEOUT", "timed out", None),
+]
+
+
 @contextmanager
 def _force_path(postgres_first: bool) -> Generator[None, None, None]:
     with patch.object(
@@ -484,9 +491,10 @@ def test_out_of_time_returns_a_partial_page_that_continues(
         ) == ["dog", "owl"]
 
 
+@pytest.mark.parametrize("timeout", _TIMEOUTS)
 @pytest.mark.parametrize("postgres_first", [True, False])
 def test_search_timeout_keeps_the_checked_batches(
-    content_env: ContentEnv, postgres_first: bool
+    content_env: ContentEnv, postgres_first: bool, timeout: Exception
 ) -> None:
     index = content_env.index
     real_match = index.match_documents_by_content
@@ -496,7 +504,7 @@ def test_search_timeout_keeps_the_checked_batches(
         nonlocal calls
         calls += 1
         if calls > 1:
-            raise OpenSearchServerSideTimeout("timed out")
+            raise timeout
         return real_match(*args, **kwargs)
 
     with (
@@ -520,9 +528,10 @@ def test_search_timeout_keeps_the_checked_batches(
     ]
 
 
+@pytest.mark.parametrize("timeout", _TIMEOUTS)
 @pytest.mark.parametrize("postgres_first", [True, False])
 def test_count_timeout_keeps_the_counted_batches(
-    content_env: ContentEnv, postgres_first: bool
+    content_env: ContentEnv, postgres_first: bool, timeout: Exception
 ) -> None:
     index = content_env.index
     real_match = index.match_documents_by_content
@@ -532,7 +541,7 @@ def test_count_timeout_keeps_the_counted_batches(
         nonlocal calls
         calls += 1
         if calls > 1:
-            raise OpenSearchServerSideTimeout("timed out")
+            raise timeout
         return real_match(*args, **kwargs)
 
     with (
