@@ -127,10 +127,80 @@ fn open_local(
 ) -> Result<WebviewWindow, String> {
     let size = initial_size(label).ok_or("not a local window")?;
     let window = local_window(app, label, page, title, size);
-    if let Err(e) = &window {
-        let _ = webview_failed(app, e);
+    // The offline window has its own fallback dialog (`show_offline`).
+    if let (Err(e), false) = (&window, label == OFFLINE) {
+        window_failed(app, e);
     }
     window
+}
+
+/// What the user sees when a local window or the launcher cannot open.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum WindowFailure {
+    /// "Close the older version of Onyx" (see `webview_failed`).
+    OlderVersion,
+    /// The "Could not open Onyx" dialog with Try Again and Quit.
+    CouldNotOpen,
+    /// Already said this run: logged only, so a retry cannot loop.
+    LogOnly,
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn window_failure(
+    webview_error: bool,
+    earlier_app_evidence: bool,
+    already_shown: bool,
+) -> WindowFailure {
+    if shows_close_older(webview_error, earlier_app_evidence) {
+        WindowFailure::OlderVersion
+    } else if already_shown {
+        WindowFailure::LogOnly
+    } else {
+        WindowFailure::CouldNotOpen
+    }
+}
+
+/// A local window or the launcher did not open. On Windows (where a web view
+/// can fail to start) the user is told once per run; macOS and Linux only
+/// log it, as before.
+pub(crate) fn window_failed(app: &AppHandle, error: &str) {
+    log::warn!("could not open a window: {error}");
+    #[cfg(windows)]
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SHOWN: AtomicBool = AtomicBool::new(false);
+        let evidence = crate::earlier_install::evidence(app);
+        let response = window_failure(
+            is_webview_start_error(error),
+            evidence,
+            SHOWN.load(Ordering::SeqCst),
+        );
+        match response {
+            WindowFailure::OlderVersion => {
+                let _ = webview_failed(app, error);
+            }
+            WindowFailure::LogOnly => {}
+            WindowFailure::CouldNotOpen => {
+                SHOWN.store(true, Ordering::SeqCst);
+                let dialog = rfd::MessageDialog::new()
+                    .set_title("Could not open Onyx")
+                    .set_description(crate::dialog::text(error))
+                    .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                        "Try Again".into(),
+                        "Quit".into(),
+                    ));
+                crate::dialog::show(app, dialog, |app, choice| {
+                    if choice == rfd::MessageDialogResult::Custom("Try Again".into()) {
+                        route(app);
+                    } else {
+                        app.exit(0);
+                    }
+                });
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = app;
 }
 
 /// Whether a window error is the web view failing to start.
@@ -516,6 +586,25 @@ pub fn show_primary_except(app: &AppHandle, closing: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_window_failure_is_reported_once() {
+        use super::{window_failure, WindowFailure};
+        assert_eq!(
+            window_failure(true, true, false),
+            WindowFailure::OlderVersion
+        );
+        // A fresh install: the usual dialog, once.
+        assert_eq!(
+            window_failure(true, false, false),
+            WindowFailure::CouldNotOpen
+        );
+        assert_eq!(
+            window_failure(false, false, false),
+            WindowFailure::CouldNotOpen
+        );
+        assert_eq!(window_failure(true, false, true), WindowFailure::LogOnly);
+    }
 
     #[test]
     fn the_older_version_message_needs_evidence_of_it() {

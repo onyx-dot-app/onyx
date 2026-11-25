@@ -457,8 +457,7 @@ pub fn preload(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         if let Err(e) = platform::ensure(&handle, WebviewUrl::App("launcher.html".into())) {
-            log::warn!("could not create the launcher: {e}");
-            let _ = crate::windows::webview_failed(&handle, &e.to_string());
+            crate::windows::window_failed(&handle, &format!("could not create the launcher: {e}"));
         }
     });
 }

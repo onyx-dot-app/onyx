@@ -81,7 +81,10 @@ impl Config {
         !needs_record || self.session_servers.contains(server)
     }
 
-    /// Whether `token` is the one a sign-out from `server` could not delete.
+    /// Whether `token` is one a sign-out from `server` could not delete. The
+    /// app refuses every stored token while a record exists; this checks
+    /// the record's contents in tests.
+    #[cfg(test)]
     pub fn rejects_token(&self, server: &str, token: &str) -> bool {
         self.rejected_tokens
             .get(server)

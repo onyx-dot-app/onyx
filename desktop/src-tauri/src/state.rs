@@ -201,8 +201,9 @@ impl AppState {
         }
         // A sign-out that could not delete the token: the store is read at
         // most once per launch for that server (a locked store asks each
-        // time). A rejected token is deleted; another token (a sign-in whose
-        // record update failed) drops the record and is used.
+        // time), and any stored token is deleted. Only a new sign-in clears
+        // the record: the stored token can be older than the fingerprints
+        // (a renewal that could not be saved).
         let rejected = self.config.get().rejected_tokens.contains_key(server);
         let tried = rejected && self.rejected_cleanup_tried.swap(true, Ordering::SeqCst);
         let token = match rejected_store_access(rejected, tried) {
@@ -211,10 +212,7 @@ impl AppState {
                 let stored = session_store::load(server);
                 let found = match &stored {
                     Ok(None) => Stored::Empty,
-                    Ok(Some(token)) if self.config.get().rejects_token(server, token) => {
-                        Stored::Rejected
-                    }
-                    Ok(Some(_)) => Stored::Other,
+                    Ok(Some(_)) => Stored::Token,
                     Err(_) => Stored::Unreadable,
                 };
                 match rejected_record_action(found) {
@@ -236,10 +234,6 @@ impl AppState {
                             }
                         }
                         return None;
-                    }
-                    RecordAction::ForgetAndUse => {
-                        self.forget_rejected(server);
-                        stored.ok().flatten()?
                     }
                 }
             }
@@ -296,18 +290,23 @@ impl AppState {
         if self.epoch() != epoch || self.server().ok().as_deref() != Some(server) {
             return Ok(false);
         }
+        // A rejected-token record goes in the same config write as the
+        // session record: if it fails, the sign-in fails, and the record
+        // still makes the next launch delete the stored token.
+        let rejected = self.config.get().rejected_tokens.contains_key(server);
         save_then_record(
-            TOKEN_NEEDS_RECORD,
+            sign_in_writes_config(TOKEN_NEEDS_RECORD, rejected),
             || session_store::store(server, token),
             || {
                 self.config.update(|c| {
-                    c.session_servers.insert(server.to_string());
+                    if TOKEN_NEEDS_RECORD {
+                        c.session_servers.insert(server.to_string());
+                    }
+                    c.rejected_tokens.remove(server);
                 })
             },
         )?;
         *cache = Some((server.to_string(), token.to_string()));
-        // The store now holds the new token, not the rejected one.
-        self.forget_rejected(server);
         self.store_stale.store(false, Ordering::SeqCst);
         *self.signed_out.lock().unwrap_or_else(|p| p.into_inner()) = None;
         self.forget_read_failure();
@@ -470,9 +469,7 @@ enum StoreAccess {
 enum Stored {
     Unreadable,
     Empty,
-    Rejected,
-    /// A token that is not rejected: a sign-in whose record update failed.
-    Other,
+    Token,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -480,16 +477,22 @@ enum RecordAction {
     Keep,
     Forget,
     DeleteToken,
-    ForgetAndUse,
 }
 
+/// Any stored token is deleted while the record exists, also one that
+/// matches no fingerprint.
 fn rejected_record_action(found: Stored) -> RecordAction {
     match found {
         Stored::Unreadable => RecordAction::Keep,
         Stored::Empty => RecordAction::Forget,
-        Stored::Rejected => RecordAction::DeleteToken,
-        Stored::Other => RecordAction::ForgetAndUse,
+        Stored::Token => RecordAction::DeleteToken,
     }
+}
+
+/// Whether a sign-in writes config after it stores the token: the Windows
+/// session record, or clearing a rejected-token record.
+fn sign_in_writes_config(needs_session_record: bool, has_rejected_record: bool) -> bool {
+    needs_session_record || has_rejected_record
 }
 
 /// How `token` uses the store for a server with a rejected token record.
@@ -540,13 +543,9 @@ mod tests {
     use std::cell::RefCell;
 
     #[test]
-    fn a_new_token_after_a_rejected_one_is_used() {
+    fn a_rejected_record_deletes_any_stored_token() {
         assert_eq!(
-            rejected_record_action(Stored::Other),
-            RecordAction::ForgetAndUse
-        );
-        assert_eq!(
-            rejected_record_action(Stored::Rejected),
+            rejected_record_action(Stored::Token),
             RecordAction::DeleteToken
         );
         assert_eq!(rejected_record_action(Stored::Empty), RecordAction::Forget);
@@ -554,6 +553,20 @@ mod tests {
             rejected_record_action(Stored::Unreadable),
             RecordAction::Keep
         );
+    }
+
+    #[test]
+    fn a_sign_in_clears_the_rejected_record_in_its_config_write() {
+        assert!(sign_in_writes_config(false, true));
+        assert!(sign_in_writes_config(true, false));
+        assert!(!sign_in_writes_config(false, false));
+        // A failed write fails the sign-in.
+        let result = save_then_record(
+            sign_in_writes_config(false, true),
+            || Ok(()),
+            || Err("disk full".to_string()),
+        );
+        assert!(result.is_err());
     }
 
     #[test]

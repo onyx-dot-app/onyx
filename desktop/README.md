@@ -123,9 +123,11 @@ install of this app upgrades it in place. See
   fingerprint of each token that could still be loaded (never the token) in `config.json`
   (`rejectedTokens`): the one in use and the stored one, which differ when a renewed token could
   not be saved. These tokens are never used again, also after a restart. While that record exists, the app
-  reads the store for that server at most once per launch (a locked store asks each time): a
-  rejected token is deleted again, an empty store drops the record, and another token (a sign-in
-  whose record update failed) drops the record and is used. A new sign-in also drops it. The launcher, onboarding and sign-in show one line for each of the same errors,
+  reads the store for that server at most once per launch (a locked store asks each time) and
+  deletes any token it finds there: the stored token can be older than the recorded ones, when a
+  renewed token could not be saved. An empty store drops the record. Otherwise only a new sign-in
+  drops it, in the same `config.json` write as its session record; if that write fails, the
+  sign-in fails. The launcher, onboarding and sign-in show one line for each of the same errors,
   for example "Can't find <host>. Check the server address." (`src-tauri/src/reachability.rs`).
 - If the HTTP client cannot start (for example, a broken OpenSSL configuration), a dialog
   says so and the app quits.
@@ -609,7 +611,9 @@ How the app differs from macOS:
     Onyx again." once per run, and the error is logged. This happens while the earlier desktop
     app still runs as another user token: both use the same WebView2 data folder. The message
     shows only when the earlier app's uninstall entry, or a folder that the retire step still has
-    to clean up, is there; otherwise the main window shows its usual error with **Try Again**.
+    to clean up, is there. Otherwise the main window shows its usual error with **Try Again**, and
+    onboarding, sign-in, Preferences or the launcher show "Could not open Onyx" with the error,
+    **Try Again** and **Quit**, once per run.
   - A retry of the retire step also deletes the earlier setup program's key again, if an earlier
     launch could not.
   - At launch, a release build deletes a per-user `onyx://` entry
