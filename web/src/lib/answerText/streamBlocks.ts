@@ -11,14 +11,18 @@ const FENCE_PATTERN = /^ {0,3}(`{3,}(?![^`\n]*`)|~{3,})/;
 const CONTINUATION_PATTERN = /^(?:[ \t]|(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$))/;
 
 /**
- * The fence of display math that `line` opens and a later line closes, or
- * null. A fence is two or more dollar signs; only as many or more close it.
+ * The fence of display math that `line` opens, or null. As in remark-math, a
+ * fence is two or more dollar signs, and the text after it has no dollar
+ * sign; otherwise the line is a paragraph with inline math.
  */
 function mathFence(line: string): string | null {
+  return /^(\${2,})[^$]*$/.exec(line.trim())?.[1] ?? null;
+}
+
+/** As in remark-math, only a line of as many or more dollar signs closes. */
+function closesMath(line: string, fence: string): boolean {
   const trimmed = line.trim();
-  const fence = /^\${2,}/.exec(trimmed)?.[0];
-  if (!fence || trimmed.slice(fence.length).includes(fence)) return null;
-  return fence;
+  return /^\$+$/.test(trimmed) && trimmed.length >= fence.length;
 }
 
 /** Whether `text` ends inside a fenced code block that is not closed yet. */
@@ -64,7 +68,7 @@ export function splitMarkdownBlocks(text: string): string[] | null {
       // A line left of an indented block may end the list item holding it, which isn't tracked.
       if (/\S/.test(line.slice(0, openIndent))) break;
       if (math !== null) {
-        if (line.trim().endsWith(math)) math = null;
+        if (closesMath(line, math)) math = null;
       } else if (
         fence !== null &&
         opener &&
