@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import { CONTACT_SALES_URL, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { loginPath, signupPath } from "@/lib/auth/paths";
+import { MagicLinkRefusal } from "@/lib/auth/types";
 import { isStaleSsoStateError } from "@/lib/auth/utils";
 
 // Raw IdP/OAuth error codes that map to a friendlier translated message.
@@ -30,6 +31,8 @@ const KNOWN_ERROR_CODES = [
   "PLAYGROUND_LIMIT_REACHED",
   "PLAYGROUND_ACTIVE_TENANT",
   "PLAYGROUND_CHECK_FAILED",
+  "MAGIC_LINK_INVALID",
+  "MAGIC_LINK_USE_SSO",
 ] as const;
 
 // A team from the domain has a running trial: join it, or start a new one.
@@ -75,6 +78,8 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
     PLAYGROUND_LIMIT_REACHED: t("error.code.playgroundLimitReached"),
     PLAYGROUND_ACTIVE_TENANT: t("error.code.playgroundActiveTenant"),
     PLAYGROUND_CHECK_FAILED: t("error.code.playgroundCheckFailed"),
+    MAGIC_LINK_INVALID: t("error.code.magicLinkInvalid"),
+    MAGIC_LINK_USE_SSO: t("magicLink.useSso.error"),
   } satisfies Record<KnownErrorCode, string>;
   const isPlayground = rawMessage?.startsWith("PLAYGROUND_") ?? false;
   const isTeamChoice = rawMessage === TEAM_CHOICE_CODE && !joinChosen;
@@ -171,6 +176,18 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
               {t("error.returnToLoginButton.label")}
             </Button>
           </>
+        ) : rawMessage === MagicLinkRefusal.INVALID ? (
+          <Button
+            {...navigation.linkTo(loginPath({ autoRedirectToSso: false }))}
+            width="full"
+          >
+            {t("error.newLinkButton.label")}
+          </Button>
+        ) : rawMessage === MagicLinkRefusal.USE_SSO ? (
+          /* SSO is the way in here, so the login page may start it at once. */
+          <Button {...navigation.linkTo(loginPath())} width="full">
+            {t("login.ssoSignInButton.label")}
+          </Button>
         ) : (
           /* Held on the button: the IdP just failed, so no bounce back to it. */
           <Button

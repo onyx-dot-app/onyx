@@ -10,8 +10,17 @@ export enum SessionEndReason {
 // own message (`backend/onyx/auth/magic_link.py` and the playground hooks).
 export enum MagicLinkRefusal {
   USE_SSO = "MAGIC_LINK_USE_SSO",
+  INVALID = "MAGIC_LINK_INVALID",
   PLAYGROUND_FREE_MAIL = "PLAYGROUND_FREE_MAIL",
 }
+
+// Answer of POST /auth/magic-link/redeem.
+export type MagicLinkRedeemed =
+  // The session cookie is set.
+  | { state: "signed_in"; next_url: string; team_choice_token: null }
+  // Playground: a team from the domain has a running trial. Redeeming
+  // `team_choice_token` starts a new team; joining needs no call.
+  | { state: "team_choice"; next_url: null; team_choice_token: string };
 
 // Error body of the fastapi-users routes (`fastapi_users.router.common.ErrorModel`).
 // The register and reset-password routes send an object when the password is

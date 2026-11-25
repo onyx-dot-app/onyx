@@ -11426,6 +11426,7 @@
         "invalidScope": "Los permisos solicitados no están disponibles.",
         "loginBadCredentials": "Esta cuenta no puede iniciar sesión. Puede estar desactivada. Contacta al administrador de tu espacio de trabajo.",
         "loginRequired": "Primero debes iniciar sesión con tu proveedor de identidad.",
+        "magicLinkInvalid": "Este enlace de inicio de sesión ha caducado o ya se usó. Pide uno nuevo.",
         "oauthUserAlreadyExists": "Ya existe una cuenta con este correo con otro método de inicio de sesión. Inicia sesión como lo hiciste la primera vez, o pide a tu administrador que vincule este proveedor.",
         "playgroundActiveTenant": "Un equipo de tu empresa ya está probando Onyx. ¿Unirte a tu equipo o crear un equipo nuevo?",
         "playgroundAskAdmin": "Pide a tu administrador que te invite.",
@@ -11449,6 +11450,9 @@
       },
       "joinTeamButton": {
         "label": "Unirme a mi equipo"
+      },
+      "newLinkButton": {
+        "label": "Obtener un enlace nuevo"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11606,6 +11610,9 @@
     "magicLink": {
       "differentEmailButton": {
         "label": "Usar otro correo"
+      },
+      "redeeming": {
+        "text": "Iniciando sesión…"
       },
       "requestButton": {
         "label": "Recibir un enlace por correo"

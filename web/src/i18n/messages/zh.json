@@ -11426,6 +11426,7 @@
         "invalidScope": "请求的权限不可用。",
         "loginBadCredentials": "此账户无法登录，可能已被停用。请联系您的工作区管理员。",
         "loginRequired": "您需要先通过身份提供方登录。",
+        "magicLinkInvalid": "此登录链接已失效或已被使用。请重新获取。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
         "playgroundActiveTenant": "您公司的团队已经在试用 Onyx。加入您的团队，还是创建新团队？",
         "playgroundAskAdmin": "请让您的管理员邀请您。",
@@ -11449,6 +11450,9 @@
       },
       "joinTeamButton": {
         "label": "加入我的团队"
+      },
+      "newLinkButton": {
+        "label": "获取新链接"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11606,6 +11610,9 @@
     "magicLink": {
       "differentEmailButton": {
         "label": "使用其他邮箱"
+      },
+      "redeeming": {
+        "text": "正在登录…"
       },
       "requestButton": {
         "label": "通过邮件获取链接"

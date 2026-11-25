@@ -11426,6 +11426,7 @@
         "invalidScope": "要求された権限は利用できません。",
         "loginBadCredentials": "このアカウントはサインインできません。無効化されている可能性があります。ワークスペースの管理者にお問い合わせください。",
         "loginRequired": "先に ID プロバイダーでログインする必要があります。",
+        "magicLinkInvalid": "このサインインリンクは期限切れか、すでに使用されています。新しいリンクをリクエストしてください。",
         "oauthUserAlreadyExists": "このメールアドレスのアカウントは、別のサインイン方法で既に存在します。最初に使用した方法でサインインするか、管理者にこのプロバイダーの連携を依頼してください。",
         "playgroundActiveTenant": "あなたの会社のチームがすでに Onyx を試用しています。チームに参加しますか、それとも新しいチームを始めますか？",
         "playgroundAskAdmin": "管理者に招待を依頼してください。",
@@ -11449,6 +11450,9 @@
       },
       "joinTeamButton": {
         "label": "チームに参加"
+      },
+      "newLinkButton": {
+        "label": "新しいリンクを取得"
       },
       "playgroundHeading": {
         "title": "Onyx プレイグラウンド"
@@ -11606,6 +11610,9 @@
     "magicLink": {
       "differentEmailButton": {
         "label": "別のメールアドレスを使用"
+      },
+      "redeeming": {
+        "text": "サインインしています…"
       },
       "requestButton": {
         "label": "メールでリンクを受け取る"

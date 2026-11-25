@@ -164,4 +164,34 @@ describe("auth error page", () => {
     ).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
+  test("offers a new link for an expired or used magic link", async () => {
+    mockError = "MAGIC_LINK_INVALID";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(
+        "This sign-in link has expired or was already used. Ask for a new one."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Get a new link" })
+    ).toHaveAttribute("href", "/auth/login?autoRedirectToSso=false");
+  });
+
+  test("sends a magic link refused for SSO-only to SSO sign-in", async () => {
+    mockError = "MAGIC_LINK_USE_SSO";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(
+        "Sign in with your SSO provider. Email links are turned off for this workspace."
+      )
+    ).toBeInTheDocument();
+    // The login page may start SSO at once: it is the way in here.
+    expect(
+      screen.getByRole("link", { name: "Sign in with SSO" })
+    ).toHaveAttribute("href", "/auth/login");
+  });
 });
