@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 
 interface FullImageModalProps {
   src: string;
+  alt?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCloseAutoFocus?: (event: Event) => void;
@@ -14,6 +15,7 @@ interface FullImageModalProps {
 
 export function FullImageModal({
   src,
+  alt,
   open,
   onOpenChange,
   onCloseAutoFocus,
@@ -43,7 +45,7 @@ export function FullImageModal({
           </Dialog.Title>
           <img
             src={src}
-            alt={t("fullImageModal.image.alt")}
+            alt={alt || t("fullImageModal.image.alt")}
             className="max-w-full max-h-[calc(100dvh-2rem)] object-contain"
           />
         </Dialog.Content>

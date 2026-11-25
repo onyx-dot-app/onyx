@@ -508,9 +508,16 @@ const ChatScrollContainer = React.memo(
         const modeAtOpen = modeRef.current;
         modeRef.current = "reading";
         const inputAtOpen = userInputAtRef.current;
-        return () => {
-          if (!row.isConnected || userInputAtRef.current !== inputAtOpen)
+        return (cancelled = false) => {
+          if (
+            userInputAtRef.current !== inputAtOpen ||
+            modeRef.current !== "reading"
+          )
             return;
+          if (cancelled || !row.isConnected) {
+            modeRef.current = modeAtOpen;
+            return;
+          }
           const viewport = container.getBoundingClientRect();
           const rect = row.getBoundingClientRect();
           const hiddenBelow =
@@ -518,7 +525,6 @@ const ChatScrollContainer = React.memo(
             (viewport.bottom - footerHeight(contentWrapperRef.current));
           const roomAbove = rect.top - viewport.top - TURN_TOP_OFFSET_PX;
           const delta = Math.min(hiddenBelow, roomAbove);
-          if (modeRef.current !== "reading") return;
           if (delta <= 0) {
             modeRef.current = modeAtOpen;
             return;

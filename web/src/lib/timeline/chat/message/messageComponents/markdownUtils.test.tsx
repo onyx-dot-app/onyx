@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import {
   MarkdownImage,
@@ -17,9 +23,8 @@ describe("MarkdownImage", () => {
     expect(screen.getByAltText("Chart")).toHaveAttribute("loading", "lazy");
 
     await userEvent.click(screen.getByRole("button", { name: "Chart" }));
-    expect(
-      screen.getByRole("dialog", { name: "View the full image" })
-    ).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "View the full image" });
+    expect(within(dialog).getByAltText("Chart")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Chart" })).toHaveFocus()

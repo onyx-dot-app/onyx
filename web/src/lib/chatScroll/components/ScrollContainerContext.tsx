@@ -20,7 +20,7 @@ interface ScrollContainerContextType {
     onChange: (near: boolean) => void
   ) => () => void;
   /** Stops idle following before the fold expands. Returns the scroll to run after expansion. */
-  prepareReveal: (row: Element) => (() => void) | undefined;
+  prepareReveal: (row: Element) => ((cancelled?: boolean) => void) | undefined;
 }
 
 const ScrollContainerContext = createContext<
@@ -38,7 +38,7 @@ export function ScrollContainerProvider({
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   contentWrapperRef: RefObject<HTMLDivElement | null>;
   sessionId?: string;
-  prepareReveal: (row: Element) => (() => void) | undefined;
+  prepareReveal: (row: Element) => ((cancelled?: boolean) => void) | undefined;
 }) {
   // One observer for every row of the container, rebuilt only when the
   // container's height changes the margin.

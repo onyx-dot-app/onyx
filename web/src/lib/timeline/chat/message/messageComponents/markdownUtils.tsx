@@ -205,6 +205,7 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
       {fullImageShowing && (
         <FullImageModal
           src={src}
+          alt={alt}
           open
           onOpenChange={setFullImageShowing}
           onCloseAutoFocus={(event) => {

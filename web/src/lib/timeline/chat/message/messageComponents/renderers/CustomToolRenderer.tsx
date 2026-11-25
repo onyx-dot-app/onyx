@@ -87,10 +87,10 @@ function ToolFields({ fields }: ToolFieldsProps) {
           height="fit"
         >
           <Text font="secondary-mono" color="text-03" wordWrap="wrap-anywhere">
-            {`${key}:`}
+            <span className="whitespace-pre-wrap">{`${key}:`}</span>
           </Text>
           <Text font="secondary-mono" color="text-04" wordWrap="wrap-anywhere">
-            {String(value)}
+            <span className="whitespace-pre-wrap">{String(value)}</span>
           </Text>
         </Section>
       ))}

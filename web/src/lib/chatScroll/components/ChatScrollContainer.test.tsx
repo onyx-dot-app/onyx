@@ -10,6 +10,7 @@ function OpenableRow() {
   return (
     <div ref={rowRef} data-testid="openable-row">
       <button onClick={() => onToggle(true)}>Open</button>
+      <button onClick={() => onToggle(false)}>Close</button>
     </div>
   );
 }
@@ -219,6 +220,18 @@ test("opening a row in an idle view at the end does not jump to the end after th
   await grow(200);
   settleInput();
   expect(container.scrollTop).toBe(600);
+});
+
+test("closing a step before its reveal keeps following the reply", async () => {
+  const { container, grow, settleInput } = renderChat({
+    children: <OpenableRow />,
+  });
+  settleInput();
+  fireEvent.click(screen.getByRole("button", { name: "Open" }));
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  await grow(200);
+  settleInput();
+  expect(container.scrollTop).toBe(800);
 });
 
 test.each([false, true])(

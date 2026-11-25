@@ -41,11 +41,15 @@ export function useScrollToNewTurn(
 export function useRevealOnOpen() {
   const scroll = useOptionalScrollContainer();
   const rowRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const cancelRef = useRef<(() => void) | undefined>(undefined);
+  const cancelPendingReveal = useCallback(() => {
+    cancelRef.current?.();
+    cancelRef.current = undefined;
+  }, []);
   const onToggle = useCallback(
     (open: boolean) => {
       // A row closed again before the wait ends does not scroll.
-      clearTimeout(timerRef.current);
+      cancelPendingReveal();
       const row = rowRef.current;
       if (!open || !row) return;
       const reveal = scroll?.prepareReveal(row);
@@ -53,13 +57,20 @@ export function useRevealOnOpen() {
       // Measure once the fold has its full height: a scroll is clamped to the
       // height the content has when it starts. A row that unmounts before
       // then has a null ref, so the late timer does nothing.
-      timerRef.current = setTimeout(
-        reveal,
+      const timer = setTimeout(
+        () => {
+          cancelRef.current = undefined;
+          reveal();
+        },
         prefersReducedMotion() ? 0 : FOLD_OPEN_MS
       );
+      cancelRef.current = () => {
+        clearTimeout(timer);
+        reveal(true);
+      };
     },
-    [scroll]
+    [scroll, cancelPendingReveal]
   );
-  useEffect(() => () => clearTimeout(timerRef.current), []);
+  useEffect(() => cancelPendingReveal, [cancelPendingReveal]);
   return { rowRef, onToggle };
 }
