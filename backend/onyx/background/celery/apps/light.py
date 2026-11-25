@@ -148,6 +148,7 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.docprocessing",
             "onyx.background.celery.tasks.cc_pair_ids_backfill",
             "onyx.background.celery.tasks.capability_checks",
+            "onyx.background.celery.tasks.suggested_questions",
         ]
     )
 )
