@@ -1,6 +1,7 @@
 import { type Packet, PacketType } from "@/app/app/services/streamingModels";
 
-const MAX_PREVIEW_LENGTH = 200;
+/** A section title: a line that opens with bold text, or a closed heading. */
+const SECTION_TITLE = /^(?:\*\*([^*\n]+)\*\*|#{1,6}[ \t]+([^\n]+)\n)/gm;
 
 /** The reasoning text a step's packets carry so far. */
 export function reasoningText(packets: Packet[]): string {
@@ -14,12 +15,19 @@ export function reasoningText(packets: Packet[]): string {
 }
 
 /**
- * A one-line preview of live reasoning: whitespace collapsed, and only the
- * latest text when it is long. Empty when there is no text yet.
+ * The title of the reasoning's latest section, such as "Planning the answer"
+ * for `**Planning the answer**` or `## Planning the answer`. It changes only
+ * when a new section starts. Empty while the reasoning has no title.
  */
 export function reasoningPreview(text: string): string {
-  const line = text.trim().replace(/\s+/g, " ");
-  return line.length > MAX_PREVIEW_LENGTH
-    ? `…${line.slice(-MAX_PREVIEW_LENGTH).trimStart()}`
-    : line;
+  let title = "";
+  for (const match of text.matchAll(SECTION_TITLE)) {
+    const found = (match[1] ?? match[2] ?? "")
+      .replace(/[*_`]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/:$/, "");
+    if (found) title = found;
+  }
+  return title;
 }
