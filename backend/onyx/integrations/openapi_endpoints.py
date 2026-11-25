@@ -3,6 +3,7 @@
 operation whose line did not change stays as it was."""
 
 import copy
+import hashlib
 import json
 import re
 from typing import Any
@@ -89,6 +90,15 @@ def _operations(spec: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
     }
 
 
+def _new_operation_id(method: str, path: str) -> str:
+    """Readable, with a hash of the exact method and path: ``/a-b`` and
+    ``/a_b`` get different keys, so a new endpoint never takes the key, and so
+    the stored policies, of another one."""
+    readable = re.sub(r"[^a-z0-9]+", "_", f"{method}_{path}".lower()).strip("_")
+    digest = hashlib.sha256(f"{method} {path}".encode()).hexdigest()[:8]
+    return f"{readable}_{digest}"
+
+
 def _remove_operation(paths: dict[str, Any], path: str, method_key: str) -> None:
     """Remove one operation, then its path if no operation is left."""
     item = paths[path]
@@ -162,9 +172,7 @@ def _operation(
             _string_param(q, "query") for q in query if (q, "query") not in defined
         ]
         operation: dict[str, Any] = {
-            "operationId": re.sub(r"[^a-z0-9]+", "_", f"{method}_{path}".lower()).strip(
-                "_"
-            ),
+            "operationId": _new_operation_id(method, path),
             "summary": name,
         }
         if params:
