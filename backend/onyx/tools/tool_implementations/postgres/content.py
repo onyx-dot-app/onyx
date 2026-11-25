@@ -456,8 +456,14 @@ class ContentFilter:
             if self._out_of_time() or count >= MAX_COUNT:
                 return ContentMatchCount(count=count, is_complete=False)
             candidates = self._candidates(DocumentOrder.UPDATED_DESC, position)
-            if candidates:
-                count += len(self._matching_candidates(candidates))
+            try:
+                if candidates:
+                    count += len(self._matching_candidates(candidates))
+            except OpenSearchServerSideTimeout:
+                # Keep the batches already counted; with none, the call fails.
+                if position is None:
+                    raise
+                return ContentMatchCount(count=count, is_complete=False)
             if len(candidates) < CANDIDATE_BATCH_SIZE:
                 return ContentMatchCount(count=count, is_complete=True)
             position = candidates[-1]
@@ -469,9 +475,19 @@ class ContentFilter:
         while True:
             if self._out_of_time() or count >= MAX_COUNT:
                 return ContentMatchCount(count=count, is_complete=False)
-            matches = self._document_index.match_documents_by_content(
-                request, ContentMatchDateField.UPDATED, True, position, MATCH_BATCH_SIZE
-            )
+            try:
+                matches = self._document_index.match_documents_by_content(
+                    request,
+                    ContentMatchDateField.UPDATED,
+                    True,
+                    position,
+                    MATCH_BATCH_SIZE,
+                )
+            except OpenSearchServerSideTimeout:
+                # Keep the batches already counted; with none, the call fails.
+                if position is None:
+                    raise
+                return ContentMatchCount(count=count, is_complete=False)
             if matches:
                 count += len(self._passing([match.document_id for match in matches]))
             if len(matches) < MATCH_BATCH_SIZE:

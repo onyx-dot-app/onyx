@@ -521,6 +521,37 @@ def test_search_timeout_keeps_the_checked_batches(
 
 
 @pytest.mark.parametrize("postgres_first", [True, False])
+def test_count_timeout_keeps_the_counted_batches(
+    content_env: ContentEnv, postgres_first: bool
+) -> None:
+    index = content_env.index
+    real_match = index.match_documents_by_content
+    calls = 0
+
+    def match_then_time_out(*args: Any, **kwargs: Any) -> list[ContentMatchKey]:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise OpenSearchServerSideTimeout("timed out")
+        return real_match(*args, **kwargs)
+
+    with (
+        _force_path(postgres_first),
+        patch.object(content, "CANDIDATE_BATCH_SIZE", 1),
+        patch.object(content, "MATCH_BATCH_SIZE", 1),
+        patch.object(index, "match_documents_by_content", match_then_time_out),
+    ):
+        text = _run(
+            content_env.tool,
+            table="document",
+            content_contains=_PHRASE,
+            title_contains=content_env.tag,
+            count=True,
+        )
+    assert text.startswith("At least 1 matching documents")
+
+
+@pytest.mark.parametrize("postgres_first", [True, False])
 def test_auto_picks_the_way_by_candidate_count(
     content_env: ContentEnv, postgres_first: bool
 ) -> None:
