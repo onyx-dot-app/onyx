@@ -1,3 +1,5 @@
+import sys
+
 from chonkie import SentenceChunker
 
 from onyx.configs.app_configs import (
@@ -35,9 +37,10 @@ DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS = MAX_CONTEXT_TOKENS * (
     int(USE_CHUNK_SUMMARY) + int(USE_DOCUMENT_SUMMARY)
 )
 
-# Bounds of the per-document sentence token count cache: about 5 MB of text.
+# Bounds of the per-document sentence token count cache: about 10 MB of text.
+# The entry limit is in bytes of the stored str, which uses up to 4 per character.
 _TOKEN_COUNT_CACHE_MAX_ENTRIES = 10_000
-_TOKEN_COUNT_CACHE_MAX_TEXT_CHARS = 512
+_TOKEN_COUNT_CACHE_MAX_ENTRY_BYTES = 1024
 
 logger = setup_logger()
 
@@ -169,7 +172,7 @@ class Chunker:
             if count is None:
                 count = len(tokenizer.encode(text))
                 if (
-                    len(text) <= _TOKEN_COUNT_CACHE_MAX_TEXT_CHARS
+                    sys.getsizeof(text) <= _TOKEN_COUNT_CACHE_MAX_ENTRY_BYTES
                     and len(sentence_token_counts) < _TOKEN_COUNT_CACHE_MAX_ENTRIES
                 ):
                     sentence_token_counts[text] = count
