@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown } from "@opal/components";
-import { SvgCodeFile, SvgPlus, SvgServer } from "@opal/icons";
+import { SvgBookOpen, SvgCodeFile, SvgPlus, SvgServer } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
@@ -20,8 +20,8 @@ interface AddIntegrationMenuProps {
   openOnLoad?: boolean;
 }
 
-/** The Add button of an integrations list: MCP server or custom API, each in
- * the add modal. */
+/** The Add button of an integrations list: MCP server, custom API or the
+ * catalog, each in the add modal. */
 export default function AddIntegrationMenu({
   from,
   openOnLoad = false,
@@ -69,6 +69,13 @@ export default function AddIntegrationMenu({
               icon: SvgCodeFile,
               title: t("menu.customApi"),
               onSelect: () => setStart({ kind: "api" }),
+            },
+            {
+              kind: "action",
+              id: "catalog",
+              icon: SvgBookOpen,
+              title: t("menu.fromCatalog"),
+              onSelect: () => setStart({ kind: "catalog" }),
             },
           ]}
         />

@@ -592,7 +592,7 @@ export default function AddIntegrationModal({
               <Content
                 icon={tile.icon}
                 title={tile.name}
-                titleMaxLines={1}
+                titleMaxLines={2}
                 description={tile.kind}
               />
             </SelectCard>
@@ -715,6 +715,8 @@ export default function AddIntegrationModal({
   }
 
   function setupStep(found: Detection) {
+    const unreachable =
+      found.shape === "mcp_server" && found.probe.kind === "unreachable";
     return (
       <Section gap={4} alignItems="stretch" height="auto">
         <Card padding={2} border="solid">
@@ -725,9 +727,12 @@ export default function AddIntegrationModal({
                 : INTEGRATION_SHAPE_ICONS[shape]
             }
             title={name}
-            description={summary(found)}
+            description={unreachable ? undefined : summary(found)}
           />
         </Card>
+        {unreachable && (
+          <MessageCard variant="warning" title={summary(found)} />
+        )}
         {found.shape === "openapi" && (
           <SkippedOperations lines={found.view.skipped} />
         )}
@@ -881,11 +886,7 @@ export default function AddIntegrationModal({
           icon={SvgPlug}
           title={title}
           description={
-            step !== "setup"
-              ? t(`modal.${flow}.description`)
-              : named || flow !== "mcp_server"
-                ? labels.shape({ shape })
-                : undefined
+            step !== "setup" ? t(`modal.${flow}.description`) : undefined
           }
           onClose={busy ? undefined : onClose}
         />

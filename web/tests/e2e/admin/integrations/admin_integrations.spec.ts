@@ -88,7 +88,7 @@ test.describe("Admin integrations", () => {
 
     // MCP server with one organization API key.
     await integrations.goto();
-    await integrations.openAdd("MCP Server");
+    await integrations.openAdd("MCP server");
     await integrations.fillMcpServer({
       name: mcpName,
       url: serverUrl,

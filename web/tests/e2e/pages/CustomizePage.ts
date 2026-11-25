@@ -163,7 +163,7 @@ export class CustomizePage {
   }): Promise<number> {
     await this.openAddMenu();
     await this.page
-      .getByRole("menuitem", { name: "MCP Server", exact: true })
+      .getByRole("menuitem", { name: "MCP server", exact: true })
       .click();
     const addPage = new AdminIntegrationsPage(this.page);
     const form = addPage.addForm;

@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "MCP 服务器",
-          "customApi": "自定义 API"
+          "customApi": "自定义 API",
+          "fromCatalog": "从目录"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "请添加 API 的 URL。规范中没有提供。"
           },
           "upload": {
-            "label": "上传 openapi.json、openapi.yaml 或 schema.graphql",
+            "label": "上传规范文件",
             "chosen": "规范：{file}",
             "remove": "移除规范"
           },

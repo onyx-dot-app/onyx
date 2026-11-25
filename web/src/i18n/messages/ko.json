@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "MCP 서버",
-          "customApi": "사용자 지정 API"
+          "customApi": "사용자 지정 API",
+          "fromCatalog": "카탈로그에서"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "API의 URL을 추가하세요. 사양에 URL이 없습니다."
           },
           "upload": {
-            "label": "openapi.json, openapi.yaml 또는 schema.graphql 업로드",
+            "label": "사양 파일 업로드",
             "chosen": "사양: {file}",
             "remove": "사양 제거"
           },

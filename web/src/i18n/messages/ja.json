@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "MCP サーバー",
-          "customApi": "カスタム API"
+          "customApi": "カスタム API",
+          "fromCatalog": "カタログから"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "API の URL を追加してください。仕様に URL がありません。"
           },
           "upload": {
-            "label": "openapi.json、openapi.yaml または schema.graphql をアップロード",
+            "label": "仕様ファイルをアップロード",
             "chosen": "仕様: {file}",
             "remove": "仕様を削除"
           },

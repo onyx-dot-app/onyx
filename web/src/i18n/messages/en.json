@@ -10446,8 +10446,9 @@
           }
         },
         "menu": {
-          "mcpServer": "MCP Server",
-          "customApi": "Custom API"
+          "mcpServer": "MCP server",
+          "customApi": "Custom API",
+          "fromCatalog": "From catalog"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "Add the URL of the API. The spec does not give one."
           },
           "upload": {
-            "label": "Upload openapi.json, openapi.yaml or schema.graphql",
+            "label": "Upload a spec file",
             "chosen": "Spec: {file}",
             "remove": "Remove the spec"
           },

@@ -2,7 +2,7 @@ import { type Locator, type Page, expect } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 /** The rows of the Add menu on an integrations list. */
-export type AddIntegrationKind = "MCP Server" | "Custom API";
+export type AddIntegrationKind = "MCP server" | "Custom API";
 
 /** The integration catalog at /admin/integrations and its add modal. */
 export class AdminIntegrationsPage {
@@ -85,7 +85,7 @@ export class AdminIntegrationsPage {
   /** Uploads a spec file in step 1 of a custom API. */
   async uploadSpec(fileName: string, spec: string): Promise<void> {
     await this.addForm
-      .getByLabel("Upload openapi.json, openapi.yaml or schema.graphql", {
+      .getByLabel("Upload a spec file", {
         exact: true,
       })
       .setInputFiles({

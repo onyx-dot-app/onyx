@@ -235,7 +235,7 @@ test("hides Add without manage:actions", async () => {
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 
-test("the Add menu has MCP Server and Custom API", async () => {
+test("the Add menu has MCP server, Custom API and the catalog", async () => {
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   mockList();
   render(<IntegrationsPage />);
@@ -244,7 +244,28 @@ test("the Add menu has MCP Server and Custom API", async () => {
   await user.click(screen.getByRole("button", { name: copy.add.label }));
   expect(
     (await screen.findAllByRole("menuitem")).map((item) => item.textContent)
-  ).toEqual([copy.add.menu.mcpServer, copy.add.menu.customApi]);
+  ).toEqual([
+    copy.add.menu.mcpServer,
+    copy.add.menu.customApi,
+    copy.add.menu.fromCatalog,
+  ]);
+});
+
+test("From catalog in the Add menu opens the catalog", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  mockList({ "/api/admin/integrations/presets": [] });
+  render(<IntegrationsPage />);
+  await screen.findByText("Linear");
+
+  await user.click(screen.getByRole("button", { name: copy.add.label }));
+  await user.click(
+    await screen.findByRole("menuitem", { name: copy.add.menu.fromCatalog })
+  );
+  expect(
+    await screen.findByRole("dialog", {
+      name: new RegExp(`^${copy.add.modal.catalog.title}`),
+    })
+  ).toBeInTheDocument();
 });
 
 test("the catalog section at the foot opens the catalog", async () => {

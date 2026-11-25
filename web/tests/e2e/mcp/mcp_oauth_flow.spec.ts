@@ -136,7 +136,7 @@ test.describe("MCP OAuth flows", () => {
     serverName = `PW MCP OAuth ${Date.now()}`;
     const integrations = new AdminIntegrationsPage(page);
     await integrations.goto();
-    await integrations.openAdd("MCP Server");
+    await integrations.openAdd("MCP server");
     await integrations.fillMcpServer({
       name: serverName,
       url: serverUrl,

@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "خادم MCP",
-          "customApi": "واجهة API مخصصة"
+          "customApi": "واجهة API مخصصة",
+          "fromCatalog": "من الكتالوج"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "أضف عنوان URL لواجهة API. المواصفة لا تحدده."
           },
           "upload": {
-            "label": "رفع openapi.json أو openapi.yaml أو schema.graphql",
+            "label": "رفع ملف مواصفة",
             "chosen": "المواصفة: {file}",
             "remove": "إزالة المواصفة"
           },

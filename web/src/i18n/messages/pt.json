@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "Servidor MCP",
-          "customApi": "API personalizada"
+          "customApi": "API personalizada",
+          "fromCatalog": "Do catálogo"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "Adicione a URL da API. A especificação não informa uma."
           },
           "upload": {
-            "label": "Enviar openapi.json, openapi.yaml ou schema.graphql",
+            "label": "Enviar um arquivo de especificação",
             "chosen": "Especificação: {file}",
             "remove": "Remover a especificação"
           },
