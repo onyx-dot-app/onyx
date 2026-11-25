@@ -775,6 +775,16 @@ const AgentMessage = React.memo(function AgentMessage({
                                     isLastSection && codeModeWorking
                                   }
                                   awaitingUser={awaitingUser}
+                                  isFirstRun={
+                                    sectionIndex === 0 &&
+                                    !segments
+                                      .slice(0, index)
+                                      .some(
+                                        (s) =>
+                                          s.kind === "run" &&
+                                          s.turnGroups.length > 0
+                                      )
+                                  }
                                 />
                               ),
                             };
