@@ -3679,6 +3679,51 @@ def test_projected_response_round_trip_replays_tool_and_answer(
     assert memory[0].operation == "add"
 
 
+def test_response_stopped_before_its_answer_keeps_its_duration(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    response.time_sent = datetime.now(timezone.utc) - timedelta(seconds=14)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="remember", name="memory", arguments={"text": "Prefers tea"}
+                    )
+                ]
+            ),
+        ],
+    )
+    projected = project_response(
+        RunState(
+            run_id=record.run_id,
+            agent_id=record.agent_id,
+            status=RunStatus.CANCELLED,
+            input_messages=record.input_messages,
+            steps=record.steps,
+        ),
+        tool_ids={},
+    )
+    assert projected.cancelled
+    assert projected.pre_answer_processing_time is None
+    message_id, session_id = response.id, conversation.id
+    db_session.commit()
+    save_chat_response_to_db(
+        message_id=message_id,
+        chat_session_id=session_id,
+        expected_persist_content=True,
+        response=projected,
+    )
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, message_id)
+    assert stored is not None
+    assert stored.processing_duration_seconds is not None
+    assert 14 <= stored.processing_duration_seconds < 60
+
+
 def test_search_projection_restores_saved_source_cards(
     db_session: Session, conversation: ChatSession, tool_record: Tool
 ) -> None:
