@@ -21,12 +21,8 @@ import {
   SvgLightbulbSimple,
   SvgXOctagon,
 } from "@opal/icons";
-import { Content } from "@opal/layouts";
-import type {
-  IconFunctionComponent,
-  IconProps,
-  StatusColor,
-} from "@opal/types";
+import { Content, Section } from "@opal/layouts";
+import type { IconFunctionComponent, StatusColor } from "@opal/types";
 import { cn } from "@opal/utils";
 import {
   MemoizedLink,
@@ -178,15 +174,6 @@ function AnswerBlockquote({
   );
 }
 
-function DetailsChevron({ className, ...props }: IconProps) {
-  return (
-    <SvgChevronRight
-      {...props}
-      className={cn(className, "transition-transform group-open:rotate-90")}
-    />
-  );
-}
-
 /** `<details>` from `remarkDetails`: a native disclosure. */
 function AnswerDetails({
   node: _node,
@@ -195,7 +182,14 @@ function AnswerDetails({
   ...rest
 }: React.ComponentProps<"details"> & ExtraProps) {
   return (
-    <details {...rest} className={cn(className, "group my-4")}>
+    <details
+      {...rest}
+      // Child combinators, so an open block never turns a nested block's chevron.
+      className={cn(
+        className,
+        "my-4 [&>summary_svg]:transition-transform [&[open]>summary_svg]:rotate-90"
+      )}
+    >
       {children}
     </details>
   );
@@ -205,7 +199,7 @@ function AnswerSummary({ node }: React.ComponentProps<"summary"> & ExtraProps) {
   return (
     <summary className="not-prose list-none cursor-pointer [&::-webkit-details-marker]:hidden">
       <Content
-        icon={DetailsChevron}
+        icon={SvgChevronRight}
         title={node ? textOf(node.children) : ""}
         font="main-ui-action"
         width="fit"
@@ -214,36 +208,59 @@ function AnswerSummary({ node }: React.ComponentProps<"summary"> & ExtraProps) {
   );
 }
 
-/** A GFM task list item: no bullet; its checkbox is `TaskCheckbox`. */
+/**
+ * The checkbox GFM puts first in a task item, or first in its paragraph
+ * when the list is loose.
+ */
+function taskCheckbox(item: Element | undefined): Element | undefined {
+  const first = item?.children.find(
+    (child): child is Element => child.type === "element"
+  );
+  const box =
+    first?.tagName === "p"
+      ? first.children.find(
+          (child): child is Element => child.type === "element"
+        )
+      : first;
+  return box?.tagName === "input" ? box : undefined;
+}
+
+/**
+ * A GFM task item: a read-only checkbox and no bullet. The checkbox sits
+ * beside the item's content, not inside its paragraph, because the Opal
+ * checkbox is a block element.
+ */
 function AnswerListItem({
-  node: _node,
+  node,
   className,
   children,
   ...rest
 }: React.ComponentProps<"li"> & ExtraProps) {
+  const box = taskCheckbox(node);
+  if (!box) {
+    return (
+      <li {...rest} className={className}>
+        {children}
+      </li>
+    );
+  }
   return (
-    <li
-      {...rest}
-      className={cn(
-        className,
-        className?.includes("task-list-item") && "list-none"
-      )}
-    >
-      {children}
+    <li {...rest} className={cn(className, "list-none")}>
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        alignItems="start"
+        gap={2}
+        height="auto"
+      >
+        <div className="mt-1">
+          <InputCheckbox checked={box.properties.checked === true} disabled />
+        </div>
+        <div className="min-w-0 grow [&>:first-child]:mt-0 [&>:last-child]:mb-0">
+          {children}
+        </div>
+      </Section>
     </li>
-  );
-}
-
-/** GFM renders a task's box as a disabled input; show it read-only. */
-function TaskCheckbox({
-  type,
-  checked,
-}: React.ComponentProps<"input"> & ExtraProps) {
-  if (type !== "checkbox") return null;
-  return (
-    <span className="-ms-6 me-2 inline-block align-middle">
-      <InputCheckbox checked={checked === true} disabled />
-    </span>
   );
 }
 
@@ -253,7 +270,8 @@ const BASE_COMPONENTS: Components = {
   details: AnswerDetails,
   summary: AnswerSummary,
   li: AnswerListItem,
-  input: TaskCheckbox,
+  // GFM's task box: `AnswerListItem` draws it.
+  input: () => null,
   p: ({ dir, children }) => (
     <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
   ),
