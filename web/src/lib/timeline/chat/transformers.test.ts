@@ -10,6 +10,7 @@ import {
 } from "@/lib/timeline/chat/hooks/packetProcessor";
 import {
   CODE_MODE_TOOL_TYPE,
+  CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
   type CustomToolErrorInfo,
   type ExecEnd,
   Packet,
@@ -377,5 +378,24 @@ describe("toChatTimelineEntry status", () => {
     ],
   ])("an external tool with %s is %s", (_, error, status) => {
     expect(toChatTimelineEntry(customToolStep(error)).status).toBe(status);
+  });
+
+  it("a call rejected without details is an error", () => {
+    const step = customToolStep(null);
+    const packets = step.packets.map((packet) =>
+      packet.obj.type === PacketType.CUSTOM_TOOL_DELTA
+        ? {
+            ...packet,
+            obj: {
+              ...packet.obj,
+              response_type: CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+              data: null,
+            },
+          }
+        : packet
+    );
+    expect(
+      toChatTimelineEntry({ ...step, packets, streamPackets: packets }).status
+    ).toBe("error");
   });
 });

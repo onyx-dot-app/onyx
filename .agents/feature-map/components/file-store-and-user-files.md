@@ -13,7 +13,9 @@
   returns at once. While the request sends, the file card shows the percent
   sent (`lib/projects/uploadProgress.ts`; the request uses `XMLHttpRequest`
   for progress). In the composer, removing an uploading file cancels it with
-  no error toast; the request aborts when no file of its batch is left. The
+  no error toast. When no file of its batch is left, the request aborts if
+  part of its body is unsent; once the whole body is sent, it finishes and
+  the cancelled files are deleted with the delete endpoint. The
   file shows "processing" until indexing finishes. A file
   that is too large, has too many tokens, has a password, or has no
   extractable text is rejected with a reason. Spreadsheets over the token limit

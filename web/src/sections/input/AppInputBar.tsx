@@ -114,6 +114,7 @@ import {
   useChatSessionStore,
   useCurrentResponseStopped,
 } from "@/app/app/stores/useChatSessionStore";
+import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useAnswerWithMessage, useWaitingQuestionIds } from "@/lib/chat/hooks";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
@@ -585,6 +586,20 @@ const AppInputBar = React.memo(
       setCurrentMessageFiles(releaseUploads(stash.files ?? []));
     }
 
+    // A switch to another version hides the edited message, and a resend of a
+    // hidden message fails, so the edit ends and the draft comes back.
+    const editedMessageShown = useChatSessionStore((state) => {
+      if (!editing || state.currentSessionId === null) return true;
+      const tree = state.sessions.get(state.currentSessionId)?.messageTree;
+      if (!tree || tree.size === 0) return true;
+      return getLatestMessageChain(tree).some(
+        (message) => message.messageId === editing.messageId
+      );
+    });
+    useEffect(() => {
+      if (editing && !editedMessageShown) endEdit(editing.stash);
+    }, [editedMessageShown]);
+
     function submitMessage(submitted: ComposedMessage) {
       if (!submitted.message.trim()) return;
       if (questionWaits && !editing) {
@@ -637,7 +652,7 @@ const AppInputBar = React.memo(
         pasteClipboard(data);
       },
       editMessage: (edit: MessageEdit) => {
-        if (disabled || chatState !== "input") return;
+        if (disabled || chatState !== "input" || withdrawingForEdit) return;
         beginEdit(
           edit.messageId,
           edit,
@@ -946,6 +961,9 @@ const AppInputBar = React.memo(
     const controlsLoading =
       sourcesLoading || !activeAgent || llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
+    const promptMenuOpen = Boolean(
+      user?.preferences?.shortcut_enabled && showPrompts && !mentionPicker.open
+    );
 
     const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
@@ -1521,14 +1539,7 @@ const AppInputBar = React.memo(
             </div>
 
             <div className="flex flex-row items-center w-full">
-              <Popover
-                open={
-                  user?.preferences?.shortcut_enabled &&
-                  showPrompts &&
-                  !mentionPicker.open
-                }
-                onOpenChange={setShowPrompts}
-              >
+              <Popover open={promptMenuOpen} onOpenChange={setShowPrompts}>
                 <Popover.Anchor asChild>
                   <div
                     ref={inputWrapperRef}
@@ -1580,7 +1591,7 @@ const AppInputBar = React.memo(
                         if (
                           event.key === "Escape" &&
                           editing &&
-                          !showPrompts &&
+                          !promptMenuOpen &&
                           !mentionPicker.open &&
                           !event.nativeEvent.isComposing
                         ) {

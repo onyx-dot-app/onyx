@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} konnte seinen Server nicht erreichen"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} fehlgeschlagen"
         }
       },
       "customToolAuth": {
@@ -12586,12 +12589,6 @@
             "before": "vor {date}",
             "between": "von {start} bis {end}"
           }
-        },
-        "stoppedDuration": {
-          "label": "Von dir nach {duration} gestoppt"
-        },
-        "interruptedThinking": {
-          "label": "Du hast diese Antwort gestoppt"
         },
         "memory": {
           "default": {
@@ -13653,9 +13650,11 @@
       }
     },
     "find": {
+      "capped": "Die letzten {count, plural, one {# Nachricht} other {# Nachrichten}} durchsucht",
       "close": "Suche schließen",
       "count": "{current} von {total}",
       "label": "In Sitzung suchen",
+      "loadingOlder": "Ältere Nachrichten werden geladen…",
       "next": "Nächster Treffer",
       "placeholder": "In Sitzung suchen",
       "previous": "Vorheriger Treffer"

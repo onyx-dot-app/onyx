@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} 실패"
         }
       },
       "customToolAuth": {
@@ -12586,12 +12589,6 @@
             "before": "{date} 이전",
             "between": "{start}부터 {end}까지"
           }
-        },
-        "stoppedDuration": {
-          "label": "{duration} 후에 중지함"
-        },
-        "interruptedThinking": {
-          "label": "이 응답을 중지함"
         },
         "memory": {
           "default": {
@@ -13653,9 +13650,11 @@
       }
     },
     "find": {
+      "capped": "최근 {count, plural, other {#개의 메시지}}를 검색했습니다",
       "close": "찾기 닫기",
       "count": "{current}/{total}",
       "label": "세션에서 찾기",
+      "loadingOlder": "이전 메시지를 불러오는 중…",
       "next": "다음 일치 항목",
       "placeholder": "세션에서 찾기",
       "previous": "이전 일치 항목"

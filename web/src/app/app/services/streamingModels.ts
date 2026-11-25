@@ -272,6 +272,18 @@ export interface CustomToolDelta extends BaseObj {
   error?: CustomToolErrorInfo | null;
 }
 
+// A call that failed without public error details (backend
+// CUSTOM_TOOL_ERROR_RESPONSE_TYPE): the model got the reason, the user does not.
+export const CUSTOM_TOOL_ERROR_RESPONSE_TYPE = "error";
+
+/** Whether a custom tool result says that the call failed. */
+export function isFailedCustomToolDelta(delta: CustomToolDelta): boolean {
+  return (
+    Boolean(delta.error) ||
+    delta.response_type === CUSTOM_TOOL_ERROR_RESPONSE_TYPE
+  );
+}
+
 // File Reader Packets
 export interface FileReaderStart extends BaseObj {
   type: "file_reader_start";

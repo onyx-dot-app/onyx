@@ -3,6 +3,7 @@
 import { type ComponentProps, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import {
+  isFailedCustomToolDelta,
   PacketType,
   type CustomToolPacket,
   type Packet,
@@ -54,7 +55,10 @@ export function SkillToolRenderer({
     if (obj.type === PacketType.CUSTOM_TOOL_ARGS && tool) {
       const value: unknown = obj.tool_args[tool.nameArg];
       if (typeof value === "string") name = value.trim();
-    } else if (obj.type === PacketType.CUSTOM_TOOL_DELTA && obj.error) {
+    } else if (
+      obj.type === PacketType.CUSTOM_TOOL_DELTA &&
+      isFailedCustomToolDelta(obj)
+    ) {
       failed = true;
     } else if (obj.type === PacketType.ERROR) {
       failed = true;

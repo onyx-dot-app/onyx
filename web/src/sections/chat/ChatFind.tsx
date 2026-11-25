@@ -11,6 +11,8 @@ import { SvgChevronDown, SvgChevronUp, SvgSearch, SvgX } from "@opal/icons";
 import {
   useCurrentMessageHistory,
   useCurrentMessageTree,
+  useHasOlderMessages,
+  useOlderMessagesFailed,
 } from "@/app/app/stores/useChatSessionStore";
 import { useScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
 import { useChatFindHighlights } from "@/lib/chatFind/hooks";
@@ -27,6 +29,7 @@ import {
   setChatFindQuery,
   useChatFindStore,
 } from "@/lib/chatFind/store";
+import { loadOlderPagesForFind } from "@/lib/chatFind/olderPages";
 import { messageRowId } from "@/lib/chat/rowIds";
 import { CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
 import { isModalOpen } from "@/lib/shortcuts/utils";
@@ -36,7 +39,8 @@ const NO_RESULTS: ChatFindResults = { entries: [], total: 0 };
 
 /**
  * Find in the shown chat: Ctrl+F (⌘F on macOS) opens a bar over the chat
- * that searches every loaded message, also the rows the list has unmounted.
+ * that searches every message, also the rows the list has unmounted. The
+ * first search loads the chat's older pages, up to `FIND_MAX_OLDER_PAGES`.
  * Render it in the chat's `ChatScrollContainer` overlay.
  */
 export default function ChatFind() {
@@ -53,30 +57,30 @@ export default function ChatFind() {
   return open ? <ChatFindBar /> : null;
 }
 
-/** The index of the first message at the top of the view. */
-function topMessageIndex(
-  container: HTMLElement | null,
-  rowIds: readonly string[]
-): number {
-  if (!container) return 0;
+/** The id of the first row at the top of the view. */
+function topRowId(container: HTMLElement | null): string | null {
+  if (!container) return null;
   const viewportTop = container.getBoundingClientRect().top;
   for (const row of Array.from(
     container.querySelectorAll<HTMLElement>('[id^="message-"]')
   )) {
-    if (row.getBoundingClientRect().bottom > viewportTop) {
-      return Math.max(0, rowIds.indexOf(row.id));
-    }
+    if (row.getBoundingClientRect().bottom > viewportTop) return row.id;
   }
-  return 0;
+  return null;
 }
 
 function ChatFindBar() {
   const t = useTranslations("chat.find");
-  const { scrollContainerRef, releaseFollowing } = useScrollContainer();
+  const { scrollContainerRef, releaseFollowing, sessionId } =
+    useScrollContainer();
   const query = useChatFindStore((state) => state.query);
   const focusRequestId = useChatFindStore((state) => state.focusRequestId);
   const messages = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
+  // Older messages are missing: not loaded yet, or a page failed to load.
+  const hasOlderMessages = useHasOlderMessages();
+  const olderMessagesFailed = useOlderMessagesFailed();
+  const olderMissing = hasOlderMessages || olderMessagesFailed;
   const barRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -90,16 +94,48 @@ function ChatFindBar() {
     [messages, messageTree, searchedQuery]
   );
 
+  // The first search loads the older pages, so the counts cover the chat.
+  const [olderPages, setOlderPages] = useState<
+    "idle" | "loading" | "done" | "capped"
+  >("idle");
+  const olderLoadStartedRef = useRef(false);
+  const unmountedRef = useRef(false);
+  useEffect(
+    () => () => {
+      unmountedRef.current = true;
+    },
+    []
+  );
+  useEffect(() => {
+    if (!searchedQuery || !olderMissing || !sessionId) return;
+    if (olderLoadStartedRef.current) return;
+    olderLoadStartedRef.current = true;
+    setOlderPages("loading");
+    void loadOlderPagesForFind(sessionId, () => unmountedRef.current).then(
+      (capped) => {
+        if (!unmountedRef.current) setOlderPages(capped ? "capped" : "done");
+      }
+    );
+  }, [searchedQuery, olderMissing, sessionId]);
+
   // A new search starts at the view; a step picks an index. Each one gets a
   // new id, so its match is brought into view even when it is the same one.
   const [selection, setSelection] = useState<{
-    fromMessage: number;
+    /** The row at the top of the view when the search started. */
+    fromRowId: string | null;
     index: number | null;
     id: number;
-  }>({ fromMessage: 0, index: null, id: 0 });
+  }>({ fromRowId: null, index: null, id: 0 });
+  // By row id: older pages that load add messages above it.
+  const fromMessage = Math.max(
+    0,
+    messages.findIndex(
+      (message) => messageRowId(message) === selection.fromRowId
+    )
+  );
   const startIndex =
-    results.entries.find((entry) => entry.messageIndex >= selection.fromMessage)
-      ?.start ?? 0;
+    results.entries.find((entry) => entry.messageIndex >= fromMessage)?.start ??
+    0;
   const activeIndex =
     results.total === 0
       ? 0
@@ -137,10 +173,7 @@ function ChatFindBar() {
   function handleQueryChange(value: string) {
     setChatFindQuery(value);
     setSelection((previous) => ({
-      fromMessage: topMessageIndex(
-        scrollContainerRef.current,
-        messages.map(messageRowId)
-      ),
+      fromRowId: topRowId(scrollContainerRef.current),
       index: null,
       id: previous.id + 1,
     }));
@@ -200,12 +233,18 @@ function ChatFindBar() {
               {hasQuery && (
                 <Text
                   font="secondary-body"
-                  color={navigationDisabled ? "status-error-05" : "text-03"}
+                  color={
+                    navigationDisabled && olderPages !== "loading"
+                      ? "status-error-05"
+                      : "text-03"
+                  }
                 >
-                  {t("count", {
-                    current: results.total === 0 ? 0 : activeIndex + 1,
-                    total: results.total,
-                  })}
+                  {olderPages === "loading"
+                    ? t("loadingOlder")
+                    : t("count", {
+                        current: results.total === 0 ? 0 : activeIndex + 1,
+                        total: results.total,
+                      })}
                 </Text>
               )}
             </span>
@@ -238,6 +277,13 @@ function ChatFindBar() {
           </Section>
         }
       />
+      {hasQuery && olderPages === "capped" && (
+        <div className="mt-1 rounded-08 bg-background-neutral-00 px-3 py-1">
+          <Text font="secondary-body" color="text-03">
+            {t("capped", { count: messages.length })}
+          </Text>
+        </div>
+      )}
     </div>
   );
 }

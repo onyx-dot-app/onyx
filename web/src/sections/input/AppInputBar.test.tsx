@@ -22,7 +22,9 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { Button } from "@opal/components";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import type { ChatState } from "@/app/app/types";
+import type { ChatState, Message } from "@/app/app/types";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { SYSTEM_NODE_ID } from "@/app/app/services/messageTree";
 import type { PickerSections } from "@/lib/skills/picker";
 import { useChatSkills } from "@/lib/skills/hooks";
 import type { ChatSkill } from "@/lib/skills/types";
@@ -31,7 +33,9 @@ import { trackUpload } from "@/lib/projects/uploadProgress";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
 import {
   MAX_MENTIONS_PER_MESSAGE,
+  type ChatSessionQueue,
   type ComposedMessage,
+  type PendingChatMessage,
 } from "@/lib/chat/types";
 
 function memberTool(overrides: Partial<ToolSnapshot> = {}): ToolSnapshot {
@@ -209,6 +213,7 @@ function Composer({
   chatState = "input",
   disabled = false,
   onSubmit = jest.fn(),
+  queueOverride,
 }: {
   agentId?: number;
   tools?: MinimalAgent["tools"];
@@ -216,10 +221,12 @@ function Composer({
   chatState?: ChatState;
   disabled?: boolean;
   onSubmit?: AppInputBarProps["onSubmit"];
+  queueOverride?: ChatSessionQueue;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
-  const queue = useChatSessionQueue(false);
+  const sessionQueue = useChatSessionQueue(false);
+  const queue = queueOverride ?? sessionQueue;
   return (
     <>
       <Button
@@ -449,6 +456,60 @@ describe("edit a sent message in the composer", () => {
     return { inputBarRef, onSubmit };
   }
 
+  test("does not start while a queued message is withdrawn for an edit", async () => {
+    const store = useChatSessionStore.getState();
+    store.createSession("queue-session");
+    store.setCurrentSession("queue-session");
+    const withdrawal = deferred<PendingChatMessage | null>();
+    const queued: PendingChatMessage = {
+      id: "queued-1",
+      message: "queued text",
+      delivery: "queue",
+      target_response_id: null,
+      deep_research: false,
+      llm_override: null,
+      mentions: [],
+    };
+    const queue: ChatSessionQueue = {
+      enabled: true,
+      messages: [queued],
+      error: null,
+      busy: false,
+      needsResponseSelection: false,
+      submit: jest.fn(),
+      withdraw: () => withdrawal.promise,
+      interrupt: jest.fn(),
+    };
+    const inputBarRef = createRef<AppInputBarHandle>();
+    mockProjectsContext.currentMessageFiles = [];
+    render(<Composer inputBarRef={inputBarRef} queueOverride={queue} />);
+    await setupUser().click(
+      screen.getByRole("button", { name: "Edit queued message: queued text" })
+    );
+
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    await act(async () => withdrawal.resolve(null));
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
+  test("Escape ends the edit when the text starts with / and shortcuts are off", async () => {
+    const { inputBarRef } = startEdit([]);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const user = setupUser();
+    await user.clear(screen.getByRole("textbox"));
+    await user.type(screen.getByRole("textbox"), "/x");
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
   test("does not start while a response streams", () => {
     const { inputBarRef } = startEdit([], "streaming");
     act(() => inputBarRef.current?.editMessage(edit));
@@ -490,6 +551,55 @@ describe("edit a sent message in the composer", () => {
     await setupUser().keyboard("{Escape}");
 
     expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  test("switching to another version of the edited message ends the edit", async () => {
+    const node = (nodeId: number, fields: Partial<Message> = {}): Message => ({
+      nodeId,
+      messageId: nodeId,
+      type: "user",
+      message: `version ${nodeId}`,
+      files: [],
+      toolCall: null,
+      packets: [],
+      parentNodeId: SYSTEM_NODE_ID,
+      childrenNodeIds: [],
+      latestChildNodeId: null,
+      ...fields,
+    });
+    const tree = (shown: number) =>
+      new Map([
+        [
+          SYSTEM_NODE_ID,
+          node(SYSTEM_NODE_ID, {
+            type: "system",
+            parentNodeId: null,
+            childrenNodeIds: [5, 6],
+            latestChildNodeId: shown,
+          }),
+        ],
+        [5, node(5)],
+        [6, node(6)],
+      ]);
+    const store = useChatSessionStore.getState();
+    store.createSession("edit-session", { messageTree: tree(5) });
+    store.setCurrentSession("edit-session");
+    const { inputBarRef } = startEdit();
+    await setupUser().type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+
+    act(() =>
+      useChatSessionStore
+        .getState()
+        .updateSessionMessageTree("edit-session", tree(6))
+    );
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
   });
 
   test("a draft file that finished uploading during the edit survives a remount", async () => {

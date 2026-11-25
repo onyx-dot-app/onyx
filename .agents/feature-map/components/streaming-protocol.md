@@ -475,7 +475,8 @@ its background task end ([[#pure-asgi-middleware]]).
    `backend/onyx/server/query_and_chat/streaming_models.py:PacketException` in
    its tab (`chat/renderer.py:ToolRenderer.complete`) only when the tool
    raised `ToolExecutionException` with `emit_error_packet=True`; other tool
-   errors go only to the model. Its `exception` field is excluded from
+   errors go only to the model. A call on the generic card that failed without
+   details gets a `custom_tool_delta` with `response_type: "error"` instead. Its `exception` field is excluded from
    serialization, so the client gets a bare `error` packet with no message.
 9. `tab-packets-interleave` **Tabs finish in any order.** Parallel calls run
    on their own threads, so packets of different tabs interleave and results

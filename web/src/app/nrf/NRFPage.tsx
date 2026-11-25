@@ -191,7 +191,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     [activitySlot]
   );
   const activity = currentSessionId ? (
-    <ChatActivity key={currentSessionId} sessionId={currentSessionId} />
+    <ChatActivity
+      key={currentSessionId}
+      sessionId={currentSessionId}
+      showFiles={false}
+    />
   ) : null;
 
   // Memoized callback for closing document sidebar

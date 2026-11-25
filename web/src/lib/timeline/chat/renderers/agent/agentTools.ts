@@ -1,5 +1,9 @@
 /** The agent tools of every tool family, and their calls read from packets. */
-import { PacketType, type Packet } from "@/app/app/services/streamingModels";
+import {
+  isFailedCustomToolDelta,
+  PacketType,
+  type Packet,
+} from "@/app/app/services/streamingModels";
 
 export interface AgentTool {
   action: "spawn" | "send" | "interrupt";
@@ -84,7 +88,10 @@ export function agentToolCalls(packets: readonly Packet[]): AgentToolCall[] {
           (tool.action === "send" ? stringArg(obj.tool_args, "to") : "");
         if (tool.messageArg)
           call.message = stringArg(obj.tool_args, tool.messageArg);
-      } else if (obj.type === PacketType.CUSTOM_TOOL_DELTA && obj.error) {
+      } else if (
+        obj.type === PacketType.CUSTOM_TOOL_DELTA &&
+        isFailedCustomToolDelta(obj)
+      ) {
         call.failed = true;
       } else if (obj.type === PacketType.ERROR) {
         call.failed = true;

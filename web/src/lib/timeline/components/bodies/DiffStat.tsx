@@ -1,11 +1,10 @@
 import { useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import {
   computeDiff,
   countDiffLines,
-  formatDiffCount,
 } from "@/lib/timeline/components/bodies/diffLines";
 
 interface DiffStatProps {
@@ -16,6 +15,9 @@ interface DiffStatProps {
 /** The `+N -M` line counts of a change; a zero count is left out. */
 export function DiffStat({ added, removed }: DiffStatProps) {
   const t = useTranslations("craft.toolCards.diff");
+  const format = useFormatter();
+  const compact = (value: number) =>
+    format.number(value, { notation: "compact", maximumFractionDigits: 1 });
   if (added === 0 && removed === 0) return null;
   return (
     <Section
@@ -27,12 +29,12 @@ export function DiffStat({ added, removed }: DiffStatProps) {
     >
       {added > 0 && (
         <Text font="secondary-mono" color="status-success-05">
-          {`+${formatDiffCount(added)}`}
+          {`+${compact(added)}`}
         </Text>
       )}
       {removed > 0 && (
         <Text font="secondary-mono" color="status-error-05">
-          {`-${formatDiffCount(removed)}`}
+          {`-${compact(removed)}`}
         </Text>
       )}
     </Section>

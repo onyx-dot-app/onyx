@@ -202,4 +202,62 @@ describe("useTimelineHeader", () => {
     });
     expect(result.current.headerText).toBe("Checking sources");
   });
+
+  it("names the newest running step when a later parallel step is done", () => {
+    const step = (tabIndex: number, packets: Packet[]) => ({
+      key: `0-${tabIndex}`,
+      groupKey: `0-${tabIndex}`,
+      turnIndex: 0,
+      tabIndex,
+      packets,
+      nestedCalls: [],
+      streamPackets: packets,
+      codeMode: null,
+    });
+    const placement = (tabIndex: number) => ({
+      turn_index: 0,
+      tab_index: tabIndex,
+    });
+    const running = step(0, [
+      {
+        placement: placement(0),
+        obj: { type: PacketType.SEARCH_TOOL_START, is_internet_search: true },
+      },
+    ]);
+    const done = step(1, [
+      {
+        placement: placement(1),
+        obj: { type: PacketType.PYTHON_TOOL_START, code: "print(1)" },
+      },
+      { placement: placement(1), obj: { type: PacketType.SECTION_END } },
+    ]);
+    const { result, rerender } = renderHook(
+      ({ later }: { later: typeof done }) =>
+        useTimelineHeader([
+          { turnIndex: 0, steps: [running] },
+          { turnIndex: 0, steps: [later] },
+        ]),
+      { initialProps: { later: done } }
+    );
+    expect(result.current.headerText).toBe("header.searchingWeb.label");
+
+    // Stderr marks a step failed, but it still runs until its end packet.
+    const warning = step(1, [
+      {
+        placement: placement(1),
+        obj: { type: PacketType.PYTHON_TOOL_START, code: "import x" },
+      },
+      {
+        placement: placement(1),
+        obj: {
+          type: PacketType.PYTHON_TOOL_DELTA,
+          stdout: "",
+          stderr: "DeprecationWarning",
+          file_ids: [],
+        },
+      },
+    ]);
+    rerender({ later: warning });
+    expect(result.current.headerText).toBe("header.executingCode.label");
+  });
 });

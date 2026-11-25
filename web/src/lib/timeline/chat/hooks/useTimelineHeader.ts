@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { TurnGroup } from "@/lib/timeline/chat/transformers";
+import type { TurnGroup } from "@/lib/timeline/chat/transformers";
+import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
 import type { AwaitingUser } from "@/lib/chat/toolApprovals";
 import {
   IMAGE_GENERATION_TOOL_TYPE,
@@ -145,9 +146,14 @@ export function useTimelineHeader(
       return { headerText: working, hasPackets, userStopped };
     }
 
-    // The current step's activity. A step with no activity of its own yet is
-    // working.
-    const packets = turnGroups.at(-1)?.steps[0]?.packets;
+    // The current step's activity: the newest step that still runs, since a
+    // parallel step can finish before an earlier one; otherwise the newest
+    // step. A step with no activity of its own yet is working.
+    const steps = turnGroups.flatMap((group) => group.steps);
+    const current =
+      steps.findLast((step) => !step.packets.some(isGroupEndPacket)) ??
+      steps.at(-1);
+    const packets = current?.packets;
     const headerText =
       (packets && stepHeaderText(packets, t, locale)) ?? working;
     return { headerText, hasPackets, userStopped };

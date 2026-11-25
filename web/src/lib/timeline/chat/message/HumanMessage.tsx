@@ -286,7 +286,7 @@ const HumanMessage = React.memo(function HumanMessage({
           {isMobile && copyEditButton}
           {/* The send time sits under the bubble, at its end. */}
           {timeSent && (
-            <div className="px-1 opacity-0 transition-opacity duration-150 group-hover/human-message:opacity-100 group-hover/human-message:delay-300 group-focus-within/human-message:opacity-100 no-hover:opacity-100">
+            <div className="px-1 opacity-0 transition-opacity duration-0 group-hover/human-message:duration-150 group-hover/human-message:opacity-100 group-hover/human-message:delay-300 group-focus-within/human-message:opacity-100 no-hover:opacity-100">
               <MessageTime timeSent={timeSent} />
             </div>
           )}

@@ -2,6 +2,7 @@ import { render, screen } from "@tests/setup/test-utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   type CustomToolPacket,
+  CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
   PacketType,
 } from "@/app/app/services/streamingModels";
 import { RenderType } from "@/lib/timeline/chat/message/messageComponents/types";
@@ -12,7 +13,7 @@ import { SkillToolRenderer } from "@/lib/timeline/chat/renderers/skill/SkillTool
 
 const placement = { turn_index: 0, tab_index: 0 };
 
-type End = "running" | "done" | "error" | "toolError";
+type End = "running" | "done" | "error" | "toolError" | "rejected";
 
 function call(
   toolName: string,
@@ -51,6 +52,15 @@ function call(
           status_code: 500,
           message: "Unknown skill",
         },
+      },
+    });
+  if (end === "rejected")
+    packets.push({
+      placement,
+      obj: {
+        type: PacketType.CUSTOM_TOOL_DELTA,
+        tool_name: toolName,
+        response_type: CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
       },
     });
   if (end === "error")
@@ -144,6 +154,7 @@ test("a running load names the skill", () => {
 test.each([
   ["error", "skills_read", "Could not read skill pptx"],
   ["toolError", "load_skill", "Could not load skill pptx"],
+  ["rejected", "skills_read", "Could not read skill pptx"],
 ] as const)("a failed call (%s) says so", (end, toolName, title) => {
   renderStep(call(toolName, { name: "pptx" }, end));
   expect(screen.getByTestId("done")).toHaveTextContent(title);
