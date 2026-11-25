@@ -298,7 +298,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
     (sessionId: string) => {
       pendingSessionsStore.remove(sessionId);
       // A deleted chat has nothing left to view.
-      useChatSessionStore.getState().suppressDeletedRunMarkers(sessionId);
+      useChatSessionStore.getState().suppressRunMarkers(sessionId);
       useUnseenRuns.getState().markSeen(sessionId);
       // Optimistically remove from all loaded pages
       mutate(

@@ -205,7 +205,7 @@ export default function AccountSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        useChatSessionStore.getState().suppressDeletedRunMarkers();
+        useChatSessionStore.getState().suppressRunMarkers();
         useUnseenRuns.getState().clearAll();
         await refreshChatSessions();
         deleteAllChatsModal.toggle(false);

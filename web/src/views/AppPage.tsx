@@ -234,6 +234,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const {
     incognitoEnabled,
     incognitoEnabledRef,
+    incognitoSessionId,
     setIncognitoEnabled,
     setIncognitoLocked,
   } = useIncognito();
@@ -375,14 +376,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Best-effort teardown when the tab closes over a live incognito session.
   // sendBeacon survives unload where fetch would be cancelled.
   useEffect(() => {
-    if (!incognitoEnabled || !currentChatSessionId) return;
-    const sessionId = currentChatSessionId;
+    const sessionId = currentChatSessionId ?? incognitoSessionId;
+    if (!incognitoEnabled || !sessionId) return;
     const handlePageHide = () => {
       navigator.sendBeacon(`/api/chat/end-incognito-session/${sessionId}`);
     };
     window.addEventListener("pagehide", handlePageHide);
     return () => window.removeEventListener("pagehide", handlePageHide);
-  }, [incognitoEnabled, currentChatSessionId]);
+  }, [incognitoEnabled, currentChatSessionId, incognitoSessionId]);
 
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];

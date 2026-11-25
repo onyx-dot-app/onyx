@@ -299,6 +299,38 @@ test("session input shows typed keys, and polls show the session state", async (
   }
 });
 
+test("a poll that reports a command deadline shows the time limit in its title", async () => {
+  const poll = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      poll({ type: PacketType.WRITE_STDIN_START, session_id: "7", chars: "" }),
+      poll({
+        type: PacketType.EXEC_END,
+        completion: "deadline_exceeded",
+        exit_code: null,
+        session_id: null,
+        wall_time_seconds: 1,
+        truncated: false,
+        output: "",
+        error: null,
+      }),
+      poll(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getByText("Stopped at its time limit");
+    expect(screen.queryByText("Checked session 7")).not.toBeInTheDocument();
+    expect(title.closest(".opal-line")).toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
+  } finally {
+    view.unmount();
+  }
+});
+
 // Renderer contract: the backend renderer starts a write_stdin call whose
 // arguments are wrong-typed with an empty session ID.
 test("a session call without a session ID leaves the session out", async () => {

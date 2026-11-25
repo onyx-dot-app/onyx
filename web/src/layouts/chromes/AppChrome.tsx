@@ -66,6 +66,7 @@ function Header() {
     incognitoAvailable,
     incognitoEnabled,
     incognitoLocked,
+    incognitoSessionId,
     toggleIncognito,
     setIncognitoEnabled,
   } = useIncognito();
@@ -99,7 +100,7 @@ function Header() {
   // into a session being torn down. The server deletes that session's uploads
   // itself, including any that landed late.
   const handleExitIncognito = useCallback(async () => {
-    const sessionId = currentChatSessionId;
+    const sessionId = currentChatSessionId ?? incognitoSessionId;
     if (sessionId) {
       let tornDown = false;
       try {
@@ -113,15 +114,16 @@ function Header() {
         showErrorNotification("Could not end the incognito chat. Try again.");
         return;
       }
-      removeSession(sessionId);
+      if (currentChatSessionId) removeSession(currentChatSessionId);
     }
     setIncognitoEnabled(false);
     setCurrentMessageFiles([]);
-    if (sessionId) {
+    if (currentChatSessionId) {
       navigation.go("/app", { replace: true });
     }
   }, [
     currentChatSessionId,
+    incognitoSessionId,
     setIncognitoEnabled,
     setCurrentMessageFiles,
     removeSession,

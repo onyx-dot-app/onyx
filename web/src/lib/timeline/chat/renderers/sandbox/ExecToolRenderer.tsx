@@ -91,24 +91,28 @@ export function ExecToolRenderer({
       : end?.completion === "canceled"
         ? "canceled"
         : "done";
+  const showDeadlineInTitle =
+    isComplete && !stopped && end?.completion === "deadline_exceeded";
   const status = stopped
     ? t("sandbox.stopped.status")
-    : start.type === PacketType.EXEC_COMMAND_START
-      ? t("sandbox.exec.status", {
-          // A command still running at its exec_end has only started
-          phase: phase === "done" && end?.session_id ? "started" : phase,
-        })
-      : start.session_id
-        ? t("sandbox.stdin.status", {
-            kind: start.chars ? "send" : "check",
-            phase,
-            sessionId: start.session_id,
+    : showDeadlineInTitle
+      ? t("sandbox.completion.label", { completion: "deadline_exceeded" })
+      : start.type === PacketType.EXEC_COMMAND_START
+        ? t("sandbox.exec.status", {
+            // A command still running at its exec_end has only started
+            phase: phase === "done" && end?.session_id ? "started" : phase,
           })
-        : // Interrupted or wrong-typed arguments have no session ID
-          t("sandbox.stdin.noSession.status", {
-            kind: start.chars ? "send" : "check",
-            phase,
-          });
+        : start.session_id
+          ? t("sandbox.stdin.status", {
+              kind: start.chars ? "send" : "check",
+              phase,
+              sessionId: start.session_id,
+            })
+          : // Interrupted or wrong-typed arguments have no session ID
+            t("sandbox.stdin.noSession.status", {
+              kind: start.chars ? "send" : "check",
+              phase,
+            });
 
   // The output shares the command's panel: it streams into the output band,
   // which waits with a loading shimmer until the first output arrives. A
@@ -180,7 +184,8 @@ export function ExecToolRenderer({
       )}
 
       {end?.completion &&
-        end.completion !== "exited" && (
+        end.completion !== "exited" &&
+        !showDeadlineInTitle && (
           // A kill or a time limit fails the step, so it reads as an error.
           <Text
             font="secondary-body"

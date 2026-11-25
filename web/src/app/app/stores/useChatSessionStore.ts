@@ -118,7 +118,7 @@ interface ChatSessionStore {
 
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
-  suppressDeletedRunMarkers: (sessionId?: string) => void;
+  suppressRunMarkers: (sessionId?: string) => void;
   createSession: (
     sessionId: string,
     initialData?: Partial<ChatSessionData>
@@ -316,7 +316,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().cleanupOldSessions();
   },
 
-  suppressDeletedRunMarkers: (sessionId) => {
+  suppressRunMarkers: (sessionId) => {
     set((state) => {
       const sessions = new Map(state.sessions);
       for (const [id, session] of sessions) {

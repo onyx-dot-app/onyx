@@ -14,6 +14,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { subscribeNewSessionNavigation } from "@/lib/navigation/hooks";
+import { endIncognitoSession } from "@/app/app/services/lib";
 
 interface IncognitoAvailabilityResponse {
   available: boolean;
@@ -88,10 +89,15 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
   useEffect(
     () =>
       subscribeNewSessionNavigation(() => {
-        if (incognitoEnabledRef.current)
-          setIncognitoSessionId(crypto.randomUUID());
+        if (!incognitoEnabledRef.current) return;
+        setIncognitoSessionId(crypto.randomUUID());
+        if (incognitoSessionId) {
+          void endIncognitoSession(incognitoSessionId).catch((error) =>
+            console.error("Failed to end discarded incognito session:", error)
+          );
+        }
       }),
-    []
+    [incognitoSessionId]
   );
 
   // Memoized so consumers keying callbacks on the context object do not
