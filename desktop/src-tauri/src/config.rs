@@ -51,6 +51,11 @@ pub struct Config {
     /// (`earlier_install.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub earlier_install_dir: Option<String>,
+    /// The identity (`earlier_install::file_identity`) of that folder's
+    /// `uninstall.exe` when it was recorded. A retry runs only for the same
+    /// file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub earlier_install_id: Option<String>,
 }
 
 impl Config {

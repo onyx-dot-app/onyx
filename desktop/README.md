@@ -163,8 +163,10 @@ and binary name (`onyx`), so this app takes its place:
      of these names is removed as a link. The folder goes only if it is empty then. It refuses a
      folder that is a link, a drive root, the user profile or an AppData root, this app's install
      folder, or one of this app's data folders. A file that is in use stays: `config.json` keeps
-     the folder (`earlierInstallDir`), and the next launch tries again, but only while the folder
-     still holds `uninstall.exe`. If `config.json` cannot record the folder, the app stops before
+     the folder (`earlierInstallDir`) and the size and last write time of its `uninstall.exe`
+     (`earlierInstallId`). The next launch tries again only if that `uninstall.exe` is still the
+     same file; otherwise, or for a record without that identity, it drops the record and deletes
+     nothing. If `config.json` cannot record the folder, the app stops before
      it deletes the uninstall entry, so the next launch starts again from that entry.
 
   An elevated (administrator) process skips this. The earlier app's data folder

@@ -149,6 +149,33 @@ pub fn still_earlier<'a>(names: impl IntoIterator<Item = &'a str>) -> bool {
         .any(|name| name.eq_ignore_ascii_case("uninstall.exe"))
 }
 
+/// The identity of the earlier app's `uninstall.exe`: its size and last
+/// write time.
+pub fn file_identity(len: u64, modified_nanos: u128) -> String {
+    format!("{len}:{modified_nanos}")
+}
+
+/// Whether a retry still targets the install that was recorded. A record
+/// without an identity (from an earlier build) is not trusted.
+pub fn same_install(recorded: Option<&str>, now: Option<&str>) -> bool {
+    matches!((recorded, now), (Some(recorded), Some(now)) if recorded == now)
+}
+
+/// The identity of `dir`'s `uninstall.exe`, if it is a plain file.
+fn uninstaller_identity(dir: &str) -> Option<String> {
+    let meta = std::fs::symlink_metadata(Path::new(dir).join("uninstall.exe")).ok()?;
+    if is_link(&meta) || !meta.is_file() {
+        return None;
+    }
+    let modified = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos();
+    Some(file_identity(meta.len(), modified))
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Removal {
     /// The earlier app's files are gone (the folder too, if it was empty).
@@ -303,21 +330,44 @@ pub fn retire(app: &tauri::AppHandle) {
             }
             ok
         });
-    let pending = state
-        .config
-        .get()
+    let config = state.config.get();
+    let pending = config
         .earlier_install_dir
         .filter(|dir| plausible_earlier_folder(dir, &exe, &protected));
+    // A retry runs only for the same uninstall.exe that was recorded.
+    if from_entry.is_none() {
+        if let Some(dir) = &pending {
+            let now = uninstaller_identity(dir);
+            if !same_install(config.earlier_install_id.as_deref(), now.as_deref()) {
+                log::warn!(
+                    "the earlier desktop app's folder changed since it was recorded; left alone"
+                );
+                if let Err(e) = state.config.update(|c| {
+                    c.earlier_install_dir = None;
+                    c.earlier_install_id = None;
+                }) {
+                    log::warn!("could not update the earlier desktop app's record: {e}");
+                }
+                return;
+            }
+        }
+    }
     let Some(dir) = from_entry.clone().or(pending.clone()) else {
         return;
     };
     for step in plan(from_entry.is_some(), pending.is_some()) {
         match step {
             Step::RecordFolder => {
-                if let Err(e) = state
-                    .config
-                    .update(|c| c.earlier_install_dir = Some(dir.clone()))
-                {
+                let Some(id) = uninstaller_identity(&dir) else {
+                    log::warn!(
+                        "the earlier desktop app's uninstaller is not a plain file; left alone"
+                    );
+                    return;
+                };
+                if let Err(e) = state.config.update(|c| {
+                    c.earlier_install_dir = Some(dir.clone());
+                    c.earlier_install_id = Some(id);
+                }) {
                     // Without the record a failed delete has no retry, so
                     // the entry stays for the next launch to start from.
                     log::warn!("could not record the earlier desktop app's folder: {e}");
@@ -344,7 +394,10 @@ pub fn retire(app: &tauri::AppHandle) {
                             "the earlier desktop app's folder no longer holds its install; left alone"
                         );
                     }
-                    if let Err(e) = state.config.update(|c| c.earlier_install_dir = None) {
+                    if let Err(e) = state.config.update(|c| {
+                        c.earlier_install_dir = None;
+                        c.earlier_install_id = None;
+                    }) {
                         log::warn!("could not update the earlier desktop app's record: {e}");
                     }
                 }
@@ -450,6 +503,21 @@ mod tests {
             b"C:\\Users\\Ann O'Neil\\AppData\\Local\\Onyx2\\onyx.exe",
             dir
         ));
+    }
+
+    #[test]
+    fn a_retry_needs_the_same_uninstaller() {
+        let id = file_identity(1234, 1_700_000_000_000_000_000);
+        assert!(same_install(Some(&id), Some(&id)));
+        assert!(!same_install(
+            Some(&id),
+            Some(&file_identity(1235, 1_700_000_000_000_000_000))
+        ));
+        assert!(!same_install(Some(&id), Some(&file_identity(1234, 1))));
+        // Missing file, or a record from a build without the identity.
+        assert!(!same_install(Some(&id), None));
+        assert!(!same_install(None, Some(&id)));
+        assert!(!same_install(None, None));
     }
 
     #[test]
