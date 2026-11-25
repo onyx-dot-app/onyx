@@ -1163,10 +1163,12 @@ export function useChatExportMenu(
 export function useChatRunStatus(sessionId: string): ChatRunStatus | null {
   const localStatuses = useToolRequestUi((state) => state.localStatuses);
   const localAnswers = useToolRequestUi((state) => state.localAnswers);
-  const live = useChatSessionStore((state) => {
-    const session = state.sessions.get(sessionId);
-    return session ? liveRunStatus(session, localStatuses, localAnswers) : null;
-  });
+  const session = useChatSessionStore((state) => state.sessions.get(sessionId));
+  const live = useMemo(
+    () =>
+      session ? liveRunStatus(session, localStatuses, localAnswers) : null,
+    [session, localStatuses, localAnswers]
+  );
   const unseen = useUnseenRuns((state) => state.unseen.get(sessionId) ?? null);
   return live ?? unseen;
 }
@@ -1193,6 +1195,7 @@ export function useTrackChatRuns(): void {
           if (
             !before ||
             before === session ||
+            session.incognito ||
             !isWorking(before) ||
             isWorking(session) ||
             sessionId === visibleChatIdRef.current
