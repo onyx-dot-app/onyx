@@ -35,4 +35,33 @@ describe("terminalSpans", () => {
       { text: "c", style: null },
     ]);
   });
+
+  test("colon-form colors keep their value", () => {
+    expect(terminalSpans("\u001b[38:2::255:0:0mred")[0]?.style).toEqual({
+      color: "rgb(255,0,0)",
+    });
+    expect(terminalSpans("\u001b[48:2:1:2:3mx")[0]?.style).toEqual({
+      backgroundColor: "rgb(1,2,3)",
+    });
+    expect(terminalSpans("\u001b[38:5:196mx")[0]?.style).toEqual({
+      color: "rgb(255,0,0)",
+    });
+  });
+
+  test("reverse video with default colors swaps the panel colors", () => {
+    expect(terminalSpans("\u001b[7mx")[0]?.style).toEqual({
+      color: "var(--background-tint-00)",
+      backgroundColor: "var(--text-04)",
+    });
+  });
+
+  test("a style does not cross an omission marker", () => {
+    expect(terminalSpans("\u001b[31mred\n…12 tokens truncated…\ntail")).toEqual(
+      [
+        { text: "red\n", style: { color: "var(--opal-ansi-1)" } },
+        { text: "…12 tokens truncated…", style: null },
+        { text: "\ntail", style: null },
+      ]
+    );
+  });
 });
