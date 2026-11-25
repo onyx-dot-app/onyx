@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "إدارة إعدادات الدردشة في نماذج الدردشة والصور",
+      "sharedModelSettings": "إدارة إعدادات الدردشة في نماذج الذكاء الاصطناعي",
       "decisionModel": {
         "title": "نموذج القرار",
         "openAiDecisionsModelName": "قرارات OpenAI (GPT-6 Luna)",
@@ -381,12 +381,8 @@
         "notConfigured": "غير مُعدّ",
         "saveFailed": "تعذّر تحديث نموذج القرار"
       },
-      "header": {
-        "title": "نماذج القرار",
-        "description": "أدر موفري نماذج القرار واختر نموذجًا اختياريًا."
-      },
       "providers": {
-        "title": "الموفرون",
+        "title": "مزوّدو القرارات",
         "description": "اربط موفرًا أو أدر نماذج القرار الخاصة به.",
         "clearBeforeRemoval": "امسح نموذج القرار المحدد قبل إزالة هذا الموفر.",
         "connect": "ربط"
@@ -6466,6 +6462,9 @@
         },
         "selfHosted": {
           "title": "مستضاف ذاتيًا ومخصص"
+        },
+        "decisions": {
+          "title": "القرارات"
         }
       },
       "hideProviderGrouping": {
@@ -7039,6 +7038,17 @@
           "craft": {
             "title": "نموذج Craft الافتراضي"
           }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "الدردشة"
+        },
+        "imageGeneration": {
+          "title": "إنشاء الصور"
+        },
+        "decisions": {
+          "title": "القرارات"
         }
       }
     },
@@ -16372,10 +16382,7 @@
           "label": "إعدادات الفهرس"
         },
         "languageModels": {
-          "label": "نماذج الدردشة والصور"
-        },
-        "decisionModels": {
-          "label": "نماذج القرار"
+          "label": "نماذج الذكاء الاصطناعي"
         },
         "llmGateway": {
           "label": "بوابة LLM"

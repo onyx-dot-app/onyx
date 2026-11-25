@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "채팅 및 이미지 모델에서 채팅 설정 관리",
+      "sharedModelSettings": "AI 모델에서 채팅 설정 관리",
       "decisionModel": {
         "title": "판단 모델",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
@@ -381,12 +381,8 @@
         "notConfigured": "설정되지 않음",
         "saveFailed": "판단 모델을 업데이트하지 못했습니다"
       },
-      "header": {
-        "title": "판단 모델",
-        "description": "판단 모델 제공업체를 관리하고 선택적으로 모델을 선택합니다."
-      },
       "providers": {
-        "title": "제공업체",
+        "title": "결정 제공자",
         "description": "제공업체를 연결하거나 판단 모델을 관리합니다.",
         "clearBeforeRemoval": "이 제공업체를 삭제하기 전에 선택한 판단 모델을 해제하세요.",
         "connect": "연결"
@@ -6466,6 +6462,9 @@
         },
         "selfHosted": {
           "title": "자체 호스팅 및 사용자 지정"
+        },
+        "decisions": {
+          "title": "결정"
         }
       },
       "hideProviderGrouping": {
@@ -7039,6 +7038,17 @@
           "craft": {
             "title": "Craft 기본 모델"
           }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "채팅"
+        },
+        "imageGeneration": {
+          "title": "이미지 생성"
+        },
+        "decisions": {
+          "title": "결정"
         }
       }
     },
@@ -16372,10 +16382,7 @@
           "label": "인덱스 설정"
         },
         "languageModels": {
-          "label": "채팅 및 이미지 모델"
-        },
-        "decisionModels": {
-          "label": "판단 모델"
+          "label": "AI 모델"
         },
         "llmGateway": {
           "label": "LLM 게이트웨이"

@@ -260,7 +260,7 @@ describe("ChatTaskModelSettings", () => {
     const links = await screen.findAllByRole("link", { name: "Add Provider" });
     expect(links).toHaveLength(2);
     links.forEach((link) =>
-      expect(link).toHaveAttribute("href", "/admin/chat-image-models")
+      expect(link).toHaveAttribute("href", "/admin/ai-models")
     );
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });

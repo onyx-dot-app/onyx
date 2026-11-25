@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "チャット・画像モデルでチャット設定を管理",
+      "sharedModelSettings": "AI モデルでチャット設定を管理",
       "decisionModel": {
         "title": "判断モデル",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
@@ -381,12 +381,8 @@
         "notConfigured": "未設定",
         "saveFailed": "判断モデルを更新できませんでした"
       },
-      "header": {
-        "title": "判断モデル",
-        "description": "判断モデルのプロバイダーを管理し、必要に応じてモデルを選択します。"
-      },
       "providers": {
-        "title": "プロバイダー",
+        "title": "判断プロバイダー",
         "description": "プロバイダーを接続するか、判断モデルを管理します。",
         "clearBeforeRemoval": "このプロバイダーを削除する前に、選択した判断モデルを解除してください。",
         "connect": "接続"
@@ -6466,6 +6462,9 @@
         },
         "selfHosted": {
           "title": "セルフホストとカスタム"
+        },
+        "decisions": {
+          "title": "判断"
         }
       },
       "hideProviderGrouping": {
@@ -7039,6 +7038,17 @@
           "craft": {
             "title": "Craft のデフォルトモデル"
           }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "チャット"
+        },
+        "imageGeneration": {
+          "title": "画像生成"
+        },
+        "decisions": {
+          "title": "判断"
         }
       }
     },
@@ -16372,10 +16382,7 @@
           "label": "インデックス設定"
         },
         "languageModels": {
-          "label": "チャット・画像モデル"
-        },
-        "decisionModels": {
-          "label": "判断モデル"
+          "label": "AI モデル"
         },
         "llmGateway": {
           "label": "LLM ゲートウェイ"

@@ -20,7 +20,7 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   or generate another image before answering. Each generated image appears
   once, inline right after the step that made it, in stream order. With code mode on, a program can generate
   images too, and they show the same way.
-- **An admin** opens the Chat & Image Models page (`/admin/chat-image-models`).
+- **An admin** opens the AI Models page (`/admin/ai-models`).
   A provider's edit modal lists its recommended catalog image models and any
   connected ones, each a checkbox row like the chat models. A click stages
   the change in the form (`image_model_changes`); **Update** saves the
@@ -104,7 +104,7 @@ snapshots that have an undated alias.
 stored model of the provider for the unfiltered view. A linked config has the ID
 `llm-<llm_provider_id>-<model slug>`. Linked image models get the
 `IMAGE_GENERATION` model flow, so chat model lists skip them. The admin
-settings live on the Chat & Image Models page (`/admin/chat-image-models`):
+settings live on the AI Models page (`/admin/ai-models`):
 `web/src/lib/imageGeneration/components.tsx` holds the default image model
 select; `web/src/sections/modals/languageModels/shared.tsx:ImageModelsField`
 holds the "Image Models" rows in each provider's edit modal (`ModalWrapper`). Legacy own-key configs have no edit form; they stay hidden

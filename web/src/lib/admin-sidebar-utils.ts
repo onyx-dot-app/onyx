@@ -22,7 +22,6 @@ export type AdminNavItemId =
   | "languageModels"
   | "webSearch"
   | "voice"
-  | "decisionModels"
   | "codeInterpreter"
   | "chatPreferences"
   | "llmGateway"
@@ -79,7 +78,6 @@ export const NAV_ITEM_IDS: Record<
   AdminNavItemId | null
 > = {
   LLM_MODELS: "languageModels",
-  DECISION_MODELS: "decisionModels",
   WEB_SEARCH: "webSearch",
   VOICE: "voice",
   CODE_INTERPRETER: "codeInterpreter",

@@ -89,11 +89,9 @@ test("group permissions apply immediately when a user is added to the group", as
 
     await page.goto(ADMIN_ROUTES.LLM_MODELS.path);
     await expect(page.getByLabel("admin-page-title")).toContainText(
-      "Chat & Image Models"
+      "AI Models"
     );
-    await expect(
-      page.getByRole("link", { name: "Chat & Image Models" })
-    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "AI Models" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Groups" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
 

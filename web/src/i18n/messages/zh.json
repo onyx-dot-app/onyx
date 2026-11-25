@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "在聊天和图像模型中管理聊天设置",
+      "sharedModelSettings": "在AI 模型中管理聊天设置",
       "decisionModel": {
         "title": "决策模型",
         "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
@@ -381,12 +381,8 @@
         "notConfigured": "未配置",
         "saveFailed": "无法更新决策模型"
       },
-      "header": {
-        "title": "决策模型",
-        "description": "管理决策模型提供商并选择可选的决策模型。"
-      },
       "providers": {
-        "title": "提供商",
+        "title": "决策提供商",
         "description": "连接提供商或管理其决策模型。",
         "clearBeforeRemoval": "移除此提供商前，请先清除已选的决策模型。",
         "connect": "连接"
@@ -6466,6 +6462,9 @@
         },
         "selfHosted": {
           "title": "自托管和自定义"
+        },
+        "decisions": {
+          "title": "决策"
         }
       },
       "hideProviderGrouping": {
@@ -7039,6 +7038,17 @@
           "craft": {
             "title": "Craft 默认模型"
           }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "聊天"
+        },
+        "imageGeneration": {
+          "title": "图像生成"
+        },
+        "decisions": {
+          "title": "决策"
         }
       }
     },
@@ -16372,10 +16382,7 @@
           "label": "索引设置"
         },
         "languageModels": {
-          "label": "聊天和图像模型"
-        },
-        "decisionModels": {
-          "label": "决策模型"
+          "label": "AI 模型"
         },
         "llmGateway": {
           "label": "LLM 网关"

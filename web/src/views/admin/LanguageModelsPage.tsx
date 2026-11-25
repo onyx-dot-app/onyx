@@ -60,6 +60,7 @@ import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
+import DecisionModelSetting from "@/views/admin/DecisionModelSetting";
 import {
   ChatNamingModelSetting,
   SearchDecisionModelSetting,
@@ -560,6 +561,11 @@ export default function LanguageModelsPage() {
         ],
         includeCustom: true,
       },
+      {
+        id: "decisions",
+        title: t("groups.decisions.title"),
+        providerNames: [LLMProviderName.TYPESAFE, LLMProviderName.ZOOM_AI],
+      },
     ],
     [t, settings.appName]
   );
@@ -571,8 +577,8 @@ export default function LanguageModelsPage() {
   const chatProviderCount = chatProviders.length;
   const isFirstProvider = chatProviderCount === 0;
 
-  // Pre-sort providers so the default appears first
-  const sortedProviders = [...chatProviders].sort((a, b) => {
+  // Every connected provider, decision-only ones too, the default first.
+  const sortedProviders = [...(existingLlmProviders ?? [])].sort((a, b) => {
     const aIsDefault = defaultText?.provider_id === a.id;
     const bIsDefault = defaultText?.provider_id === b.id;
     if (aIsDefault && !bIsDefault) return -1;
@@ -707,208 +713,252 @@ export default function LanguageModelsPage() {
 
       <SettingsLayouts.Body>
         {hasProviders ? (
-          <Card border="solid" rounding={4}>
-            <Section alignItems="stretch">
-              <InputHorizontal
-                title={t("defaultModel.title")}
-                description={t("defaultModel.description")}
-                center
-                withLabel
-              >
-                <SimpleModelSelector
-                  providers={filterModelConfigurations(
-                    existingLlmProviders ?? [],
-                    { keep: defaultModelConfigId }
-                  )}
-                  value={defaultModelConfigId}
-                  grouped={
-                    !(pendingHideGrouping ?? settings.hide_provider_grouping)
-                  }
-                  modelPaging={modelPaging}
-                  onChange={(modelConfigurationId) => {
-                    const opt = findLlmOptionById(
-                      existingLlmProviders,
-                      modelConfigurationId
-                    );
-                    // Keyed on the model configuration id. Matching on provider
-                    // type plus display name picks the first of several
-                    // same-named providers — and nameless providers are the
-                    // common case, so `!p.name && !opt.name` matched any of
-                    // them. The backend accepts the wrong provider whenever it
-                    // also hosts a model of that name, so this failed silently.
-                    const provider = findProviderOwningModelConfig(
-                      existingLlmProviders,
-                      modelConfigurationId
-                    );
-                    if (provider && opt) {
-                      void handleDefaultModelChange(
-                        `${provider.id}:${opt.modelName}`
-                      );
-                    }
-                  }}
-                />
-              </InputHorizontal>
-              <InputHorizontal
-                title={t("modelRouting.autoMode.title")}
-                description={t("modelRouting.autoMode.description")}
-                // On with no router model at all: the Router Model row is
-                // hidden, so the error sits here.
-                error={
-                  routingEnabled && noRouterModels
-                    ? t("modelRouting.autoMode.noRoutersError")
-                    : undefined
-                }
-                withLabel
-                disabled={autoModeLocked}
-                // Only once the list is known to be empty; while it loads the
-                // switch is locked without a reason to give.
-                disabledTooltip={
-                  noRouterModels
-                    ? t("modelRouting.autoMode.noRoutersTooltip")
-                    : undefined
-                }
-              >
-                <InputSwitch
-                  checked={routingEnabled}
-                  disabled={pendingRoutingEnabled !== null}
-                  onCheckedChange={(checked) => {
-                    void handleRoutingEnabledChange(checked);
-                  }}
-                />
-              </InputHorizontal>
-              {routingEnabled && !noRouterModels && (
-                <InputHorizontal
-                  title={t("modelRouting.target.title")}
-                  description={t("modelRouting.target.description")}
-                  error={
-                    routingTargetMissing
-                      ? t("modelRouting.target.missing")
-                      : undefined
-                  }
-                  withLabel
-                  disabled={!!routerProvidersError}
-                  // The loader spans the input column; the select hugs.
-                  fillInput={routerProvidersLoading}
-                >
-                  {routerProvidersLoading ? (
-                    <DropdownLoader />
-                  ) : (
+          <>
+            {/* ── Chat: the chat defaults, then the task models ── */}
+            <Section
+              gap={3}
+              height="fit"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Content
+                font="main-content-emphasis"
+                title={t("sections.chat.title")}
+              />
+              <Card border="solid" rounding={4}>
+                <Section alignItems="stretch">
+                  <InputHorizontal
+                    title={t("defaultModel.title")}
+                    description={t("defaultModel.description")}
+                    center
+                    withLabel
+                  >
                     <SimpleModelSelector
-                      // Clearable: re-picking the chosen router unsets it.
-                      nullable
-                      providers={routerProviders ?? []}
-                      isError={
-                        routerProvidersError || routingTargetMissing
-                          ? true
-                          : undefined
-                      }
-                      value={routingTargetId}
-                      disabled={
-                        pendingRoutingTarget !== null || !!routerProvidersError
-                      }
+                      providers={filterModelConfigurations(
+                        existingLlmProviders ?? [],
+                        { keep: defaultModelConfigId }
+                      )}
+                      value={defaultModelConfigId}
                       grouped={
                         !(
                           pendingHideGrouping ?? settings.hide_provider_grouping
                         )
                       }
+                      modelPaging={modelPaging}
                       onChange={(modelConfigurationId) => {
-                        void handleRoutingTargetChange(modelConfigurationId);
+                        const opt = findLlmOptionById(
+                          existingLlmProviders,
+                          modelConfigurationId
+                        );
+                        // Keyed on the model configuration id. Matching on provider
+                        // type plus display name picks the first of several
+                        // same-named providers — and nameless providers are the
+                        // common case, so `!p.name && !opt.name` matched any of
+                        // them. The backend accepts the wrong provider whenever it
+                        // also hosts a model of that name, so this failed silently.
+                        const provider = findProviderOwningModelConfig(
+                          existingLlmProviders,
+                          modelConfigurationId
+                        );
+                        if (provider && opt) {
+                          void handleDefaultModelChange(
+                            `${provider.id}:${opt.modelName}`
+                          );
+                        }
                       }}
                     />
-                  )}
-                </InputHorizontal>
-              )}
-              <Divider paddingParallel={0} paddingPerpendicular={0} />
-              <InputHorizontal
-                title={t("reasoning.title")}
-                description={t("reasoning.description")}
-                withLabel
-              >
-                <InputSwitch
-                  id="reasoning_override_enabled"
-                  checked={
-                    pendingChatControls.reasoning_override_enabled ??
-                    settings.reasoning_override_enabled ??
-                    true
-                  }
-                  disabled={
-                    pendingChatControls.reasoning_override_enabled !== undefined
-                  }
-                  onCheckedChange={(checked) => {
-                    void handleChatControlChange(
-                      "reasoning_override_enabled",
-                      checked
-                    );
-                  }}
-                />
-              </InputHorizontal>
-              <InputHorizontal
-                title={t("temperature.title")}
-                description={t("temperature.description")}
-                withLabel
-              >
-                <InputSwitch
-                  checked={
-                    pendingChatControls.temperature_override_enabled ??
-                    settings.temperature_override_enabled ??
-                    true
-                  }
-                  disabled={
-                    pendingChatControls.temperature_override_enabled !==
-                    undefined
-                  }
-                  onCheckedChange={(checked) => {
-                    void handleChatControlChange(
-                      "temperature_override_enabled",
-                      checked
-                    );
-                  }}
-                />
-              </InputHorizontal>
-              {hasProviderGrouping && (
-                <InputHorizontal
-                  title={t("hideProviderGrouping.title")}
-                  description={t("hideProviderGrouping.description")}
-                  withLabel
-                >
-                  <InputSwitch
-                    checked={
-                      pendingHideGrouping ??
-                      settings.hide_provider_grouping ??
-                      false
+                  </InputHorizontal>
+                  <InputHorizontal
+                    title={t("modelRouting.autoMode.title")}
+                    description={t("modelRouting.autoMode.description")}
+                    // On with no router model at all: the Router Model row is
+                    // hidden, so the error sits here.
+                    error={
+                      routingEnabled && noRouterModels
+                        ? t("modelRouting.autoMode.noRoutersError")
+                        : undefined
                     }
-                    disabled={pendingHideGrouping !== null}
-                    onCheckedChange={(checked) => {
-                      void handleHideProviderGroupingChange(checked);
-                    }}
-                  />
-                </InputHorizontal>
-              )}
+                    withLabel
+                    disabled={autoModeLocked}
+                    // Only once the list is known to be empty; while it loads the
+                    // switch is locked without a reason to give.
+                    disabledTooltip={
+                      noRouterModels
+                        ? t("modelRouting.autoMode.noRoutersTooltip")
+                        : undefined
+                    }
+                  >
+                    <InputSwitch
+                      checked={routingEnabled}
+                      disabled={pendingRoutingEnabled !== null}
+                      onCheckedChange={(checked) => {
+                        void handleRoutingEnabledChange(checked);
+                      }}
+                    />
+                  </InputHorizontal>
+                  {routingEnabled && !noRouterModels && (
+                    <InputHorizontal
+                      title={t("modelRouting.target.title")}
+                      description={t("modelRouting.target.description")}
+                      error={
+                        routingTargetMissing
+                          ? t("modelRouting.target.missing")
+                          : undefined
+                      }
+                      withLabel
+                      disabled={!!routerProvidersError}
+                      // The loader spans the input column; the select hugs.
+                      fillInput={routerProvidersLoading}
+                    >
+                      {routerProvidersLoading ? (
+                        <DropdownLoader />
+                      ) : (
+                        <SimpleModelSelector
+                          // Clearable: re-picking the chosen router unsets it.
+                          nullable
+                          providers={routerProviders ?? []}
+                          isError={
+                            routerProvidersError || routingTargetMissing
+                              ? true
+                              : undefined
+                          }
+                          value={routingTargetId}
+                          disabled={
+                            pendingRoutingTarget !== null ||
+                            !!routerProvidersError
+                          }
+                          grouped={
+                            !(
+                              pendingHideGrouping ??
+                              settings.hide_provider_grouping
+                            )
+                          }
+                          onChange={(modelConfigurationId) => {
+                            void handleRoutingTargetChange(
+                              modelConfigurationId
+                            );
+                          }}
+                        />
+                      )}
+                    </InputHorizontal>
+                  )}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <InputHorizontal
+                    title={t("reasoning.title")}
+                    description={t("reasoning.description")}
+                    withLabel
+                  >
+                    <InputSwitch
+                      id="reasoning_override_enabled"
+                      checked={
+                        pendingChatControls.reasoning_override_enabled ??
+                        settings.reasoning_override_enabled ??
+                        true
+                      }
+                      disabled={
+                        pendingChatControls.reasoning_override_enabled !==
+                        undefined
+                      }
+                      onCheckedChange={(checked) => {
+                        void handleChatControlChange(
+                          "reasoning_override_enabled",
+                          checked
+                        );
+                      }}
+                    />
+                  </InputHorizontal>
+                  <InputHorizontal
+                    title={t("temperature.title")}
+                    description={t("temperature.description")}
+                    withLabel
+                  >
+                    <InputSwitch
+                      checked={
+                        pendingChatControls.temperature_override_enabled ??
+                        settings.temperature_override_enabled ??
+                        true
+                      }
+                      disabled={
+                        pendingChatControls.temperature_override_enabled !==
+                        undefined
+                      }
+                      onCheckedChange={(checked) => {
+                        void handleChatControlChange(
+                          "temperature_override_enabled",
+                          checked
+                        );
+                      }}
+                    />
+                  </InputHorizontal>
+                  {hasProviderGrouping && (
+                    <InputHorizontal
+                      title={t("hideProviderGrouping.title")}
+                      description={t("hideProviderGrouping.description")}
+                      withLabel
+                    >
+                      <InputSwitch
+                        checked={
+                          pendingHideGrouping ??
+                          settings.hide_provider_grouping ??
+                          false
+                        }
+                        disabled={pendingHideGrouping !== null}
+                        onCheckedChange={(checked) => {
+                          void handleHideProviderGroupingChange(checked);
+                        }}
+                      />
+                    </InputHorizontal>
+                  )}
+                </Section>
+              </Card>
+              <Card border="solid" rounding={4}>
+                <Section alignItems="stretch">
+                  <ChatNamingModelSetting />
+                  <SearchDecisionModelSetting />
+                </Section>
+              </Card>
             </Section>
-          </Card>
+
+            {/* ── Image Generation: the default image model ── */}
+            <Section
+              gap={3}
+              height="fit"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Content
+                font="main-content-emphasis"
+                title={t("sections.imageGeneration.title")}
+              />
+              <Card border="solid" rounding={4}>
+                <DefaultImageModelSetting />
+              </Card>
+            </Section>
+
+            {/* ── Decisions: the decision model ── */}
+            <Section
+              gap={3}
+              height="fit"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Content
+                font="main-content-emphasis"
+                title={t("sections.decisions.title")}
+              />
+              <Card border="solid" rounding={4}>
+                <DecisionModelSetting />
+              </Card>
+            </Section>
+
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
+          </>
         ) : (
           <MessageCard variant="info" title={t("noProviders.title")} />
         )}
 
-        {/* ── Image Generation: the default image model ── */}
-        {hasProviders && (
-          <Card border="solid" rounding={4}>
-            <DefaultImageModelSetting />
-          </Card>
-        )}
-
-        {/* ── Task models: chat naming and search decisions ── */}
-        {hasProviders && (
-          <Card border="solid" rounding={4}>
-            <Section alignItems="stretch">
-              <ChatNamingModelSetting />
-              <SearchDecisionModelSetting />
-            </Section>
-          </Card>
-        )}
-
         {/* ── Available Providers (only when providers exist) ── */}
-        {hasProviders && (
+        {sortedProviders.length > 0 && (
           <>
             <Section
               gap={3}
@@ -930,13 +980,14 @@ export default function LanguageModelsPage() {
                     isDefaultImage={
                       defaultImageConfig?.llm_provider_id === provider.id
                     }
-                    isLastProvider={chatProviderCount === 1}
+                    isLastProvider={
+                      chatProviderCount === 1 &&
+                      !getProvider(provider.provider).decisionOnly
+                    }
                   />
                 ))}
               </div>
             </Section>
-
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </>
         )}
 

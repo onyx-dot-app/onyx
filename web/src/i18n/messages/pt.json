@@ -372,7 +372,7 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "Gerenciar configurações de chat em Modelos de chat e imagem",
+      "sharedModelSettings": "Gerenciar configurações de chat em Modelos de IA",
       "decisionModel": {
         "title": "Modelo de decisão",
         "openAiDecisionsModelName": "Decisões da OpenAI (GPT-6 Luna)",
@@ -381,12 +381,8 @@
         "notConfigured": "Não configurado",
         "saveFailed": "Não foi possível atualizar o modelo de decisão"
       },
-      "header": {
-        "title": "Modelos de decisão",
-        "description": "Gerencie os provedores e escolha um modelo de decisão opcional."
-      },
       "providers": {
-        "title": "Provedores",
+        "title": "Provedores de decisão",
         "description": "Conecte um provedor ou gerencie seus modelos de decisão.",
         "clearBeforeRemoval": "Limpe o modelo de decisão selecionado antes de remover este provedor.",
         "connect": "Conectar"
@@ -6466,6 +6462,9 @@
         },
         "selfHosted": {
           "title": "Auto-hospedados e personalizados"
+        },
+        "decisions": {
+          "title": "Decisões"
         }
       },
       "hideProviderGrouping": {
@@ -7039,6 +7038,17 @@
           "craft": {
             "title": "Modelo padrão do Craft"
           }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "Chat"
+        },
+        "imageGeneration": {
+          "title": "Geração de imagens"
+        },
+        "decisions": {
+          "title": "Decisões"
         }
       }
     },
@@ -16372,10 +16382,7 @@
           "label": "Configurações de índice"
         },
         "languageModels": {
-          "label": "Modelos de chat e imagem"
-        },
-        "decisionModels": {
-          "label": "Modelos de decisão"
+          "label": "Modelos de IA"
         },
         "llmGateway": {
           "label": "LLM Gateway"

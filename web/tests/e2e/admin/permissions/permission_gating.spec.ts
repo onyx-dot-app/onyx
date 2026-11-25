@@ -170,7 +170,7 @@ test.describe("Permission gating: MANAGE_AGENTS", () => {
 });
 
 test.describe("Permission gating: MANAGE_LLMS", () => {
-  test("Admin panel and /admin/chat-image-models are gated behind MANAGE_LLMS", async ({
+  test("Admin panel and /admin/ai-models are gated behind MANAGE_LLMS", async ({
     page,
     adminClient,
     testUserContext,
@@ -213,7 +213,7 @@ test.describe("Permission gating: MANAGE_LLMS", () => {
 
       expect(page.url()).toContain(ADMIN_ROUTES.LLM_MODELS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Chat & Image Models")
+        page.getByLabel("admin-page-title").getByText("AI Models")
       ).toBeVisible({
         timeout: 10000,
       });
