@@ -16,13 +16,13 @@ import cProfile
 import hashlib
 import json
 import os
-import pstats
 import queue
 import resource
 import subprocess
 import sys
 import threading
 import time
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -485,6 +485,10 @@ def run(
 ) -> RunResult:
     """Runs the body of `docprocessing_task` for each batch on a thread pool, as
     the Celery worker does (worker_pool = threads)."""
+    if cprofile_out is not None:
+        # The interpreter allows one active profiler, so a profiled run has
+        # one worker thread.
+        threads = 1
     _init(pool_size=threads)
     # Fail fast on a wrong Redis instead of inside the first batch.
     get_redis_client(tenant_id=_TENANT_ID).ping()
@@ -497,21 +501,17 @@ def run(
     batch_errors: list[str] = []
     lock = threading.Lock()
 
-    profiles: list[cProfile.Profile] = []
-
     def work() -> None:
         if cprofile_out is None:
             drain()
             return
-        # One profile per thread: cProfile only sees the thread that enables it.
         profile = cProfile.Profile()
-        with lock:
-            profiles.append(profile)
         profile.enable()
         try:
             drain()
         finally:
             profile.disable()
+            profile.dump_stats(cprofile_out)
 
     def drain() -> None:
         while True:
@@ -555,18 +555,6 @@ def run(
     sampler.stop()
     heartbeat_stop.set()
     heartbeat_thread.join()
-
-    if cprofile_out is not None:
-        # A thread that found the queue empty has no samples, and pstats
-        # refuses an empty profile.
-        for profile in profiles:
-            profile.create_stats()
-        sampled = [profile for profile in profiles if profile.stats]
-        if sampled:
-            merged = pstats.Stats(sampled[0])
-            for profile in sampled[1:]:
-                merged.add(profile)
-            merged.dump_stats(cprofile_out)
 
     with get_session_with_current_tenant() as db_session:
         attempt = get_index_attempt(db_session, attempt_id)
@@ -705,7 +693,9 @@ def verify(spec: CorpusSpec, index_name: str, cc_pair_id: int) -> VerifyResult:
                     row.chunk_count,
                     row.semantic_id,
                     row.content_hash,
-                    row.doc_updated_at.isoformat() if row.doc_updated_at else None,
+                    row.doc_updated_at.astimezone(UTC).isoformat()
+                    if row.doc_updated_at
+                    else None,
                 ]
             ).encode()
         )
@@ -742,7 +732,9 @@ def main() -> None:
     parser.add_argument("--attempt-id", type=int, default=0)
     parser.add_argument("--batches", type=int, default=0)
     parser.add_argument("--threads", type=int, default=6)
-    parser.add_argument("--cprofile-out", help="write a merged cProfile here")
+    parser.add_argument(
+        "--cprofile-out", help="write a cProfile here; the run then uses one thread"
+    )
     args = parser.parse_args()
 
     spec = CorpusSpec.model_validate_json(args.corpus)

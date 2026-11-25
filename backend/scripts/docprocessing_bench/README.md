@@ -45,7 +45,7 @@ uv run python -m scripts.benchmark_docprocessing --profile mixed --json-out repo
 | `--poison-docs` | Documents that the mock refuses to embed |
 | `--max-rss-mb` | Fail when peak RSS is above this |
 | `--update-golden` | Store the digests of this run as the expected values |
-| `--cprofile` | Write a merged cProfile of the worker threads to `profiles/<pass>.prof`. It slows the run, so do not compare its timings |
+| `--cprofile` | Write a cProfile to `profiles/<pass>.prof`. The run then uses one worker thread, because Python allows one active profiler. Do not compare its timings |
 
 ### With the limits of the pod
 
