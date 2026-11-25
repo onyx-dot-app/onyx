@@ -164,7 +164,7 @@ test("a command shows its output while it runs and how it ended", async () => {
   const view = render(renderMessage(running));
   try {
     expect(
-      (await screen.findAllByText("Running command")).length
+      (await screen.findAllByText("Running command...")).length
     ).toBeGreaterThan(0);
     await openRun();
     expect(view.container).toHaveTextContent("$ make test");

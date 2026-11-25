@@ -340,7 +340,7 @@ describe("BuildMessageList thinking visibility", () => {
       timelineEvents: [thought("Checking the app structure.")],
     });
 
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Thinking...")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
@@ -382,7 +382,7 @@ test("keeps a finalization cursor when attachment completes before any assistant
     />
   );
   expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
-  expect(screen.queryByText("Working")).not.toBeInTheDocument();
+  expect(screen.queryByText("Working...")).not.toBeInTheDocument();
 });
 
 test("keeps one assistant cursor during finalization and removes it when finalization stops", () => {

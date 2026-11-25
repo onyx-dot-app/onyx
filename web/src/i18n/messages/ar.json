@@ -12241,7 +12241,7 @@
           "label": "الاستجابة"
         },
         "runningStatus": {
-          "text": "جارٍ تنفيذ {toolName}"
+          "text": "جارٍ تنفيذ {toolName}..."
         },
         "unreachableStatus": {
           "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"
@@ -12425,7 +12425,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "جارٍ التفكير"
+          "text": "جارٍ التفكير..."
         }
       },
       "timeline": {
@@ -12440,7 +12440,7 @@
             "status": "تم توليد الخطة"
           },
           "generating": {
-            "status": "جارٍ توليد الخطة"
+            "status": "جارٍ توليد الخطة..."
           }
         },
         "expandButton": {
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "{count, plural, =0 {جارٍ التصفح} one {جارٍ تصفح صفحة واحدة} two {جارٍ تصفح صفحتين} few {جارٍ تصفح # صفحات} many {جارٍ تصفح # صفحة} other {جارٍ تصفح # صفحة}}"
+            "status": "جارٍ تصفح صفحات الويب..."
           },
           "read": {
-            "status": "{count, plural, =0 {تم التصفح} one {تم تصفح صفحة واحدة} two {تم تصفح صفحتين} few {تم تصفح # صفحات} many {تم تصفح # صفحة} other {تم تصفح # صفحة}}"
+            "status": "{count, plural, =0 {تم تصفح صفحات الويب} one {تم تصفح صفحة ويب واحدة} two {تم تصفح صفحتي ويب} few {تم تصفح # صفحات ويب} many {تم تصفح # صفحة ويب} other {تم تصفح # صفحة ويب}}"
           }
         },
         "fileReader": {
@@ -12459,66 +12459,66 @@
             "status": "قرأ {fileName} (الأحرف {start, number}–{end, number} من {total, number})"
           },
           "reading": {
-            "status": "جارٍ قراءة الملف"
+            "status": "جارٍ قراءة الملف..."
           }
         },
         "header": {
           "executingCode": {
-            "label": "جارٍ تنفيذ الكود"
+            "label": "جارٍ تنفيذ الكود..."
           },
           "executingNamedTool": {
-            "label": "جارٍ تنفيذ {toolName}"
+            "label": "جارٍ تنفيذ {toolName}..."
           },
           "executingTool": {
-            "label": "جارٍ تنفيذ الأداة"
+            "label": "جارٍ تنفيذ الأداة..."
           },
           "generatingImages": {
-            "label": "جارٍ توليد الصور"
+            "label": "جارٍ توليد الصور..."
           },
           "generatingPlan": {
-            "label": "جارٍ توليد الخطة"
+            "label": "جارٍ توليد الخطة..."
           },
           "queryingKnowledgeBase": {
-            "label": "جارٍ الاستعلام عن قاعدة المعرفة"
+            "label": "جارٍ الاستعلام عن قاعدة المعرفة..."
           },
           "reading": {
-            "label": "جارٍ القراءة"
+            "label": "جارٍ القراءة..."
           },
           "readingFile": {
-            "label": "جارٍ قراءة الملف"
+            "label": "جارٍ قراءة الملف..."
           },
           "researching": {
-            "label": "جارٍ البحث"
+            "label": "جارٍ البحث..."
           },
           "searchingWeb": {
-            "label": "جارٍ البحث في الويب"
+            "label": "جارٍ البحث في الويب..."
           },
           "thinking": {
-            "label": "جارٍ التفكير"
+            "label": "جارٍ التفكير..."
           },
           "updatingMemory": {
             "label": "جارٍ تحديث الذاكرة..."
           },
           "working": {
-            "label": "قيد العمل"
+            "label": "قيد العمل..."
           },
           "waitingForApproval": {
-            "label": "في انتظار موافقتك"
+            "label": "في انتظار موافقتك..."
           },
           "waitingForAnswer": {
-            "label": "في انتظار إجابتك"
+            "label": "في انتظار إجابتك..."
           },
           "runningCommand": {
-            "label": "جارٍ تشغيل الأمر"
+            "label": "جارٍ تشغيل الأمر..."
           },
           "editingFiles": {
-            "label": "جارٍ تعديل الملفات"
+            "label": "جارٍ تعديل الملفات..."
           },
           "publishingFiles": {
-            "label": "جارٍ نشر الملفات"
+            "label": "جارٍ نشر الملفات..."
           },
           "browsing": {
-            "label": "{count, plural, =0 {جارٍ التصفح} one {جارٍ تصفح صفحة واحدة} two {جارٍ تصفح صفحتين} few {جارٍ تصفح # صفحات} many {جارٍ تصفح # صفحة} other {جارٍ تصفح # صفحة}}"
+            "label": "جارٍ تصفح صفحات الويب..."
           },
           "runPhrases": {
             "doingWork": {
@@ -12568,7 +12568,7 @@
             "text": "لم يتم العثور على نتائج"
           },
           "reading": {
-            "status": "جارٍ القراءة"
+            "status": "جارٍ القراءة..."
           },
           "read": {
             "label": "تمت القراءة"
@@ -12579,7 +12579,8 @@
             "sources": "جارٍ البحث في {sources}",
             "doneSources": "تم البحث في {sources}",
             "sourcesOverflow": "{sources} +{count} أخرى",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "منذ {date}",
@@ -12598,7 +12599,7 @@
             "text": "أداة الذاكرة معطّلة"
           },
           "updating": {
-            "status": "جارٍ تحديث الذاكرة"
+            "status": "جارٍ تحديث الذاكرة..."
           },
           "updated": {
             "status": "تم تحديث الذاكرة"
@@ -12620,7 +12621,7 @@
             "status": "تم الاستعلام عن قاعدة المعرفة"
           },
           "querying": {
-            "status": "جارٍ الاستعلام عن قاعدة المعرفة"
+            "status": "جارٍ الاستعلام عن قاعدة المعرفة..."
           },
           "listed": {
             "label": "{count, plural, one {مستند واحد مُدرج} other {# مستندات مُدرجة}}"
@@ -12680,7 +12681,7 @@
             "label": "الإخراج:"
           },
           "running": {
-            "status": "جارٍ تشغيل Python"
+            "status": "جارٍ تشغيل Python..."
           },
           "ran": {
             "status": "تم تشغيل Python"
@@ -12694,7 +12695,7 @@
         },
         "reasoning": {
           "thinking": {
-            "status": "جارٍ التفكير"
+            "status": "جارٍ التفكير..."
           },
           "thought": {
             "status": "تم التفكير"
@@ -12730,7 +12731,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "جارٍ البحث في الويب"
+            "status": "جارٍ البحث في الويب..."
           },
           "searched": {
             "status": "تم البحث في الويب"
@@ -12738,15 +12739,15 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {جارٍ تشغيل الأمر} started {تم بدء الأمر} failed {فشل الأمر} canceled {أُلغي} done {تم تشغيل الأمر} other {تم تشغيل الأمر}}",
+            "status": "{phase, select, running {جارٍ تشغيل الأمر...} started {تم بدء الأمر} failed {فشل الأمر} canceled {أُلغي} done {تم تشغيل الأمر} other {تم تشغيل الأمر}}",
             "workdir": {
               "label": "في {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}...} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}...} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة} failed {تعذر إرسال إدخال إلى الجلسة} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة} other {تم إرسال إدخال إلى الجلسة}}} check {{phase, select, running {جارٍ فحص الجلسة} failed {تعذر فحص الجلسة} canceled {أُلغي} done {تم فحص الجلسة} other {تم فحص الجلسة}}} other {الجلسة}}"
+              "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة...} failed {تعذر إرسال إدخال إلى الجلسة} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة} other {تم إرسال إدخال إلى الجلسة}}} check {{phase, select, running {جارٍ فحص الجلسة...} failed {تعذر فحص الجلسة} canceled {أُلغي} done {تم فحص الجلسة} other {تم فحص الجلسة}}} other {الجلسة}}"
             }
           },
           "output": {
@@ -15085,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "قيد العمل"
+          "label": "قيد العمل..."
         }
       },
       "read": {

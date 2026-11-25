@@ -106,6 +106,9 @@ export const isCodeInterpreterToolType = (toolType: string): boolean =>
 // tool_type of the argument deltas that stream a code mode program
 export const CODE_MODE_TOOL_TYPE = "execute_code";
 
+// tool_type of the argument deltas that stream an image generation prompt
+export const IMAGE_GENERATION_TOOL_TYPE = "generate_image";
+
 // Basic Message Packets
 export interface UserMessage extends BaseObj {
   type: "user_message";
@@ -594,6 +597,7 @@ export type SearchToolObj =
 export type ImageGenerationToolObj =
   | ImageGenerationToolStart
   | ImageGenerationToolDelta
+  | ToolCallArgumentDelta
   | SectionEnd
   | PacketError;
 export type PythonToolObj =

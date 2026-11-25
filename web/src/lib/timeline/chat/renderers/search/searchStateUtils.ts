@@ -126,9 +126,11 @@ export const formatSearchHeader = (
     );
   }
   const timeWindow = formatTimeWindow(timeFilter, t, locale);
-  return timeWindow
+  const full = timeWindow
     ? t("internalSearch.header.withTimeWindow", { header, timeWindow })
     : header;
+  // A running search ends with an ellipsis, after the time window.
+  return done ? full : t("internalSearch.header.running", { header: full });
 };
 
 /** Constructs the current search state from search tool packets. */

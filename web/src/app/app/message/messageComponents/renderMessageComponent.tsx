@@ -2,6 +2,7 @@ import React, { JSX, memo } from "react";
 import {
   ChatPacket,
   isCodeInterpreterToolType,
+  IMAGE_GENERATION_TOOL_TYPE,
   Packet,
   PacketType,
   ReasoningPacket,
@@ -57,7 +58,12 @@ function isInternalSearchPacket(packet: Packet): boolean {
 }
 
 function isImageToolPacket(packet: Packet) {
-  return packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START;
+  return (
+    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
+    (packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+      (packet.obj as ToolCallArgumentDelta).tool_type ===
+        IMAGE_GENERATION_TOOL_TYPE)
+  );
 }
 
 function isPythonToolPacket(packet: Packet) {

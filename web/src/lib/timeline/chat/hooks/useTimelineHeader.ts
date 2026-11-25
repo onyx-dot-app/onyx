@@ -6,7 +6,6 @@ import {
   Packet,
   PacketType,
   SearchToolPacket,
-  FetchToolPacket,
   StopReason,
   CustomToolStart,
 } from "@/app/app/services/streamingModels";
@@ -14,7 +13,6 @@ import {
   formatSearchHeader,
   constructCurrentSearchState,
 } from "@/lib/timeline/chat/renderers/search/searchStateUtils";
-import { constructCurrentFetchState } from "@/lib/timeline/chat/renderers/fetch/fetchStateUtils";
 import {
   firstActivityPacket,
   type TimelineTranslate,
@@ -48,10 +46,7 @@ function stepHeaderText(
       );
     }
     case PacketType.FETCH_TOOL_START:
-      return t("header.browsing.label", {
-        count: constructCurrentFetchState(packets as FetchToolPacket[])
-          .pageCount,
-      });
+      return t("header.browsing.label");
     case PacketType.PYTHON_TOOL_START:
       return t("header.executingCode.label");
     case PacketType.IMAGE_GENERATION_TOOL_START:

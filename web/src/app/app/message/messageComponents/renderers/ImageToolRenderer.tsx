@@ -4,16 +4,13 @@ import { Text } from "@opal/components";
 import { CardGrid, Section } from "@opal/layouts";
 import {
   GeneratedImage,
+  IMAGE_GENERATION_TOOL_TYPE,
   ImageGenerationToolPacket,
   PacketType,
 } from "@/app/app/services/streamingModels";
-import {
-  MessageRenderer,
-  RenderType,
-} from "@/app/app/message/messageComponents/types";
+import { MessageRenderer } from "@/app/app/message/messageComponents/types";
 import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
-import GeneratingImageDisplay from "@/app/app/components/tools/GeneratingImageDisplay";
 
 interface GeneratedImageGridProps {
   images: GeneratedImage[];
@@ -38,12 +35,13 @@ export function GeneratedImageGrid({ images }: GeneratedImageGridProps) {
  * ImageToolRenderer - one image generation call in the timeline.
  *
  * The images themselves show in the answer (GeneratedImageGrid), so the step
- * shows a placeholder while it runs and the revised prompts when done.
+ * shows the model's prompt as it streams in, and the provider's revised
+ * prompts once done.
  */
 export const ImageToolRenderer: MessageRenderer<
   ImageGenerationToolPacket,
   {}
-> = ({ packets, renderType, stopPacketSeen, children }) => {
+> = ({ packets, stopPacketSeen, children }) => {
   const t = useTranslations("chat.messages");
   const images = Array.from(
     new Map(
@@ -71,25 +69,40 @@ export const ImageToolRenderer: MessageRenderer<
         ? t("imageTool.emptyState.text")
         : t("imageTool.stoppedStatus.text");
 
+  // The model's prompt, as it streams in before the call starts.
+  const prompt = packets
+    .map((packet) =>
+      packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+      packet.obj.tool_type === IMAGE_GENERATION_TOOL_TYPE
+        ? String(packet.obj.argument_deltas.prompt ?? "")
+        : ""
+    )
+    .join("");
   const revisedPrompts = Array.from(
     new Set(images.map((image) => image.revised_prompt).filter(Boolean))
   );
+  // The revised prompts replace the model's once the images arrive; a
+  // provider that does not revise keeps the model's.
+  // The streaming prompt keeps one key, so it updates in place.
+  const prompts =
+    isRunning || revisedPrompts.length === 0
+      ? prompt
+        ? [{ key: "prompt", text: prompt }]
+        : []
+      : revisedPrompts.map((text) => ({ key: text, text }));
 
-  const content = isRunning ? (
-    renderType === RenderType.FULL ? (
-      <GeneratingImageDisplay isCompleted={false} />
+  const content =
+    prompts.length > 0 ? (
+      <Section gap={1} alignItems="start" justifyContent="start" height="auto">
+        {prompts.map(({ key, text }) => (
+          <Text key={key} as="p" font="secondary-body" color="text-04">
+            {text}
+          </Text>
+        ))}
+      </Section>
     ) : (
       <></>
-    )
-  ) : (
-    <Section gap={1} alignItems="start" justifyContent="start" height="auto">
-      {revisedPrompts.map((prompt) => (
-        <Text key={prompt} as="p" font="secondary-body" color="text-04">
-          {prompt}
-        </Text>
-      ))}
-    </Section>
-  );
+    );
 
   return children([
     {

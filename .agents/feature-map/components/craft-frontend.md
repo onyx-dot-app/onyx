@@ -186,15 +186,19 @@ of a stopped one; a step that did not finish keeps its running title, and a
 done step shows its finished title). `CraftTimeline`
 and chat's `AgentTimeline` only map their steps onto them. Both are an Opal
 `Line` card, built on `Collapsible`'s parts: icon, title (Craft puts the
-command or path in it as a code span), trailing content and the chevron. Only
-the header folds a card, so a click or a text selection in the body never
-folds it. A step inside a run card has no padding of its own. A chat run of at
-most `MAX_HOISTED_STEPS` steps shows each step as its own card instead of one
-run card. Every other block folds, even with one entry, once
+command or path in it as a code span, and a running title ends with "..."),
+trailing content and the chevron. Only the header folds a card, so a click or
+a text selection in the body never folds it. A step inside a run card has no
+padding of its own. A chat run of at most `MAX_HOISTED_STEPS` steps shows each
+step as its own card instead of one run card. Every other block folds, even
+with one entry, once
 a text reply follows. A whole response is laid out by the shared `Response`
 (`web/src/lib/timeline/components/Response.tsx`): `BuildMessageList` and chat's
 `AgentMessage` only build its items (runs, text, cards) in arrival order, and
-`Response` spaces them and lines text up with the run header. The message list
+`Response` spaces them. A run card is a padded surface, so every other item
+(text, the cursor, cards) punches in by the card's padding, title inset and
+icon-box padding, plus 1px for the glyph's own inset (`ResponseInset`), to
+start at the run card's visible icon. The message list
 uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
 `CHAT_COLUMN_ROW`), not a Craft-only width.
 

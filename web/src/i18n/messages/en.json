@@ -12241,7 +12241,7 @@
           "label": "Response"
         },
         "runningStatus": {
-          "text": "Executing {toolName}"
+          "text": "Executing {toolName}..."
         },
         "unreachableStatus": {
           "text": "{toolName} could not reach its server"
@@ -12425,7 +12425,7 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "Thinking"
+          "text": "Thinking..."
         }
       },
       "timeline": {
@@ -12440,7 +12440,7 @@
             "status": "Generated plan"
           },
           "generating": {
-            "status": "Generating plan"
+            "status": "Generating plan..."
           }
         },
         "expandButton": {
@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "{count, plural, =0 {Browsing} one {Browsing # page} other {Browsing # pages}}"
+            "status": "Browsing web pages..."
           },
           "read": {
-            "status": "{count, plural, =0 {Browsed} one {Browsed # page} other {Browsed # pages}}"
+            "status": "{count, plural, =0 {Browsed web pages} one {Browsed # web page} other {Browsed # web pages}}"
           }
         },
         "fileReader": {
@@ -12459,66 +12459,66 @@
             "status": "Read {fileName} (chars {start, number}–{end, number} of {total, number})"
           },
           "reading": {
-            "status": "Reading file"
+            "status": "Reading file..."
           }
         },
         "header": {
           "executingCode": {
-            "label": "Executing code"
+            "label": "Executing code..."
           },
           "executingNamedTool": {
-            "label": "Executing {toolName}"
+            "label": "Executing {toolName}..."
           },
           "executingTool": {
-            "label": "Executing tool"
+            "label": "Executing tool..."
           },
           "generatingImages": {
-            "label": "Generating images"
+            "label": "Generating images..."
           },
           "generatingPlan": {
-            "label": "Generating plan"
+            "label": "Generating plan..."
           },
           "queryingKnowledgeBase": {
-            "label": "Querying knowledge base"
+            "label": "Querying knowledge base..."
           },
           "reading": {
-            "label": "Reading"
+            "label": "Reading..."
           },
           "readingFile": {
-            "label": "Reading file"
+            "label": "Reading file..."
           },
           "researching": {
-            "label": "Researching"
+            "label": "Researching..."
           },
           "searchingWeb": {
-            "label": "Searching the web"
+            "label": "Searching the web..."
           },
           "thinking": {
-            "label": "Thinking"
+            "label": "Thinking..."
           },
           "updatingMemory": {
             "label": "Updating memory..."
           },
           "working": {
-            "label": "Working"
+            "label": "Working..."
           },
           "waitingForApproval": {
-            "label": "Waiting for your approval"
+            "label": "Waiting for your approval..."
           },
           "waitingForAnswer": {
-            "label": "Waiting for your answer"
+            "label": "Waiting for your answer..."
           },
           "runningCommand": {
-            "label": "Running command"
+            "label": "Running command..."
           },
           "editingFiles": {
-            "label": "Editing files"
+            "label": "Editing files..."
           },
           "publishingFiles": {
-            "label": "Publishing files"
+            "label": "Publishing files..."
           },
           "browsing": {
-            "label": "{count, plural, =0 {Browsing} one {Browsing # page} other {Browsing # pages}}"
+            "label": "Browsing web pages..."
           },
           "runPhrases": {
             "doingWork": {
@@ -12568,7 +12568,7 @@
             "text": "No results found"
           },
           "reading": {
-            "status": "Reading"
+            "status": "Reading..."
           },
           "read": {
             "label": "Read"
@@ -12579,7 +12579,8 @@
             "sources": "Searching {sources}",
             "doneSources": "Searched {sources}",
             "sourcesOverflow": "{sources} +{count} more",
-            "withTimeWindow": "{header} ({timeWindow})"
+            "withTimeWindow": "{header} ({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "since {date}",
@@ -12598,7 +12599,7 @@
             "text": "Memory tool disabled"
           },
           "updating": {
-            "status": "Updating memory"
+            "status": "Updating memory..."
           },
           "updated": {
             "status": "Updated memory"
@@ -12620,7 +12621,7 @@
             "status": "Queried knowledge base"
           },
           "querying": {
-            "status": "Querying knowledge base"
+            "status": "Querying knowledge base..."
           },
           "listed": {
             "label": "{count, plural, one {# document listed} other {# documents listed}}"
@@ -12680,7 +12681,7 @@
             "label": "Output:"
           },
           "running": {
-            "status": "Running Python"
+            "status": "Running Python..."
           },
           "ran": {
             "status": "Ran Python"
@@ -12694,7 +12695,7 @@
         },
         "reasoning": {
           "thinking": {
-            "status": "Thinking"
+            "status": "Thinking..."
           },
           "thought": {
             "status": "Thought"
@@ -12730,7 +12731,7 @@
         },
         "webSearch": {
           "searching": {
-            "status": "Searching the web"
+            "status": "Searching the web..."
           },
           "searched": {
             "status": "Searched the web"
@@ -12738,15 +12739,15 @@
         },
         "sandbox": {
           "exec": {
-            "status": "{phase, select, running {Running command} started {Started command} failed {Command failed} canceled {Canceled} done {Ran command} other {Ran command}}",
+            "status": "{phase, select, running {Running command...} started {Started command} failed {Command failed} canceled {Canceled} done {Ran command} other {Ran command}}",
             "workdir": {
               "label": "In {workdir}"
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Sending input to session {sessionId}} failed {Could not send input to session {sessionId}} canceled {Canceled} done {Sent input to session {sessionId}} other {Sent input to session {sessionId}}}} check {{phase, select, running {Checking session {sessionId}} failed {Could not check session {sessionId}} canceled {Canceled} done {Checked session {sessionId}} other {Checked session {sessionId}}}} other {Session {sessionId}}}",
+            "status": "{kind, select, send {{phase, select, running {Sending input to session {sessionId}...} failed {Could not send input to session {sessionId}} canceled {Canceled} done {Sent input to session {sessionId}} other {Sent input to session {sessionId}}}} check {{phase, select, running {Checking session {sessionId}...} failed {Could not check session {sessionId}} canceled {Canceled} done {Checked session {sessionId}} other {Checked session {sessionId}}}} other {Session {sessionId}}}",
             "noSession": {
-              "status": "{kind, select, send {{phase, select, running {Sending input to the session} failed {Could not send input to the session} canceled {Canceled} done {Sent input to the session} other {Sent input to the session}}} check {{phase, select, running {Checking the session} failed {Could not check the session} canceled {Canceled} done {Checked the session} other {Checked the session}}} other {Session}}"
+              "status": "{kind, select, send {{phase, select, running {Sending input to the session...} failed {Could not send input to the session} canceled {Canceled} done {Sent input to the session} other {Sent input to the session}}} check {{phase, select, running {Checking the session...} failed {Could not check the session} canceled {Canceled} done {Checked the session} other {Checked the session}}} other {Session}}"
             }
           },
           "output": {
@@ -15085,7 +15086,7 @@
       },
       "group": {
         "working": {
-          "label": "Working"
+          "label": "Working..."
         }
       },
       "read": {

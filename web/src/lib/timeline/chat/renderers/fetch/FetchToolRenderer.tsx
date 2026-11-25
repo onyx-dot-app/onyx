@@ -72,7 +72,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     return children([
       {
         icon: STEP_ICONS.fetch,
-        status: t("fetch.reading.status", { count: pageCount }),
+        status: t("fetch.reading.status"),
         doneStatus: t("fetch.read.status", { count: readCount }),
         content: <div />,
         supportsCollapsible: false,
@@ -103,7 +103,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
           <div className="flex flex-col">
             <div className="mb-1">
               <Text as="p" color="text-02">
-                {t("fetch.reading.status", { count: pageCount })}
+                {t("fetch.reading.status")}
               </Text>
             </div>
             {sources.length > 0 && (
@@ -127,7 +127,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   return children([
     {
       icon: STEP_ICONS.fetch,
-      status: t("fetch.reading.status", { count: pageCount }),
+      status: t("fetch.reading.status"),
       doneStatus: t("fetch.read.status", { count: readCount }),
       supportsCollapsible: false,
       timelineLayout: "timeline",

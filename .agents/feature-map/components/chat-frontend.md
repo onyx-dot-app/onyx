@@ -467,7 +467,9 @@ step. `MESSAGE_START` makes an answer group. Debug and control packets
 that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group with no packet in
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
 making their own step. Generated images accumulate across tool steps, unique
-by file ID, and render once above the answer as soon as they arrive. Later tool
+by file ID, and render once, inline right after the step that made them
+(`web/src/app/app/message/messageComponents/AgentMessage.tsx:buildSectionSegments`), as soon as they arrive. An image
+ends its step's run, so a later step starts a new run card. Later tool
 calls do not hide them. An image call does not mark the answer as final;
 later search or image calls can continue the timeline. Published files work the same way: each
 `publish_files_end` adds its files, unique by file ID, to

@@ -20,6 +20,7 @@ import { downloadFile } from "@/lib/download";
 import { openExternalLink } from "@/lib/search/utils";
 import { SvgDownload, SvgExternalLink } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";
+import { codeSpan, markdown } from "@opal/utils";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 
 function constructCustomToolState(
@@ -88,32 +89,37 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   }, [isComplete, onComplete]);
 
   // A failed or stopped step keeps the running title; a done one says how it
-  // ended, the tool's own errors included.
-  const status = t("customTool.runningStatus.text", { toolName });
+  // ended, the tool's own errors included. The tool's name is a code span.
+  const status = markdown(
+    t("customTool.runningStatus.text", { toolName: codeSpan(toolName) })
+  );
   const doneStatus = useMemo(() => {
-    if (isComplete) {
-      if (error) {
-        if (error.is_unreachable)
-          return t("customTool.unreachableStatus.text", { toolName });
-        if (error.status_code === null)
-          return t("customTool.blockedStatus.text", { toolName });
-        return error.is_auth_error
+    if (!isComplete) return null;
+    const chip = codeSpan(toolName);
+    if (error) {
+      if (error.is_unreachable)
+        return markdown(
+          t("customTool.unreachableStatus.text", { toolName: chip })
+        );
+      if (error.status_code === null)
+        return markdown(t("customTool.blockedStatus.text", { toolName: chip }));
+      return markdown(
+        error.is_auth_error
           ? t("customTool.authFailedStatus.text", {
-              toolName,
+              toolName: chip,
               statusCode: error.status_code,
             })
           : t("customTool.failedStatus.text", {
-              toolName,
+              toolName: chip,
               statusCode: error.status_code,
-            });
-      }
-      if (responseType === "image")
-        return t("customTool.imagesStatus.text", { toolName });
-      if (responseType === "csv")
-        return t("customTool.fileStatus.text", { toolName });
-      return t("customTool.completedStatus.text", { toolName });
+            })
+      );
     }
-    return null;
+    if (responseType === "image")
+      return markdown(t("customTool.imagesStatus.text", { toolName: chip }));
+    if (responseType === "csv")
+      return markdown(t("customTool.fileStatus.text", { toolName: chip }));
+    return markdown(t("customTool.completedStatus.text", { toolName: chip }));
   }, [toolName, responseType, error, isComplete, t]);
 
   const icon = STEP_ICONS.tool;
