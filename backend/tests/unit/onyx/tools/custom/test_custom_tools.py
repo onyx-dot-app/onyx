@@ -43,6 +43,8 @@ _REQUEST_KWARGS: dict[str, Any] = {
     "stream": True,
 }
 
+_NO_PLACEHOLDERS = DynamicSchemaInfo(chat_session_id=None, message_id=None)
+
 
 def _set_ssrf_level(
     monkeypatch: pytest.MonkeyPatch,
@@ -585,6 +587,7 @@ if __name__ == "__main__":
 def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> None:
     tools = build_custom_tools_from_openapi_schema_and_headers(
         integration_id=1,
+        dynamic_schema_info=_NO_PLACEHOLDERS,
         openapi_schema={
             "openapi": "3.0.0",
             "info": {"title": "Status", "version": "1.0.0"},
@@ -679,6 +682,7 @@ def test_custom_tool_file_response_is_serialized_for_llm(
 ) -> None:
     tools = build_custom_tools_from_openapi_schema_and_headers(
         integration_id=1,
+        dynamic_schema_info=_NO_PLACEHOLDERS,
         openapi_schema={
             "openapi": "3.0.0",
             "info": {"title": "Files", "version": "1.0.0"},
@@ -863,7 +867,9 @@ def test_save_rejects_invalid_server_url(servers: list[dict[str, Any]] | None) -
 
 def _run_ping(server_url: str) -> ToolResult:
     tool = build_custom_tools_from_openapi_schema_and_headers(
-        integration_id=1, openapi_schema=_schema(server_url)
+        integration_id=1,
+        openapi_schema=_schema(server_url),
+        dynamic_schema_info=_NO_PLACEHOLDERS,
     )[0]
     response = tool.run(
         ToolInvocation(

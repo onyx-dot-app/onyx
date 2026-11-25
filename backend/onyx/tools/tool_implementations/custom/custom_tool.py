@@ -356,16 +356,15 @@ class CustomTool(ApiTool):
 def build_custom_tools_from_openapi_schema_and_headers(
     integration_id: int,
     openapi_schema: dict[str, Any],
+    dynamic_schema_info: DynamicSchemaInfo,
     headers: dict[str, str] | None = None,
-    dynamic_schema_info: DynamicSchemaInfo | None = None,
     approval_for: Callable[[str], ToolApprovalScope | None] | None = None,
     credentials: CallCredentials | None = None,
     acting_user_id: UUID | None = None,
 ) -> list[CustomTool]:
     """Build CustomTool instances from an OpenAPI schema.
 
-    Placeholder substitution: when ``dynamic_schema_info`` is provided, the
-    JSON-serialized schema is scanned for the following literal strings and
+    Placeholder substitution: the JSON-serialized schema is scanned for the following literal strings and
     each is replaced with the corresponding per-request value before the tool
     is built:
 
@@ -380,37 +379,31 @@ def build_custom_tools_from_openapi_schema_and_headers(
     ``headers`` are not templated. ``approval_for`` gets the
     operationId from before the substitution.
     """
+    # Mark each operation with its position, so that it keeps its own action
+    # key when two paths render to the same path.
     action_keys: list[str] = []
-    if dynamic_schema_info:
-        # Mark each operation with its position, so that it keeps its own
-        # action key when two paths render to the same path.
-        marked_schema = copy.deepcopy(openapi_schema)
-        for _, _, _, operation in openapi_operations(marked_schema):
-            operation[_OPERATION_POSITION_KEY] = len(action_keys)
-            action_keys.append(str(operation.get("operationId") or ""))
-        schema_str = json.dumps(marked_schema)
-        placeholders = {
-            CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
-            MESSAGE_ID_PLACEHOLDER: dynamic_schema_info.message_id,
-            USER_ID_PLACEHOLDER: dynamic_schema_info.user_id,
-            USER_EMAIL_PLACEHOLDER: dynamic_schema_info.user_email,
-        }
-
-        for placeholder, value in placeholders.items():
-            if value:
-                schema_str = schema_str.replace(placeholder, str(value))
-
-        openapi_schema = json.loads(schema_str)
+    marked_schema = copy.deepcopy(openapi_schema)
+    for _, _, _, operation in openapi_operations(marked_schema):
+        operation[_OPERATION_POSITION_KEY] = len(action_keys)
+        action_keys.append(str(operation.get("operationId") or ""))
+    schema_str = json.dumps(marked_schema)
+    placeholders = {
+        CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
+        MESSAGE_ID_PLACEHOLDER: dynamic_schema_info.message_id,
+        USER_ID_PLACEHOLDER: dynamic_schema_info.user_id,
+        USER_EMAIL_PLACEHOLDER: dynamic_schema_info.user_email,
+    }
+    for placeholder, value in placeholders.items():
+        if value:
+            schema_str = schema_str.replace(placeholder, str(value))
+    openapi_schema = json.loads(schema_str)
 
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
 
     tools = []
     for method_spec in method_specs:
-        position = method_spec.spec.pop(_OPERATION_POSITION_KEY, None)
-        action_key = (
-            action_keys[position] if position is not None else method_spec.raw_name
-        )
+        action_key = action_keys[method_spec.spec.pop(_OPERATION_POSITION_KEY)]
         tools.append(
             CustomTool(
                 integration_id=integration_id,
