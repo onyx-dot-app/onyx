@@ -151,7 +151,7 @@ function penStyle(pen: Pen): TerminalSpanStyle | null {
  * `var(--opal-ansi-N)`, so they follow the theme inside a `CodePanel`.
  * Escapes other than SGR (cursor moves, titles, links) are dropped.
  */
-function parseSegment(text: string): TerminalSpan[] {
+function parseSegment(text: string, budget: number): TerminalSpan[] {
   if (!text.includes("\u001b")) return [{ text, style: null }];
   const spans: TerminalSpan[] = [];
   let pen = newPen();
@@ -168,11 +168,11 @@ function parseSegment(text: string): TerminalSpan[] {
       pen = applySgr(pen, sgr[1] ?? "");
       style = penStyle(pen);
     }
-    if (spans.length >= MAX_SPANS) break;
+    if (spans.length >= budget) break;
   }
   if (cursor < text.length) {
     const rest = text.slice(cursor);
-    if (spans.length >= MAX_SPANS) {
+    if (spans.length >= budget) {
       spans.push({ text: rest.replace(ANSI_ESCAPE, ""), style: null });
     } else {
       push(rest);
@@ -181,24 +181,37 @@ function parseSegment(text: string): TerminalSpan[] {
   return spans;
 }
 
-// `truncation_marker` in backend/onyx/tools/tool_implementations/utils.py.
+// `truncation_marker` in backend/onyx/tools/tool_implementations/utils.py, and
+// the gap note in backend/onyx/server/features/build/sandbox/exec_output.py.
 const OMISSION =
-  /\.\.\. \[output truncated, \d+ characters omitted\](?: \.\.\.)?/g;
+  /\.\.\. \[output truncated, \d+ characters omitted\](?: \.\.\.)?|\[\.\.\. \d+ bytes of (?:stdout|stderr) lost \.\.\.\]/g;
 
 /**
  * Splits terminal output into styled spans. The 16 base colors are
  * `var(--opal-ansi-N)`, so they follow the theme inside a `CodePanel`.
  * Escapes other than SGR (cursor moves, titles, links) are dropped. A style
- * never crosses an omission marker, since the cut can remove its reset.
+ * never crosses an omission marker, since the cut can remove its reset. One
+ * span budget covers the whole output; text past it is plain.
  */
 export function terminalSpans(text: string): TerminalSpan[] {
   const spans: TerminalSpan[] = [];
   let cursor = 0;
+  const addPlainRest = () => {
+    spans.push({
+      text: text.slice(cursor).replace(ANSI_ESCAPE, ""),
+      style: null,
+    });
+  };
   for (const match of text.matchAll(OMISSION)) {
-    spans.push(...parseSegment(text.slice(cursor, match.index)));
+    if (spans.length >= MAX_SPANS) break;
+    spans.push(
+      ...parseSegment(text.slice(cursor, match.index), MAX_SPANS - spans.length)
+    );
     spans.push({ text: match[0], style: null });
     cursor = match.index + match[0].length;
   }
-  spans.push(...parseSegment(text.slice(cursor)));
+  if (spans.length >= MAX_SPANS) addPlainRest();
+  else
+    spans.push(...parseSegment(text.slice(cursor), MAX_SPANS - spans.length));
   return spans.filter((span) => span.text !== "");
 }
