@@ -13,7 +13,7 @@ export const useUploadProgressStore = create<UploadProgressStore>(() => ({
 interface UploadBatch {
   controller: AbortController;
   pending: Set<string>;
-  /** Every byte was sent, so the server may save the files even on abort. */
+  /** The server has the whole body, so it stores the files even if aborted. */
   sent: boolean;
 }
 
@@ -66,8 +66,8 @@ export function trackUpload(tempIds: string[]): {
 
 /**
  * Stops waiting for the file's upload. The request is aborted when no other
- * file in its batch still waits for it and its bytes are not all sent. Once
- * they are, the request finishes and its caller deletes the cancelled files.
+ * file in its batch still waits for it and its body is not fully sent;
+ * otherwise the upload finishes and the cancelled files are deleted.
  */
 export function cancelUpload(tempId: string): void {
   const batch = batchByTempId.get(tempId);
