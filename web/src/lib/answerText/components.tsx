@@ -312,7 +312,7 @@ interface AnswerMarkdownProps {
  * Answer text, the same in chat and Craft: one markdown pipeline (GFM, `$$`
  * math, per-block direction), one look (`prose prose-onyx` on the main
  * content font), code blocks as `CodeBlockBody`, and the streaming cursor.
- * While streaming, finished blocks keep their render and only the last block
+ * Each block renders on its own, so while streaming only the last block
  * re-renders.
  */
 export function AnswerMarkdown({
@@ -334,9 +334,12 @@ export function AnswerMarkdown({
     [components]
   );
   const markdown = useMemo(() => prepareAnswerMarkdown(content), [content]);
-  const blocks = (streaming ? splitMarkdownBlocks(markdown) : null) ?? [
-    markdown,
-  ];
+  // Split finished answers too: a block that changes parent on completion
+  // remounts and loses its state, such as a code block's wrap choice.
+  const blocks = useMemo(
+    () => splitMarkdownBlocks(markdown) ?? [markdown],
+    [markdown]
+  );
 
   return (
     <StreamingContext.Provider value={streaming}>
