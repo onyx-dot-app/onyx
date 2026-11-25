@@ -41,7 +41,8 @@ test.describe("Code mode", () => {
 
       await sendMessage(page, "How many orders are open?");
       await expect(chatPage.aiMessage()).toContainText(MESSAGE);
-      await expect(chatPage.aiMessage()).toContainText("1 step");
+      // The one call is a step of its own.
+      await expect(chatPage.aiMessage()).toContainText(`Executed ${TOOL}`);
       // The call completes only in the wait observation or in the closing
       // record that follows the answer.
       await chatPage.expectCustomToolResult(TOOL, TOOL_OUTPUT);
