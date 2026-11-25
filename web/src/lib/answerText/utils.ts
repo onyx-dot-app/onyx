@@ -42,6 +42,8 @@ function replaceIndentedCode(
   let listColumn = 0;
   // Whether the previous line can be continued as a paragraph.
   let inParagraph = false;
+  // The block quote depth of the previous line.
+  let quoteDepth = 0;
   const flush = () => {
     if (block === null) return;
     // Trailing blank lines belong after the block.
@@ -53,8 +55,17 @@ function replaceIndentedCode(
     block = null;
   };
   for (const line of content.split("\n")) {
-    const rest = line.replace(QUOTE_PREFIX_REGEX, "");
+    const prefix = QUOTE_PREFIX_REGEX.exec(line)?.[0] ?? "";
+    const rest = line.slice(prefix.length);
     const blank = rest.trim() === "";
+    // A deeper quote opens a new container: no paragraph or list to continue.
+    // A shallower line can still continue the quote's paragraph lazily.
+    const depth = prefix.split(">").length - 1;
+    if (depth > quoteDepth) {
+      inParagraph = false;
+      listColumn = 0;
+    }
+    quoteDepth = depth;
     const indent = indentOf(rest);
     if (block !== null) {
       if (blank || indent >= blockIndent) {
@@ -116,7 +127,8 @@ export function prepareAnswerMarkdown(content: string): string {
   };
   let text = replaceFencedCodeBlocks(content, keep);
   text = replaceIndentedCode(text, keep);
-  text = text.replace(/(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g, keep);
+  // A code span opens at the start of a backtick run, never inside one.
+  text = text.replace(/(?<!`)(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g, keep);
   text = text.replace(/\$\$[\s\S]+?\$\$/g, keep);
 
   text = preprocessLaTeX(escapeIncompleteBlockMath(text));
