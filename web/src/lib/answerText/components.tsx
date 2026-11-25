@@ -61,11 +61,13 @@ function AnswerCodeBlock({ node }: React.ComponentProps<"pre"> & ExtraProps) {
       )
     : undefined;
   return (
-    <CodeBlockBody
-      code={code ? textOf(code.children).replace(/\n$/, "") : ""}
-      language={languageClass?.slice("language-".length)}
-      streaming={streaming}
-    />
+    <div data-testid="answer-code-block">
+      <CodeBlockBody
+        code={code ? textOf(code.children).replace(/\n$/, "") : ""}
+        language={languageClass?.slice("language-".length)}
+        streaming={streaming}
+      />
+    </div>
   );
 }
 

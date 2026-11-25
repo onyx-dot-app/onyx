@@ -912,9 +912,9 @@ export class ChatPage {
   }
 
   async expectAnswerCode(text: string): Promise<void> {
-    await expect(this.aiMessage().getByTestId("code-block")).toContainText(
-      text
-    );
+    await expect(
+      this.aiMessage().getByTestId("answer-code-block")
+    ).toContainText(text);
   }
 
   /** Inline citations must fit the text line: no taller than its line height. */
