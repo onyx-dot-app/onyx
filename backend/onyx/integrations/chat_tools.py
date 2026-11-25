@@ -81,7 +81,10 @@ def _integration_tools(
             acting_user is None
             or not isinstance(config, ApiConfig)
             or config.shape is ApiShape.CUSTOM
-            or link_settings.default is LinkValue.BLOCKED
+            or all(
+                link_settings.value_for(action.key) is LinkValue.BLOCKED
+                for action in actions
+            )
         ):
             return []
         # A preset or a custom app: one tool that asks the user to connect.

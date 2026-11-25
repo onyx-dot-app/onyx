@@ -2,6 +2,7 @@
 write one-field documents, and proxy matches by root field."""
 
 import json
+from collections.abc import Generator
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -20,7 +21,7 @@ from onyx.db.models import Integration, User
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.chat_tools import build_integration_chat_tools
 from onyx.integrations.kinds.api import ApiKindHandler
-from onyx.integrations.models import ActionSettings, ApprovalMode
+from onyx.integrations.models import ActionSettings, ApprovalMode, LinkValue
 from onyx.sandbox_proxy.usable_integrations import load_match_targets
 from onyx.server.features.integrations import admin_api
 from onyx.server.features.integrations.models import (
@@ -37,7 +38,10 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.custom.graphql_tool import GraphQLTool
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.integration_helpers import give_access
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    give_access,
+)
 
 ENDPOINT = "https://tickets.example.com/graphql"
 SDL = """
@@ -58,7 +62,16 @@ def admin(make_test_user: MakeTestUser) -> User:
 
 
 @pytest.fixture
-def integration(db_session: Session, admin: User) -> Integration:
+def created(db_session: Session) -> Generator[list[int], None, None]:
+    ids: list[int] = []
+    try:
+        yield ids
+    finally:
+        delete_integrations(db_session, ids)
+
+
+@pytest.fixture
+def integration(db_session: Session, admin: User, created: list[int]) -> Integration:
     detail = admin_api.create_integration(
         IntegrationCreate(
             name=f"tickets-{uuid4().hex[:8]}",
@@ -68,6 +81,7 @@ def integration(db_session: Session, admin: User) -> Integration:
         admin,
         db_session,
     )
+    created.append(detail.id)
     assert detail.shape is IntegrationShape.GRAPHQL
     assert detail.config == GraphQLConfigInput(
         endpoint_url=ENDPOINT, graphql_schema=SDL
@@ -231,10 +245,7 @@ def test_the_query_in_the_url_of_a_get_request_is_matched(
     ) == ["unspecified"]
 
 
-def test_an_endpoint_change_needs_a_new_connection(
-    db_session: Session, admin: User
-) -> None:
-    """The saved key was for the old endpoint; it must not go to the new one."""
+def _shared_key_app(db_session: Session, admin: User, created: list[int]) -> int:
     detail = admin_api.create_integration(
         IntegrationCreate(
             name=f"tickets-{uuid4().hex[:8]}",
@@ -246,12 +257,57 @@ def test_an_endpoint_change_needs_a_new_connection(
         admin,
         db_session,
     )
+    created.append(detail.id)
+    return detail.id
+
+
+def test_an_agent_default_of_blocked_hides_connect_only_with_no_open_action(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    integration_id = _shared_key_app(db_session, admin, created)
+    integration = db_session.get(Integration, integration_id)
+    assert integration is not None
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    db_session.commit()
+
+    def tool_names(settings: ActionSettings) -> list[str]:
+        return [
+            tool.name
+            for tool in build_integration_chat_tools(
+                db_session,
+                admin,
+                IntegrationChatRequest(
+                    persona_id=7,
+                    integration_links=[
+                        IntegrationLinkConfiguration(
+                            integration_id=integration_id, action_settings=settings
+                        )
+                    ],
+                    approval_mode=ApprovalMode.INTERACTIVE,
+                ),
+            )
+        ]
+
+    blocked, allow = LinkValue.BLOCKED, LinkValue.ALLOW
+    assert tool_names(
+        ActionSettings(default=blocked, actions={"query.ticket": allow})
+    ) == [f"app__{integration_id}__connect"]
+    assert tool_names(ActionSettings(default=blocked)) == []
+
+
+def test_an_endpoint_change_needs_a_new_connection(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    """The saved key was for the old endpoint; it must not go to the new one."""
+    detail_id = _shared_key_app(db_session, admin, created)
     admin_api.save_organization_connection(
-        detail.id, ConnectionFieldsRequest(fields={"api_key": "k"}), admin, db_session
+        detail_id, ConnectionFieldsRequest(fields={"api_key": "k"}), admin, db_session
     )
 
     admin_api.update_integration(
-        detail.id,
+        detail_id,
         IntegrationUpdate(
             config=GraphQLConfigInput(
                 endpoint_url="https://other.example.com/graphql", graphql_schema=SDL
@@ -261,6 +317,6 @@ def test_an_endpoint_change_needs_a_new_connection(
         db_session,
     )
 
-    view = admin_api.get_integration_admin(detail.id, admin, db_session)
+    view = admin_api.get_integration_admin(detail_id, admin, db_session)
     assert view.organization_status is not None
     assert view.organization_status.state.value == "needs_reconnect"
