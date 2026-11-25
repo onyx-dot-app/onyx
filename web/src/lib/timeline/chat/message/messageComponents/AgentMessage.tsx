@@ -858,6 +858,10 @@ function endsWithRun(segments: SectionSegment[]): boolean {
   );
   return (
     last?.kind === "images" ||
+    // A question is a tool call with no step of its own, so its record
+    // ends the run; without a slot under it, the cursor stays on the text
+    // above the card.
+    (last?.kind === "record" && last.record.kind === "question") ||
     (last?.kind === "run" && last.turnGroups.length > 0)
   );
 }
