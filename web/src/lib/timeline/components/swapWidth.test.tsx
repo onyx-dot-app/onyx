@@ -4,17 +4,21 @@ import { Presence } from "@opal/components";
 // jsdom has no layout: the content is 100px wide, or 40px when its CSS caps
 // it at the box's previous width.
 function mockWidths() {
-  Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
-    configurable: true,
-    get(this: HTMLElement) {
-      if (!this.classList.contains("opal-presence-swap-content")) return 0;
-      return this.style.maxWidth === "none" ? 100 : 40;
-    },
-  });
+  jest
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      const capped = this.style.maxWidth !== "none";
+      const width = !this.classList.contains("opal-presence-swap-content")
+        ? 0
+        : capped
+          ? 40
+          : 100;
+      return { width, height: 0 } as DOMRect;
+    });
 }
 
 afterEach(() => {
-  Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
+  jest.restoreAllMocks();
 });
 
 test("a swap box measures its content uncapped, so a longer title is not cut", () => {
