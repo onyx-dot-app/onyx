@@ -764,13 +764,16 @@ def list_llm_providers(
     for llm_provider_model in providers:
         from_model_start = datetime.now(timezone.utc)
         if windows is None:
-            full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+            full_llm_provider = LLMProviderView.from_model(
+                llm_provider_model, include_image_generation_models=include_image_gen
+            )
         else:
             window = windows[llm_provider_model.id]
             full_llm_provider = LLMProviderView.from_model(
                 llm_provider_model,
                 model_configurations=window.model_configurations,
                 next_model_configuration_offset=window.next_offset,
+                include_image_generation_models=include_image_gen,
             )
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
@@ -803,6 +806,7 @@ def list_llm_providers(
 @admin_router.get("/provider/{provider_id}")
 def get_llm_provider(
     provider_id: int,
+    include_image_gen: bool = Query(False),
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
@@ -813,7 +817,9 @@ def get_llm_provider(
             OnyxErrorCode.NOT_FOUND, f"LLM provider {provider_id} does not exist"
         )
 
-    provider_view = LLMProviderView.from_model(llm_provider_model)
+    provider_view = LLMProviderView.from_model(
+        llm_provider_model, include_image_generation_models=include_image_gen
+    )
     _mask_provider_credentials(provider_view)
     return provider_view
 

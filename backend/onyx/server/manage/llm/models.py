@@ -238,6 +238,7 @@ class LLMProviderView(LLMProvider):
         include_api_key: bool = True,
         model_configurations: list["ModelConfigurationModel"] | None = None,
         next_model_configuration_offset: int | None = None,
+        include_image_generation_models: bool = False,
     ) -> "LLMProviderView":
         # ``model_configurations`` is one page of the provider's rows when the
         # caller paged them, otherwise the loaded relationship is used.
@@ -299,6 +300,7 @@ class LLMProviderView(LLMProvider):
                 use_stored_display_name=llm_provider_model.custom_config is not None,
                 custom_config=llm_provider_model.custom_config,
                 deployment_name=llm_provider_model.deployment_name,
+                include_image_generation=include_image_generation_models,
             ),
             next_model_configuration_offset=next_model_configuration_offset,
         )
@@ -377,6 +379,8 @@ class ModelConfigurationView(BaseModel):
     is_visible: bool
     supports_decisions: bool = False
     supports_chat: bool = True
+    # Linked for image generation (the image_generation flow).
+    supports_image_generation: bool = False
     max_input_tokens: int | None = None
     # The persisted override/source value, before static-provider capability
     # enrichment. Internal consumers use this to distinguish an intentional
@@ -441,6 +445,8 @@ class ModelConfigurationView(BaseModel):
                 supports_decisions=LLMModelFlowType.DECISION
                 in model_configuration_model.llm_model_flow_types,
                 supports_chat=LLMModelFlowType.CHAT
+                in model_configuration_model.llm_model_flow_types,
+                supports_image_generation=LLMModelFlowType.IMAGE_GENERATION
                 in model_configuration_model.llm_model_flow_types,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
@@ -512,6 +518,8 @@ class ModelConfigurationView(BaseModel):
             supports_decisions=LLMModelFlowType.DECISION
             in model_configuration_model.llm_model_flow_types,
             supports_chat=LLMModelFlowType.CHAT
+            in model_configuration_model.llm_model_flow_types,
+            supports_image_generation=LLMModelFlowType.IMAGE_GENERATION
             in model_configuration_model.llm_model_flow_types,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=(
