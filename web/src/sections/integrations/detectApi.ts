@@ -152,17 +152,25 @@ function rootTypeName(
   return match?.[1] ?? fallback;
 }
 
-/** The number of fields of an object type in SDL; 0 when it is missing. */
+/** The number of fields of an object type in SDL, its extensions included;
+ * 0 when it is missing. */
 function rootFieldCount(sdl: string, typeName: string): number {
-  const start = new RegExp(`\\btype\\s+${typeName}\\b[^{]*\\{`).exec(sdl);
-  if (!start) return 0;
-  let end = start.index + start[0].length;
+  const blocks = new RegExp(`\\btype\\s+${typeName}\\b[^{]*\\{`, "g");
+  let count = 0;
+  for (const start of sdl.matchAll(blocks)) {
+    count += blockFieldCount(sdl, start.index + start[0].length);
+  }
+  return count;
+}
+
+function blockFieldCount(sdl: string, bodyStart: number): number {
+  let end = bodyStart;
   for (let depth = 1; end < sdl.length && depth > 0; end++) {
     if (sdl[end] === "{") depth++;
     else if (sdl[end] === "}") depth--;
   }
   let body = sdl
-    .slice(start.index + start[0].length, end - 1)
+    .slice(bodyStart, end - 1)
     .replace(/"""[\s\S]*?"""/g, "")
     .replace(/"(?:[^"\\\n]|\\.)*"/g, "")
     .replace(/#[^\n]*/g, "");

@@ -739,7 +739,8 @@ type Query {
   tickets(first: Int): [Ticket!]!
 }
 type Mutation { ticketClose(id: ID!): Ticket }
-type Ticket { id: ID! title: String! }`;
+type Ticket { id: ID! title: String! }
+extend type Query { closedTickets: [Ticket!]! }`;
     const fetchMock = mockFetch({
       "POST /api/admin/integrations/openapi-import": () => failure(400),
       "POST /api/admin/integrations/graphql-introspect": {
@@ -758,7 +759,7 @@ type Ticket { id: ID! title: String! }`;
       "https://api.example.com/graphql"
     );
     expect(
-      await screen.findByText("GraphQL API, 2 queries and 1 mutation")
+      await screen.findByText("GraphQL API, 3 queries and 1 mutation")
     ).toBeInTheDocument();
     await submit(user);
     await waitFor(() =>
