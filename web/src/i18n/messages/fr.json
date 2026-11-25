@@ -12789,6 +12789,24 @@
               "status": "Échec de la publication"
             }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "Lecture de la compétence {name}",
+            "done": "Compétence {name} lue",
+            "failed": "Impossible de lire la compétence {name}",
+            "runningUnnamed": "Lecture de la compétence",
+            "doneUnnamed": "Compétence lue",
+            "failedUnnamed": "Impossible de lire la compétence"
+          },
+          "load": {
+            "running": "Chargement de la compétence {name}",
+            "done": "Compétence {name} chargée",
+            "failed": "Impossible de charger la compétence {name}",
+            "runningUnnamed": "Chargement de la compétence",
+            "doneUnnamed": "Compétence chargée",
+            "failedUnnamed": "Impossible de charger la compétence"
+          }
         }
       },
       "toolApproval": {

@@ -12789,6 +12789,24 @@
               "status": "Veröffentlichung fehlgeschlagen"
             }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "Skill {name} wird gelesen",
+            "done": "Skill {name} gelesen",
+            "failed": "Skill {name} konnte nicht gelesen werden",
+            "runningUnnamed": "Skill wird gelesen",
+            "doneUnnamed": "Skill gelesen",
+            "failedUnnamed": "Skill konnte nicht gelesen werden"
+          },
+          "load": {
+            "running": "Skill {name} wird geladen",
+            "done": "Skill {name} geladen",
+            "failed": "Skill {name} konnte nicht geladen werden",
+            "runningUnnamed": "Skill wird geladen",
+            "doneUnnamed": "Skill geladen",
+            "failedUnnamed": "Skill konnte nicht geladen werden"
+          }
         }
       },
       "toolApproval": {

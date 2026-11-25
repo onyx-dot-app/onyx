@@ -12789,6 +12789,24 @@
               "status": "公開に失敗しました"
             }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "スキル {name} を読み込み中",
+            "done": "スキル {name} を読みました",
+            "failed": "スキル {name} を読めませんでした",
+            "runningUnnamed": "スキルを読み込み中",
+            "doneUnnamed": "スキルを読みました",
+            "failedUnnamed": "スキルを読めませんでした"
+          },
+          "load": {
+            "running": "スキル {name} をロード中",
+            "done": "スキル {name} をロードしました",
+            "failed": "スキル {name} をロードできませんでした",
+            "runningUnnamed": "スキルをロード中",
+            "doneUnnamed": "スキルをロードしました",
+            "failedUnnamed": "スキルをロードできませんでした"
+          }
         }
       },
       "toolApproval": {

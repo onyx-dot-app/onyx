@@ -12789,6 +12789,24 @@
               "status": "发布失败"
             }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "正在读取技能 {name}",
+            "done": "已读取技能 {name}",
+            "failed": "无法读取技能 {name}",
+            "runningUnnamed": "正在读取技能",
+            "doneUnnamed": "已读取技能",
+            "failedUnnamed": "无法读取技能"
+          },
+          "load": {
+            "running": "正在加载技能 {name}",
+            "done": "已加载技能 {name}",
+            "failed": "无法加载技能 {name}",
+            "runningUnnamed": "正在加载技能",
+            "doneUnnamed": "已加载技能",
+            "failedUnnamed": "无法加载技能"
+          }
         }
       },
       "toolApproval": {

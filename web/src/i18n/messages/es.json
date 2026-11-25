@@ -12789,6 +12789,24 @@
               "status": "Error al publicar"
             }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "Leyendo la habilidad {name}",
+            "done": "Habilidad {name} leída",
+            "failed": "No se pudo leer la habilidad {name}",
+            "runningUnnamed": "Leyendo la habilidad",
+            "doneUnnamed": "Habilidad leída",
+            "failedUnnamed": "No se pudo leer la habilidad"
+          },
+          "load": {
+            "running": "Cargando la habilidad {name}",
+            "done": "Habilidad {name} cargada",
+            "failed": "No se pudo cargar la habilidad {name}",
+            "runningUnnamed": "Cargando la habilidad",
+            "doneUnnamed": "Habilidad cargada",
+            "failedUnnamed": "No se pudo cargar la habilidad"
+          }
         }
       },
       "toolApproval": {

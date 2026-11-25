@@ -12789,6 +12789,24 @@
               "status": "게시 실패"
             }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "스킬 {name} 읽는 중",
+            "done": "스킬 {name} 읽음",
+            "failed": "스킬 {name}을(를) 읽을 수 없음",
+            "runningUnnamed": "스킬 읽는 중",
+            "doneUnnamed": "스킬 읽음",
+            "failedUnnamed": "스킬을 읽을 수 없음"
+          },
+          "load": {
+            "running": "스킬 {name} 불러오는 중",
+            "done": "스킬 {name} 불러옴",
+            "failed": "스킬 {name}을(를) 불러올 수 없음",
+            "runningUnnamed": "스킬 불러오는 중",
+            "doneUnnamed": "스킬 불러옴",
+            "failedUnnamed": "스킬을 불러올 수 없음"
+          }
         }
       },
       "toolApproval": {

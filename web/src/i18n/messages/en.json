@@ -12789,6 +12789,24 @@
               "status": "Publish failed"
             }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "Reading skill {name}",
+            "done": "Read skill {name}",
+            "failed": "Could not read skill {name}",
+            "runningUnnamed": "Reading skill",
+            "doneUnnamed": "Read skill",
+            "failedUnnamed": "Could not read skill"
+          },
+          "load": {
+            "running": "Loading skill {name}",
+            "done": "Loaded skill {name}",
+            "failed": "Could not load skill {name}",
+            "runningUnnamed": "Loading skill",
+            "doneUnnamed": "Loaded skill",
+            "failedUnnamed": "Could not load skill"
+          }
         }
       },
       "toolApproval": {
