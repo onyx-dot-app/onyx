@@ -85,8 +85,8 @@ function isSpecError(error: unknown): boolean {
   );
 }
 
-/** Onyx checked the URL and it is not this kind of API. Any other failure
- * (no permission, a server error, no connection) is not an answer. */
+/** Onyx checked the URL and it is not this kind of API, or the URL did not
+ * answer. Any other failure (no permission, an Onyx error) is not an answer. */
 export function isNotThisKind(error: unknown): error is FetchError {
   return error instanceof FetchError && error.status === 400;
 }

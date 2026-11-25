@@ -1058,7 +1058,6 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   no integration, so chat offers none of its actions.
 - The temporary shapes of API apps are in the tech debt register:
   [the dual write to `tool`](../TECH-DEBT.md#dual-write-of-openapi-apps-to-tool),
-  [the rolling-deploy gap](../TECH-DEBT.md#rolling-deploy-gap-of-api_app),
   [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps) and
   [request-body `$ref`s](../TECH-DEBT.md#request-body-ref-left-unresolved).
 
