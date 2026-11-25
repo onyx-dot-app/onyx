@@ -282,7 +282,7 @@ def _restore_integration() -> None:
     op.drop_column("integration", "api_app_id")
 
 
-def downgrade() -> None:
+def _refuse_graphql_apps() -> None:
     graphql_apps: int = (
         op.get_bind().execute(sa.text(_COUNT_GRAPHQL_INTEGRATIONS)).scalar_one()
     )
@@ -292,6 +292,12 @@ def downgrade() -> None:
             "this revision cannot hold them. An admin must delete the GraphQL "
             "apps before the downgrade."
         )
+
+
+def downgrade() -> None:
+    # The count also waits for locks on integration, so it gets the same
+    # bound. The refusal is not a lock timeout, so it is not retried.
+    _with_bounded_lock_wait(_refuse_graphql_apps)
     # The old checks come back NOT VALID, so the downgrade does not scan the
     # tables while it holds the lock.
     _with_bounded_lock_wait(_restore_integration_action)

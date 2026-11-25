@@ -205,24 +205,45 @@ def seeded(engine: Engine) -> Generator[dict[int, int], None, None]:
                 )
             },
         }
-    _migrate("upgrade", REVISION)
-    yield integrations
+    try:
+        _migrate("upgrade", REVISION)
+        yield integrations
+    finally:
+        _remove_seeded(engine, list(integrations.values()))
+
+
+def _remove_seeded(engine: Engine, integration_ids: list[int]) -> None:
+    """Removes the seeded rows, also when a failed upgrade left the database
+    at the revision before, with no api_app_id column."""
     with engine.begin() as conn:
-        app_ids = conn.execute(
+        has_column = conn.execute(
             text(
-                "SELECT api_app_id FROM integration "
-                "WHERE id = ANY(:ids) AND api_app_id IS NOT NULL"
-            ),
-            {"ids": list(integrations.values())},
-        ).scalars()
-        app_id_list = list(app_ids)
+                "SELECT 1 FROM information_schema.columns WHERE "
+                "table_schema = current_schema() AND table_name = 'integration' "
+                "AND column_name = 'api_app_id'"
+            )
+        ).first()
+        app_ids: list[int] = (
+            list(
+                conn.execute(
+                    text(
+                        "SELECT api_app_id FROM integration "
+                        "WHERE id = ANY(:ids) AND api_app_id IS NOT NULL"
+                    ),
+                    {"ids": integration_ids},
+                ).scalars()
+            )
+            if has_column
+            else []
+        )
         conn.execute(
             text("DELETE FROM integration WHERE id = ANY(:ids)"),
-            {"ids": list(integrations.values())},
+            {"ids": integration_ids},
         )
-        conn.execute(
-            text("DELETE FROM api_app WHERE id = ANY(:ids)"), {"ids": app_id_list}
-        )
+        if app_ids:
+            conn.execute(
+                text("DELETE FROM api_app WHERE id = ANY(:ids)"), {"ids": app_ids}
+            )
         conn.execute(text("DELETE FROM tool WHERE id = ANY(:ids)"), {"ids": ALL_TOOLS})
 
 
