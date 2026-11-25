@@ -131,6 +131,55 @@ def test_a_closed_connection_is_made_again_once(
     assert scandir.call_count == 2
 
 
+def test_a_referral_to_a_refused_server_gets_no_connection_and_no_sign_in() -> None:
+    """smbclient follows a DFS referral with the same account and the same
+    connection cache."""
+
+    def policy(host: str, role: str) -> None:  # noqa: ARG001
+        if host != "fs01":
+            raise ConnectorValidationError(f"{host} is refused")
+
+    cache = source_operations._PolicedConnectionCache()
+    with (
+        patch.object(source_operations, "validate_network_host", side_effect=policy),
+        patch("smbclient._pool.Connection") as connection_class,
+        patch("smbclient._pool.Session") as session_class,
+        pytest.raises(ConnectorValidationError, match="internal is refused"),
+    ):
+        source_operations.smbclient.register_session(
+            "internal", username="CORP\\svc", password="secret", connection_cache=cache
+        )
+
+    connection_class.assert_not_called()
+    session_class.assert_not_called()
+
+
+def test_a_name_that_resolved_to_a_refused_address_gets_no_sign_in() -> None:
+    """DNS rebinding: the name passes the policy, the address it then
+    connects to does not."""
+
+    def policy(host: str, role: str) -> None:  # noqa: ARG001
+        if host == "10.0.0.5":
+            raise ConnectorValidationError("10.0.0.5 is refused")
+
+    cache = source_operations._PolicedConnectionCache()
+    with (
+        patch.object(source_operations, "validate_network_host", side_effect=policy),
+        patch("smbclient._pool.Connection") as connection_class,
+        patch("smbclient._pool.Session") as session_class,
+        pytest.raises(ConnectorValidationError, match="10.0.0.5 is refused"),
+    ):
+        connection = connection_class.return_value
+        connection.transport._sock.getpeername.return_value = ("10.0.0.5", 445)
+        source_operations.smbclient.register_session(
+            "fs01", username="CORP\\svc", password="secret", connection_cache=cache
+        )
+
+    connection.disconnect.assert_called_once()
+    session_class.assert_not_called()
+    assert not cache
+
+
 def test_the_file_server_is_refused_on_a_multi_tenant_deployment() -> None:
     with (
         patch.object(source_operations, "MULTI_TENANT", True),

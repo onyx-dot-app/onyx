@@ -156,7 +156,8 @@ def validate_network_host(host: str, role: str) -> None:
     )
     try:
         validate_outbound_http_url(
-            f"https://{host}",
+            # An IPv6 address needs brackets in a URL.
+            f"https://[{host}]" if ":" in host else f"https://{host}",
             allow_private_network=not enforced,
             block_link_local_only=not enforced,
         )
@@ -179,6 +180,61 @@ def _close_connections(connection_cache: dict[str, Connection]) -> None:
         )
     except Exception:
         logger.debug("Closing SMB connections failed", exc_info=True)
+
+
+def _socket(connection: Connection) -> socket.socket | None:
+    # smbprotocol has no public handle to its socket.
+    transport = connection.transport
+    return transport._sock if transport is not None else None  # noqa: SLF001
+
+
+def _peer_address(connection: Connection) -> str | None:
+    """The address the connection's socket reached."""
+    sock: socket.socket | None = _socket(connection)
+    if sock is None:
+        return None
+    try:
+        return str(sock.getpeername()[0])
+    except OSError:
+        return None
+
+
+class _PolicedConnectionCache(dict[str, Connection]):
+    """The connection cache smbclient uses for one gateway, with the network
+    policy on every server it holds.
+
+    smbclient follows a DFS referral to the server the referral names, and
+    signs in there with the same account. It looks a server up here before it
+    connects, and stores the connection here before it signs in. So no
+    account proof goes to a server that fails the policy: not to a referral
+    target, and not to an address that a name resolved to only after the
+    check (DNS rebinding).
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._allowed_hosts: set[str] = set()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """``key`` is ``<server>:<port>``."""
+        host: str = key.rsplit(":", 1)[0]
+        if host not in self._allowed_hosts:
+            validate_network_host(host, "file server")
+            self._allowed_hosts.add(host)
+        return super().get(key, default)
+
+    def __setitem__(self, key: str, connection: Connection) -> None:
+        peer: str | None = _peer_address(connection)
+        try:
+            if peer is None:
+                raise ConnectorValidationError(
+                    f"Onyx cannot tell which address '{key}' connected to."
+                )
+            validate_network_host(peer, "file server address")
+        except ConnectorValidationError:
+            connection.disconnect(close=False)
+            raise
+        super().__setitem__(key, connection)
 
 
 def _aware(value: datetime) -> datetime:
@@ -270,7 +326,7 @@ class SmbSourceOperations(SourceOperations):
         if self._connection_cache is None:
             with self._session_lock:
                 if self._connection_cache is None:
-                    cache: dict[str, Connection] = {}
+                    cache: dict[str, Connection] = _PolicedConnectionCache()
                     # Each connection owns a socket and a reader thread.
                     weakref.finalize(self, _close_connections, cache)
                     self._connection_cache = cache
@@ -383,8 +439,10 @@ class SmbSourceOperations(SourceOperations):
         try:
             with socket.create_connection(
                 (host, port), timeout=_CONNECTION_TIMEOUT_SECONDS
-            ):
-                return
+            ) as sock:
+                # The name can resolve to another address than the one the
+                # policy saw.
+                validate_network_host(str(sock.getpeername()[0]), "file server address")
         except OSError as e:
             raise UnreachableValidationError(
                 f"Onyx cannot reach the file server '{host}' on port {port}: {e}"
@@ -498,11 +556,7 @@ class SmbSourceOperations(SourceOperations):
 
 def _enable_keepalive(connection: Connection) -> None:
     """Makes TCP close a connection whose peer stopped answering."""
-    # smbprotocol has no public handle to its socket.
-    transport = connection.transport
-    sock: socket.socket | None = (
-        transport._sock if transport is not None else None  # noqa: SLF001
-    )
+    sock: socket.socket | None = _socket(connection)
     if sock is None:
         return
     try:
