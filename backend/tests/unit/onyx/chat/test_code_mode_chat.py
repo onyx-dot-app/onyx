@@ -405,6 +405,25 @@ def test_code_mode_guidance_names_the_shape_s_run_tool(family: ToolFamily) -> No
         )
 
 
+@pytest.mark.parametrize("family", list(ToolFamily))
+def test_code_mode_shows_a_python_call_where_the_model_reads_first(
+    family: ToolFamily,
+) -> None:
+    """The run tool's first line and the code mode section's first line say
+    that programs are Python and show a Python tool call."""
+    shape = CODE_MODE_SHAPES[family]
+    offered = with_code_mode([MemoryTool(tool_id=1, llm=MagicMock())], shape)[0]
+    [code_tool] = [tool for tool in offered if isinstance(tool, CodeModeTool)]
+    python_call = "`result = await tools.tool_name(argument=value)`"
+    section = _code_mode_prompt(offered).split(f"## {shape.run_name}\n", 1)[1]
+    for first_line in (
+        code_tool.tool_definition().description.split("\n", 1)[0],
+        section.split("\n", 1)[0],
+    ):
+        assert "Python program" in first_line
+        assert python_call in first_line
+
+
 def _unused(*_: object) -> ToolResult:
     return ToolResult(content="")
 
