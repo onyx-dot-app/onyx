@@ -19,7 +19,7 @@ from onyx.tools.constants import (
     REPL_TOOL_NAME,
     WAIT_TOOL_NAME,
 )
-from onyx.tools.interface import ToolArguments
+from onyx.tools.models import ToolArguments
 from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 from onyx.tools.tool_implementations.code_mode.tool_search import (
     DEFAULT_TOOL_SEARCH_LIMIT,

@@ -647,7 +647,7 @@ def test_a_manage_result_past_the_steps_budget_stays_whole(
             result=ToolResult(content=text),
             step_results=(earlier,),
         ),
-        code_mode=False,
+        code_mode_run_name=None,
     )
 
     assert result.content == text
