@@ -136,17 +136,22 @@ def site_connector(
 
 
 def index(
-    connector: DealCloudConnector, start: float = 0
+    connector: DealCloudConnector, start: float = 0, with_access: bool = False
 ) -> tuple[list[Document], list[HierarchyNode]]:
     """Runs the connector to the end, through a JSON round trip of the
     checkpoint between calls, as the indexing run does."""
+    load = (
+        connector.load_from_checkpoint_with_perm_sync
+        if with_access
+        else connector.load_from_checkpoint
+    )
     documents: list[Document] = []
     nodes: list[HierarchyNode] = []
     checkpoint = connector.build_dummy_checkpoint()
     while checkpoint.has_more:
         wrapper = CheckpointOutputWrapper[DealCloudCheckpoint]()
         for document, node, failure, next_checkpoint in wrapper(
-            connector.load_from_checkpoint(start, 4_000_000_000, checkpoint)
+            load(start, 4_000_000_000, checkpoint)
         ):
             assert failure is None
             if isinstance(document, Document):

@@ -9,8 +9,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from ee.onyx.db.external_perm import ExternalUserGroup
+from ee.onyx.external_permissions.utils import instance_key
 from ee.onyx.external_permissions.youtrack.access import (
-    instance_key,
     issue_access,
     override_group_id,
     project_group_id,

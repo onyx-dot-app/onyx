@@ -5,6 +5,10 @@ from ee.onyx.external_permissions.azure_datalake.capability_checks import (
     build_azure_datalake_doc_permission_sync_checks,
     build_azure_datalake_group_sync_checks,
 )
+from ee.onyx.external_permissions.dealcloud.capability_checks import (
+    build_dealcloud_doc_permission_sync_checks,
+    build_dealcloud_group_sync_checks,
+)
 from ee.onyx.external_permissions.egnyte.capability_checks import (
     build_egnyte_doc_permission_sync_checks,
     build_egnyte_group_sync_checks,
@@ -31,6 +35,7 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.dealcloud.connector import DealCloudConnector
 from onyx.connectors.egnyte.config import EgnyteConnectorConfig
 from onyx.connectors.egnyte.connector import EgnyteConnector
 from onyx.connectors.exceptions import (
@@ -185,6 +190,28 @@ def validate_linear_perm_sync(connector: LinearConnector) -> None:
         check.run(context)
 
 
+def _run_each_once(
+    checks: list[CapabilityCheck], context: CapabilityCheckContext
+) -> None:
+    """Checks mirrored across both capabilities share an id and run once."""
+    for check in {check.check_id: check for check in checks}.values():
+        check.run(context)
+
+
+def validate_dealcloud_perm_sync(connector: DealCloudConnector) -> None:
+    """Index runs and scheduled doc syncs validate through here, so they stop
+    when the API user loses the User Management capability."""
+    _run_each_once(
+        build_dealcloud_doc_permission_sync_checks()
+        + build_dealcloud_group_sync_checks(),
+        CapabilityCheckContext(
+            source=DocumentSource.DEALCLOUD,
+            credential_json={},
+            source_operations=connector.ops,
+        ),
+    )
+
+
 def validate_youtrack_perm_sync(connector: YouTrackConnector) -> None:
     """Scheduled syncs validate through here, so a token that lost admin read
     or Override Visibility Restrictions fails the sync instead of hiding every
@@ -198,14 +225,11 @@ def validate_youtrack_perm_sync(connector: YouTrackConnector) -> None:
         ).model_dump(mode="json"),
         source_operations=connector.ops,
     )
-    # Checks mirrored across both capabilities share an id and run once.
-    checks: dict[str, CapabilityCheck] = {
-        check.check_id: check
-        for check in build_youtrack_doc_permission_sync_checks()
-        + build_youtrack_group_sync_checks()
-    }
-    for check in checks.values():
-        check.run(context)
+    _run_each_once(
+        build_youtrack_doc_permission_sync_checks()
+        + build_youtrack_group_sync_checks(),
+        context,
+    )
 
 
 def _run_egnyte_checks(
@@ -220,9 +244,7 @@ def _run_egnyte_checks(
         ).model_dump(mode="json"),
         source_operations=connector.ops,
     )
-    # Checks mirrored across both capabilities share an id and run once.
-    for check in {check.check_id: check for check in checks}.values():
-        check.run(context)
+    _run_each_once(checks, context)
 
 
 def validate_egnyte_perm_sync(connector: EgnyteConnector) -> None:
@@ -308,6 +330,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     AzureDataLakeConnector: validate_azure_datalake_perm_sync,
     BoxConnector: validate_box_perm_sync,
     CanvasConnector: validate_canvas_perm_sync,
+    DealCloudConnector: validate_dealcloud_perm_sync,
     EgnyteConnector: validate_egnyte_perm_sync,
     ConfluenceConnector: validate_confluence_perm_sync,
     GoogleDriveConnector: validate_drive_perm_sync,

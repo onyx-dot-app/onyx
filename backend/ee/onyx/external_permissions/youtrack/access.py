@@ -11,11 +11,10 @@ Helpdesk projects skip the intersection, since a ticket's visibility names
 everyone who may read it.
 """
 
-import hashlib
 from collections import defaultdict
 from collections.abc import Callable
-from urllib.parse import urlsplit, urlunsplit
 
+from ee.onyx.external_permissions.utils import instance_key
 from ee.onyx.external_permissions.youtrack.models import (
     ProjectReaders,
     VisibilityEntries,
@@ -39,17 +38,6 @@ READ_ISSUE: str = "READ_ISSUE"
 READ_COMMENT: str = "READ_COMMENT"
 OVERRIDE_VISIBILITY: str = "READ_HIDDEN_STUFF"
 _READER_PERMISSIONS: frozenset[str] = frozenset({READ_ISSUE, READ_COMMENT})
-
-
-def instance_key(base_url: str) -> str:
-    """Scopes group ids to one YouTrack, whose database ids repeat across
-    instances. Only the scheme and host are case-insensitive, since a Server
-    context path is not."""
-    parts = urlsplit(base_url.rstrip("/"))
-    normalized: str = urlunsplit(
-        (parts.scheme.lower(), parts.netloc.lower(), parts.path, "", "")
-    )
-    return hashlib.sha256(normalized.encode()).hexdigest()[:12]
 
 
 def project_group_id(instance: str, project_id: str) -> str:

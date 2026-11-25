@@ -12,6 +12,7 @@ from ee.onyx.configs.app_configs import (
     CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY,
     CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY,
     CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    DEALCLOUD_PERMISSION_SYNC_FREQUENCY,
     DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
     EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY,
     EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY,
@@ -155,6 +156,18 @@ def _load_confluence_group_sync() -> GroupSyncFuncType:
     from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 
     return confluence_group_sync
+
+
+def _load_dealcloud_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.dealcloud.doc_sync import dealcloud_doc_sync
+
+    return dealcloud_doc_sync
+
+
+def _load_dealcloud_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.dealcloud.group_sync import dealcloud_group_sync
+
+    return dealcloud_group_sync
 
 
 def _load_egnyte_doc_sync() -> DocSyncFuncType:
@@ -507,6 +520,20 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=_lazy_group_sync(_load_youtrack_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.DEALCLOUD: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=DEALCLOUD_PERMISSION_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_dealcloud_doc_sync),
+            # The first index gives each entry its object's group. An entry
+            # indexed later stays private until the next doc sync lists it.
+            initial_index_should_sync=True,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=DEALCLOUD_PERMISSION_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_dealcloud_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
