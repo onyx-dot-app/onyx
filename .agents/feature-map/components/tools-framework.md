@@ -177,8 +177,10 @@ returns its SKILL.md, frontmatter included, up to 32,000 characters per call
 sandbox tool `load_skill` copies a skill into the VM. The Deep Research orchestrator binds
 both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
-tool catalog rows. A direct call renders as a generic tool card with a short
-JSON summary, not the SKILL.md text. In code mode they are `IMMEDIATE`
+tool catalog rows. A direct call renders as a generic tool card
+(`web/src/lib/timeline/chat/message/messageComponents/renderers/CustomToolRenderer.tsx`),
+not the SKILL.md text. The card shows the arguments as fields, and hides a
+response whose fields all repeat a request field (same key and value). In code mode they are `IMMEDIATE`
 functions that return text (`tools.skills_list`, `tools.skills_read`), and the
 chat agent's skills catalog names them so. SKILL.md text that the program
 prints or returns goes into its `code_mode_delta` packets; the web timeline

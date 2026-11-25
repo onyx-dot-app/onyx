@@ -11792,7 +11792,12 @@
         "toast": "Authentication successful"
       },
       "scrollToBottomButton": {
-        "label": "Scroll to bottom"
+        "label": "Scroll to bottom",
+        "reason": {
+          "approval": "Approval needed",
+          "newAnswer": "New answer",
+          "question": "Question waiting"
+        }
       },
       "sessionAccessDenied": {
         "description": "You don't have permission to view this chat session.",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "Copied!",
           "label": "Copy"
+        },
+        "wrapButton": {
+          "unwrapLabel": "Unwrap",
+          "wrapLabel": "Wrap"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "Edit"
+        },
+        "foldButton": {
+          "collapseLabel": "Show less",
+          "expandLabel": "Show full message"
         }
       },
       "imageTool": {
@@ -12338,6 +12351,12 @@
         },
         "stoppedStatus": {
           "text": "Image generation stopped"
+        }
+      },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Image unavailable",
+          "withAlt": "{alt} · Image unavailable"
         }
       },
       "markdownTable": {
@@ -12368,6 +12387,9 @@
         "previousButton": {
           "tooltip": "Previous"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "Yesterday at {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,14 +16704,29 @@
       "rename": {
         "label": "Rename"
       },
+      "runStatus": {
+        "approval": {
+          "label": "Needs approval"
+        },
+        "done": {
+          "label": "Done"
+        },
+        "failed": {
+          "label": "Failed"
+        },
+        "question": {
+          "label": "Question waiting"
+        },
+        "working": {
+          "label": "Working"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Share"
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "Create New Project \"<name>{projectName}</name>\""
-      },
       "footer": {
         "openAction": {
           "label": "Open"
@@ -16701,25 +16738,21 @@
           "label": "Show all"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "No chats or projects yet"
+          "text": "No chats yet"
         },
         "noResults": {
           "text": "No results found"
         }
       },
-      "newProject": {
-        "label": "New Project"
-      },
       "newSession": {
         "label": "New Session"
-      },
-      "noMoreResults": {
-        "text": "No more results"
-      },
-      "projectsFilter": {
-        "label": "Projects"
       },
       "recentFilter": {
         "label": "Recent"
@@ -16728,10 +16761,25 @@
         "label": "Recent Sessions"
       },
       "searchInput": {
-        "placeholder": "Search chat sessions, projects..."
+        "placeholder": "Search chat sessions..."
       },
       "sessionsFilter": {
         "label": "Sessions"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "Change Model"
+        },
+        "nextChat": {
+          "label": "Next Session"
+        },
+        "previousChat": {
+          "label": "Previous Session"
+        },
+        "title": "Shortcuts",
+        "toggleSidebar": {
+          "label": "Toggle Sidebar"
+        }
       }
     },
     "notifications": {

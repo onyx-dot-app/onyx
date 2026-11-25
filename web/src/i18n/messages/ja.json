@@ -11792,7 +11792,12 @@
         "toast": "認証に成功しました"
       },
       "scrollToBottomButton": {
-        "label": "一番下までスクロール"
+        "label": "一番下までスクロール",
+        "reason": {
+          "approval": "承認が必要です",
+          "newAnswer": "新しい回答",
+          "question": "質問への回答待ち"
+        }
       },
       "sessionAccessDenied": {
         "description": "このチャットセッションを表示する権限がありません。",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "コピーしました！",
           "label": "コピー"
+        },
+        "wrapButton": {
+          "unwrapLabel": "折り返さない",
+          "wrapLabel": "折り返す"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "編集"
+        },
+        "foldButton": {
+          "collapseLabel": "表示を減らす",
+          "expandLabel": "メッセージ全体を表示"
         }
       },
       "imageTool": {
@@ -12338,6 +12351,12 @@
         },
         "stoppedStatus": {
           "text": "画像の生成を停止しました"
+        }
+      },
+      "markdownImage": {
+        "unavailable": {
+          "text": "画像を表示できません",
+          "withAlt": "{alt} · 画像を表示できません"
         }
       },
       "markdownTable": {
@@ -12368,6 +12387,9 @@
         "previousButton": {
           "tooltip": "前へ"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "昨日 {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,14 +16704,29 @@
       "rename": {
         "label": "名前を変更"
       },
+      "runStatus": {
+        "approval": {
+          "label": "承認が必要"
+        },
+        "done": {
+          "label": "完了"
+        },
+        "failed": {
+          "label": "失敗"
+        },
+        "question": {
+          "label": "質問が待機中"
+        },
+        "working": {
+          "label": "処理中"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共有"
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "新しいプロジェクト「<name>{projectName}</name>」を作成"
-      },
       "footer": {
         "openAction": {
           "label": "開く"
@@ -16701,25 +16738,21 @@
           "label": "すべて表示"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "チャットやプロジェクトはまだありません"
+          "text": "チャットはまだありません"
         },
         "noResults": {
           "text": "結果が見つかりません"
         }
       },
-      "newProject": {
-        "label": "新しいプロジェクト"
-      },
       "newSession": {
         "label": "新しいセッション"
-      },
-      "noMoreResults": {
-        "text": "これ以上の結果はありません"
-      },
-      "projectsFilter": {
-        "label": "プロジェクト"
       },
       "recentFilter": {
         "label": "最近"
@@ -16728,10 +16761,25 @@
         "label": "最近のセッション"
       },
       "searchInput": {
-        "placeholder": "チャットセッションやプロジェクトを検索..."
+        "placeholder": "チャットセッションを検索..."
       },
       "sessionsFilter": {
         "label": "セッション"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "モデルを変更"
+        },
+        "nextChat": {
+          "label": "次のセッション"
+        },
+        "previousChat": {
+          "label": "前のセッション"
+        },
+        "title": "ショートカット",
+        "toggleSidebar": {
+          "label": "サイドバーの切り替え"
+        }
       }
     },
     "notifications": {

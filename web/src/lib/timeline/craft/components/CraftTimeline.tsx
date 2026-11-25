@@ -83,7 +83,11 @@ function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
       status={entry.status}
       icon={getToolCallIcon(toolCall)}
       title={renderToolCallHeader(toolCall)}
-      doneTitle={renderToolCallHeader(toolCall, true)}
+      doneTitle={
+        entry.status === "done"
+          ? renderToolCallHeader(toolCall, true)
+          : undefined
+      }
       headerAccessory={
         toolCall.skillName && toolCall.toolName !== "skill" ? (
           <SkillBadge name={toolCall.skillName} />

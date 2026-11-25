@@ -1,8 +1,19 @@
-import { createRef } from "react";
+import { createRef, type ReactNode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/lib/chatScroll/components/ChatScrollContainer";
+import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
+
+function OpenableRow() {
+  const { rowRef, onToggle } = useRevealOnOpen();
+  return (
+    <div ref={rowRef} data-testid="openable-row">
+      <button onClick={() => onToggle(true)}>Open</button>
+      <button onClick={() => onToggle(false)}>Close</button>
+    </div>
+  );
+}
 
 const VIEWPORT_HEIGHT = 400;
 /** Longer than the window in which a move counts as the user's. */
@@ -39,7 +50,11 @@ afterEach(() => {
 });
 
 /** A chat at its end: 1000px of content in a 400px viewport. */
-function renderChat({ autoScroll = true, paused = false } = {}) {
+function renderChat({
+  autoScroll = true,
+  paused = false,
+  children = null as ReactNode,
+} = {}) {
   const ref = createRef<ChatScrollContainerHandle>();
   const chat = (enabled: boolean, pause: boolean) => (
     <ChatScrollContainer
@@ -50,6 +65,7 @@ function renderChat({ autoScroll = true, paused = false } = {}) {
       pauseFollowing={pause}
     >
       <div id="anchor" />
+      {children}
     </ChatScrollContainer>
   );
   const view = render(chat(autoScroll, paused));
@@ -190,4 +206,93 @@ test("a user scroll during a glide ends it, and later content does not move the 
   settleInput();
   await grow(48);
   expect(container.scrollTop).toBe(100);
+});
+
+test("opening a row in an idle view at the end does not jump to the end after the click", async () => {
+  const { container, grow, settleInput } = renderChat({
+    children: <OpenableRow />,
+  });
+  settleInput();
+  const open = screen.getByRole("button", { name: "Open" });
+  fireEvent.pointerDown(open);
+  fireEvent.pointerUp(open);
+  fireEvent.click(open);
+  await grow(200);
+  settleInput();
+  expect(container.scrollTop).toBe(600);
+});
+
+test("closing a step before its reveal keeps following the reply", async () => {
+  jest
+    .spyOn(window, "matchMedia")
+    .mockReturnValue({ matches: false } as MediaQueryList);
+  const { container, grow, settleInput } = renderChat({
+    children: <OpenableRow />,
+  });
+  settleInput();
+  const open = screen.getByRole("button", { name: "Open" });
+  fireEvent.pointerDown(open);
+  fireEvent.pointerUp(open);
+  fireEvent.click(open);
+  act(() => jest.advanceTimersByTime(1));
+  const close = screen.getByRole("button", { name: "Close" });
+  fireEvent.pointerDown(close);
+  fireEvent.pointerUp(close);
+  fireEvent.click(close);
+  await grow(200);
+  settleInput();
+  expect(container.scrollTop).toBe(800);
+});
+
+test.each([false, true])(
+  "reveals the fold unless the user scrolls first (%s)",
+  (scrollsFirst) => {
+    const { container, userScroll, settleInput } = renderChat({
+      children: <OpenableRow />,
+    });
+    jest
+      .spyOn(window, "matchMedia")
+      .mockReturnValue({ matches: false } as MediaQueryList);
+    container.scrollBy = jest.fn();
+    jest
+      .spyOn(container, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 500, 400));
+    const row = screen.getByTestId("openable-row");
+    jest
+      .spyOn(row, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 250, 500, 210));
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    if (scrollsFirst) {
+      act(() => jest.advanceTimersByTime(1));
+      userScroll(500);
+    }
+    settleInput();
+    if (scrollsFirst) expect(container.scrollBy).not.toHaveBeenCalled();
+    else
+      expect(container.scrollBy).toHaveBeenCalledWith(
+        expect.objectContaining({ top: 60 })
+      );
+  }
+);
+
+test("a step whose run card closed before its reveal does not scroll", () => {
+  const { container, settleInput } = renderChat({
+    children: <OpenableRow />,
+  });
+  jest
+    .spyOn(window, "matchMedia")
+    .mockReturnValue({ matches: false } as MediaQueryList);
+  container.scrollBy = jest.fn();
+  jest
+    .spyOn(container, "getBoundingClientRect")
+    .mockReturnValue(new DOMRect(0, 0, 500, 400));
+  const row = screen.getByTestId("openable-row");
+  jest
+    .spyOn(row, "getBoundingClientRect")
+    .mockReturnValue(new DOMRect(0, 250, 500, 210));
+  fireEvent.click(screen.getByRole("button", { name: "Open" }));
+  // The closed card's fold stays mounted, inert, while it closes.
+  row.setAttribute("inert", "");
+  settleInput();
+  expect(container.scrollBy).not.toHaveBeenCalled();
 });

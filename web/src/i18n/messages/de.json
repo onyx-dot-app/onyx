@@ -11792,7 +11792,12 @@
         "toast": "Authentifizierung erfolgreich"
       },
       "scrollToBottomButton": {
-        "label": "Nach unten scrollen"
+        "label": "Nach unten scrollen",
+        "reason": {
+          "approval": "Freigabe erforderlich",
+          "newAnswer": "Neue Antwort",
+          "question": "Frage wartet"
+        }
       },
       "sessionAccessDenied": {
         "description": "Sie haben keine Berechtigung, diese Chat-Sitzung zu sehen.",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "Kopiert!",
           "label": "Kopieren"
+        },
+        "wrapButton": {
+          "unwrapLabel": "Nicht umbrechen",
+          "wrapLabel": "Umbrechen"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "Bearbeiten"
+        },
+        "foldButton": {
+          "collapseLabel": "Weniger anzeigen",
+          "expandLabel": "Ganze Nachricht anzeigen"
         }
       },
       "imageTool": {
@@ -12338,6 +12351,12 @@
         },
         "stoppedStatus": {
           "text": "Bildgenerierung gestoppt"
+        }
+      },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Bild nicht verfügbar",
+          "withAlt": "{alt} · Bild nicht verfügbar"
         }
       },
       "markdownTable": {
@@ -12368,6 +12387,9 @@
         "previousButton": {
           "tooltip": "Zurück"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "Gestern um {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,14 +16704,29 @@
       "rename": {
         "label": "Umbenennen"
       },
+      "runStatus": {
+        "approval": {
+          "label": "Freigabe erforderlich"
+        },
+        "done": {
+          "label": "Fertig"
+        },
+        "failed": {
+          "label": "Fehlgeschlagen"
+        },
+        "question": {
+          "label": "Frage wartet"
+        },
+        "working": {
+          "label": "In Arbeit"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Teilen"
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "Neues Projekt \"<name>{projectName}</name>\" erstellen"
-      },
       "footer": {
         "openAction": {
           "label": "Öffnen"
@@ -16701,25 +16738,21 @@
           "label": "Alle anzeigen"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Strg",
+        "shift": "Umschalt"
+      },
       "list": {
         "empty": {
-          "text": "Noch keine Chats oder Projekte"
+          "text": "Noch keine Chats"
         },
         "noResults": {
           "text": "Keine Ergebnisse gefunden"
         }
       },
-      "newProject": {
-        "label": "Neues Projekt"
-      },
       "newSession": {
         "label": "Neue Sitzung"
-      },
-      "noMoreResults": {
-        "text": "Keine weiteren Ergebnisse"
-      },
-      "projectsFilter": {
-        "label": "Projekte"
       },
       "recentFilter": {
         "label": "Zuletzt verwendet"
@@ -16728,10 +16761,25 @@
         "label": "Letzte Sitzungen"
       },
       "searchInput": {
-        "placeholder": "Chat-Sitzungen, Projekte durchsuchen..."
+        "placeholder": "Chat-Sitzungen durchsuchen..."
       },
       "sessionsFilter": {
         "label": "Sitzungen"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "Modell wechseln"
+        },
+        "nextChat": {
+          "label": "Nächste Sitzung"
+        },
+        "previousChat": {
+          "label": "Vorherige Sitzung"
+        },
+        "title": "Tastenkürzel",
+        "toggleSidebar": {
+          "label": "Seitenleiste umschalten"
+        }
       }
     },
     "notifications": {

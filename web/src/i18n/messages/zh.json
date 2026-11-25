@@ -11792,7 +11792,12 @@
         "toast": "身份验证成功"
       },
       "scrollToBottomButton": {
-        "label": "滚动到底部"
+        "label": "滚动到底部",
+        "reason": {
+          "approval": "需要批准",
+          "newAnswer": "新回答",
+          "question": "有问题待回答"
+        }
       },
       "sessionAccessDenied": {
         "description": "您没有查看此聊天会话的权限。",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "已复制！",
           "label": "复制"
+        },
+        "wrapButton": {
+          "unwrapLabel": "取消换行",
+          "wrapLabel": "自动换行"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "编辑"
+        },
+        "foldButton": {
+          "collapseLabel": "收起",
+          "expandLabel": "显示完整消息"
         }
       },
       "imageTool": {
@@ -12338,6 +12351,12 @@
         },
         "stoppedStatus": {
           "text": "图片生成已停止"
+        }
+      },
+      "markdownImage": {
+        "unavailable": {
+          "text": "图片不可用",
+          "withAlt": "{alt} · 图片不可用"
         }
       },
       "markdownTable": {
@@ -12368,6 +12387,9 @@
         "previousButton": {
           "tooltip": "上一条"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "昨天 {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,14 +16704,29 @@
       "rename": {
         "label": "重命名"
       },
+      "runStatus": {
+        "approval": {
+          "label": "需要批准"
+        },
+        "done": {
+          "label": "完成"
+        },
+        "failed": {
+          "label": "失败"
+        },
+        "question": {
+          "label": "问题待回答"
+        },
+        "working": {
+          "label": "处理中"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共享"
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "创建新项目“<name>{projectName}</name>”"
-      },
       "footer": {
         "openAction": {
           "label": "打开"
@@ -16701,25 +16738,21 @@
           "label": "显示全部"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "暂无对话或项目"
+          "text": "暂无对话"
         },
         "noResults": {
           "text": "未找到结果"
         }
       },
-      "newProject": {
-        "label": "新建项目"
-      },
       "newSession": {
         "label": "新建会话"
-      },
-      "noMoreResults": {
-        "text": "没有更多结果"
-      },
-      "projectsFilter": {
-        "label": "项目"
       },
       "recentFilter": {
         "label": "最近"
@@ -16728,10 +16761,25 @@
         "label": "最近会话"
       },
       "searchInput": {
-        "placeholder": "搜索对话会话、项目…"
+        "placeholder": "搜索对话会话…"
       },
       "sessionsFilter": {
         "label": "会话"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "更换模型"
+        },
+        "nextChat": {
+          "label": "下一个会话"
+        },
+        "previousChat": {
+          "label": "上一个会话"
+        },
+        "title": "快捷键",
+        "toggleSidebar": {
+          "label": "切换侧边栏"
+        }
       }
     },
     "notifications": {

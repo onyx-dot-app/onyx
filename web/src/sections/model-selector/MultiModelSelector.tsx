@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsPresent } from "motion/react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { getModelIcon } from "@/lib/languageModels/utils";
@@ -66,11 +67,15 @@ export default function MultiModelSelector({
   const [menuKey, setMenuKey] = useState(0);
   // A removal unmounts the content with no exit animation; the next open resets it.
   const [closedByRemoval, setClosedByRemoval] = useState<boolean>(false);
+  const isPresent = useIsPresent();
   const rowRef = useRef<HTMLDivElement>(null);
   // The opener's rect frozen at open: a pick can move or unmount the opener
   // (pills prepend, + hides at max, a replaced pill remounts) while the menu fades.
   // Only a window resize while open re-measures it, since that reflows the row.
   const openerRef = useRef<HTMLElement | null>(null);
+  // The element outside the row that had focus at open: the composer, when
+  // Cmd/Ctrl+/ or `/model` clicks the pill from code.
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const openerRectRef = useRef<DOMRect>(new DOMRect());
   const anchorRef = useRef<PopoverAnchor>({
     getBoundingClientRect: () => openerRectRef.current,
@@ -192,6 +197,13 @@ export default function MultiModelSelector({
       return;
     }
     openerRef.current = element;
+    const focused = document.activeElement;
+    returnFocusRef.current =
+      focused instanceof HTMLElement &&
+      focused !== document.body &&
+      !rowRef.current?.contains(focused)
+        ? focused
+        : null;
     openerRectRef.current = element.getBoundingClientRect();
     anchorRef.current = {
       getBoundingClientRect: () => openerRectRef.current,
@@ -229,6 +241,17 @@ export default function MultiModelSelector({
     event.preventDefault();
   };
 
+  // With no Popover.Trigger, Radix returns focus nowhere when the menu
+  // closes. Give it back unless the user already moved it.
+  const returnFocus = (event: Event) => {
+    const target = returnFocusRef.current;
+    if (!target?.isConnected || document.activeElement !== document.body) {
+      return;
+    }
+    event.preventDefault();
+    target.focus();
+  };
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       {/* Disabled state blocks pointer events on children only, so the
@@ -246,6 +269,9 @@ export default function MultiModelSelector({
         >
           {canAdd && (
             <Button
+              data-model-picker-open={
+                isPresent && open && replacingIndex === null ? "" : undefined
+              }
               prominence="tertiary"
               icon={SvgPlusCircle}
               size="sm"
@@ -278,6 +304,14 @@ export default function MultiModelSelector({
                   return (
                     <div
                       key={llmOptionKey(model)}
+                      data-model-picker-open={
+                        isPresent && open && replacingIndex === index
+                          ? ""
+                          : undefined
+                      }
+                      data-model-picker-pill={
+                        isPresent && index === 0 ? "" : undefined
+                      }
                       className="flex items-center"
                     >
                       {index > 0 && (
@@ -319,6 +353,7 @@ export default function MultiModelSelector({
           align="end"
           width={70}
           onInteractOutside={keepOpenForRowButton}
+          onCloseAutoFocus={returnFocus}
         >
           <ModelSelectorContent
             key={menuKey}

@@ -69,7 +69,6 @@ const props: ChatUIProps = {
   stopGenerating: jest.fn(),
   onSubmit: jest.fn(async () => {}),
   deepResearchEnabled: true,
-  currentMessageFiles: [],
   onResubmit: jest.fn(),
 };
 
@@ -402,6 +401,8 @@ test.each([false, true])(
 );
 
 test("accepting an instruction reveals preceding text before its user bubble", () => {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query) => ({ ...matchMedia(query), matches: false });
   const animation = jest
     .spyOn(window, "requestAnimationFrame")
     .mockImplementation(() => 1);
@@ -469,6 +470,7 @@ test("accepting an instruction reveals preceding text before its user bubble", (
   } finally {
     view.unmount();
     animation.mockRestore();
+    window.matchMedia = matchMedia;
   }
 });
 

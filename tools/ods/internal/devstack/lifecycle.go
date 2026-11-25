@@ -883,18 +883,20 @@ func (s *Stack) waitReady(ctx context.Context, st *State, timeout, settle time.D
 	probeCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	for {
-		var conflicts []string
 		for i := range st.Services {
-			rec := &st.Services[i]
-			rememberGroup(rec)
-			if failedBind(*rec) {
-				conflicts = append(conflicts, rec.Slug)
-			}
+			rememberGroup(&st.Services[i])
 		}
 		if err := s.WriteState(st); err != nil {
 			return nil, err
 		}
 		status := s.statusCtx(probeCtx, st, true)
+		// A child can log a bind failure and exit during the health probes.
+		var conflicts []string
+		for _, rec := range st.Services {
+			if failedBind(rec) {
+				conflicts = append(conflicts, rec.Slug)
+			}
+		}
 		if len(conflicts) > 0 {
 			return status, &bindFailure{services: conflicts}
 		}

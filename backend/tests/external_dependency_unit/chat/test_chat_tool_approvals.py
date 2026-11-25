@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable, Generator, Sequence
+from copy import copy
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -70,7 +71,11 @@ from onyx.db.models import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import (
+    FileStore,
+    S3BackedFileStore,
+    get_default_file_store,
+)
 from onyx.file_store.gcs_file_store import GCSBackedFileStore
 from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import CancellationSignal
@@ -1436,8 +1441,8 @@ def _azure_forbidden() -> HttpResponseError:
     "error, retries, file_store",
     [
         (OperationalError("SELECT 1", {}, Exception("connection lost")), True, None),
-        (_storage_error("SlowDown", 503), True, None),
-        (_storage_error("AccessDenied", 403), False, None),
+        (_storage_error("SlowDown", 503), True, "s3"),
+        (_storage_error("AccessDenied", 403), False, "s3"),
         (ServiceResponseError("connection reset"), True, "azure"),
         (_azure_forbidden(), False, "azure"),
         (ServiceUnavailable("backend busy"), True, "gcs"),
@@ -1468,13 +1473,15 @@ def test_a_park_that_fails_for_a_moment_keeps_the_run_and_its_dump_goes(
     retrying each second. The configured file store tells the two apart."""
     if file_store is not None:
         # Only the park's error check reads this store; dumps use the default.
-        store = (
-            AzureBlobBackedFileStore(
+        store: FileStore
+        if file_store == "s3":
+            store = S3BackedFileStore(bucket_name="parks")
+        elif file_store == "azure":
+            store = AzureBlobBackedFileStore(
                 container_name="parks", connection_string="UseDevelopmentStorage=true"
             )
-            if file_store == "azure"
-            else GCSBackedFileStore(bucket_name="parks")
-        )
+        else:
+            store = GCSBackedFileStore(bucket_name="parks")
         monkeypatch.setattr(run_store, "get_default_file_store", lambda: store)
     owned = _program(chat, owned_runs, [])
     assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
@@ -1535,7 +1542,7 @@ def test_a_failed_dump_save_deletes_the_dumps_saved_before_it(
         )
     )
     progress.feature_state = state.model_dump(mode="json")
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     save_file = store.save_file
     saves: list[str] = []
 

@@ -7,7 +7,7 @@ import type { RichStr } from "@opal/types";
 import { Hoverable } from "@opal/core";
 import { Section } from "@opal/layouts";
 import { SvgDownloadCloud } from "@opal/icons";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
 
 /** An image thumbnail that falls back to an icon when the image fails. */
 export function OutputImageThumbnail({

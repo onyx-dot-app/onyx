@@ -59,6 +59,7 @@ export function getMultiModelResponses(
       modelIndex: idx,
       ...getMultiModelLabel(msg, modelProviderLookup),
       packets: msg.packets || [],
+      timeSent: msg.timeSent,
       packetCount: msg.packetCount || msg.packets?.length || 0,
       nodeId: msg.nodeId,
       messageId: msg.messageId,

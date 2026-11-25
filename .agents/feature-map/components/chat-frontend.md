@@ -44,6 +44,37 @@
   Pending submission takes no attached files and is unavailable in incognito
   and for anonymous users. Craft keeps its own queue; only the queue display and
   keyboard navigation are shared.
+- **A user drives the chat from the keyboard.** Cmd/Ctrl+Shift+O starts a
+  new session, Cmd/Ctrl+E folds the sidebar, Cmd/Ctrl+/ opens or closes the
+  model picker, Alt+Up and Alt+Down open the previous or next Recents chat,
+  and Cmd+Option on Mac or Ctrl+Alt with 1–9 opens the Nth Recents chat.
+  Holding those modifiers shows the shortcut at the end of each chat row. All but
+  Alt+Up and Alt+Down work from the chat input too, since those keys move
+  the caret by paragraph on macOS. Only the sidebar shortcut runs while
+  another modal is open.
+  `web/src/lib/shortcuts/constants.ts` lists them;
+  `sections/sidebar/ChatShortcuts.tsx` binds them with Opal's `useHotkey`.
+  Cmd/Ctrl+K opens or closes the sidebar's search menu
+  (`sections/sidebar/ChatSearchCommandMenu.tsx`). The menu shows Recent
+  Sessions and Shortcuts. Search matches chat sessions and shortcut labels.
+  Shortcuts includes New Session and shows the keys for the user's platform.
+  Each shortcut action runs after the menu closes.
+- **A user types or pastes with no field focused.** On the chat page, a
+  printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and
+  the browser types the character there. A paste goes to the input too. Keys
+  in a field, Space on a button, and keys while a dialog, menu or listbox is
+  open stay where they are (`web/src/lib/chat/typeToFocus.ts`). The handlers
+  are React props on the page's root element in `views/AppPage.tsx`, which
+  takes focus (`tabIndex={-1}`) on a click in empty space. So only keys with
+  focus inside the page count: not keys on the sidebar, or on `body` before
+  the first click.
+- **The composer keeps a draft for each chat** and one for the new chat
+  (`sections/input/AppInputBar.tsx`, `useDraft` with `storage: "local"`). The
+  draft holds the text, its `@` picks and the uploaded files, and survives
+  reload and browser closure. A send or an emptied input clears it, and
+  logout removes all of them. Incognito keeps its composer text and files
+  in memory. Persisted drafts are scoped to the signed-in account and tenant.
+  Drafts from older tabs without an account or privacy mode are not restored.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button stops every active
@@ -425,7 +456,10 @@ history API first, so the tabs follow the click, then asks Next to render a new
 route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
 `web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
 `AppPage` renders itself, so writing the URL is the whole switch; in-app links
-use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
+use its `linkTo*` props. A send from a new session makes its chat current
+before the URL changes, so a switch to a new session in that gap writes no new
+URL; `openNewSession` and `linkToNewSession` clear the current chat for that
+case. `AppChrome`'s `PendingRoute` loader is
 `web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
 URL's page loader (the agents catalog, the agent editor, the page loader, or
 blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same
@@ -449,8 +483,9 @@ parent and the server parent are the same node. When the server answers
 without admitting the send (`CurrentMessageFIFO.acknowledged` resolves to
 `null`) or the send fails before dispatch, `restoreTreeBeforeSend` removes the
 send's nodes and restores the links of their parent. The error goes to the
-session's `uncaughtError`, a `SessionError` with the error code and details,
-after settlement.
+session's `uncaughtError`, a `SessionError` with the error code and details.
+The reader returns a rejected send’s error when it finishes. Completion and
+Stop both read that result before releasing the input.
 An automatic follow-up response has a hidden `agent_results` question node as
 its parent. `ChatUI` and the shared chat view render that node with
 `web/src/lib/timeline/chat/message/AgentResultsDivider.tsx`, with no message controls. Checks that
@@ -897,6 +932,20 @@ the admin and Craft sidebars share: the logo mark and the wordmark from
 column's edge as the sidebar folds. A sidebar renders it rather than setting
 up its own branding.
 
+**Run status on chat rows.** Each chat row (`sections/sidebar/ChatButton.tsx`)
+shows live status from the session store and unseen Done or Failed status
+from a separate store. The tooltip shows the title and status. Working shimmers
+the title (`SidebarTab` `loading`). The other statuses put a mark at the row's
+end. On hover, the options button replaces the warning icon, error icon, or
+blue unseen dot for Done. Working (`loading`, `streaming` or `cancelling`), Needs
+approval or Question waiting (`lib/chat/runStatus.ts:liveRunStatus`, from
+`readWaitingToolRequests`, less the requests that this client decided), and
+Failed or Done for a run that ended while its chat was not on screen.
+`lib/chat/hooks.ts:useTrackChatRuns`, which `AppSidebar` mounts, watches the
+store for runs that stop working and records Failed or Done in
+`useUnseenRuns`. Tab storage keeps the 50 newest records across reloads.
+Opening or deleting the chat clears its record. Signing out clears all records.
+
 ## Contracts and traps
 
 1. `packet-list-append-only` **A message's packet list grows by appending,
@@ -1043,6 +1092,16 @@ up its own branding.
     when it ends. Do not write `scrollTop` while the user scrolls: a following
     view catches up once the input settles. Keep native scroll anchoring on: a
     script write stops a trackpad fling.
+    **Opening a step reveals it.** When the user opens a run card or a step,
+    `lib/chatScroll/hooks.ts:useRevealOnOpen` waits `FOLD_OPEN_MS` for the fold
+    to reach its full height, then the action from the container's `prepareReveal` scrolls by the smaller of
+    the part of the row hidden below and the room above it. The footer's height (a
+    spacer the height of the composer laid over the view) counts as hidden.
+    It does nothing while the view follows a streaming reply (`isStreaming`) with
+    auto-scroll on, or when the user closes the row again during the wait, and
+    jumps instead of gliding under reduced motion. Otherwise it makes the view a
+    reading one, so the click's catch-up does not jump a following idle view to
+    the end.
     **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
     user message and its replies) in a `data-chat-turn` element. The latest turn
     has `min-height: calc(100cqh - 3rem - var(--app-composer-height))` (the
@@ -1062,6 +1121,11 @@ up its own branding.
     chat's end clear of the composer: a footer spacer (not content, so "at the
     bottom" ignores it), the latest turn's minimum height, and
     `scroll-padding-bottom` for focus and `scrollIntoView`.
+    The button names why to return (`lib/chat/hooks.ts:useJumpToLatestReason`):
+    a waiting approval, a waiting question, or new output from a run that went
+    on after the button appeared and has ended. Output that only loads, such
+    as an opened chat's history, does not count. Otherwise it is a bare
+    chevron.
     Each chat's position (end, or a row and offset) and its row heights live
     in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
     them from loaded rows only, so a switch never waits on the network. Rows

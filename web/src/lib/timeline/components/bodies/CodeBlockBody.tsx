@@ -1,6 +1,9 @@
 "use client";
 
-import { CodePanel } from "@opal/components";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { Button, CodePanel } from "@opal/components";
+import { SvgTextWrap } from "@opal/icons";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 
 interface CodeBlockBodyProps {
@@ -23,20 +26,39 @@ export function CodeBlockBody({
   language,
   streaming = false,
 }: CodeBlockBodyProps) {
+  const t = useTranslations("chat.messages.codeBlock.wrapButton");
+  const [wrap, setWrap] = useState(true);
   const lines = useCodeLines(code, language, {
     streaming,
     detect: !language,
   });
+  const wrapLabel = wrap ? t("unwrapLabel") : t("wrapLabel");
 
   return (
     <CodePanel>
-      {language && <CodePanel.Header title={language} copyText={code} />}
+      {language && (
+        <CodePanel.Header
+          title={language}
+          copyText={code}
+          rightChildren={
+            <Button
+              icon={SvgTextWrap}
+              size="2xs"
+              prominence="tertiary"
+              tooltip={wrapLabel}
+              aria-label={wrapLabel}
+              onClick={() => setWrap(!wrap)}
+            />
+          }
+        />
+      )}
       {/* Answer code grows with its lines, so streaming code stays in view
           as the page follows it. */}
       <CodePanel.Lines
         lines={lines}
         copyText={language ? undefined : code}
         grow
+        wrap={wrap}
       />
     </CodePanel>
   );
