@@ -36,12 +36,15 @@ from sqlalchemy import select
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.tasks import _docprocessing_task
 from onyx.configs.app_configs import (
+    FILE_STORE_BACKEND,
     INDEX_BATCH_SIZE,
     OPENSEARCH_ADMIN_PASSWORD,
     OPENSEARCH_ADMIN_USERNAME,
+    OPENSEARCH_CA_CERTS,
     OPENSEARCH_HOST,
     OPENSEARCH_REST_API_PORT,
     OPENSEARCH_USE_SSL,
+    OPENSEARCH_VERIFY_CERTS,
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PORT,
@@ -50,6 +53,7 @@ from onyx.configs.app_configs import (
     REDIS_HOST,
     REDIS_PASSWORD,
     REDIS_PORT,
+    S3_FILE_STORE_BUCKET_NAME,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
@@ -71,6 +75,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     DocumentByConnectorCredentialPair,
+    SearchSettings,
 )
 from onyx.db.models import Document as DBDocument
 from onyx.db.search_settings import (
@@ -117,6 +122,8 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 # Every throwaway resource carries this prefix. Setup refuses any other name, so
 # a wrong environment cannot drop a real database or index.
 BENCH_PREFIX = "docproc_bench"
+# Bucket names cannot hold an underscore.
+BENCH_BUCKET_PREFIX = "docproc-bench"
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _TENANT_ID = POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 _CELERY_TASK_ID = "docprocessing-bench"
@@ -240,7 +247,8 @@ def _opensearch() -> OpenSearch:
         hosts=[{"host": OPENSEARCH_HOST, "port": OPENSEARCH_REST_API_PORT}],
         http_auth=(OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
         use_ssl=OPENSEARCH_USE_SSL,
-        verify_certs=False,
+        verify_certs=OPENSEARCH_VERIFY_CERTS,
+        ca_certs=OPENSEARCH_CA_CERTS if OPENSEARCH_VERIFY_CERTS else None,
         ssl_show_warn=False,
         timeout=120,
     )
@@ -279,9 +287,22 @@ def _flush_redis() -> None:
     client.close()
 
 
+def _require_bench_file_store() -> None:
+    # Batch names restart with the database, so a shared store would lose files.
+    if FILE_STORE_BACKEND != "s3" or not S3_FILE_STORE_BUCKET_NAME.startswith(
+        BENCH_BUCKET_PREFIX
+    ):
+        raise RuntimeError(
+            f"Refusing to use file store '{FILE_STORE_BACKEND}' with bucket "
+            f"'{S3_FILE_STORE_BUCKET_NAME}': the benchmark needs the S3 backend "
+            f"and a bucket that starts with '{BENCH_BUCKET_PREFIX}'."
+        )
+
+
 def setup(index_name: str) -> SetupResult:
     _require_bench_name("database", POSTGRES_DB)
     _require_bench_name("index", index_name)
+    _require_bench_file_store()
 
     _recreate_database()
     subprocess.run(
@@ -299,7 +320,19 @@ def setup(index_name: str) -> SetupResult:
 
     with get_session_with_current_tenant() as db_session:
         # A new database starts on the legacy model with the current default as
-        # FUTURE. Startup swaps to it at once when no connector exists.
+        # FUTURE. Startup swaps to it at once when no connector exists. The
+        # seeded rows name the indexes of a normal deployment, so rename them
+        # first: nothing here may touch an index without the bench prefix.
+        next_settings = get_secondary_search_settings(
+            db_session
+        ) or get_current_search_settings(db_session)
+        for row in db_session.scalars(select(SearchSettings)):
+            row.index_name = (
+                index_name
+                if row.id == next_settings.id
+                else f"{index_name}_retired_{row.id}"
+            )
+        db_session.commit()
         check_and_perform_index_swap(db_session=db_session)
         if get_secondary_search_settings(db_session) is not None:
             raise RuntimeError("Bug: FUTURE search settings remain after the swap.")

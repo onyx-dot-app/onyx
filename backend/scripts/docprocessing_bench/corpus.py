@@ -55,7 +55,8 @@ class CorpusProfile(str, Enum):
 
 _DEFAULT_DOCS: dict[CorpusProfile, int] = {
     CorpusProfile.SMALL: 3_200,
-    CorpusProfile.MIXED: 1_600,
+    # golden.json holds the digests of this corpus.
+    CorpusProfile.MIXED: 400,
     CorpusProfile.LARGE: 48,
     CorpusProfile.PATHOLOGICAL: 16,
 }

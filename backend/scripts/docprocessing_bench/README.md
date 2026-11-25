@@ -20,7 +20,8 @@ not predict a customer's corpus.
 The run uses its own Postgres database (`docproc_bench_db`), OpenSearch index
 (`docproc_bench_index`), file store bucket (`docproc-bench-file-store`) and Redis database
 (9). Setup drops and creates them on each run. The worker refuses a database or index name
-without the `docproc_bench` prefix.
+without the `docproc_bench` prefix, and a file store that is not the S3 backend with a
+`docproc-bench` bucket.
 
 The mock model server returns a vector that is a pure function of the text. Two runs over
 one corpus therefore write the same index.
@@ -37,7 +38,7 @@ uv run python -m scripts.benchmark_docprocessing --profile mixed --json-out repo
 | Option | Use |
 | --- | --- |
 | `--profile` | `small` (1-5k characters), `mixed` (long tail, the default), `large` (1-8 MB), `pathological` (16 documents of 20 MB) |
-| `--docs`, `--doc-chars`, `--seed` | Change the corpus. Each combination is a different corpus id |
+| `--docs`, `--doc-chars`, `--seed` | Change the corpus. Each combination is a different corpus id. The default is 400 `mixed` documents |
 | `--passes` | `first` (all new), `unchanged` (same corpus again), `updated` (1 document in 10 changed, to half its size) |
 | `--threads` | Worker threads. The default 6 is the default worker concurrency |
 | `--latency` | Embed latency of the mock: `zero`, `local` or `api` |
@@ -82,6 +83,10 @@ The exit status is 1 when a gate fails.
 The golden values are in `golden.json`, one entry per corpus id, pass, embedding model and
 multipass setting. A change that alters chunk content on purpose must update them with
 `--update-golden` in the same commit.
+
+`golden.json` has values for the default corpus and a few others. A corpus with no entry
+fails the golden gate. To compare two builds on such a corpus, run the base build with
+`--update-golden` first.
 
 ## Read the report
 

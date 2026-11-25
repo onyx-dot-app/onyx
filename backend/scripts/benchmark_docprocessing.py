@@ -8,7 +8,7 @@ Postgres against a set of gates. The exit status is 1 when a gate fails.
 
 Usage:
     cd backend && uv run python -m scripts.benchmark_docprocessing \
-        [--profile mixed] [--docs 1600] [--threads 6] \
+        [--profile mixed] [--docs 400] [--threads 6] \
         [--passes first,unchanged,updated] [--latency zero|local|api] \
         [--poison-docs 2] [--max-rss-mb 2000] \
         [--update-golden] [--json-out report.json]
@@ -129,6 +129,8 @@ def _bench_env(mock_port: int, log_level: str) -> dict[str, str]:
     return {
         "POSTGRES_DB": f"{_BENCH_PREFIX}_db",
         "REDIS_DB_NUMBER": "9",
+        # Batch names restart with the database, so never use a shared store.
+        "FILE_STORE_BACKEND": "s3",
         "S3_FILE_STORE_BUCKET_NAME": "docproc-bench-file-store",
         "MODEL_SERVER_HOST": "127.0.0.1",
         "MODEL_SERVER_PORT": str(mock_port),
