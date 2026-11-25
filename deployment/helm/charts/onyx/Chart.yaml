@@ -22,8 +22,9 @@ annotations:
   artifacthub.io/changes: |
     - kind: added
       description: configMap values MAGIC_LINK_ENABLED and MAGIC_LINK_TTL_SECONDS
-        add "Get a link by email" sign-in and set how long a link works. Empty
-        keeps it off.
+        turn on sign-in with a link sent by email and set how long a link works.
+        Empty keeps it off. Sign-in links are not copied to
+        EMAIL_ARCHIVE_BCC_ADDRESSES.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
