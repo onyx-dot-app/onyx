@@ -347,6 +347,33 @@ describe("ProjectsContext attached file status polling", () => {
     expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"]);
   });
 
+  it("polls a pending file again when it is attached again after it finished", async () => {
+    const pendingFile = makePendingFile("file-1");
+    mockGetUserFileStatuses.mockResolvedValue(completedStatuses(["file-1"]));
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    // A draft set aside for an edit keeps the pending copy.
+    await act(async () => {
+      result.current.setCurrentMessageFiles([pendingFile]);
+    });
+    await act(async () => {
+      result.current.setCurrentMessageFiles([]);
+    });
+    await waitFor(() => expect(mockGetUserFileStatuses).toHaveBeenCalled());
+    await act(async () => {});
+    mockGetUserFileStatuses.mockClear();
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([pendingFile]);
+    });
+
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[0]?.status).toBe(
+        UserFileStatus.COMPLETED
+      )
+    );
+  });
+
   it("keeps a file attached while an earlier status request is in flight", async () => {
     const first = makePendingFile("file-1");
     const second = makePendingFile("file-2");

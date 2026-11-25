@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { FileDescriptor } from "@/app/app/types";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/lib/timeline/chat/message/MessageSwitcher";
@@ -14,88 +14,10 @@ import { useOverflow } from "@opal/hooks";
 import FileDisplay from "./FileDisplay";
 import MessageTime from "@/lib/timeline/chat/message/MessageTime";
 import { placeMentions, MENTION_TRIGGER } from "@/lib/chat/mentions";
-import type {
-  ComposedMention,
-  ComposedMessage,
-  Mention,
-} from "@/lib/chat/types";
+import type { ComposedMention, MessageEdit, Mention } from "@/lib/chat/types";
 import type { IconFunctionComponent } from "@opal/types";
 import { useTranslations } from "next-intl";
 import { chatFindTextKey } from "@/lib/chatFind/highlights";
-
-interface MessageEditingProps {
-  content: string;
-  onSubmitEdit: (editedContent: string) => void;
-  onCancelEdit: () => void;
-}
-
-function MessageEditing({
-  content,
-  onSubmitEdit,
-  onCancelEdit,
-}: MessageEditingProps) {
-  const t = useTranslations("chat.messages");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [editedContent, setEditedContent] = useState(content);
-
-  useEffect(() => {
-    if (!textareaRef.current) return;
-
-    // Focus the textarea
-    textareaRef.current.focus();
-    textareaRef.current.select();
-  }, []);
-
-  function handleSubmit() {
-    onSubmitEdit(editedContent);
-  }
-
-  function handleCancel() {
-    setEditedContent(content);
-    onCancelEdit();
-  }
-
-  return (
-    <div className="w-full">
-      <div
-        className={cn(
-          "w-full h-full border rounded-16 overflow-hidden p-3 flex flex-col gap-2"
-        )}
-      >
-        <textarea
-          ref={textareaRef}
-          dir="auto"
-          className={cn(
-            "w-full h-full resize-none outline-hidden bg-transparent overflow-y-scroll whitespace-normal break-word"
-          )}
-          value={editedContent}
-          style={{ scrollbarWidth: "thin" }}
-          onChange={(e) => {
-            setEditedContent(e.target.value);
-            textareaRef.current!.style.height = "auto";
-            e.target.style.height = `${e.target.scrollHeight}px`;
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.preventDefault();
-              handleCancel();
-            }
-            // Submit edit if "Command Enter" is pressed, like in ChatGPT
-            if (e.key === "Enter" && e.metaKey) handleSubmit();
-          }}
-        />
-        <div className="flex justify-end gap-1">
-          <Button onClick={handleSubmit}>
-            {t("messageEditing.submitButton.label")}
-          </Button>
-          <Button prominence="secondary" onClick={handleCancel}>
-            {t("messageEditing.cancelButton.label")}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // The chip icon of each mention kind.
 const MENTION_CHIP_ICONS: Record<Mention["type"], IconFunctionComponent> = {
@@ -213,8 +135,8 @@ interface HumanMessageProps {
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
 
-  // Editing functionality - takes (edited, messageId) to allow stable callback reference
-  onEdit?: (edited: ComposedMessage, messageId: number) => void;
+  /** Starts an edit of this message in the composer. */
+  onEdit?: (edit: MessageEdit) => void;
 
   // Streaming and generation
   stopGenerating?: () => void;
@@ -241,7 +163,7 @@ function arePropsEqual(
 }
 
 const HumanMessage = React.memo(function HumanMessage({
-  content: initialContent,
+  content,
   files,
   mentions,
   timeSent,
@@ -255,13 +177,6 @@ const HumanMessage = React.memo(function HumanMessage({
 }: HumanMessageProps) {
   const t = useTranslations("chat.messages");
 
-  // TODO (@raunakab):
-  //
-  // This is some duplicated state that is patching a memoization issue with `HumanMessage`.
-  // Fix this later.
-  const [content, setContent] = useState(initialContent);
-
-  const [isEditing, setIsEditing] = useState(false);
   const { isMobile } = useScreenSize();
 
   // Use nodeId for switching (finding position in siblings)
@@ -309,18 +224,25 @@ const HumanMessage = React.memo(function HumanMessage({
           prominence="tertiary"
           data-testid="HumanMessage/copy-button"
         />
-        {onEdit && (
+        {onEdit && messageId != null && (
           <Button
             icon={SvgEdit}
             prominence="tertiary"
             tooltip={t("humanMessage.editButton.tooltip")}
-            onClick={() => setIsEditing(true)}
+            onClick={() =>
+              onEdit({
+                messageId,
+                message: content,
+                mentions: mentions ?? [],
+                files: files ?? [],
+              })
+            }
             data-testid="HumanMessage/edit-button"
           />
         )}
       </Section>
     ),
-    [content, onEdit, t]
+    [content, files, mentions, messageId, onEdit, t]
   );
 
   const copyEditButton = (
@@ -336,39 +258,14 @@ const HumanMessage = React.memo(function HumanMessage({
         className="flex flex-col justify-end w-full relative"
       >
         <FileDisplay files={files || []} />
-        {isEditing ? (
-          <MessageEditing
+        <div className="flex justify-end">
+          {!isMobile && copyEditButton}
+          <HumanMessageBubble
             content={content}
-            onSubmitEdit={(editedContent) => {
-              // Don't update UI for edits that can't be persisted
-              if (messageId === undefined || messageId === null) {
-                setIsEditing(false);
-                return;
-              }
-              // The edit has no `@` menu, so it keeps the recorded mentions
-              // that its text still has and adds no new ones.
-              onEdit?.(
-                {
-                  message: editedContent,
-                  mentions: placeMentions(editedContent, mentions ?? []),
-                },
-                messageId
-              );
-              setContent(editedContent);
-              setIsEditing(false);
-            }}
-            onCancelEdit={() => setIsEditing(false)}
+            mentions={mentions}
+            findKey={chatFindTextKey("user", nodeId)}
           />
-        ) : (
-          <div className="flex justify-end">
-            {!isMobile && copyEditButton}
-            <HumanMessageBubble
-              content={content}
-              mentions={mentions}
-              findKey={chatFindTextKey("user", nodeId)}
-            />
-          </div>
-        )}
+        </div>
         <Section
           flexDirection="row"
           justifyContent="end"
@@ -377,9 +274,9 @@ const HumanMessage = React.memo(function HumanMessage({
           gap={0}
           className="mt-1"
         >
-          {!isEditing && isMobile && copyEditButton}
+          {isMobile && copyEditButton}
           {/* The send time sits under the bubble, at its end. */}
-          {!isEditing && timeSent && (
+          {timeSent && (
             <Hoverable.Item group="humanMessage" variant="appear-on-hover">
               <div className="px-1">
                 <MessageTime timeSent={timeSent} />

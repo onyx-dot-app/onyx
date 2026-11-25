@@ -540,3 +540,16 @@ test("an automatic follow-up renders a divider instead of a user bubble", () => 
   if (!followUp) throw new Error("Follow-up answer is missing");
   expect(within(followUp).getByText("test")).toBeVisible();
 });
+
+test("a sent message offers Edit only while the chat is idle", () => {
+  render(<ChatUI {...props} onEditMessage={jest.fn()} />);
+  expect(screen.getByTestId("HumanMessage/edit-button")).toBeInTheDocument();
+
+  act(() =>
+    useChatSessionStore.getState().updateChatState("session", "streaming")
+  );
+
+  expect(
+    screen.queryByTestId("HumanMessage/edit-button")
+  ).not.toBeInTheDocument();
+});

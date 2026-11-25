@@ -79,7 +79,7 @@ import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { effectiveChatPreference } from "@/lib/tools/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
+import { projectsFileToFileDescriptor } from "@/lib/projects/utils";
 import {
   claimStreamReader,
   releaseStreamReader,
@@ -582,13 +582,18 @@ export default function useChatController({
         ? messageToResend?.message || message
         : message;
 
-      // When editing a message that had files attached, preserve the original files.
-      // Skip for regeneration — the regeneration path reuses the existing user node
-      // (and its files), so merging here would send duplicates.
-      const effectiveFileDescriptors = [
-        ...projectFilesToFileDescriptors(currentMessageFiles),
-        ...(!regenerationRequest ? (messageToResend?.files ?? []) : []),
-      ];
+      // A resent message sends the files the caller passes. A file kept from
+      // the original keeps its original descriptor.
+      const originalFiles = new Map(
+        (messageToResend?.files ?? []).map((file) => [
+          file.user_file_id ?? file.id,
+          file,
+        ])
+      );
+      const effectiveFileDescriptors = currentMessageFiles.map(
+        (file) =>
+          originalFiles.get(file.id) ?? projectsFileToFileDescriptor(file)
+      );
 
       updateChatStateAction(frozenSessionId, "loading");
 

@@ -12197,6 +12197,13 @@
       },
       "fileDropOverlay": {
         "label": "Déposez des fichiers pour les joindre"
+      },
+      "editMessageBanner": {
+        "label": "Modification dans le champ de saisie",
+        "cancelButton": {
+          "label": "Annuler",
+          "ariaLabel": "Annuler la modification du message"
+        }
       }
     },
     "messages": {
@@ -12396,14 +12403,6 @@
         },
         "artifactError": {
           "message": "Ce fichier n'est pas disponible."
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "Annuler"
-        },
-        "submitButton": {
-          "label": "Envoyer"
         }
       },
       "messageSwitcher": {

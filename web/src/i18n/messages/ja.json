@@ -12197,6 +12197,13 @@
       },
       "fileDropOverlay": {
         "label": "ファイルをドロップして添付"
+      },
+      "editMessageBanner": {
+        "label": "入力欄で編集中",
+        "cancelButton": {
+          "label": "キャンセル",
+          "ariaLabel": "メッセージの編集をキャンセル"
+        }
       }
     },
     "messages": {
@@ -12396,14 +12403,6 @@
         },
         "artifactError": {
           "message": "このファイルは利用できません。"
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "キャンセル"
-        },
-        "submitButton": {
-          "label": "送信"
         }
       },
       "messageSwitcher": {

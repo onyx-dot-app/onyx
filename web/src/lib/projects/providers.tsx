@@ -399,6 +399,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
       const upload = trackUpload(tempIds);
+      let settledFiles: ProjectFile[] = [];
       svcUploadFiles(
         validFiles,
         projectId,
@@ -420,6 +421,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             return;
           }
           const uploadedFiles = uploaded.user_files || [];
+          settledFiles = uploadedFiles;
           const tempIdToUploadedFileMap = new Map(
             uploadedFiles.map((f) => [f.temp_id, f])
           );
@@ -503,7 +505,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           onFailure?.(Array.from(optimisticTempIds));
         })
         .finally(() => {
-          upload.finish();
+          upload.finish(settledFiles);
           if (projectId && currentProjectId === projectId) {
             refreshCurrentProjectDetails();
           }

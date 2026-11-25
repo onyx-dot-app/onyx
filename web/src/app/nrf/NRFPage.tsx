@@ -5,7 +5,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useUser } from "@/providers/UserProvider";
 import { toast, Section } from "@opal/layouts";
-import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import AppInputBar, {
+  type AppInputBarHandle,
+  type ComposerSubmission,
+} from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useLlmManager } from "@/lib/hooks";
@@ -20,7 +23,7 @@ import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
-import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
+import type { MessageEdit, UnsentMessage } from "@/lib/chat/types";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
@@ -57,6 +60,7 @@ import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
+import { resendFiles } from "@/lib/projects/utils";
 
 const SearchUI = paidTierGated(EESearchUI);
 
@@ -315,6 +319,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     chatInputBarRef.current?.restore(unsent);
   }, []);
 
+  const editMessage = useCallback((edit: MessageEdit) => {
+    chatInputBarRef.current?.editMessage(edit);
+  }, []);
+
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -355,7 +363,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
   const handleChatInputSubmit = useCallback(
-    async (composed: ComposedMessage) => {
+    async (composed: ComposerSubmission) => {
       if (!composed.message.trim()) return;
 
       const additionalContext =
@@ -419,7 +427,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       mentions: lastUserMsg.mentions ?? [],
-      currentMessageFiles: currentMessageFiles,
+      currentMessageFiles: resendFiles(lastUserMsg, currentMessageFiles),
       deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
     });
@@ -540,7 +548,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     deepResearchEnabled={deepResearchEnabled}
                     anchorNodeId={anchorNodeId}
-                    selectedModels={multiModel.selectedModels}
+                    onEditMessage={editMessage}
                   />
                 </ChatScrollContainer>
               </>

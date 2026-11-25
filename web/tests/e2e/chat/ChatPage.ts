@@ -51,6 +51,8 @@ export class ChatPage {
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
+  /** Shows above the composer while a sent message is edited there. */
+  readonly editMessageBanner: Locator;
   readonly errorBanners: Locator;
   /** The toggle at the header's end that opens and closes the right panel. */
   readonly rightPanelToggle: Locator;
@@ -93,6 +95,7 @@ export class ChatPage {
     });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
     this.errorBanners = page.getByTestId("chat-error-banner");
+    this.editMessageBanner = page.getByTestId("edit-message-banner");
     this.rightPanelToggle = page.getByRole("button", {
       name: "Toggle panel",
     });
@@ -1191,23 +1194,30 @@ export class ChatPage {
       .click();
   }
 
-  async editHumanMessage(text: string, index = 0): Promise<void> {
+  /** Loads the sent message into the composer for an edit. */
+  async startHumanMessageEdit(index = 0): Promise<void> {
     const message = this.humanMessage(index);
     await message.hover();
     await message.getByTestId("HumanMessage/edit-button").click();
-    await message.getByRole("textbox").fill(text);
+    await expect(this.editMessageBanner).toBeVisible();
   }
 
-  async submitHumanMessageEdit(index = 0): Promise<void> {
-    await this.humanMessage(index)
-      .getByRole("button", { name: "Submit", exact: true })
-      .click();
+  async editHumanMessage(text: string, index = 0): Promise<void> {
+    await this.startHumanMessageEdit(index);
+    await this.inputBar.fill(text);
   }
 
-  async cancelHumanMessageEdit(index = 0): Promise<void> {
-    await this.humanMessage(index)
-      .getByRole("button", { name: "Cancel", exact: true })
+  async submitHumanMessageEdit(): Promise<void> {
+    await this.inputBar.textbox.focus();
+    await this.inputBar.send();
+    await expect(this.editMessageBanner).toBeHidden();
+  }
+
+  async cancelHumanMessageEdit(): Promise<void> {
+    await this.editMessageBanner
+      .getByRole("button", { name: "Cancel editing message" })
       .click();
+    await expect(this.editMessageBanner).toBeHidden();
   }
 
   async expectHumanMessage(text: string, index = 0): Promise<void> {

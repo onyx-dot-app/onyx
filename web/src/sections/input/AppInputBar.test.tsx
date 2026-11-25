@@ -415,6 +415,148 @@ test("incognito keeps its draft out of storage and restores the regular draft on
   expect(message()).not.toHaveTextContent("private draft");
 });
 
+describe("edit a sent message in the composer", () => {
+  const sentFile = {
+    id: "store-sent",
+    type: ChatFileType.PLAIN_TEXT,
+    name: "sent.txt",
+    user_file_id: "user-sent",
+  };
+  const edit = {
+    messageId: 5,
+    message: "sent question",
+    mentions: [],
+    files: [sentFile],
+  };
+
+  function startEdit(
+    draftFiles: ProjectFile[] = [projectFile("draft-file")],
+    chatState: ChatState = "input"
+  ) {
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const onSubmit = jest.fn();
+    mockProjectsContext.currentMessageFiles = draftFiles;
+    render(
+      <Composer
+        inputBarRef={inputBarRef}
+        onSubmit={onSubmit}
+        chatState={chatState}
+      />
+    );
+    return { inputBarRef, onSubmit };
+  }
+
+  test("does not start while a response streams", () => {
+    const { inputBarRef } = startEdit([], "streaming");
+    act(() => inputBarRef.current?.editMessage(edit));
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).not.toHaveTextContent("sent question");
+  });
+
+  test("a draft file still processing comes back live after the edit", async () => {
+    const processing = {
+      ...projectFile("processing-file"),
+      status: UserFileStatus.PROCESSING,
+    };
+    const { inputBarRef } = startEdit([processing]);
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await setupUser().keyboard("{Escape}");
+
+    expect(lastFiles()).toEqual([processing]);
+  });
+
+  test("a draft file that finished uploading during the edit comes back uploaded", async () => {
+    const uploading = {
+      ...projectFile("temp_draft"),
+      temp_id: "temp_draft",
+      status: UserFileStatus.UPLOADING,
+    };
+    const upload = trackUpload(["temp_draft"]);
+    const { inputBarRef } = startEdit([uploading]);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const uploaded = {
+      ...projectFile("user-draft"),
+      temp_id: "temp_draft",
+      status: UserFileStatus.PROCESSING,
+    };
+    upload.finish([uploaded]);
+
+    await setupUser().keyboard("{Escape}");
+
+    expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  function lastFiles(): ProjectFile[] {
+    const next = mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+    return typeof next === "function" ? next([]) : next;
+  }
+
+  test("loads the text and files and shows the banner; Cancel restores the draft", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(lastFiles()).toEqual([
+      expect.objectContaining({
+        id: "user-sent",
+        file_id: "store-sent",
+        name: "sent.txt",
+      }),
+    ]);
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(lastFiles()).toEqual([projectFile("draft-file")]);
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("Escape cancels the edit", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("send resends the edited text as an edit, then restores the draft", async () => {
+    const { inputBarRef, onSubmit } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await user.keyboard(" again{Enter}");
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "sent question again",
+      mentions: [],
+      messageIdToResend: 5,
+    });
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(lastFiles()).toEqual([projectFile("draft-file")]);
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("restore after a failed send", () => {
   const failedFiles = [projectFile("failed-file")] satisfies ProjectFile[];
 

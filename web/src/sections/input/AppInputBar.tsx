@@ -31,6 +31,7 @@ import { settleChatSession } from "@/lib/chat/settleChatSession";
 import type {
   ChatSessionQueue,
   ComposedMessage,
+  MessageEdit,
   PendingChatMessage,
   UnsentMessage,
 } from "@/lib/chat/types";
@@ -61,9 +62,17 @@ import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
-import { cancelUpload } from "@/lib/projects/uploadProgress";
+import {
+  cancelUpload,
+  holdUploads,
+  releaseUploads,
+} from "@/lib/projects/uploadProgress";
+import { EditMessageBanner } from "@/sections/input/EditMessageBanner";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { isFilePending } from "@/lib/projects/utils";
+import {
+  fileDescriptorToProjectFile,
+  isFilePending,
+} from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
 import IntegrationConnectPrompt from "@/sections/plugins/IntegrationConnectPrompt";
@@ -113,12 +122,19 @@ export interface AppInputBarHandle {
   focus: () => void;
   /** Focuses the input and pastes the clipboard data at its end. */
   paste: (data: DataTransfer) => void;
+  /** Loads a sent question into the composer and sets the draft aside. */
+  editMessage: (edit: MessageEdit) => void;
 }
+
+/** What the composer sends. An edit names the sent question it replaces. */
+export type ComposerSubmission = ComposedMessage & {
+  messageIdToResend?: number;
+};
 
 export interface AppInputBarProps {
   initialMessage?: string;
   stopGenerating: () => void;
-  onSubmit: (composed: ComposedMessage) => void;
+  onSubmit: (submission: ComposerSubmission) => void;
   llmManager: LlmManager;
   chatState: ChatState;
 
@@ -239,6 +255,11 @@ const AppInputBar = React.memo(
     const withdrawingForEdit =
       editWithdrawalSession !== null &&
       editWithdrawalSession === currentSessionId;
+    // The draft waits aside while a sent question is edited in the composer.
+    const [editing, setEditing] = useState<{
+      messageId: number;
+      stash: ChatDraft;
+    } | null>(null);
     const { user, isAdmin } = useUser();
     const { isMac } = useBrowserInfo();
     const sendDelivery = user?.preferences.interrupt_on_send
@@ -434,6 +455,7 @@ const AppInputBar = React.memo(
       previousScopeRef.current = editorScope;
       attachmentsScope = editorScope;
       setHeldSendKey(null);
+      setEditing(null);
       clearMessage();
       setCurrentMessageFiles([]);
     }, [editorScope, clearMessage, setCurrentMessageFiles]);
@@ -471,7 +493,8 @@ const AppInputBar = React.memo(
       if (
         !chatDraftLoaded ||
         !draftSeededRef.current ||
-        draftGeneration !== getChatDraftGeneration()
+        draftGeneration !== getChatDraftGeneration() ||
+        editing
       )
         return;
       if (skipNextDraftSaveRef.current) {
@@ -485,6 +508,7 @@ const AppInputBar = React.memo(
       chatDraftLoaded,
       draftGeneration,
       saveChatDraft,
+      editing,
     ]);
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
@@ -505,9 +529,15 @@ const AppInputBar = React.memo(
     const questionRefusesFiles =
       questionWaits && currentMessageFiles.length > 0;
 
+    function endEdit(stash: ChatDraft) {
+      setEditing(null);
+      setMessage(stash.message, stash.mentions);
+      setCurrentMessageFiles(releaseUploads(stash.files ?? []));
+    }
+
     function submitMessage(submitted: ComposedMessage) {
       if (!submitted.message.trim()) return;
-      if (questionWaits) {
+      if (questionWaits && !editing) {
         if (!questionRefusesFiles) void answerQuestion(submitted);
         return;
       }
@@ -518,6 +548,11 @@ const AppInputBar = React.memo(
       }
       // Stop TTS first to prevent overlapping voices.
       stopTTS();
+      if (editing) {
+        onSubmit({ ...submitted, messageIdToResend: editing.messageId });
+        endEdit(editing.stash);
+        return;
+      }
       onSubmit(submitted);
       clearChatDraft();
     }
@@ -544,6 +579,21 @@ const AppInputBar = React.memo(
         inputRef.current?.focus();
         setCursorToEnd();
         pasteClipboard(data);
+      },
+      editMessage: (edit: MessageEdit) => {
+        if (disabled || chatState !== "input") return;
+        if (!editing) holdUploads(currentMessageFiles);
+        setEditing({
+          messageId: edit.messageId,
+          // Files still uploading or processing come back with the draft.
+          stash: editing?.stash ?? {
+            ...composedRef.current,
+            files: currentMessageFiles,
+          },
+        });
+        setMessage(edit.message, edit.mentions);
+        setCurrentMessageFiles(edit.files.map(fileDescriptorToProjectFile));
+        setCursorToEnd();
       },
     }));
 
@@ -609,7 +659,7 @@ const AppInputBar = React.memo(
     // Text typed while Onyx responds becomes pending input, unless it
     // answers the agent's questions.
     const hasPendingInput =
-      responding && Boolean(message.trim()) && !questionWaits;
+      responding && Boolean(message.trim()) && !questionWaits && !editing;
     const canSubmitPending =
       queue.enabled &&
       !queue.busy &&
@@ -1344,7 +1394,7 @@ const AppInputBar = React.memo(
                 return;
               }
               const canSubmitNormally = chatState === "input";
-              if (questionWaits && message.trim()) {
+              if (questionWaits && !editing && message.trim()) {
                 submitMessage(composed);
               } else if (!canSubmitNormally && message.trim()) {
                 void submitPendingMessage(sendDelivery);
@@ -1379,6 +1429,9 @@ const AppInputBar = React.memo(
           disabled={queue.busy || disabled}
           canEdit={!message.trim()}
         />
+        {editing && (
+          <EditMessageBanner onCancel={() => endEdit(editing.stash)} />
+        )}
         {queue.error && (
           <Section padding={1} width="full" height="fit">
             <Text font="secondary-body" color="text-03">
@@ -1514,6 +1567,18 @@ const AppInputBar = React.memo(
                         )
                           return;
 
+                        if (
+                          event.key === "Escape" &&
+                          editing &&
+                          !showPrompts &&
+                          !mentionPicker.open &&
+                          !event.nativeEvent.isComposing
+                        ) {
+                          event.preventDefault();
+                          endEdit(editing.stash);
+                          return;
+                        }
+
                         // Enter to submit or queue (Shift+Enter falls through
                         // to browser default: inserts <br>).
                         if (
@@ -1524,7 +1589,7 @@ const AppInputBar = React.memo(
                           !event.nativeEvent.isComposing
                         ) {
                           event.preventDefault();
-                          if (questionWaits) {
+                          if (questionWaits && !editing) {
                             submitMessage(composed);
                           } else if (chatState === "input") {
                             if (message && acceptsSend) {

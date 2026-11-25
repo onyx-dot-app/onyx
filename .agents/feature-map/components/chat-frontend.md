@@ -222,7 +222,11 @@
   section there); a reload replays the same.
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
-  reload shows the same version.
+  reload shows the same version. Edit loads the message's text and files into
+  the composer (`AppInputBarHandle.editMessage`) under an "Editing in the
+  composer" banner, and sets the draft aside. Cancel, Escape or the send
+  puts the draft back. The send resends with `messageIdToResend` and the
+  composer's files; a kept file keeps its original descriptor.
 - **A user sends one message to several models** and sees the answers side by
   side. They can pick one. If they send a follow-up without a pick, the chat
   continues from the answer they were looking at.
