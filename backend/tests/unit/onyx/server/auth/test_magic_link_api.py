@@ -241,6 +241,17 @@ class TestRequest:
         address_passes["send"].assert_not_called()
 
     @pytest.mark.usefixtures("mail_is_configured")
+    def test_unreadable_settings_send_nothing(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        with patch(f"{_MODULE}.is_sso_only", side_effect=RuntimeError("db down")):
+            response = client.post("/auth/magic-link/request", json={"email": EMAIL})
+
+        assert response.status_code == OnyxErrorCode.SERVICE_UNAVAILABLE.status_code
+        address_passes["reserve"].assert_not_awaited()
+        address_passes["send"].assert_not_called()
+
+    @pytest.mark.usefixtures("mail_is_configured")
     def test_a_failed_send_is_reported(
         self, client: TestClient, address_passes: dict[str, MagicMock]
     ) -> None:
@@ -440,6 +451,19 @@ class TestRedeem:
         consume.assert_not_awaited()
         user_manager.magic_link_login.assert_not_awaited()
 
+    def test_unreadable_settings_keep_the_token_unused(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        with (
+            patch(f"{_MODULE}.is_sso_only", side_effect=RuntimeError("db down")),
+            patch(f"{_MODULE}.consume_magic_link", AsyncMock()) as consume,
+        ):
+            response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.status_code == OnyxErrorCode.SERVICE_UNAVAILABLE.status_code
+        consume.assert_not_awaited()
+        user_manager.magic_link_login.assert_not_awaited()
+
     def test_a_disabled_account_is_not_signed_in(
         self, client: TestClient, user_manager: MagicMock
     ) -> None:
@@ -470,6 +494,22 @@ def test_sso_only_follows_the_password_switch(
     settings.password_auth_enabled = password_auth_enabled
     with (
         patch.object(magic_link, "MULTI_TENANT", multi_tenant),
-        patch.object(magic_link, "get_security_settings", return_value=settings),
+        patch.object(
+            magic_link, "get_security_settings", return_value=settings
+        ) as get_settings,
     ):
         assert magic_link.is_sso_only() is sso_only
+    if not multi_tenant:
+        # Strict by default: a failed read must not fall back to passwords on.
+        get_settings.assert_called_once_with(allow_fallback=False)
+
+
+def test_a_failed_settings_read_is_not_taken_as_passwords_on() -> None:
+    with (
+        patch.object(magic_link, "MULTI_TENANT", False),
+        patch.object(
+            magic_link, "get_security_settings", side_effect=RuntimeError("db down")
+        ),
+    ):
+        with pytest.raises(RuntimeError):
+            magic_link.is_sso_only()

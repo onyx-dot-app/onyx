@@ -246,7 +246,8 @@ async def get_auth_type(response: Response) -> AuthConfigResponse:
         password_auth_enabled=security.password_auth_enabled,
         magic_link_enabled=MAGIC_LINK_ENABLED
         and EMAIL_CONFIGURED
-        and not is_sso_only(),
+        # A display hint: the routes check again, strictly.
+        and not is_sso_only(allow_fallback=True),
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
         default_language=(
             None

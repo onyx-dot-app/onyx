@@ -131,7 +131,9 @@ before `oauth_callback` runs.
 `magic_link_enabled` when an email sender is configured too and SSO is not the
 only way in. With "Disable Password Login & Signup" on, both routes refuse with
 `MAGIC_LINK_USE_SSO` (`onyx/auth/magic_link.py:is_sso_only`), since a link
-would get around the identity provider. The request route
+would get around the identity provider. The routes read the setting strictly
+and answer 503 when the read fails, because the fallback defaults allow
+passwords. The request route
 answers "link sent" for every well-formed address, whether or not it has an
 account, so nothing leaks before the inbox is proven. It sends one email per address a
 minute, whoever asks. The link carries a random

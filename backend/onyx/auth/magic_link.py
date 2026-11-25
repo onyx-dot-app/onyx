@@ -78,11 +78,19 @@ async def release_send(email: str) -> None:
     await asyncio.to_thread(get_shared_cache_backend().delete, _send_key(email))
 
 
-def is_sso_only() -> bool:
+def is_sso_only(*, allow_fallback: bool = False) -> bool:
     """The admin turned off password sign-in, so everyone signs in through SSO.
     A link sent by email would get around that, so it is off too. Single-tenant
-    only, like the password switch."""
-    return not MULTI_TENANT and not get_security_settings().password_auth_enabled
+    only, like the password switch.
+
+    Raises when the settings cannot be read: the fallback defaults allow
+    passwords, which would let a link past SSO. ``allow_fallback=True`` is for
+    display hints only.
+    """
+    if MULTI_TENANT:
+        return False
+    settings = get_security_settings(allow_fallback=allow_fallback)
+    return not settings.password_auth_enabled
 
 
 async def store_magic_link(record: MagicLinkRecord) -> str:

@@ -61,7 +61,16 @@ _PLAYGROUND_MODULE = "onyx.server.tenants.provisioning"
 
 
 def _refuse_when_sso_only() -> None:
-    if is_sso_only():
+    try:
+        sso_only = is_sso_only()
+    except Exception as e:
+        # Fail closed: without the settings, SSO-only cannot be ruled out.
+        logger.exception("Could not read the security settings for a magic link")
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Could not check the sign-in settings. Try again in a moment.",
+        ) from e
+    if sso_only:
         raise OnyxError(OnyxErrorCode.REGISTRATION_DISABLED, MAGIC_LINK_USE_SSO_CODE)
 
 
