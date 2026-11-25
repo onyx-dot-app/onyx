@@ -61,13 +61,10 @@ function ShortcutBinding({
   onPress,
   whileTyping = true,
 }: ShortcutBindingProps) {
-  useHotkey(
-    hotkey,
-    () => {
-      if (!isModalOpen()) onPress();
-    },
-    { whileTyping }
-  );
+  useHotkey(hotkey, onPress, {
+    whileTyping,
+    shouldHandle: () => !isModalOpen(),
+  });
   return null;
 }
 

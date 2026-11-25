@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 export interface UseHotkeyOptions {
   /** Whether the hotkey is bound. @default true */
   enabled?: boolean;
+  shouldHandle?: (event: KeyboardEvent) => boolean;
   /**
    * Fire even while the user types in a field (an input, textarea, select or
    * contenteditable element). @default false
@@ -106,7 +107,7 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 export default function useHotkey(
   hotkey: string,
   handler: (event: KeyboardEvent) => void,
-  { enabled = true, whileTyping = false }: UseHotkeyOptions = {}
+  { enabled = true, whileTyping = false, shouldHandle }: UseHotkeyOptions = {}
 ): void {
   // The latest handler, so an inline callback does not rebind the listener.
   const handlerRef = useRef(handler);
@@ -121,12 +122,12 @@ export default function useHotkey(
     function handleKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || event.isComposing) return;
       if (!whileTyping && isTypingTarget(event.target)) return;
-      if (!matches(event, parsed)) return;
+      if (!matches(event, parsed) || shouldHandle?.(event) === false) return;
       event.preventDefault();
       handlerRef.current(event);
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [hotkey, enabled, whileTyping]);
+  }, [hotkey, enabled, whileTyping, shouldHandle]);
 }

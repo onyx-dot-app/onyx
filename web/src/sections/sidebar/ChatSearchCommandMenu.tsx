@@ -163,13 +163,10 @@ export default function ChatSearchCommandMenu({
 
   const hasSearchValue = searchValue.trim().length > 0;
 
-  useHotkey(
-    CHAT_SHORTCUTS.commandPalette,
-    () => {
-      if (open || !isModalOpen()) handleOpenChange(!open);
-    },
-    { whileTyping: true }
-  );
+  useHotkey(CHAT_SHORTCUTS.commandPalette, () => handleOpenChange(!open), {
+    whileTyping: true,
+    shouldHandle: () => open || !isModalOpen(),
+  });
 
   const { isMac } = useBrowserInfo();
   const { setFolded } = useSidebarState();

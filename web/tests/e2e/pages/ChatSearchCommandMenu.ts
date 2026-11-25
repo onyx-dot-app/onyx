@@ -6,9 +6,7 @@ export class ChatSearchCommandMenu {
 
   constructor(private readonly page: Page) {
     this.dialog = page.locator('[role="dialog"]:has([data-command-menu-list])');
-    this.input = this.dialog.getByPlaceholder(
-      "Search chat sessions, projects..."
-    );
+    this.input = this.dialog.getByPlaceholder("Search chat sessions...");
   }
 
   async open(): Promise<void> {

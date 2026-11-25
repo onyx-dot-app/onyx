@@ -7,7 +7,6 @@ import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 // Test data storage
 const TEST_PREFIX = "E2E-CMD";
 let chatSessionIds: string[] = [];
-let projectIds: number[] = [];
 
 // Chat/project rows render a relative timestamp (e.g. "3 seconds ago") whose
 // value depends on the wall clock, making screenshots non-deterministic. Mask
@@ -45,11 +44,6 @@ test.describe("Chat Search Command Menu", () => {
       chatSessionIds.push(id);
     }
 
-    for (let i = 1; i <= 4; i++) {
-      const id = await client.createProject(`${TEST_PREFIX} Project ${i}`);
-      projectIds.push(id);
-    }
-
     await context.close();
   });
 
@@ -64,9 +58,6 @@ test.describe("Chat Search Command Menu", () => {
 
     for (const id of chatSessionIds) {
       await client.deleteChatSession(id);
-    }
-    for (const id of projectIds) {
-      await client.deleteProject(id);
     }
 
     await context.close();
@@ -87,7 +78,7 @@ test.describe("Chat Search Command Menu", () => {
     const dialog = await openCommandMenu(page);
 
     await expect(
-      dialog.getByPlaceholder("Search chat sessions, projects...")
+      dialog.getByPlaceholder("Search chat sessions...")
     ).toBeFocused();
     await expect(
       dialog.locator('[data-command-item="new-session"]')
@@ -100,36 +91,6 @@ test.describe("Chat Search Command Menu", () => {
   });
 
   // -- Preview limits --
-
-  test("Shows at most 4 chats and 3 projects in preview", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    const chatCount = await dialog
-      .locator('[data-command-item^="chat-"]')
-      .count();
-    expect(chatCount).toBeLessThanOrEqual(4);
-
-    const projectCount = await dialog
-      .locator('[data-command-item^="project-"]')
-      .count();
-    expect(projectCount).toBeLessThanOrEqual(3);
-  });
-
-  test('Shows "Recent Sessions", "Projects" filters and "New Project" action', async ({
-    page,
-  }) => {
-    const dialog = await openCommandMenu(page);
-
-    await expect(
-      dialog.locator('[data-command-item="recent-sessions"]')
-    ).toBeVisible();
-    await expect(
-      dialog.locator('[data-command-item="projects"]')
-    ).toBeVisible();
-    await expect(
-      dialog.locator('[data-command-item="new-project"]')
-    ).toBeVisible();
-  });
 
   // -- Filter expansion --
 
@@ -146,22 +107,6 @@ test.describe("Chat Search Command Menu", () => {
     }
 
     await expect(dialog.getByText("Sessions")).toBeVisible();
-  });
-
-  test('"Projects" filter expands to show all 4 projects', async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-    await dialog.locator('[data-command-item="projects"]').click();
-
-    for (let i = 1; i <= 4; i++) {
-      await expect(
-        dialog.locator(`[data-command-item="project-${projectIds[i - 1]}"]`)
-      ).toBeVisible();
-    }
-
-    await expectScreenshot(page, {
-      name: "command-menu-projects-filter",
-      mask: [TIMESTAMP_MASK],
-    });
   });
 
   test("Filter chip X removes filter and returns to all", async ({ page }) => {
@@ -181,7 +126,7 @@ test.describe("Chat Search Command Menu", () => {
     await dialog.locator('[data-command-item="recent-sessions"]').click();
     await expect(dialog.getByText("Sessions")).toBeVisible();
 
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
+    const input = dialog.getByPlaceholder("Search chat sessions...");
     await input.focus();
     await page.keyboard.press("Backspace");
 
@@ -213,29 +158,6 @@ test.describe("Chat Search Command Menu", () => {
       name: "command-menu-search-results",
       mask: [TIMESTAMP_MASK],
     });
-  });
-
-  test("Search finds matching project", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill(`${TEST_PREFIX} Project 2`);
-    await expect(
-      dialog.locator(`[data-command-item="project-${projectIds[1]}"]`)
-    ).toBeVisible();
-  });
-
-  test('Search shows "Create New Project" action with typed name', async ({
-    page,
-  }) => {
-    const dialog = await openCommandMenu(page);
-
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill("my custom project name");
-
-    await expect(
-      dialog.locator('[data-command-item="create-project-with-name"]')
-    ).toBeVisible();
   });
 
   test("Search with no results shows empty state", async ({ page }) => {
@@ -277,25 +199,6 @@ test.describe("Chat Search Command Menu", () => {
     expect(page.url()).toContain(`chatId=${chatSessionIds[0]}`);
   });
 
-  test("Clicking a project navigates to its URL", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill(`${TEST_PREFIX} Project 1`);
-    await dialog
-      .locator(`[data-command-item="project-${projectIds[0]}"]`)
-      .click();
-
-    await page.waitForURL(/projectId=/);
-    expect(page.url()).toContain(`projectId=${projectIds[0]}`);
-  });
-
-  test('"New Project" opens create project modal', async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-    await dialog.locator('[data-command-item="new-project"]').click();
-    await expect(page.getByText("Create New Project")).toBeVisible();
-  });
-
   // -- Menu state --
 
   test("Menu closes after selecting an item", async ({ page }) => {
@@ -315,7 +218,7 @@ test.describe("Chat Search Command Menu", () => {
     await dialog.locator('[data-command-item="recent-sessions"]').click();
     await expect(dialog.getByText("Sessions")).toBeVisible();
 
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
+    const input = dialog.getByPlaceholder("Search chat sessions...");
     await input.fill("test query");
 
     await page.keyboard.press("Escape");
@@ -324,7 +227,7 @@ test.describe("Chat Search Command Menu", () => {
     dialog = await openCommandMenu(page);
 
     await expect(
-      dialog.getByPlaceholder("Search chat sessions, projects...")
+      dialog.getByPlaceholder("Search chat sessions...")
     ).toHaveValue("");
     await expect(
       dialog.locator('[data-command-item="new-session"]')

@@ -135,6 +135,7 @@ export interface AppInputBarProps {
    * the same one and two instances would drift.
    */
   toolConfiguration: ToolConfigurationHandle;
+  persistDraft?: boolean;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -180,6 +181,7 @@ function isChatDraftEmpty(draft: StoredChatDraft): boolean {
 const AppInputBar = React.memo(
   ({
     initialMessage = "",
+    persistDraft = true,
     stopGenerating,
     onSubmit,
     chatState,
@@ -368,7 +370,7 @@ const AppInputBar = React.memo(
       ? draftKey("chat", `${draftOwner}:${draftConversation}`)
       : null;
     const composerScope =
-      incognitoEnabled || isSearchMode || initialMessage
+      !persistDraft || incognitoEnabled || isSearchMode || initialMessage
         ? null
         : chatDraftStorageKey;
     const editorScope = JSON.stringify([
@@ -434,7 +436,9 @@ const AppInputBar = React.memo(
       const draft = chatDraft === null ? null : toChatDraft(chatDraft);
       skipNextDraftSaveRef.current = true;
       setCurrentMessageFiles((files) =>
-        files.length > 0 ? files : (draft?.files ?? [])
+        files.length > 0 || composedRef.current.message
+          ? files
+          : (draft?.files ?? [])
       );
       if (draft && !initialMessage && !composedRef.current.message) {
         setMessage(draft.message, draft.mentions, { focus: false });
