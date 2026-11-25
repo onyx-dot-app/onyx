@@ -27,12 +27,12 @@ import {
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import {
-import { StopReason } from "@/app/app/services/streamingModels";
   fetchSettledChatSession,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import type { Message } from "@/app/app/types";
+import { StopReason } from "@/app/app/services/streamingModels";
 
 jest.mock("next/navigation", () => {
   const actual = jest.requireActual("next/navigation");
