@@ -24,9 +24,11 @@ import {
   InputTypeInTag,
   InputTypeIn,
   InputSwitch,
+  MessageCard,
   Text,
   type TagItem,
 } from "@opal/components";
+import { SvgLock } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { usePlaygroundRestriction } from "@/lib/playground/hooks";
@@ -417,33 +419,40 @@ export default function SecurityHardeningPage() {
                 }
               />
 
-              <ToggleRow
-                title={t("authentication.anonymousUsers.title")}
-                // The reason sits in the row, so a keyboard user reads it
-                // without the tooltip, which Tab skips on a disabled switch.
-                description={
-                  anonymousAccess.restricted
-                    ? anonymousAccess.description
-                    : markdown(t("authentication.anonymousUsers.description"))
-                }
-                checked={
-                  !anonymousAccess.restricted &&
-                  (workspaceSettings.anonymous_user_enabled ?? false)
-                }
-                onCheckedChange={(checked) =>
-                  void saveWorkspaceSettings({
-                    anonymous_user_enabled: checked,
-                  })
-                }
-                // Locked until the settings arrive, so the switch is never
-                // live before the page knows it is restricted.
-                disabled={!anonymousAccess.known || anonymousAccess.restricted}
-                disabledTooltip={
-                  anonymousAccess.restricted
-                    ? anonymousAccess.tooltip
-                    : undefined
-                }
-              />
+              {/* The reason sits outside the dimmed row, so it keeps its
+                  contrast and a keyboard user reads it without the tooltip. */}
+              {anonymousAccess.restricted && (
+                <MessageCard
+                  icon={SvgLock}
+                  title={anonymousAccess.title}
+                  description={anonymousAccess.description}
+                />
+              )}
+              {/* The row appears once the setting is known, so it never
+                  shows a value it does not have. */}
+              {anonymousAccess.known && (
+                <ToggleRow
+                  title={t("authentication.anonymousUsers.title")}
+                  description={markdown(
+                    t("authentication.anonymousUsers.description")
+                  )}
+                  checked={
+                    !anonymousAccess.restricted &&
+                    (workspaceSettings.anonymous_user_enabled ?? false)
+                  }
+                  onCheckedChange={(checked) =>
+                    void saveWorkspaceSettings({
+                      anonymous_user_enabled: checked,
+                    })
+                  }
+                  disabled={anonymousAccess.restricted}
+                  disabledTooltip={
+                    anonymousAccess.restricted
+                      ? anonymousAccess.tooltip
+                      : undefined
+                  }
+                />
+              )}
 
               {!isMultiTenant && (
                 <>
