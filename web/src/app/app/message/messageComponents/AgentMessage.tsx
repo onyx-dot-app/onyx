@@ -737,7 +737,6 @@ const AgentMessage = React.memo(function AgentMessage({
                                 processingDurationSeconds={
                                   processingDurationSeconds
                                 }
-                                generatedImageCount={section.images.length}
                                 finalAnswerComing={
                                   !isLastSection || pacedFinalAnswerComing
                                 }

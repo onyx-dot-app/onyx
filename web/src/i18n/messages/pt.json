@@ -12462,9 +12462,6 @@
             "status": "Lendo arquivo"
           }
         },
-        "generatedImages": {
-          "label": "{count, plural, one {# imagem gerada} other {# imagens geradas}}"
-        },
         "header": {
           "executingCode": {
             "label": "Executando código"

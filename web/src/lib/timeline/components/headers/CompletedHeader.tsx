@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import { Button, Presence, Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
 import { ContentAction, Section } from "@opal/layouts";
@@ -100,48 +100,15 @@ export function MemoryTagWithTooltip({
 // =============================================================================
 
 export interface CompletedHeaderProps {
-  /** The run is open: the duration shows instead of the image count. */
-  isExpanded: boolean;
   processingDurationSeconds?: number;
-  generatedImageCount?: number;
-  isMemoryOnly?: boolean;
-  memoryText?: string | null;
-  memoryOperation?: "add" | "update" | null;
-  memoryId?: number | null;
-  memoryIndex?: number | null;
 }
 
-/** The finished run's title: how long it took, or what it produced. */
+/** The finished run's title: how long it took, for every run. A saved
+ *  memory adds its tag on the card's right side (see RunCard). */
 export function CompletedHeader({
-  isExpanded,
   processingDurationSeconds = 0,
-  generatedImageCount = 0,
-  isMemoryOnly = false,
-  memoryText = null,
-  memoryOperation = null,
-  memoryId = null,
-  memoryIndex = null,
 }: CompletedHeaderProps) {
   const t = useTranslations("chat.messages.timeline");
-
-  if (isMemoryOnly) {
-    return (
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        gap={0}
-        height="fit"
-        className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
-      >
-        <MemoryTagWithTooltip
-          memoryText={memoryText}
-          memoryOperation={memoryOperation}
-          memoryId={memoryId}
-          memoryIndex={memoryIndex}
-        />
-      </Section>
-    );
-  }
 
   const durationText = processingDurationSeconds
     ? t("thoughtDuration.label", {
@@ -149,30 +116,17 @@ export function CompletedHeader({
       })
     : t("thoughtUnknownDuration.label");
 
-  const imageText =
-    generatedImageCount > 0
-      ? t("generatedImages.label", { count: generatedImageCount })
-      : null;
-
-  const shownText = isExpanded ? durationText : (imageText ?? durationText);
-
-  // The summary swaps through Presence.Swap whenever its text changes
-  // (opening the card shows the duration in place of the image count). A
-  // saved memory's tag sits on the card's right side (see RunCard), so it
-  // never swaps the summary.
   return (
-    <Presence.Swap swapKey={shownText}>
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        gap={0}
-        height="fit"
-        className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
-      >
-        <Text as="p" font="main-ui-action" color="text-03">
-          {shownText}
-        </Text>
-      </Section>
-    </Presence.Swap>
+    <Section
+      flexDirection="row"
+      justifyContent="start"
+      gap={0}
+      height="fit"
+      className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
+    >
+      <Text as="p" font="main-ui-action" color="text-03">
+        {durationText}
+      </Text>
+    </Section>
   );
 }

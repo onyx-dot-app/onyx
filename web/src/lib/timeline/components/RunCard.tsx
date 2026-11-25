@@ -11,7 +11,6 @@ import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHead
 import {
   CompletedHeader,
   MemoryTagWithTooltip,
-  type CompletedHeaderProps,
 } from "@/lib/timeline/components/headers/CompletedHeader";
 import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
 import type {
@@ -24,16 +23,13 @@ export interface RunCardStep {
   status: TimelineEntryStatus;
 }
 
-/** What the finished header can add: generated images, a memory change. */
-export type RunCardSummary = Pick<
-  CompletedHeaderProps,
-  | "generatedImageCount"
-  | "isMemoryOnly"
-  | "memoryText"
-  | "memoryOperation"
-  | "memoryId"
-  | "memoryIndex"
->;
+/** What the finished card adds on its right side: a memory change. */
+export interface RunCardSummary {
+  memoryText?: string | null;
+  memoryOperation?: "add" | "update" | null;
+  memoryId?: number | null;
+  memoryIndex?: number | null;
+}
 
 export interface RunCardProps<S extends RunCardStep> {
   /** The run's steps, in arrival order. */
@@ -151,7 +147,7 @@ export function RunCard<S extends RunCardStep>({
               <>
                 {/* A saved memory's tag, on the right so it never swaps the
                     summary. Shown on a finished card while it is folded. */}
-                {summary?.memoryOperation && !summary.isMemoryOnly && (
+                {summary?.memoryOperation && (
                   <Presence
                     show={!isRunning && !stopped && !isOpen}
                     from="end"
@@ -217,11 +213,7 @@ export function RunCard<S extends RunCardStep>({
             ) : stopped ? (
               <StoppedHeader />
             ) : (
-              <CompletedHeader
-                isExpanded={isOpen}
-                processingDurationSeconds={finishedSeconds}
-                {...summary}
-              />
+              <CompletedHeader processingDurationSeconds={finishedSeconds} />
             )}
           </Presence.Swap>
         </Line>

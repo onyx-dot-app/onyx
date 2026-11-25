@@ -12462,9 +12462,6 @@
             "status": "Reading file"
           }
         },
-        "generatedImages": {
-          "label": "{count, plural, one {Generated # image} other {Generated # images}}"
-        },
         "header": {
           "executingCode": {
             "label": "Executing code"

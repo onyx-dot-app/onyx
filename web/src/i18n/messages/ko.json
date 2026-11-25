@@ -12462,9 +12462,6 @@
             "status": "파일 읽는 중"
           }
         },
-        "generatedImages": {
-          "label": "{count, plural, one {이미지 #개 생성됨} other {이미지 #개 생성됨}}"
-        },
         "header": {
           "executingCode": {
             "label": "코드 실행 중"
