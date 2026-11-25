@@ -1,0 +1,69 @@
+---
+title: "Codex"
+description: "Connect Codex to the Onyx MCP server with OAuth or a personal access token."
+icon: "terminal"
+---
+
+## Add Onyx
+
+```bash
+codex mcp add onyx --url https://onyx.example.com/mcp/
+codex mcp login onyx
+```
+
+Sign in and select **Allow access**. In Codex, enter `/mcp` to check that Onyx is connected,
+then send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection). The Codex CLI, desktop app,
+and IDE extension share this configuration.
+
+### Configure with TOML
+
+Instead of `codex mcp add`, add this to `~/.codex/config.toml`, then run `codex mcp login onyx`:
+
+```toml
+[mcp_servers.onyx]
+url = "https://onyx.example.com/mcp/"
+```
+
+Keep only one `[mcp_servers.onyx]` table in the file.
+
+## Onyx plugin
+
+The [Onyx plugin](https://github.com/onyx-dot-app/onyx/tree/main/extensions/agent-plugin)
+tells Codex to search Onyx first for company knowledge. Install it after you add Onyx:
+
+```
+codex plugin marketplace add onyx-dot-app/onyx --sparse extensions/agent-plugin --sparse .agents/plugins
+codex plugin add onyx@onyx
+```
+
+Open `/hooks`, trust the plugin's hooks, and start a new session. The hooks need `bun` or Node 23.6 or later.
+Set options as environment variables:
+
+| Variable | Effect |
+| --- | --- |
+| `ONYX_STRICT_RETRIEVAL=true` | Blocks other MCP search tools until Codex searches Onyx for the prompt. Codex's built-in web search is not blocked. |
+| `ONYX_PREFETCH=true` | Searches Onyx before each prompt and gives Codex the top results. Adds up to 3 seconds per prompt. Also set `ONYX_URL` and `ONYX_API_TOKEN` (a personal access token with `read:search`). |
+
+## Personal access token
+
+To use a token instead of OAuth,
+export a [personal access token](/overview/onyx_anywhere/mcp_server#use-a-personal-access-token-instead)
+as `ONYX_TOKEN` and use this table:
+
+```toml
+[mcp_servers.onyx]
+url = "https://onyx.example.com/mcp/"
+bearer_token_env_var = "ONYX_TOKEN"
+```
+
+Start `codex` from the shell that exports `ONYX_TOKEN`. A desktop app started separately may not see it.
+
+## Disconnect
+
+```bash
+codex mcp logout onyx   # sign out
+codex mcp remove onyx   # remove the server
+```
+
+This does not revoke access.
+Revoke it in Onyx under [Connected apps](/overview/onyx_anywhere/mcp_server#manage-connected-apps).

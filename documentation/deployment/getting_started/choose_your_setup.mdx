@@ -1,0 +1,94 @@
+---
+title: "Choose Your Setup"
+description: "Pick a platform and sandbox runtime for a self-hosted Onyx deployment"
+icon: "signs-post"
+---
+
+Onyx runs model-generated code in sandboxes. Chat sandbox tools (run code, read and write files, built-in skills)
+and Craft use them. The sandbox runtime that Onyx can use depends on your platform and on KVM on your nodes.
+Use this page to find your setup before you install Onyx.
+
+## Find your setup
+
+| Platform | KVM on the nodes | Sandbox runtime | Chat sandbox tools | Next step |
+| --- | --- | --- | --- | --- |
+| Kubernetes | Yes | Firecracker microVMs. On by default in Onyx v6 and later. | Yes | [Firecracker on Kubernetes](#kubernetes-with-kvm) |
+| Kubernetes | No | Container sandboxes (coming in a later release) | No | [Kubernetes without KVM](#kubernetes-without-kvm) |
+| Docker Compose | Yes or no | Container sandboxes (coming in a later release) | No | [Docker Compose](#docker-compose) |
+
+Until container sandboxes are available, a deployment without Firecracker has no chat sandbox tools.
+Onyx hides these tools in chat. It does not show tools that cannot run. The Python tool does not use these sandboxes.
+It runs in the [Code Interpreter](/deployment/production/code_interpreter) on every platform.
+
+## Check for KVM
+
+Firecracker needs Intel x86_64 nodes with `/dev/kvm`. AMD and Arm nodes are not supported. Run these commands on a node:
+
+```bash
+ls -l /dev/kvm                  # must show a character device
+grep -c vmx /proc/cpuinfo       # must be more than 0
+```
+
+A cloud VM has `/dev/kvm` only on a type with nested virtualization, or on a bare-metal type:
+
+| Cloud | Types with KVM | Onyx Terraform default |
+| --- | --- | --- |
+| Amazon EKS | Intel `c8i`, `m8i`, `r8i` (and `-flex`), or Intel `.metal` | `m8i.2xlarge` |
+| Google GKE Standard | Intel `n2` or `c3` | `n2-standard-8` |
+| Azure AKS | Intel D or E, v5 to v7 | `Standard_D8ds_v5` |
+
+GKE Autopilot, AWS Fargate, and most managed container services have no KVM.
+
+## Kubernetes with KVM
+
+In Onyx v6 and later, the Helm chart default `craft.sandboxRuntime: auto` turns on Firecracker.
+You do not set a runtime, pin an image version, or make a registration value. The chart does these steps:
+
+- runs the Firecracker host agent on each node with the label `onyx.app/kvm=true`;
+- runs a preflight check on the same nodes;
+- makes the node registration value and the certificates.
+
+Chat sandbox tools appear when at least one host agent registers its node with a ready template. While no node is ready,
+Onyx hides the tools.
+
+The KVM nodes need the `onyx.app/kvm=true` label and taint.
+The Onyx Terraform modules make a KVM sandbox node pool by default and set them. To use the modules,
+see [Terraform](/deployment/local/terraform). For the requirements, the checks, and other clusters,
+see [Firecracker on Kubernetes](/deployment/kubernetes/craft-firecracker).
+
+<CardGroup cols={2}>
+  <Card title="Amazon EKS" icon="aws" href="/deployment/kubernetes/craft-firecracker-eks">
+    Terraform or your own EKS cluster.
+  </Card>
+
+  <Card title="Google GKE" icon="google" href="/deployment/kubernetes/craft-firecracker-gke">
+    GKE Standard with nested virtualization.
+  </Card>
+
+  <Card title="Azure AKS" icon="microsoft" href="/deployment/kubernetes/craft-firecracker-aks">
+    AKS with Intel v5 to v7 VM sizes.
+  </Card>
+
+  <Card title="Bare-metal Kubernetes" icon="server" href="/deployment/kubernetes/craft-firecracker-bare-metal">
+    k3s, RKE2, or kubeadm on your own Intel KVM hosts.
+  </Card>
+</CardGroup>
+
+## Kubernetes without KVM
+
+Install Onyx with the [Helm chart](/deployment/local/kubernetes). You set no sandbox values.
+With the default `craft.sandboxRuntime: auto`,
+the chart starts no host agent pods on a cluster without `onyx.app/kvm=true` nodes, and chat has no sandbox tools.
+
+Craft can run its sandboxes as pods on this cluster. See [Craft on Kubernetes](/deployment/local/craft_kubernetes).
+To add KVM nodes later, add a node pool from the table in [Check for KVM](#check-for-kvm).
+Firecracker then starts on the new nodes with no other change.
+
+## Docker Compose
+
+Onyx does not run Firecracker on Docker Compose, also on a host with KVM. Chat has no sandbox tools on Docker Compose.
+Craft can run its sandboxes as Docker containers.
+See [Craft with Docker Compose](/deployment/local/craft_docker_compose).
+
+To use Firecracker on one Linux host with KVM, install single-node Kubernetes (for example k3s)
+and follow [Firecracker on bare-metal Kubernetes](/deployment/kubernetes/craft-firecracker-bare-metal).
