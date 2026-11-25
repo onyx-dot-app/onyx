@@ -273,6 +273,13 @@ class Tool(abc.ABC):
     def display_name(self) -> str:
         raise NotImplementedError
 
+    @property
+    def summary(self) -> str:
+        """What the tool does, without the usage guidance that its description
+        can carry. A caller that writes its own guidance, as deep research
+        does, shows the summary instead."""
+        return self.description
+
     def describe(self, called_name: Callable[[str], str]) -> str | None:  # noqa: ARG002
         """The description, naming each other tool by the name that
         `called_name` gives for its tool name, such as its code mode
@@ -321,8 +328,15 @@ class Tool(abc.ABC):
 
         return _invoke_tool(self.name, invocation, execute)
 
-    def bind(self, get_context: Callable[[], ToolContext]) -> AgentTool:
-        """Bind runtime callbacks; resolve application context only when they execute."""
+    def bind(
+        self, get_context: Callable[[], ToolContext], *, summary_only: bool = False
+    ) -> AgentTool:
+        """Bind runtime callbacks; resolve application context only when they
+        execute. With `summary_only`, the definition describes the tool by its
+        `summary`."""
+        definition = self.tool_definition()
+        if summary_only:
+            definition = definition.model_copy(update={"description": self.summary})
         convert_child_results = self.result_from_children
         result_from_children = None
         if convert_child_results is not None:
@@ -361,7 +375,7 @@ class Tool(abc.ABC):
                 return take_open_input(invocation, get_context(), answers)
 
         return AgentTool(
-            definition=self.tool_definition(),
+            definition=definition,
             execute=lambda invocation: self.run(invocation, get_context()),
             execution_mode=self.execution_mode,
             sequence_group=self.sequence_group,

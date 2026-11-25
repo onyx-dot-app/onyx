@@ -44,6 +44,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.prompts.deep_research.dr_tool_prompts import (
+    INTERNAL_SEARCH_TOOL_DESCRIPTION,
     OPEN_URLS_TOOL_DESCRIPTION,
     WEB_SEARCH_TOOL_DESCRIPTION,
 )
@@ -54,7 +55,6 @@ from onyx.prompts.deep_research.research_agent import (
     USER_REPORT_QUERY,
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
-from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
@@ -131,7 +131,10 @@ class ResearchAgent(Agent, RestorableFeature):
         )
         super().__init__(
             llm,
-            tools=[tool.bind(self._tool_context) for tool in self.application_tools]
+            tools=[
+                tool.bind(self._tool_context, summary_only=True)
+                for tool in self.application_tools
+            ]
             + [report_tool],
             agent_id=agent_id,
             previous_run_id=previous_run_id,
@@ -241,9 +244,7 @@ class ResearchAgent(Agent, RestorableFeature):
                 available_tools=generate_tools_description(self.application_tools),
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
-                optional_internal_search_tool_description=INTERNAL_SEARCH_GUIDANCE.format(
-                    name=SearchTool.NAME
-                )
+                optional_internal_search_tool_description=INTERNAL_SEARCH_TOOL_DESCRIPTION
                 if SearchTool.NAME in tool_names
                 else "",
                 optional_web_search_tool_description=WEB_SEARCH_TOOL_DESCRIPTION

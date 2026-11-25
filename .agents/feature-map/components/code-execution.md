@@ -327,12 +327,14 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         ApprovalMode is RUN_WITHOUT_ASKING (evals) builds
                                         them with no scope
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
-                                        (sandbox_tools.py:sandbox_guidance): one use per
-                                        SandboxTool that the turn offers, in tool order, named
-                                        as the model calls it (CodeModeTool.called_name in
-                                        code mode), except tools whose USE is None
-                                        (the artifact tools of both families); the tool
-                                        descriptions describe only the tools. In code mode
+                                        (sandbox_tools.py:sandbox_guidance): the working
+                                        directory (SandboxTurn.workdir), what a save keeps,
+                                        and only the lines across tools whose tools the
+                                        turn offers (edit tools: EDITS_FILES; the shell),
+                                        named as the model calls them
+                                        (CodeModeTool.called_name in code mode). Each
+                                        tool's own usage, such as the shell's stateless
+                                        `bash -c` calls, is in its description. In code mode
                                         every artifact function is deferred, so only the
                                         deferred-groups note names its group (`library`,
                                         or `artifact` for Claude models), with the line
