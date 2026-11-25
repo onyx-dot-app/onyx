@@ -192,14 +192,13 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                     secret=True,
                 ),
             ],
-            setup_instructions=(
-                "In HubSpot: create a developer account, then Apps → Create app. "
-                "On the app's Auth tab, add this Onyx instance's callback URL "
-                "(/craft/v1/apps/oauth/callback) to the Redirect URLs and select "
-                "the CRM contacts, companies, and deals read/write scopes plus "
-                "the owners read scope. Save, then paste the Client ID and "
-                "Client Secret below."
-            ),
+            setup_steps=[
+                "Create a HubSpot developer account.",
+                "Open Apps, then click Create app.",
+                "On the Auth tab, add the callback URL to Redirect URLs.",
+                "Select the scopes, then save the app.",
+                "Paste the Client ID and Client Secret into the fields.",
+            ],
         ),
         endpoint_catalog=_ENDPOINTS,
     )

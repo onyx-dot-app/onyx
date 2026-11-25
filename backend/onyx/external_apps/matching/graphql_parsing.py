@@ -42,11 +42,11 @@ def parse_invocations(body: bytes | None) -> list[tuple[str, str]]:
         query = document.get("query")
         if not isinstance(query, str):
             continue
-        invocations.extend(_operation_invocations(query))
+        invocations.extend(operation_invocations(query))
     return invocations
 
 
-def _operation_invocations(query: str) -> list[tuple[str, str]]:
+def operation_invocations(query: str) -> list[tuple[str, str]]:
     """``(operation_type, root_field)`` for every root field of every operation
     in a GraphQL document. Fragment spreads and inline fragments at the top
     level are resolved so a field can't be hidden from matching inside a

@@ -1,7 +1,8 @@
 """The public tool routes. Built-in tools come from the ``tool`` table. A
-custom tool is an ``api`` integration with an OpenAPI schema: the routes read
+custom tool is an ``api`` integration with a REST ``api_app``: the routes read
 and write the integration and return the id of its OpenAPI ``tool`` row."""
 
+import json
 from collections.abc import Sequence
 from typing import Any
 
@@ -23,6 +24,7 @@ from onyx.db.integration import (
     get_mcp_tool_with_integration,
     get_openapi_tool_for_integration,
     get_openapi_tool_with_integration,
+    list_api_apps_by_integration,
     list_mcp_tools_with_integration,
     list_openapi_tools_with_integration,
 )
@@ -35,7 +37,7 @@ from onyx.db.integration_connection import (
     list_connections,
     upsert_connection__no_commit,
 )
-from onyx.db.models import Integration, IntegrationConnection, Tool, User
+from onyx.db.models import ApiApp, Integration, IntegrationConnection, Tool, User
 from onyx.db.tools import get_tools, get_tools_by_ids
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -77,6 +79,7 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
+    parse_openapi_document,
 )
 from onyx.utils.encryption import mask_string
 
@@ -221,12 +224,17 @@ def _alias_snapshot(
     tool: Tool,
     integration: Integration,
     organization: IntegrationConnection | None,
+    api_app: ApiApp | None,
 ) -> ToolSnapshot:
     return ToolSnapshot(
         id=tool.id,
         name=integration.name,
         description=integration.description or "",
-        definition=tool.openapi_schema,
+        definition=(
+            parse_openapi_document(api_app.openapi_document)
+            if api_app is not None and api_app.openapi_document is not None
+            else None
+        ),
         display_name=integration.name,
         in_code_tool_id=None,
         custom_headers=[
@@ -268,8 +276,14 @@ def openapi_tool_snapshots(
 ) -> list[ToolSnapshot]:
     integration_ids = [integration.id for _, integration in tools]
     connections = list_connections(db_session, integration_ids, None)
+    api_apps = list_api_apps_by_integration(integration_ids, db_session)
     return [
-        _alias_snapshot(tool, integration, connections.get((integration.id, None)))
+        _alias_snapshot(
+            tool,
+            integration,
+            connections.get((integration.id, None)),
+            api_apps.get(integration.id),
+        )
         for tool, integration in tools
     ]
 
@@ -295,7 +309,9 @@ def create_custom_tool(
             auth_method=auth.auth_method,
             credential_fields=auth.credential_fields,
             header_template=auth.header_template,
-            config=OpenApiConfigInput(openapi_spec=tool_data.definition),
+            config=OpenApiConfigInput(
+                openapi_document=json.dumps(tool_data.definition)
+            ),
         ),
         db_session,
     )
@@ -330,7 +346,9 @@ def update_custom_tool(
     if tool_data.description is not None:
         update.description = tool_data.description
     if tool_data.definition is not None:
-        update.config = OpenApiConfigInput(openapi_spec=tool_data.definition)
+        update.config = OpenApiConfigInput(
+            openapi_document=json.dumps(tool_data.definition)
+        )
 
     organization_fields: dict[str, str] = {}
     if tool_data.custom_headers is not None or tool_data.passthrough_auth is not None:
@@ -416,6 +434,9 @@ def _openapi_snapshots(
         state.integration_id: state
         for state in load_user_integration_states([user.id], db_session)
     }
+    api_apps = list_api_apps_by_integration(
+        [integration.id for _, integration, _ in tools], db_session
+    )
     snapshots: list[ToolSnapshot] = []
     for tool, integration, organization in tools:
         state = states.get(integration.id)
@@ -427,7 +448,9 @@ def _openapi_snapshots(
         if tool.mcp_server_id is not None:
             snapshot = ToolSnapshot.from_model(tool, integration_id=integration.id)
         else:
-            snapshot = _alias_snapshot(tool, integration, organization)
+            snapshot = _alias_snapshot(
+                tool, integration, organization, api_apps.get(integration.id)
+            )
         snapshot.user_enabled_in_chat = state.turned_on if state is not None else True
         snapshot.default_chat_enabled = (
             integration.installation_policy in _DEFAULT_CHAT_POLICIES

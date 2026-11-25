@@ -12,6 +12,7 @@ import pytest
 from httpx import ConnectError, HTTPStatusError, Request, Response
 from mcp.types import Tool as MCPLibTool
 from mcp.types import ToolAnnotations
+from pydantic import ValidationError
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -28,12 +29,14 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
 )
 from onyx.db.integration import (
+    get_api_app_for_integration,
     get_external_app_for_integration,
     get_integration_by_kind_row,
     get_mcp_server_for_integration,
     get_openapi_tool_for_integration,
     list_integration_actions,
 )
+from onyx.db.integration_access import set_integration_preferences__no_commit
 from onyx.db.integration_connection import get_connection, get_oauth_client
 from onyx.db.integration_policy import list_persona_integration_links
 from onyx.db.models import (
@@ -59,6 +62,7 @@ from onyx.integrations.connection_models import (
 )
 from onyx.integrations.connections import (
     connect_with_fields__no_commit,
+    credential_fields_json,
     integration_status,
 )
 from onyx.integrations.models import (
@@ -71,7 +75,6 @@ from onyx.server.features.integrations.models import (
     ActionGrantsUpdate,
     ConnectionFieldsRequest,
     CredentialField,
-    CustomConfigInput,
     IntegrationActionsUpdate,
     IntegrationCreate,
     IntegrationShape,
@@ -93,6 +96,7 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
+    make_app_integration,
     make_mcp_integration,
 )
 
@@ -151,15 +155,6 @@ def created(
         delete_integrations(db_session, tracker.ids)
 
 
-@pytest.fixture
-def craft_available() -> Generator[None, None, None]:
-    with patch(
-        "onyx.integrations.service.is_craft_available_for_deployment",
-        return_value=True,
-    ):
-        yield
-
-
 def _openapi_create(
     *, for_organization: bool = True, name: str | None = None
 ) -> IntegrationCreate:
@@ -170,7 +165,7 @@ def _openapi_create(
         auth_mode=IntegrationAuthMode.SHARED,
         auth_method=IntegrationAuthMethod.API_KEY,
         header_template={"X-Api-Key": "{api_key}"},
-        config=OpenApiConfigInput(openapi_spec=OPENAPI_SPEC),
+        config=OpenApiConfigInput(openapi_document=json.dumps(OPENAPI_SPEC)),
     )
 
 
@@ -269,9 +264,10 @@ def test_a_spec_with_no_server_url_does_not_break_the_admin_list(
 ) -> None:
     detail = admin_api.create_integration(_openapi_create(), admin, db_session)
     created.add(detail.id)
-    tool = get_openapi_tool_for_integration(detail.id, db_session)
-    assert tool is not None
-    tool.openapi_schema = {**OPENAPI_SPEC, "servers": []}
+    api_app = get_api_app_for_integration(detail.id, db_session)
+    assert api_app is not None
+    api_app.openapi_document = json.dumps({**OPENAPI_SPEC, "servers": []})
+    api_app.base_url = ""
     db_session.commit()
 
     listed = admin_api.list_integrations_admin(admin, db_session)
@@ -334,7 +330,6 @@ def test_create_mcp_discovers_tools_of_a_public_server(
     )
 
 
-@pytest.mark.usefixtures("craft_available")
 def test_create_preset_keeps_client_and_host_on_the_oauth_client(
     db_session: Session, admin: User, created: Created
 ) -> None:
@@ -375,74 +370,78 @@ def test_create_preset_keeps_client_and_host_on_the_oauth_client(
     assert len(list_integration_actions(detail.id, db_session)) > 0
 
 
-def _custom_create() -> IntegrationCreate:
-    return IntegrationCreate(
-        name=f"custom-{uuid4().hex[:8]}",
+_CUSTOM_HEADERS = {"Authorization": "Bearer {token}"}
+
+
+def _custom_app(
+    db_session: Session, owner: User, *, for_organization: bool = False
+) -> int:
+    """A URL-pattern custom app, which only older releases could add."""
+    integration, _ = make_app_integration(
+        db_session,
+        upstream_url_patterns=["https://api.custom.example.com/*"],
+        auth_template=dict(_CUSTOM_HEADERS),
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
-        header_template={"Authorization": "Bearer {token}"},
-        config=CustomConfigInput(
-            upstream_url_patterns=["https://api.custom.example.com/*"]
-        ),
+        header_template=dict(_CUSTOM_HEADERS),
     )
+    integration.owner_user_id = owner.id
+    integration.credential_fields = credential_fields_json(None, _CUSTOM_HEADERS)
+    integration.installation_policy = (
+        PluginInstallationPolicy.AVAILABLE
+        if for_organization
+        else PluginInstallationPolicy.NOT_AVAILABLE
+    )
+    if not for_organization:
+        set_integration_preferences__no_commit(
+            owner.id, [integration.id], True, db_session
+        )
+    db_session.commit()
+    return integration.id
 
 
-@pytest.mark.usefixtures("craft_available")
-def test_create_custom_app(db_session: Session, admin: User, created: Created) -> None:
-    detail = admin_api.create_integration(_custom_create(), admin, db_session)
-    created.add(detail.id)
+def test_a_url_pattern_app_cannot_be_added(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    with pytest.raises(ValidationError):
+        IntegrationCreate.model_validate(
+            {
+                "name": f"custom-{uuid4().hex[:8]}",
+                "auth_mode": IntegrationAuthMode.NONE,
+                "config": {
+                    "shape": IntegrationShape.CUSTOM,
+                    "upstream_url_patterns": ["https://api.custom.example.com/*"],
+                },
+            }
+        )
+
+    detail = admin_api.get_integration_admin(
+        created.add(_custom_app(db_session, admin)), admin, db_session
+    )
     assert detail.shape is IntegrationShape.CUSTOM
-    assert detail.access.shared_with_everyone is False
     assert detail.config.shape is IntegrationShape.CUSTOM
 
 
-@pytest.mark.usefixtures("craft_available")
 def test_action_views_flag_the_custom_app_action_that_always_asks(
     db_session: Session, admin: User, created: Created
 ) -> None:
-    custom = admin_api.create_integration(_custom_create(), admin, db_session)
-    created.add(custom.id)
+    custom_id = created.add(_custom_app(db_session, admin))
     openapi = admin_api.create_integration(_openapi_create(), admin, db_session)
     created.add(openapi.id)
 
     custom_actions = admin_api.get_integration_actions(
-        custom.id, admin, db_session
+        custom_id, admin, db_session
     ).actions
     assert [(a.key, a.always_asks) for a in custom_actions] == [
         (WHOLE_DOMAIN_ACTION_TYPE, True)
     ]
-    member_actions = api.get_integration_for_member(custom.id, admin, db_session)
+    member_actions = api.get_integration_for_member(custom_id, admin, db_session)
     assert [a.always_asks for a in member_actions.actions] == [True]
     openapi_actions = admin_api.get_integration_actions(
         openapi.id, admin, db_session
     ).actions
     assert openapi_actions
     assert not any(a.always_asks for a in openapi_actions)
-
-
-def test_without_craft_no_external_app_and_no_presets(
-    db_session: Session, admin: User
-) -> None:
-    preset = IntegrationCreate(
-        name=f"github-{uuid4().hex[:8]}",
-        auth_mode=IntegrationAuthMode.NONE,
-        config=PresetConfigInput(preset_id="GITHUB"),
-    )
-    with patch(
-        "onyx.integrations.service.is_craft_available_for_deployment",
-        return_value=False,
-    ):
-        assert admin_api.list_integration_presets(admin) == []
-        for request in (preset, _custom_create()):
-            with pytest.raises(OnyxError) as error:
-                admin_api.create_integration(request, admin, db_session)
-            assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
-            assert (
-                db_session.scalar(
-                    select(Integration.id).where(Integration.name == request.name)
-                )
-                is None
-            )
 
 
 def test_create_mcp_saves_nothing_when_discovery_fails(
@@ -492,43 +491,37 @@ def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -
     assert db_session.scalar(select(Tool.id).where(Tool.name == name)) is None
 
 
-@pytest.mark.parametrize(
-    "config",
-    [
-        McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
-        CustomConfigInput(upstream_url_patterns=["https://api.custom.example.com/*"]),
-    ],
-)
-@pytest.mark.usefixtures("craft_available")
+@pytest.mark.parametrize("shape", ["mcp_server", "custom"])
 def test_delete_removes_the_kind_row(
-    db_session: Session,
-    admin: User,
-    created: Created,
-    config: McpServerConfigInput | CustomConfigInput,
+    db_session: Session, admin: User, created: Created, shape: str
 ) -> None:
-    detail = admin_api.create_integration(
-        IntegrationCreate(
-            name=f"delete-{uuid4().hex[:8]}",
-            auth_mode=IntegrationAuthMode.SHARED,
-            auth_method=IntegrationAuthMethod.API_KEY,
-            header_template={"Authorization": "Bearer {token}"},
-            config=config,
-        ),
-        admin,
-        db_session,
+    integration_id = (
+        admin_api.create_integration(
+            IntegrationCreate(
+                name=f"delete-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.SHARED,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"Authorization": "Bearer {token}"},
+                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+            ),
+            admin,
+            db_session,
+        ).id
+        if shape == "mcp_server"
+        else _custom_app(db_session, admin)
     )
-    created.add(detail.id)
-    integration = db_session.get(Integration, detail.id)
+    created.add(integration_id)
+    integration = db_session.get(Integration, integration_id)
     assert integration is not None
     kind_row = (MCPServer, integration.mcp_server_id)
     if integration.external_app_id is not None:
         kind_row = (ExternalApp, integration.external_app_id)
     assert kind_row[1] is not None
 
-    admin_api.delete_integration(detail.id, admin, db_session)
+    admin_api.delete_integration(integration_id, admin, db_session)
 
     db_session.expire_all()
-    assert db_session.get(Integration, detail.id) is None
+    assert db_session.get(Integration, integration_id) is None
     assert db_session.get(kind_row[0], kind_row[1]) is None
 
 
@@ -550,7 +543,7 @@ def test_only_global_manager_sets_onyx_login(
         name=f"login-{uuid4().hex[:8]}",
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.ONYX_LOGIN,
-        config=OpenApiConfigInput(openapi_spec=OPENAPI_SPEC),
+        config=OpenApiConfigInput(openapi_document=json.dumps(OPENAPI_SPEC)),
     )
     with pytest.raises(OnyxError) as error:
         admin_api.create_integration(request, scoped, db_session)
@@ -642,7 +635,7 @@ def _oauth_create() -> IntegrationCreate:
             client_id="client-1",
             client_secret="secret-1",
         ),
-        config=OpenApiConfigInput(openapi_spec=OPENAPI_SPEC),
+        config=OpenApiConfigInput(openapi_document=json.dumps(OPENAPI_SPEC)),
     )
 
 
@@ -1298,18 +1291,14 @@ def test_member_cannot_save_always_allow_over_an_admin_block_or_allow(
     )
 
 
-@pytest.mark.usefixtures("craft_available")
 def test_member_cannot_save_always_allow_for_an_action_that_always_asks(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:
-    request = _custom_create()
-    request.for_organization = True
-    detail = admin_api.create_integration(request, admin, db_session)
-    created.add(detail.id)
+    custom_id = created.add(_custom_app(db_session, admin, for_organization=True))
 
     with pytest.raises(OnyxError) as error:
         api.save_action_grants(
-            detail.id,
+            custom_id,
             ActionGrantsUpdate(actions={WHOLE_DOMAIN_ACTION_TYPE: "allow"}),
             member,
             db_session,
@@ -1317,18 +1306,14 @@ def test_member_cannot_save_always_allow_for_an_action_that_always_asks(
     assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert all(
         action.user_policy is None
-        for action in api.get_action_grants(detail.id, member, db_session).actions
+        for action in api.get_action_grants(custom_id, member, db_session).actions
     )
 
 
-@pytest.mark.usefixtures("craft_available")
 def test_member_list_carries_the_craft_fields(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:
-    request = _custom_create()
-    request.for_organization = True
-    custom = admin_api.create_integration(request, admin, db_session)
-    created.add(custom.id)
+    custom_id = created.add(_custom_app(db_session, admin, for_organization=True))
     with patch("onyx.integrations.service.discover_mcp_tools", return_value=[]):
         mcp = admin_api.create_integration(
             IntegrationCreate(
@@ -1342,7 +1327,7 @@ def test_member_list_carries_the_craft_fields(
         )
     created.add(mcp.id)
     api.save_member_connection(
-        custom.id,
+        custom_id,
         ConnectionFieldsRequest(fields={"token": "secret-value"}),
         member,
         db_session,
@@ -1351,9 +1336,9 @@ def test_member_list_carries_the_craft_fields(
     listed = {
         view.id: view for view in api.list_integrations_for_member(member, db_session)
     }
-    app = get_external_app_for_integration(custom.id, db_session)
+    app = get_external_app_for_integration(custom_id, db_session)
     assert app is not None
-    custom_view = listed[custom.id]
+    custom_view = listed[custom_id]
     assert custom_view.external_app_id == app.id
     assert custom_view.service_urls == ["https://api.custom.example.com"]
     assert set(custom_view.credential_values) == {"token"}
@@ -1574,34 +1559,28 @@ def _connection_status(
     return connection.status
 
 
-@pytest.mark.usefixtures("craft_available")
-@pytest.mark.parametrize("shape", ["openapi", "custom"])
 def test_a_destination_change_resets_connections(
-    db_session: Session, admin: User, member: User, created: Created, shape: str
+    db_session: Session, admin: User, member: User, created: Created
 ) -> None:
-    request = _openapi_create() if shape == "openapi" else _custom_create()
-    detail = admin_api.create_integration(request, admin, db_session)
-    created.add(detail.id)
-    _member_connection(db_session, detail.id, member)
+    integration_id = created.add(
+        admin_api.create_integration(_openapi_create(), admin, db_session).id
+    )
+    _member_connection(db_session, integration_id, member)
 
     admin_api.update_integration(
-        detail.id, IntegrationUpdate(name="Renamed"), admin, db_session
+        integration_id, IntegrationUpdate(name="Renamed"), admin, db_session
     )
     assert (
-        _connection_status(db_session, detail.id, member)
+        _connection_status(db_session, integration_id, member)
         is IntegrationConnectionStatus.CONNECTED
     )
-    if shape == "openapi":
-        tool = get_openapi_tool_for_integration(detail.id, db_session)
-        assert tool is not None
-        assert (tool.name, tool.display_name) == ("Renamed", "Renamed")
-    else:
-        app = get_external_app_for_integration(detail.id, db_session)
-        assert app is not None and app.name == "Renamed"
+    tool = get_openapi_tool_for_integration(integration_id, db_session)
+    assert tool is not None
+    assert (tool.name, tool.display_name) == ("Renamed", "Renamed")
 
-    config = (
-        OpenApiConfigInput(
-            openapi_spec={
+    config = OpenApiConfigInput(
+        openapi_document=json.dumps(
+            {
                 **OPENAPI_SPEC,
                 "servers": [{"url": "https://new.example.com"}],
                 "paths": {
@@ -1614,20 +1593,17 @@ def test_a_destination_change_resets_connections(
                 },
             }
         )
-        if shape == "openapi"
-        else CustomConfigInput(upstream_url_patterns=["https://new.example.com/*"])
     )
     admin_api.update_integration(
-        detail.id, IntegrationUpdate(config=config), admin, db_session
+        integration_id, IntegrationUpdate(config=config), admin, db_session
     )
     assert (
-        _connection_status(db_session, detail.id, member)
+        _connection_status(db_session, integration_id, member)
         is IntegrationConnectionStatus.NEEDS_RECONNECT
     )
-    if shape == "openapi":
-        assert [a.key for a in list_integration_actions(detail.id, db_session)] == [
-            "get_forecast"
-        ]
+    assert [a.key for a in list_integration_actions(integration_id, db_session)] == [
+        "get_forecast"
+    ]
 
 
 def test_scoped_owner_cannot_move_an_onyx_login_integration(
@@ -1647,10 +1623,12 @@ def test_scoped_owner_cannot_move_an_onyx_login_integration(
     for update in (
         IntegrationUpdate(
             config=OpenApiConfigInput(
-                openapi_spec={
-                    **OPENAPI_SPEC,
-                    "servers": [{"url": "https://other.example.com"}],
-                }
+                openapi_document=json.dumps(
+                    {
+                        **OPENAPI_SPEC,
+                        "servers": [{"url": "https://other.example.com"}],
+                    }
+                )
             )
         ),
         IntegrationUpdate(header_template={"Authorization": "Bearer {access_token}"}),
@@ -1759,7 +1737,6 @@ def _linear_create() -> IntegrationCreate:
     )
 
 
-@pytest.mark.usefixtures("craft_available")
 def test_cloud_protects_onyx_managed_presets(
     db_session: Session, admin: User, created: Created
 ) -> None:

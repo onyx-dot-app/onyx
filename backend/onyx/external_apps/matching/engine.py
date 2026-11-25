@@ -45,6 +45,8 @@ class GatedTarget(BaseModel):
     integration_id: int
     kind: IntegrationKind
     app_name: str
+    # An OpenAPI or GraphQL app: its chat tools are named by ``custom_tool_name``.
+    api_app: bool = False
 
 
 class AllMatchedActions(BaseModel):

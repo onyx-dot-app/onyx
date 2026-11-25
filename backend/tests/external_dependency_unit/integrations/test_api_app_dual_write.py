@@ -68,7 +68,9 @@ def test_create_update_and_delete_write_the_api_app_row(
             auth_method=IntegrationAuthMethod.API_KEY,
             header_template={"X-Api-Key": "{api_key}"},
             config=OpenApiConfigInput(
-                openapi_spec=_spec("https://weather.example.com", "get_forecast")
+                openapi_document=json.dumps(
+                    _spec("https://weather.example.com", "get_forecast")
+                )
             ),
         ),
         admin,
@@ -82,7 +84,9 @@ def test_create_update_and_delete_write_the_api_app_row(
         detail.id,
         IntegrationUpdate(
             config=OpenApiConfigInput(
-                openapi_spec=_spec("https://v2.weather.example.com", "get_v2")
+                openapi_document=json.dumps(
+                    _spec("https://v2.weather.example.com", "get_v2")
+                )
             )
         ),
         admin,
@@ -111,7 +115,9 @@ def test_a_spec_change_adds_the_row_that_older_code_did_not_write(
             name=f"weather-{uuid4().hex[:8]}",
             auth_mode=IntegrationAuthMode.NONE,
             config=OpenApiConfigInput(
-                openapi_spec=_spec("https://weather.example.com", "get_forecast")
+                openapi_document=json.dumps(
+                    _spec("https://weather.example.com", "get_forecast")
+                )
             ),
         ),
         admin,
@@ -129,7 +135,9 @@ def test_a_spec_change_adds_the_row_that_older_code_did_not_write(
             detail.id,
             IntegrationUpdate(
                 config=OpenApiConfigInput(
-                    openapi_spec=_spec("https://v2.weather.example.com", "get_v2")
+                    openapi_document=json.dumps(
+                        _spec("https://v2.weather.example.com", "get_v2")
+                    )
                 )
             ),
             admin,

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import IntegrationActionPolicyValue, IntegrationActionSource
 from onyx.db.models import IntegrationAction
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.models import (
     ActionSettings,
     ApprovalMode,
@@ -229,3 +230,46 @@ def test_stored_settings_parse_and_a_bad_row_blocks() -> None:
     assert parse_action_settings({"default": "sometimes"}) == ActionSettings(
         default=LinkValue.BLOCKED
     )
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        (ApprovalMode.INTERACTIVE, E_ASK),
+        (ApprovalMode.NO_APPROVER, E_BLOCKED),
+        (ApprovalMode.RUN_WITHOUT_ASKING, E_BLOCKED),
+    ],
+)
+def test_an_action_that_always_asks_never_runs_with_no_question(
+    mode: ApprovalMode, expected: EffectivePolicy
+) -> None:
+    """A link Allow, a saved Always allow and a chat grant do not apply."""
+    result = decide_action_policy(
+        WHOLE_DOMAIN_ACTION_TYPE,
+        None,
+        PolicyRows(
+            admin={},
+            user={WHOLE_DOMAIN_ACTION_TYPE: IntegrationActionPolicyValue.ALLOW},
+        ),
+        users_can_save_always_allow=True,
+        link=ActionSettings(actions={WHOLE_DOMAIN_ACTION_TYPE: LinkValue.ALLOW}),
+        granted=True,
+        approval_mode=mode,
+    )
+    assert result is expected
+
+
+def test_an_action_that_always_asks_stays_blocked() -> None:
+    result = decide_action_policy(
+        WHOLE_DOMAIN_ACTION_TYPE,
+        None,
+        PolicyRows(
+            admin={WHOLE_DOMAIN_ACTION_TYPE: IntegrationActionPolicyValue.BLOCKED},
+            user={},
+        ),
+        users_can_save_always_allow=True,
+        link=ActionSettings(),
+        granted=False,
+        approval_mode=ApprovalMode.INTERACTIVE,
+    )
+    assert result is E_BLOCKED

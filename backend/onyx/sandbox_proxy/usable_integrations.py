@@ -4,7 +4,6 @@ enabled integration of a tenant, cached for a short time."""
 import threading
 import time
 from collections.abc import Callable, Hashable
-from typing import Any
 from uuid import UUID
 
 from cachetools import TTLCache
@@ -14,8 +13,9 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import IntegrationKind
 from onyx.db.integration import (
     list_enabled_external_apps,
+    list_enabled_graphql_endpoints,
     list_enabled_mcp_server_urls,
-    list_enabled_openapi_schemas,
+    list_enabled_openapi_documents,
 )
 from onyx.db.models import ExternalApp
 from onyx.integrations.craft import load_usable_integration_ids
@@ -24,7 +24,10 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     IntegrationMatchTarget,
     parse_target,
 )
-from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_url,
+    parse_openapi_document,
+)
 
 CACHE_TTL_S = 30.0
 
@@ -93,12 +96,18 @@ def load_match_targets(
         target = mcp_match_target(integration_id, server_url)
         if target is not None:
             targets.append(target)
-    for integration_id, schema in list_enabled_openapi_schemas(
+    for integration_id, document in list_enabled_openapi_documents(
         db_session, only_integration_id
     ):
-        target = openapi_match_target(integration_id, schema)
+        target = openapi_match_target(integration_id, document)
         if target is not None:
             targets.append(target)
+    for integration_id, endpoint_url in list_enabled_graphql_endpoints(
+        db_session, only_integration_id
+    ):
+        target = mcp_match_target(integration_id, endpoint_url, IntegrationKind.API)
+        if target is not None:
+            targets.append(target.model_copy(update={"graphql": True}))
     targets.extend(
         app_match_target(integration_id, app)
         for integration_id, app in list_enabled_external_apps(
@@ -109,16 +118,19 @@ def load_match_targets(
 
 
 def mcp_match_target(
-    integration_id: int, server_url: str
+    integration_id: int,
+    server_url: str,
+    kind: IntegrationKind = IntegrationKind.MCP,
 ) -> IntegrationMatchTarget | None:
+    """An MCP server, or the endpoint of a GraphQL app."""
     try:
         endpoint = parse_target(integration_id, server_url)
     except ValueError as e:
-        return _broken_target(integration_id, IntegrationKind.MCP, _bad_url(e))
+        return _broken_target(integration_id, kind, _bad_url(e))
     if endpoint is None:
         return None
     return IntegrationMatchTarget(
-        integration_id=integration_id, kind=IntegrationKind.MCP, endpoint=endpoint
+        integration_id=integration_id, kind=kind, endpoint=endpoint
     )
 
 
@@ -136,14 +148,14 @@ def app_match_target(integration_id: int, app: ExternalApp) -> IntegrationMatchT
 
 
 def openapi_match_target(
-    integration_id: int, schema: dict[str, Any] | None
+    integration_id: int, document: str | None
 ) -> IntegrationMatchTarget | None:
-    if schema is None:
+    if document is None:
         return _broken_api_target(
             integration_id, f"Integration {integration_id} has no API settings."
         )
     try:
-        base_url = openapi_to_url(schema)
+        base_url = openapi_to_url(parse_openapi_document(document))
     except ValueError as e:
         return _broken_api_target(integration_id, str(e))
     try:

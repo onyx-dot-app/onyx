@@ -51,16 +51,18 @@ class CraftMCPTarget(BaseModel):
 
 class IntegrationMatchTarget(BaseModel):
     """What the proxy needs to find the integrations a request can be for,
-    with no query. ``endpoint`` is the server URL of an MCP server or the base
-    URL of an OpenAPI spec. ``url_regexes`` are the URL patterns of a preset or
-    custom app. ``load_error`` tells that the stored settings could not be
-    read; such a target blocks each request of a user who can use it."""
+    with no query. ``endpoint`` is the server URL of an MCP server, the base
+    URL of an OpenAPI spec, or the endpoint of a GraphQL app (``graphql``).
+    ``url_regexes`` are the URL patterns of a preset or custom app.
+    ``load_error`` tells that the stored settings could not be read; such a
+    target blocks each request of a user who can use it."""
 
     model_config = ConfigDict(frozen=True)
 
     integration_id: int
     kind: IntegrationKind
     endpoint: CraftMCPTarget | None = None
+    graphql: bool = False
     app_type: ExternalAppType | None = None
     url_regexes: tuple[str, ...] = ()
     load_error: str | None = None

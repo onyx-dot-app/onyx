@@ -1,3 +1,4 @@
+import json
 import unittest.mock
 import uuid
 from typing import Any
@@ -13,9 +14,8 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo, ToolContext
-from onyx.tools.tool_implementations.custom import custom_tool
+from onyx.tools.tool_implementations import http_request
 from onyx.tools.tool_implementations.custom.custom_tool import (
-    CUSTOM_TOOL_REQUEST_TIMEOUT,
     build_custom_tools_from_openapi_schema_and_headers,
     validate_custom_tool_url,
 )
@@ -23,16 +23,17 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
     validate_openapi_schema,
 )
+from onyx.tools.tool_implementations.http_request import TOOL_REQUEST_TIMEOUT
 from onyx.tools.tool_name import sanitize_tool_name
-from onyx.utils.headers import HeaderItemDict
 from onyx.utils.url import SSRFException
 
 # Kwargs the tool passes on self-hosted below DISABLED.
 _REQUEST_KWARGS: dict[str, Any] = {
-    "timeout": CUSTOM_TOOL_REQUEST_TIMEOUT,
+    "timeout": TOOL_REQUEST_TIMEOUT,
     "allow_private_network": True,
     "block_loopback_and_link_local": True,
     "block_link_local_only": False,
+    "stream": True,
 }
 
 
@@ -43,8 +44,8 @@ def _set_ssrf_level(
 ) -> None:
     settings = unittest.mock.MagicMock()
     settings.ssrf_protection_level = level
-    monkeypatch.setattr(custom_tool, "get_security_settings", lambda: settings)
-    monkeypatch.setattr(custom_tool, "MULTI_TENANT", multi_tenant)
+    monkeypatch.setattr(http_request, "get_security_settings", lambda: settings)
+    monkeypatch.setattr(http_request, "MULTI_TENANT", multi_tenant)
 
 
 @pytest.fixture(autouse=True)
@@ -114,7 +115,7 @@ class TestCustomTool(unittest.TestCase):
             chat_session_id=uuid.uuid4(), message_id=20
         )
 
-    @patch("onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request")
+    @patch("onyx.tools.tool_implementations.http_request.ssrf_safe_request")
     def test_custom_tool_run_get(self, mock_request: unittest.mock.MagicMock) -> None:
         """
         Test the GET method of a custom tool.
@@ -123,8 +124,11 @@ class TestCustomTool(unittest.TestCase):
         # Mock the response object
         mock_response = unittest.mock.MagicMock()
         mock_response.is_redirect = False
+        mock_response.status_code = 200
         mock_response.headers = {"Content-Type": "application/json"}
-        mock_response.json.return_value = {"id": "123", "name": "Test Assistant"}
+        mock_response.iter_content.return_value = [
+            json.dumps({"id": "123", "name": "Test Assistant"}).encode()
+        ]
         mock_request.return_value = mock_response
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
@@ -145,7 +149,7 @@ class TestCustomTool(unittest.TestCase):
         assert isinstance(result, ToolResult)
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with(
-            expected_url, method="GET", json=None, headers={}, **_REQUEST_KWARGS
+            expected_url, method="GET", headers={}, **_REQUEST_KWARGS
         )
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
@@ -160,7 +164,7 @@ class TestCustomTool(unittest.TestCase):
             "Tool name in response does not match expected value",
         )
 
-    @patch("onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request")
+    @patch("onyx.tools.tool_implementations.http_request.ssrf_safe_request")
     def test_custom_tool_run_post(self, mock_request: unittest.mock.MagicMock) -> None:
         """
         Test the POST method of a custom tool.
@@ -169,8 +173,11 @@ class TestCustomTool(unittest.TestCase):
         # Mock the response object
         mock_response = unittest.mock.MagicMock()
         mock_response.is_redirect = False
+        mock_response.status_code = 200
         mock_response.headers = {"Content-Type": "application/json"}
-        mock_response.json.return_value = {"id": "456", "name": "Created Assistant"}
+        mock_response.iter_content.return_value = [
+            json.dumps({"id": "456", "name": "Created Assistant"}).encode()
+        ]
         mock_request.return_value = mock_response
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
@@ -191,7 +198,7 @@ class TestCustomTool(unittest.TestCase):
         assert isinstance(result, ToolResult)
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/456"
         mock_request.assert_called_once_with(
-            expected_url, method="POST", json=None, headers={}, **_REQUEST_KWARGS
+            expected_url, method="POST", headers={}, **_REQUEST_KWARGS
         )
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
@@ -206,7 +213,7 @@ class TestCustomTool(unittest.TestCase):
             "Tool name in response does not match expected value",
         )
 
-    @patch("onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request")
+    @patch("onyx.tools.tool_implementations.http_request.ssrf_safe_request")
     def test_custom_tool_with_headers(
         self, mock_request: unittest.mock.MagicMock
     ) -> None:
@@ -217,18 +224,18 @@ class TestCustomTool(unittest.TestCase):
         # Mock the response object
         mock_response = unittest.mock.MagicMock()
         mock_response.is_redirect = False
+        mock_response.status_code = 200
         mock_response.headers = {"Content-Type": "application/json"}
-        mock_response.json.return_value = {"id": "123"}
+        mock_response.iter_content.return_value = [json.dumps({"id": "123"}).encode()]
         mock_request.return_value = mock_response
 
-        custom_headers: list[HeaderItemDict] = [
-            {"key": "Authorization", "value": "Bearer token123"},
-            {"key": "Custom-Header", "value": "CustomValue"},
-        ]
         tools = build_custom_tools_from_openapi_schema_and_headers(
             integration_id=-1,
             openapi_schema=self.openapi_schema,
-            custom_headers=custom_headers,
+            headers={
+                "Authorization": "Bearer token123",
+                "Custom-Header": "CustomValue",
+            },
             dynamic_schema_info=self.dynamic_schema_info,
         )
 
@@ -249,12 +256,11 @@ class TestCustomTool(unittest.TestCase):
         mock_request.assert_called_once_with(
             expected_url,
             method="GET",
-            json=None,
             headers=expected_headers,
             **_REQUEST_KWARGS,
         )
 
-    @patch("onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request")
+    @patch("onyx.tools.tool_implementations.http_request.ssrf_safe_request")
     def test_custom_tool_with_empty_headers(
         self, mock_request: unittest.mock.MagicMock
     ) -> None:
@@ -265,15 +271,15 @@ class TestCustomTool(unittest.TestCase):
         # Mock the response object
         mock_response = unittest.mock.MagicMock()
         mock_response.is_redirect = False
+        mock_response.status_code = 200
         mock_response.headers = {"Content-Type": "application/json"}
-        mock_response.json.return_value = {"id": "123"}
+        mock_response.iter_content.return_value = [json.dumps({"id": "123"}).encode()]
         mock_request.return_value = mock_response
 
-        custom_headers: list[HeaderItemDict] = []
         tools = build_custom_tools_from_openapi_schema_and_headers(
             integration_id=-1,
             openapi_schema=self.openapi_schema,
-            custom_headers=custom_headers,
+            headers={},
             dynamic_schema_info=self.dynamic_schema_info,
         )
 
@@ -288,7 +294,7 @@ class TestCustomTool(unittest.TestCase):
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with(
-            expected_url, method="GET", json=None, headers={}, **_REQUEST_KWARGS
+            expected_url, method="GET", headers={}, **_REQUEST_KWARGS
         )
 
     def test_invalid_openapi_schema(self) -> None:
@@ -307,7 +313,7 @@ class TestCustomTool(unittest.TestCase):
         with self.assertRaises(ValueError) as _:
             validate_openapi_schema(invalid_schema)
 
-    @patch("onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request")
+    @patch("onyx.tools.tool_implementations.http_request.ssrf_safe_request")
     def test_custom_tool_user_placeholders(
         self, mock_request: unittest.mock.MagicMock
     ) -> None:
@@ -315,8 +321,9 @@ class TestCustomTool(unittest.TestCase):
         OpenAPI schema (server URL, paths, headers) at tool-build time."""
         mock_response = unittest.mock.MagicMock()
         mock_response.is_redirect = False
+        mock_response.status_code = 200
         mock_response.headers = {"Content-Type": "application/json"}
-        mock_response.json.return_value = {"ok": True}
+        mock_response.iter_content.return_value = [json.dumps({"ok": True}).encode()]
         mock_request.return_value = mock_response
 
         user_id = uuid.uuid4()
@@ -355,13 +362,10 @@ class TestCustomTool(unittest.TestCase):
         tools = build_custom_tools_from_openapi_schema_and_headers(
             integration_id=-1,
             openapi_schema=schema,
-            custom_headers=[
-                {"key": "X-Onyx-User-Id", "value": "USER_ID"},
-                {
-                    "key": "X-Onyx-User-Email",  # pragma: allowlist secret
-                    "value": "USER_EMAIL",
-                },
-            ],
+            headers={
+                "X-Onyx-User-Id": "USER_ID",
+                "X-Onyx-User-Email": "USER_EMAIL",  # pragma: allowlist secret
+            },
             dynamic_schema_info=DynamicSchemaInfo(
                 chat_session_id=None,
                 message_id=None,
@@ -392,12 +396,11 @@ class TestCustomTool(unittest.TestCase):
         mock_request.assert_called_once_with(
             expected_url,
             method="GET",
-            json=None,
             headers=expected_headers,
             **_REQUEST_KWARGS,
         )
 
-    @patch("onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request")
+    @patch("onyx.tools.tool_implementations.http_request.ssrf_safe_request")
     def test_custom_tool_user_placeholders_unset_are_left_alone(
         self, mock_request: unittest.mock.MagicMock
     ) -> None:
@@ -406,8 +409,9 @@ class TestCustomTool(unittest.TestCase):
         replaced with empty strings."""
         mock_response = unittest.mock.MagicMock()
         mock_response.is_redirect = False
+        mock_response.status_code = 200
         mock_response.headers = {"Content-Type": "application/json"}
-        mock_response.json.return_value = {"ok": True}
+        mock_response.iter_content.return_value = [json.dumps({"ok": True}).encode()]
         mock_request.return_value = mock_response
 
         schema: dict[str, Any] = {
@@ -453,7 +457,6 @@ class TestCustomTool(unittest.TestCase):
         mock_request.assert_called_once_with(
             "http://localhost:8080/users/USER_ID/ping",
             method="GET",
-            json=None,
             headers={},
             **_REQUEST_KWARGS,
         )
@@ -590,15 +593,16 @@ def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> No
             },
         },
     )
-    response = requests.Response()
+    response = unittest.mock.MagicMock()
+    response.is_redirect = False
     response.status_code = status_code
-    response.headers["Content-Type"] = "application/json"
-    with (
-        patch(
-            "onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request",
-            return_value=response,
-        ),
-        patch.object(response, "json", return_value={"message": "upstream response"}),
+    response.headers = {"Content-Type": "application/json"}
+    response.iter_content.return_value = [
+        json.dumps({"message": "upstream response"}).encode()
+    ]
+    with patch(
+        "onyx.tools.tool_implementations.http_request.ssrf_safe_request",
+        return_value=response,
     ):
         result = tools[0].run(
             ToolInvocation(
@@ -641,11 +645,12 @@ def test_custom_tool_file_response_is_serialized_for_llm(
     mock_response = unittest.mock.MagicMock()
     mock_response.is_redirect = False
     mock_response.status_code = 200
+    mock_response.status_code = 200
     mock_response.headers = {"Content-Type": content_type}
-    mock_response.content = b"file-bytes"
+    mock_response.iter_content.return_value = [b"file-bytes"]
     with (
         patch(
-            "onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request",
+            "onyx.tools.tool_implementations.http_request.ssrf_safe_request",
             return_value=mock_response,
         ),
         patch.object(
@@ -887,7 +892,7 @@ def test_call_pins_private_ip_on_self_hosted(
     response.is_redirect = False
     response.status_code = 200
     response.headers = {"Content-Type": "application/json"}
-    response.json.return_value = {"ok": True}
+    response.iter_content.return_value = [json.dumps({"ok": True}).encode()]
     with (
         patch("onyx.utils.url.socket.getaddrinfo", return_value=_addr_info("10.0.0.5")),
         patch("onyx.utils.url._pinned_request", return_value=response) as pinned,
@@ -902,8 +907,8 @@ def test_call_pins_private_ip_on_self_hosted(
         "internal.corp",
         8080,
     )
-    assert args[6] == CUSTOM_TOOL_REQUEST_TIMEOUT
-    assert kwargs == {"json": {"q": 1}}
+    assert args[6] == TOOL_REQUEST_TIMEOUT
+    assert kwargs == {"json": {"q": 1}, "stream": True}
 
 
 def test_call_refuses_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -931,7 +936,7 @@ def test_validate_all_allows_private_network_on_self_hosted(
     response.is_redirect = False
     response.status_code = 200
     response.headers = {"Content-Type": "application/json"}
-    response.json.return_value = {"ok": True}
+    response.iter_content.return_value = [json.dumps({"ok": True}).encode()]
     with patch("onyx.utils.url._pinned_request", return_value=response) as pinned:
         result = _run_ping("http://10.0.0.1")
     pinned.assert_called_once()
@@ -950,11 +955,17 @@ _RAW_URLLIB3_MESSAGE = (
 @pytest.mark.parametrize(
     ("error", "expected_reason"),
     [
-        (requests.exceptions.ConnectTimeout(_RAW_URLLIB3_MESSAGE), "(timed out)"),
-        (requests.exceptions.ReadTimeout(_RAW_URLLIB3_MESSAGE), "(timed out)"),
+        (
+            requests.exceptions.ConnectTimeout(_RAW_URLLIB3_MESSAGE),
+            "The server did not answer in time.",
+        ),
+        (
+            requests.exceptions.ReadTimeout(_RAW_URLLIB3_MESSAGE),
+            "The server did not answer in time.",
+        ),
         (
             requests.exceptions.ConnectionError(_RAW_URLLIB3_MESSAGE),
-            "(connection failed)",
+            "The connection to the server failed.",
         ),
     ],
 )
@@ -964,8 +975,6 @@ def test_call_network_error_returns_clean_message(
     with patch("onyx.utils.url._pinned_request", side_effect=error):
         response = _run_ping("http://10.255.255.1")
     _assert_failed(response, status_code=None, is_unreachable=True)
-    assert response.text == (
-        f"The custom__1__ping tool could not reach its server {expected_reason}."
-    )
+    assert response.text == expected_reason
     for internal_detail in ("urllib3", "HTTPConnectionPool", "Max retries", "10.255"):
         assert internal_detail not in response.text

@@ -43,7 +43,7 @@ from onyx.integrations.models import (
 )
 from onyx.integrations.policy import (
     resolve_action_policies,
-    resolve_chat_action_policy,
+    resolve_chat_action_policies,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
@@ -270,13 +270,13 @@ def _recheck(
     db_session.add(chat_session)
     db_session.commit()
     try:
-        return resolve_chat_action_policy(
+        return resolve_chat_action_policies(
             db_session,
             integration=integration,
-            action_key="update",
+            action_keys=["update"],
             user_id=user.id,
             chat_session_id=chat_session.id,
-        )
+        )["update"]
     finally:
         db_session.delete(chat_session)
         db_session.commit()

@@ -7,21 +7,21 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
     ActionPolicy,
+    ApiAppType,
     ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
 )
 from onyx.db.integration import (
+    get_api_app_for_integration,
     get_external_app_for_integration,
     get_integration_by_id,
-    get_openapi_tool_for_integration,
     integration_action_from_spec,
     list_integration_actions,
     lock_integration__no_commit,
     replace_integration_actions__no_commit,
 )
-from onyx.db.models import ExternalApp, Integration, IntegrationAction
-from onyx.db.models import Tool as ToolModel
+from onyx.db.models import ApiApp, ExternalApp, Integration, IntegrationAction
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
@@ -29,6 +29,7 @@ from onyx.external_apps.matching.engine import (
     recognize_actions,
     url_matches_patterns,
 )
+from onyx.external_apps.matching.graphql_parsing import parse_invocations
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.kinds.base import IntegrationKindHandler
@@ -46,18 +47,27 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     match_request,
     normalized_request_path,
 )
-from onyx.server.features.mcp.models import merge_mcp_headers
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
+from onyx.tools.tool_implementations.app_action.app_action_tool import (
+    AppActionSettings,
+    AppActionTool,
+)
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
+)
+from onyx.tools.tool_implementations.custom.graphql_tool import (
+    GraphQLTool,
+    graphql_root_fields,
+    graphql_tool_parameters,
+    parse_graphql_schema,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
     openapi_to_url,
+    parse_openapi_document,
 )
-from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -87,6 +97,37 @@ def openapi_action_spec(method_spec: MethodSpec) -> IntegrationActionSpec:
         http_method=method_spec.method.upper(),
         path_template=method_spec.path,
     )
+
+
+def graphql_action_specs(sdl: str) -> list[IntegrationActionSpec]:
+    """One action per root field: a query runs, a mutation asks."""
+    try:
+        schema = parse_graphql_schema(sdl)
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    fields = graphql_root_fields(schema)
+    if not fields:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The GraphQL schema has no query or mutation fields.",
+        )
+    return [
+        IntegrationActionSpec(
+            key=key,
+            source=IntegrationActionSource.GRAPHQL,
+            display_name=key.split(".", 1)[1],
+            description=field.description,
+            read_only=key.startswith("query."),
+            default_policy=(
+                IntegrationActionPolicyValue.ALLOW
+                if key.startswith("query.")
+                else IntegrationActionPolicyValue.ASK
+            ),
+            input_schema=graphql_tool_parameters(field),
+            http_method="POST",
+        )
+        for key, field in fields
+    ]
 
 
 _PATH_PARAMETER = re.compile(r"\{[^{}/]+\}")
@@ -128,6 +169,18 @@ def _openapi_path_matches(template: str, path: str) -> bool:
     )
 
 
+def _matched_action(
+    integration_id: int, action: IntegrationAction
+) -> MatchedIntegrationAction:
+    return MatchedIntegrationAction(
+        integration_id=integration_id,
+        action_key=action.key,
+        display_name=action.display_name,
+        description=action.description or "",
+        default_policy=action.default_policy or IntegrationActionPolicyValue.ASK,
+    )
+
+
 def _whole_domain_action(
     integration_id: int, description: str
 ) -> MatchedIntegrationAction:
@@ -141,33 +194,46 @@ def _whole_domain_action(
 
 
 class ApiKindHandler(IntegrationKindHandler):
-    """An HTTP API. The kind row decides the shape: an OpenAPI ``tool`` row
-    (each operation is an action), an ``external_app`` with a preset (the
-    catalog of the preset gives the actions), or a CUSTOM ``external_app``
-    (one action for all of its URLs)."""
+    """An HTTP API. The kind row decides the shape: a REST ``api_app`` row
+    (each OpenAPI operation is an action), a GraphQL ``api_app`` row (each
+    query or mutation root field is an action), an ``external_app`` with a preset (the
+    catalog of the preset gives the actions, plus one action for each other
+    request), or a CUSTOM ``external_app`` (one action for all of its URLs, and
+    no chat tools)."""
 
     def _openapi_config(
         self, integration: Integration, db_session: Session
     ) -> ApiConfig | None:
-        if integration.tool_id is None:
+        if integration.api_app_id is None:
             return None
-        tool = get_openapi_tool_for_integration(integration.id, db_session)
-        return self.openapi_config_from_tool(tool) if tool is not None else None
+        app = get_api_app_for_integration(integration.id, db_session)
+        return self.config_from_api_app(app) if app is not None else None
 
     @staticmethod
-    def openapi_config_from_tool(tool: ToolModel) -> ApiConfig | None:
-        if tool.openapi_schema is None:
+    def config_from_api_app(app: ApiApp) -> ApiConfig | None:
+        if app.api_type is ApiAppType.GRAPHQL and app.graphql_schema is not None:
+            return ApiConfig(
+                shape=ApiShape.GRAPHQL,
+                api_app_id=app.id,
+                base_url=app.base_url,
+                graphql_schema=app.graphql_schema,
+            )
+        if app.api_type is not ApiAppType.REST or app.openapi_document is None:
             return None
         try:
-            base_url: str | None = openapi_to_url(tool.openapi_schema)
+            spec = parse_openapi_document(app.openapi_document)
+        except ValueError as e:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+        try:
+            base_url: str | None = openapi_to_url(spec)
         except ValueError:
             # A spec with no single server URL matches no request; it must not
             # break the readers that only need the shape.
             base_url = None
         return ApiConfig(
             shape=ApiShape.OPENAPI,
-            tool_id=tool.id,
-            openapi_spec=tool.openapi_schema,
+            api_app_id=app.id,
+            openapi_spec=spec,
             base_url=base_url,
         )
 
@@ -175,7 +241,12 @@ class ApiKindHandler(IntegrationKindHandler):
         config = self._openapi_config(integration, db_session)
         if config is not None:
             return config
-        app = self._external_app(integration, db_session)
+        return self.config_from_external_app(
+            self._external_app(integration, db_session)
+        )
+
+    @staticmethod
+    def config_from_external_app(app: ExternalApp) -> ApiConfig:
         return ApiConfig(
             shape=(
                 ApiShape.CUSTOM
@@ -183,6 +254,7 @@ class ApiKindHandler(IntegrationKindHandler):
                 else ApiShape.PRESET
             ),
             app_type=app.app_type,
+            url_regexes=tuple(app.upstream_url_regexes),
         )
 
     def _external_app(
@@ -211,19 +283,26 @@ class ApiKindHandler(IntegrationKindHandler):
                 ]
             except ValueError as e:
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-        if config.shape is ApiShape.CUSTOM:
-            return [
-                IntegrationActionSpec(
-                    key=WHOLE_DOMAIN_ACTION_TYPE,
-                    source=IntegrationActionSource.EXTERNAL_APP,
-                    display_name=integration.name,
-                    description=f"Any request to {integration.name}.",
-                    read_only=None,
-                    default_policy=IntegrationActionPolicyValue.ASK,
-                )
-            ]
-        if config.app_type is None:
-            return []
+        if config.shape is ApiShape.GRAPHQL and config.graphql_schema is not None:
+            return graphql_action_specs(config.graphql_schema)
+        other_requests = IntegrationActionSpec(
+            key=WHOLE_DOMAIN_ACTION_TYPE,
+            source=IntegrationActionSource.EXTERNAL_APP,
+            display_name=(
+                integration.name
+                if config.shape is ApiShape.CUSTOM
+                else "Any other request"
+            ),
+            description=(
+                f"Any request to {integration.name}."
+                if config.shape is ApiShape.CUSTOM
+                else f"A request to {integration.name} that is no other action."
+            ),
+            read_only=None,
+            default_policy=IntegrationActionPolicyValue.ASK,
+        )
+        if config.shape is ApiShape.CUSTOM or config.app_type is None:
+            return [other_requests]
         return [
             IntegrationActionSpec(
                 key=endpoint.id.value,
@@ -234,7 +313,7 @@ class ApiKindHandler(IntegrationKindHandler):
                 default_policy=CATALOG_POLICY_VALUES[endpoint.default_policy],
             )
             for endpoint in get_endpoint_catalog(config.app_type)
-        ]
+        ] + [other_requests]
 
     def build_chat_tools(
         self,
@@ -243,8 +322,8 @@ class ApiKindHandler(IntegrationKindHandler):
         ctx: ChatToolContext,
         db_session: Session,
     ) -> list[Tool]:
-        """OpenAPI only. A preset or custom app has no chat tools in release N:
-        only Craft uses it."""
+        """An OpenAPI tool for each operation, a GraphQL tool for each root
+        field, or an app action tool for each action of a preset."""
         if not actions:
             return []
         config = (
@@ -252,9 +331,32 @@ class ApiKindHandler(IntegrationKindHandler):
             if isinstance(ctx.config, ApiConfig)
             else self.load_config(integration, db_session)
         )
+        if config.shape is ApiShape.PRESET:
+            return self._app_action_tools(integration, actions, config, ctx)
+        if (
+            config.shape is ApiShape.GRAPHQL
+            and config.graphql_schema is not None
+            and config.base_url is not None
+        ):
+            schema = parse_graphql_schema(config.graphql_schema)
+            keys = {key for key, _ in graphql_root_fields(schema)}
+            return [
+                GraphQLTool(
+                    integration_id=integration.id,
+                    action_key=action.key,
+                    schema=schema,
+                    endpoint_url=config.base_url,
+                    headers=ctx.additional_headers,
+                    approval=ctx.approval_for(action.key),
+                    credentials=ctx.credentials,
+                    acting_user_id=ctx.user_id,
+                )
+                for action in actions
+                if action.key in keys
+            ]
         if (
             config.shape is not ApiShape.OPENAPI
-            or config.tool_id is None
+            or config.api_app_id is None
             or config.openapi_spec is None
         ):
             return []
@@ -262,10 +364,7 @@ class ApiKindHandler(IntegrationKindHandler):
         tools = build_custom_tools_from_openapi_schema_and_headers(
             integration_id=integration.id,
             openapi_schema=config.openapi_spec,
-            # The credential wins over a request header of the same name.
-            custom_headers=header_dict_to_header_list(
-                merge_mcp_headers(ctx.additional_headers, ctx.credentials.headers)
-            ),
+            headers=ctx.additional_headers,
             dynamic_schema_info=DynamicSchemaInfo(
                 chat_session_id=ctx.chat_session_id,
                 message_id=ctx.message_id,
@@ -273,12 +372,54 @@ class ApiKindHandler(IntegrationKindHandler):
                 user_email=ctx.user_email,
             ),
             approval_for=ctx.approval_for,
+            credentials=ctx.credentials,
+            acting_user_id=ctx.user_id,
         )
         return [
             tool
             for tool in tools
             if tool.integration_action is not None
             and tool.integration_action.action in keys
+        ]
+
+    @staticmethod
+    def _app_action_tools(
+        integration: Integration,
+        actions: Sequence[IntegrationAction],
+        config: ApiConfig,
+        ctx: ChatToolContext,
+    ) -> list[Tool]:
+        """A stored action that the catalog no longer has gives no tool."""
+        if config.app_type is None or not config.url_regexes:
+            return []
+        rules = {
+            endpoint.id.value: endpoint.matches
+            for endpoint in get_endpoint_catalog(config.app_type)
+        }
+        offered = [
+            action
+            for action in actions
+            if action.key in rules or action.key == WHOLE_DOMAIN_ACTION_TYPE
+        ]
+        settings = AppActionSettings(
+            integration_id=integration.id,
+            integration_name=integration.name,
+            app_type=config.app_type,
+            url_regexes=config.url_regexes,
+            credentials=ctx.credentials,
+            acting_user_id=ctx.user_id,
+            offered_keys=frozenset(action.key for action in offered),
+        )
+        return [
+            AppActionTool(
+                settings,
+                action_key=action.key,
+                display_name=action.display_name,
+                description=action.description or "",
+                rules=rules.get(action.key, ()),
+                approval=ctx.approval_for(action.key),
+            )
+            for action in offered
         ]
 
     def match_request(
@@ -290,6 +431,10 @@ class ApiKindHandler(IntegrationKindHandler):
     ) -> RequestMatch | None:
         if request.url is None:
             return None
+        if target.endpoint is not None and target.graphql:
+            return self._match_graphql(
+                integration.id, target.endpoint, request.url, request, db_session
+            )
         if target.endpoint is not None:
             return self._match_openapi(
                 integration.id, target.endpoint, request.method, request.url, db_session
@@ -349,22 +494,46 @@ class ApiKindHandler(IntegrationKindHandler):
             for action, template in path_matches
             if _literal_length(template) == longest and action.http_method == method
         ]
-        matched = [
-            MatchedIntegrationAction(
-                integration_id=integration_id,
-                action_key=action.key,
-                display_name=action.display_name,
-                description=action.description or "",
-                default_policy=action.default_policy
-                or IntegrationActionPolicyValue.ASK,
-            )
-            for action in winners
-        ]
+        matched = [_matched_action(integration_id, action) for action in winners]
         return RequestMatch(
             actions=matched
             or [_whole_domain_action(integration_id, f"{method} {path}")],
             path_prefix_length=len(target.path_prefix),
         )
+
+    def _match_graphql(
+        self,
+        integration_id: int,
+        target: CraftMCPTarget,
+        url: str,
+        request: ProxiedRequest,
+        db_session: Session,
+    ) -> RequestMatch | None:
+        """A request under the endpoint URL calls the action of each root
+        field in its body. A body with no root field, or with a root field
+        that is no action, also calls the request action, which asks."""
+        if match_request((target,), http.Request.make(request.method, url)) is None:
+            return None
+        actions = {
+            action.key: action
+            for action in api_integration_actions(integration_id, db_session)
+        }
+        invoked = {
+            f"{operation}.{field}"
+            for operation, field in parse_invocations(request.body)
+        }
+        matched = [
+            _matched_action(integration_id, actions[key])
+            for key in sorted(invoked)
+            if key in actions
+        ]
+        if not invoked or len(matched) < len(invoked):
+            matched.append(
+                _whole_domain_action(
+                    integration_id, f"{request.method.upper()} {request.path}"
+                )
+            )
+        return RequestMatch(actions=matched, path_prefix_length=len(target.path_prefix))
 
 
 def sync_integration_actions__no_commit(
