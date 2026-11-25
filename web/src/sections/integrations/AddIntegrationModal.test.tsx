@@ -480,51 +480,52 @@ describe("Custom API", () => {
     expect(await screen.findByText(skipped)).toBeInTheDocument();
   });
 
-  test("an uploaded spec with no server takes the URL as its base URL", async () => {
-    const fetchMock = mockFetch({
-      "POST /api/admin/integrations/openapi-import": {
-        shape: "openapi",
-        openapi_document: "{}",
-        base_url: "",
-        endpoints: ["GET /pets List pets"],
-        skipped: [],
-      },
-      "POST /api/admin/integrations": makeDetail({ id: 15 }),
-      "/api/admin/integrations": [],
-    });
-    const { user } = open({ kind: "api" });
-    // jsdom's File has no text().
-    const spec = Object.assign(
-      new File(["{}"], "openapi.json", { type: "application/json" }),
-      { text: async () => "{}" }
-    );
-    await user.upload(screen.getByLabelText(add.api.upload.label), spec);
-    await screen.findByText(
-      add.api.upload.chosen.replace("{file}", "openapi.json")
-    );
-    await fillConnect(
-      user,
-      "Pets",
-      add.api.url.title,
-      "https://pets.example.com/api/v2/"
-    );
-    const baseUrl = await screen.findByRole("textbox", {
-      name: add.rest.baseUrl.title,
-    });
-    expect(baseUrl).toHaveValue("https://pets.example.com/api/v2");
-    await submit(user);
-
-    await waitFor(() =>
-      expect(
-        requestBody(fetchMock, "POST", "/api/admin/integrations")
-      ).toMatchObject({
-        config: {
+  test.each([
+    ["no server", "", "https://pets.example.com/api/v2/"],
+    ["a relative server", "/", "https://pets.example.com/api/v2"],
+  ])(
+    "an uploaded spec with %s takes the URL as its base URL",
+    async (_case, specBaseUrl, url) => {
+      const fetchMock = mockFetch({
+        "POST /api/admin/integrations/openapi-import": {
           shape: "openapi",
-          base_url: "https://pets.example.com/api/v2",
+          openapi_document: "{}",
+          base_url: specBaseUrl,
+          endpoints: ["GET /pets List pets"],
+          skipped: [],
         },
-      })
-    );
-  });
+        "POST /api/admin/integrations": makeDetail({ id: 15 }),
+        "/api/admin/integrations": [],
+      });
+      const { user } = open({ kind: "api" });
+      // jsdom's File has no text().
+      const spec = Object.assign(
+        new File(["{}"], "openapi.json", { type: "application/json" }),
+        { text: async () => "{}" }
+      );
+      await user.upload(screen.getByLabelText(add.api.upload.label), spec);
+      await screen.findByText(
+        add.api.upload.chosen.replace("{file}", "openapi.json")
+      );
+      await fillConnect(user, "Pets", add.api.url.title, url);
+      const baseUrl = await screen.findByRole("textbox", {
+        name: add.rest.baseUrl.title,
+      });
+      expect(baseUrl).toHaveValue("https://pets.example.com/api/v2");
+      await submit(user);
+
+      await waitFor(() =>
+        expect(
+          requestBody(fetchMock, "POST", "/api/admin/integrations")
+        ).toMatchObject({
+          config: {
+            shape: "openapi",
+            base_url: "https://pets.example.com/api/v2",
+          },
+        })
+      );
+    }
+  );
 
   test("a spec with several servers asks which base URL to call", async () => {
     const fetchMock = mockFetch({
@@ -666,37 +667,6 @@ describe("Custom API", () => {
     expect(await screen.findByText(add.api.checkFailed)).toBeInTheDocument();
     expect(screen.queryByText(add.detected.rest)).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  test("an uploaded spec with a relative server takes the URL as its base URL", async () => {
-    mockFetch({
-      "POST /api/admin/integrations/openapi-import": {
-        shape: "openapi",
-        openapi_document: "{}",
-        base_url: "/",
-        endpoints: ["GET /pets List pets"],
-        skipped: [],
-      },
-    });
-    const { user } = open({ kind: "api" });
-    const spec = Object.assign(
-      new File(["{}"], "openapi.json", { type: "application/json" }),
-      { text: async () => "{}" }
-    );
-    await user.upload(screen.getByLabelText(add.api.upload.label), spec);
-    await screen.findByText(
-      add.api.upload.chosen.replace("{file}", "openapi.json")
-    );
-    await fillConnect(
-      user,
-      "Pets",
-      add.api.url.title,
-      "https://pets.example.com/v2"
-    );
-
-    expect(
-      await screen.findByRole("textbox", { name: add.rest.baseUrl.title })
-    ).toHaveValue("https://pets.example.com/v2");
   });
 
   test("waits for the spec file and shows a read error", async () => {
