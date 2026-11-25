@@ -154,7 +154,7 @@ export class CustomizePage {
 
   /** Adds a personal MCP server from the Add menu of the Integrations tab
    * ("For me" only) and returns the new integration id. The page then shows
-   * the integration on its Configuration tab. */
+   * the integration on its Overview tab. */
   async addMcpServer(details: {
     name: string;
     url: string;
@@ -192,7 +192,7 @@ export class CustomizePage {
     expect(created.ok(), await created.text()).toBeTruthy();
     const body: { id: number } = await created.json();
     await expect(this.page).toHaveURL(
-      new RegExp(`/app/customize/integrations/${body.id}\\?tab=configuration`)
+      new RegExp(`/app/customize/integrations/${body.id}$`)
     );
     return body.id;
   }
