@@ -122,6 +122,7 @@ const ChatButton = memo(
     const pinChatAgent = usePinChatAgent();
     const { exportMenuItem } = useChatExportMenu(chatSession);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [optionsFocused, setOptionsFocused] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
     >(null);
@@ -407,6 +408,8 @@ const ChatButton = memo(
           size="sm"
           interaction={menuOpen ? "hover" : "rest"}
           aria-label={t("chatButton.options.label")}
+          onFocus={() => setOptionsFocused(true)}
+          onBlur={() => setOptionsFocused(false)}
         />
       </Dropdown.Trigger>
     );
@@ -453,7 +456,7 @@ const ChatButton = memo(
     );
 
     const jumpHint =
-      jumpShortcut && !renaming && !menuOpen ? (
+      jumpShortcut && !renaming && !menuOpen && !optionsFocused ? (
         <span dir="ltr" aria-hidden="true" className="pointer-events-none!">
           <Text
             font="figure-keystroke"

@@ -105,11 +105,12 @@ export function useDraft<T>({
   isEmpty = defaultIsEmpty,
   storage = "session",
 }: UseDraftOptions<T>): UseDraftReturn<T> {
-  // Key-tagged so `loaded` is derived, giving a false->true edge on every key
-  // change that consumers rely on to re-seed.
-  const [entry, setEntry] = useState<{ key: string; draft: T | null } | null>(
-    null
-  );
+  // Consumers re-seed when the key or storage backend changes.
+  const [entry, setEntry] = useState<{
+    key: string;
+    storage: DraftStorage;
+    draft: T | null;
+  } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const writeRef = useRef<(() => void) | null>(null);
   const isEmptyRef = useRef(isEmpty);
@@ -119,7 +120,9 @@ export function useDraft<T>({
   }, [isEmpty]);
 
   useEffect(() => {
-    setEntry(key === null ? null : { key, draft: readDraft<T>(key, storage) });
+    setEntry(
+      key === null ? null : { key, storage, draft: readDraft<T>(key, storage) }
+    );
   }, [key, storage]);
 
   // Cancel a pending write on key change/unmount so it can't land under the old
@@ -131,7 +134,7 @@ export function useDraft<T>({
         timerRef.current = null;
       }
     };
-  }, [key]);
+  }, [key, storage]);
 
   // A page unload skips React cleanup, so write the pending value before the
   // timer is lost.
@@ -169,10 +172,11 @@ export function useDraft<T>({
       timerRef.current = null;
     }
     clearDraft(key, storage);
-    setEntry({ key, draft: null });
+    setEntry({ key, storage, draft: null });
   }, [key, storage]);
 
-  const loaded = entry !== null && entry.key === key;
+  const loaded =
+    entry !== null && entry.key === key && entry.storage === storage;
   const draft = loaded ? entry.draft : null;
   const hasDraft = draft !== null && !isEmpty(draft);
 

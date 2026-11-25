@@ -494,11 +494,12 @@ export function useContentEditable({
       resize();
       onContentChangeRef.current?.(text);
 
-      if (!focus || disabledRef.current) return;
-
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
+      if (!focus || disabledRef.current) return;
+
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;
         if (ref.current) {
