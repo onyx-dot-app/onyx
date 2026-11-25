@@ -13,6 +13,8 @@ export const useUploadProgressStore = create<UploadProgressStore>(() => ({
 interface UploadBatch {
   controller: AbortController;
   pending: Set<string>;
+  /** Every byte was sent, so the server may save the files even on abort. */
+  sent: boolean;
 }
 
 const batchByTempId = new Map<string, UploadBatch>();
@@ -35,19 +37,22 @@ export function trackUpload(tempIds: string[]): {
   const batch: UploadBatch = {
     controller: new AbortController(),
     pending: new Set(tempIds),
+    sent: false,
   };
   tempIds.forEach((id) => batchByTempId.set(id, batch));
   return {
     options: {
       signal: batch.controller.signal,
-      onProgress: (progress) =>
+      onProgress: (progress) => {
+        if (progress >= 1) batch.sent = true;
         useUploadProgressStore.setState((state) => {
           const progressByTempId = { ...state.progressByTempId };
           batch.pending.forEach((id) => {
             progressByTempId[id] = progress;
           });
           return { progressByTempId };
-        }),
+        });
+      },
     },
     isCancelled: (tempId) => !batch.pending.has(tempId),
     finish: () => {
@@ -61,7 +66,8 @@ export function trackUpload(tempIds: string[]): {
 
 /**
  * Stops waiting for the file's upload. The request is aborted when no other
- * file in its batch still waits for it.
+ * file in its batch still waits for it and its bytes are not all sent. Once
+ * they are, the request finishes and its caller deletes the cancelled files.
  */
 export function cancelUpload(tempId: string): void {
   const batch = batchByTempId.get(tempId);
@@ -69,5 +75,5 @@ export function cancelUpload(tempId: string): void {
   batchByTempId.delete(tempId);
   batch.pending.delete(tempId);
   clearProgress([tempId]);
-  if (batch.pending.size === 0) batch.controller.abort();
+  if (batch.pending.size === 0 && !batch.sent) batch.controller.abort();
 }

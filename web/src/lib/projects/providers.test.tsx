@@ -485,4 +485,51 @@ describe("ProjectsContext beginUpload cancel", () => {
     );
     expect(mockToastError).not.toHaveBeenCalled();
   });
+
+  it("lets a request with all bytes sent finish, then deletes its cancelled file", async () => {
+    let finishUpload: (value: unknown) => void = () => {};
+    let signal: AbortSignal | undefined;
+    mockUploadFiles.mockImplementation(
+      (
+        _files: File[],
+        _projectId: number | null,
+        _tempIds: string[],
+        _incognito: string | null,
+        options: UploadFilesOptions
+      ) =>
+        new Promise((resolve) => {
+          signal = options.signal;
+          options.onProgress?.(1);
+          finishUpload = resolve;
+        })
+    );
+    mockDeleteUserFile.mockReset();
+    mockDeleteUserFile.mockResolvedValue({ deleted: true });
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [new File(["a"], "a.txt", { type: "text/plain" })],
+        null
+      );
+    });
+    const tempId = optimisticFiles[0]?.temp_id ?? "";
+    act(() => cancelUpload(tempId));
+
+    expect(signal?.aborted).toBe(false);
+    await act(async () => {
+      finishUpload({
+        user_files: [{ ...optimisticFiles[0], id: "user-a", temp_id: tempId }],
+        rejected_files: [],
+      });
+    });
+
+    await waitFor(() =>
+      expect(mockDeleteUserFile).toHaveBeenCalledWith("user-a")
+    );
+    expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
+      tempId
+    );
+  });
 });
