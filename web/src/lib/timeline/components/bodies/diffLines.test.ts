@@ -80,6 +80,28 @@ test("a diff counts only the lines that changed", () => {
   });
 });
 
+test("a long file with two far apart edits counts exactly two and two", () => {
+  const body = Array.from({ length: 2100 }, (_, i) => `line ${i}`);
+  const edited = [...body];
+  edited[0] = "first";
+  edited[2099] = "last";
+  expect(
+    countDiffLines(computeDiff(body.join("\n"), edited.join("\n")))
+  ).toEqual({ added: 2, removed: 2 });
+});
+
+test("a diff with scattered edits keeps every shared line", () => {
+  const body = Array.from({ length: 300 }, (_, i) => `line ${i % 7}`);
+  const edited = body.filter((_, i) => i % 10 !== 3);
+  edited.splice(100, 0, "new a", "new b");
+  const lines = computeDiff(body.join("\n"), edited.join("\n"));
+  const kept = lines.filter((line) => line.type !== "added");
+  expect(kept.map((line) => line.content)).toEqual(body);
+  expect(
+    lines.filter((line) => line.type !== "removed").map((l) => l.content)
+  ).toEqual(edited);
+});
+
 test("an empty side and a missing final newline add no phantom changes", () => {
   expect(countDiffLines(computeDiff("", "a\nb"))).toEqual({
     added: 2,
