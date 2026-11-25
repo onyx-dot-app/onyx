@@ -25,6 +25,7 @@ import {
   SvgUploadCloud,
   SvgXCircle,
 } from "@opal/icons";
+import { PageLoader } from "@opal/loaders";
 import { SvgGitHub } from "@opal/logos";
 import { useNavigation } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -314,10 +315,12 @@ export default function CustomizePluginsPage() {
     </>
   );
 
-  // The marketplaces stay usable when the skills fail to load.
+  // The marketplaces stay usable while the skills load or when they fail.
   const list = (
     <>
-      {skills.error ? (
+      {skills.isLoading ? (
+        <PageLoader />
+      ) : skills.error ? (
         <MessageCard
           variant="error"
           outerPadding={1}
@@ -438,7 +441,7 @@ export default function CustomizePluginsPage() {
 
   if (panel === "admin")
     return (
-      <SettingsLayouts.Root width="lg" loading={skills.isLoading}>
+      <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header
           icon={SvgPlug}
           title={adminCopy("title")}
@@ -482,7 +485,6 @@ export default function CustomizePluginsPage() {
           {addMenu}
         </>
       }
-      loading={skills.isLoading}
     >
       <Text as="p" font="secondary-body" color="text-03">
         {t("plugins.intro")}

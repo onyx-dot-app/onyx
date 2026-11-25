@@ -164,6 +164,19 @@ test("the marketplaces stay usable when the plugins fail to load", async () => {
   ).toBeInTheDocument();
 });
 
+test("the marketplaces show while the plugins still load", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  mockFetch({
+    "/api/skills": () => new Promise<never>(() => undefined),
+    "/api/marketplaces": { marketplaces: [summaryFixture()] },
+  });
+  render(<CustomizePluginsPage />);
+
+  expect(
+    await screen.findByRole("table", { name: "Marketplaces" })
+  ).toBeInTheDocument();
+});
+
 test("a link to #marketplaces scrolls to the section once it loads", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins#marketplaces");
   const scrollIntoView = jest.fn();
