@@ -299,7 +299,7 @@ def calculate_reserved_tokens(
         db_session: Database session
         persona_system_prompt: Custom agent system prompt (can be empty string)
         token_counter: Function that counts tokens in text
-        sandbox_tools: The turn's sandbox tools (sandbox_tools_for_model), if any
+        sandbox_tools: The turn's sandbox tools (SANDBOX_TOOLS), if any
         files: List of file descriptors from the chat message (optional)
         user_memory_context: User memory context (optional)
 

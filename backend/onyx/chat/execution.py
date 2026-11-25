@@ -97,8 +97,8 @@ from onyx.tools.tool_constructor import (
 )
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     LoadSkillTool,
-    sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
@@ -1095,7 +1095,7 @@ def create_chat_agent(
         )
         if turn is not None:
             sandbox_tools = [
-                tool(turn) for tool in sandbox_tools_for_model(llm.config.tool_family)
+                tool(turn) for tool in SANDBOX_TOOLS[llm.config.tool_family]
             ]
             # A turn that runs without asking (evals) gates no built-in
             # action, as integration policies allow its Ask actions.

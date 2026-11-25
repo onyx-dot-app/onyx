@@ -3,13 +3,15 @@ search the deferred functions, and describe one function. Each tool family
 names them and takes their arguments its own way; each shape's arguments
 normalize into the same requests, which the cells serve (code_mode/cells.py)."""
 
-from collections.abc import Callable, Mapping
-from typing import ClassVar, NamedTuple
+import inspect
+from collections.abc import Mapping
+from typing import NamedTuple
 
 from pydantic import Field
 
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.tools.constants import (
+    DEFAULT_MAX_OUTPUT_CHARS,
     DEFAULT_MAX_OUTPUT_TOKENS,
     EXEC_TOOL_NAME,
     MAX_OUTPUT_TOKENS_DESCRIPTION,
@@ -57,9 +59,6 @@ class WaitRequest(NamedTuple):
 
 
 class ExecArguments(ToolArguments[RunRequest]):
-    # The argument that bounds how long a call waits for the program.
-    YIELD_ARGUMENT: ClassVar[str] = "yield_time_ms"
-
     code: str = Field(description="The Python program to run.")
     yield_time_ms: int = Field(
         default=DEFAULT_EXECUTE_YIELD_MS,
@@ -80,9 +79,6 @@ class ExecArguments(ToolArguments[RunRequest]):
 
 
 class ReplArguments(ToolArguments[RunRequest]):
-    # The argument that bounds how long a call waits for the program.
-    YIELD_ARGUMENT: ClassVar[str] = "timeout"
-
     code: str = Field(description="The Python program to run.")
     timeout: int = Field(
         default=DEFAULT_EXECUTE_YIELD_MS,
@@ -95,7 +91,7 @@ class ReplArguments(ToolArguments[RunRequest]):
         return RunRequest(
             code=self.code,
             yield_seconds=yield_seconds(self.timeout, MAX_EXECUTE_YIELD_MS),
-            max_chars=output_chars_from_tokens(DEFAULT_MAX_OUTPUT_TOKENS),
+            max_chars=DEFAULT_MAX_OUTPUT_CHARS,
         )
 
 
@@ -139,7 +135,7 @@ class PollArguments(ToolArguments[WaitRequest]):
         return WaitRequest(
             cell_id=self.cell_id,
             yield_seconds=yield_seconds(self.timeout, MAX_WAIT_YIELD_MS),
-            max_chars=output_chars_from_tokens(DEFAULT_MAX_OUTPUT_TOKENS),
+            max_chars=DEFAULT_MAX_OUTPUT_CHARS,
             terminate=self.terminate,
         )
 
@@ -156,34 +152,39 @@ class ProgramFunction(NamedTuple):
         return f"async def {self.name}{self.signature}"
 
 
-def _search_signature(limit: str) -> str:
-    return f'''(query: str, {limit}: int = {DEFAULT_TOOL_SEARCH_LIMIT}) -> list[{TOOL_MATCH_TYPE}]:
-    """Find tool functions that this description does not list, best match first.
+class SearchHost:
+    """The host function of a shape's search function: its arguments are the
+    stub's, `query` and the shape's limit argument."""
 
-    Each match has the function name, its description, and its full stub with
-    the argument and result types. Call a match as `await {TOOLS_NAMESPACE}.<name>(...)`.
-    At most `{limit}` matches, up to {MAX_TOOL_SEARCH_LIMIT}.
-    """
-    ...'''
+    def __init__(self, index: ToolIndex, limit_argument: str) -> None:
+        self._index = index
+        self._limit_argument = limit_argument
+        # The sandbox binds a program's call to this signature.
+        self.__signature__ = inspect.Signature(
+            [
+                inspect.Parameter("query", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+                inspect.Parameter(
+                    limit_argument,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    default=DEFAULT_TOOL_SEARCH_LIMIT,
+                ),
+            ]
+        )
 
-
-# The search host function of each shape; its argument names are the stub's.
-def _tool_search(
-    index: ToolIndex, query: object, limit: object = DEFAULT_TOOL_SEARCH_LIMIT
-) -> list[dict[str, str]]:
-    return index.matches(query, limit, "limit")
-
-
-def _search_tools(
-    index: ToolIndex,
-    query: object,
-    max: object = DEFAULT_TOOL_SEARCH_LIMIT,  # noqa: A002
-) -> list[dict[str, str]]:
-    return index.matches(query, max, "max")
+    def __call__(self, *args: object, **kwargs: object) -> list[dict[str, str]]:
+        bound = self.__signature__.bind(*args, **kwargs)
+        bound.apply_defaults()
+        return self._index.matches(
+            bound.arguments["query"],
+            bound.arguments[self._limit_argument],
+            self._limit_argument,
+        )
 
 
 class CodeModeShape(NamedTuple):
-    """How one tool family names and calls the code mode operations."""
+    """How one tool family names and calls the code mode operations. The
+    argument names that the prompt and the host functions use are fields, so
+    each has one source."""
 
     run_name: str
     wait_name: str
@@ -191,23 +192,38 @@ class CodeModeShape(NamedTuple):
     # The run argument that bounds how long a call waits for the program.
     run_yield_argument: str
     wait_arguments: type[ToolArguments[WaitRequest]]
-    # The program function that searches the deferred functions, and its host
-    # function.
-    search: ProgramFunction
-    search_host: Callable[[ToolIndex, object, object], list[dict[str, str]]]
+    # The program function that searches the deferred functions, and the
+    # name of its argument that bounds the number of matches.
+    search_name: str
+    search_limit_argument: str
     # The program function that describes one function by name, when the
     # shape has one.
     describe: ProgramFunction | None
+
+    @property
+    def search(self) -> ProgramFunction:
+        limit = self.search_limit_argument
+        return ProgramFunction(
+            self.search_name,
+            f'''(query: str, {limit}: int = {DEFAULT_TOOL_SEARCH_LIMIT}) -> list[{TOOL_MATCH_TYPE}]:
+    """Find tool functions that this description does not list, best match first.
+
+    Each match has the function name, its description, and its full stub with
+    the argument and result types. Call a match as `await {TOOLS_NAMESPACE}.<name>(...)`.
+    At most `{limit}` matches, up to {MAX_TOOL_SEARCH_LIMIT}.
+    """
+    ...''',
+        )
 
 
 OPENAI_CODE_MODE = CodeModeShape(
     run_name=EXEC_TOOL_NAME,
     wait_name=WAIT_TOOL_NAME,
     run_arguments=ExecArguments,
-    run_yield_argument=ExecArguments.YIELD_ARGUMENT,
+    run_yield_argument="yield_time_ms",
     wait_arguments=WaitArguments,
-    search=ProgramFunction("tool_search", _search_signature("limit")),
-    search_host=_tool_search,
+    search_name="tool_search",
+    search_limit_argument="limit",
     describe=None,
 )
 # The shape Claude models are trained on.
@@ -215,10 +231,10 @@ CLAUDE_CODE_MODE = CodeModeShape(
     run_name=REPL_TOOL_NAME,
     wait_name=POLL_TOOL_NAME,
     run_arguments=ReplArguments,
-    run_yield_argument=ReplArguments.YIELD_ARGUMENT,
+    run_yield_argument="timeout",
     wait_arguments=PollArguments,
-    search=ProgramFunction("search_tools", _search_signature("max")),
-    search_host=_search_tools,
+    search_name="search_tools",
+    search_limit_argument="max",
     describe=ProgramFunction(
         "describe_tool",
         f'''(name: str) -> {TOOL_MATCH_TYPE}:

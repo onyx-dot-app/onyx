@@ -1,4 +1,5 @@
 import ast
+import inspect
 import json
 from collections.abc import Iterator
 from typing import cast
@@ -738,16 +739,24 @@ def test_tool_search_ranks_name_matches_first_and_bounds_the_count() -> None:
         FakeTool(f"ticket_{n}", _unused, exposure=CodeModeExposure.DEFERRED)
         for n in range(MAX_TOOL_SEARCH_LIMIT + 5)
     ]
-    # Each shape's search caps its own limit argument.
-    for shape, limit in ((OPENAI_CODE_MODE, "limit"), (CLAUDE_CODE_MODE, "max")):
-        found = build_tool_stubs(shape, many).async_functions[shape.search.name](
-            "ticket", **{limit: 100}
-        )
+    # Each shape's search caps its own limit argument, which its stub and its
+    # host function both name.
+    for shape in CODE_MODE_SHAPES.values():
+        limit = shape.search_limit_argument
+        assert f"{limit}: int" in shape.search.stub
+        search = build_tool_stubs(shape, many).async_functions[shape.search_name]
+        assert list(inspect.signature(search).parameters) == ["query", limit]
+        found = search("ticket", **{limit: 100})
         assert isinstance(found, list) and len(found) == MAX_TOOL_SEARCH_LIMIT
     with pytest.raises(ValueError, match="max must be at least 1"):
         build_tool_stubs(CLAUDE_CODE_MODE, many).async_functions["search_tools"](
             "ticket", max=0
         )
+
+
+def test_each_shape_names_arguments_that_its_models_have() -> None:
+    for shape in CODE_MODE_SHAPES.values():
+        assert shape.run_yield_argument in shape.run_arguments.model_fields
 
 
 def test_describe_tool_returns_the_match_of_one_listed_or_deferred_function() -> None:

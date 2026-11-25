@@ -8,7 +8,6 @@ import re
 import unicodedata
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from functools import partial
 from types import UnionType
 from typing import Literal, Union, get_args, get_origin
 
@@ -39,6 +38,7 @@ from onyx.tools.tool_implementations.code_mode.sandbox import (
 from onyx.tools.tool_implementations.code_mode.shapes import (
     PROGRAM_SEARCH_NAMES,
     CodeModeShape,
+    SearchHost,
 )
 from onyx.tools.tool_implementations.code_mode.store import (
     STORE_FUNCTIONS,
@@ -187,8 +187,8 @@ class ToolStubs(BaseModel):
         """Host functions that only some programs have; programs await them."""
         functions: dict[str, HostFunction] = {}
         if self.tool_index is not None:
-            functions[self.shape.search.name] = partial(
-                self.shape.search_host, self.tool_index
+            functions[self.shape.search_name] = SearchHost(
+                self.tool_index, self.shape.search_limit_argument
             )
         if self.shape.describe is not None:
             functions[self.shape.describe.name] = self.describe_tool

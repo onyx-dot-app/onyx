@@ -124,7 +124,7 @@ usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
 - A Craft sandbox: the pod or Docker container of opencode sessions. See
   [[craft-sandboxes]].
 - A harness sandbox: the user's Firecracker VM behind `HarnessSandbox`, which
-  the chat sandbox tools (`tools/tool_implementations/sandbox/sandbox_tools.py:sandbox_tools_for_model`) use. See [[craft-sandboxes]] and [[code-execution]].
+  the chat sandbox tools (`tools/tool_implementations/sandbox/sandbox_tools.py:SANDBOX_TOOLS`) use. See [[craft-sandboxes]] and [[code-execution]].
 - The `sandbox` table: one row per user, which Craft and harness sandboxes
   share.
 

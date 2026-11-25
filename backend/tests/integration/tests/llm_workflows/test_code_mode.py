@@ -1,10 +1,12 @@
 """Code mode through the real server: the model calls tools from an
 `exec` program, which runs in the sandbox and is saved with the chat."""
 
+from collections.abc import Callable
 from contextlib import ExitStack
 from uuid import uuid4
 
 from onyx.configs.constants import DocumentSource
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.constants import SEARCH_TOOL_ID
@@ -182,12 +184,14 @@ def _replayed_code_cells(packets: list[dict]) -> int:
 def test_a_claude_model_runs_programs_with_repl_and_poll(
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
-    claude_mock_llm: DATestLLMProvider,
+    mock_llm_of_family: Callable[[ToolFamily], DATestLLMProvider | None],
 ) -> None:
     """A Claude model gets the shape it is trained on: `repl` and `poll`, and
     `search_tools` and `describe_tool` in programs. A chat that switches to it
     keeps the cells and calls of the other shape."""
     nonce = uuid4().hex
+    claude = mock_llm_of_family(ToolFamily.CLAUDE)
+    assert claude is not None
     with ExitStack() as cleanup:
         integration_id = IntegrationManager.create(
             {
@@ -308,7 +312,7 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
             f"Use the ping tool. {nonce}",
             admin_user,
             llm_override=LLMOverride(
-                model_configuration_id=claude_mock_llm.model_configuration_ids[0]
+                model_configuration_id=claude.model_configuration_ids[0]
             ),
         )
         # The model reads the rejected poll; the stream shows it as an error.

@@ -38,6 +38,8 @@ from tests.integration.mock_services.mock_llm_server.models import (
 
 # Onyx special-cases some model names (claude, qwen, gpt-6-sol.x, catalog models).
 MOCK_LLM_MODEL_NAME = "mock-model"
+# A mock model name that gets the Claude tool family (LLMConfig.tool_family).
+CLAUDE_MOCK_LLM_MODEL_NAME = "claude-sonnet-4-5-mock"
 # Deep Research needs at least 50000.
 MOCK_LLM_MAX_INPUT_TOKENS = 200000
 
