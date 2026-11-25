@@ -23,7 +23,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 _LINE_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _PATH_PARAM = re.compile(r"\{([^{}]*)\}")
 _PARAM_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-]*")
-_QUERY_NAME = re.compile(r"[A-Za-z0-9_.\-\[\]]+")
+_QUERY_NAME = re.compile(r"[^\s&?=#]+")
 
 
 class EndpointLineError(BaseModel):

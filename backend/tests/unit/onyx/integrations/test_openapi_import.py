@@ -269,3 +269,45 @@ def test_lines_show_and_keep_shared_query_parameters() -> None:
 
     with pytest.raises(EndpointLinesError, match="Each operation of /pets/{petId}"):
         _apply(spec, [line.replace("?verbose", "") for line in lines])
+
+
+def test_imported_lines_with_any_query_name_save_again() -> None:
+    """A spec's query names (`$filter`, `fields[user]`) appear in the lines,
+    and those lines save again unchanged."""
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Orders", "version": "1"},
+        "servers": [{"url": "https://orders.example.com"}],
+        "paths": {
+            "/orders": {
+                "get": {
+                    "operationId": "list_orders",
+                    "summary": "List orders",
+                    "parameters": [
+                        {
+                            "name": "$filter",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "fields[user]",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                    ],
+                }
+            }
+        },
+    }
+    lines = endpoint_lines(spec)
+    assert lines == ["GET /orders?$filter&fields[user] List orders"]
+
+    saved = apply_endpoint_lines(
+        json.dumps(spec),
+        title="Orders",
+        description=None,
+        base_url="https://orders.example.com",
+        lines=lines,
+    )
+
+    assert endpoint_lines(json.loads(saved)) == lines
