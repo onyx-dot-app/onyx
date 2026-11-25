@@ -123,7 +123,10 @@ one-time PKCE-bound code to the app (`auth/mobile_sso/`, [[mobile-app]]).
 
 **Magic link.** `MAGIC_LINK_ENABLED` mounts two public routes
 (`onyx/server/auth/magic_link_api.py`) and `GET /auth/type` reports
-`magic_link_enabled` when an email sender is configured too. The request route
+`magic_link_enabled` when an email sender is configured too and SSO is not the
+only way in. With "Disable Password Login & Signup" on, both routes refuse with
+`MAGIC_LINK_USE_SSO` (`onyx/auth/magic_link.py:is_sso_only`), since a link
+would get around the identity provider. The request route
 answers "link sent" for every well-formed address, whether or not it has an
 account, so nothing leaks before the inbox is proven. The link carries a random
 token. The cache keeps the token's hash and what the click should do: the

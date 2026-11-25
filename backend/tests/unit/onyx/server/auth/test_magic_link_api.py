@@ -9,13 +9,18 @@ import pytest
 from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 
+from onyx.auth import magic_link
 from onyx.auth.magic_link import MagicLinkRecord
 from onyx.auth.users import auth_backend, get_user_manager
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.server.auth import magic_link_api
-from onyx.server.auth.magic_link_api import MAGIC_LINK_INVALID_CODE, router
+from onyx.server.auth.magic_link_api import (
+    MAGIC_LINK_INVALID_CODE,
+    MAGIC_LINK_USE_SSO_CODE,
+    router,
+)
 from onyx.utils.variable_functionality import global_version
 
 _MODULE = "onyx.server.auth.magic_link_api"
@@ -53,12 +58,19 @@ def address_passes() -> Iterator[dict[str, MagicMock]]:
     settings = MagicMock()
     settings.valid_email_domains = ()
     with (
+        patch(f"{_MODULE}.is_sso_only", return_value=False),
         patch(f"{_MODULE}.get_security_settings", return_value=settings),
         patch(f"{_MODULE}.verify_email_domain") as verify_domain,
         patch(f"{_MODULE}.store_magic_link", AsyncMock(return_value="tok")) as store,
         patch(f"{_MODULE}.send_magic_link_email") as send,
     ):
         yield {"verify_domain": verify_domain, "store": store, "send": send}
+
+
+@pytest.fixture
+def not_sso_only() -> Iterator[None]:
+    with patch(f"{_MODULE}.is_sso_only", return_value=False):
+        yield
 
 
 def _playground(hooks: dict[str, Any]) -> Callable[..., Any]:
@@ -183,6 +195,18 @@ class TestRequest:
         address_passes["store"].assert_not_awaited()
 
     @pytest.mark.usefixtures("mail_is_configured")
+    def test_sso_only_sends_nothing(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        with patch(f"{_MODULE}.is_sso_only", return_value=True):
+            response = client.post("/auth/magic-link/request", json={"email": EMAIL})
+
+        assert response.status_code == OnyxErrorCode.REGISTRATION_DISABLED.status_code
+        assert response.json()["detail"] == MAGIC_LINK_USE_SSO_CODE
+        address_passes["store"].assert_not_awaited()
+        address_passes["send"].assert_not_called()
+
+    @pytest.mark.usefixtures("mail_is_configured")
     def test_a_failed_send_is_reported(
         self, client: TestClient, address_passes: dict[str, MagicMock]
     ) -> None:
@@ -220,6 +244,7 @@ def _is_team_choice(error: OnyxError) -> bool:
     return error.detail == "PLAYGROUND_ACTIVE_TENANT"
 
 
+@pytest.mark.usefixtures("not_sso_only")
 class TestRedeem:
     def test_a_good_token_signs_in_and_sets_the_cookies(
         self, client: TestClient, user_manager: MagicMock
@@ -353,6 +378,20 @@ class TestRedeem:
         assert response.json()["detail"] == "You are not invited."
         store.assert_not_awaited()
 
+    def test_sso_only_keeps_the_token_unused(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        with (
+            patch(f"{_MODULE}.is_sso_only", return_value=True),
+            patch(f"{_MODULE}.consume_magic_link", AsyncMock()) as consume,
+        ):
+            response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.status_code == OnyxErrorCode.REGISTRATION_DISABLED.status_code
+        assert response.json()["detail"] == MAGIC_LINK_USE_SSO_CODE
+        consume.assert_not_awaited()
+        user_manager.magic_link_login.assert_not_awaited()
+
     def test_a_disabled_account_is_not_signed_in(
         self, client: TestClient, user_manager: MagicMock
     ) -> None:
@@ -365,3 +404,24 @@ class TestRedeem:
 
         assert response.status_code == OnyxErrorCode.VALIDATION_ERROR.status_code
         login.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("multi_tenant", "password_auth_enabled", "sso_only"),
+    [
+        (False, False, True),
+        (False, True, False),
+        # Cloud has no password switch, so SSO is never the only way in.
+        (True, False, False),
+    ],
+)
+def test_sso_only_follows_the_password_switch(
+    multi_tenant: bool, password_auth_enabled: bool, sso_only: bool
+) -> None:
+    settings = MagicMock()
+    settings.password_auth_enabled = password_auth_enabled
+    with (
+        patch.object(magic_link, "MULTI_TENANT", multi_tenant),
+        patch.object(magic_link, "get_security_settings", return_value=settings),
+    ):
+        assert magic_link.is_sso_only() is sso_only

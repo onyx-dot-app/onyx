@@ -26,9 +26,14 @@ from pydantic import BaseModel, ValidationError
 
 from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import MAGIC_LINK_TOKEN_PREFIX, MAGIC_LINK_TTL_SECONDS
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+# The web sends the person to their SSO provider for this error detail.
+MAGIC_LINK_USE_SSO_CODE = "MAGIC_LINK_USE_SSO"
 
 
 class MagicLinkRecord(BaseModel):
@@ -46,6 +51,13 @@ class MagicLinkRecord(BaseModel):
 def _cache_key(token: str) -> str:
     digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
     return f"{MAGIC_LINK_TOKEN_PREFIX}{digest}"
+
+
+def is_sso_only() -> bool:
+    """The admin turned off password sign-in, so everyone signs in through SSO.
+    A link sent by email would get around that, so it is off too. Single-tenant
+    only, like the password switch."""
+    return not MULTI_TENANT and not get_security_settings().password_auth_enabled
 
 
 async def store_magic_link(record: MagicLinkRecord) -> str:

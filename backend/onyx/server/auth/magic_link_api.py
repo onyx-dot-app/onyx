@@ -23,8 +23,10 @@ from pydantic import BaseModel, EmailStr
 
 from onyx.auth.email_utils import send_magic_link_email
 from onyx.auth.magic_link import (
+    MAGIC_LINK_USE_SSO_CODE,
     MagicLinkRecord,
     consume_magic_link,
+    is_sso_only,
     store_magic_link,
 )
 from onyx.auth.users import (
@@ -54,6 +56,11 @@ MAGIC_LINK_INVALID_CODE = "MAGIC_LINK_INVALID"
 MAGIC_LINK_WEB_PATH = "/auth/magic-link"
 
 _PLAYGROUND_MODULE = "onyx.server.tenants.provisioning"
+
+
+def _refuse_when_sso_only() -> None:
+    if is_sso_only():
+        raise OnyxError(OnyxErrorCode.REGISTRATION_DISABLED, MAGIC_LINK_USE_SSO_CODE)
 
 
 class MagicLinkRequest(BaseModel):
@@ -91,6 +98,8 @@ async def request_magic_link(
             OnyxErrorCode.SERVICE_UNAVAILABLE,
             "Email sending has not been configured for this deployment.",
         )
+
+    _refuse_when_sso_only()
 
     email = payload.email.lower()
     # Decided by the address alone, so refused before any email goes out.
@@ -130,6 +139,9 @@ async def redeem_magic_link(
     user_manager: UserManager = Depends(get_user_manager),
     strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
 ) -> MagicLinkRedeemed:
+    # Before the token is used up, so it still works if SSO-only is lifted.
+    _refuse_when_sso_only()
+
     record = await consume_magic_link(payload.token)
     if record is None:
         # Unknown, expired and already used look the same. The page offers a
