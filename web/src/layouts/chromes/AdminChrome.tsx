@@ -10,6 +10,7 @@ import {
   PendingRoute,
   useNavigation,
   usePathname,
+  useRenderedPathname,
   useRouteRendering,
 } from "@opal/navigation";
 import { useUser } from "@/providers/UserProvider";
@@ -48,6 +49,7 @@ export default function AdminChrome({
   // /ee/admin/… keeps that URL.
   const base = pathname.startsWith("/ee/admin") ? "/ee/admin" : "/admin";
   const routeRendering = useRouteRendering(base);
+  const renderedPathname = useRenderedPathname(base);
   const { vectorDbEnabled, isLoading, application_status } = useSettings();
   useAdminDocumentTitle();
   const navigation = useNavigation();
@@ -70,6 +72,15 @@ export default function AdminChrome({
   const denied =
     matched !== undefined &&
     !hasPermission(adminCapabilities, matched.requiredPermission);
+
+  // The restriction belongs to the page on screen. While the next page
+  // renders, the page being left keeps its own wrapper, so a navigation
+  // that is canceled does not remount it and lose its state.
+  const rendered = matchAdminRoute(
+    base === "/ee/admin"
+      ? renderedPathname.slice("/ee".length)
+      : renderedPathname
+  );
 
   useEffect(() => {
     if (!denied) return;
@@ -142,7 +153,7 @@ export default function AdminChrome({
         <AdminTopBarSlotContext.Provider value={isMobile ? topBarSlot : null}>
           <RootLayout.MainContent>
             <PendingRoute base={base} loader={<PageLoader />}>
-              <PlaygroundRestrictedPage featureKey={matched?.featureKey}>
+              <PlaygroundRestrictedPage featureKey={rendered?.featureKey}>
                 {content}
               </PlaygroundRestrictedPage>
             </PendingRoute>
