@@ -1091,7 +1091,7 @@ the tab, and a chat that the store does not hold shows no status.
     script write stops a trackpad fling.
     **Opening a step reveals it.** When the user opens a run card or a step,
     `lib/chatScroll/hooks.ts:useRevealOnOpen` waits `FOLD_OPEN_MS` for the fold
-    to reach its full height, then the container's `revealContent` scrolls by the smaller of
+    to reach its full height, then the action from the container's `prepareReveal` scrolls by the smaller of
     the part of the row hidden below and the room above it. The footer's height (a
     spacer the height of the composer laid over the view) counts as hidden.
     It does nothing while the view follows a streaming reply (`isStreaming`) with

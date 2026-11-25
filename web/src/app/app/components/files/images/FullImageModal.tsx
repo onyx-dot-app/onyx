@@ -38,10 +38,13 @@ export function FullImageModal({
             "focus:outline-hidden"
           )}
         >
+          <Dialog.Title className="sr-only">
+            {t("inMessageImage.viewFullImage.label")}
+          </Dialog.Title>
           <img
             src={src}
             alt={t("fullImageModal.image.alt")}
-            className="max-w-full max-h-full"
+            className="max-w-full max-h-[calc(100dvh-2rem)] object-contain"
           />
         </Dialog.Content>
       </Dialog.Portal>

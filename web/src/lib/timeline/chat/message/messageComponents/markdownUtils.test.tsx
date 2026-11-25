@@ -17,7 +17,9 @@ describe("MarkdownImage", () => {
     expect(screen.getByAltText("Chart")).toHaveAttribute("loading", "lazy");
 
     await userEvent.click(screen.getByRole("button", { name: "Chart" }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "View the full image" })
+    ).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Chart" })).toHaveFocus()

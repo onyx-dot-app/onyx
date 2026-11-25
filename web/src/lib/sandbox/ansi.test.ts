@@ -15,6 +15,10 @@ describe("stripAnsi", () => {
     ).toBe("done link");
   });
 
+  test("removes a character set selector", () => {
+    expect(stripAnsi("\u001b(Bplain")).toBe("plain");
+  });
+
   test("keeps text without escapes", () => {
     expect(stripAnsi("[32m is not an escape")).toBe("[32m is not an escape");
   });

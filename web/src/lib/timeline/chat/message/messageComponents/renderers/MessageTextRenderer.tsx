@@ -261,7 +261,8 @@ export const MessageTextRenderer: MessageRenderer<
     content,
     isStreamingAnimationEnabled,
     isStreamFinished,
-    restoredTextLength
+    restoredTextLength,
+    prefersReducedMotion
   );
 
   // One-way signal: stream done AND typewriter caught up. Do NOT derive

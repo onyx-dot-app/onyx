@@ -27,6 +27,7 @@ import {
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import {
+import { StopReason } from "@/app/app/services/streamingModels";
   fetchSettledChatSession,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
@@ -1588,12 +1589,12 @@ test.each<{
   expect(runs.endings).toEqual([ended]);
 });
 
-test("a run the user stops does not show Failed", async () => {
+test("a run the user cancels records no outcome", async () => {
   useChatSessionStore.setState({
     sessions: new Map(),
     currentSessionId: "session",
   });
-  useChatSessionStore.getState().createSession("session");
+  useChatSessionStore.getState().createSession("session", { incognito: true });
   const stopped = Promise.withResolvers<void>();
   global.fetch = jest.fn(async () => {
     stopped.resolve();
@@ -1602,7 +1603,10 @@ test("a run the user stops does not show Failed", async () => {
   jest.mocked(sendMessage).mockImplementationOnce(async function* () {
     yield sentTurn;
     await stopped.promise;
-    yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+    yield {
+      placement: { turn_index: 0 },
+      obj: { type: "stop", stop_reason: StopReason.USER_CANCELLED },
+    };
   });
   const runs = recordRunEndings();
   const { result } = renderChatController();
@@ -1625,7 +1629,7 @@ test("a run the user stops does not show Failed", async () => {
     await sent;
   });
   runs.stop();
-  expect(runs.endings).toEqual(["done"]);
+  expect(runs.endings).toEqual([]);
 });
 
 test("Stop preserves a rejection when it releases the composer first", async () => {
