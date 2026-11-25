@@ -42,9 +42,10 @@ function answerOf(question: ToolQuestion, choice: Choice): ToolQuestionAnswer {
   const note = choice.note.trim();
   return {
     question_id: question.id,
-    option_labels: question.options
-      .map((option) => option.label)
-      .filter((label) => choice.optionLabels.includes(label)),
+    // A saved question can repeat a label; each label counts once.
+    option_labels: [
+      ...new Set(question.options.map((option) => option.label)),
+    ].filter((label) => choice.optionLabels.includes(label)),
     user_note: note || null,
   };
 }
