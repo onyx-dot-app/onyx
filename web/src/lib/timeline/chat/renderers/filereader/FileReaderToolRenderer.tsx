@@ -11,7 +11,7 @@ import {
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 
 interface FileReaderState {
   fileName: string | null;

@@ -1,4 +1,4 @@
-import { getToolKey } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import { getToolKey } from "@/lib/timeline/chat/message/messageComponents/toolDisplayHelpers";
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { PacketType } from "@/app/app/services/streamingModels";
 import { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";

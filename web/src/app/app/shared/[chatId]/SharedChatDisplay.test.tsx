@@ -41,7 +41,7 @@ jest.mock("@/providers/VoiceModeProvider", () => ({
     isAwaitingAutoPlaybackStart: false,
   }),
 }));
-jest.mock("@/app/app/message/HumanMessage", () => ({
+jest.mock("@/lib/timeline/chat/message/HumanMessage", () => ({
   __esModule: true,
   default: () => null,
 }));

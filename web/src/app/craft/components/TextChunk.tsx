@@ -2,7 +2,7 @@
 
 import { useMemo, type ComponentPropsWithoutRef } from "react";
 import { AnswerMarkdown } from "@/lib/answerText/components";
-import { MemoizedLink } from "@/app/app/message/MemoizedTextComponents";
+import { MemoizedLink } from "@/lib/timeline/chat/message/MemoizedTextComponents";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { buildArtifactUrl } from "@/app/craft/services/apiServices";
 import { parseOutputLink } from "@/app/craft/utils/pathSanitizer";

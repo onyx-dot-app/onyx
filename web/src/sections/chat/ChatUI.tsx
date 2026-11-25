@@ -10,15 +10,15 @@ import React, {
 import { Message } from "@/app/app/types";
 import type { ComposedMessage } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
-import HumanMessage from "@/app/app/message/HumanMessage";
-import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
-import { ErrorBanner } from "@/app/app/message/Resubmit";
+import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
+import AgentResultsDivider from "@/lib/timeline/chat/message/AgentResultsDivider";
+import { ErrorBanner } from "@/lib/timeline/chat/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
-import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
-import { MultiModelResponse } from "@/app/app/message/types";
-import { getMultiModelResponses } from "@/app/app/message/multiModel";
+import AgentMessage from "@/lib/timeline/chat/message/messageComponents/AgentMessage";
+import MultiModelResponseView from "@/lib/timeline/chat/message/MultiModelResponseView";
+import { MultiModelResponse } from "@/lib/timeline/chat/message/types";
+import { getMultiModelResponses } from "@/lib/timeline/chat/message/multiModel";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import {

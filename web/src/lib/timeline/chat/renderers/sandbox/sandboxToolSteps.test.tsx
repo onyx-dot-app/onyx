@@ -10,8 +10,8 @@ import {
   StopReason,
 } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
-import { FullChatState } from "@/app/app/message/messageComponents/types";
+import AgentMessage from "@/lib/timeline/chat/message/messageComponents/AgentMessage";
+import { FullChatState } from "@/lib/timeline/chat/message/messageComponents/types";
 import type { MinimalAgent } from "@/lib/agents/types";
 
 jest.mock("@/providers/VoiceModeProvider", () => ({

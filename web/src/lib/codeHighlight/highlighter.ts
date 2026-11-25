@@ -8,7 +8,7 @@ import { all } from "lowlight";
 import abap from "highlightjs-sap-abap";
 
 // hljs theme styles. Loads with this chunk, not on first paint.
-import "@/app/app/message/custom-code-styles.css";
+import "@/lib/timeline/chat/message/custom-code-styles.css";
 
 for (const [name, language] of Object.entries({ ...all, abap })) {
   hljs.registerLanguage(name, language);

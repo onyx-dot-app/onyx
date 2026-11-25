@@ -12,7 +12,7 @@ import {
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { Text } from "@opal/components";
 import { SvgServer } from "@opal/icons";
 import { OnyxDocument } from "@/lib/search/types";

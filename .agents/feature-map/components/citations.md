@@ -101,7 +101,7 @@ one step that return the same document give it two numbers.
 **Web rendering.** Inline links resolve through
 `web/src/lib/timeline/chat/hooks/packetProcessor.ts:handleCitationPacket`,
 which builds `citationMap`.
-`web/src/app/app/message/messageComponents/AgentMessage.tsx` merges it with
+`web/src/lib/timeline/chat/message/messageComponents/AgentMessage.tsx` merges it with
 `chatState.citations` as `mergedCitations` and passes the map to
 `MemoizedAnchor`. `app/app/services/packetUtils.ts:getCitations` feeds only the
 documents sidebar.
@@ -151,7 +151,7 @@ of only markers stays empty.
 
 1. `unresolved-citation-silent` **An unresolved citation renders as nothing,
    not as an error.**
-   `web/src/app/app/message/MemoizedTextComponents.tsx:MemoizedAnchor` returns
+   `web/src/lib/timeline/chat/message/MemoizedTextComponents.tsx:MemoizedAnchor` returns
    an empty fragment when a number has no document. During streaming this is
    correct, because the mapping can arrive late. It also hides real bugs. If
    citations disappear, suspect the pipeline before the model.
@@ -211,7 +211,7 @@ of only markers stays empty.
    files pass `True`, so their saved numbers win. Do not change either without
    checking the call sites.
 8. `not-every-bracket-is-a-citation` **Not every bracketed number is a document
-   citation.** `app/app/message/MemoizedTextComponents.tsx:MemoizedAnchor`
+   citation.** `lib/timeline/chat/message/MemoizedTextComponents.tsx:MemoizedAnchor`
    matches `[n]`, `[Dn]` and `[Qn]`. `[Qn]` is a
    deep-research sub-question link indexed by list position, not by the
    citation map.
@@ -224,7 +224,7 @@ of only markers stays empty.
    exponential backtracking risk.
 10. `partial-link-hidden` **`stripPartialCitations` hides a partial link at the
     end of the text.**
-    `web/src/app/app/message/messageComponents/markdownUtils.tsx:stripPartialCitations`
+    `web/src/lib/timeline/chat/message/messageComponents/markdownUtils.tsx:stripPartialCitations`
     (chat answers call it directly; `processContent` calls it for the other
     renderers) strips a trailing incomplete `[[n]](url`, so a broken link does not flash
     during streaming. A citation that never completes because of a backend bug
@@ -344,7 +344,7 @@ of only markers stays empty.
 
 - Unit tests in `backend/tests/unit/onyx/chat/` cover the processor and the
   citation helpers. The web renderer tests sit beside
-  `web/src/app/app/message/MemoizedTextComponents.tsx`. Prompt or format
+  `web/src/lib/timeline/chat/message/MemoizedTextComponents.tsx`. Prompt or format
   changes also need a citation eval.
 - By hand, ask a question that forces a search. Each marker must open a source
   card, and the toolbar "Sources" tag must list the same documents. Reload the

@@ -13,7 +13,7 @@ import {
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import { ShadowDiv } from "@opal/components";
 

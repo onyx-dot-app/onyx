@@ -5,7 +5,7 @@ import { MemoryToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
 import { SvgMaximize2 } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";

@@ -4,7 +4,7 @@ import { FetchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { OnyxDocument } from "@/lib/search/types";
 import { openExternalLink } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/connectors/types/source";

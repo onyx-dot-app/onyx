@@ -15,9 +15,9 @@ import { cn } from "@opal/utils";
 import {
   MemoizedLink,
   MemoizedParagraph,
-} from "@/app/app/message/MemoizedTextComponents";
-import { ScrollableTable } from "@/app/app/message/messageComponents/markdownUtils";
-import { tableToCopyContent } from "@/app/app/message/tableCopyUtils";
+} from "@/lib/timeline/chat/message/MemoizedTextComponents";
+import { ScrollableTable } from "@/lib/timeline/chat/message/messageComponents/markdownUtils";
+import { tableToCopyContent } from "@/lib/timeline/chat/message/tableCopyUtils";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
 import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";

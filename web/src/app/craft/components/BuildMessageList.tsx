@@ -17,12 +17,12 @@ import {
   type ResponseItem,
 } from "@/lib/timeline/components/Response";
 import { responseCursorItem } from "@/lib/timeline/components/ResponseCursor";
-import { ErrorBanner } from "@/app/app/message/Resubmit";
+import { ErrorBanner } from "@/lib/timeline/chat/message/Resubmit";
 import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
-import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
+import { convertMarkdownTablesToTsv } from "@/lib/timeline/chat/message/copyingUtils";
 import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import TodoListCard from "@/app/craft/components/TodoListCard";
-import HumanMessage from "@/app/app/message/HumanMessage";
+import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
 import CraftMessageAttachments from "@/app/craft/components/CraftMessageAttachments";
 import TurnOutputCards from "@/app/craft/components/TurnOutputCards";
 import { craftMessageRowId } from "@/app/craft/utils/rowIds";

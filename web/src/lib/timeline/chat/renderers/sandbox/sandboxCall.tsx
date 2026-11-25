@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Section } from "@opal/layouts";
 import { ShadowDiv, Text } from "@opal/components";
 import { richNodes } from "@opal/utils";
-import { RenderType } from "@/app/app/message/messageComponents/types";
+import { RenderType } from "@/lib/timeline/chat/message/messageComponents/types";
 
 interface SandboxCallContentProps {
   renderType: RenderType;

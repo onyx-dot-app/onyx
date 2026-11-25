@@ -6,7 +6,7 @@ import { createLowlight } from "lowlight";
 import { cn } from "@opal/utils";
 import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import { indentJson } from "@/lib/filePreview/indentJson";
-import "@/app/app/message/custom-code-styles.css";
+import "@/lib/timeline/chat/message/custom-code-styles.css";
 
 // Longer text shows without highlighting, which would block the page.
 // Markdown longer than this shows as source.

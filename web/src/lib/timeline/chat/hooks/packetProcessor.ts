@@ -24,7 +24,7 @@ import {
 import {
   getToolKey,
   parseToolKey,
-} from "@/app/app/message/messageComponents/toolDisplayHelpers";
+} from "@/lib/timeline/chat/message/messageComponents/toolDisplayHelpers";
 import {
   CodeModeProgram,
   isCodeModePacket,

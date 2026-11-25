@@ -12,7 +12,7 @@ import {
   PublishFilesToolPacket,
   type PublishedFile,
 } from "@/app/app/services/streamingModels";
-import { MessageRenderer } from "@/app/app/message/messageComponents/types";
+import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import {
   SandboxCallContent,
   SandboxCallError,

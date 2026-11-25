@@ -6,7 +6,7 @@
 import hljs from "highlight.js/lib/core";
 
 // hljs theme styles (Atom One Dark). Loads with this chunk, not on first paint.
-import "@/app/app/message/custom-code-styles.css";
+import "@/lib/timeline/chat/message/custom-code-styles.css";
 
 import javascript from "highlight.js/lib/languages/javascript";
 import typescript from "highlight.js/lib/languages/typescript";

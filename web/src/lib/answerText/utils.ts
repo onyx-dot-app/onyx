@@ -2,7 +2,7 @@ import {
   escapeIncompleteBlockMath,
   preprocessLaTeX,
   replaceFencedCodeBlocks,
-} from "@/app/app/message/codeUtils";
+} from "@/lib/timeline/chat/message/codeUtils";
 
 // Private-use characters: no math or markdown rewrite matches them.
 const PLACEHOLDER_OPEN = "\uE000";

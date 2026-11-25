@@ -343,7 +343,7 @@ its background task end ([[#pure-asgi-middleware]]).
    (`web/src/app/app/services/streamingModels.ts`,
    `mobile/src/chat/streamingModels.ts`), the
    renderer dispatch
-   (`web/src/app/app/message/messageComponents/renderMessageComponent.tsx:findRenderer`,
+   (`web/src/lib/timeline/chat/message/messageComponents/renderMessageComponent.tsx:findRenderer`,
    `mobile/src/components/chat/renderers/findRenderer.ts`), the widget
    (`widget/src/services/stream-parser.ts`), the Onyx CLI
    (`cli/internal/parser/parser.go`, `cli/internal/models/events.go`), the
@@ -360,7 +360,7 @@ its background task end ([[#pure-asgi-middleware]]).
    in the field keep the old vocabulary much longer. Accept the old name or
    framing, or add the new one beside it.
 3. `unknown-packet-renders-nothing` **An unknown packet renders nothing.**
-   `web/src/app/app/message/messageComponents/renderMessageComponent.tsx:findRenderer`
+   `web/src/lib/timeline/chat/message/messageComponents/renderMessageComponent.tsx:findRenderer`
    returns `null` when no predicate matches. Keep that path for
    new families: an unguarded cast can throw instead.
 4. `emitter-sets-model-index` **`chat/emitter.py:Emitter.emit` sets a producer's

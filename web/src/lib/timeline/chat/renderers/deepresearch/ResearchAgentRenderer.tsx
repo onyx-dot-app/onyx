@@ -12,7 +12,7 @@ import {
   MessageRenderer,
   FullChatState,
   RenderType,
-} from "@/app/app/message/messageComponents/types";
+} from "@/lib/timeline/chat/message/messageComponents/types";
 import { RunStep } from "@/lib/timeline/components/RunStep";
 import {
   isGroupEndPacket,
@@ -29,7 +29,7 @@ import {
   processContent,
   useMarkdownComponents,
   renderMarkdown,
-} from "@/app/app/message/messageComponents/markdownUtils";
+} from "@/lib/timeline/chat/message/messageComponents/markdownUtils";
 
 // A nested call has no nested calls of its own.
 const CALLS_OF_A_NESTED_CALL: NestedCall[] = [];

@@ -58,7 +58,7 @@ import {
   getMessageByMessageId,
   type MessageTreeState,
 } from "@/app/app/services/messageTree";
-import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
+import { getUnresolvedMultiModelTurn } from "@/lib/timeline/chat/message/multiModel";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useChatSessionStore,
