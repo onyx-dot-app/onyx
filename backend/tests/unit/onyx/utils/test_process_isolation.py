@@ -7,6 +7,7 @@ import multiprocessing as mp
 import operator
 import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -18,6 +19,13 @@ from onyx.utils.process_isolation import (
 
 
 def test_returns_value() -> None:
+    assert run_in_isolated_process(abs, -42, timeout=30) == 42
+
+
+def test_returns_value_from_another_working_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
     assert run_in_isolated_process(abs, -42, timeout=30) == 42
 
 
