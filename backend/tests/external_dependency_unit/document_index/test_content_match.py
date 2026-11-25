@@ -344,3 +344,13 @@ def test_naive_bounds_are_utc(content_index: OpenSearchDocumentIndex) -> None:
         updated_before=_day(6).replace(tzinfo=None),
     )
     assert _match_ids(content_index, naive) == ["d1"]
+
+
+def test_phrase_terms_follow_the_index_analyzer(
+    content_index: OpenSearchDocumentIndex,
+) -> None:
+    # The default english analyzer drops "the" and "and" but keeps "can",
+    # which the keyword stopword list drops.
+    assert content_index.count_phrase_terms("the and") == 0
+    assert content_index.count_phrase_terms("can !") == 1
+    assert content_index.count_phrase_terms("quick brown") == 2

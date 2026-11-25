@@ -1347,6 +1347,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
             search_type=OpenSearchSearchType.CONTENT_MATCH,
         )
 
+    def count_phrase_terms(self, phrase: str) -> int:
+        # A content match analyzes the phrase as it is, with no stopword list
+        # of its own. Title and content share one analyzer.
+        return len(self._client.analyze(phrase, field=CONTENT_FIELD_NAME))
+
     def count_documents_by_content(
         self,
         request: ContentMatchRequest,
@@ -1638,6 +1643,9 @@ class OpenSearchIndexPair(DocumentIndex):
         deadline: float | None = None,
     ) -> ContentMatchCount:
         return self._primary.count_documents_by_content(request, max_count, deadline)
+
+    def count_phrase_terms(self, phrase: str) -> int:
+        return self._primary.count_phrase_terms(phrase)
 
     def semantic_retrieval(
         self,

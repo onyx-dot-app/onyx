@@ -623,6 +623,12 @@ class ContentMatchCapable(abc.ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def count_phrase_terms(self, phrase: str) -> int:
+        """The number of terms a content match searches for this phrase: 0
+        when the index analyzer drops every word, such as common words."""
+        raise NotImplementedError
+
 
 class DocumentIndex(
     SchemaVerifiable,

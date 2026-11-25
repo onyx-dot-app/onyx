@@ -142,3 +142,9 @@ class DisabledDocumentIndex(DocumentIndex):
         deadline: float | None = None,  # noqa: ARG002
     ) -> ContentMatchCount:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
+    def count_phrase_terms(
+        self,
+        phrase: str,  # noqa: ARG002
+    ) -> int:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
