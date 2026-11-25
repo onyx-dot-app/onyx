@@ -37,7 +37,37 @@ else
 fi
 TARGET="${MERGE_GROUP_BASE_REF#refs/heads/}"
 
-pr_json="$(gh pr view "${PR_NUMBER}" --repo "${REPO}" --json headRefName,headRefOid,isCrossRepository,author)"
+# The job times out at 29 minutes. Retries and merge queue polls stop at this
+# deadline, so the script fails with a reason instead of a timeout.
+DEADLINE=$((SECONDS + 26 * 60))
+
+# Runs a read-only gh command and prints its output. A failed read is tried
+# again: one bad answer must not fail this check, because in a stack it ejects
+# every PR from the queue. It fails when every try fails, or at DEADLINE. Give
+# gh --json or --jq, so that gh parses the body and a body that is not JSON
+# counts as a failed read.
+GH_TRIES=5
+gh_read() {
+  local try output
+  for ((try = 1; try <= GH_TRIES; try++)); do
+    if output="$(gh "$@")"; then
+      # The command substitution removed the trailing newline.
+      printf '%s\n' "${output}"
+      return 0
+    fi
+    echo "GitHub read failed (try ${try}/${GH_TRIES}): gh $1 $2" >&2
+    if ((try < GH_TRIES)); then
+      if ((SECONDS + 15 >= DEADLINE)); then
+        echo "No time is left to try again." >&2
+        return 1
+      fi
+      sleep 15
+    fi
+  done
+  return 1
+}
+
+pr_json="$(gh_read pr view "${PR_NUMBER}" --repo "${REPO}" --json headRefName,headRefOid,isCrossRepository,author)"
 HEAD_REF="$(jq -r '.headRefName' <<<"${pr_json}")"
 HEAD_SHA="$(jq -r '.headRefOid' <<<"${pr_json}")"
 IS_CROSS_REPO="$(jq -r '.isCrossRepository' <<<"${pr_json}")"
@@ -57,7 +87,7 @@ QUEUE_LOADED=false
 load_queue() {
   if [[ "${QUEUE_LOADED}" != "true" ]]; then
     # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
-    QUEUED=" $(gh api graphql \
+    QUEUED=" $(gh_read api graphql \
       -f query='query($owner: String!, $name: String!, $branch: String!) {
         repository(owner: $owner, name: $name) {
           mergeQueue(branch: $branch) { entries(first: 100) { nodes { pullRequest { number } } } }
@@ -76,7 +106,7 @@ load_queue() {
 BUILD_LIMIT=""
 load_build_limit() {
   if [[ -z "${BUILD_LIMIT}" ]]; then
-    BUILD_LIMIT="$(gh api "repos/${REPO}/rules/branches/${TARGET}" \
+    BUILD_LIMIT="$(gh_read api "repos/${REPO}/rules/branches/${TARGET}" \
       --jq '[.[] | select(.type == "merge_queue") | .parameters.max_entries_to_build] | first // empty')"
     : "${BUILD_LIMIT:?Cannot read max_entries_to_build of the ${TARGET} merge queue.}"
   fi
@@ -97,14 +127,12 @@ too_deep() {
 # an entry above them fails, and the stack tip's entry can pass while a PR
 # below it fails. So a lower PR that relies on the tip's verdict waits for
 # every PR up to the tip. The waits clear from the top down, one poll for each
-# level. All waits share 80 polls of 20 seconds, which stay under the queue's
-# 30-minute check timeout. Sets WAIT_FAILURE when it returns 1.
+# level. All waits poll every 20 seconds until DEADLINE. Sets WAIT_FAILURE
+# when it returns 1.
 WAIT_FAILURE=""
-POLLS_LEFT=80
 wait_for_entries() {
   local pairs="$1" entries line pending="" pair pr sha
-  while ((POLLS_LEFT > 0)); do
-    POLLS_LEFT=$((POLLS_LEFT - 1))
+  while ((SECONDS < DEADLINE)); do
     # A failed read is not a removal: retry it, so one GitHub error does not
     # eject the whole stack.
     # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
@@ -118,7 +146,7 @@ wait_for_entries() {
       }' \
       -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
       --jq '.data.repository.mergeQueue.entries.nodes[] | "\(.pullRequest.number) \(.state) \(.pullRequest.headRefOid)"')"; then
-      echo "Could not read the merge queue (${POLLS_LEFT} polls left). Trying again."
+      echo "Could not read the merge queue ($((DEADLINE - SECONDS)) seconds left). Trying again."
       sleep 20
       continue
     fi
@@ -148,7 +176,7 @@ wait_for_entries() {
       echo "Every PR up to the stack tip passed its merge queue checks."
       return 0
     fi
-    echo "Waiting in the merge queue for${pending} (${POLLS_LEFT} polls left)"
+    echo "Waiting in the merge queue for${pending} ($((DEADLINE - SECONDS)) seconds left)"
     sleep 20
   done
   WAIT_FAILURE="These PRs did not pass their merge queue checks in time:${pending}."
@@ -158,7 +186,7 @@ wait_for_entries() {
 # A PR in a GitHub stack merges only with the whole stack (gh stack merge),
 # because the stack tip's run is the one that tests the PRs below it.
 # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
-stack_json="$(gh api graphql \
+stack_json="$(gh_read api graphql \
   -f query='query($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) {
       pullRequest(number: $number) {
@@ -184,16 +212,18 @@ if [[ -n "${stack_json}" && "${stack_json}" != "null" ]]; then
 fi
 
 # Verdict record of CONTEXT on commit $1: "<tested base sha> <tested base ref>".
+# gh --jq has no --arg, so the context goes in as a JSON string literal.
+CONTEXT_JSON="$(jq -n --arg ctx "${CONTEXT}" '$ctx')"
 verdict_on() {
-  gh api "repos/${REPO}/commits/${1}/status" \
-    | jq -r --arg ctx "${CONTEXT}" '.statuses[] | select(.context == $ctx) | .description'
+  gh_read api "repos/${REPO}/commits/${1}/status" \
+    --jq ".statuses[] | select(.context == ${CONTEXT_JSON}) | .description"
 }
 
 # True when $1 is in the history of $2. The compare API reports base...head as
 # "ahead" or "identical" only when base is an ancestor of head.
 is_ancestor() {
   local status
-  if ! status="$(gh api "repos/${REPO}/compare/${1}...${2}" --jq '.status' 2>/dev/null)"; then
+  if ! status="$(gh_read api "repos/${REPO}/compare/${1}...${2}" --jq '.status')"; then
     status="unknown"
   fi
   echo "compare ${1}...${2}: ${status}"
@@ -202,7 +232,7 @@ is_ancestor() {
 
 # Open same-repo PRs, read once. Stacks can be dozens of PRs deep, so the walks
 # below use this list instead of one API call for each level.
-OPEN_PRS="$(gh pr list --repo "${REPO}" --state open --limit 2000 \
+OPEN_PRS="$(gh_read pr list --repo "${REPO}" --state open --limit 2000 \
   --json number,headRefName,baseRefName,headRefOid,isCrossRepository \
   --jq '[.[] | select(.isCrossRepository == false)]')"
 MAX_CHAIN_DEPTH=500
@@ -240,7 +270,7 @@ base_landed() {
   # never enters the target as-is, so look at the parent PR instead: the tested
   # tip must be part of the parent's head, and the parent must have merged into
   # the target or still be open against it.
-  parents="$(gh pr list --repo "${REPO}" --head "${tested_ref}" --state all --limit 20 \
+  parents="$(gh_read pr list --repo "${REPO}" --head "${tested_ref}" --state all --limit 20 \
     --json number,state,baseRefName,headRefOid,mergeCommit,isCrossRepository \
     --jq '[.[] | select(.isCrossRepository == false and (.state == "MERGED" or .state == "OPEN"))]
           | sort_by(.state)[]
