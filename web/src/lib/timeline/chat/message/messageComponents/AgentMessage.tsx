@@ -795,6 +795,7 @@ const AgentMessage = React.memo(function AgentMessage({
           {isComplete && (!hideFooter || timeSent) && (
             <Section
               flexDirection="row"
+              justifyContent="start"
               alignItems="center"
               height="fit"
               gap={0}
