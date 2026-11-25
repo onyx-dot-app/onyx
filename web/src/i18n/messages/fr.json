@@ -6721,7 +6721,7 @@
             "title": "Aucun modèle disponible."
           },
           "field": {
-            "description": "Sélectionnez les modèles à rendre disponibles pour ce fournisseur.",
+            "description": "Sélectionnez les modèles autorisés pour discuter dans l'application.",
             "title": "Modèles de chat"
           },
           "foldButton": {
@@ -7002,7 +7002,7 @@
         },
         "imageModels": {
           "title": "Modèles d'image",
-          "description": "Activez les modèles que ce fournisseur peut utiliser pour générer des images."
+          "description": "Sélectionnez les modèles autorisés à générer des images dans le chat."
         }
       }
     },

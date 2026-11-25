@@ -6721,7 +6721,7 @@
             "title": "No hay modelos disponibles."
           },
           "field": {
-            "description": "Selecciona los modelos que estarán disponibles para este proveedor.",
+            "description": "Selecciona los modelos que se pueden usar para chatear en la aplicación.",
             "title": "Modelos de chat"
           },
           "foldButton": {
@@ -7002,7 +7002,7 @@
         },
         "imageModels": {
           "title": "Modelos de imagen",
-          "description": "Activa los modelos que este proveedor puede usar para generar imágenes."
+          "description": "Selecciona los modelos que pueden generar imágenes en el chat."
         }
       }
     },
