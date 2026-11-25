@@ -1,55 +1,36 @@
-"""Tests that PythonTool.is_available() respects the server_enabled DB flag.
-
-Uses a real DB session with CODE_INTERPRETER_BASE_URL mocked so the
-environment-variable check passes and the DB flag is the deciding factor.
-"""
+"""The database flag controls availability when the interpreter is healthy."""
 
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.code_interpreter import (
     fetch_code_interpreter_server,
     update_code_interpreter_server_enabled,
 )
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    HealthResponse,
+)
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 
 
-def test_python_tool_unavailable_when_server_disabled(
-    db_session: Session,
-) -> None:
-    """With a valid base URL, the tool should be unavailable when
-    server_enabled is False in the DB."""
-    server = fetch_code_interpreter_server(db_session)
-    initial_enabled = server.server_enabled
-
+@pytest.mark.parametrize("enabled", [False, True], ids=["disabled", "enabled"])
+def test_python_tool_server_enabled(db_session: Session, enabled: bool) -> None:
+    initial_enabled = fetch_code_interpreter_server(db_session).server_enabled
     try:
-        update_code_interpreter_server_enabled(db_session, enabled=False)
-
-        with patch(
-            "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
-            "http://fake:8888",
+        update_code_interpreter_server_enabled(db_session, enabled=enabled)
+        with (
+            patch(
+                "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
+                "http://interpreter.test",
+            ),
+            patch(
+                "onyx.tools.tool_implementations.python.python_tool.CodeInterpreterClient"
+            ) as client,
         ):
-            assert PythonTool.is_available(db_session) is False
-    finally:
-        update_code_interpreter_server_enabled(db_session, enabled=initial_enabled)
-
-
-def test_python_tool_available_when_server_enabled(
-    db_session: Session,
-) -> None:
-    """With a valid base URL, the tool should be available when
-    server_enabled is True in the DB."""
-    server = fetch_code_interpreter_server(db_session)
-    initial_enabled = server.server_enabled
-
-    try:
-        update_code_interpreter_server_enabled(db_session, enabled=True)
-
-        with patch(
-            "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
-            "http://fake:8888",
-        ):
-            assert PythonTool.is_available(db_session) is True
+            health = client.return_value.__enter__.return_value.health
+            health.return_value = HealthResponse(connected=True)
+            assert PythonTool.is_available(db_session) is enabled
     finally:
         update_code_interpreter_server_enabled(db_session, enabled=initial_enabled)
