@@ -61,24 +61,6 @@ def decide_command_approval(
             "This request cannot be approved for the rest of the command",
         )
     integration_id = row.integration_id
-    cache: CacheBackend | None = None
-    try:
-        cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        if for_command and integration_id is not None:
-            # Saved before the decision, so a recorded command grant is one
-            # the proxy can honor, and before the scan: a request that misses
-            # the grant in the cache committed its row before that check.
-            approval_cache.grant_command_actions(
-                command_id, integration_id, granted, cache
-            )
-    except CACHE_TRANSIENT_ERRORS as error:
-        # The proxy would refuse a grant that is not saved: approve once.
-        logger.warning(
-            "command_approval_grant_failed approval_id=%s error=%s",
-            row.approval_id,
-            error,
-        )
-        for_command = False
     decision = (
         ApprovalDecision.REJECTED
         if choice == ApprovalChoice.REJECT
@@ -105,14 +87,30 @@ def decide_command_approval(
             OnyxErrorCode.CONFLICT,
             "This request was already decided or is no longer waiting",
         )
-
     # Commit before the scan below locks other rows of the command, so two
     # decisions of one command never wait on each other's rows.
     db_session.commit()
 
+    cache: CacheBackend | None = None
+    try:
+        cache = get_cache_backend(tenant_id=get_current_tenant_id())
+        if for_command and integration_id is not None:
+            # Saved before the scan: a request that misses the grant in the
+            # cache committed its row before the scan reads it.
+            approval_cache.grant_command_actions(
+                command_id, integration_id, granted, cache
+            )
+    except CACHE_TRANSIENT_ERRORS as error:
+        # Later requests of the command ask again.
+        logger.warning(
+            "command_approval_grant_failed approval_id=%s error=%s",
+            row.approval_id,
+            error,
+        )
+        for_command = False
+
     approved_ids = [row.approval_id]
 
-    # Saving the grant needed the cache, so `cache` is set here.
     if for_command and integration_id is not None and cache is not None:
         for other in action_approval.list_pending_command_action_approvals(
             db_session,

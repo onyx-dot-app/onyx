@@ -33,6 +33,8 @@ from onyx.db.enums import (
     IntegrationKind,
 )
 from onyx.db.models import ActionApproval, CacheStore, ChatSession, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
@@ -508,11 +510,32 @@ def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
     assert seen == [(True, ApprovalDecision.APPROVED)]
 
 
-def test_a_command_grant_that_the_cache_cannot_save_approves_once(
+def test_a_command_grant_for_a_decided_request_grants_nothing(
+    db_session: Session, chat: _Chat
+) -> None:
+    """A conflict saves no grant, so the command's later requests still ask."""
+    command_id = uuid4()
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, command_id), _matched(chat.integration_id), {}
+    )
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    _decide(db_session, chat, approval_id, ApprovalChoice.REJECT)
+    try:
+        with pytest.raises(OnyxError) as conflict:
+            _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_COMMAND)
+        assert conflict.value.error_code is OnyxErrorCode.CONFLICT
+        assert not approval_cache.command_grants_cover(
+            command_id, chat.integration_id, ["issues.create"], cache
+        )
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
+
+
+def test_a_command_grant_that_the_cache_cannot_save_approves_only_this_request(
     db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The proxy refuses a command grant that the cache does not hold, so the
-    decision is an approval of this request only."""
+    command's other requests keep waiting for the user."""
     command_id = uuid4()
     gate = _gate()
     ctx = _ctx(chat, command_id)
@@ -524,14 +547,11 @@ def test_a_command_grant_that_the_cache_cannot_save_approves_once(
 
     monkeypatch.setattr(command_approvals.approval_cache, "grant_command_actions", fail)
 
-    assert (
-        _decide(db_session, chat, first, ApprovalChoice.APPROVE_COMMAND)
-        == ApprovalDecidedVia.USER
-    )
+    _decide(db_session, chat, first, ApprovalChoice.APPROVE_COMMAND)
     db_session.expire_all()
     first_row = db_session.get(ActionApproval, first)
     second_row = db_session.get(ActionApproval, second)
-    assert first_row is not None and first_row.decided_via == ApprovalDecidedVia.USER
+    assert first_row is not None and first_row.decision == ApprovalDecision.APPROVED
     assert second_row is not None and second_row.decision is None
 
 
