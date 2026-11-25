@@ -461,6 +461,7 @@ class OpenURLTool(Tool):
         web_fetch_disabled: bool = False,
         *,
         shape: OpenURLShape,
+        db_session: Session | None = None,
     ) -> None:
         """Initialize the OpenURLTool.
 
@@ -476,6 +477,8 @@ class OpenURLTool(Tool):
             web_fetch_disabled: When True (e.g. the user turned Web Search off
                 for the chat), URLs are only served from indexed documents —
                 the live-crawl path is never used.
+            db_session: An open session to read the default provider with.
+                Without one, the read opens its own.
         """
         self._id = tool_id
         self.shape = shape
@@ -490,7 +493,7 @@ class OpenURLTool(Tool):
             # Indexed-only mode never crawls, so no provider is needed.
             self._provider = None
         else:
-            provider = get_default_content_provider()
+            provider = get_default_content_provider(db_session)
             if provider is None:
                 raise RuntimeError(
                     "No web content provider available. "

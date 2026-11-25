@@ -1,4 +1,5 @@
 import json
+from contextlib import ExitStack
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -57,11 +58,15 @@ class WebSearchTool(Tool):
     DESCRIPTION = "Search the web for information."
     DISPLAY_NAME = "Web Search"
 
-    def __init__(self, tool_id: int) -> None:
+    def __init__(self, tool_id: int, db_session: Session | None = None) -> None:
+        """`db_session`: an open session to read the provider with. Without
+        one, the tool opens its own."""
         self._id = tool_id
 
         # Get web search provider from database
-        with get_session_with_current_tenant() as db_session:
+        with ExitStack() as stack:
+            if db_session is None:
+                db_session = stack.enter_context(get_session_with_current_tenant())
             provider_model = fetch_active_web_search_provider(db_session)
             if provider_model is None:
                 raise RuntimeError("No web search provider configured.")
@@ -117,9 +122,7 @@ class WebSearchTool(Tool):
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
         """Available only if an active web search provider is configured in the database."""
-        with get_session_with_current_tenant() as session:
-            provider = fetch_active_web_search_provider(session)
-            return provider is not None
+        return fetch_active_web_search_provider(db_session) is not None
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
