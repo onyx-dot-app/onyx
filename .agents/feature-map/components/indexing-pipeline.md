@@ -151,7 +151,10 @@ dispatcher is gone, it sends the lost batches again and counts that as a
 heartbeat. When every stub batch is converted but fewer batches are complete,
 it sends the stored document batches that have no docprocessing task. The watchdog fails the attempt only after two runs in a row in
 which a restart sent nothing. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
-local disk inside one docprocessing task, so a large batch is never in memory.
+local disk inside one docprocessing task, so the vectors of a large batch are never
+all in memory. The documents and, until the write starts, the chunk texts stay in
+memory. A batch file holds a reference to each source document, not a copy, and only
+the store that wrote the file can read it.
 
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
 decides which documents to re-chunk. Gate 1 skips a document whose
