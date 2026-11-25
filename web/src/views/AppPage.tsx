@@ -26,6 +26,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import { FileDropOverlay } from "@/sections/input/FileDropOverlay";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
@@ -921,7 +922,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           noPaste
           noKeyboard
         >
-          {({ getRootProps }) => (
+          {({ getRootProps, isDragActive }) => (
             <div
               className="h-full w-full flex flex-col items-center outline-hidden relative"
               {...getRootProps({ tabIndex: -1 })}
@@ -1346,6 +1347,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   </Fade>
                 </div>
               </div>
+              {isDragActive && <FileDropOverlay />}
             </div>
           )}
         </Dropzone>

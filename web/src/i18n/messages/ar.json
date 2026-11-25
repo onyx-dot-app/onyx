@@ -12194,6 +12194,9 @@
       },
       "pendingUserInput": {
         "toast": "تعامل مع طلبات الموافقة أو الأسئلة المعلقة أولًا."
+      },
+      "fileDropOverlay": {
+        "label": "أفلت الملفات لإرفاقها"
       }
     },
     "messages": {

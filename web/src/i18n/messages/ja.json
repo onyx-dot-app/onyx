@@ -12194,6 +12194,9 @@
       },
       "pendingUserInput": {
         "toast": "先に保留中の承認リクエストまたは質問に対応してください。"
+      },
+      "fileDropOverlay": {
+        "label": "ファイルをドロップして添付"
       }
     },
     "messages": {

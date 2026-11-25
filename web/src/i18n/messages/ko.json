@@ -12194,6 +12194,9 @@
       },
       "pendingUserInput": {
         "toast": "먼저 대기 중인 승인 요청이나 질문을 처리하세요."
+      },
+      "fileDropOverlay": {
+        "label": "파일을 놓아 첨부"
       }
     },
     "messages": {

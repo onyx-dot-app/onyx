@@ -10,7 +10,11 @@
 ## User experience
 
 - **A user** drops a file into the composer, a project or an agent. The upload
-  returns at once. The file shows "processing" until indexing finishes. A file
+  returns at once. While the request sends, the file card shows the percent
+  sent (`lib/projects/uploadProgress.ts`; the request uses `XMLHttpRequest`
+  for progress). In the composer, removing an uploading file cancels it with
+  no error toast; the request aborts when no file of its batch is left. The
+  file shows "processing" until indexing finishes. A file
   that is too large, has too many tokens, has a password, or has no
   extractable text is rejected with a reason. Spreadsheets over the token limit
   are accepted but not indexed.

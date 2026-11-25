@@ -5,10 +5,13 @@ import englishMessages from "@/i18n/messages/en.json";
 import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/types";
+import type { UploadFilesOptions } from "@/lib/projects/svc";
+import { cancelUpload } from "@/lib/projects/uploadProgress";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
 const mockToastWarning = jest.fn();
+const mockToastError = jest.fn();
 const mockGetUserFileStatuses = jest.fn();
 
 jest.mock("next/navigation", () => ({
@@ -44,7 +47,7 @@ jest.mock("@/lib/settings/hooks", () => ({
 jest.mock("@opal/layouts/toast/store", () => ({
   toast: {
     warning: (...args: unknown[]) => mockToastWarning(...args),
-    error: jest.fn(),
+    error: (...args: unknown[]) => mockToastError(...args),
     success: jest.fn(),
   },
 }));
@@ -381,4 +384,54 @@ describe("ProjectsContext attached file status polling", () => {
       { timeout: 5000 }
     );
   }, 10000);
+});
+
+describe("ProjectsContext beginUpload cancel", () => {
+  beforeEach(() => {
+    mockUploadFiles.mockReset();
+    mockGetRecentFiles.mockReset();
+    mockToastError.mockReset();
+    mockGetRecentFiles.mockResolvedValue([]);
+    mockGetUserFileStatuses.mockResolvedValue([]);
+  });
+
+  it("aborts the request and shows no error toast", async () => {
+    let signal: AbortSignal | undefined;
+    mockUploadFiles.mockImplementation(
+      (
+        _files: File[],
+        _projectId: number | null,
+        _tempIds: string[],
+        _incognito: string | null,
+        options: UploadFilesOptions
+      ) =>
+        new Promise((_resolve, reject) => {
+          signal = options.signal;
+          options.signal?.addEventListener("abort", () => {
+            const error = new Error("Upload cancelled");
+            error.name = "AbortError";
+            reject(error);
+          });
+        })
+    );
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const onFailure = jest.fn();
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [new File(["a"], "a.txt", { type: "text/plain" })],
+        null,
+        undefined,
+        onFailure
+      );
+    });
+    const tempId = optimisticFiles[0]?.temp_id ?? "";
+
+    act(() => cancelUpload(tempId));
+
+    expect(signal?.aborted).toBe(true);
+    await waitFor(() => expect(onFailure).toHaveBeenCalledWith([tempId]));
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
 });

@@ -29,6 +29,7 @@ import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
   uploadFiles as svcUploadFiles,
+  isUploadCancelled,
   getRecentFiles as svcGetRecentFiles,
   getFilesInProject as svcGetFilesInProject,
   getProject as svcGetProject,
@@ -42,6 +43,7 @@ import {
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
 } from "@/lib/projects/svc";
+import { trackUpload } from "@/lib/projects/uploadProgress";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { ChatFileType } from "@/app/app/types";
@@ -396,7 +398,14 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
-      svcUploadFiles(validFiles, projectId, tempIds, incognitoSessionId)
+      const upload = trackUpload(tempIds);
+      svcUploadFiles(
+        validFiles,
+        projectId,
+        tempIds,
+        incognitoSessionId,
+        upload.options
+      )
         .then((uploaded) => {
           if (
             incognitoSessionId &&
@@ -477,7 +486,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           }
           onSuccess?.(uploaded);
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           // Roll back optimistic inserts on failure
           const optimisticTempIds = new Set(
             optimisticFiles
@@ -487,11 +496,14 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
           removeOptimisticFilesByTempIds(optimisticTempIds, projectId);
 
-          toast.error(t("projects.uploads.failed.toast"));
+          if (!isUploadCancelled(err)) {
+            toast.error(t("projects.uploads.failed.toast"));
+          }
 
           onFailure?.(Array.from(optimisticTempIds));
         })
         .finally(() => {
+          upload.finish();
           if (projectId && currentProjectId === projectId) {
             refreshCurrentProjectDetails();
           }

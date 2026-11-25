@@ -226,7 +226,9 @@
 - **A user sends one message to several models** and sees the answers side by
   side. They can pick one. If they send a follow-up without a pick, the chat
   continues from the answer they were looking at.
-- **A user attaches files** by drag and drop, paste or the input bar. If the
+- **A user attaches files** by drag and drop, paste or the input bar. While
+  files are dragged over the chat page, an overlay says "Drop files to
+  attach" (`sections/input/FileDropOverlay.tsx`). If the
   active model has no vision support, an upload that contains an image is
   refused with a message, and none of its files attach.
 - **A user reloads during an answer.** The buffered part appears at once,

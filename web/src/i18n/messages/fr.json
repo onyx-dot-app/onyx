@@ -12194,6 +12194,9 @@
       },
       "pendingUserInput": {
         "toast": "Traitez d'abord les demandes d'approbation ou les questions en attente."
+      },
+      "fileDropOverlay": {
+        "label": "Déposez des fichiers pour les joindre"
       }
     },
     "messages": {
