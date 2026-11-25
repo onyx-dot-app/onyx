@@ -47,9 +47,10 @@ pub struct Config {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub rejected_tokens: BTreeMap<String, BTreeSet<String>>,
-    /// Windows: the notice about the earlier app's per-user install was shown.
+    /// Windows: the earlier app's program folder that is still to delete
+    /// (`earlier_install.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub earlier_install_notice_shown: Option<bool>,
+    pub earlier_install_dir: Option<String>,
 }
 
 impl Config {

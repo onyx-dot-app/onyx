@@ -260,6 +260,8 @@ pub async fn start_in_browser(
     // The browser hands the result back through onyx://.
     #[cfg(all(windows, not(debug_assertions)))]
     crate::remove_other_user_link_handler("before browser sign-in");
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
+    crate::claim_onyx_links(&app.config().identifier, "before browser sign-in");
     app.opener()
         .open_url(authorize.as_str(), None::<&str>)
         .map_err(|e| format!("Could not open your browser: {e}"))?;

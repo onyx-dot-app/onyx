@@ -375,7 +375,7 @@ async fn end_session(app: &AppHandle) -> Result<(), String> {
 const NOT_REVOKED: &str =
     "Signed out on this computer. Onyx could not reach the server to end the \
      session. Onyx tries again while it is open.";
-const NOT_CLEARED: &str = "Signed out, but Onyx could not delete the stored session token from \
+pub(crate) const NOT_CLEARED: &str = "Signed out, but Onyx could not delete the stored session token from \
      the credential store of this computer. Onyx does not use it again, and deletes it at a later launch.";
 const NEITHER: &str = "Signed out on this computer, but Onyx could not delete the stored \
      session token, and could not reach the server to end the session. Onyx tries again \

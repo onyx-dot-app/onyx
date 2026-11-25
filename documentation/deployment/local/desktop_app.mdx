@@ -88,6 +88,10 @@ Each Onyx release on the [GitHub Releases page](https://github.com/onyx-dot-app/
     ```
 
     The packages register `onyx://` sign-in links. The AppImage registers them each time it starts.
+
+    The AppImage uses the graphics libraries of the system. On a minimal install or in a container,
+    install `libgles2` (Debian and Ubuntu) or `libglvnd-gles` (Fedora)
+    if the AppImage stops with `Couldn't open libGLESv2.so.2`.
   </Tab>
 </Tabs>
 
@@ -100,11 +104,12 @@ over a setup program install. To change the installer type, uninstall the previo
 
 - **macOS**: the new `Onyx.app` replaces the previous one in **Applications**.
 - **Windows**: the new MSI upgrades a previous MSI install. The new setup program (`.exe`) installs for all users.
-  The previous setup program installed for the current user only, and the new installers do not remove it.
-  After you install the new app,
-  each user who used the previous setup program removes the older **Onyx** in **Settings > Apps**. At its first launch,
-  the new app shows this once, with a button that opens **Settings > Apps**.
-  The new app takes over `onyx://` sign-in links at launch, so the older install does not get them.
+  The previous setup program installed for the current user only. At each user's first launch,
+  the new app removes that user's previous install: its entry in **Settings > Apps** and **Programs and Features**,
+  its shortcuts, and its program folder. Do not remove the previous app with its own uninstaller:
+  its **Delete the application data** option also deletes the new app's settings and sign-in.
+  If the previous app is still running, the new app removes the rest of its files at a later launch.
+  The new app also takes over `onyx://` sign-in links.
 - **Linux**: the new `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and `dnf` upgrade
   the previous package.
 

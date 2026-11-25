@@ -22,6 +22,12 @@ pub struct AppState {
     cookie_name: Mutex<Option<(String, String)>>,
     /// Launcher uploads in flight, by the page's upload id: true once cancelled.
     uploads: Mutex<HashMap<u64, Arc<AtomicBool>>>,
+    /// The server signed out of this run: its store is not read again (each
+    /// read of a locked store asks for a password) until a new sign-in.
+    signed_out: Mutex<Option<String>>,
+    /// A renewed token could not be saved, so the stored token is older than
+    /// the one in memory.
+    store_stale: AtomicBool,
 }
 
 /// Ends an upload's entry in `AppState::uploads` when the upload ends.
@@ -66,6 +72,8 @@ impl AppState {
             epoch: AtomicU64::new(0),
             cookie_name: Mutex::new(None),
             uploads: Mutex::new(HashMap::new()),
+            signed_out: Mutex::new(None),
+            store_stale: AtomicBool::new(false),
         }
     }
 
@@ -180,6 +188,14 @@ impl AppState {
                 return Some(token.clone());
             }
         }
+        let signed_out = self
+            .signed_out
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        if skips_store(signed_out.as_deref(), server) {
+            return None;
+        }
         let mut failure = self.read_failure.lock().unwrap_or_else(|p| p.into_inner());
         let token = read_token(
             &mut failure,
@@ -250,6 +266,8 @@ impl AppState {
         *cache = Some((server.to_string(), token.to_string()));
         // The store now holds the new token, not the rejected one.
         self.forget_rejected(server);
+        self.store_stale.store(false, Ordering::SeqCst);
+        *self.signed_out.lock().unwrap_or_else(|p| p.into_inner()) = None;
         self.forget_read_failure();
         self.end_epoch();
         Ok(true)
@@ -278,10 +296,14 @@ impl AppState {
         }
         // The next renewal saves again. Until then the stored token is the
         // older one, and a failed sign-out rejects both.
-        if let Err(e) = session_store::store(server, new) {
-            log::warn!(
-                "could not save the renewed session; the stored token is now older than the one in use: {e}"
-            );
+        match session_store::store(server, new) {
+            Ok(()) => self.store_stale.store(false, Ordering::SeqCst),
+            Err(e) => {
+                self.store_stale.store(true, Ordering::SeqCst);
+                log::warn!(
+                    "could not save the renewed session; the stored token is now older than the one in use: {e}"
+                );
+            }
         }
         *cache = Some((server.to_string(), new.to_string()));
         true
@@ -297,24 +319,19 @@ impl AppState {
             Some((cached_server, token)) if cached_server == server => Some(token),
             _ => None,
         };
-        let stored = session_store::load(server).ok().flatten();
+        // Each read of a locked store asks for a password: read only when the
+        // stored token can differ from the one in memory.
+        let stale = self.store_stale.load(Ordering::SeqCst);
+        let stored = if reads_store_at_sign_out(in_memory.is_some(), stale) {
+            session_store::load(server).ok().flatten()
+        } else {
+            None
+        };
         let cleared = session_store::clear(server);
         if cleared.is_err() {
-            // Kept in config, so neither token is used again, also after a
-            // restart.
-            let rejected =
-                crate::config::tokens_to_reject(server, in_memory.as_deref(), stored.as_deref());
-            if !rejected.is_empty() {
-                if let Err(e) = self.config.update(|c| {
-                    c.rejected_tokens
-                        .entry(server.to_string())
-                        .or_default()
-                        .extend(rejected);
-                }) {
-                    log::warn!("could not record the signed-out token: {e}");
-                }
-            }
+            self.record_undeleted(server, in_memory.as_deref(), stored.as_deref());
         }
+        *self.signed_out.lock().unwrap_or_else(|p| p.into_inner()) = Some(server.to_string());
         let token = in_memory.or(stored);
         self.forget_read_failure();
         self.end_epoch();
@@ -335,7 +352,31 @@ impl AppState {
             return Ok(false);
         }
         *cache = None;
-        session_store::clear(server).map(|()| true)
+        *self.signed_out.lock().unwrap_or_else(|p| p.into_inner()) = Some(server.to_string());
+        match session_store::clear(server) {
+            Ok(()) => Ok(true),
+            Err(e) => {
+                self.record_undeleted(server, Some(rejected), None);
+                Err(e)
+            }
+        }
+    }
+
+    /// Records the tokens that a session end could not delete from the OS
+    /// store, so they are never used again, also after a restart.
+    fn record_undeleted(&self, server: &str, in_memory: Option<&str>, stored: Option<&str>) {
+        let rejected = crate::config::tokens_to_reject(server, in_memory, stored);
+        if rejected.is_empty() {
+            return;
+        }
+        if let Err(e) = self.config.update(|c| {
+            c.rejected_tokens
+                .entry(server.to_string())
+                .or_default()
+                .extend(rejected);
+        }) {
+            log::warn!("could not record the signed-out token: {e}");
+        }
     }
 
     /// Runs `f` only if session `epoch` is still current. The check and `f`
@@ -373,6 +414,18 @@ fn save_then_record(
 
 /// Reads the stored token with `load`. A failed read for `server` that
 /// `keep_failure` keeps is not tried again: the caller gets `None`.
+/// Whether `token` skips the OS store: the user signed out of `server`
+/// this run.
+fn skips_store(signed_out: Option<&str>, server: &str) -> bool {
+    signed_out == Some(server)
+}
+
+/// Whether a sign-out reads the stored token: it may differ from the one in
+/// memory only when there is none, or a renewed token was not saved.
+fn reads_store_at_sign_out(has_in_memory: bool, store_stale: bool) -> bool {
+    !has_in_memory || store_stale
+}
+
 fn read_token(
     failure: &mut Option<(String, String)>,
     server: &str,
@@ -398,6 +451,26 @@ fn read_token(
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn a_signed_out_server_is_not_read_again() {
+        assert!(skips_store(
+            Some("https://a.example.com"),
+            "https://a.example.com"
+        ));
+        assert!(!skips_store(
+            Some("https://a.example.com"),
+            "https://b.example.com"
+        ));
+        assert!(!skips_store(None, "https://a.example.com"));
+    }
+
+    #[test]
+    fn sign_out_reads_the_store_only_when_it_can_differ() {
+        assert!(!reads_store_at_sign_out(true, false));
+        assert!(reads_store_at_sign_out(true, true));
+        assert!(reads_store_at_sign_out(false, false));
+    }
 
     #[test]
     fn token_is_saved_before_it_is_recorded() {

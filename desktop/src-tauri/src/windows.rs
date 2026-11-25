@@ -389,7 +389,8 @@ pub fn route_to(app: &AppHandle, path: &str) {
 /// unless a sign-in that finished meanwhile replaced `token`.
 pub fn end_rejected_session(app: &AppHandle, server: &str, token: &str) {
     let state = app.state::<AppState>();
-    if matches!(state.clear_rejected_token(server, token), Ok(false)) {
+    let cleared = state.clear_rejected_token(server, token);
+    if matches!(cleared, Ok(false)) {
         return;
     }
     // The rejected account's answers and pages (a main window kept hidden
@@ -397,6 +398,10 @@ pub fn end_rejected_session(app: &AppHandle, server: &str, token: &str) {
     reset_launcher(app);
     main_window::close(app, server);
     let _ = open_login(app);
+    if let Err(e) = cleared {
+        log::warn!("signed out, but the stored session token was not deleted: {e}");
+        notify(app, "Signed out", crate::commands::NOT_CLEARED);
+    }
 }
 
 /// The offline window, or the "Try Again / Sign In" dialog if it cannot open.

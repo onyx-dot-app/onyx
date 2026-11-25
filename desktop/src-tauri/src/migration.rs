@@ -56,6 +56,30 @@ impl Sources {
     }
 }
 
+impl Sources {
+    /// The log line for an import: the file, with the home folder as `~`.
+    pub fn imported_message(&self, source: Source) -> String {
+        let (app, path) = match source {
+            Source::Preview => ("the preview build", self.preview.as_deref()),
+            Source::Earlier => ("the earlier desktop app", self.earlier.as_deref()),
+        };
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" });
+        let file = path
+            .map(|p| redact_home(p, home.as_deref().map(Path::new)))
+            .unwrap_or_default();
+        format!("imported the settings of {app} from {file} (renamed to config.json.imported)")
+    }
+}
+
+/// `path` with a leading `home` shown as `~`, so a shared log does not name
+/// the user.
+fn redact_home(path: &Path, home: Option<&Path>) -> String {
+    match home.and_then(|home| path.strip_prefix(home).ok()) {
+        Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+        None => path.display().to_string(),
+    }
+}
+
 /// Where the earlier app kept `config.json` (the `directories` crate's
 /// project dirs for "app", "onyx", "onyx-desktop").
 fn earlier_config_path(config_dir: &Path) -> PathBuf {
@@ -370,6 +394,24 @@ mod tests {
             Some("https://mine.example.com")
         );
         assert!(earlier(&d).exists());
+    }
+
+    #[test]
+    fn the_import_log_names_the_file_without_the_user() {
+        let home = Path::new("/home/ann o'neil");
+        let path = Path::new("/home/ann o'neil/.config/onyx-desktop/config.json");
+        assert_eq!(
+            redact_home(path, Some(home)),
+            format!(
+                "~{}.config/onyx-desktop/config.json",
+                std::path::MAIN_SEPARATOR
+            )
+        );
+        assert_eq!(
+            redact_home(Path::new("/etc/x.json"), Some(home)),
+            "/etc/x.json"
+        );
+        assert_eq!(redact_home(path, None), path.display().to_string());
     }
 
     #[test]

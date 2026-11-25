@@ -150,13 +150,21 @@ and binary name (`onyx`), so this app takes its place:
 - Windows: the MSI has the same UpgradeCode (Tauri derives it from the product name), so it
   upgrades an earlier MSI install. The NSIS installer (`.exe`) installs for all users into
   `Program Files\Onyx`. The earlier `.exe` installed for the current user only, into
-  `%LOCALAPPDATA%\Onyx`. Nothing removes that install: the app never runs its uninstaller (the
-  user can change that HKCU entry and its files, and the uninstaller ends every `onyx.exe` of the
-  user by name). At the first launch, if the HKCU uninstall entry is there, a Windows release
-  build shows a one-time notice: "An older version of Onyx is still installed. Remove it in
-  Windows Settings > Apps.", with **Open Settings** (`ms-settings:appsfeatures`) and **Not now**
-  (`src-tauri/src/earlier_install.rs`). `config.json` records that it was shown
-  (`earlierInstallNoticeShown`).
+  `%LOCALAPPDATA%\Onyx`. The app retires that install at launch, as the user
+  (`src-tauri/src/earlier_install.rs`), and never runs its uninstaller: that uninstaller ends
+  every `onyx.exe` of the user by name, and its "Delete the application data" option deletes
+  `%APPDATA%\app.onyx.desktop` and `%LOCALAPPDATA%\app.onyx.desktop`, which this app uses.
+  1. It deletes the HKCU uninstall entry first, so Settings and Control Panel cannot start that
+     uninstaller any more.
+  2. It deletes the earlier app's Start menu and desktop shortcuts (only `Onyx.lnk` files that
+     point into its folder).
+  3. It deletes the earlier program folder (the folder of its `uninstall.exe`) without following
+     links. It refuses a folder that is a drive root, the user profile or an AppData root, this
+     app's install folder, or one of this app's data folders. Files that are in use stay;
+     `config.json` keeps the folder (`earlierInstallDir`), and the next launch tries again.
+
+  An elevated (administrator) process skips this. The earlier app's data folder
+  (`%APPDATA%\onyx\onyx-desktop`) stays.
 - Linux: the `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and
   `dnf` upgrade the earlier package.
 
@@ -579,9 +587,13 @@ How the app differs from macOS:
     installer stops before its first page (a silent install exits with code 1638). The MSI
     stops when the NSIS version is installed. Uninstall the other one first. This also
     applies to an MSI install of the earlier desktop app: upgrade it with the MSI.
-  - The installers and the app never remove the earlier desktop app's per-user install
-    (`HKCU\...\Uninstall\Onyx`). Its user sees two "Onyx" entries in Apps until they remove
-    the older one; the app says so once at its first launch.
+  - The installers never touch the earlier desktop app's per-user install. The app retires it at
+    the user's first launch (see
+    [Upgrade from the earlier desktop app](#upgrade-from-the-earlier-desktop-app)).
+  - Test builds have version `0.1.0` (or `0.0.0`), lower than the earlier app's releases. Over an
+    MSI install of the earlier app, their setup program then stops at the downgrade check (exit
+    code 2) before the MSI check (exit code 1638). Release builds have the tag version, which is
+    higher.
   - At launch, a release build deletes a per-user `onyx://` entry
     (`HKCU\Software\Classes\onyx`) that starts another program, and again before each browser
     sign-in. The earlier desktop app
@@ -611,7 +623,11 @@ How the app differs from macOS:
     reinstall uses the token.
 - On Linux the `.deb` and `.rpm` register `onyx://` in their desktop file (`Onyx.desktop`). AppImage
   and other builds that do not run from `/usr/bin` register it for the current user at launch,
-  so they get sign-in links too. This needs `xdg-mime`. At each launch, a `.deb` install makes
+  so they get sign-in links too: the app writes
+  `~/.local/share/applications/onyx-handler.desktop` and makes it the default with `xdg-mime`.
+  Its `Exec` line names the program unquoted when the path has no reserved character, because
+  xdg-open's generic path cannot run a quoted program (`handler_exec` in `src-tauri/src/main.rs`).
+  A path with spaces is quoted as the Desktop Entry spec says; some xdg-open versions then fail. At each launch, a `.deb` install makes
   `Onyx.desktop` the current user's default for `onyx://`, and deletes the per-user `onyx://`
   entry that the earlier desktop app wrote for the same binary
   (`~/.local/share/applications/onyx-handler.desktop`). It deletes the file only if
@@ -620,6 +636,9 @@ How the app differs from macOS:
   `apt remove`, the default names a desktop file that no longer exists, and the desktop ignores
   it. The AppImage entry points to the AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
   launch it once from its new path. A launch while the app runs only shows the running app.
+- The AppImage uses the host's WebKitGTK graphics libraries: it needs `libGLESv2.so.2`
+  (`libgles2` on Debian and Ubuntu, `libglvnd-gles` on Fedora). Minimal installs and containers
+  often lack it; then the AppImage exits with "Couldn't open libGLESv2.so.2".
 - Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 and later). CI builds them on
   Ubuntu 22.04 and fails if a file in the `.deb` or the AppImage needs a newer glibc.
 
@@ -738,8 +757,10 @@ stderr. If the folder cannot be written, the app runs without a log.
   and `GET /` answer, the main window keeps that failed page.
 - Browser SSO needs a server with the native-app sign-in pass-through in its web OAuth
   callback. The preview build (`app.onyx.desktop.v2`, "Onyx v2") also registers the `onyx://`
-  scheme; with both apps installed, macOS sends the sign-in link to whichever app registered it
-  last. Uninstall the preview build.
+  scheme. A macOS release build makes itself the default `onyx://` handler
+  (`LSSetDefaultHandlerForURLScheme`) at launch and before each browser sign-in. On Linux the
+  `.deb` and `.rpm` replace the preview package (`onyx-v2`: Conflicts/Replaces, Obsoletes).
+  Uninstall the preview build anyway.
 - Windows and Linux: no Authenticode signature yet, no auto-update, and no QA harness
   input (it posts AppKit events). Aonyx is a plain always-on-top window there, so clicking it
   can take focus from the app you are in.

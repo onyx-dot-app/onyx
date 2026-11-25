@@ -133,7 +133,17 @@ fn legacy_link_handler(
 /// `Onyx_amd64.AppImage`, ...), quoted or not.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn runs_onyx(exec: &str) -> bool {
-    let exec = exec.trim_start();
+    let mut exec = exec.trim_start();
+    // `env NAME=value ... program`, as `handler_exec` writes it.
+    if let Some(rest) = exec.strip_prefix("env ") {
+        exec = rest.trim_start();
+        while let Some((word, rest)) = exec.split_once(' ') {
+            if !word.contains('=') {
+                break;
+            }
+            exec = rest.trim_start();
+        }
+    }
     let program = match exec.strip_prefix('"') {
         Some(rest) => rest.split('"').next().unwrap_or_default(),
         None => exec.split_whitespace().next().unwrap_or_default(),
@@ -190,6 +200,42 @@ fn link_command_is_other_program(command: &str, exe: &std::path::Path) -> bool {
     !program.eq_ignore_ascii_case(&exe.to_string_lossy())
 }
 
+/// Makes this app the default for onyx:// links (`when`: for the log). The
+/// preview build (app.onyx.desktop.v2) also claims the scheme, and
+/// LaunchServices keeps whichever app registered last.
+#[cfg(all(target_os = "macos", not(debug_assertions)))]
+fn claim_onyx_links(identifier: &str, when: &str) {
+    use objc2_core_foundation::{CFRetained, CFString};
+    use std::ptr::NonNull;
+    #[link(name = "CoreServices", kind = "framework")]
+    extern "C" {
+        fn LSCopyDefaultHandlerForURLScheme(scheme: &CFString) -> Option<NonNull<CFString>>;
+        fn LSSetDefaultHandlerForURLScheme(scheme: &CFString, handler: &CFString) -> i32;
+    }
+    let scheme = CFString::from_str("onyx");
+    // SAFETY: the "Copy" rule: the caller owns the returned string.
+    let current = unsafe { LSCopyDefaultHandlerForURLScheme(&scheme) }
+        .map(|ptr| unsafe { CFRetained::from_raw(ptr) }.to_string());
+    if !takes_over_links(current.as_deref(), identifier) {
+        return;
+    }
+    let handler = CFString::from_str(identifier);
+    // SAFETY: both arguments are valid CFStrings for the call.
+    match unsafe { LSSetDefaultHandlerForURLScheme(&scheme, &handler) } {
+        0 => log::info!(
+            "made this app the default for onyx:// links ({when}; was {})",
+            current.as_deref().unwrap_or("none")
+        ),
+        status => log::warn!("could not take onyx:// links ({when}): status {status}"),
+    }
+}
+
+/// Whether the default onyx:// handler (a bundle ID) must change to `own`.
+#[cfg_attr(not(all(target_os = "macos", not(debug_assertions))), allow(dead_code))]
+fn takes_over_links(current: Option<&str>, own: &str) -> bool {
+    !current.is_some_and(|current| current.eq_ignore_ascii_case(own))
+}
+
 /// Takes onyx:// back from another program (`when`: for the log). Runs at
 /// launch and before each browser sign-in: the earlier desktop app, while it
 /// is still installed, writes its own entry each time it starts.
@@ -217,6 +263,77 @@ fn remove_other_user_link_handler(when: &str) {
     }
 }
 
+/// The `Exec` value of the per-user onyx:// handler. xdg-open's generic
+/// path cannot run a quoted program, so a path with no reserved character is
+/// written as is; any other path is quoted and escaped as the Desktop Entry
+/// spec says. `extract_and_run` keeps APPIMAGE_EXTRACT_AND_RUN for an
+/// AppImage that runs without FUSE.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn handler_exec(program: &str, extract_and_run: bool) -> String {
+    const RESERVED: &[char] = &[
+        ' ', '\t', '\n', '"', '\'', '\\', '>', '<', '~', '|', '&', ';', '$', '*', '?', '#', '(',
+        ')', '`', '%', '=',
+    ];
+    let program = if program.contains(RESERVED) {
+        let mut quoted = String::from("\"");
+        for c in program.chars() {
+            match c {
+                // Escaped inside quotes, then the backslash itself is escaped
+                // again because the value is a desktop-file string.
+                '"' | '`' | '$' => {
+                    quoted.push_str("\\\\");
+                    quoted.push(c);
+                }
+                '\\' => quoted.push_str("\\\\\\\\"),
+                '%' => quoted.push_str("%%"),
+                _ => quoted.push(c),
+            }
+        }
+        quoted.push('"');
+        quoted
+    } else {
+        program.to_string()
+    };
+    let prefix = if extract_and_run {
+        "env APPIMAGE_EXTRACT_AND_RUN=1 "
+    } else {
+        ""
+    };
+    format!("{prefix}{program} %u")
+}
+
+/// Writes the per-user onyx:// handler for a build that is not packaged
+/// (AppImage, dev builds) and makes it the default.
+#[cfg(target_os = "linux")]
+fn register_runtime_handler(app: &tauri::AppHandle, program: &std::path::Path) {
+    let Ok(dir) = app.path().data_dir().map(|d| d.join("applications")) else {
+        return;
+    };
+    let extract_and_run = std::env::var_os("APPIMAGE_EXTRACT_AND_RUN").is_some();
+    let exec = handler_exec(&program.to_string_lossy(), extract_and_run);
+    let body = format!(
+        "[Desktop Entry]\nType=Application\nName=Onyx\nExec={exec}\nTerminal=false\nMimeType=x-scheme-handler/onyx;\nNoDisplay=true\n"
+    );
+    let file = "onyx-handler.desktop";
+    if let Err(e) =
+        std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(dir.join(file), body))
+    {
+        log::warn!("could not write the onyx:// link handler: {e}");
+        return;
+    }
+    let _ = std::process::Command::new("update-desktop-database")
+        .arg(&dir)
+        .status();
+    match std::process::Command::new("xdg-mime")
+        .args(["default", file, "x-scheme-handler/onyx"])
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(status) => log::warn!("could not make {file} open onyx:// links: {status}"),
+        Err(e) => log::warn!("could not make {file} open onyx:// links: {e}"),
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn register_links(app: &tauri::AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
@@ -224,9 +341,12 @@ fn register_links(app: &tauri::AppHandle) {
         return;
     };
     if registers_links_at_runtime(app.env().appimage.is_some(), &exe) {
-        if let Err(e) = app.deep_link().register_all() {
-            log::warn!("could not register onyx:// links: {e}");
-        }
+        let program = app
+            .env()
+            .appimage
+            .clone()
+            .map_or(exe, std::path::PathBuf::from);
+        register_runtime_handler(app, &program);
         return;
     }
     // Removes a handler that earlier versions wrote for this install. The
@@ -321,10 +441,9 @@ fn main() {
             let config_path = app.path().app_config_dir()?.join("config.json");
             app.manage(offline::Offline::default());
             let handle = app.handle();
-            if let Some(source) =
-                migration::import_previous(&config_path, &migration::Sources::find(handle))
-            {
-                log::info!("imported the settings of the {source:?} app");
+            let sources = migration::Sources::find(handle);
+            if let Some(source) = migration::import_previous(&config_path, &sources) {
+                log::info!("{}", sources.imported_message(source));
             }
             let config = ConfigStore::load(config_path);
             let policy = policy::with_remembered_server(policy::read(handle), &config);
@@ -332,7 +451,7 @@ fn main() {
             policy::apply_launch_at_login(handle, &policy);
             app.manage(AppState::new(config, policy, api));
             #[cfg(all(windows, not(debug_assertions)))]
-            earlier_install::notify_if_present(handle);
+            earlier_install::retire(handle);
 
             // Windows and Linux: the main window gets its own menu (main_window.rs).
             #[cfg(target_os = "macos")]
@@ -368,6 +487,8 @@ fn main() {
                 remove_other_user_link_handler("at launch");
                 #[cfg(target_os = "linux")]
                 register_links(handle);
+                #[cfg(all(target_os = "macos", not(debug_assertions)))]
+                claim_onyx_links(&handle.config().identifier, "at launch");
                 let link_app = handle.clone();
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
@@ -451,8 +572,8 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        is_onyx_link_handler, legacy_link_handler, link_command_is_other_program,
-        packaged_desktop_file, registers_links_at_runtime,
+        handler_exec, is_onyx_link_handler, legacy_link_handler, link_command_is_other_program,
+        packaged_desktop_file, registers_links_at_runtime, runs_onyx, takes_over_links,
     };
 
     #[test]
@@ -519,6 +640,44 @@ mod tests {
             ),
             Some(Path::new("/home/a/.local/share/applications/onyx-handler.desktop").into())
         );
+    }
+
+    #[test]
+    fn links_are_taken_over_from_any_other_app() {
+        assert!(takes_over_links(
+            Some("app.onyx.desktop.v2"),
+            "app.onyx.desktop"
+        ));
+        assert!(takes_over_links(None, "app.onyx.desktop"));
+        assert!(!takes_over_links(
+            Some("App.Onyx.Desktop"),
+            "app.onyx.desktop"
+        ));
+    }
+
+    #[test]
+    fn the_handler_exec_line_works_with_xdg_open() {
+        // No reserved character: unquoted, so xdg-open's generic path runs it.
+        assert_eq!(
+            handler_exec("/home/a/Onyx_0.1.0+12_amd64.AppImage", false),
+            "/home/a/Onyx_0.1.0+12_amd64.AppImage %u"
+        );
+        assert_eq!(
+            handler_exec("/home/a/Onyx.AppImage", true),
+            "env APPIMAGE_EXTRACT_AND_RUN=1 /home/a/Onyx.AppImage %u"
+        );
+        // Reserved characters: quoted and escaped per the Desktop Entry spec.
+        assert_eq!(
+            handler_exec("/home/a b/My Apps/Onyx.AppImage", false),
+            r#""/home/a b/My Apps/Onyx.AppImage" %u"#
+        );
+        assert_eq!(
+            handler_exec(r#"/home/a/x"$`\y 100%.AppImage"#, false),
+            r#""/home/a/x\\"\\$\\`\\\\y 100%%.AppImage" %u"#
+        );
+        // The cleanup still knows the file it writes.
+        assert!(runs_onyx(&handler_exec("/home/a/Onyx.AppImage", true)));
+        assert!(runs_onyx(&handler_exec("/home/a b/Onyx.AppImage", false)));
     }
 
     #[test]

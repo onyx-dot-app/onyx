@@ -25,7 +25,8 @@
       "dmg"
     ],
     "category": "Productivity",
-    "shortDescription": "Onyx for desktop",
+    "shortDescription": "Desktop app for the Onyx AI platform",
+    "license": "MIT",
     "longDescription": "The Onyx desktop app connects to your Onyx server.\nIt gives you chat, search and a launcher in a native window.",
     "icon": [
       "icons/32x32.png",
@@ -65,6 +66,12 @@
           "ca-certificates",
           "xdg-utils"
         ],
+        "conflicts": [
+          "onyx-v2"
+        ],
+        "replaces": [
+          "onyx-v2"
+        ],
         "section": "utils",
         "desktopTemplate": "linux/onyx.desktop",
         "files": {
@@ -73,8 +80,15 @@
       },
       "rpm": {
         "depends": [
+          "glibc >= 2.35",
           "ca-certificates",
           "xdg-utils"
+        ],
+        "conflicts": [
+          "onyx-v2"
+        ],
+        "obsoletes": [
+          "onyx-v2"
         ],
         "desktopTemplate": "linux/onyx.desktop"
       }
