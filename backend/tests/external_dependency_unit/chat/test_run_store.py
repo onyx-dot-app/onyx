@@ -1650,7 +1650,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         else:
             assert len(received) == 1
             assert received[0].id == f"agent-result:{direct_child.run_id}"
-            notification = json.loads(received[0].text.split("\n", 1)[1])
+            notification = json.loads(received[0].text.splitlines()[2])
             assert notification["status"] == (
                 "cancelled" if cancel_child else "complete"
             )
