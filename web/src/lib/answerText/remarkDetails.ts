@@ -5,6 +5,8 @@ const DETAILS_TOKEN =
 const DETAILS_OPEN = /^<details(\s+open)?\s*>$/i;
 const SUMMARY = /^<summary>([\s\S]*?)<\/summary>$/i;
 const DETAILS_CLOSE = /^<\/details>$/i;
+// Tags inside these regions are text, so a block that holds one stays whole.
+const RAW_TEXT_REGION = /<(?:pre|script|style|textarea)\b|<!--/i;
 const NAMED_REFERENCES = new Map([
   ["amp", "&"],
   ["lt", "<"],
@@ -45,7 +47,8 @@ function htmlValue(node: MarkdownAstNode | undefined): string {
  */
 function splitDetailsTags(node: MarkdownAstNode): MarkdownAstNode[] {
   const value = node.type === "html" ? (node.value ?? "") : "";
-  if (!/<\/?details/i.test(value)) return [node];
+  if (!/<\/?(?:details|summary)\b/i.test(value) || RAW_TEXT_REGION.test(value))
+    return [node];
   const out: MarkdownAstNode[] = [];
   const pushSegment = (segment: string) => {
     const text = segment.trim();

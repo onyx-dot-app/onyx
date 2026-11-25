@@ -84,4 +84,13 @@ describe("full image gallery", () => {
       "Chat attachment"
     );
   });
+
+  test("shows the position in a light color on the dark overlay", async () => {
+    const user = userEvent.setup();
+    renderAnswer(["a", "b"]);
+    await user.click(
+      screen.getAllByRole("button", { name: "View the full image" })[0]!
+    );
+    expect(screen.getByText("1 / 2")).toHaveClass("text-text-light-05");
+  });
 });

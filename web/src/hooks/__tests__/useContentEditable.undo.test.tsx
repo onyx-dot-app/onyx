@@ -481,4 +481,31 @@ describe("paste over a selection", () => {
     expect(api.message).toBe(longText);
     expect(input().querySelectorAll("[data-rich-tile]")).toHaveLength(1);
   });
+
+  it("Enter after a paste over a selected tile opens no editor", () => {
+    render(<Harness pasteTilesEnabled />);
+    const longText = "line1\nline2\nline3\nline4\nline5";
+    act(() => api.pasteText(longText));
+    const key = (name: string) =>
+      ({
+        key: name,
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+        preventDefault: () => {},
+        nativeEvent: { isComposing: false },
+      }) as unknown as React.KeyboardEvent<HTMLDivElement>;
+    act(() => {
+      api.handleTileKeyDown(key("ArrowLeft"));
+    });
+
+    act(() => api.pasteText(longText));
+    act(() => {
+      api.handleTileKeyDown(key("Enter"));
+    });
+
+    expect(api.tilePopover).toBeNull();
+    expect(input().querySelectorAll("[data-rich-tile]")).toHaveLength(1);
+  });
 });
