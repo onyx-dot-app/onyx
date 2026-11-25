@@ -58,16 +58,6 @@ export class AdminIntegrationsPage {
     await expect(this.addForm).toBeVisible();
   }
 
-  /** Opens the catalog from the section at the foot of the list. */
-  async openCatalog(): Promise<void> {
-    await this.page
-      .getByRole("button", { name: "Browse", exact: true })
-      .click();
-    await expect(
-      this.page.getByRole("dialog", { name: /^Add from Catalog/ })
-    ).toBeVisible();
-  }
-
   async cancelAdd(): Promise<void> {
     await this.addForm
       .getByRole("button", { name: "Cancel", exact: true })
