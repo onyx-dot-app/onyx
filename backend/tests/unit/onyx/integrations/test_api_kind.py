@@ -16,13 +16,15 @@ from onyx.db.enums import (
     IntegrationKind,
 )
 from onyx.db.models import ExternalApp, Integration, IntegrationAction, Tool
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.kinds import api as api_kind
 from onyx.integrations.kinds.api import ApiKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
-from onyx.integrations.models import ApiShape
+from onyx.integrations.models import BUILTIN_ACTION_PREFIX, ApiShape
 from onyx.sandbox_proxy.resolvers.mcp_matching import IntegrationMatchTarget
 from onyx.sandbox_proxy.usable_integrations import (
     app_match_target,
@@ -157,6 +159,29 @@ def test_openapi_action_display_name_is_the_summary_else_the_operation_id() -> N
         "getOrder": "Get one order for USER_EMAIL",
         "deleteOrder": "deleteOrder",
     }
+
+
+def test_openapi_operation_cannot_take_a_builtin_action_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = {
+        **OPENAPI_SPEC,
+        "paths": {
+            "/files/{file_id}": {
+                "delete": {
+                    "operationId": f"{BUILTIN_ACTION_PREFIX}artifacts.delete",
+                    "summary": "Delete a file",
+                }
+            }
+        },
+    }
+    tool = Tool(id=5, name="files", openapi_schema=spec)
+    monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
+    integration = _integration(tool_id=tool.id, external_app_id=None)
+
+    with pytest.raises(OnyxError) as error:
+        HANDLER.discover_actions(integration, DB)
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 @pytest.mark.parametrize(

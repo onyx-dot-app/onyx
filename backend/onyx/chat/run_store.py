@@ -484,12 +484,16 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         # first poll scans, which also finds inbox work left by earlier turns.
         self._has_running_children = True
         self._next_input_poll = 0.0
-        # The gated actions of the tools whose calls wait for approval, and
-        # the display names that their requests save.
-        self._approval_scopes: dict[str, ToolApprovalScope] = {
-            tool.name: tool.approval for tool in tools if tool.approval is not None
+        # The tools whose calls can wait for approval, with their gated actions.
+        self._gated_tools: dict[str, tuple[Tool, ToolApprovalScope]] = {
+            tool.name: (tool, scope)
+            for tool in tools
+            if (scope := tool.approval) is not None
         }
-        self._display_names = {tool.name: tool.display_name for tool in tools}
+        # Whether a run of this store can have open approval requests: one
+        # opened here, or a resumed run's from an earlier process. Without
+        # one, releasing a run closes none.
+        self._approval_opened = False
         # Result follow-ups use the step limit of this store's chat agent.
         self._follow_up_steps = follow_up_steps
         # Every run counts against the chat owner's token rate limits.
@@ -1342,17 +1346,18 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 for call in step.message.tool_calls
             )
         )
-        if (self._approval_scopes or asked) and owned.run.status.is_terminal:
+        if (self._approval_opened or asked) and owned.run.status.is_terminal:
             # No call of the run waits anymore, so its requests cannot be
             # answered. A handed-off run keeps them for its resume.
             try:
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                    close_pending_approval_requests__no_commit(
-                        session,
-                        ApprovalDecision.EXPIRED,
-                        None,
-                        chat_message_ids=[response_id],
-                    )
+                    if self._approval_opened:
+                        close_pending_approval_requests__no_commit(
+                            session,
+                            ApprovalDecision.EXPIRED,
+                            None,
+                            chat_message_ids=[response_id],
+                        )
                     if asked:
                         resolve_question_requests__no_commit(
                             session,
@@ -1538,19 +1543,27 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
     ) -> PendingToolInput | ToolResult | None:
         call = nested_call or tool_call
-        return open_tool_approval(
+        tool, scope = self._gated_tools[call.name]
+        # Before any database work: a call that needs no approval runs.
+        details = tool.approval_details(call.arguments)
+        if details is None:
+            return None
+        pending = open_tool_approval(
             tenant_id=self.tenant_id,
             chat_session_id=self.chat_session_id,
             response_id=int(run.id),
             user_id=self._user.id,
             tool_call_id=tool_call.id,
             tool_name=call.name,
-            display_name=self._display_names.get(call.name, call.name),
+            details=details,
             arguments=tool_arguments_for_display(call),
-            scope=self._approval_scopes[call.name],
+            scope=scope,
             # Only the chat's signed-in owner can decide.
             signed_out=self._user.is_anonymous,
         )
+        if isinstance(pending, PendingToolInput):
+            self._approval_opened = True
+        return pending
 
     def withdraw_approval(self, request_id: str) -> None:
         try:
@@ -1770,6 +1783,8 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             )
             return None
         saved = self._load(response_id)
+        # The saved run can wait on requests that an earlier process opened.
+        self._approval_opened = True
         if saved.agent.parent_id is not None:
             context = self._child_context(saved.agent.id, response_id)
         if context is None:

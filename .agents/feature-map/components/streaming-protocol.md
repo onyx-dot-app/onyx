@@ -194,7 +194,9 @@ from a stop. A turn-level Stop drops packets after it, except
 each request's resolution precedes the `stop` packet. For a code mode
 program's call, the events carry `nested_call`, and
 the packet sits on the `execute_code` or `wait_code` card with the nested
-call's name and arguments. Every client gets them
+call's name. A request's `arguments` is the tool's approval payload
+(`Tool.approval_details`), or the call's arguments when the tool gives none.
+Every client gets them
 ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]); web, mobile,
 the widget and the CLI mirror them. A question call
 (`chat/renderer.py:QuestionToolRenderer`) sends only `tool_question_request`

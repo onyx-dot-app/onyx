@@ -272,7 +272,7 @@ For example, deep research normalizes a child report's citations before returnin
 Approval is separate from the callbacks. An `AgentTool` lists the call names that need the user's approval in `approval_required`: its own name, or the names of calls it makes for the model.
 The runtime gates those calls through the coordinator's `ToolApprovals` (`AgentCoordinator(approvals=...)`).
 A call whose `before_tool_call` request the user approves runs without asking `ToolApprovals`.
-`ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
+`ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call or the call needs no approval. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
 `ToolApprovals.withdraw_approval(request_id)` ends the request of a call that a tool made for the model when that call stops waiting while the run goes on: its program ended or its park was refused.
 The runtime logs a `withdraw_approval` that raises, so the waiting call still ends.
 The requests of a run that ends are the application's to close; the run store does it when it releases the run.
@@ -280,7 +280,7 @@ Answers live in `RunProgress.human_tool_answers`. A request ends with the answer
 To stop a run with answers, such as the user's rejection on Stop, submit them and cancel while holding `Run.execution_lock`; the run applies them only after it sees the cancellation.
 A direct call whose answer denies it or supplies its result keeps that result, so the model sees it in later runs.
 The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
-`PendingToolInput.display_name` carries the application's name for the action to the card that shows the request.
+`PendingToolInput.display_name` and `display_arguments` carry the application's name for the action and what it shows of the call to the card that shows the request.
 Without `ToolApprovals`, such a call returns an error result.
 
 The runtime records a tool's raw result before calling `after_tool_call`.

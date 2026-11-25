@@ -25,6 +25,7 @@ from onyx.tools.models import (
     CodeModeFunctionName,
     CodeModeResultSpec,
     IntegrationActionRef,
+    ToolApprovalDetails,
     ToolApprovalScope,
     ToolCallException,
     ToolContext,
@@ -245,7 +246,9 @@ class Tool(abc.ABC):
     merge_list_limit: int | None = None
     # SEQUENTIAL tools of one group take turns, as calls of one tool do.
     sequence_group: str | None = None
-    # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
+    # Set on tools whose calls can wait for the user's approval: an integration
+    # action that its policy asks for, or a built-in tool's gated action. See
+    # onyx/chat/tool_approvals.py and approval_details.
     approval: ToolApprovalScope | None = None
     # Set on the tool of an integration action; a preference names it.
     integration_action: IntegrationActionRef | None = None
@@ -317,6 +320,18 @@ class Tool(abc.ABC):
     @classmethod
     def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
         return True
+
+    def approval_details(
+        self,
+        arguments: dict[str, JsonValue],  # noqa: ARG002
+    ) -> ToolApprovalDetails | None:
+        """What the approval card of a call of this gated tool shows, or None
+        when the call needs no approval. `arguments` are the ones the call
+        runs with. Called before the call runs, with no database session open,
+        so it must not raise: arguments that it cannot read return None, and
+        the call reports its own error. The default shows the call's
+        arguments."""
+        return ToolApprovalDetails(display_name=self.display_name)
 
     @abc.abstractmethod
     def tool_definition(self) -> ToolDefinition:

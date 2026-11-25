@@ -111,7 +111,8 @@ usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
 - Craft: `ActionApproval` rows (`action_approval`) that the sandbox proxy writes and waits on
   (`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`), with "approve for session" scoped
   to a Craft session. See [[craft-external-apps]].
-- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP calls, with no
+- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP, OpenAPI and
+  built-in tool calls (a built-in action has no integration and an `onyx:` key), with no
   deadline; the response is saved while they wait. "Approve for this chat" is
   scoped to a chat session. See [[mcp-and-custom-tools#chat-approval-durable-wait]].
   The root agent's questions (`QuestionRequest`, "tool question") wait the
