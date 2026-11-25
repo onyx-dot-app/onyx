@@ -25,14 +25,18 @@ import {
   SvgTrash,
   SvgXCircle,
 } from "@opal/icons";
-import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import {
   bulkUpdateSkills,
   type SkillShareUpdatePayload,
 } from "@/lib/skills/api";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import type { SkillEnablement } from "@/lib/skills/hooks";
-import { canManageSkill } from "@/lib/skills/sharing";
+import {
+  canChangeOrganizationAccess,
+  canShareSkill,
+} from "@/lib/skills/sharing";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
 import BulkSkillSharingModal, {
@@ -75,7 +79,9 @@ export function useSkillBulkActions({
   // The strings that name the rows say "plugin" or "skill".
   const nounCopy = noun === "plugin" ? pluginNounCopy : bulkCopy;
   const listCopy = useTranslations("skills");
-  const { isAdmin } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const { mutate, cache } = useSWRConfig();
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
     new Set()
@@ -91,8 +97,8 @@ export function useSkillBulkActions({
   // The skills the delete confirm lists. Snapshotted on open: the selection
   // clears when the delete lands, while the card still fades out.
   const [deleteTargets, setDeleteTargets] = useState<CustomSkill[]>([]);
-  const canManageSelected =
-    selectedItems.length > 0 && selectedItems.every(canManageSkill);
+  const canShareSelected =
+    selectedItems.length > 0 && selectedItems.every(canShareSkill);
   const toggleableItems = selectedItems.filter((item) => item.can_toggle);
   // A row toggle still in flight must settle before a bulk action may race it.
   const locked =
@@ -172,7 +178,7 @@ export function useSkillBulkActions({
       <Button
         prominence="secondary"
         icon={SvgShare}
-        disabled={locked || !canManageSelected}
+        disabled={locked || !canShareSelected}
         onClick={() => setSharingOpen(true)}
       >
         {bulkCopy("share")}
@@ -226,10 +232,9 @@ export function useSkillBulkActions({
       <BulkSkillSharingModal
         noun={noun}
         count={selectedItems.length}
-        canChangeOrgAccess={
-          isAdmin ||
-          selectedItems.every((item) => item.user_permission === "OWNER")
-        }
+        canChangeOrgAccess={selectedItems.every((item) =>
+          canChangeOrganizationAccess(item, isOrganizationManager)
+        )}
         open={sharingOpen}
         saving={busy}
         onClose={() => setSharingOpen(false)}

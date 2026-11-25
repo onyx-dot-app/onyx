@@ -352,4 +352,51 @@ describe("admin page", () => {
       screen.getByRole("checkbox", { name: "Select viewed-kit" })
     ).not.toBeChecked();
   });
+
+  test("bulk Share skips a personal marketplace's plugin and publishing a synced one", async () => {
+    window.history.replaceState(null, "", "/admin/plugins");
+    const marketplace = {
+      name: "anthropic-agent-skills",
+      kind: "github" as const,
+      repository: "anthropics/skills",
+    };
+    mockFetch({
+      "/api/skills": {
+        builtins: [],
+        customs: [
+          plugin("personal", "personal-kit", {
+            user_permission: "OWNER",
+            content_locked: true,
+            marketplace: { ...marketplace, id: "m-personal", personal: true },
+          }),
+          plugin("company", "company-kit", {
+            user_permission: "OWNER",
+            content_locked: true,
+            marketplace: { ...marketplace, id: "m-company", personal: false },
+          }),
+        ],
+      },
+      "/api/marketplaces": { marketplaces: [] },
+    });
+    render(<CustomizePluginsPage />);
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Select personal-kit" })
+    );
+    expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select personal-kit" })
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select company-kit" })
+    );
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(
+      await screen.findByRole("button", { name: "Who can access" })
+    ).toBeDisabled();
+  });
 });

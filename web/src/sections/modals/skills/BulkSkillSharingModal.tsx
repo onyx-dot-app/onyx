@@ -43,7 +43,7 @@ interface BulkSkillSharingModalProps {
   noun?: BulkSkillNoun;
   count: number;
   // False when a selected skill's organization access is not the caller's to
-  // change (owner or admin only); the API would reject that skill's update.
+  // change (see canChangeOrganizationAccess); the API would reject it.
   canChangeOrgAccess: boolean;
   open: boolean;
   saving: boolean;

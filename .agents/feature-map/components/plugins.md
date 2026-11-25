@@ -82,7 +82,10 @@ Group or user restriction needs EE.
   Skills bulk actions (`sections/skills/useSkillBulkActions.tsx`: Share,
   Enable for me, Disable for me, Delete with a confirm that lists the
   plugins, all through `POST /skills/bulk`), with plugin copy
-  (`plugins.bulk`). A row's Delete opens the same confirm for that plugin.
+  (`plugins.bulk`). Share takes the row menu's rule (`canShareSkill`: never
+  a personal marketplace's plugin), and **Everyone** needs
+  `canChangeOrganizationAccess` for every selected row (never a synced one).
+  A row's Delete opens the same confirm for that plugin.
   Search and the status filter clear the selection. A failed `GET /skills`
   shows an error in place of the list; the Marketplaces section stays.
   `/admin/plugins/[pluginId]` renders `MemberPluginDetailPage`. These pages read their panel from the path
