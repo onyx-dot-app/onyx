@@ -1,7 +1,7 @@
 "use client";
 
 // Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@opal/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useTranslations } from "next-intl";
@@ -25,6 +25,7 @@ export function FullImageModal({
   onCloseAutoFocus,
 }: FullImageModalProps) {
   const t = useTranslations("chat.files");
+  const contentRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState(0);
   const count = images.length;
   const index =
@@ -58,6 +59,11 @@ export function FullImageModal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black bg-opacity-80 z-modal-overlay backdrop-blur-xl" />
         <Dialog.Content
+          ref={contentRef}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            contentRef.current?.focus();
+          }}
           onCloseAutoFocus={onCloseAutoFocus}
           onKeyDown={onKeyDown}
           className={cn(
