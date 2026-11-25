@@ -18,6 +18,7 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   deleteImageGenerationConfig,
   linkImageGenerationModel,
+  renameImageGenerationConfig,
   setDefaultImageGenerationConfig,
 } from "@/lib/imageGeneration/svc";
 
@@ -36,11 +37,18 @@ async function saveImageModelChanges(
     }
   }
   for (const [modelName, change] of entries) {
-    if (change.connect) {
+    if (!change.connect) continue;
+    if (change.imageProviderId === null) {
       await linkImageGenerationModel(
         llmProviderId,
         modelName,
-        change.makeDefault
+        change.makeDefault,
+        change.customDisplayName
+      );
+    } else if (change.customDisplayName !== undefined) {
+      await renameImageGenerationConfig(
+        change.imageProviderId,
+        change.customDisplayName
       );
     }
   }

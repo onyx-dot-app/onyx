@@ -772,64 +772,113 @@ function ModelRow({
 interface ImageModelRowProps {
   model: ImageGenerationProviderModel;
   checked: boolean;
+  /** The name shown, with any staged rename. */
+  title: string;
   isDefaultModel: boolean;
   onToggle: (connect: boolean) => void;
+  onRename: (value: string | null) => void;
 }
 
 /** One image model, laid out like a chat model's `ModelRow`. */
 function ImageModelRow({
   model,
   checked,
+  title,
   isDefaultModel,
   onToggle,
+  onRename,
 }: ImageModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const title = model.display_name || model.name;
+  const editHandle = useRef<ContentEditHandle>(null);
   const toggle = () => onToggle(!checked);
+  // A click that blurs and commits an inline rename reaches the row after the
+  // edit input unmounts, so the input's presence is sampled at pointerdown.
+  const renamingAtPointerDown = useRef(false);
+  // The rename button's clicks must not toggle the model.
+  const toggleFromRow = (e: React.MouseEvent) => {
+    if (renamingAtPointerDown.current) return;
+    const interactive = (e.target as HTMLElement).closest(
+      'button, input, textarea, [contenteditable="true"]'
+    );
+    if (interactive) return;
+    toggle();
+  };
 
   return (
-    <Interactive.Stateful
-      variant="select-heavy"
-      state={checked ? "selected" : "empty"}
-      onClick={toggle}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e: React.KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          toggle();
-        }
-      }}
-      data-model-name={model.name}
-    >
-      <Interactive.Container width="full" size="fit" rounding={3}>
-        <OpalSection alignItems="stretch" height="auto" padding={1.5}>
-          <ContentAction
-            font="main-ui-action"
-            color="interactive"
-            center
-            icon={() => <InputCheckbox checked={checked} />}
-            title={title}
-            description={title === model.name ? undefined : model.name}
-            rightChildren={
-              isDefaultModel ? (
-                <span className="px-1.5">
-                  <Text
-                    as="p"
-                    font="secondary-action"
-                    wordWrap="whitespace-nowrap"
-                    color="action-selection-05"
+    <Hoverable.Root group="image-model-row" data-model-name={model.name}>
+      <Interactive.Stateful
+        variant="select-heavy"
+        state={checked ? "selected" : "empty"}
+        onPointerDownCapture={(e: React.PointerEvent) => {
+          renamingAtPointerDown.current =
+            e.currentTarget.querySelector(".opal-content-title-row input") !=
+            null;
+        }}
+        onClick={toggleFromRow}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        }}
+      >
+        <Interactive.Container width="full" size="fit" rounding={3}>
+          <OpalSection alignItems="stretch" height="auto" padding={1.5}>
+            <ContentAction
+              font="main-ui-action"
+              color="interactive"
+              center
+              icon={() => <InputCheckbox checked={checked} />}
+              title={title}
+              description={title === model.name ? undefined : model.name}
+              rightChildren={
+                <OpalSection
+                  flexDirection="row"
+                  width="fit"
+                  height="auto"
+                  gap={1}
+                >
+                  <Hoverable.Item
+                    group="image-model-row"
+                    variant="appear-on-hover"
                   >
-                    {t("models.row.defaultLabel")}
-                  </Text>
-                </span>
-              ) : undefined
-            }
-            padding={0}
-          />
-        </OpalSection>
-      </Interactive.Container>
-    </Interactive.Stateful>
+                    <Button
+                      icon={SvgEdit}
+                      prominence="internal"
+                      size="sm"
+                      tooltip={t("models.row.renameButton.tooltip")}
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        editHandle.current?.startEditing();
+                      }}
+                    />
+                  </Hoverable.Item>
+                  {isDefaultModel && (
+                    <span className="px-1.5">
+                      <Text
+                        as="p"
+                        font="secondary-action"
+                        wordWrap="whitespace-nowrap"
+                        color="action-selection-05"
+                      >
+                        {t("models.row.defaultLabel")}
+                      </Text>
+                    </span>
+                  )}
+                </OpalSection>
+              }
+              editable
+              editHandle={editHandle}
+              onTitleChange={(newTitle) => onRename(newTitle || null)}
+              padding={0}
+            />
+          </OpalSection>
+        </Interactive.Container>
+      </Interactive.Stateful>
+    </Hoverable.Root>
   );
 }
 
@@ -860,10 +909,27 @@ function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
   const isChecked = (model: ImageGenerationProviderModel) =>
     changes[model.name]?.connect ?? model.image_provider_id !== null;
 
-  function handleToggle(model: ImageGenerationProviderModel, connect: boolean) {
-    const { [model.name]: _previous, ...rest } = changes;
+  /** Stages a model's change; a change back to what is saved drops it, and
+   *  no staged change leaves the field out, so the form is pristine again. */
+  function stage(
+    model: ImageGenerationProviderModel,
+    update: { connect?: boolean; customDisplayName?: string | null }
+  ) {
+    const { [model.name]: previous, ...rest } = changes;
+    const isConnected = model.image_provider_id !== null;
+    const connect = update.connect ?? previous?.connect ?? isConnected;
+    const rawName =
+      "customDisplayName" in update
+        ? update.customDisplayName
+        : previous?.customDisplayName;
+    // The saved name, as the listing shows it, is no change.
+    const customDisplayName =
+      rawName === undefined ||
+      (rawName ?? model.name) === (model.display_name || model.name)
+        ? undefined
+        : rawName;
     const next =
-      connect === (model.image_provider_id !== null)
+      connect === isConnected && customDisplayName === undefined
         ? rest
         : {
             ...rest,
@@ -872,11 +938,12 @@ function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
               imageProviderId: model.image_provider_id,
               makeDefault:
                 connect &&
+                !isConnected &&
                 defaultConfig === null &&
                 !Object.values(rest).some((change) => change.makeDefault),
+              ...(customDisplayName !== undefined && { customDisplayName }),
             },
           };
-    // No staged change leaves the field out, so the form is pristine again.
     const { image_model_changes: _changes, ...others } = values;
     void setValues(
       Object.keys(next).length === 0
@@ -901,11 +968,17 @@ function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
                 key={model.name}
                 model={model}
                 checked={isChecked(model)}
+                title={
+                  changes[model.name]?.customDisplayName === undefined
+                    ? model.display_name || model.name
+                    : (changes[model.name]?.customDisplayName ?? model.name)
+                }
                 isDefaultModel={
                   model.image_provider_id !== null &&
                   defaultConfig?.image_provider_id === model.image_provider_id
                 }
-                onToggle={(connect) => handleToggle(model, connect)}
+                onToggle={(connect) => stage(model, { connect })}
+                onRename={(value) => stage(model, { customDisplayName: value })}
               />
             ))}
           </OpalSection>

@@ -13,7 +13,8 @@ async function throwOnError(response: Response, fallback: string) {
 export async function linkImageGenerationModel(
   llmProviderId: number,
   modelName: string,
-  isDefault: boolean
+  isDefault: boolean,
+  customDisplayName?: string | null
 ): Promise<ImageGenerationConfigView> {
   const response = await fetch(`${CONFIG_URL}/link`, {
     method: "POST",
@@ -22,10 +23,24 @@ export async function linkImageGenerationModel(
       llm_provider_id: llmProviderId,
       model_name: modelName,
       is_default: isDefault,
+      custom_display_name: customDisplayName ?? null,
     }),
   });
   await throwOnError(response, "Failed to connect model");
   return response.json();
+}
+
+/** Renames a connected image model; null restores its catalog name. */
+export async function renameImageGenerationConfig(
+  imageProviderId: string,
+  customDisplayName: string | null
+): Promise<void> {
+  const response = await fetch(`${CONFIG_URL}/${imageProviderId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ custom_display_name: customDisplayName }),
+  });
+  await throwOnError(response, "Failed to rename model");
 }
 
 export async function setDefaultImageGenerationConfig(

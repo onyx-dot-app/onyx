@@ -163,6 +163,9 @@ export interface ImageModelChange {
   imageProviderId: string | null;
   /** Make it the default image model: the first one connected. */
   makeDefault: boolean;
+  /** A new name: a string, null to restore the catalog name, or undefined
+   *  when unchanged. */
+  customDisplayName?: string | null;
 }
 
 /** Bound stored policy by current capability, which can shrink after a save. */
