@@ -175,7 +175,9 @@ Click **Refresh** on the **Actions** tab to load them again.
 Onyx can ask a user to approve an action before it runs.
 Admins set the policy for each action on the **Actions** tab of an integration. MCP tool policies apply in Chat,
 in custom agents, and in Craft. Craft App policies apply in Chat, in custom agents, and in Craft,
-also to the requests of commands that the agent runs.
+also to the requests of commands that the agent runs. In Chat,
+a command request with the **Ask** policy gets no approval card. Onyx refuses the request,
+and the agent calls the tool of the action instead. The tool shows the approval card.
 
 | Policy | Effect |
 | --- | --- |
