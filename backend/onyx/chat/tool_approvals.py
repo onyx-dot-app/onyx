@@ -110,7 +110,11 @@ def open_tool_approval(
             display_name=details.display_name,
             arguments=arguments if details.payload is None else details.payload,
         )
-        integration = get_integration_by_id(scope.integration_id, db_session)
+        integration = (
+            get_integration_by_id(scope.integration_id, db_session)
+            if scope.integration_id is not None
+            else None
+        )
         app_name = integration.name if integration is not None else None
         db_session.commit()
     return PendingToolInput(
