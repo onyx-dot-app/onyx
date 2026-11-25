@@ -18,6 +18,11 @@ describe("endsInOpenCodeFence", () => {
     ["````\n```\n````", false],
     ["- item\n\n  ```\n  code", true],
     ["```a``` is inline", false],
+    ["- item\n\n  ```python\n  x\n\nMore text", false],
+    ["> ```\n> x\nplain", false],
+    ["> ```\n> x\n>\n> more code", true],
+    ["- ```\n  x\n```\nnew fence", true],
+    ["- ```\n  x\n  ```\n\nafter", false],
   ])("%j: %s", (text, open) => {
     expect(endsInOpenCodeFence(text)).toBe(open);
   });
@@ -60,6 +65,7 @@ describe("splitMarkdownBlocks", () => {
     "$$\nx$$\n\ny\n$$\n\nend",
     "$$\na\n\nb $$ c\n  $$  \n\nend",
     "$$a$b\n\nc",
+    "[guide][a\\]b]\n\n[a\\]b]: https://example.com\n\nend",
     "[ref]\n\n> [ref]: https://example.com\n\nend",
     "[ref]\n\n- item\n\n  [ref]: https://example.com\n\nend",
     "[multi line]\n\n[multi\nline]: https://example.com\n\nend",
@@ -118,6 +124,7 @@ describe("splitMarkdownBlocks", () => {
     "[ref]\n\n> [ref]: https://example.com",
     "[ref]\n\n- [ref]: https://example.com",
     "[a b]\n\n[a\nb]: https://example.com",
+    "[guide][a\\]b]\n\n[a\\]b]: https://example.com",
     "a[^x]\n\n[^x]: note",
     "<details>\n\nbody\n\n</details>",
     ":::note\n\ncontent\n\n:::",
