@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/audit"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/basedigest"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
@@ -64,6 +65,25 @@ func newNodeImagePinsCommand() *cobra.Command {
 				return fmt.Errorf("no pinned Node images found")
 			}
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(pins)
+		},
+	}
+}
+
+func newNodeRuntimesCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "node-runtimes",
+		Short: "Read observed Node image versions as JSON and report Linux advisories for nightly alert sync",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			var runtimes []audit.NodeRuntime
+			if err := json.NewDecoder(cmd.InOrStdin()).Decode(&runtimes); err != nil {
+				return err
+			}
+			result, err := audit.CheckNodeRuntimes(runtimes)
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
 		},
 	}
 }

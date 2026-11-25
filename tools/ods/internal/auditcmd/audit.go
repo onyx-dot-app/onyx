@@ -74,6 +74,7 @@ how it gates deploys.`,
 
 	cmd.AddCommand(newAuditImageCommand())
 	cmd.AddCommand(newNodeImagePinsCommand())
+	cmd.AddCommand(newNodeRuntimesCommand())
 	cmd.AddCommand(newAuditCraftFCCommand())
 	cmd.AddCommand(newAuditGateCommand())
 	cmd.AddCommand(newAuditIgnoreCommand(terminalEditUI()))
