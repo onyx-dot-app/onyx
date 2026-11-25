@@ -283,7 +283,7 @@ test("session input shows typed keys, and polls show the session state", async (
     expect(screen.getByText("Sent input to session 7")).toBeInTheDocument();
     expect(screen.getByText("^C")).toBeInTheDocument();
     expect(screen.getByText("Still running (session 7)")).toBeInTheDocument();
-    expect(screen.getByText("Checked session 7")).toBeInTheDocument();
+    expect(screen.queryByText("Checked session 7")).not.toBeInTheDocument();
     expect(screen.getByText("Stopped by a signal")).toBeInTheDocument();
     expect(screen.getByText("Command failed")).toBeInTheDocument();
     expect(screen.getByText("Sandbox is unavailable")).toBeInTheDocument();

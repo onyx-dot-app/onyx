@@ -170,7 +170,7 @@ class AppPosition {
   private leaveSentChat() {
     newSessionNavigation++;
     for (const listener of newSessionListeners) listener();
-    if (this.isNewSession())
+    if (this.isNewSession() || this.isProject())
       useChatSessionStore.getState().setCurrentSession(null);
   }
 

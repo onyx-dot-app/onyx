@@ -1581,6 +1581,7 @@ export default function useChatController({
       activeAgent,
       availableAgents,
       existingChatSessionId,
+      incognitoSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
@@ -1640,7 +1641,7 @@ export default function useChatController({
         updateChatStateAction(uploadSessionId, "input");
       }
     },
-    [activeAgent, llmManager, toolConfiguration]
+    [activeAgent, beginUpload, llmManager, toolConfiguration]
   );
 
   useEffect(() => {
