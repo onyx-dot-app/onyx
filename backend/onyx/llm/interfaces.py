@@ -1,6 +1,7 @@
 """LLM interface, public settings, and provider configuration."""
 
 import abc
+import os
 from collections.abc import Generator
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
@@ -76,7 +77,11 @@ class LLMConfig(BaseModel):
 
     @property
     def tool_family(self) -> ToolFamily:
-        """The tool shapes that this model gets."""
+        """The tool shapes that this model gets. Bench-only: the
+        BENCH_TOOL_FAMILY env var (claude|openai) forces one family."""
+        forced = os.environ.get("BENCH_TOOL_FAMILY")
+        if forced:
+            return ToolFamily(forced)
         return (
             ToolFamily.CLAUDE
             if is_claude_model(
