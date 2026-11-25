@@ -61,10 +61,18 @@ def address_passes() -> Iterator[dict[str, MagicMock]]:
         patch(f"{_MODULE}.is_sso_only", return_value=False),
         patch(f"{_MODULE}.get_security_settings", return_value=settings),
         patch(f"{_MODULE}.verify_email_domain") as verify_domain,
+        patch(f"{_MODULE}.reserve_send", AsyncMock(return_value=True)) as reserve,
+        patch(f"{_MODULE}.release_send", AsyncMock()) as release,
         patch(f"{_MODULE}.store_magic_link", AsyncMock(return_value="tok")) as store,
         patch(f"{_MODULE}.send_magic_link_email") as send,
     ):
-        yield {"verify_domain": verify_domain, "store": store, "send": send}
+        yield {
+            "verify_domain": verify_domain,
+            "reserve": reserve,
+            "release": release,
+            "store": store,
+            "send": send,
+        }
 
 
 @pytest.fixture
@@ -115,6 +123,7 @@ class TestRequest:
         address_passes["verify_domain"].assert_called_once_with(
             "someone@example.com", valid_email_domains=()
         )
+        address_passes["reserve"].assert_awaited_once_with("someone@example.com")
 
     @pytest.mark.usefixtures("mail_is_configured", "not_sso_only")
     def test_an_existing_dotted_gmail_address_can_ask_for_a_link(
@@ -129,6 +138,7 @@ class TestRequest:
             patch("onyx.auth.users.is_disposable_email", return_value=False),
             patch(f"{_MODULE}.get_security_settings", return_value=settings),
             patch(f"{_MODULE}.IS_PLAYGROUND", False),
+            patch(f"{_MODULE}.reserve_send", AsyncMock(return_value=True)),
             patch(f"{_MODULE}.store_magic_link", AsyncMock(return_value="tok")),
             patch(f"{_MODULE}.send_magic_link_email") as send,
         ):
@@ -240,6 +250,20 @@ class TestRequest:
 
         assert response.status_code == OnyxErrorCode.SERVICE_UNAVAILABLE.status_code
         assert response.json()["detail"] == "Failed to send the sign-in email."
+        # Nothing reached the inbox, so the address may ask again at once.
+        address_passes["release"].assert_awaited_once_with("someone@example.com")
+
+    @pytest.mark.usefixtures("mail_is_configured")
+    def test_one_email_per_address_a_minute(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        address_passes["reserve"].return_value = False
+
+        response = client.post("/auth/magic-link/request", json={"email": EMAIL})
+
+        assert response.status_code == OnyxErrorCode.RATE_LIMITED.status_code
+        address_passes["store"].assert_not_awaited()
+        address_passes["send"].assert_not_called()
 
 
 RECORD = MagicLinkRecord(

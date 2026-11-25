@@ -128,7 +128,8 @@ only way in. With "Disable Password Login & Signup" on, both routes refuse with
 `MAGIC_LINK_USE_SSO` (`onyx/auth/magic_link.py:is_sso_only`), since a link
 would get around the identity provider. The request route
 answers "link sent" for every well-formed address, whether or not it has an
-account, so nothing leaks before the inbox is proven. The link carries a random
+account, so nothing leaks before the inbox is proven. It sends one email per address a
+minute, whoever asks. The link carries a random
 token. The cache keeps the token's hash and what the click should do: the
 address, the `start_new_team` choice and the next URL (`onyx/auth/magic_link.py`).
 A token works once and expires after `MAGIC_LINK_TTL_SECONDS`. The email

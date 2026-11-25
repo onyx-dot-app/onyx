@@ -27,6 +27,8 @@ from onyx.auth.magic_link import (
     MagicLinkRecord,
     consume_magic_link,
     is_sso_only,
+    release_send,
+    reserve_send,
     store_magic_link,
 )
 from onyx.auth.users import (
@@ -113,6 +115,14 @@ async def request_magic_link(
             _PLAYGROUND_MODULE, "check_playground_address", None
         )(email)
 
+    # The same for every address, so it says nothing about accounts.
+    if not await reserve_send(email):
+        raise OnyxError(
+            OnyxErrorCode.RATE_LIMITED,
+            "A sign-in link was sent to this address a moment ago. "
+            "Check your inbox, or wait a minute and ask again.",
+        )
+
     record = MagicLinkRecord(
         email=email,
         start_new_team=payload.start_new_team,
@@ -125,6 +135,8 @@ async def request_magic_link(
         await asyncio.to_thread(send_magic_link_email, email, link)
     except Exception as e:
         logger.exception("Failed to send the magic link email")
+        # Nothing reached the inbox, so the address may ask again at once.
+        await release_send(email)
         raise OnyxError(
             OnyxErrorCode.SERVICE_UNAVAILABLE, "Failed to send the sign-in email."
         ) from e

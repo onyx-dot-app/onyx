@@ -18,6 +18,8 @@ import onyx.auth.users as users_module
 from onyx.auth.magic_link import (
     MagicLinkRecord,
     consume_magic_link,
+    release_send,
+    reserve_send,
     store_magic_link,
 )
 from onyx.auth.users import UserManager
@@ -77,6 +79,20 @@ class TestTokenStore:
 
         assert await consume_magic_link(token) is None
         assert not cache.exists(_cache_key(token))
+
+
+class TestSendLimit:
+    @pytest.mark.asyncio
+    async def test_one_send_per_address_until_released(self) -> None:
+        email = f"limit_{uuid4().hex[:8]}@example.com"
+        try:
+            assert await reserve_send(email)
+            # The same address, in any case, waits for the window.
+            assert not await reserve_send(email.upper())
+            await release_send(email)
+            assert await reserve_send(email)
+        finally:
+            await release_send(email)
 
 
 @pytest.fixture

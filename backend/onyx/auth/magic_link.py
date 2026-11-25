@@ -35,6 +35,10 @@ logger = setup_logger()
 # The web sends the person to their SSO provider for this error detail.
 MAGIC_LINK_USE_SSO_CODE = "MAGIC_LINK_USE_SSO"
 
+# One email per address in this window, whoever asks.
+MAGIC_LINK_RESEND_SECONDS = 60
+_SEND_KEY_PREFIX = "magic_link_send:"
+
 
 class MagicLinkRecord(BaseModel):
     """What a click on the link signs in, and where it lands."""
@@ -51,6 +55,27 @@ class MagicLinkRecord(BaseModel):
 def _cache_key(token: str) -> str:
     digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
     return f"{MAGIC_LINK_TOKEN_PREFIX}{digest}"
+
+
+def _send_key(email: str) -> str:
+    digest = hashlib.sha256(email.lower().encode("utf-8")).hexdigest()
+    return f"{_SEND_KEY_PREFIX}{digest}"
+
+
+async def reserve_send(email: str) -> bool:
+    """Take the one send this address gets per ``MAGIC_LINK_RESEND_SECONDS``.
+    False when a link went to it recently."""
+    return await asyncio.to_thread(
+        get_shared_cache_backend().set_if_absent,
+        _send_key(email),
+        1,
+        MAGIC_LINK_RESEND_SECONDS,
+    )
+
+
+async def release_send(email: str) -> None:
+    """Give the send back, for a send that failed."""
+    await asyncio.to_thread(get_shared_cache_backend().delete, _send_key(email))
 
 
 def is_sso_only() -> bool:
