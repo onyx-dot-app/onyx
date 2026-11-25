@@ -27,6 +27,7 @@ from onyx.tools.models import (
     MemoryUpdated,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
 
@@ -34,6 +35,7 @@ logger = setup_logger()
 
 
 class MemoryTool(Tool):
+    rank = ToolRank.MEMORY
     NAME = "add_memory"
     DISPLAY_NAME = "Add Memory"
     DESCRIPTION = "Save memories about the user for future conversations."

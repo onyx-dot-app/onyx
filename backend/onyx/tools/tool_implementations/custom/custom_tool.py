@@ -32,6 +32,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     REQUEST_BODY,
     MethodSpec,
@@ -91,6 +92,8 @@ _OPERATION_POSITION_KEY = "x-onyx-operation-position"
 class CustomTool(Tool):
     """One operation of an OpenAPI integration. The caller renders the
     credential into ``custom_headers``."""
+
+    rank = ToolRank.INTEGRATION
 
     def __init__(
         self,

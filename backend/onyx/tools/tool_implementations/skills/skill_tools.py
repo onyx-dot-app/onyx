@@ -35,6 +35,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 
 SKILLS_PER_PAGE: Final = 20
 SKILL_READ_MAX_CHARS: Final = 32000
@@ -117,6 +118,7 @@ class _SkillTool(Tool):
 
 
 class SkillsListTool(_SkillTool):
+    rank = ToolRank.SKILLS_LIST
     name = SKILLS_LIST_TOOL_NAME
     display_name = "List skills"
     arguments = SkillsListArguments
@@ -155,6 +157,7 @@ class SkillsReadTool(_SkillTool):
     """Reads a skill's SKILL.md; the tool family's shape (SKILL_READ_SHAPES)
     names it and takes its arguments."""
 
+    rank = ToolRank.SKILLS_READ
     display_name = "Read skill"
     description = (
         "Read the SKILL.md of a skill by name. Read the whole file before you "

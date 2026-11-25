@@ -21,6 +21,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.subagents.models import (
     AgentSelectionArguments,
     AgentWaitDetails,
@@ -79,6 +80,7 @@ class SpawnAgentTool(_SubagentTool):
     """Starts an agent; the tool family's agent shape (AGENT_SHAPES) names
     it and takes its arguments."""
 
+    rank = ToolRank.SPAWN_AGENT
     display_name = "Start agent"
     description = (
         "Start an agent on a task in the background. It does not see this "
@@ -131,6 +133,7 @@ class SpawnAgentTool(_SubagentTool):
 
 
 class ListAgentsTool(_SubagentTool):
+    rank = ToolRank.LIST_AGENTS
     name = "list_agents"
     display_name = "List agents"
     description = "List agents with their path and status."
@@ -183,6 +186,7 @@ class SendMessageTool(_SubagentTool):
     """Sends a message to an agent; the tool family's agent shape
     (AGENT_SHAPES) takes its arguments."""
 
+    rank = ToolRank.SEND_MESSAGE
     name = SEND_MESSAGE_TOOL_NAME
     display_name = "Send agent message"
     description = (
@@ -215,6 +219,7 @@ class SendMessageTool(_SubagentTool):
 
 
 class InterruptAgentTool(_SubagentTool):
+    rank = ToolRank.INTERRUPT_AGENT
     name = "interrupt_agent"
     display_name = "Interrupt agent"
     description = "Stop an agent's current run. No result is reported."
@@ -241,6 +246,7 @@ class WaitAgentTool(_SubagentTool):
     """Ends the root's response until its agents finish, in the shapes that
     have it (AgentShape.wait_name)."""
 
+    rank = ToolRank.WAIT_AGENT
     display_name = "Wait for agents"
     description = (
         "Wait for agents that you started and end your response. When they finish, a "

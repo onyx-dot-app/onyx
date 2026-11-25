@@ -43,12 +43,14 @@ from onyx.prompts.tool_prompts import (
     INTERNAL_SEARCH_GUIDANCE,
     MEMORY_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
+    TOOL_SECTION_HEADER,
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import (
     EXEC_TOOL_NAME,
     FILE_READER_TOOL_NAME,
+    OPEN_URL_TOOL_NAME,
     WAIT_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
@@ -76,8 +78,15 @@ from onyx.tools.tool_implementations.code_mode.shapes import (
     CODE_MODE_SHAPES,
     OPENAI_CODE_MODE,
 )
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     ApplyPatchTool,
     ExecCommandTool,
     WriteStdinTool,
@@ -85,6 +94,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
 from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.postgres_sanitization import sanitize_json_like
 from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM, run_agent
 from tests.unit.onyx.tools.code_mode.fakes import search_doc
@@ -337,6 +347,7 @@ def test_direct_search_prompt_has_no_code_mode_guidance() -> None:
     # external_dependency_unit/answer/test_code_mode_citations.py.
     search = MagicMock(spec=SearchTool)
     search.name = SearchTool.NAME
+    search.rank = SearchTool.rank
     direct = build_system_prompt("base", tools=[search], include_user_info=False)
     for shape in CODE_MODE_SHAPES.values():
         assert CODE_MODE_GUIDANCE.format(name=shape.run_name) not in direct
@@ -422,6 +433,121 @@ def test_the_token_reservation_counts_code_mode_guidance(
     )
     assert CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME) in reserved
     assert ("## Sandbox" in reserved) is include_sandbox
+
+
+def _guided(tool_type: type[Tool], name: str) -> MagicMock:
+    tool = MagicMock(spec=tool_type)
+    tool.name = name
+    tool.rank = tool_type.rank
+    return tool
+
+
+def _guidance_headings(prompt: str) -> list[str]:
+    """The headings of the tool section, with `search` where the search
+    guidance, which has no heading, starts."""
+    tools_section = prompt.split(TOOL_SECTION_HEADER, 1)[1].replace(
+        TOOL_DESCRIPTION_SEARCH_GUIDANCE, "## search\n"
+    )
+    return [line[3:] for line in tools_section.splitlines() if line.startswith("## ")]
+
+
+def test_tool_guidance_follows_the_tool_order_in_both_prompt_variants() -> None:
+    turn = SandboxTurn(
+        tenant_id="t",
+        user_id=uuid4(),
+        chat_session_id=uuid4(),
+        vm_chat_files=[],
+        copy_vm_chat_files=False,
+        shell=SHELL_SHAPES[ToolFamily.OPENAI],
+    )
+    # Offered in another order than the ranks.
+    offered: list[Tool] = [
+        _guided(PostgresTool, PostgresTool.NAME),
+        _guided(ImageGenerationTool, ImageGenerationTool.NAME),
+        _guided(PythonTool, PythonTool.NAME),
+        _guided(OpenURLTool, OPEN_URL_TOOL_NAME),
+        _guided(WebSearchTool, WebSearchTool.NAME),
+        WriteStdinTool(turn),
+        ApplyPatchTool(turn),
+        ExecCommandTool(turn),
+        _guided(SearchTool, SearchTool.NAME),
+        *with_code_mode([MemoryTool(tool_id=1, llm=MagicMock())], OPENAI_CODE_MODE)[0],
+    ]
+    expected = [
+        "search",
+        EXEC_TOOL_NAME,
+        SearchTool.NAME,
+        "Sandbox",
+        WebSearchTool.NAME,
+        OPEN_URL_TOOL_NAME,
+        PostgresTool.NAME,
+        PythonTool.NAME,
+        ImageGenerationTool.NAME,
+        MemoryTool.NAME,
+    ]
+
+    offered_prompt = _code_mode_prompt(offered)
+    estimate_prompt = build_system_prompt(
+        "base",
+        include_user_info=False,
+        all_guidance_family=ToolFamily.OPENAI,
+        all_guidance_sandbox=True,
+    )
+
+    # The memory tool runs inside programs, so the prompt names its function.
+    assert _guidance_headings(offered_prompt) == [
+        *expected[:-1],
+        f"tools.{MemoryTool.NAME}",
+    ]
+    assert _guidance_headings(estimate_prompt) == expected
+    # The sandbox section names its tools in tool order too.
+    assert (
+        "Run commands with `exec_command`, use `write_stdin` for commands that "
+        "are still running and edit files with `apply_patch`."
+    ) in offered_prompt
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+@pytest.mark.parametrize("code_mode", [False, True])
+@pytest.mark.parametrize("with_sandbox", [False, True])
+def test_the_search_guidance_opens_the_tools_section(
+    family: ToolFamily, code_mode: bool, with_sandbox: bool
+) -> None:
+    """The search guidance has no heading, so it comes before every tool's
+    section and never reads as part of one, also when web search, which
+    ranks after the code mode and sandbox tools, is the only search tool."""
+    sandbox = SANDBOX_TOOLS[family]
+    turn = SandboxTurn(
+        tenant_id="t",
+        user_id=uuid4(),
+        chat_session_id=uuid4(),
+        vm_chat_files=[],
+        copy_vm_chat_files=False,
+        shell=sandbox.shell,
+    )
+    functions: list[Tool] = [
+        MemoryTool(tool_id=1, llm=MagicMock()),
+        *([tool(turn) for tool in sandbox.tools] if with_sandbox else []),
+    ]
+    offered = [
+        _guided(WebSearchTool, WebSearchTool.NAME),
+        *(
+            with_code_mode(functions, CODE_MODE_SHAPES[family])[0]
+            if code_mode
+            else functions
+        ),
+    ]
+    estimate = build_system_prompt(
+        "base",
+        include_user_info=False,
+        all_guidance_family=family,
+        all_guidance_sandbox=with_sandbox,
+    )
+
+    for prompt in (_code_mode_prompt(offered), estimate):
+        assert prompt.split(TOOL_SECTION_HEADER, 1)[1].startswith(
+            TOOL_DESCRIPTION_SEARCH_GUIDANCE
+        )
 
 
 class _DirectOnlyTool(EchoTool):
@@ -529,9 +655,9 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
 
     [request] = llm.requests
     assert _offered(request) == [
-        "send_email",
         EXEC_TOOL_NAME,
         WAIT_TOOL_NAME,
+        "send_email",
     ]
     assert request["tool_choice"] == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {operation}." in str(request)
@@ -566,9 +692,9 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
     first, final = llm.requests
     assert first["tools"] == final["tools"]
     assert _offered(final) == [
-        "send_email",
         EXEC_TOOL_NAME,
         WAIT_TOOL_NAME,
+        "send_email",
     ]
     assert final["tool_choice"] == ToolChoiceOptions.NONE
 

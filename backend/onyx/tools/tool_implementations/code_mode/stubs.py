@@ -21,6 +21,7 @@ from onyx.tools.models import (
     CodeModeResultSpec,
     CustomToolCallSummary,
 )
+from onyx.tools.ordering import tool_order
 from onyx.tools.tool_implementations.code_mode.models import (
     SchemaRefBudget,
     SchemaType,
@@ -151,6 +152,7 @@ class ToolFunction(BaseModel):
 class ToolStubs(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+    # Function name -> function, in tool order (onyx/tools/ordering.py).
     functions: Mapping[str, ToolFunction]
     # The name that programs call each function's tool by, by its tool name.
     called_names: Mapping[str, str]
@@ -228,27 +230,16 @@ class ToolStubs(BaseModel):
 
     @property
     def deferred_namespaces(self) -> dict[str, str | None]:
-        """Each namespace of the deferred functions and its description:
-        the built-in namespaces in name order, then those of integrations
-        (MCP servers), in name order. The tools of one namespace share its
-        owner's description."""
-        namespaces: dict[str, tuple[bool, str | None]] = {}
+        """Each namespace of the deferred functions and its description, in
+        the order of the functions: by tool rank, then by name, so built-in
+        namespaces come before those of integrations (MCP servers). The tools
+        of one namespace share its owner's description."""
+        namespaces: dict[str, str | None] = {}
         for function in self.functions.values():
             name = function.tool.code_mode_function_name
             if function.deferred and name.namespace is not None:
-                namespaces.setdefault(
-                    name.namespace,
-                    (
-                        function.tool.integration_action is not None,
-                        name.namespace_description,
-                    ),
-                )
-        return {
-            namespace: description
-            for namespace, (_, description) in sorted(
-                namespaces.items(), key=lambda item: (item[1][0], item[0])
-            )
-        }
+                namespaces.setdefault(name.namespace, name.namespace_description)
+        return namespaces
 
     @property
     def has_deferred_functions_without_namespace(self) -> bool:
@@ -898,7 +889,9 @@ def build_tool_stubs(shape: CodeModeShape, tools: Sequence[Tool]) -> ToolStubs:
         tool.name: f"{TOOLS_NAMESPACE}.{name}" for name, tool in named.items()
     }
     functions: dict[str, ToolFunction] = {}
-    for name, tool in named.items():
+    # The description lists the functions in tool order; the name order above
+    # only gives repeated names their suffixes.
+    for name, tool in sorted(named.items(), key=lambda item: tool_order(item[1])):
         schema = tool.code_mode_result.output_schema
         functions[name] = tool_function(
             name,

@@ -70,6 +70,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.postgres.models import (
     CHAT_HISTORY_TABLES,
     PostgresQueryArgs,
@@ -651,6 +652,7 @@ def _format_rows(lines: list[str], noun: str, effective_limit: int) -> str:
 
 
 class PostgresTool(Tool):
+    rank = ToolRank.POSTGRES_QUERY
     NAME = POSTGRES_TOOL_NAME
     DISPLAY_NAME = "Knowledge Base Query"
     DESCRIPTION = (

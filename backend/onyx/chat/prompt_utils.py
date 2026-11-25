@@ -91,6 +91,7 @@ from onyx.tools.constants import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import LlmPythonExecutionResult, ToolPreference
+from onyx.tools.ordering import ToolRank, tool_order
 from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -114,6 +115,30 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
+
+# The tools that the system prompt guides: the tool type, its section, and
+# the name each tool family calls it by, which the token estimate uses.
+_TOOL_GUIDANCE: tuple[tuple[type[Tool], str, Mapping[ToolFamily, str]], ...] = (
+    (SearchTool, INTERNAL_SEARCH_GUIDANCE, dict.fromkeys(ToolFamily, SearchTool.NAME)),
+    (WebSearchTool, WEB_SEARCH_GUIDANCE, dict.fromkeys(ToolFamily, WebSearchTool.NAME)),
+    (
+        OpenURLTool,
+        OPEN_URLS_GUIDANCE,
+        {family: shape.name for family, shape in OPEN_URL_SHAPES.items()},
+    ),
+    (PythonTool, PYTHON_TOOL_GUIDANCE, dict.fromkeys(ToolFamily, PythonTool.NAME)),
+    (
+        ImageGenerationTool,
+        GENERATE_IMAGE_GUIDANCE,
+        dict.fromkeys(ToolFamily, ImageGenerationTool.NAME),
+    ),
+    (MemoryTool, MEMORY_GUIDANCE, dict.fromkeys(ToolFamily, MemoryTool.NAME)),
+    (
+        PostgresTool,
+        POSTGRES_QUERY_GUIDANCE,
+        dict.fromkeys(ToolFamily, PostgresTool.NAME),
+    ),
+)
 
 
 def callable_tools(tools: Sequence[Tool]) -> list[Tool]:
@@ -537,105 +562,84 @@ def build_system_prompt(
         system_prompt += REQUIRE_CITATION_GUIDANCE
         system_prompt += ANSWER_COVERAGE_GUIDANCE
 
+    # (tool type, rank, text): the guided tools, offered or, for the estimate,
+    # all of them.
+    guided: list[tuple[type[Tool], ToolRank, str]] = []
+    sandbox_section: str | None = None
+    sandbox_rank = ToolRank.SHELL
     if all_guidance_family is not None:
-        run_name = CODE_MODE_SHAPES[all_guidance_family].run_name
-        tool_sections = [
-            TOOL_DESCRIPTION_SEARCH_GUIDANCE,
-            INTERNAL_SEARCH_GUIDANCE.format(name=SearchTool.NAME),
-            WEB_SEARCH_GUIDANCE.format(
-                name=WebSearchTool.NAME,
-                site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE,
-            ),
-            OPEN_URLS_GUIDANCE.format(name=OPEN_URL_SHAPES[all_guidance_family].name),
-            PYTHON_TOOL_GUIDANCE.format(name=PythonTool.NAME),
-            GENERATE_IMAGE_GUIDANCE.format(name=ImageGenerationTool.NAME),
-            MEMORY_GUIDANCE.format(name=MemoryTool.NAME),
-            CODE_MODE_GUIDANCE.format(name=run_name),
-            POSTGRES_QUERY_GUIDANCE.format(name=PostgresTool.NAME),
-        ]
-        sandbox = SANDBOX_TOOLS[all_guidance_family]
-        sandbox_section = (
-            sandbox_guidance(
-                sandbox.tools, sandbox.shell, str, code_mode_run_name=run_name
+        code_mode_run_name = CODE_MODE_SHAPES[all_guidance_family].run_name
+        guided = [
+            (
+                tool_type,
+                tool_type.rank,
+                template.format(
+                    name=estimate_names[all_guidance_family],
+                    site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE,
+                ),
             )
-            if all_guidance_sandbox
-            else None
-        )
-        if sandbox_section is not None:
-            tool_sections.append(sandbox_section)
-        system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_sections)
-        return system_prompt
-
-    if tools:
+            for tool_type, template, estimate_names in _TOOL_GUIDANCE
+        ]
+        if all_guidance_sandbox:
+            sandbox = SANDBOX_TOOLS[all_guidance_family]
+            sandbox_section = sandbox_guidance(
+                sandbox.tools, sandbox.shell, str, code_mode_run_name=code_mode_run_name
+            )
+            sandbox_rank = min(tool.rank for tool in sandbox.tools)
+    elif tools:
         # Inner tools are functions of a code mode program, not direct tools.
         tools = callable_tools(tools)
-        tool_guidance_sections: list[str] = (
-            []
-            if code_mode_run_name is None
-            else [CODE_MODE_GUIDANCE.format(name=code_mode_run_name)]
-        )
-        search_tool = next((t for t in tools if isinstance(t, SearchTool)), None)
-        web_search_tool = next((t for t in tools if isinstance(t, WebSearchTool)), None)
-        open_url_tool = next((t for t in tools if isinstance(t, OpenURLTool)), None)
-        python_tool = next((t for t in tools if isinstance(t, PythonTool)), None)
-        image_tool = next(
-            (t for t in tools if isinstance(t, ImageGenerationTool)), None
-        )
-        memory_tool = next((t for t in tools if isinstance(t, MemoryTool)), None)
-        postgres_tool = next((t for t in tools if isinstance(t, PostgresTool)), None)
-
-        if web_search_tool is not None or search_tool is not None:
-            tool_guidance_sections.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
-
-        # These are not included at the Tool level because the ordering may matter.
-        if search_tool is not None:
-            tool_guidance_sections.append(
-                INTERNAL_SEARCH_GUIDANCE.format(name=called_name(search_tool.name))
-            )
-
-        if web_search_tool is not None:
-            site_disabled_guidance = (
-                ""
-                if web_search_tool.supports_site_filter
-                else WEB_SEARCH_SITE_DISABLED_GUIDANCE
-            )
-            tool_guidance_sections.append(
-                WEB_SEARCH_GUIDANCE.format(
-                    name=called_name(web_search_tool.name),
-                    site_colon_disabled=site_disabled_guidance,
-                )
-            )
-
-        for template, tool in (
-            (OPEN_URLS_GUIDANCE, open_url_tool),
-            (PYTHON_TOOL_GUIDANCE, python_tool),
-            (GENERATE_IMAGE_GUIDANCE, image_tool),
-            (MEMORY_GUIDANCE, memory_tool),
-            (POSTGRES_QUERY_GUIDANCE, postgres_tool),
-        ):
+        for tool_type, template, _ in _TOOL_GUIDANCE:
+            tool = next((t for t in tools if isinstance(t, tool_type)), None)
             if tool is not None:
-                tool_guidance_sections.append(
-                    template.format(name=called_name(tool.name))
+                guided.append(
+                    (
+                        tool_type,
+                        tool.rank,
+                        template.format(
+                            name=called_name(tool.name),
+                            site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE
+                            if isinstance(tool, WebSearchTool)
+                            and not tool.supports_site_filter
+                            else "",
+                        ),
+                    )
                 )
-
-        sandbox_tools = [tool for tool in tools if isinstance(tool, SandboxTool)]
+        sandbox_tools = sorted(
+            (tool for tool in tools if isinstance(tool, SandboxTool)), key=tool_order
+        )
         # The sandbox tools of an agent share one turn.
-        sandbox_section = (
-            sandbox_guidance(
+        if sandbox_tools:
+            sandbox_section = sandbox_guidance(
                 [type(tool) for tool in sandbox_tools],
                 sandbox_tools[0].turn.shell,
                 called_name,
                 code_mode_run_name=code_mode_run_name,
             )
-            if sandbox_tools
-            else None
+            sandbox_rank = sandbox_tools[0].rank
+
+    # Each tool's section has the rank of its tool, and the sections follow
+    # the tool order (onyx/tools/ordering.py).
+    sections: list[tuple[ToolRank, str]] = [(rank, text) for _, rank, text in guided]
+    if code_mode_run_name is not None:
+        sections.append(
+            (ToolRank.CODE_MODE_RUN, CODE_MODE_GUIDANCE.format(name=code_mode_run_name))
         )
-        if sandbox_section is not None:
-            tool_guidance_sections.append(sandbox_section)
+    if sandbox_section is not None:
+        sections.append((sandbox_rank, sandbox_section))
 
-        if tool_guidance_sections:
-            system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
-
+    if sections:
+        # The search guidance is about all search tools, so it has no heading
+        # and opens the tools section, before every tool's own section.
+        has_search = any(
+            tool_type in (SearchTool, WebSearchTool) for tool_type, _, _ in guided
+        )
+        system_prompt += TOOL_SECTION_HEADER + "\n".join(
+            [
+                *([TOOL_DESCRIPTION_SEARCH_GUIDANCE] if has_search else []),
+                *(section for _, section in sorted(sections, key=lambda item: item[0])),
+            ]
+        )
     return system_prompt
 
 

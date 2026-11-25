@@ -41,6 +41,7 @@ from onyx.tools.models import (
     ToolApprovalScope,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_name import normalize_external_tool_name, sanitize_tool_name
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION
 from onyx.utils.logger import setup_logger
@@ -100,6 +101,8 @@ class MCPTool(Tool):
     that construction resolved, and resolves it again only when its token
     is near expiry. ``oauth_server`` lets the MCP SDK refresh an OAuth2
     token during the call."""
+
+    rank = ToolRank.INTEGRATION
 
     def __init__(
         self,
