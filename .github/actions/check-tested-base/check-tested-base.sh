@@ -37,7 +37,27 @@ else
 fi
 TARGET="${MERGE_GROUP_BASE_REF#refs/heads/}"
 
-pr_json="$(gh pr view "${PR_NUMBER}" --repo "${REPO}" --json headRefName,headRefOid,isCrossRepository,author)"
+# Runs a read-only gh command and prints its output. A failed read (a GitHub
+# error, or a body that is not JSON) is tried again: one bad answer must not
+# fail this check, because in a stack it ejects every PR from the queue. It
+# fails when every try fails.
+GH_TRIES=5
+gh_read() {
+  local try output
+  for ((try = 1; try <= GH_TRIES; try++)); do
+    if output="$(gh "$@")"; then
+      printf '%s' "${output}"
+      return 0
+    fi
+    echo "GitHub read failed (try ${try}/${GH_TRIES}): gh $1 $2" >&2
+    if ((try < GH_TRIES)); then
+      sleep 15
+    fi
+  done
+  return 1
+}
+
+pr_json="$(gh_read pr view "${PR_NUMBER}" --repo "${REPO}" --json headRefName,headRefOid,isCrossRepository,author)"
 HEAD_REF="$(jq -r '.headRefName' <<<"${pr_json}")"
 HEAD_SHA="$(jq -r '.headRefOid' <<<"${pr_json}")"
 IS_CROSS_REPO="$(jq -r '.isCrossRepository' <<<"${pr_json}")"
@@ -57,7 +77,7 @@ QUEUE_LOADED=false
 load_queue() {
   if [[ "${QUEUE_LOADED}" != "true" ]]; then
     # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
-    QUEUED=" $(gh api graphql \
+    QUEUED=" $(gh_read api graphql \
       -f query='query($owner: String!, $name: String!, $branch: String!) {
         repository(owner: $owner, name: $name) {
           mergeQueue(branch: $branch) { entries(first: 100) { nodes { pullRequest { number } } } }
@@ -76,7 +96,7 @@ load_queue() {
 BUILD_LIMIT=""
 load_build_limit() {
   if [[ -z "${BUILD_LIMIT}" ]]; then
-    BUILD_LIMIT="$(gh api "repos/${REPO}/rules/branches/${TARGET}" \
+    BUILD_LIMIT="$(gh_read api "repos/${REPO}/rules/branches/${TARGET}" \
       --jq '[.[] | select(.type == "merge_queue") | .parameters.max_entries_to_build] | first // empty')"
     : "${BUILD_LIMIT:?Cannot read max_entries_to_build of the ${TARGET} merge queue.}"
   fi
@@ -158,7 +178,7 @@ wait_for_entries() {
 # A PR in a GitHub stack merges only with the whole stack (gh stack merge),
 # because the stack tip's run is the one that tests the PRs below it.
 # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
-stack_json="$(gh api graphql \
+stack_json="$(gh_read api graphql \
   -f query='query($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) {
       pullRequest(number: $number) {
@@ -185,7 +205,7 @@ fi
 
 # Verdict record of CONTEXT on commit $1: "<tested base sha> <tested base ref>".
 verdict_on() {
-  gh api "repos/${REPO}/commits/${1}/status" \
+  gh_read api "repos/${REPO}/commits/${1}/status" \
     | jq -r --arg ctx "${CONTEXT}" '.statuses[] | select(.context == $ctx) | .description'
 }
 
@@ -193,7 +213,7 @@ verdict_on() {
 # "ahead" or "identical" only when base is an ancestor of head.
 is_ancestor() {
   local status
-  if ! status="$(gh api "repos/${REPO}/compare/${1}...${2}" --jq '.status' 2>/dev/null)"; then
+  if ! status="$(gh_read api "repos/${REPO}/compare/${1}...${2}" --jq '.status')"; then
     status="unknown"
   fi
   echo "compare ${1}...${2}: ${status}"
@@ -202,7 +222,7 @@ is_ancestor() {
 
 # Open same-repo PRs, read once. Stacks can be dozens of PRs deep, so the walks
 # below use this list instead of one API call for each level.
-OPEN_PRS="$(gh pr list --repo "${REPO}" --state open --limit 2000 \
+OPEN_PRS="$(gh_read pr list --repo "${REPO}" --state open --limit 2000 \
   --json number,headRefName,baseRefName,headRefOid,isCrossRepository \
   --jq '[.[] | select(.isCrossRepository == false)]')"
 MAX_CHAIN_DEPTH=500
@@ -240,7 +260,7 @@ base_landed() {
   # never enters the target as-is, so look at the parent PR instead: the tested
   # tip must be part of the parent's head, and the parent must have merged into
   # the target or still be open against it.
-  parents="$(gh pr list --repo "${REPO}" --head "${tested_ref}" --state all --limit 20 \
+  parents="$(gh_read pr list --repo "${REPO}" --head "${tested_ref}" --state all --limit 20 \
     --json number,state,baseRefName,headRefOid,mergeCommit,isCrossRepository \
     --jq '[.[] | select(.isCrossRepository == false and (.state == "MERGED" or .state == "OPEN"))]
           | sort_by(.state)[]
