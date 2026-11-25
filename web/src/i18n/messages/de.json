@@ -15087,7 +15087,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added} Hinzufügungen, {removed} Löschungen"
+          "label": "{added, plural, one {# Hinzufügung} other {# Hinzufügungen}}, {removed, plural, one {# Löschung} other {# Löschungen}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {# unveränderte Zeile} other {# unveränderte Zeilen}}"
