@@ -426,7 +426,7 @@ admin value is not Ask.
 checks every request the MCP SDK makes, redirects included, at the admin SSRF
 Protection level. `MCP_SERVER_ALLOW_PRIVATE_NETWORK` and
 `MCP_SERVER_ALLOW_LOOPBACK` only seed that level's default. OpenAPI tools use
-`tools/tool_implementations/custom/custom_tool.py:custom_tool_ssrf_params`:
+`tools/tool_implementations/http_request.py:tool_request_ssrf_params`:
 self-hosted allows private targets at every level and loopback only at
 `DISABLED`, cloud blocks all internal targets, and `ssrf_safe_request` does not
 follow redirects.
