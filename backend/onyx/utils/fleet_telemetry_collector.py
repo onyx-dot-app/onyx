@@ -6,17 +6,20 @@ the rows that changed since the previous run and the work that is still running.
 """
 
 import json
+import random
 import re
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from itertools import groupby
 from typing import Any, TypedDict, TypeIs
 
+from sqlalchemy.orm import Session
+
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import DISABLE_VECTOR_DB, OAUTH_ENABLED
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -26,13 +29,18 @@ from onyx.db.fleet_telemetry import (
     attempt_rows,
     connector_rows,
     email_domain_rows,
+    first_question_at,
     has_indexed_connectors__no_commit,
     job_rows,
     license_row,
     limit_statement_time,
+    setup_counts,
     stage_rows,
     standard_user_counts,
+    usage_counts,
+    usage_week_rows,
 )
+from onyx.llm.constants import LlmProviderNames
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.fleet_telemetry import (
     CONNECTOR_ROW_SETTINGS,
@@ -45,6 +53,7 @@ from onyx.utils.fleet_telemetry import (
     sanitize_data,
 )
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.configs import MULTI_TENANT
 
 # The first run reads one hour back. After a long pause, a run reads one day back.
 _FIRST_WINDOW: timedelta = timedelta(hours=1)
@@ -107,6 +116,23 @@ _ERROR_STAGES: dict[str, str] = {
     "index_write": "write",
     "parse": "prepare",
 }
+# Usage and setup counts go out about once an hour. Cloud runs a pass for each
+# tenant, so each tenant's first read waits a random part of the hour, and each
+# later read a random part of the jitter, to spread them out.
+_USAGE_SECONDS: float = 3600
+_USAGE_JITTER_SECONDS: float = 600
+_USAGE_DUE_KEY: str = "fleet_telemetry_usage_due"
+# The weekly history goes out a few weeks per read, with a random gap between
+# reads, from the first question to the last completed week. About every 30 days
+# it starts again from the first week, so a lost or changed week is corrected.
+# The service replaces each week, so sending a week again never adds to it.
+_HISTORY_KEY: str = "fleet_telemetry_usage_history"
+_HISTORY_WEEKS_PER_READ: int = 4
+_HISTORY_GAP_SECONDS: tuple[float, float] = (600, 1800)
+_HISTORY_REFRESH: timedelta = timedelta(days=30)
+# Onyx chat history cannot start earlier. Bounds the weeks a wrong clock can add.
+_EARLIEST_WEEK: date = date(2023, 1, 2)
+_LLM_PROVIDER_TYPES: frozenset[str] = frozenset(name.value for name in LlmProviderNames)
 # A public DNS name. Addresses, single labels, and paths do not match.
 _EMAIL_DOMAIN: re.Pattern[str] = re.compile(
     r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\Z"
@@ -547,6 +573,165 @@ def stage_data(row: dict[str, Any], attempt: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _jitter(low: float, high: float) -> float:
+    return random.uniform(low, high)
+
+
+def _week_of(at: datetime) -> date:
+    day: date = at.astimezone(timezone.utc).date()
+    return day - timedelta(days=day.weekday())
+
+
+def _read_or_none(db_session: Session, read: Callable[[], Any]) -> Any:
+    """Run one read in a savepoint. A read that fails, for example on the statement
+    timeout, returns None and leaves the transaction usable for the next read."""
+    try:
+        with db_session.begin_nested():
+            return read()
+    except Exception:
+        return None
+
+
+def setup_data(
+    counts: dict[str, int], providers: list[tuple[str, int]]
+) -> dict[str, Any]:
+    """Setup counts. Provider types outside Onyx's list count as custom."""
+    by_type: dict[str, int] = {}
+    for provider, count in providers:
+        kind: str = provider if provider in _LLM_PROVIDER_TYPES else "custom"
+        by_type[kind] = by_type.get(kind, 0) + count
+    return {
+        **counts,
+        "llm_providers": by_type,
+        # Cloud's Google login is the same for every tenant, so only rows count there.
+        "sso_configured": counts["sso_providers"] > 0
+        or (OAUTH_ENABLED and not MULTI_TENANT),
+    }
+
+
+class _HistoryState(TypedDict):
+    # The oldest week not sent yet in this cycle; None until the first question is read.
+    next_week: str | None
+    cycle_started_at: float
+    due_at: float
+
+
+def _send_usage_history(
+    sender: BoundedTelemetry,
+    cache: CacheBackend,
+    db_session: Session,
+    tenant_id: str,
+    state: _HistoryState,
+    now: datetime,
+) -> bool:
+    """Send the next few completed weeks. False when a read failed."""
+    current_week: date = _week_of(now)
+    state["due_at"] = now.timestamp() + _jitter(*_HISTORY_GAP_SECONDS)
+    ok: bool = True
+    if state["next_week"] is None:
+        first: Any = _read_or_none(db_session, lambda: (first_question_at(db_session),))
+        if first is None:
+            ok = False
+        elif first[0] is None:
+            # No question yet: the first one is in this week or later.
+            state["next_week"] = current_week.isoformat()
+        else:
+            state["next_week"] = max(_week_of(first[0]), _EARLIEST_WEEK).isoformat()
+    if state["next_week"] is not None:
+        start: date = date.fromisoformat(state["next_week"])
+        end: date = min(start + timedelta(weeks=_HISTORY_WEEKS_PER_READ), current_week)
+        if start < end:
+            rows: Any = _read_or_none(
+                db_session, lambda: usage_week_rows(db_session, start, end)
+            )
+            if rows is None:
+                ok = False
+            else:
+                by_week = {row.week_start: row for row in rows}
+                week: date = start
+                while week < end:
+                    row = by_week.get(week)
+                    data: dict[str, Any] = {
+                        "week_start": week.isoformat(),
+                        "queries": row.queries if row else 0,
+                        "sessions": row.sessions if row else 0,
+                        "active_users": row.active_users if row else 0,
+                    }
+                    if not _queue(sender, "usage_week", data, tenant_id):
+                        break
+                    week += timedelta(weeks=1)
+                # A full queue stops here; the next read resumes at this week.
+                state["next_week"] = week.isoformat()
+    cache.set(_HISTORY_KEY, json.dumps(state), ex=_CACHE_SECONDS)
+    return ok
+
+
+def collect_usage(
+    sender: BoundedTelemetry, cache: CacheBackend, tenant_id: str, now: datetime
+) -> None:
+    """Usage and setup counts about once an hour, and the next weeks of history.
+    Each read runs only when it is due, so most passes read nothing here."""
+    stored: bytes | None = cache.get(_USAGE_DUE_KEY)
+    if stored is None:
+        usage_due_at: float = now.timestamp() + _jitter(0, _USAGE_SECONDS)
+        cache.set(_USAGE_DUE_KEY, str(usage_due_at), ex=_CACHE_SECONDS)
+    else:
+        usage_due_at = float(stored)
+    history: bytes | None = cache.get(_HISTORY_KEY)
+    state: _HistoryState
+    if history is None:
+        state = {
+            "next_week": None,
+            "cycle_started_at": now.timestamp(),
+            "due_at": now.timestamp() + _jitter(0, _USAGE_SECONDS),
+        }
+        cache.set(_HISTORY_KEY, json.dumps(state), ex=_CACHE_SECONDS)
+    else:
+        state = json.loads(history)
+        if (
+            now.timestamp() - state["cycle_started_at"]
+            > _HISTORY_REFRESH.total_seconds()
+        ):
+            state["next_week"] = None
+            state["cycle_started_at"] = now.timestamp()
+    history_due: bool = state["due_at"] <= now.timestamp() and (
+        state["next_week"] is None
+        or date.fromisoformat(state["next_week"]) < _week_of(now)
+    )
+    usage_due: bool = usage_due_at <= now.timestamp()
+    if not usage_due and not history_due:
+        return
+    failures: int = 0
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        limit_statement_time(db_session)
+        if usage_due:
+            cache.set(
+                _USAGE_DUE_KEY,
+                str(
+                    now.timestamp() + _USAGE_SECONDS + _jitter(0, _USAGE_JITTER_SECONDS)
+                ),
+                ex=_CACHE_SECONDS,
+            )
+            usage: Any = _read_or_none(
+                db_session, lambda: usage_counts(db_session, now)
+            )
+            if usage is None:
+                failures += 1
+            else:
+                _queue(sender, "usage", usage, tenant_id)
+            setup: Any = _read_or_none(db_session, lambda: setup_counts(db_session))
+            if setup is None:
+                failures += 1
+            else:
+                _queue(sender, "setup", setup_data(*setup), tenant_id)
+        if history_due and not _send_usage_history(
+            sender, cache, db_session, tenant_id, state, now
+        ):
+            failures += 1
+    if failures:
+        sender.health["usage_errors"] = sender.health.get("usage_errors", 0) + failures
+
+
 def collect_snapshots(tenant_id: str) -> None:
     """One collection pass for one tenant. Never raises."""
     sender: BoundedTelemetry | None = get_sender()
@@ -657,6 +842,10 @@ def collect_snapshots(tenant_id: str) -> None:
         cache.set(_CURSOR_KEY, next_since.isoformat(), ex=_CACHE_SECONDS)
         sender.health["source_consecutive_errors"] = 0
         sender.health["last_source_success_at"] = started.isoformat()
+        try:
+            collect_usage(sender, cache, tenant_id, started)
+        except Exception:
+            sender.health["usage_errors"] = sender.health.get("usage_errors", 0) + 1
     except Exception:
         # No SQL, identifiers, or exception text leave the process.
         sender.health["source_errors"] = sender.health.get("source_errors", 0) + 1
