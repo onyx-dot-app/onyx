@@ -1,6 +1,8 @@
 import hashlib
 import re
 
+from onyx.external_apps.models import WHOLE_DOMAIN_ACTION_TYPE
+
 # Bedrock rejects toolUse.name values that don't match [a-zA-Z0-9_-]+, and
 # OpenAI imposes the same constraint on function names. User-supplied Tool.name
 # and OpenAPI operationId can contain spaces, dots, etc.
@@ -24,11 +26,6 @@ def normalize_external_tool_name(qualified: str) -> str:
     return f"{sanitized[:prefix_length]}_{digest}"
 
 
-# The action key of a request to an app that is no catalog action
-# (``WHOLE_DOMAIN_ACTION_TYPE``).
-_OTHER_REQUESTS_ACTION = "unspecified"
-
-
 def custom_tool_name(integration_id: int, operation_id: str) -> str:
     """The chat tool of one REST operation or GraphQL root field. A GraphQL
     key (``query.<field>``) loses its dot, so the name needs no hash."""
@@ -40,7 +37,7 @@ def app_action_tool_name(integration_id: int, action_key: str) -> str:
     """The chat tool of one action of a preset."""
     suffix = (
         "request"
-        if action_key == _OTHER_REQUESTS_ACTION
+        if action_key == WHOLE_DOMAIN_ACTION_TYPE
         else action_key.replace(".", "_")
     )
     return normalize_external_tool_name(f"app__{integration_id}__{suffix}")

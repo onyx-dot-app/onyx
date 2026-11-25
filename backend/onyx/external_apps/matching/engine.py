@@ -14,14 +14,12 @@ from onyx.db.enums import (
 )
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
+from onyx.external_apps.models import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.external_apps.providers.actions import EndpointSpec, GraphQLOp
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# action_type for a domain-matched request that hit no catalog action.
-WHOLE_DOMAIN_ACTION_TYPE = "unspecified"
 
 
 class MatchedAction(BaseModel):
