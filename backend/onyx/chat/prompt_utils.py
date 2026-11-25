@@ -60,18 +60,12 @@ from onyx.prompts.prompt_utils import (
     get_company_context,
     substitute_user_placeholders,
 )
+from onyx.prompts.sandbox_tools import SANDBOX_GUIDANCE, SANDBOX_SHELL_LINE
 from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
-    GENERATE_IMAGE_GUIDANCE,
-    INTERNAL_SEARCH_GUIDANCE,
-    MEMORY_GUIDANCE,
-    OPEN_URLS_GUIDANCE,
-    POSTGRES_QUERY_GUIDANCE,
-    PYTHON_TOOL_GUIDANCE,
+    OPEN_URL_AFTER_WEB_SEARCH_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
     TOOL_SECTION_HEADER,
-    WEB_SEARCH_GUIDANCE,
-    WEB_SEARCH_SITE_DISABLED_GUIDANCE,
 )
 from onyx.prompts.user_info import (
     BASIC_INFORMATION_PROMPT,
@@ -86,6 +80,7 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
+from onyx.server.features.build.sandbox.models import session_workspace
 from onyx.tools.constants import (
     FILE_READER_TOOL_NAME,
 )
@@ -106,8 +101,8 @@ from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     SANDBOX_TOOLS,
+    ExecCommandTool,
     SandboxTool,
-    sandbox_guidance,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -115,30 +110,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
-
-# The tools that the system prompt guides: the tool type, its section, and
-# the name each tool family calls it by, which the token estimate uses.
-_TOOL_GUIDANCE: tuple[tuple[type[Tool], str, Mapping[ToolFamily, str]], ...] = (
-    (SearchTool, INTERNAL_SEARCH_GUIDANCE, dict.fromkeys(ToolFamily, SearchTool.NAME)),
-    (WebSearchTool, WEB_SEARCH_GUIDANCE, dict.fromkeys(ToolFamily, WebSearchTool.NAME)),
-    (
-        OpenURLTool,
-        OPEN_URLS_GUIDANCE,
-        {family: shape.name for family, shape in OPEN_URL_SHAPES.items()},
-    ),
-    (PythonTool, PYTHON_TOOL_GUIDANCE, dict.fromkeys(ToolFamily, PythonTool.NAME)),
-    (
-        ImageGenerationTool,
-        GENERATE_IMAGE_GUIDANCE,
-        dict.fromkeys(ToolFamily, ImageGenerationTool.NAME),
-    ),
-    (MemoryTool, MEMORY_GUIDANCE, dict.fromkeys(ToolFamily, MemoryTool.NAME)),
-    (
-        PostgresTool,
-        POSTGRES_QUERY_GUIDANCE,
-        dict.fromkeys(ToolFamily, PostgresTool.NAME),
-    ),
-)
 
 
 def callable_tools(tools: Sequence[Tool]) -> list[Tool]:
@@ -340,6 +311,8 @@ def calculate_reserved_tokens(
 
     This is used for token estimation purposes to reserve space for:
     - The system prompt (base + custom agent prompt + all guidance)
+    - The descriptions of the built-in tools and, with `sandbox_tools`, the
+      family's sandbox tools, which carry their usage guidance
     - User files attached to the message
 
     Args:
@@ -354,7 +327,6 @@ def calculate_reserved_tokens(
     Returns:
         Total reserved token count
     """
-    # This is for token estimation purposes
     fake_system_prompt = build_system_prompt(
         base_system_prompt=base_system_prompt,
         datetime_aware=True,
@@ -367,7 +339,27 @@ def calculate_reserved_tokens(
 
     custom_agent_prompt = persona_system_prompt or ""
 
-    reserved_token_count = token_counter(custom_agent_prompt + " " + fake_system_prompt)
+    # The built-in tools and the family's sandbox tools carry their usage
+    # guidance in their descriptions, so the estimate counts the longest
+    # description of each.
+    sandbox = SANDBOX_TOOLS[tool_family]
+    guided_tool_descriptions = (
+        SearchTool.DESCRIPTION,
+        WebSearchTool.DESCRIPTION_NO_SITE_FILTER,
+        OpenURLTool.DESCRIPTION_NO_WEB_FETCH,
+        PostgresTool.DESCRIPTION,
+        PythonTool.DESCRIPTION,
+        ImageGenerationTool.DESCRIPTION,
+        MemoryTool.DESCRIPTION,
+        *(
+            tool.describe_in(sandbox.shell, str, chat_files=True)
+            for tool in sandbox.tools
+            if sandbox_tools
+        ),
+    )
+    reserved_token_count = token_counter(
+        " ".join([custom_agent_prompt, fake_system_prompt, *guided_tool_descriptions])
+    )
 
     # Calculate total token count for files in the last message
     file_token_count = 0
@@ -532,13 +524,15 @@ def build_system_prompt(
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
 
-    `tools` are the offered tools. Tools that run inside their calls, such as code
-    mode functions, get their guidance too, and the prompt names each tool as
-    `called_name` gives it (in code mode, its program function);
-    `code_mode_run_name` names the code mode run tool when code mode applies.
-    With `all_guidance_family`, the prompt is a token estimate: it has the
-    guidance of every guided tool, named as that tool family names it, and
-    with `all_guidance_sandbox` the family's sandbox tools.
+    `tools` are the offered tools. The tools section has the guidance that
+    spans tools; each tool's own guidance is in its description. Tools that
+    run inside their calls, such as code mode functions, count too, and the
+    prompt names each tool as `called_name` gives it (in code mode, its
+    program function); `code_mode_run_name` names the code mode run tool when
+    code mode applies. With `all_guidance_family`, the prompt is a token
+    estimate: it has every piece of that guidance, with tools named as that
+    tool family names them, and with `all_guidance_sandbox` the family's
+    sandbox section.
 
     With include_user_info=False the per-user block is left out so the result is
     byte-identical across users; emit it separately via build_user_information_prompt.
@@ -562,81 +556,72 @@ def build_system_prompt(
         system_prompt += REQUIRE_CITATION_GUIDANCE
         system_prompt += ANSWER_COVERAGE_GUIDANCE
 
-    # (tool type, rank, text): the guided tools, offered or, for the estimate,
-    # all of them.
-    guided: list[tuple[type[Tool], ToolRank, str]] = []
-    sandbox_section: str | None = None
-    sandbox_rank = ToolRank.SHELL
+    # Guidance that spans tools; each tool's own guidance is in its
+    # description. The search guidance covers every search tool, so it has no
+    # heading and opens the tools section, followed by URL reading after a web
+    # search. The other sections have the rank of their tools and follow the
+    # tool order (onyx/tools/ordering.py).
+    leading: list[str] = []
+    sections: list[tuple[ToolRank, str]] = []
     if all_guidance_family is not None:
         code_mode_run_name = CODE_MODE_SHAPES[all_guidance_family].run_name
-        guided = [
-            (
-                tool_type,
-                tool_type.rank,
-                template.format(
-                    name=estimate_names[all_guidance_family],
-                    site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE,
-                ),
-            )
-            for tool_type, template, estimate_names in _TOOL_GUIDANCE
+        leading = [
+            TOOL_DESCRIPTION_SEARCH_GUIDANCE,
+            OPEN_URL_AFTER_WEB_SEARCH_GUIDANCE.format(
+                name=OPEN_URL_SHAPES[all_guidance_family].name
+            ),
         ]
         if all_guidance_sandbox:
             sandbox = SANDBOX_TOOLS[all_guidance_family]
-            sandbox_section = sandbox_guidance(
-                sandbox.tools, sandbox.shell, str, code_mode_run_name=code_mode_run_name
+            sections.append(
+                (
+                    min(tool.rank for tool in sandbox.tools),
+                    SANDBOX_GUIDANCE.format(
+                        # A working directory as long as every chat's.
+                        workdir=session_workspace(UUID(int=0)),
+                        shell_line=SANDBOX_SHELL_LINE,
+                    ),
+                )
             )
-            sandbox_rank = min(tool.rank for tool in sandbox.tools)
     elif tools:
         # Inner tools are functions of a code mode program, not direct tools.
         tools = callable_tools(tools)
-        for tool_type, template, _ in _TOOL_GUIDANCE:
-            tool = next((t for t in tools if isinstance(t, tool_type)), None)
-            if tool is not None:
-                guided.append(
-                    (
-                        tool_type,
-                        tool.rank,
-                        template.format(
-                            name=called_name(tool.name),
-                            site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE
-                            if isinstance(tool, WebSearchTool)
-                            and not tool.supports_site_filter
-                            else "",
-                        ),
-                    )
+        if any(isinstance(tool, (SearchTool, WebSearchTool)) for tool in tools):
+            leading.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
+        open_url_tool = next((t for t in tools if isinstance(t, OpenURLTool)), None)
+        if open_url_tool is not None and any(
+            isinstance(tool, WebSearchTool) for tool in tools
+        ):
+            leading.append(
+                OPEN_URL_AFTER_WEB_SEARCH_GUIDANCE.format(
+                    name=called_name(open_url_tool.name)
                 )
+            )
         sandbox_tools = sorted(
             (tool for tool in tools if isinstance(tool, SandboxTool)), key=tool_order
         )
         # The sandbox tools of an agent share one turn.
         if sandbox_tools:
-            sandbox_section = sandbox_guidance(
-                [type(tool) for tool in sandbox_tools],
-                sandbox_tools[0].turn.shell,
-                called_name,
-                code_mode_run_name=code_mode_run_name,
+            sections.append(
+                (
+                    sandbox_tools[0].rank,
+                    SANDBOX_GUIDANCE.format(
+                        workdir=sandbox_tools[0].turn.workdir,
+                        shell_line=SANDBOX_SHELL_LINE
+                        if any(isinstance(tool, ExecCommandTool) for tool in tools)
+                        else "",
+                    ),
+                )
             )
-            sandbox_rank = sandbox_tools[0].rank
-
-    # Each tool's section has the rank of its tool, and the sections follow
-    # the tool order (onyx/tools/ordering.py).
-    sections: list[tuple[ToolRank, str]] = [(rank, text) for _, rank, text in guided]
     if code_mode_run_name is not None:
         sections.append(
             (ToolRank.CODE_MODE_RUN, CODE_MODE_GUIDANCE.format(name=code_mode_run_name))
         )
-    if sandbox_section is not None:
-        sections.append((sandbox_rank, sandbox_section))
 
-    if sections:
-        # The search guidance is about all search tools, so it has no heading
-        # and opens the tools section, before every tool's own section.
-        has_search = any(
-            tool_type in (SearchTool, WebSearchTool) for tool_type, _, _ in guided
-        )
+    if leading or sections:
         system_prompt += TOOL_SECTION_HEADER + "\n".join(
             [
-                *([TOOL_DESCRIPTION_SEARCH_GUIDANCE] if has_search else []),
+                *leading,
                 *(section for _, section in sorted(sections, key=lambda item: item[0])),
             ]
         )

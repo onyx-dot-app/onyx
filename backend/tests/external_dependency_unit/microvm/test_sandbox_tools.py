@@ -1723,12 +1723,15 @@ def test_claude_models_get_edit_and_write_and_others_apply_patch(
     assert offered & (file_tools | {ApplyPatchTool.NAME}) == (
         file_tools if claude else {ApplyPatchTool.NAME}
     )
-    # The system prompt's sandbox section names the turn's file tools.
-    assert (
-        "edit files with `edit` and create or overwrite files with `write`."
-        if claude
-        else "edit files with `apply_patch`."
-    ) in str(request["prompt"])
+    # The file tools say that the user sees each change as a diff.
+    descriptions = {
+        tool["function"]["name"]: tool["function"]["description"]
+        for tool in request.get("tools") or []
+    }
+    assert all(
+        "The user sees the change as a diff." in descriptions[name]
+        for name in (file_tools if claude else {ApplyPatchTool.NAME})
+    )
 
 
 @pytest.mark.usefixtures("node")
@@ -1828,10 +1831,6 @@ def test_a_program_edits_and_writes_files(
     )
     chat.send(llm, code_mode=True)
 
-    assert (
-        "edit files with `tools.edit` and create or overwrite files with "
-        "`tools.write`." in str(llm.requests[0]["prompt"])
-    )
     text = last_tool_text(llm, "code")
     assert "File created successfully at: a.txt" in text
     assert "The file a.txt has been updated successfully." in text

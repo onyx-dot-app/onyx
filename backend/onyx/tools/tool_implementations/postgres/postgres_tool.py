@@ -61,6 +61,7 @@ from onyx.db.postgres_tool_models import (
     GroupCount,
 )
 from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.prompts.tool_prompts import POSTGRES_QUERY_DESCRIPTION
 from onyx.tools.constants import POSTGRES_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
 from onyx.tools.models import (
@@ -655,17 +656,7 @@ class PostgresTool(Tool):
     rank = ToolRank.POSTGRES_QUERY
     NAME = POSTGRES_TOOL_NAME
     DISPLAY_NAME = "Knowledge Base Query"
-    DESCRIPTION = (
-        "Run an exact, structured query over Onyx's metadata tables instead of "
-        "semantic search. Use it to count or exhaustively list documents by "
-        "metadata (source, title substring, update date, owner, folder), to "
-        "browse source folder structure, to find the user's past conversations "
-        "or messages, and to look up which documents a past answer cited. Not "
-        "for questions about document content or meaning — use search for "
-        "those. Results are permission-scoped to the current user. Document "
-        "listings come in pages: pass each page's next_cursor back as cursor "
-        "to go through every matching document."
-    )
+    DESCRIPTION = POSTGRES_QUERY_DESCRIPTION
 
     # Built per turn with internal search; it has no tool row.
     id = None

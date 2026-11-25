@@ -11,6 +11,7 @@ from pydantic_monty import Monty, MontyTypingError
 
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolResult
+from onyx.prompts.tool_prompts import WEB_SEARCH_DESCRIPTION
 from onyx.tools.constants import (
     SEND_MESSAGE_TOOL_NAME,
     SKILLS_LIST_TOOL_NAME,
@@ -47,9 +48,6 @@ from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OPEN_URL_SHAPES,
     OPEN_URL_TOOL_NAMES,
@@ -78,6 +76,7 @@ from onyx.tools.tool_implementations.subagents.subagent_tools import (
     ListAgentsTool,
 )
 from tests.unit.onyx.tools.code_mode.fakes import (
+    FakeImageGenerationTool,
     FakeMCPTool,
     FakeTool,
     FakeWebSearchTool,
@@ -207,9 +206,9 @@ class _BatchedSearchTool(FakeWebSearchTool):
 def test_usage_note_reaches_the_docstring() -> None:
     stubs = build_tool_stubs(OPENAI_CODE_MODE, [_BatchedSearchTool(_unused)])
     assert (
-        "snippets.\n\n        Pass all queries in one call.\n\n        Args:"
-        in _full_text(stubs)
-    )
+        f"{WEB_SEARCH_DESCRIPTION.splitlines()[-1]}\n\n"
+        "        Pass all queries in one call.\n\n        Args:"
+    ) in _full_text(stubs)
 
 
 def test_mcp_like_schema_with_odd_names_and_refs() -> None:
@@ -701,13 +700,6 @@ def test_stub_text_is_deterministic() -> None:
         < first.index("async def a(")
         < first.index("async def zeta(")
     )
-
-
-class FakeImageGenerationTool(ImageGenerationTool):
-    """An image generation tool without a provider; only its stub is used."""
-
-    def __init__(self) -> None:
-        self._id = 5
 
 
 def test_image_generation_returns_typed_images() -> None:
@@ -1274,3 +1266,20 @@ def test_a_program_gets_the_full_value_that_the_content_cuts() -> None:
         "state": "whole",
         "exit_code": None,
     }
+
+
+def test_every_line_of_a_multi_line_description_is_indented() -> None:
+    tool = FakeMCPTool("lookup", _unused, {"type": "object", "properties": {}})
+    tool._description = 'First line.\n- a "quoted" item\n\nLast line ends with "'
+    [function_stub] = build_tool_stubs(OPENAI_CODE_MODE, [tool]).functions.values()
+    stub = function_stub.stub
+    assert '\n        - a "quoted" item\n\n        Last line ends with \\"' in stub
+    [tools_class] = ast.parse(f"class tools:\n{stub}").body
+    assert isinstance(tools_class, ast.ClassDef)
+    [function] = tools_class.body
+    assert isinstance(function, ast.AsyncFunctionDef)
+    docstring = ast.get_docstring(function)
+    assert docstring is not None
+    assert docstring.startswith(
+        'First line.\n- a "quoted" item\n\nLast line ends with "\n'
+    )
