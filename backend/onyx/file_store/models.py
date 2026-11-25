@@ -179,6 +179,17 @@ class StoredFileFacts(BaseModel):
     content_sha256: str | None
 
 
+class ArtifactText(BaseModel):
+    """The text of a published file version (utils.py:get_or_extract_artifact_text),
+    by page when its format has pages (extract_file_text.py:PagedText)."""
+
+    pages: list[str]
+    paged: bool
+    # The text stopped at ARTIFACT_TEXT_MAX_CHARS, or a sheet stopped at
+    # MAX_XLSX_CELLS_PER_SHEET.
+    truncated: bool
+
+
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int

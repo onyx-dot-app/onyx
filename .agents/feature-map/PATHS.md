@@ -118,6 +118,7 @@ covers new files that match it.
 | `backend/onyx/connectors/teams/` | teams |
 | `backend/onyx/indexing/` | indexing-pipeline |
 | `backend/onyx/indexing/adapters/user_file_indexing_adapter.py` | file-store-and-user-files, indexing-pipeline |
+| `backend/onyx/indexing/adapters/chat_artifact_indexing_adapter.py`, `backend/onyx/indexing/chat_artifact_index.py` | file-store-and-user-files, indexing-pipeline |
 | `backend/onyx/background/indexing/`, `backend/onyx/db/index_attempt*.py`, `backend/onyx/db/indexing_coordination.py` | indexing-pipeline |
 | `backend/onyx/background/celery/tasks/docfetching/`, `backend/onyx/background/celery/tasks/docprocessing/`, `backend/onyx/background/celery/tasks/docconversion/`, `backend/onyx/background/celery/tasks/tabular_rechunk/` | indexing-pipeline |
 | `backend/onyx/file_store/document_batch_storage.py`, `backend/onyx/db/targeted_reindex.py`, `backend/onyx/redis/redis_docprocessing.py` | indexing-pipeline |
@@ -130,7 +131,7 @@ covers new files that match it.
 | `backend/ee/onyx/db/cc_pair_data_access.py`, `backend/ee/onyx/db/connector_manage_access.py` | cc-pairs-and-creds, access-control |
 | `backend/onyx/db/document.py`, `backend/onyx/db/chunk.py`, `backend/onyx/db/tag.py` | indexing-pipeline, document-index |
 | `backend/onyx/file_processing/`, `backend/onyx/file_store/`, `backend/onyx/db/file_record.py`, `backend/onyx/db/file_content.py`, `backend/onyx/db/user_file.py` | file-store-and-user-files |
-| `backend/onyx/background/celery/tasks/user_file_processing/` | file-store-and-user-files |
+| `backend/onyx/background/celery/tasks/user_file_processing/`, `backend/onyx/background/celery/tasks/chat_artifact_indexing/` | file-store-and-user-files |
 | `backend/onyx/server/documents/` | cc-pairs-and-creds, indexing-pipeline |
 
 ## Backend: configuration surfaces

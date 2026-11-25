@@ -415,6 +415,17 @@ class UserFileStatus(str, PyEnum):
     DELETING = "DELETING"
 
 
+class ChatArtifactIndexStatus(str, PyEnum):
+    """Where a published file's newest version stands in the search index.
+    INDEXED means its document holds that version. REMOVED means its chat is
+    deleted and it has no document; nothing indexes it again."""
+
+    PENDING = "PENDING"
+    INDEXED = "INDEXED"
+    FAILED = "FAILED"
+    REMOVED = "REMOVED"
+
+
 class ThemePreference(str, PyEnum):
     LIGHT = "light"
     DARK = "dark"

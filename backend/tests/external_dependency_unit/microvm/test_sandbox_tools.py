@@ -14,7 +14,7 @@ from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from typing import Any
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, call, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -28,6 +28,10 @@ from onyx.agents.models import InputSource, MessageDelivery, RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.auth.users import get_anonymous_user
+from onyx.background.celery.tasks.chat_artifact_indexing.tasks import (
+    process_single_chat_artifact,
+)
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat import execution, process_message
@@ -45,10 +49,14 @@ from onyx.chat.process_message import (
 from onyx.chat.renderer import SPILLED_OUTPUT_NOTE
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import (
+    CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
     DEFAULT_PERSONA_ID,
     DocumentSource,
     FileOrigin,
     MessageType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
 )
 from onyx.context.search.models import (
     InferenceChunk,
@@ -94,14 +102,20 @@ from onyx.db.sandbox import (
     get_or_create_sandbox,
     get_sandbox_by_user_id,
 )
+from onyx.db.search_settings import get_current_search_settings
 from onyx.db.skill import delete_skill
 from onyx.db.tools import get_builtin_tool
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
+from onyx.document_index.factory import build_opensearch_document_index
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id
+from onyx.indexing.chat_artifact_index import (
+    chat_artifact_queued_key,
+    delete_chat_artifacts_from_index,
+)
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import (
     AgentCancelled,
@@ -242,6 +256,7 @@ from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_page_scrape,
 )
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_chat_tool_approvals import ACTION
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
 from tests.external_dependency_unit.chat.test_wait_agents import (
@@ -2271,9 +2286,10 @@ def test_a_bulk_delete_keeps_a_chat_created_while_it_runs(
     monkeypatch.setattr(
         db_chat, "delete_messages_and_files_from_chat_session", delete_and_create
     )
-    assert delete_all_chat_sessions_for_user(user, db_session, hard_delete=True) == [
-        first
-    ]
+    assert delete_all_chat_sessions_for_user(user, db_session, hard_delete=True) == (
+        [first],
+        [],
+    )
     db_session.expire_all()
     assert db_session.get(ChatSession, first) is None
     assert db_session.get(ChatSession, created[0]) is not None
@@ -2847,6 +2863,104 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
         ).all()
         == []
     )
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_publish_sends_the_indexing_task_of_each_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+    user: User,
+) -> None:
+    tools = make_tools(
+        create_chat_session(
+            db_session, "indexed", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
+    sandbox.write_file(tools.ref, "a.md", b"a")
+    sandbox.write_file(tools.ref, "b.md", b"b")
+    send_task = MagicMock()
+    monkeypatch.setattr(client_app, "send_task", send_task)
+
+    result, _ = _run(tools.create_file, {"files": ["a.md", "b.md"]})
+
+    assert isinstance(result.details, PublishedFiles)
+    artifact_ids = [file.artifact_id for file in result.details.files]
+    try:
+        assert send_task.mock_calls == [
+            call(
+                OnyxCeleryTask.PROCESS_SINGLE_CHAT_ARTIFACT,
+                kwargs={
+                    "artifact_id": str(artifact_id),
+                    "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                },
+                queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
+                priority=OnyxCeleryPriority.HIGH,
+                expires=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+            )
+            for artifact_id in artifact_ids
+        ]
+    finally:
+        cache = get_cache_backend()
+        for artifact_id in artifact_ids:
+            if artifact_id is not None:
+                cache.delete(chat_artifact_queued_key(artifact_id))
+
+
+@pytest.mark.usefixtures(
+    "node", "initialize_file_store", "full_deployment_setup", "fake_embeddings"
+)
+def test_a_failed_publish_takes_an_artifact_indexed_meanwhile_out_of_the_index(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+    user: User,
+) -> None:
+    """The indexing beat indexes the call's first file before its second
+    file fails; the call's clean-up deletes that artifact's document."""
+    monkeypatch.setattr(artifact_operations, "PUBLISH_FILES_MAX_BYTES", 16)
+    tools = make_tools(
+        create_chat_session(
+            db_session, "unpublished", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
+    sandbox.write_file(tools.ref, "a.md", b"Pelicans")
+    sandbox.write_file(tools.ref, "big.bin", b"x" * 17)
+    indexed_ids: list[UUID] = []
+    save = artifact_operations.save_chat_artifact
+    document_index = build_opensearch_document_index(
+        get_current_search_settings(db_session)
+    )
+
+    def indexed() -> bool:
+        """Whether the PRESENT index holds the document, after a refresh."""
+        return bool(document_index.get_documents_with_any_chunk([str(indexed_ids[0])]))
+
+    def save_then_index(*args: Any, **kwargs: Any) -> PublishedFile:
+        published = save(*args, **kwargs)
+        if published.artifact_id is None:
+            raise RuntimeError("save_chat_artifact always sets the artifact")
+        process_single_chat_artifact.run(
+            artifact_id=str(published.artifact_id),  # ty: ignore[invalid-argument-type]
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
+        )
+        indexed_ids.append(published.artifact_id)
+        if not indexed():
+            raise RuntimeError("the beat's write did not land")
+        return published
+
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save_then_index)
+    try:
+        result, _ = _run(tools.create_file, {"files": ["a.md", "big.bin"]})
+
+        assert result.is_error
+        assert result.text.endswith("'big.bin' is larger than the limit of 16 bytes")
+        assert len(indexed_ids) == 1
+        assert not indexed()
+    finally:
+        delete_chat_artifacts_from_index(indexed_ids)
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")

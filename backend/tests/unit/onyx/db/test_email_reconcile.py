@@ -35,6 +35,11 @@ def _user(
     )
 
 
+def _executed_tables(db_session: MagicMock) -> list[str]:
+    """The table of each statement that the session executed, in order."""
+    return [call.args[0].table.name for call in db_session.execute.call_args_list]
+
+
 def test_no_update_when_the_address_is_unchanged() -> None:
     assert (
         build_email_reconcile_update(_user("same@example.com"), "same@example.com")
@@ -117,7 +122,7 @@ def test_reconcile_locks_and_rekeys_email_state_without_committing() -> None:
     query.populate_existing.return_value.with_for_update.assert_called_once_with(
         of=User
     )
-    assert db_session.execute.call_count == 1
+    assert _executed_tables(db_session) == ["mcp_server", "chat_artifact"]
     db_session.commit.assert_not_called()
 
 
@@ -139,4 +144,9 @@ def test_reconcile_adopts_an_external_permission_shadow() -> None:
     assert result == ("old@example.com", ["old@example.com"])
     db_session.delete.assert_called_once_with(shadow_user)
     db_session.flush.assert_called_once_with()
-    assert db_session.execute.call_count == 3
+    assert _executed_tables(db_session) == [
+        "user__external_user_group_id",
+        "user__external_user_group_id",
+        "mcp_server",
+        "chat_artifact",
+    ]

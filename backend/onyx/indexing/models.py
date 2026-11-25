@@ -1,6 +1,8 @@
 import contextlib
 from collections.abc import Generator
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Protocol
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -301,3 +303,26 @@ class IndexingBatchAdapter(Protocol):
         index_to_secondary: bool,
         failed_document_ids: set[str],
     ) -> None: ...
+
+
+class ChatArtifactIndexInput(BaseModel):
+    """What the indexing task of a published file reads when it picks the
+    artifact up (db/chat.py:start_chat_artifact_indexing): its newest
+    available version and its owner."""
+
+    artifact_id: UUID
+    # The artifact's latest change (publish or rename) and its pickups, when
+    # it was picked up. Its row becomes INDEXED only if both are unchanged
+    # when the write lands. The latest change is also the document's update
+    # time.
+    updated_at: datetime
+    index_attempts: int
+    created_at: datetime
+    # The owner's current email, the document's only ACL entry.
+    owner_email: str
+    # The version's artifact_url, the document's link.
+    link: str
+    file_id: str
+    file_name: str
+    file_size: int
+    title: str | None
