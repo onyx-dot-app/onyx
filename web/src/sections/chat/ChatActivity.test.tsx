@@ -1,4 +1,5 @@
 import { act, render, screen } from "@tests/setup/test-utils";
+import { unstable_serialize } from "swr";
 import ChatActivity from "@/sections/chat/ChatActivity";
 import { PacketType, type Packet } from "@/app/app/services/streamingModels";
 import type { Message } from "@/app/app/types";
@@ -24,7 +25,6 @@ function agent(path: string, status: ChatSubagent["status"]): ChatSubagent {
     status,
     stopped_by_user: false,
     started_at: null,
-    duration_seconds: null,
   };
 }
 
@@ -192,7 +192,7 @@ test("lists running agents on one line each and folds the finished ones", async 
   const trigger = await screen.findByRole("button", { name: "Activity" });
   act(() => trigger.click());
   expect(screen.getByText("poet")).toBeVisible();
-  expect(screen.getByText("Running")).toBeVisible();
+  expect(screen.getByText("Agents · 1 running")).toBeVisible();
   expect(screen.queryByText("researcher")).toBeNull();
 
   const finished = screen.getByRole("button", { name: /Previous agents/ });
@@ -237,12 +237,70 @@ test("View all files shows the Files list even while a file is open", async () =
   expect(panel?.activeId).toBe(RIGHT_PANEL_FILES_TAB);
 });
 
-test("agents live when the chat loads leave the card closed", async () => {
-  serve([agent("/root/poet", "running")], {
-    ...STATUS,
-    has_active_subagents: true,
-  });
+// The run's start in the past, as an ISO date
+function startedAgo(ms: number): string {
+  return new Date(Date.now() - ms).toISOString();
+}
+
+test("a run that started just before the card mounted opens it, as in a new chat", async () => {
+  serve(
+    [{ ...agent("/root/poet", "running"), started_at: startedAgo(2_000) }],
+    {
+      ...STATUS,
+      has_active_subagents: true,
+    }
+  );
   renderActivity();
+  expect(await screen.findByText("poet")).toBeVisible();
+});
+
+test("agents that started well before the chat loads leave the card closed", async () => {
+  serve(
+    [{ ...agent("/root/poet", "running"), started_at: startedAgo(60_000) }],
+    {
+      ...STATUS,
+      has_active_subagents: true,
+    }
+  );
+  renderActivity();
+  await screen.findByRole("button", { name: "Activity" });
+  await act(async () => undefined);
+  expect(screen.queryByText("poet")).toBeNull();
+});
+
+test("an empty list cached from an earlier visit does not open the card for agents already live", async () => {
+  serve(
+    [{ ...agent("/root/poet", "running"), started_at: startedAgo(60_000) }],
+    {
+      ...STATUS,
+      has_active_subagents: true,
+    }
+  );
+  // The cache still holds the chat as it was before its agents started
+  render(
+    <AppWorkspaceElementsContext.Provider
+      value={{
+        workspace: { current: null },
+        page: { current: null },
+        panelToggleSlot: null,
+        activitySlot: document.body,
+      }}
+    >
+      <ChatActivity sessionId="s" />
+    </AppWorkspaceElementsContext.Provider>,
+    {
+      swrConfig: {
+        fallback: {
+          "/api/chat/chat-session/s/status": STATUS,
+          [unstable_serialize([
+            "/api/chat/chat-session/s/agents",
+            false,
+            null,
+          ])]: [],
+        },
+      },
+    }
+  );
   await screen.findByRole("button", { name: "Activity" });
   await act(async () => undefined);
   expect(screen.queryByText("poet")).toBeNull();
@@ -271,14 +329,14 @@ test("each live agent has its own Stop, which stops only that agent", async () =
   expect(screen.getByRole("button", { name: "Stop critic" })).toBeVisible();
 });
 
-test("a live agent shows its run time; a finished one its saved duration", async () => {
+test("a live agent shows its run time and no status word; a finished one its outcome only", async () => {
   serve(
     [
+      { ...agent("/root/poet", "running"), started_at: startedAgo(65_000) },
       {
-        ...agent("/root/poet", "running"),
-        started_at: new Date(Date.now() - 65_000).toISOString(),
+        ...agent("/root/researcher", "complete"),
+        started_at: startedAgo(90_000),
       },
-      { ...agent("/root/researcher", "complete"), duration_seconds: 42 },
     ],
     { ...STATUS, has_active_subagents: true }
   );
@@ -286,8 +344,12 @@ test("a live agent shows its run time; a finished one its saved duration", async
   const trigger = await screen.findByRole("button", { name: "Activity" });
   act(() => trigger.click());
   expect(await screen.findByText("1m 5s")).toBeVisible();
-  // A finished agent has no Stop
+  expect(screen.queryByText("Running")).toBeNull();
+  // The Stop's tooltip names the action; its label names the agent
+  expect(screen.getByRole("button", { name: "Stop poet" })).toBeInTheDocument();
+  // A finished agent has no Stop and no time
   act(() => screen.getByRole("button", { name: /Previous agents/ }).click());
-  expect(screen.getByText("42s")).toBeVisible();
+  expect(screen.getByText("Done")).toBeVisible();
+  expect(screen.queryByText("1m 30s")).toBeNull();
   expect(screen.queryByRole("button", { name: "Stop researcher" })).toBeNull();
 });

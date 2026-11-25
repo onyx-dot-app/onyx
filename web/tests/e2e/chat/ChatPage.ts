@@ -455,7 +455,7 @@ export class ChatPage {
     const width = await this.rightPanelWidth();
     const viewport = this.page.viewportSize();
     if (!viewport) throw new Error("The page has no viewport");
-    // The panel slides open: drag once its edge is in place
+    // Drag once the panel's edge is in place
     await expect
       .poll(async () => (await handle.boundingBox())?.x ?? Infinity)
       .toBeLessThan(viewport.width - width + 2);
@@ -658,6 +658,8 @@ export class ChatPage {
    * skills, so that `@` opens the picker at once. */
   /** Stops one live agent, by its name, from the activity card. */
   async stopAgent(name: string): Promise<void> {
+    // The Stop takes the place of the run time while the row is hovered
+    await this.activityPanel.getByText(name, { exact: true }).hover();
     await this.activityPanel
       .getByRole("button", { name: `Stop ${name}`, exact: true })
       .click();

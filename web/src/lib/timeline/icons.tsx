@@ -3,7 +3,7 @@ import {
   SvgAlertCircle,
   SvgBubbleText,
   SvgCheckCircle,
-  SvgLightbulbSimple,
+  SvgBrain,
   SvgCpu,
   SvgEdit,
   SvgFileText,
@@ -24,7 +24,7 @@ function SpinningLoader({ className, ...props }: IconProps) {
 
 /** The rail's step icons, one per kind of step, shared by chat and Craft. */
 export const STEP_ICONS = {
-  thinking: SvgLightbulbSimple,
+  thinking: SvgBrain,
   execute: SvgTerminal,
   search: SvgSearch,
   webSearch: SvgGlobe,

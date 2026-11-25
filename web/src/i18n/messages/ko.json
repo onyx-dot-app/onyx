@@ -13620,10 +13620,8 @@
       },
       "agents": {
         "title": "에이전트",
+        "titleRunning": "에이전트 · {count}개 실행 중",
         "status": {
-          "starting": "시작 중",
-          "running": "실행 중",
-          "suspended": "대기 중",
           "complete": "완료",
           "limit": "단계 한도 도달",
           "cancelled": "취소됨",
@@ -13632,6 +13630,7 @@
         },
         "finished": "이전 에이전트",
         "stop": "{name} 중지",
+        "stopTooltip": "에이전트 중지",
         "stopFailed": "에이전트를 중지할 수 없습니다."
       },
       "files": {
@@ -15134,7 +15133,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added}줄 추가, {removed}줄 삭제"
+          "label": "{added, plural, other {#줄 추가}}, {removed, plural, other {#줄 삭제}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {변경되지 않은 줄 #개} other {변경되지 않은 줄 #개}}"

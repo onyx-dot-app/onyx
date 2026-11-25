@@ -800,8 +800,9 @@ it. A yield (status `running`) ends the program's turn: the model acts next.
 The header names a step's activity from its own first packet; nested packets
 do not decide it. A step with no activity of its own reads "Working". A
 command step names its program (`web/src/lib/timeline/chat/commandProgramName.ts`, from T3 Code).
-A reasoning step shows a one-line preview of its latest text
-(`reasoningPreview`), which its own step card also shows while it streams. The
+A reasoning step shows the title of its latest section, a bold line or a
+heading (`reasoningPreview`), or "Thinking" before the first title. Its own
+step card also shows this title while it streams. The
 collapsed run card shows this header while it works. Once done, it reads
 "Worked for {duration}", or "You stopped after {duration}" when the stop
 ended its work. Only the response's first run uses the response's start and
@@ -931,14 +932,21 @@ side panel's header or beside the new tab's settings button; that is the only
 subagent Stop there. It is always the icon alone, so the header never shifts,
 and toggles a card that stays open until that button closes it. The card also
 opens when the count of live agents goes from zero to more while the chat
-shows; agents already live when the chat loads leave it closed, and a card
-closed during a run of agents stays closed. Each live agent row has a Stop
-button: `useChatSubagents().stopAgent` posts
+shows. `loaded` from `useChatSubagents` turns true only after a list read from
+the server, so a cached list is never the baseline. In the first list, a live
+run that started up to 10 seconds before the card mounted counts as new (a new
+chat's reply can start agents before that list arrives); older live agents
+leave the card closed, and a card closed during a run of agents stays closed.
+The agent rows copy T3 Code's lineage rows: the section header counts the
+running agents ("Agents · 2 running"), and a live row shows the agent glyph
+with a blue dot, its name and its run time, counted up from `started_at`
+(`useStreamingDuration`, plain `Text` so the ticks do not flash). Hover or
+keyboard focus on the row swaps the time for a red filled square Stop (two
+overlaid `Hoverable.Item`s, so the Stop stays in the tab order; a touch screen
+shows the Stop): `useChatSubagents().stopAgent` posts
 `/api/chat/chat-session/{id}/stop-subagents` with `{ "agent_id": ... }`, then
-reloads the status and the list. A row shows its run's time beside its status:
-a live run counts up from `started_at` (`useStreamingDuration`, plain `Text`
-so the ticks do not flash), and a finished run shows `duration_seconds` when
-the server saved one. The card portals into the page column's
+reloads the status and the list. A finished row shows its outcome and no time.
+The card portals into the page column's
 `activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
 at the chat region's top end, so the header keeps its width and buttons. With
 no output panel open it sets `data-activity-docked`, and in a workspace at
@@ -956,8 +964,7 @@ panel. Agents come from
 which reads `load_session_agent_metadata` for the selected branch and keeps
 the `spawn_agent` children (`ChatConfiguration`; Deep Research workers are
 foreground): `id`, `path`, `status`, `stopped_by_user`, and the latest run's
-`started_at` (its response's `time_sent`) and, once finished,
-`duration_seconds` (`processing_duration_seconds`), with no transcript. The list loads again when the status changes
+`started_at` (its response's `time_sent`), with no transcript. The list loads again when the status changes
 `has_active_subagents` or `latest_response_id`, and polls while agents are
 active. The status it reads also polls while a reply streams, so agents that
 the reply starts show. An idle chat that sees a running or unknown

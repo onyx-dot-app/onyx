@@ -13620,10 +13620,8 @@
       },
       "agents": {
         "title": "エージェント",
+        "titleRunning": "エージェント · {count} 件実行中",
         "status": {
-          "starting": "開始中",
-          "running": "実行中",
-          "suspended": "待機中",
           "complete": "完了",
           "limit": "ステップ上限に到達",
           "cancelled": "キャンセル済み",
@@ -13632,6 +13630,7 @@
         },
         "finished": "以前のエージェント",
         "stop": "{name} を停止",
+        "stopTooltip": "エージェントを停止",
         "stopFailed": "エージェントを停止できませんでした。"
       },
       "files": {
@@ -15134,7 +15133,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added} 行追加、{removed} 行削除"
+          "label": "{added, plural, other {#行追加}}、{removed, plural, other {#行削除}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {変更なしの行 #行} other {変更なしの行 #行}}"

@@ -530,8 +530,6 @@ class ChatSubagent(BaseModel):
     stopped_by_user: bool
     # When its current or latest run started
     started_at: datetime | None = None
-    # How long its latest run worked, once it finished and saved its duration
-    duration_seconds: float | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):

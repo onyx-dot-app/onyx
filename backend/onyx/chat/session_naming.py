@@ -137,10 +137,13 @@ def generate_chat_session_name_or_fallback(
                 user_id=str(user_id) if user_id else None,
             ).model_dump(),
         ):
-            return generate_chat_session_name(
+            name = generate_chat_session_name(
                 chat_history=simple_chat_history,
                 llm=llm,
             )
+        if raise_on_failure and not name.strip():
+            raise ValueError("The model returned an empty chat name")
+        return name
     except Exception as error:
         if raise_on_failure:
             raise

@@ -2795,50 +2795,6 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
     assert any("The user stopped this agent." in text for text in seen)
 
 
-def test_a_finished_agent_lists_its_saved_duration(
-    chat: ChatSession,
-    owner: User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def generate(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        texts = [message.text for message in request.messages]
-        if "Quick task" in texts:
-            return AssistantMessage(content=[TextContent(text="Quick result")])
-        if any(isinstance(message, ToolResultMessage) for message in request.messages):
-            return AssistantMessage(content=[TextContent(text="Started")])
-        return AssistantMessage(
-            content=[
-                ModelToolCall(
-                    id="spawn",
-                    name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"task_name": "quick", "message": "Quick task"},
-                )
-            ]
-        )
-
-    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
-    model = QueueTestLLM(generate)
-    monkeypatch.setattr(
-        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
-    )
-    for _packet in handle_stream_message_objects(
-        new_msg_req=SendMessageRequest(
-            message="Start a quick worker",
-            chat_session_id=chat.id,
-            accepts_follow_ups=True,
-        ),
-        user=owner,
-    ):
-        pass
-    assert chat_turn_work.wait_idle(timeout=30)
-    (agent,) = chat_backend.get_chat_session_agents(chat.id, owner)
-    assert agent.status == RunStatus.COMPLETE
-    assert agent.started_at is not None
-    assert agent.duration_seconds is not None
-
-
 def test_stop_subagents_with_an_agent_id_stops_only_that_agent(
     client: TestClient,
     chat: ChatSession,
@@ -2896,7 +2852,6 @@ def test_stop_subagents_with_an_agent_id_stops_only_that_agent(
         }
         assert set(agents) == {"/root/alpha", "/root/beta"}
         assert all(agent.started_at is not None for agent in agents.values())
-        assert all(agent.duration_seconds is None for agent in agents.values())
 
         missing = client.post(
             f"/chat/chat-session/{chat.id}/stop-subagents",

@@ -13620,10 +13620,8 @@
       },
       "agents": {
         "title": "Agentes",
+        "titleRunning": "Agentes · {count} em execução",
         "status": {
-          "starting": "Iniciando",
-          "running": "Em execução",
-          "suspended": "Aguardando",
           "complete": "Concluído",
           "limit": "Limite de etapas atingido",
           "cancelled": "Cancelado",
@@ -13632,6 +13630,7 @@
         },
         "finished": "Agentes anteriores",
         "stop": "Parar {name}",
+        "stopTooltip": "Parar agente",
         "stopFailed": "Não foi possível parar o agente."
       },
       "files": {
@@ -15134,7 +15133,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added} adições, {removed} exclusões"
+          "label": "{added, plural, one {# adição} other {# adições}}, {removed, plural, one {# exclusão} other {# exclusões}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {# linha inalterada} other {# linhas inalteradas}}"

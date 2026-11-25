@@ -13620,10 +13620,8 @@
       },
       "agents": {
         "title": "Agents",
+        "titleRunning": "Agents · {count} running",
         "status": {
-          "starting": "Starting",
-          "running": "Running",
-          "suspended": "Waiting",
           "complete": "Done",
           "limit": "Hit step limit",
           "cancelled": "Cancelled",
@@ -13632,6 +13630,7 @@
         },
         "finished": "Previous agents",
         "stop": "Stop {name}",
+        "stopTooltip": "Stop agent",
         "stopFailed": "Could not stop the agent."
       },
       "files": {
@@ -15134,7 +15133,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added} additions, {removed} deletions"
+          "label": "{added, plural, one {# addition} other {# additions}}, {removed, plural, one {# deletion} other {# deletions}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {# unchanged line} other {# unchanged lines}}"

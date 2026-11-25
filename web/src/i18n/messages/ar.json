@@ -13620,10 +13620,8 @@
       },
       "agents": {
         "title": "الوكلاء",
+        "titleRunning": "الوكلاء · {count} قيد التشغيل",
         "status": {
-          "starting": "قيد البدء",
-          "running": "قيد التشغيل",
-          "suspended": "في الانتظار",
           "complete": "تم",
           "limit": "بلغ حد الخطوات",
           "cancelled": "أُلغي",
@@ -13632,6 +13630,7 @@
         },
         "finished": "الوكلاء السابقون",
         "stop": "إيقاف {name}",
+        "stopTooltip": "إيقاف الوكيل",
         "stopFailed": "تعذّر إيقاف الوكيل."
       },
       "files": {
@@ -15134,7 +15133,7 @@
       },
       "diff": {
         "stat": {
-          "label": "{added} إضافات، {removed} عمليات حذف"
+          "label": "{added, plural, one {# إضافة} other {# إضافات}}، {removed, plural, one {# حذف} other {# عمليات حذف}}"
         },
         "unchangedLines": {
           "label": "{count, plural, one {# سطر دون تغيير} other {# أسطر دون تغيير}}"
