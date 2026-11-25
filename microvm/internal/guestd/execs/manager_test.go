@@ -78,23 +78,25 @@ func TestCancelAfterExitKeepsExitCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(m.Shutdown)
-	canceled := make(chan error, 1)
-	afterExit = func(e *Execution) {
-		go func() {
-			_, _, err := m.Cancel(context.Background(), e.ID)
-			canceled <- err
-		}()
-		// Let the Cancel reach kill before the result is recorded.
-		time.Sleep(50 * time.Millisecond)
+	exited := make(chan struct{})
+	release := make(chan struct{})
+	afterExit = func(*Execution) {
+		close(exited)
+		<-release
 	}
 	t.Cleanup(func() { afterExit = nil })
 	e, err := m.Start(Spec{Argv: []string{"sh", "-c", "exit 3"}, Env: []string{"PATH=/usr/bin:/bin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
+	<-exited
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err = m.Cancel(ctx, e.ID)
+	close(release)
 	<-e.Done()
-	if err := <-canceled; err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Cancel while exit is pending: %v", err)
 	}
 	if res, _ := e.Ended(); res.Completion != Exited || res.ExitCode != 3 {
 		t.Fatalf("completion %s exit %d signal %d", res.Completion, res.ExitCode, res.Signal)
