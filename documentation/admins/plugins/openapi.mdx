@@ -37,7 +37,7 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     loopback, and link-local addresses. For an API on a private host,
     upload the schema file or select **Allow Private Network**.
 
-    To use a schema file, click **Upload openapi.json, openapi.yaml or schema.graphql** and select a JSON or YAML file.
+    To use a schema file, click **Upload a spec file** and select a JSON or YAML file.
     If the schema does not give one full server URL, enter the base URL of the API in **URL**. If you do not,
     Onyx stays on this step and shows "Add the URL of the API. The spec does not give one." Onyx shows what it found,
     for example "REST API, 12 endpoints".
@@ -105,8 +105,8 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
 For a GraphQL API, enter the endpoint URL as the **URL**.
 Onyx sends an introspection query with no credentials and loads the schema.
 Onyx shows the number of queries and mutations that it found.
-If the endpoint does not allow introspection without sign-in, click **Upload openapi.json,
-openapi.yaml or schema.graphql** and select the schema as a `.graphql` file in GraphQL SDL.
+If the endpoint does not allow introspection without sign-in,
+click **Upload a spec file** and select the schema as a `.graphql` file in GraphQL SDL.
 
 Each query and mutation root field becomes an action, with the key `query.<field>` or `mutation.<field>`.
 A query starts at **Allow** and a mutation starts at **Ask**. Subscriptions are not actions.
