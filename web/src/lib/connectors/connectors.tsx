@@ -10,6 +10,7 @@ import type {
   NumberOption,
 } from "@/lib/connectors/types";
 import { OneDriveScope } from "@/lib/connectors/types";
+import { isPermSynced } from "@/lib/connectors/accessType";
 import { googleCredentialKind } from "@/lib/credentials/utils";
 import type { CredentialValues } from "@/lib/credentials/types";
 
@@ -1928,8 +1929,39 @@ export const connectorConfigs: Record<
         description: "connectors.smb.fields.path_prefix.description",
         optional: true,
       },
+      // Permission sync reads the NTFS permissions only, so its checks fail
+      // until an admin confirms the share permissions.
+      {
+        type: "checkbox",
+        label: "connectors.smb.fields.share_permissions_confirmed.label",
+        name: "share_permissions_confirmed",
+        description:
+          "connectors.smb.fields.share_permissions_confirmed.description",
+        default: false,
+        asCheckbox: true,
+        visibleCondition: (values) => isPermSynced(values.access_type),
+      },
     ],
     advanced_values: [
+      {
+        type: "select",
+        label: "connectors.smb.fields.email_attribute.label",
+        name: "email_attribute",
+        description: "connectors.smb.fields.email_attribute.description",
+        optional: true,
+        default: "mail",
+        options: [
+          {
+            name: "connectors.smb.fields.email_attribute.options.mail",
+            value: "mail",
+          },
+          {
+            name: "connectors.smb.fields.email_attribute.options.userPrincipalName",
+            value: "userPrincipalName",
+          },
+        ],
+        visibleCondition: (values) => isPermSynced(values.access_type),
+      },
       {
         type: "list",
         label: "connectors.smb.fields.excluded_paths.label",

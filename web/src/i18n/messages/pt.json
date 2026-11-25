@@ -3732,6 +3732,10 @@
               "label": "Prefixo de Caminho",
               "description": "Uma pasta no compartilhamento, por ex. Projects/2026. Deixe vazio para indexar todo o compartilhamento."
             },
+            "share_permissions_confirmed": {
+              "label": "Permissões de compartilhamento confirmadas",
+              "description": "O Onyx lê apenas as permissões NTFS. Confirme que as permissões de compartilhamento admitem todos os usuários que as permissões NTFS admitem. É o caso quando o compartilhamento dá acesso a “Todos” ou a “Usuários autenticados”. A sincronização de permissões não é executada sem esta confirmação."
+            },
             "excluded_paths": {
               "label": "Pastas Excluídas",
               "description": "Pastas a ignorar, como caminhos a partir da raiz do compartilhamento, por ex. Archive/2019. O Onyx não indexa essas pastas nem as pastas dentro delas."
@@ -3747,6 +3751,14 @@
             "port": {
               "label": "Porta",
               "description": "A porta SMB do servidor de arquivos. O padrão é 445."
+            },
+            "email_attribute": {
+              "label": "Atributo de e-mail",
+              "description": "O atributo do Active Directory que contém o e-mail com o qual um usuário entra no Onyx. A sincronização de permissões o usa para associar os usuários do domínio aos usuários do Onyx.",
+              "options": {
+                "mail": "mail, depois userPrincipalName",
+                "userPrincipalName": "apenas userPrincipalName"
+              }
             }
           }
         },
@@ -4387,6 +4399,10 @@
         "subdomain": "Subdomínio do {source}",
         "domain": "Domínio do {source}",
         "accountDomain": "Domínio da Conta",
+        "ldapHost": "Host LDAP",
+        "ldapTls": "Criptografia LDAP",
+        "ldapPort": "Porta LDAP",
+        "ldapCaCert": "Certificado de CA do LDAP",
         "enterpriseId": "ID da empresa do {source}",
         "teamId": "ID da equipe do {source}",
         "applicationId": "ID do aplicativo do {source}",
@@ -4421,11 +4437,19 @@
         "youtrackToken": "Um token permanente de um usuário do YouTrack que pode ler todos os projetos a indexar. Crie-o no seu perfil do YouTrack, em Segurança da conta.",
         "azureDatalakeAccountKey": "No portal do Azure, abra a conta de armazenamento, depois Segurança + rede, depois Chaves de acesso.",
         "smbDomain": "Opcional. O nome NetBIOS ou DNS do domínio do Active Directory. Deixe vazio para uma conta local do servidor de arquivos.",
+        "smbLdapHost": "Somente para a sincronização de permissões. O nome DNS de um controlador de domínio, por exemplo dc01.corp.example.com. Ele deve corresponder ao nome no certificado TLS do controlador de domínio.",
+        "smbLdapTls": "Somente para a sincronização de permissões. Como o Onyx criptografa a conexão com o controlador de domínio. O padrão é LDAPS.",
+        "smbLdapPort": "Opcional. O padrão é 636 para LDAPS e 389 para StartTLS.",
+        "smbLdapCaCert": "Opcional. O certificado PEM da autoridade de certificação interna que assinou o certificado do controlador de domínio. Deixe vazio para usar o repositório de confiança do sistema.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio.",
         "confluencePersonalAccessToken": "Cole o [token de acesso pessoal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) da sua conta de administrador do Confluence."
+      },
+      "options": {
+        "ldaps": "LDAPS",
+        "startTls": "StartTLS"
       },
       "methods": {
         "labels": {

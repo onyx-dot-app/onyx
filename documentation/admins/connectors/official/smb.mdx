@@ -1,10 +1,11 @@
 ---
 title: "Windows File Share (SMB)"
-description: "Index the files of a share on a Windows file server"
+description: "Index the files of a share on a Windows file server and mirror its NTFS permissions"
 ---
 
 The Windows File Share (SMB) connector indexes the files of one share on a file server in your network.
-The connector reads the share over SMB with a service account.
+The connector reads the share over SMB with a service account. With permission sync,
+it also mirrors who can read each file.
 
 <Note>
   The Windows File Share (SMB) connector is available on self-hosted Onyx only.
@@ -60,7 +61,8 @@ You need the following:
 - A file server that supports SMB 2.1 or later with SMB signing. Onyx never uses SMB 1.
 - SMB 3 encryption on the file server. Each version of Windows Server since 2012 supports SMB 3 encryption.
   For an older server, see [Connection options](#connection-options).
-- A domain service account that signs in with NTLMv2. A local account of the file server also works.
+- A domain service account that signs in with NTLMv2. A local account of the file server also works,
+  but not with permission sync.
 
 Give the service account read access in two places:
 
@@ -68,6 +70,8 @@ Give the service account read access in two places:
 | ----------------- | ---------------------------------------------------------- | ------------------------------------- |
 | Share permissions | The **Sharing** tab of the shared folder, **Permissions**  | **Read**                              |
 | NTFS permissions  | The **Security** tab of the shared folder and its contents | **Read** and **List folder contents** |
+
+Permission sync has more requirements. See [Permission sync](#permission-sync).
 
 ## Let Onyx reach the file server
 
@@ -88,6 +92,8 @@ connectors cannot connect to private addresses.
   </Step>
 </Steps>
 
+Permission sync also connects to a domain controller. The same SSRF protection rule applies to that connection.
+
 ## Configure the connector in Onyx
 
 <Steps>
@@ -106,6 +112,9 @@ connectors cannot connect to private addresses.
     | **Account Domain**              | The NetBIOS or DNS name of the Active Directory domain. Leave empty for a local account. |
     | **Windows File Share Username** | The name of the service account.                                                         |
     | **Windows File Share Password** | The password of the service account.                                                     |
+
+    The account form also has the LDAP fields. Fill them in only for permission sync.
+    See [Set up permission sync](#set-up-permission-sync).
   </Step>
 
   <Step title="Choose the content">
@@ -123,9 +132,119 @@ connectors cannot connect to private addresses.
     - The path prefix exists.
     - Files are readable.
 
+    With permission sync, Onyx does more checks. See [Set up permission sync](#set-up-permission-sync).
+
     A failed check says what to fix. Select **Create Connector**.
   </Step>
 </Steps>
+
+## Permission sync
+
+With permission sync, an Onyx user finds a file in search only if the NTFS permissions let that user read the file.
+
+<Note>
+  Permission sync is a paid feature. A self-hosted deployment needs the Enterprise Edition.
+</Note>
+
+Onyx reads the NTFS access list (DACL) of each file and folder.
+An access list names users and groups by security identifier (SID).
+Onyx asks Active Directory for the user or group of each SID.
+Onyx connects to a domain controller over LDAP with TLS and signs in with the same service account.
+
+Onyx applies these rules:
+
+- A user gets access when the Active Directory email of the user is the same as the user's email in Onyx.
+  Onyx reads the `mail` attribute, then `userPrincipalName` for a user with no `mail`.
+- Onyx applies deny entries in the order in which Windows evaluates them.
+- Onyx expands nested groups. The group sync reads all security groups of the domain.
+- **Everyone**, **Authenticated Users**, and **Domain Users** mean each enabled user of the domain.
+  A file is never public in Onyx.
+- A disabled Active Directory account gets no access.
+
+### Share permissions
+
+Onyx does not read the share permissions. Onyx reads the NTFS permissions only.
+Microsoft recommends that the share gives access to **Everyone** or **Authenticated Users**,
+and that the NTFS permissions decide who can read a file. Onyx assumes this setup.
+
+<Warning>
+  If the share permissions let in fewer users than the NTFS permissions,
+  Onyx shows files to users that the share refuses.
+  Turn on **Share Permissions Confirmed** only after you examine the share permissions.
+</Warning>
+
+### Users and groups that Onyx cannot identify
+
+Active Directory does not know these principals, so Onyx cannot get their members:
+
+- Local groups of the file server, such as `BUILTIN\Users` and `BUILTIN\Administrators`
+- Local accounts of the file server
+- Users and groups of other domains, also trusted domains
+
+An allow entry for one of these principals gives no access in Onyx.
+If the read access to a file comes only from these principals, no user finds the file in Onyx.
+If a file has a deny entry for one of these principals, the file stays private.
+
+Give access to domain groups or domain users in the NTFS permissions.
+The **Access lists name domain users and groups** check shows how many sampled SIDs and files have this problem.
+
+### Set up permission sync
+
+You need the following:
+
+- A domain service account. A local account of the file server cannot sign in to the domain controller.
+- NTFS **Read** access for the service account. **Read** includes the right to read the permissions of a file.
+- Read access to the users and groups in Active Directory. Each domain user has this access by default.
+- A domain controller that Onyx can reach with LDAPS on TCP port 636, or with StartTLS on TCP port 389.
+  Onyx does not connect without TLS.
+- If the domain controller has a private address, the SSRF protection level from
+  [Let Onyx reach the file server](#let-onyx-reach-the-file-server).
+
+<Steps>
+  <Step title="Add the domain controller to the account">
+    Fill in these fields of the authentication account:
+
+    | Field                   | Value                                                                                                                                        |
+    | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+    | **LDAP Host**           | The DNS name of a domain controller, for example `dc01.corp.example.com`. The name must be in the TLS certificate of the domain controller. |
+    | **LDAP Encryption**     | **LDAPS** (default) or **StartTLS**.                                                                                                         |
+    | **LDAP Port**           | Optional. The default is `636` for LDAPS and `389` for StartTLS.                                                                             |
+    | **LDAP CA Certificate** | Optional. If an internal certificate authority signed the certificate of the domain controller, paste the PEM certificate of that authority. |
+
+    With **LDAP CA Certificate** empty, Onyx uses the trust store of its system.
+  </Step>
+
+  <Step title="Select the access">
+    Under **Document Access**, select **Sync with Windows File Share (SMB)**.
+  </Step>
+
+  <Step title="Confirm the share permissions">
+    Make sure that the share permissions let in each user that the NTFS permissions let in.
+    Then turn on **Share Permissions Confirmed**. Without it, the check fails and permission sync does not run.
+  </Step>
+
+  <Step title="Select the email attribute">
+    Do this step only if users sign in to Onyx with their user principal name and `mail` holds a different address.
+    Set **Email Attribute** to **userPrincipalName only**.
+  </Step>
+
+  <Step title="Run the checks">
+    Select **Start Checks**. For permission sync, Onyx also does these checks:
+
+    - The share permissions are confirmed.
+    - Sign in to the domain controller.
+    - Domain users have email addresses.
+    - Domain group members are readable.
+    - Access lists are readable.
+    - Access lists name domain users and groups.
+  </Step>
+</Steps>
+
+### Sync schedule
+
+The document sync runs each hour. The group sync runs each 30 minutes.
+You can change the intervals with `SMB_PERMISSION_DOC_SYNC_FREQUENCY` and `SMB_PERMISSION_GROUP_SYNC_FREQUENCY`,
+in seconds. A new file stays private until the next document sync reads its access list.
 
 ## Connection options
 
@@ -176,6 +295,18 @@ The connector form also has these optional fields.
 
   <Accordion title="The service account may not read a file or folder">
     Give the service account **Read** access in the share permissions and in the NTFS permissions.
+  </Accordion>
+
+  <Accordion title="Onyx cannot sign in to the domain controller">
+    Check **LDAP Host**, **LDAP Encryption**, and **LDAP Port**. Make sure that a firewall lets Onyx reach the port,
+    and that **LDAP Host** is a name in the certificate. If an internal certificate authority signed the certificate,
+    paste its PEM certificate into **LDAP CA Certificate**.
+  </Accordion>
+
+  <Accordion title="A file that users can read on the share is not in their search results">
+    Wait for the next document sync and group sync.
+    Make sure that the user's Onyx email is the same as the `mail` or `userPrincipalName` attribute in Active Directory.
+    Then make sure that the NTFS permissions give access to a domain user or a domain group, not to a local group.
   </Accordion>
 
   <Accordion title="A folder is not in Onyx">

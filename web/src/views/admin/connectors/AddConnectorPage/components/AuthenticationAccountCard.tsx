@@ -33,6 +33,7 @@ import {
 import type {
   CredentialCheckReport,
   CredentialSharing,
+  CredentialSpecField,
   SimilarCredential,
 } from "@/lib/credentials/types";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
@@ -121,6 +122,15 @@ export default function AuthenticationAccountCard({
   const tCredentialCopy = useTranslations("admin.credentials");
   const fieldCopy = useCredentialFieldCopy(source);
   const details = getCredentialDetails(credential, source);
+  // A select stores its option's value; the card shows the option's title.
+  function selectOptionTitle(
+    field: CredentialSpecField,
+    value: string
+  ): string | undefined {
+    if (field.kind !== "select") return undefined;
+    const option = field.options.find((candidate) => candidate.value === value);
+    return option && tCredentialCopy(`options.${option.label}`);
+  }
   const { user } = useUser();
   const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
   const checkedAt: string | null = lastChecked
@@ -405,7 +415,7 @@ export default function AuthenticationAccountCard({
                     <KeyValue
                       key={key}
                       label={fieldCopy(key).title}
-                      value={value}
+                      value={selectOptionTitle(field, value) ?? value}
                       mono={field.kind === "secret"}
                     />
                   ))}

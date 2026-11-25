@@ -1,7 +1,12 @@
 import { render, screen } from "@tests/setup/test-utils";
 import { Formik } from "formik";
-import ConnectorConfigFields from "@/views/admin/connectors/AddConnectorPage/form/ConnectorConfigFields";
-import { useConnectorConfiguration } from "@/lib/connectors/connectors";
+import ConnectorConfigFields, {
+  visibleConnectorFields,
+} from "@/views/admin/connectors/AddConnectorPage/form/ConnectorConfigFields";
+import {
+  connectorConfigs,
+  useConnectorConfiguration,
+} from "@/lib/connectors/connectors";
 import { createConnectorInitialValues } from "@/lib/connectors/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 import type { Credential } from "@/lib/credentials/types";
@@ -60,4 +65,53 @@ test("an advanced field shows when its visibleCondition passes", () => {
   renderDriveFields(credentialWith({ google_service_account_key: "key" }));
 
   expect(screen.getByText("Specific User Emails")).toBeInTheDocument();
+});
+
+test("a file share shows its permission sync fields only with a synced access type", () => {
+  const names = (accessType: string): string[] =>
+    visibleConnectorFields(
+      connectorConfigs.smb,
+      { access_type: accessType },
+      null
+    ).map((field) => field.name);
+
+  for (const accessType of ["public", "private"]) {
+    expect(names(accessType)).not.toContain("share_permissions_confirmed");
+    expect(names(accessType)).not.toContain("email_attribute");
+  }
+  expect(names("sync")).toEqual(
+    expect.arrayContaining(["share_permissions_confirmed", "email_attribute"])
+  );
+});
+
+function FileShareFields({
+  values,
+}: {
+  values: ReturnType<typeof createConnectorInitialValues>;
+}) {
+  const config = useConnectorConfiguration(ValidSources.Smb);
+  return (
+    <ConnectorConfigFields
+      config={config}
+      values={values}
+      connector={ValidSources.Smb}
+      currentCredential={null}
+      reportScope={null}
+    />
+  );
+}
+
+test("a select stores the option's value and shows its translated name", () => {
+  const values = createConnectorInitialValues(ValidSources.Smb);
+  values.access_type = "sync";
+  render(
+    <Formik initialValues={values} onSubmit={() => {}}>
+      <FileShareFields values={values} />
+    </Formik>
+  );
+
+  expect(values.email_attribute).toBe("mail");
+  expect(screen.getByRole("combobox")).toHaveValue(
+    "mail, then userPrincipalName"
+  );
 });

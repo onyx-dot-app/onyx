@@ -3732,6 +3732,10 @@
               "label": "بادئة المسار",
               "description": "مجلد في المشاركة، مثل Projects/2026. اتركه فارغًا لفهرسة المشاركة بأكملها."
             },
+            "share_permissions_confirmed": {
+              "label": "تم تأكيد أذونات المشاركة",
+              "description": "يقرأ Onyx أذونات NTFS فقط. أكّد أن أذونات المشاركة تسمح بدخول كل مستخدم تسمح به أذونات NTFS. يتحقق ذلك عندما تمنح المشاركة حق الوصول إلى Everyone أو Authenticated Users. لا تعمل مزامنة الأذونات بدون هذا التأكيد."
+            },
             "excluded_paths": {
               "label": "المجلدات المستبعدة",
               "description": "المجلدات المراد تخطيها، كمسارات من جذر المشاركة، مثل Archive/2019. لا يفهرس Onyx هذه المجلدات ولا المجلدات التي بداخلها."
@@ -3747,6 +3751,14 @@
             "port": {
               "label": "المنفذ",
               "description": "منفذ SMB لخادم الملفات. القيمة الافتراضية هي 445."
+            },
+            "email_attribute": {
+              "label": "سمة البريد الإلكتروني",
+              "description": "سمة Active Directory التي تحتوي على البريد الإلكتروني الذي يسجّل به المستخدم الدخول إلى Onyx. تستخدمها مزامنة الأذونات لمطابقة مستخدمي النطاق مع مستخدمي Onyx.",
+              "options": {
+                "mail": "mail ثم userPrincipalName",
+                "userPrincipalName": "userPrincipalName فقط"
+              }
             }
           }
         },
@@ -4387,6 +4399,10 @@
         "subdomain": "النطاق الفرعي لـ {source}",
         "domain": "نطاق {source}",
         "accountDomain": "نطاق الحساب",
+        "ldapHost": "مضيف LDAP",
+        "ldapTls": "تشفير LDAP",
+        "ldapPort": "منفذ LDAP",
+        "ldapCaCert": "شهادة المرجع المصدّق لـ LDAP",
         "enterpriseId": "معرّف مؤسسة {source}",
         "teamId": "معرّف فريق {source}",
         "applicationId": "معرّف تطبيق {source}",
@@ -4421,11 +4437,19 @@
         "youtrackToken": "رمز دائم لمستخدم YouTrack يمكنه قراءة كل المشاريع المراد فهرستها. أنشئه في ملفك الشخصي في YouTrack ضمن أمان الحساب.",
         "azureDatalakeAccountKey": "في مدخل Azure، افتح حساب التخزين، ثم الأمان + الشبكات، ثم مفاتيح الوصول.",
         "smbDomain": "اختياري. اسم NetBIOS أو اسم DNS لنطاق Active Directory. اتركه فارغًا لحساب محلي على خادم الملفات.",
+        "smbLdapHost": "لمزامنة الأذونات فقط. اسم DNS لوحدة تحكم بالنطاق، مثل dc01.corp.example.com. يجب أن يطابق الاسم الوارد في شهادة TLS لوحدة التحكم بالنطاق.",
+        "smbLdapTls": "لمزامنة الأذونات فقط. طريقة تشفير Onyx للاتصال بوحدة التحكم بالنطاق. القيمة الافتراضية هي LDAPS.",
+        "smbLdapPort": "اختياري. القيمة الافتراضية هي 636 لـ LDAPS و389 لـ StartTLS.",
+        "smbLdapCaCert": "اختياري. شهادة PEM للمرجع المصدّق الداخلي الذي وقّع شهادة وحدة التحكم بالنطاق. اتركه فارغًا لاستخدام مخزن الثقة في النظام.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق.",
         "confluencePersonalAccessToken": "الصق [رمز الوصول الشخصي](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) من حساب مسؤول Confluence."
+      },
+      "options": {
+        "ldaps": "LDAPS",
+        "startTls": "StartTLS"
       },
       "methods": {
         "labels": {

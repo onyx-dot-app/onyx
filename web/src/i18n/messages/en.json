@@ -3732,6 +3732,10 @@
               "label": "Path Prefix",
               "description": "A folder in the share, e.g. Projects/2026. Leave empty to index the whole share."
             },
+            "share_permissions_confirmed": {
+              "label": "Share Permissions Confirmed",
+              "description": "Onyx reads the NTFS permissions only. Confirm that the share permissions let in every user that the NTFS permissions let in. This is the case when the share gives access to Everyone or Authenticated Users. Permission sync does not run without this confirmation."
+            },
             "excluded_paths": {
               "label": "Excluded Folders",
               "description": "Folders to skip, as paths from the share root, e.g. Archive/2019. Onyx does not index these folders or the folders below them."
@@ -3747,6 +3751,14 @@
             "port": {
               "label": "Port",
               "description": "The SMB port of the file server. The default is 445."
+            },
+            "email_attribute": {
+              "label": "Email Attribute",
+              "description": "The Active Directory attribute that holds the email a user signs in to Onyx with. Permission sync uses it to match domain users to Onyx users.",
+              "options": {
+                "mail": "mail, then userPrincipalName",
+                "userPrincipalName": "userPrincipalName only"
+              }
             }
           }
         },
@@ -4387,6 +4399,10 @@
         "subdomain": "{source} Subdomain",
         "domain": "{source} Domain",
         "accountDomain": "Account Domain",
+        "ldapHost": "LDAP Host",
+        "ldapTls": "LDAP Encryption",
+        "ldapPort": "LDAP Port",
+        "ldapCaCert": "LDAP CA Certificate",
         "enterpriseId": "{source} Enterprise ID",
         "teamId": "{source} Team ID",
         "applicationId": "{source} Application ID",
@@ -4421,11 +4437,19 @@
         "youtrackToken": "A permanent token for a YouTrack user that can read every project to index. Create it in your YouTrack profile under Account Security.",
         "azureDatalakeAccountKey": "In the Azure portal, open the storage account, then Security + networking, then Access keys.",
         "smbDomain": "Optional. The NetBIOS or DNS name of the Active Directory domain. Leave empty for a local account of the file server.",
+        "smbLdapHost": "For permission sync only. The DNS name of a domain controller, e.g. dc01.corp.example.com. It must match the name in the TLS certificate of the domain controller.",
+        "smbLdapTls": "For permission sync only. How Onyx encrypts the connection to the domain controller. The default is LDAPS.",
+        "smbLdapPort": "Optional. The default is 636 for LDAPS and 389 for StartTLS.",
+        "smbLdapCaCert": "Optional. The PEM certificate of the internal certificate authority that signed the certificate of the domain controller. Leave empty to use the system trust store.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
         "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Upload or paste the `.json` key of a Google service account with domain-wide delegation.",
         "confluencePersonalAccessToken": "Paste the [Personal Access Token](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) from your Confluence admin account."
+      },
+      "options": {
+        "ldaps": "LDAPS",
+        "startTls": "StartTLS"
       },
       "methods": {
         "labels": {

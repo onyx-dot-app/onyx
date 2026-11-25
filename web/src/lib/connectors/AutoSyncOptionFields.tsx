@@ -35,4 +35,5 @@ export const autoSyncConfigBySource: Record<
   youtrack: {},
   azure_datalake: {},
   egnyte: {},
+  smb: {},
 };

@@ -3732,6 +3732,10 @@
               "label": "경로 접두사",
               "description": "공유의 폴더(예: Projects/2026). 전체 공유를 인덱싱하려면 비워 두세요."
             },
+            "share_permissions_confirmed": {
+              "label": "공유 권한 확인됨",
+              "description": "Onyx는 NTFS 권한만 읽습니다. NTFS 권한이 허용하는 모든 사용자를 공유 권한도 허용하는지 확인하세요. 공유가 Everyone 또는 Authenticated Users에 액세스 권한을 부여하면 이에 해당합니다. 이 확인이 없으면 권한 동기화가 실행되지 않습니다."
+            },
             "excluded_paths": {
               "label": "제외할 폴더",
               "description": "건너뛸 폴더를 공유 루트부터의 경로로 입력합니다(예: Archive/2019). Onyx는 이 폴더와 그 하위 폴더를 인덱싱하지 않습니다."
@@ -3747,6 +3751,14 @@
             "port": {
               "label": "포트",
               "description": "파일 서버의 SMB 포트입니다. 기본값은 445입니다."
+            },
+            "email_attribute": {
+              "label": "이메일 특성",
+              "description": "사용자가 Onyx에 로그인할 때 쓰는 이메일을 담은 Active Directory 특성입니다. 권한 동기화는 이 특성으로 도메인 사용자와 Onyx 사용자를 연결합니다.",
+              "options": {
+                "mail": "mail, 그다음 userPrincipalName",
+                "userPrincipalName": "userPrincipalName만"
+              }
             }
           }
         },
@@ -4387,6 +4399,10 @@
         "subdomain": "{source} 서브도메인",
         "domain": "{source} 도메인",
         "accountDomain": "계정 도메인",
+        "ldapHost": "LDAP 호스트",
+        "ldapTls": "LDAP 암호화",
+        "ldapPort": "LDAP 포트",
+        "ldapCaCert": "LDAP CA 인증서",
         "enterpriseId": "{source} 엔터프라이즈 ID",
         "teamId": "{source} 팀 ID",
         "applicationId": "{source} 애플리케이션 ID",
@@ -4421,11 +4437,19 @@
         "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
         "azureDatalakeAccountKey": "Azure Portal에서 스토리지 계정을 열고 보안 + 네트워킹, 액세스 키를 차례로 엽니다.",
         "smbDomain": "선택 사항입니다. Active Directory 도메인의 NetBIOS 또는 DNS 이름입니다. 파일 서버의 로컬 계정이면 비워 두세요.",
+        "smbLdapHost": "권한 동기화에만 사용합니다. 도메인 컨트롤러의 DNS 이름입니다(예: dc01.corp.example.com). 도메인 컨트롤러의 TLS 인증서에 있는 이름과 일치해야 합니다.",
+        "smbLdapTls": "권한 동기화에만 사용합니다. Onyx가 도메인 컨트롤러 연결을 암호화하는 방식입니다. 기본값은 LDAPS입니다.",
+        "smbLdapPort": "선택 사항입니다. 기본값은 LDAPS의 경우 636, StartTLS의 경우 389입니다.",
+        "smbLdapCaCert": "선택 사항입니다. 도메인 컨트롤러의 인증서에 서명한 내부 인증 기관의 PEM 인증서입니다. 비워 두면 시스템 신뢰 저장소를 사용합니다.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "도메인 전체 위임이 설정된 Google 서비스 계정의 `.json` 키를 업로드하거나 붙여 넣으세요.",
         "confluencePersonalAccessToken": "Confluence 관리자 계정의 [개인 액세스 토큰](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)을 붙여 넣으세요."
+      },
+      "options": {
+        "ldaps": "LDAPS",
+        "startTls": "StartTLS"
       },
       "methods": {
         "labels": {

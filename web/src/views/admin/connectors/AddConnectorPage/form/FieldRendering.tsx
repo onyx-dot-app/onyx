@@ -570,11 +570,14 @@ export const RenderField: FC<RenderFieldProps> = ({
             id={field.name}
             placeholder={t("selectInput.emptyOption.label")}
             disabled={disabled}
+            // With a default, the select never reads as empty.
+            defaultOption={field.default}
             options={[
               {
                 options: (field.options ?? []).map(
-                  (option: { name: string }) => ({
-                    value: option.name,
+                  (option: { value: string; name: string }) => ({
+                    // The name is translated; the config stores the value.
+                    value: option.value,
                     title: option.name,
                   })
                 ),

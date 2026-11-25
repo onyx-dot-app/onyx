@@ -10,6 +10,9 @@ export type CredentialDisplayName = keyof CredentialMessages["displayNames"];
 /** A field hint in `admin.credentials.hints`. */
 export type CredentialHintKey = keyof CredentialMessages["hints"];
 
+/** A select option label in `admin.credentials.options`. */
+export type CredentialOptionLabel = keyof CredentialMessages["options"];
+
 /** An auth-method tab label in `admin.credentials.methods.labels`. */
 export type CredentialMethodLabel =
   keyof CredentialMessages["methods"]["labels"];
@@ -50,19 +53,31 @@ interface CredentialFieldBase extends CredentialFieldOptions {
 /**
  * A string field. `jsonFile` is a JSON key file (a Google service-account
  * key): uploaded or pasted, the field holds its text, which the account
- * stores as it is.
+ * stores as it is. `textArea` is text of many lines, such as a PEM
+ * certificate.
  */
 export type CredentialTextKind =
   | "text"
   | "email"
   | "url"
   | "secret"
-  | "jsonFile";
+  | "jsonFile"
+  | "textArea";
+
+/** One choice of a `select` field. `value` is what the backend reads. */
+export interface CredentialSelectOption {
+  value: string;
+  label: CredentialOptionLabel;
+}
 
 /** One field of a credential spec. `kind` picks how it renders. */
 export type CredentialSpecField =
   | (CredentialFieldBase & { kind: CredentialTextKind })
   | (CredentialFieldBase & { kind: "toggle" | "checkbox" })
+  | (CredentialFieldBase & {
+      kind: "select";
+      options: readonly CredentialSelectOption[];
+    })
   | (CredentialFieldBase & { kind: "file"; fileType: FileTypeCategory });
 
 export type CredentialSpecFields = Record<string, CredentialSpecField>;

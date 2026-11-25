@@ -99,3 +99,34 @@ test("a Microsoft certificate account is not ready without its file", () => {
 
   expect(draft).toBeNull();
 });
+
+test("a file share account saves without the permission sync fields", () => {
+  const source = ValidSources.Smb;
+  const spec = typedAccountSpec(source);
+  if (spec === null) throw new Error("A file share takes a typed account");
+  const schema = newAccountSchema(spec, MESSAGES);
+  const signIn = { smb_username: "svc-onyx", smb_password: "secret" };
+
+  expect(
+    typedDraft(source, schema, {
+      [NEW_ACCOUNT_FIELD]: { ...initialNewAccountValues(spec), ...signIn },
+    })?.credential_json
+  ).toEqual(signIn);
+
+  const directory = {
+    ldap_host: "dc01.corp.example.com",
+    ldap_tls: "starttls",
+    ldap_port: "389",
+    ldap_ca_cert:
+      "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----",
+  };
+  expect(
+    typedDraft(source, schema, {
+      [NEW_ACCOUNT_FIELD]: {
+        ...initialNewAccountValues(spec),
+        ...signIn,
+        ...directory,
+      },
+    })?.credential_json
+  ).toEqual({ ...signIn, ...directory });
+});

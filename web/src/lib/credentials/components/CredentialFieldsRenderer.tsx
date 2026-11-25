@@ -5,6 +5,7 @@ import {
   InputSingleUpload,
   InputPasswordTypeIn,
   InputSwitch,
+  InputTextArea,
   InputTypeIn,
   MessageCard,
   Tabs,
@@ -17,7 +18,7 @@ import {
   Label,
   Section,
 } from "@opal/layouts";
-import { InputCheckboxField } from "@opal/form";
+import { InputCheckboxField, InputSingleSelectField } from "@opal/form";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { markdown } from "@opal/utils";
 import { getIn, useField, useFormikContext } from "formik";
@@ -165,6 +166,50 @@ function CredentialField({
     );
   }
 
+  // The hint sits under the input. A plain string is read as markdown.
+  const hint: RichStr | undefined =
+    copy.description === undefined ? undefined : markdown(copy.description);
+
+  if (field.kind === "select") {
+    return (
+      <InputVertical withLabel={name} title={label} subDescription={hint}>
+        <InputSingleSelectField
+          name={name}
+          id={name}
+          data-testid={fieldKey}
+          placeholder={label}
+          // Left blank, the backend uses the default, so the select shows it.
+          defaultOption={field.defaultValue}
+          options={field.options.map((option) => ({
+            value: option.value,
+            title: t(`credentials.options.${option.label}`),
+          }))}
+        />
+      </InputVertical>
+    );
+  }
+
+  if (field.kind === "textArea") {
+    return (
+      <InputVertical withLabel={name} title={label} subDescription={hint}>
+        <FormikField<string>
+          name={name}
+          render={(formikField, _helper, _meta, status) => (
+            <InputTextArea
+              {...formikField}
+              id={name}
+              data-testid={fieldKey}
+              value={formikField.value ?? ""}
+              variant={status === "error" ? "error" : "primary"}
+              rows={3}
+              mono
+            />
+          )}
+        />
+      </InputVertical>
+    );
+  }
+
   const placeholder =
     field.kind === "email"
       ? t("credentials.create.emailField.placeholder")
@@ -188,7 +233,7 @@ function CredentialField({
     <InputVertical
       withLabel={name}
       title={label}
-      subDescription={subDescription}
+      subDescription={subDescription ?? hint}
     >
       <FormikField<string>
         name={name}
