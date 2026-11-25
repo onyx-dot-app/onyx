@@ -188,6 +188,8 @@ def _sse(
     recorded: RecordedRequest | None = None,
 ) -> Iterator[str]:
     model = str(body.get("model", ""))
+    if reply.first_chunk_delay_s:
+        time.sleep(reply.first_chunk_delay_s)  # test-flakes: allow mock latency
     yield _delta(model, {"role": "assistant", "content": ""})
     for piece in _fragments(reply.reasoning or ""):
         yield _delta(model, {"reasoning_content": piece})

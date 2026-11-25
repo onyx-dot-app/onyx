@@ -1,7 +1,8 @@
 {
   "long-answer": {
-    "cache_round_trips": 105.067,
+    "cache_round_trips": 105.0,
     "first_request_digest": "415fad5a3f7bee7a1959a82002579a4c4a16ce8d8645a9dbf99eb10ae4e183a3",
+    "peak_connections_checked_out": 2,
     "sql_commits": 5.0,
     "sql_connections_checked_out": 21.2,
     "sql_statements": 100.2,
@@ -9,29 +10,42 @@
     "transcript_digest": "adc539807d165892c5af004deb37a6df02672a6da900ef34d99c41249c1e3cd0"
   },
   "long-history": {
-    "cache_round_trips": 101.633,
+    "cache_round_trips": 102.0,
     "first_request_digest": "9f31fc9aa51908b2f3c7b0c6d1b8e27eec5631e1d8ddb05bfd49072879d66318",
+    "peak_connections_checked_out": 2,
     "sql_commits": 5.0,
-    "sql_connections_checked_out": 21.3,
-    "sql_statements": 100.333,
+    "sql_connections_checked_out": 21.267,
+    "sql_statements": 100.267,
     "threads_started": 4.0,
     "transcript_digest": "8dc16b595a4edb56b47273bf16b9b284dc2ff0e98d9a4d2e698224df82cd980b"
   },
   "new-session": {
-    "cache_round_trips": 101.567,
+    "cache_round_trips": 101.267,
     "first_request_digest": "d940a0306490635fb12fce4d49976a1e35a36281080514fe4ba33435ad2cd0a1",
+    "peak_connections_checked_out": 2,
     "sql_commits": 7.0,
     "sql_connections_checked_out": 22.2,
     "sql_statements": 96.2,
     "threads_started": 4.0,
     "transcript_digest": "8dc16b595a4edb56b47273bf16b9b284dc2ff0e98d9a4d2e698224df82cd980b"
   },
-  "warm": {
-    "cache_round_trips": 101.133,
+  "slow-llm": {
+    "cache_round_trips": 107.067,
     "first_request_digest": "415fad5a3f7bee7a1959a82002579a4c4a16ce8d8645a9dbf99eb10ae4e183a3",
+    "peak_connections_checked_out": 2,
     "sql_commits": 5.0,
-    "sql_connections_checked_out": 21.233,
-    "sql_statements": 100.233,
+    "sql_connections_checked_out": 21.467,
+    "sql_statements": 100.467,
+    "threads_started": 4.0,
+    "transcript_digest": "8dc16b595a4edb56b47273bf16b9b284dc2ff0e98d9a4d2e698224df82cd980b"
+  },
+  "warm": {
+    "cache_round_trips": 102.133,
+    "first_request_digest": "415fad5a3f7bee7a1959a82002579a4c4a16ce8d8645a9dbf99eb10ae4e183a3",
+    "peak_connections_checked_out": 2,
+    "sql_commits": 5.0,
+    "sql_connections_checked_out": 21.467,
+    "sql_statements": 100.467,
     "threads_started": 4.0,
     "transcript_digest": "8dc16b595a4edb56b47273bf16b9b284dc2ff0e98d9a4d2e698224df82cd980b"
   }

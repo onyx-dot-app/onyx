@@ -33,7 +33,7 @@ uv run python -m scripts.benchmark_chat_turn --json-out report.json
 
 | Option | Use |
 | --- | --- |
-| `--scenarios` | `warm` (the second turn of a session), `new-session` (the send creates the session), `long-history` (a session with 40 turns, which grows by one turn for each measured turn), `long-answer` (a warm turn whose answer comes in 300 chunks) |
+| `--scenarios` | `warm` (the second turn of a session), `new-session` (the send creates the session), `long-history` (a session with 40 turns, which grows by one turn for each measured turn), `long-answer` (a warm turn whose answer comes in 300 chunks), `slow-llm` (a warm turn where the mock waits 0.5 s before its first chunk) |
 | `--turns` | Measured turns per scenario. The default is 30 |
 | `--sample-ms` | Sample the stacks of all server threads at this interval, and record the Onyx call site of each SQL statement. The stacks show where threads wait, not where the CPU goes. It slows the run, so do not compare its timings |
 | `--update-golden` | Store the digests and counts of this run as the expected values |
@@ -46,6 +46,12 @@ uv run python -m scripts.benchmark_chat_turn --json-out report.json
   turns, so a count can be a fraction above a whole number. A connection checkout also sends
   a pool ping, which the statement count does not include. A cache round trip is one command,
   one pipeline, or one WATCH or read inside a pipeline.
+- **DB connections** shows how long the server keeps a connection checked out of the pool:
+  the holds per turn, the total time held per turn, the longest hold, and the most connections
+  held at one time. `db_connection_holds.longest` in the JSON report names the code that
+  opened each of the 5 longest.
+- **`slow-llm`** makes a connection that is held across the LLM call visible: such a hold
+  lasts at least 0.5 s.
 - **`long-answer`** shows the CPU for each streamed chunk. Compare its CPU per turn with
   `warm`: the difference is the cost of 300 chunks.
 - The benchmark database has no license, no connector, no web search provider and no
@@ -74,6 +80,8 @@ The exit status is 1 when a gate fails.
 | Transcript digest equals golden | Any change to packet types, order, placement or content |
 | LLM request digest equals golden | Any change to the prompt, history, tools or parameters |
 | Statements, commits, checkouts, cache round trips and threads per turn not above golden | A change that adds round trips, a commit or a thread |
+| No database connection is held across the LLM call (`slow-llm`) | A session that stays open while the model works |
+| Connections held at one time not above golden | A change that opens a second session while one is open |
 | No traceback in the API server log | An error that the stream hides |
 
 The golden values are in `golden.json`. Dates and times in the LLM request are replaced

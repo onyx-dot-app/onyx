@@ -50,12 +50,19 @@ def _call_site() -> str:
     sites: list[str] = []
     while frame is not None and len(sites) < 3:
         filename = frame.f_code.co_filename
-        if "/onyx/" in filename and "/db/engine/" not in filename:
+        product = "/backend/onyx/" in filename or "/backend/ee/" in filename
+        if product and "/db/engine/" not in filename:
             sites.append(
                 f"{os.path.basename(filename)}:{frame.f_code.co_name}:{frame.f_lineno}"
             )
         frame = frame.f_back
     return " < ".join(sites)
+
+
+# How long each database connection stayed checked out, since the last read.
+_holds: list[tuple[float, str]] = []
+_checked_out_at: dict[int, tuple[float, str]] = {}
+_peak_checked_out = 0
 
 
 def _add(key: str, amount: int = 1) -> None:
@@ -84,8 +91,20 @@ def _install_counters() -> None:
         _add("sql_rollbacks")
 
     @event.listens_for(Engine, "checkout")
-    def _checkout(*_args: Any, **_kwargs: Any) -> None:
-        _add("sql_connections_checked_out")
+    def _checkout(_dbapi: Any, record: Any, *_args: Any, **_kwargs: Any) -> None:
+        global _peak_checked_out
+        site = _call_site()
+        with _lock:
+            _counts["sql_connections_checked_out"] += 1
+            _checked_out_at[id(record)] = (time.monotonic(), site)
+            _peak_checked_out = max(_peak_checked_out, len(_checked_out_at))
+
+    @event.listens_for(Engine, "checkin")
+    def _checkin(_dbapi: Any, record: Any, *_args: Any, **_kwargs: Any) -> None:
+        with _lock:
+            started = _checked_out_at.pop(id(record), None)
+            if started is not None:
+                _holds.append(((time.monotonic() - started[0]) * 1000, started[1]))
 
     execute_command = redis.Redis.execute_command
 
@@ -178,6 +197,20 @@ def main() -> None:
                 "cache_commands": dict(_cache_commands),
                 "stack_samples": dict(_stack_samples),
             }
+
+    @app.post("/_bench/holds")
+    def holds() -> dict[str, Any]:
+        """The connection holds since the last call, then starts a new window."""
+        global _peak_checked_out
+        with _lock:
+            window = list(_holds)
+            _holds.clear()
+            peak = _peak_checked_out
+            _peak_checked_out = len(_checked_out_at)
+        return {
+            "holds": [{"ms": ms, "site": site} for ms, site in window],
+            "peak_checked_out": peak,
+        }
 
     sample_ms = os.environ.get("CHAT_BENCH_SAMPLE_MS")
     if sample_ms:

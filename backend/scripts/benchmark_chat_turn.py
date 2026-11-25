@@ -58,7 +58,11 @@ _QUESTION = "What is the status of the quarterly migration project?"
 _LONG_ANSWER = " ".join([_ANSWER] * 12)
 _LONG_ANSWER_FRAGMENTS = 300
 
-_SCENARIOS = ("warm", "new-session", "long-history", "long-answer")
+# The mock waits this long before its first chunk in the slow-llm scenario. A
+# database connection that is held across the LLM call is held at least as long.
+_SLOW_LLM_DELAY_S = 0.5
+
+_SCENARIOS = ("warm", "new-session", "long-history", "long-answer", "slow-llm")
 _LONG_HISTORY_TURNS = 40
 _WARM_UP_TURNS = 10
 
@@ -226,10 +230,12 @@ class Bench:
             json={"provider_id": response.json()["id"], "model_name": _MODEL_NAME},
         ).raise_for_status()
 
-    def reset_mock(self, long_answer: bool) -> None:
+    def reset_mock(self, long_answer: bool, slow: bool) -> None:
         reply: dict[str, Any] = {"text": _ANSWER}
         if long_answer:
             reply = {"text": _LONG_ANSWER, "text_fragments": _LONG_ANSWER_FRAGMENTS}
+        if slow:
+            reply["first_chunk_delay_s"] = _SLOW_LLM_DELAY_S
         script = {"conversations": [], "default_reply": reply}
         self.mock.put(f"/scripts/{_SCRIPT_ID}", json=script).raise_for_status()
 
@@ -243,6 +249,12 @@ class Bench:
 
     def stats(self) -> dict[str, float]:
         response = self.client.get("/_bench/stats")
+        response.raise_for_status()
+        return response.json()
+
+    def holds(self) -> dict[str, Any]:
+        """The database connection holds since the last call."""
+        response = self.client.post("/_bench/holds")
         response.raise_for_status()
         return response.json()
 
@@ -260,8 +272,10 @@ class Bench:
 
     # -- one turn ------------------------------------------------------------
 
-    def turn(self, session_id: str | None, long_answer: bool = False) -> TurnResult:
-        self.reset_mock(long_answer)
+    def turn(
+        self, session_id: str | None, long_answer: bool = False, slow: bool = False
+    ) -> TurnResult:
+        self.reset_mock(long_answer, slow)
         body: dict[str, Any] = {"message": _QUESTION, "stream": True}
         if session_id is None:
             body["chat_session_info"] = {
@@ -363,7 +377,8 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
     """Prepares the sessions, then measures `turns` turns one after the other."""
     sessions: list[str | None]
     long_answer = name == "long-answer"
-    if name in ("warm", "long-answer"):
+    slow = name == "slow-llm"
+    if name in ("warm", "long-answer", "slow-llm"):
         # The second turn of a session that holds one earlier exchange.
         sessions = []
         for _ in range(turns):
@@ -382,10 +397,14 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
 
     before = bench.stats()
     breakdown_before = bench.breakdown()
+    bench.holds()
     started = time.monotonic()
-    results = [bench.turn(session_id, long_answer) for session_id in sessions]
+    results = [bench.turn(session_id, long_answer, slow) for session_id in sessions]
     elapsed = time.monotonic() - started
     after = bench.stats()
+    holds = bench.holds()
+    hold_ms = sorted(hold["ms"] for hold in holds["holds"])
+    longest = sorted(holds["holds"], key=lambda hold: -hold["ms"])[:5]
     breakdown_after = bench.breakdown()
 
     def per_turn_breakdown(kind: str, top: int) -> dict[str, float]:
@@ -429,6 +448,18 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
                 "stop_ms",
                 "close_ms",
             )
+        },
+        "db_connection_holds": {
+            "per_turn": round(len(hold_ms) / turns, 2),
+            "held_ms_per_turn": round(sum(hold_ms) / turns, 2),
+            "median_ms": _median(list(hold_ms)),
+            "p95_ms": _p95(list(hold_ms)),
+            "max_ms": round(hold_ms[-1], 2) if hold_ms else None,
+            "over_100_ms": sum(1 for ms in hold_ms if ms > 100),
+            "peak_checked_out": holds["peak_checked_out"],
+            "longest": [
+                {"ms": round(hold["ms"], 1), "site": hold["site"]} for hold in longest
+            ],
         },
         "breakdown_per_turn": {
             "sql_statements": per_turn_breakdown("sql_statements", 200),
@@ -518,6 +549,14 @@ def _check_scenario(
             f"{len(requests)} different",
         )
 
+    holds = entry["db_connection_holds"]
+    if name == "slow-llm":
+        gates.check(
+            f"{name}: no database connection is held across the LLM call",
+            holds["max_ms"] is not None and holds["max_ms"] < _SLOW_LLM_DELAY_S * 1000,
+            f"longest hold {holds['max_ms']} ms at {holds['longest'][:1]}",
+        )
+
     current = {
         "transcript_digest": transcripts[0],
         "first_request_digest": results[0].request_digest,
@@ -526,6 +565,7 @@ def _check_scenario(
         "sql_connections_checked_out": entry["per_turn"]["sql_connections_checked_out"],
         "cache_round_trips": entry["per_turn"]["cache_round_trips"],
         "threads_started": entry["per_turn"]["threads_started"],
+        "peak_connections_checked_out": holds["peak_checked_out"],
     }
     if update_golden:
         golden[name] = current
@@ -544,6 +584,13 @@ def _check_scenario(
             current[field] == expected.get(field),
             f"{current[field]} vs golden {expected.get(field)}",
         )
+    gates.check(
+        f"{name}: connections held at one time not above golden",
+        current["peak_connections_checked_out"]
+        <= expected.get("peak_connections_checked_out", 0),
+        f"{current['peak_connections_checked_out']} vs golden "
+        f"{expected.get('peak_connections_checked_out')}",
+    )
     for field, tolerance in _COUNT_TOLERANCES.items():
         gates.check(
             f"{name}: {field} per turn not above golden",
@@ -568,6 +615,13 @@ def _print_scenario(name: str, entry: dict[str, Any]) -> None:
         f"{per_turn['cache_round_trips']} cache round trips "
         f"({per_turn['cache_commands']} commands), "
         f"{per_turn['threads_started']} threads"
+    )
+    holds = entry["db_connection_holds"]
+    print(
+        f"  DB connections:      {holds['per_turn']} holds per turn, "
+        f"{holds['held_ms_per_turn']} ms held per turn, median {holds['median_ms']} ms, "
+        f"p95 {holds['p95_ms']} ms, longest {holds['max_ms']} ms, "
+        f"at most {holds['peak_checked_out']} at one time"
     )
     print(f"  First token ms:      {pair('first_token_ms')}  (median / p95)")
     print(f"    before the LLM:    {pair('pre_llm_ms')}")
