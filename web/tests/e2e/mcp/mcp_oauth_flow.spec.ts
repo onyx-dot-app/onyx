@@ -188,6 +188,7 @@ test.describe("MCP OAuth flows", () => {
     await customize.search(serverName);
     await customize.openIntegration(serverName);
     const detail = new CustomizeIntegrationPage(page);
+    await detail.expectLoaded();
     if (await detail.connectButton(serverName).isVisible()) {
       await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
         detail.startConnect(serverName)

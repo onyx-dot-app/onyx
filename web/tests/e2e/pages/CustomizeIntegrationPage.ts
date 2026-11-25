@@ -24,8 +24,13 @@ export class CustomizeIntegrationPage {
     await this.page.goto(
       `/app/customize/integrations/${integrationId}${query}`
     );
+    await this.expectLoaded(tab);
+  }
+
+  /** Waits for the integration to load: the header and tabs render together. */
+  async expectLoaded(tab: IntegrationPageTab = "Overview"): Promise<void> {
     await expect(
-      this.page.getByRole("tab", { name: tab ?? "Overview", exact: true })
+      this.page.getByRole("tab", { name: tab, exact: true })
     ).toHaveAttribute("aria-selected", "true");
   }
 
