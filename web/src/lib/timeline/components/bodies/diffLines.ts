@@ -15,13 +15,78 @@ function splitLines(text: string): string[] {
   return lines;
 }
 
-/** Past this many cells in the middle of a diff, it falls back to a replace. */
-const MAX_LCS_CELLS = 4_000_000;
+type DiffOp = "keep" | "remove" | "add";
+
+/** Past this many edits in the middle of a diff, it falls back to a replace. */
+const MAX_EDITS = 2000;
 
 /**
- * A line diff from the longest common subsequence, after the shared head and
- * tail are cut off.
+ * The shortest edit script from `a` to `b` (Myers, O(ND)): cheap while few
+ * lines change, whatever the file's length. `null` past `MAX_EDITS` edits.
  */
+function editScript(a: string[], b: string[]): DiffOp[] | null {
+  const n = a.length;
+  const m = b.length;
+  const max = Math.min(n + m, MAX_EDITS);
+  const offset = max + 1;
+  const v = new Int32Array(2 * max + 3);
+  // trace[d] holds the furthest x per diagonal k before round d, for k in
+  // [-d - 1, d + 1], at index k + d + 1.
+  const trace: Int32Array[] = [];
+  for (let d = 0; d <= max; d++) {
+    trace.push(v.slice(offset - d - 1, offset + d + 2));
+    for (let k = -d; k <= d; k += 2) {
+      let x =
+        k === -d || (k !== d && v[offset + k - 1]! < v[offset + k + 1]!)
+          ? v[offset + k + 1]!
+          : v[offset + k - 1]! + 1;
+      let y = x - k;
+      while (x < n && y < m && a[x] === b[y]) {
+        x++;
+        y++;
+      }
+      v[offset + k] = x;
+      if (x >= n && y >= m) return backtrack(trace, d, n, m);
+    }
+  }
+  return null;
+}
+
+function backtrack(
+  trace: Int32Array[],
+  edits: number,
+  n: number,
+  m: number
+): DiffOp[] {
+  const ops: DiffOp[] = [];
+  let x = n;
+  let y = m;
+  for (let d = edits; d > 0; d--) {
+    const before = trace[d]!;
+    const k = x - y;
+    const down =
+      k === -d || (k !== d && before[k - 1 + d + 1]! < before[k + 1 + d + 1]!);
+    const prevK = down ? k + 1 : k - 1;
+    const prevX = before[prevK + d + 1]!;
+    const prevY = prevX - prevK;
+    while (x > prevX && y > prevY) {
+      ops.push("keep");
+      x--;
+      y--;
+    }
+    ops.push(down ? "add" : "remove");
+    x = prevX;
+    y = prevY;
+  }
+  while (x > 0 && y > 0) {
+    ops.push("keep");
+    x--;
+    y--;
+  }
+  return ops.reverse();
+}
+
+/** A line diff with the fewest changed lines, after the shared head and tail are cut off. */
 export function computeDiff(oldText: string, newText: string): DiffLine[] {
   const oldLines = splitLines(oldText);
   const newLines = splitLines(newText);
@@ -44,24 +109,10 @@ export function computeDiff(oldText: string, newText: string): DiffLine[] {
   }
   const oldMid = oldLines.slice(head, oldLines.length - tail);
   const newMid = newLines.slice(head, newLines.length - tail);
-  const n = oldMid.length;
-  const m = newMid.length;
-
-  // lcs[i][j]: the common length of oldMid[i..] and newMid[j..]
-  const lcs: Uint32Array[] | null =
-    n * m <= MAX_LCS_CELLS
-      ? Array.from({ length: n + 1 }, () => new Uint32Array(m + 1))
-      : null;
-  if (lcs !== null) {
-    for (let i = n - 1; i >= 0; i--) {
-      for (let j = m - 1; j >= 0; j--) {
-        lcs[i]![j] =
-          oldMid[i] === newMid[j]
-            ? lcs[i + 1]![j + 1]! + 1
-            : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
-      }
-    }
-  }
+  const ops: DiffOp[] = editScript(oldMid, newMid) ?? [
+    ...oldMid.map((): DiffOp => "remove"),
+    ...newMid.map((): DiffOp => "add"),
+  ];
 
   const result: DiffLine[] = [];
   let oldLineNum = 1;
@@ -84,15 +135,12 @@ export function computeDiff(oldText: string, newText: string): DiffLine[] {
   for (let i = 0; i < head; i++) push("unchanged", oldLines[i] ?? "");
   let i = 0;
   let j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && oldMid[i] === newMid[j] && lcs !== null) {
+  for (const op of ops) {
+    if (op === "keep") {
       push("unchanged", oldMid[i] ?? "");
       i++;
       j++;
-    } else if (
-      i < n &&
-      (lcs === null || j >= m || lcs[i + 1]![j]! >= lcs[i]![j + 1]!)
-    ) {
+    } else if (op === "remove") {
       push("removed", oldMid[i] ?? "");
       i++;
     } else {
