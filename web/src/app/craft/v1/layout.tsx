@@ -4,11 +4,6 @@ import { BuildProvider } from "@/app/craft/contexts/BuildContext";
 import { BuildOnboardingProvider } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import BuildSidebar from "@/app/craft/components/SideBar";
 import RequiredIntegrationGate from "@/sections/integrations/RequiredIntegrationGate";
-// hljs theme for fenced code blocks rendered by the shared CodeBlock (via
-// MinimalMarkdown). CodeBlock expects this CSS to be present; we load it from
-// the craft layout so it's reliably themed on /craft without importing it
-// eagerly elsewhere or editing any component outside /craft.
-import "@/lib/timeline/chat/message/custom-code-styles.css";
 
 /**
  * Build V1 Layout - Skeleton pattern with 3-panel layout

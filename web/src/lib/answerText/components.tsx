@@ -1,11 +1,10 @@
 "use client";
 
-import { createContext, memo, useContext, useMemo } from "react";
+import { memo, useMemo } from "react";
 import ReactMarkdown, {
   type Components,
   type ExtraProps,
 } from "react-markdown";
-import type { Element, ElementContent } from "hast";
 import type { PluggableList } from "unified";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
@@ -36,74 +35,17 @@ import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
 import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
 import { useInResponse } from "@/lib/timeline/components/Response";
-import { CodeBlockBody } from "@/lib/timeline/components/bodies/CodeBlockBody";
 import { prepareAnswerMarkdown } from "@/lib/answerText/utils";
 import { splitMarkdownBlocks } from "@/lib/answerText/streamBlocks";
 import { ANSWER_REMARK_PLUGINS } from "@/lib/answerText/remarkPlugins";
-import { parseCodeFence } from "@/lib/answerText/codeFence";
+import {
+  AnswerCodeBlock,
+  InlineCode,
+  StreamingCodeContext,
+  textOf,
+} from "@/lib/answerText/codeBlocks";
 
 const REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
-
-const StreamingContext = createContext(false);
-
-function textOf(nodes: ElementContent[]): string {
-  return nodes
-    .map((node) =>
-      node.type === "text"
-        ? node.value
-        : node.type === "element"
-          ? textOf(node.children)
-          : ""
-    )
-    .join("");
-}
-
-/** A fenced code block: the `pre` around one `code`. */
-function AnswerCodeBlock({ node }: React.ComponentProps<"pre"> & ExtraProps) {
-  const streaming = useContext(StreamingContext);
-  const code = node?.children.find(
-    (child): child is Element =>
-      child.type === "element" && child.tagName === "code"
-  );
-  const className = code?.properties.className;
-  const languageClass = Array.isArray(className)
-    ? className.find(
-        (name): name is string =>
-          typeof name === "string" && name.startsWith("language-")
-      )
-    : undefined;
-  const { language, fileName } = parseCodeFence(
-    languageClass?.slice("language-".length),
-    code?.data?.meta ?? undefined
-  );
-  return (
-    // not-prose: the answer's typography styles tables, so without it every
-    // code line gets a row border, cell padding and the answer's font size.
-    <div data-testid="answer-code-block" className="not-prose">
-      <CodeBlockBody
-        code={code ? textOf(code.children).replace(/\n$/, "") : ""}
-        language={language}
-        fileName={fileName}
-        streaming={streaming}
-      />
-    </div>
-  );
-}
-
-/** Inline code. Fenced blocks never reach it: `pre` renders them whole. */
-function InlineCode({ children }: React.ComponentProps<"code"> & ExtraProps) {
-  return (
-    // dir="ltr": code is always LTR, even inside RTL prose. The dir attribute
-    // also bidi-isolates the run from the surrounding text.
-    <span
-      dir="ltr"
-      data-testid="code-block"
-      className="font-mono text-text-05 bg-background-tint-00 rounded-sm text-[0.75em] inline whitespace-pre-wrap wrap-break-word py-0.5 px-1"
-    >
-      {children}
-    </span>
-  );
-}
 
 const CALLOUTS = {
   note: { icon: SvgInfo, color: "info", border: "border-theme-blue-05" },
@@ -335,7 +277,7 @@ export function AnswerMarkdown({
   ];
 
   return (
-    <StreamingContext.Provider value={streaming}>
+    <StreamingCodeContext.Provider value={streaming}>
       {/* dir="auto" backstops renderers that do not forward the per-block
           dir stamped by rehypeDirection. */}
       <div
@@ -358,7 +300,7 @@ export function AnswerMarkdown({
           />
         ))}
       </div>
-    </StreamingContext.Provider>
+    </StreamingCodeContext.Provider>
   );
 }
 

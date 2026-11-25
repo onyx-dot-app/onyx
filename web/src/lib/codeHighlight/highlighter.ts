@@ -10,6 +10,7 @@ import {
 } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { bundledLanguages, type BundledLanguage } from "shiki/langs";
+import "@/lib/codeHighlight/shiki.css";
 
 const THEMES = {
   light: "github-light-default",

@@ -601,8 +601,8 @@ send the file's contents to another site. Scripted or CDN parts do not show. Dec
 and CDN loads come back only with a real browser surface for previews, not by
 loosening this policy; the page's CSP applies too. Other bodies
 are read up to the format's limit while they stream, because the server sends
-no length. Text over 200,000 characters shows without highlighting, and
-markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
+no length. Text over 100,000 characters shows without highlighting, and
+markdown over 200,000 shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
 the build's `/pdfjs/` assets, with `isEvalSupported` off. A Word file renders
 through `lib/docx/renderDocx.ts`, which sanitizes it, into a shadow root. A
 PowerPoint deck parses in the browser with `@jvmr/pptx-to-html` through

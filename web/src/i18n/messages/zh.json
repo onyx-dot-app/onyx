@@ -12236,10 +12236,6 @@
         }
       },
       "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "已复制！",
-          "label": "复制"
-        },
         "wrapButton": {
           "unwrapLabel": "取消换行",
           "wrapLabel": "自动换行"
