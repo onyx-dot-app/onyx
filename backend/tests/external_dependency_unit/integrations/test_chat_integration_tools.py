@@ -602,6 +602,10 @@ def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
         # The chat shows the connect card only when the user can sign in.
         assert result.details.error.is_auth_error is user_can_connect
 
+    # An admin who blocks every action also hides the connect tool.
+    set_policy(db_session, rest.id, "", BLOCKED)
+    assert _build(db_session, user, _configuration({rest.id: {}})) == {}
+
 
 def test_a_new_openapi_operation_asks_while_a_migrated_one_runs(
     db_session: Session, user: User, integration_ids: list[int]

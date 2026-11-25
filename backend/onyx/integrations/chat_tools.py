@@ -33,7 +33,6 @@ from onyx.integrations.models import (
     ApiShape,
     EffectivePolicy,
     IntegrationConfig,
-    LinkValue,
     PolicyRows,
 )
 from onyx.integrations.policy import (
@@ -68,33 +67,6 @@ def _integration_tools(
     ``kept_actions``: the action keys that the tool options keep; None keeps
     each."""
     acting_user = None if user.is_anonymous else user
-    credentials = resolve_call_credentials(
-        integration, acting_user, db_session, connections=connections
-    )
-    if isinstance(credentials, ConnectionProblem):
-        logger.debug(
-            "Integration %s has no credential: %s",
-            integration.id,
-            credentials.code.value,
-        )
-        if (
-            acting_user is None
-            or not isinstance(config, ApiConfig)
-            or config.shape is ApiShape.CUSTOM
-            or all(
-                link_settings.value_for(action.key) is LinkValue.BLOCKED
-                for action in actions
-            )
-        ):
-            return []
-        # A preset, OpenAPI or GraphQL app: one tool that asks the user to connect.
-        return [
-            AppConnectTool(
-                integration_id=integration.id,
-                integration_name=integration.name,
-                problem=credentials,
-            )
-        ]
     actions = [
         action
         for action in actions
@@ -117,6 +89,30 @@ def _integration_tools(
         for action in actions
         if policies[action.key] is not EffectivePolicy.BLOCKED
     ]
+    credentials = resolve_call_credentials(
+        integration, acting_user, db_session, connections=connections
+    )
+    if isinstance(credentials, ConnectionProblem):
+        logger.debug(
+            "Integration %s has no credential: %s",
+            integration.id,
+            credentials.code.value,
+        )
+        if (
+            acting_user is None
+            or not isinstance(config, ApiConfig)
+            or config.shape is ApiShape.CUSTOM
+            or not offered
+        ):
+            return []
+        # A preset, OpenAPI or GraphQL app: one tool that asks the user to connect.
+        return [
+            AppConnectTool(
+                integration_id=integration.id,
+                integration_name=integration.name,
+                problem=credentials,
+            )
+        ]
 
     def approval_for(action_key: str) -> ToolApprovalScope | None:
         # Ask is left only in an interactive run.
