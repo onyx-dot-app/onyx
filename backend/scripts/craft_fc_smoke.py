@@ -49,6 +49,7 @@ from onyx.db.users import (
     batch_add_ext_perm_user_if_not_exists,
     delete_user_from_db__no_commit,
     fetch_user_by_id,
+    finish_user_delete,
     get_all_users,
 )
 from onyx.file_store.file_store import PresignableFileStore, get_default_file_store
@@ -405,8 +406,9 @@ def delete_smoke_user(tenant_id: str, user_id: UUID) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db:
         user = fetch_user_by_id(db, user_id)
         if user is not None:
-            delete_user_from_db__no_commit(user, db)
+            cleanup = delete_user_from_db__no_commit(user, db)
             db.commit()
+            finish_user_delete(cleanup, db)
 
 
 def cleanup_leaked(tenant_id: str) -> str:

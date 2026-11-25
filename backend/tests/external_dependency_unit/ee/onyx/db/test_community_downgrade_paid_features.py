@@ -145,8 +145,13 @@ def test_paid_features_are_switched_off(db_session: Session) -> None:
         removed_user_ids = [key.user_id, nested_key.user_id, namesake_key.user_id]
         discord_key_id = discord_key.id
         rate_limit_ids = [rate_limit.id, group_rate_limit.id]
+        photo_file_id = f"downgrade-photo-{uuid4().hex[:8]}"
+        key.user.profile_image_file_id = photo_file_id
 
-        disable_paid_features__no_commit(db_session)
+        cleanup = disable_paid_features__no_commit(db_session)
+
+        # The caller deletes the removed users' files after its commit.
+        assert photo_file_id in cleanup.file_ids
 
         db_session.expire_all()
         assert db_session.scalars(select(Hook.deleted).where(Hook.id == hook.id)).one()

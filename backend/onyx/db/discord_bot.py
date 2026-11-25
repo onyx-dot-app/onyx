@@ -8,15 +8,13 @@ from sqlalchemy.orm import Session, joinedload
 
 from onyx.auth.api_key import build_displayable_api_key, generate_api_key, hash_api_key
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
-from onyx.db.api_key import insert_api_key
+from onyx.db.api_key import insert_api_key, remove_api_key
 from onyx.db.models import (
     ApiKey,
     DiscordBotConfig,
     DiscordChannelConfig,
     DiscordGuildConfig,
-    User,
 )
-from onyx.db.users import delete_user_from_db__no_commit
 from onyx.db.utils import DiscordChannelView
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
@@ -126,7 +124,8 @@ def get_or_create_discord_service_api_key(
 
 
 def delete_discord_service_api_key(db_session: Session) -> bool:
-    """Delete the Discord service API key for a tenant.
+    """Delete the Discord service API key and its service user, and commit
+    the session with the caller's pending changes.
 
     Called when:
     - Bot config is deleted (self-hosted)
@@ -142,17 +141,7 @@ def delete_discord_service_api_key(db_session: Session) -> bool:
     if not existing_key:
         return False
 
-    # Also delete the associated user
-    api_key_user = db_session.scalar(
-        select(User).where(
-            User.id == existing_key.user_id  # ty: ignore[invalid-argument-type]
-        )
-    )
-
-    db_session.delete(existing_key)
-    if api_key_user:
-        delete_user_from_db__no_commit(api_key_user, db_session)
-    db_session.flush()
+    remove_api_key(db_session, existing_key.id)
     logger.info("Deleted Discord service API key")
     return True
 
