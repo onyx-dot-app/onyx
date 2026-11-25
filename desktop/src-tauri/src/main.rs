@@ -302,6 +302,17 @@ fn handler_exec(program: &str, extract_and_run: bool) -> String {
     format!("{prefix}{program} %u")
 }
 
+/// Whether the AppImage runs extracted (no FUSE): then the handler must
+/// start it the same way. The runtime handles `--appimage-extract-and-run`
+/// itself and does not export the variable, but it extracts to
+/// `/tmp/appimage_extracted_*`.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn runs_extracted(env_var: bool, appdir: Option<&str>, appimage: bool, fuse: bool) -> bool {
+    env_var
+        || appdir.is_some_and(|dir| dir.starts_with("/tmp/appimage_extracted_"))
+        || (appimage && !fuse)
+}
+
 /// Writes the per-user onyx:// handler for a build that is not packaged
 /// (AppImage, dev builds) and makes it the default.
 #[cfg(target_os = "linux")]
@@ -309,8 +320,20 @@ fn register_runtime_handler(app: &tauri::AppHandle, program: &std::path::Path) {
     let Ok(dir) = app.path().data_dir().map(|d| d.join("applications")) else {
         return;
     };
-    let extract_and_run = std::env::var_os("APPIMAGE_EXTRACT_AND_RUN").is_some();
-    let exec = handler_exec(&program.to_string_lossy(), extract_and_run);
+    let appimage = app.env().appimage.is_some();
+    let extract_and_run = runs_extracted(
+        std::env::var_os("APPIMAGE_EXTRACT_AND_RUN").is_some(),
+        std::env::var("APPDIR").ok().as_deref(),
+        appimage,
+        std::path::Path::new("/dev/fuse").exists(),
+    );
+    let program_text = program.to_string_lossy();
+    if appimage && program_text.contains(char::is_whitespace) {
+        log::warn!(
+            "the AppImage path has a space; xdg-open may not deliver onyx:// links. Move the AppImage to a path without spaces"
+        );
+    }
+    let exec = handler_exec(&program_text, extract_and_run);
     let body = format!(
         "[Desktop Entry]\nType=Application\nName=Onyx\nExec={exec}\nTerminal=false\nMimeType=x-scheme-handler/onyx;\nNoDisplay=true\n"
     );
@@ -332,6 +355,14 @@ fn register_runtime_handler(app: &tauri::AppHandle, program: &std::path::Path) {
         Ok(status) => log::warn!("could not make {file} open onyx:// links: {status}"),
         Err(e) => log::warn!("could not make {file} open onyx:// links: {e}"),
     }
+}
+
+/// Takes onyx:// back on Linux (`when`: for the log); a preview build run by
+/// hand can claim it while this app runs.
+#[cfg(target_os = "linux")]
+fn reclaim_links(app: &tauri::AppHandle, when: &str) {
+    log::info!("making this app the onyx:// handler ({when})");
+    register_links(app);
 }
 
 #[cfg(target_os = "linux")]
@@ -573,7 +604,8 @@ mod tests {
 
     use super::{
         handler_exec, is_onyx_link_handler, legacy_link_handler, link_command_is_other_program,
-        packaged_desktop_file, registers_links_at_runtime, runs_onyx, takes_over_links,
+        packaged_desktop_file, registers_links_at_runtime, runs_extracted, runs_onyx,
+        takes_over_links,
     };
 
     #[test]
@@ -640,6 +672,26 @@ mod tests {
             ),
             Some(Path::new("/home/a/.local/share/applications/onyx-handler.desktop").into())
         );
+    }
+
+    #[test]
+    fn an_extracted_appimage_is_recognized() {
+        assert!(runs_extracted(true, None, true, true));
+        assert!(runs_extracted(
+            false,
+            Some("/tmp/appimage_extracted_0a1b2c"),
+            true,
+            true
+        ));
+        assert!(runs_extracted(false, None, true, false));
+        assert!(!runs_extracted(
+            false,
+            Some("/tmp/.mount_OnyxAb12"),
+            true,
+            true
+        ));
+        // A dev build without FUSE is not an AppImage.
+        assert!(!runs_extracted(false, None, false, false));
     }
 
     #[test]

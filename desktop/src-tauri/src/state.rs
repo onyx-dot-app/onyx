@@ -28,6 +28,8 @@ pub struct AppState {
     /// A renewed token could not be saved, so the stored token is older than
     /// the one in memory.
     store_stale: AtomicBool,
+    /// The quiet delete of a rejected token was tried this run.
+    rejected_cleanup_tried: AtomicBool,
 }
 
 /// Ends an upload's entry in `AppState::uploads` when the upload ends.
@@ -74,6 +76,7 @@ impl AppState {
             uploads: Mutex::new(HashMap::new()),
             signed_out: Mutex::new(None),
             store_stale: AtomicBool::new(false),
+            rejected_cleanup_tried: AtomicBool::new(false),
         }
     }
 
@@ -195,6 +198,22 @@ impl AppState {
             .clone();
         if skips_store(signed_out.as_deref(), server) {
             return None;
+        }
+        // A sign-out that could not delete the token: the server is signed
+        // out, so the store is not read (a locked store asks each time). The
+        // delete is tried again once per run.
+        let rejected = self.config.get().rejected_tokens.contains_key(server);
+        let tried = rejected && self.rejected_cleanup_tried.swap(true, Ordering::SeqCst);
+        match rejected_store_access(rejected, tried) {
+            StoreAccess::Read => {}
+            StoreAccess::Skip => return None,
+            StoreAccess::CleanupOnce => {
+                match session_store::clear(server) {
+                    Ok(()) => self.forget_rejected(server),
+                    Err(e) => log::warn!("could not delete a signed-out session token: {e}"),
+                }
+                return None;
+            }
         }
         let mut failure = self.read_failure.lock().unwrap_or_else(|p| p.into_inner());
         let token = read_token(
@@ -414,6 +433,23 @@ fn save_then_record(
 
 /// Reads the stored token with `load`. A failed read for `server` that
 /// `keep_failure` keeps is not tried again: the caller gets `None`.
+#[derive(Debug, PartialEq, Eq)]
+enum StoreAccess {
+    Read,
+    /// Signed out with a token that could not be deleted: try the delete.
+    CleanupOnce,
+    Skip,
+}
+
+/// How `token` uses the store for a server with a rejected token record.
+fn rejected_store_access(rejected: bool, cleanup_tried: bool) -> StoreAccess {
+    match (rejected, cleanup_tried) {
+        (false, _) => StoreAccess::Read,
+        (true, false) => StoreAccess::CleanupOnce,
+        (true, true) => StoreAccess::Skip,
+    }
+}
+
 /// Whether `token` skips the OS store: the user signed out of `server`
 /// this run.
 fn skips_store(signed_out: Option<&str>, server: &str) -> bool {
@@ -451,6 +487,14 @@ fn read_token(
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn a_rejected_record_means_signed_out_without_a_read() {
+        assert_eq!(rejected_store_access(false, false), StoreAccess::Read);
+        assert_eq!(rejected_store_access(false, true), StoreAccess::Read);
+        assert_eq!(rejected_store_access(true, false), StoreAccess::CleanupOnce);
+        assert_eq!(rejected_store_access(true, true), StoreAccess::Skip);
+    }
 
     #[test]
     fn a_signed_out_server_is_not_read_again() {

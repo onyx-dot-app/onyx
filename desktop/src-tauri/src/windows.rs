@@ -126,7 +126,39 @@ fn open_local(
     title: &str,
 ) -> Result<WebviewWindow, String> {
     let size = initial_size(label).ok_or("not a local window")?;
-    local_window(app, label, page, title, size)
+    let window = local_window(app, label, page, title, size);
+    if let Err(e) = &window {
+        webview_failed(app, e);
+    }
+    window
+}
+
+/// Whether a window error is the web view failing to start.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn is_webview_start_error(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("failed to create webview") || error.contains("webview2")
+}
+
+/// On Windows, a web view does not start while the earlier desktop app still
+/// runs as another user token: both use the same WebView2 data folder. Says
+/// so once per run; the error is logged by the caller.
+pub(crate) fn webview_failed(app: &AppHandle, error: &str) {
+    #[cfg(windows)]
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SHOWN: AtomicBool = AtomicBool::new(false);
+        if is_webview_start_error(error) && !SHOWN.swap(true, Ordering::SeqCst) {
+            log::warn!("a window could not start its web view: {error}");
+            notify(
+                app,
+                "Onyx could not open",
+                "Close the older version of Onyx, then open Onyx again.",
+            );
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (app, error);
 }
 
 pub fn open_onboarding(app: &AppHandle) -> Result<WebviewWindow, String> {
@@ -366,6 +398,10 @@ pub fn route_to(app: &AppHandle, path: &str) {
                 };
                 if let Err(e) = main_window::open(&app, &server, &token, &path).await {
                     log::warn!("could not open main window: {e}");
+                    if cfg!(windows) && is_webview_start_error(&e) {
+                        webview_failed(&app, &e);
+                        return;
+                    }
                     match state.api.health(&server).await {
                         Err(reason) => show_offline(&app, &server, &path, choice, reason, epoch),
                         Ok(()) => open_failed(&app, "Could not open Onyx", &e),
@@ -464,6 +500,14 @@ pub fn show_primary_except(app: &AppHandle, closing: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_web_view_start_failure_is_recognized() {
+        assert!(super::is_webview_start_error(
+            "runtime error: failed to create webview: WebView2 error: WindowsError(HRESULT(0x80010108))"
+        ));
+        assert!(!super::is_webview_start_error("not a local window"));
+    }
 
     #[test]
     fn a_large_window_shrinks_to_the_work_area() {

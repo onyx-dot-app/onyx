@@ -122,8 +122,9 @@ install of this app upgrades it in place. See
   window and opens sign-in, logs the error, and shows a warning. It records a SHA-256
   fingerprint of each token that could still be loaded (never the token) in `config.json`
   (`rejectedTokens`): the one in use and the stored one, which differ when a renewed token could
-  not be saved. These tokens are never used again, also after a restart. A later read deletes it from the store, and a new
-  sign-in to that server drops the record. The launcher, onboarding and sign-in show one line for each of the same errors,
+  not be saved. These tokens are never used again, also after a restart. While that record exists, the app
+  treats the server as signed out without reading the store (a locked store asks each time); it
+  tries the delete once per launch, and a new sign-in to that server drops the record. The launcher, onboarding and sign-in show one line for each of the same errors,
   for example "Can't find <host>. Check the server address." (`src-tauri/src/reachability.rs`).
 - If the HTTP client cannot start (for example, a broken OpenSSL configuration), a dialog
   says so and the app quits.
@@ -155,7 +156,9 @@ and binary name (`onyx`), so this app takes its place:
   every `onyx.exe` of the user by name, and its "Delete the application data" option deletes
   `%APPDATA%\app.onyx.desktop` and `%LOCALAPPDATA%\app.onyx.desktop`, which this app uses.
   1. It deletes the HKCU uninstall entry first, so Settings and Control Panel cannot start that
-     uninstaller any more.
+     uninstaller any more. It then deletes the earlier setup program's own key
+     (`HKCU\Software\onyx\Onyx`, only when its value names that folder), and `HKCU\Software\onyx`
+     if it is then empty.
   2. It deletes the earlier app's Start menu and desktop shortcuts (only `Onyx.lnk` files that
      point into its folder).
   3. In the earlier program folder (the folder of its `uninstall.exe`), it deletes only the files
@@ -600,6 +603,9 @@ How the app differs from macOS:
     MSI install of the earlier app, their setup program then stops at the downgrade check (exit
     code 2) before the MSI check (exit code 1638). Release builds have the tag version, which is
     higher.
+  - A window that cannot start its web view shows "Close the older version of Onyx, then open
+    Onyx again." once per run, and the error is logged. This happens while the earlier desktop
+    app still runs as another user token: both use the same WebView2 data folder.
   - At launch, a release build deletes a per-user `onyx://` entry
     (`HKCU\Software\Classes\onyx`) that starts another program, and again before each browser
     sign-in. The earlier desktop app
@@ -633,7 +639,11 @@ How the app differs from macOS:
   `~/.local/share/applications/onyx-handler.desktop` and makes it the default with `xdg-mime`.
   Its `Exec` line names the program unquoted when the path has no reserved character, because
   xdg-open's generic path cannot run a quoted program (`handler_exec` in `src-tauri/src/main.rs`).
-  A path with spaces is quoted as the Desktop Entry spec says; some xdg-open versions then fail. At each launch, a `.deb` install makes
+  A path with spaces is quoted as the Desktop Entry spec says; xdg-open's generic path then
+  fails, and the app logs a warning. Keep the AppImage in a path without spaces. An AppImage that
+  runs extracted (`--appimage-extract-and-run`, `APPIMAGE_EXTRACT_AND_RUN`, an `APPDIR` in
+  `/tmp/appimage_extracted_*`, or no `/dev/fuse`) gets `env APPIMAGE_EXTRACT_AND_RUN=1` in the
+  handler. Each browser sign-in takes `onyx://` back first, as at launch. At each launch, a `.deb` install makes
   `Onyx.desktop` the current user's default for `onyx://`, and deletes the per-user `onyx://`
   entry that the earlier desktop app wrote for the same binary
   (`~/.local/share/applications/onyx-handler.desktop`). It deletes the file only if
@@ -642,6 +652,8 @@ How the app differs from macOS:
   `apt remove`, the default names a desktop file that no longer exists, and the desktop ignores
   it. The AppImage entry points to the AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
   launch it once from its new path. A launch while the app runs only shows the running app.
+- lintian still reports `no-changelog` and `no-manual-page` for the `.deb`: the Tauri bundler
+  adds neither. They are advisory, so we accept them.
 - The AppImage uses the host's WebKitGTK graphics libraries: it needs `libGLESv2.so.2`
   (`libgles2` on Debian and Ubuntu, `libglvnd-gles` on Fedora). Minimal installs and containers
   often lack it; then the AppImage exits with "Couldn't open libGLESv2.so.2".

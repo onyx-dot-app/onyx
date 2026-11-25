@@ -262,6 +262,8 @@ pub async fn start_in_browser(
     crate::remove_other_user_link_handler("before browser sign-in");
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     crate::claim_onyx_links(&app.config().identifier, "before browser sign-in");
+    #[cfg(target_os = "linux")]
+    crate::reclaim_links(app, "before browser sign-in");
     app.opener()
         .open_url(authorize.as_str(), None::<&str>)
         .map_err(|e| format!("Could not open your browser: {e}"))?;

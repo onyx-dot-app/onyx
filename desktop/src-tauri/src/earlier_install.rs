@@ -149,6 +149,48 @@ pub fn still_earlier<'a>(names: impl IntoIterator<Item = &'a str>) -> bool {
         .any(|name| name.eq_ignore_ascii_case("uninstall.exe"))
 }
 
+/// The earlier setup program's own key (`Software\<manufacturer>\<product>`,
+/// default value = its install folder) and its parent. The earlier app had
+/// no publisher, so Tauri used the second part of its bundle ID, "onyx".
+pub fn manufacturer_keys(product_name: &str) -> (String, String) {
+    (
+        format!(r"Software\onyx\{product_name}"),
+        r"Software\onyx".to_string(),
+    )
+}
+
+/// Whether that key belongs to the earlier install in `dir`.
+pub fn manufacturer_key_is_earlier(default_value: &str, dir: &str) -> bool {
+    let value = default_value
+        .trim()
+        .trim_matches('"')
+        .trim_end_matches(['\\', '/']);
+    value.eq_ignore_ascii_case(dir.trim_end_matches(['\\', '/']))
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+fn remove_manufacturer_key(hkcu: &winreg::RegKey, product_name: &str, dir: &str) {
+    let (product_key, manufacturer_key) = manufacturer_keys(product_name);
+    let belongs = hkcu
+        .open_subkey(&product_key)
+        .and_then(|k| k.get_value::<String, _>(""))
+        .is_ok_and(|value| manufacturer_key_is_earlier(&value, dir));
+    if !belongs {
+        return;
+    }
+    match hkcu.delete_subkey_all(&product_key) {
+        Ok(()) => log::info!("deleted the earlier desktop app's install-folder key"),
+        Err(e) => log::warn!("could not delete the earlier desktop app's install-folder key: {e}"),
+    }
+    // The parent goes only when nothing else is in it.
+    let empty = hkcu
+        .open_subkey(&manufacturer_key)
+        .is_ok_and(|k| k.enum_keys().next().is_none() && k.enum_values().next().is_none());
+    if empty {
+        let _ = hkcu.delete_subkey(&manufacturer_key);
+    }
+}
+
 /// The identity of the earlier app's `uninstall.exe`: its size and last
 /// write time.
 pub fn file_identity(len: u64, modified_nanos: u128) -> String {
@@ -375,7 +417,10 @@ pub fn retire(app: &tauri::AppHandle) {
                 }
             }
             Step::RemoveUninstallEntry => match hkcu.delete_subkey_all(&key) {
-                Ok(()) => log::info!("deleted the earlier desktop app's uninstall entry"),
+                Ok(()) => {
+                    log::info!("deleted the earlier desktop app's uninstall entry");
+                    remove_manufacturer_key(&hkcu, &app.package_info().name, &dir);
+                }
                 Err(e) => {
                     log::warn!("could not delete the earlier desktop app's uninstall entry: {e}");
                     return;
@@ -503,6 +548,26 @@ mod tests {
             b"C:\\Users\\Ann O'Neil\\AppData\\Local\\Onyx2\\onyx.exe",
             dir
         ));
+    }
+
+    #[test]
+    fn the_earlier_setup_key_is_matched_by_its_folder() {
+        assert_eq!(
+            manufacturer_keys("Onyx"),
+            (
+                r"Software\onyx\Onyx".to_string(),
+                r"Software\onyx".to_string()
+            )
+        );
+        let dir = r"C:\Users\Ann O'Neil\AppData\Local\Onyx";
+        assert!(manufacturer_key_is_earlier(dir, dir));
+        assert!(manufacturer_key_is_earlier(
+            r"c:\users\ann o'neil\appdata\local\onyx\",
+            dir
+        ));
+        assert!(manufacturer_key_is_earlier(&format!("\"{dir}\""), dir));
+        assert!(!manufacturer_key_is_earlier(r"C:\Program Files\Onyx", dir));
+        assert!(!manufacturer_key_is_earlier("", dir));
     }
 
     #[test]
