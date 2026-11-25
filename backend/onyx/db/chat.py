@@ -2160,11 +2160,8 @@ def reserve_chat_response_ids(
     db_session.flush()
 
     # Point parent's latest_child to the last reserved message
-    parent = (
-        db_session.query(ChatMessage)
-        .filter(ChatMessage.id == parent_message_id)
-        .first()
-    )
+    # A parent that this session just saved comes from its identity map.
+    parent = db_session.get(ChatMessage, parent_message_id)
     if parent:
         parent.latest_child_message_id = reserved[-1].id
 
@@ -2815,6 +2812,26 @@ def create_chat_history_chain(
     stop_at_message_id: int | None = None,
 ) -> list[ChatMessage]:
     """Build the linear chain of messages without including the root message"""
+    return _history_chain_and_root(
+        chat_session_id,
+        db_session,
+        prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
+        prefetch_message_details=prefetch_message_details,
+        stop_at_message_id=stop_at_message_id,
+    )[0]
+
+
+def _history_chain_and_root(
+    chat_session_id: UUID,
+    db_session: Session,
+    *,
+    prefetch_top_two_level_tool_calls: bool = True,
+    prefetch_message_details: bool = False,
+    stop_at_message_id: int | None = None,
+    single_root: bool = False,
+) -> tuple[list[ChatMessage], ChatMessage]:
+    """The chain of `create_chat_history_chain` and the root message, from one
+    read of the session's messages. `single_root` rejects a second root."""
     mainline_messages: list[ChatMessage] = []
 
     all_chat_messages = get_chat_messages_by_session(
@@ -2835,6 +2852,15 @@ def create_chat_history_chain(
         if root_message.parent_message is not None:
             raise RuntimeError(
                 "Invalid root message, unable to fetch valid chat message sequence"
+            )
+        # Roots sort first, so a second root is the second message.
+        if (
+            single_root
+            and len(all_chat_messages) > 1
+            and all_chat_messages[1].parent_message_id is None
+        ):
+            raise Exception(
+                "Multiple root messages found for chat session. Data inconsistency detected."
             )
 
     current_message: ChatMessage | None = root_message
@@ -2866,7 +2892,7 @@ def create_chat_history_chain(
 
         previous_message = current_message
 
-    return mainline_messages
+    return mainline_messages, root_message
 
 
 def reserve_stream_id(db_session: Session) -> int:
@@ -2895,10 +2921,12 @@ def load_message_branch(
     The parent must be on the selected branch, unless `any_branch`: then a
     parent off it, such as the suspended response of another model of a
     multi-model turn, brings its own ancestry."""
-    history = create_chat_history_chain(
-        chat_session_id, db_session, prefetch_top_two_level_tool_calls=False
+    history, root = _history_chain_and_root(
+        chat_session_id,
+        db_session,
+        prefetch_top_two_level_tool_calls=False,
+        single_root=True,
     )
-    root = get_or_create_root_message(chat_session_id, db_session)
     if parent_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
         parent = history[-1] if history else root
     elif parent_id is None or parent_id == root.id:
