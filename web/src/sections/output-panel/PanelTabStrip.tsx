@@ -212,6 +212,8 @@ export function PanelTabStrip({
     const observer = new ResizeObserver(updateEdges);
     observer.observe(element);
     if (element.firstElementChild) observer.observe(element.firstElementChild);
+    // An RTL row starts at the scroller's right end
+    if (direction === "rtl") element.scrollLeft = element.scrollWidth;
     updateEdges();
     return () => observer.disconnect();
   }, [direction]);
@@ -291,11 +293,14 @@ export function PanelTabStrip({
               }
             }}
           >
-            {/* Tabs fit their labels; the strip scrolls when they overflow */}
+            {/* Tabs fit their labels; the strip scrolls when they overflow.
+                The row grows with its tabs: a full-width row would overflow
+                at its left in RTL, which the LTR scroller cannot reach. */}
             <Section
               dir={direction}
               flexDirection="row"
               justifyContent="start"
+              width="fit"
               height="auto"
               gap={1}
               className="min-w-full [&>*]:shrink-0"
