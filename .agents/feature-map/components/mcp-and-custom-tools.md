@@ -300,15 +300,15 @@ through `fresh_call_credentials` and `note_rejected_credential`
 (`tools/tool_implementations/http_request.py`).
 Request MCP headers do not stand in for a missing connection. The kind handler (`build_chat_tools`) builds the tools:
 `MCPTool` for an MCP server, one `CustomTool` per operation for an OpenAPI spec,
-one `GraphQLTool` (`tools/tool_implementations/custom/graphql_tool.py`, a
-`CustomTool` that writes a one-root-field document with variables and an
+one `GraphQLTool` (`tools/tool_implementations/custom/graphql_tool.py`, an
+`ApiTool` that writes a one-root-field document with variables and an
 optional `selection`) per root field of a GraphQL app, and one `AppActionTool` (`tools/tool_implementations/app_action/app_action_tool.py`)
 per catalog action of a preset, plus `app__<id>__request` for the `unspecified`
 action. An app action tool sends a raw request only when the URL is in the
 preset's URL scope and the request matches only its own action. The
 `unspecified` action always asks (`integrations/policy.py:always_asks`): no
 setting, chat grant or run mode makes it Allow, it is Blocked with no person to
-answer, and its card offers no approval for the whole chat. `CustomTool` and
+answer, and its card offers no approval for the whole chat. `ApiTool` (REST and GraphQL) and
 `AppActionTool` send through `tools/tool_implementations/http_request.py:send_tool_request`,
 which refuses redirects and caps the response. A preset, REST or GraphQL app whose
 credential does not resolve gives one `AppConnectTool` (`app__<id>__connect`):
@@ -708,15 +708,15 @@ default agent, is Blocked.
     notices only when neither readable content nor structured content exists.
     Transport exceptions report an auth error for a 401,
     `MCPReauthenticationRequired`, or auth words in the message.
-    `tools/tool_implementations/custom/custom_tool.py:CustomTool._run` returns a
+    `tools/tool_implementations/custom/custom_tool.py:ApiTool._run` returns a
     failed result for a blocked destination, a timeout, a connection error
     or a redirect (`tools/tool_implementations/http_request.py:send_tool_request`,
     which the app tools also use), and flags only 401 and 403. Both put a
     `CustomToolCallSummary` in `details`, which the chat renderer draws:
-    `CustomTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
+    `ApiTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
     object in `tool_result`. In a chat with a sandbox, a large output goes to
     the VM, and the summary keeps only its preview in `spilled`
-    ([[code-execution]]). Other `CustomTool` exceptions reach `Tool.run`,
+    ([[code-execution]]). Other `ApiTool` exceptions reach `Tool.run`,
     which gives the model "Tool failed with error: <exception text>" and the
     user no error detail ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **A rejected credential is marked only if it is
@@ -1065,7 +1065,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` and `USER_EMAIL` anywhere in the
   JSON, descriptions included. Headers are not templated. An anonymous user's
   email is substituted as `anonymous` (`tools/tool_constructor.py`).
-- OpenAPI response files have no chat-session stamp. `CustomTool` saves a file
+- OpenAPI response files have no chat-session stamp. `ApiTool` saves a file
   response as `FileOrigin.CHAT_UPLOAD` with no session. Only the
   `ChatMessage.files` branch of the chat-file access check can serve it
   ([[access-control]]).
@@ -1077,7 +1077,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   has no STDIO path and uses `sse_client` for it. Do not remove the enum value:
   the column is a non-native enum, and a stored `STDIO` row would fail to load.
 - A per-tool OAuth token replaces a static `Authorization` header with only a
-  log warning (`tools/tool_implementations/custom/custom_tool.py:CustomTool`).
+  log warning (`tools/tool_implementations/custom/custom_tool.py:ApiTool`).
   Save rejects that pair only for `passthrough_auth`
   (`server/features/tool/api.py:_auth_settings`).
 - On CE, `_apply_mcp_server_access` raises `EE_REQUIRED` for a non-public

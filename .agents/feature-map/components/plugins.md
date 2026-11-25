@@ -318,7 +318,7 @@ only the configuration of a chat that does not exist yet.
     ([[craft-external-apps]]) and to the chat approval gate
     ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
     `integrations/chat_tools.py:build_integration_chat_tools` gives each
-    integration tool, `CustomTool` too, the approval scope of an Ask action and
+    integration tool, REST and GraphQL too, the approval scope of an Ask action and
     leaves out a Blocked action. The Actions tab
     (`web/src/sections/integrations/IntegrationActionsTab.tsx`) shows the
     policies with or without Craft, and so does the "Users Can Save Always
