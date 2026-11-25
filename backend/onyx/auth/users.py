@@ -1428,11 +1428,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     is_registration=True,
                 )
                 try:
-                    user = await self._insert_web_user(email, is_verified=True)
+                    new_user = await self._insert_web_user(email, is_verified=True)
                 except IntegrityError as error:
-                    # Two links for this new address were redeemed at once and
-                    # the other request inserted first, as in ``create``. Sign
-                    # in to that row; it already ran the new-account steps.
+                    # Another request inserted a row for this address after the
+                    # lookup above, as in ``create``: a second link, a password
+                    # sign-up or a permission sync. It is an existing account
+                    # now, so it takes the checks below.
                     await db_session.rollback()
                     logger.warning(
                         "IntegrityError on magic link sign-up, assuming duplicate: %s",
@@ -1443,15 +1444,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise error
                 else:
                     await seed_pinned_personas_from_featured(
-                        db_session=db_session, user=user
+                        db_session=db_session, user=new_user
                     )
-                    await self.on_after_register(user, request)
-            elif user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
+                    await self.on_after_register(new_user, request)
+                    remove_user_from_invited_users_after_login(
+                        new_user.email, new_user.id, tenant_id
+                    )
+                    return new_user
+
+            # An existing account: found above, or inserted by another request.
+            if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
                 # The account's session follows its SSO provider, and that
                 # session has ended. A session from the link would be refused
                 # on the next request, so send the person to SSO now.
                 raise OnyxError(OnyxErrorCode.UNAUTHORIZED, MAGIC_LINK_USE_SSO_CODE)
-            elif not user.account_type.is_web_login():
+            if not user.account_type.is_web_login():
                 # A permission-sync placeholder for this address becomes the
                 # real account, the same way a first OAuth login claims it.
                 user = await self._promote_placeholder_to_web_login(

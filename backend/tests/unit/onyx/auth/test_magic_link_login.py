@@ -76,6 +76,7 @@ class _TenantWork:
         self.user_db = MagicMock()
         self.user_db.get_by_email = AsyncMock()
         self.insert = AsyncMock()
+        self.promote = AsyncMock()
         self.seed = AsyncMock()
         self.on_after_register = AsyncMock()
         self.manager = UserManager(self.user_db)
@@ -100,6 +101,7 @@ def tenant_work() -> Iterator[_TenantWork]:
         patch(f"{_MODULE}.fetch_ee_implementation_or_noop", side_effect=ee),
         patch.object(UserManager, "_tenant_session_with_bound_user_db", session),
         patch.object(UserManager, "_insert_web_user", work.insert),
+        patch.object(UserManager, "_promote_placeholder_to_web_login", work.promote),
         patch.object(UserManager, "on_after_register", work.on_after_register),
         patch(f"{_MODULE}.seed_pinned_personas_from_featured", work.seed),
         patch(f"{_MODULE}.get_security_settings", return_value=settings),
@@ -110,25 +112,82 @@ def tenant_work() -> Iterator[_TenantWork]:
         yield work
 
 
-@pytest.mark.asyncio
-async def test_two_links_redeemed_at_once_sign_in_to_one_account(
-    tenant_work: _TenantWork,
-) -> None:
-    winner = MagicMock()
-    winner.oidc_expiry = None
-    # Both requests saw no account; the other one inserted first.
+def _row(*, web_login: bool = True, verified: bool = True) -> MagicMock:
+    row = MagicMock()
+    row.oidc_expiry = None
+    row.account_type.is_web_login.return_value = web_login
+    row.is_verified = verified
+    return row
+
+
+def _lose_the_insert_to(tenant_work: _TenantWork, winner: MagicMock) -> None:
+    """The lookup saw no account; another request inserted first."""
     tenant_work.user_db.get_by_email.side_effect = [None, winner]
     tenant_work.insert.side_effect = IntegrityError(
         "INSERT INTO user", {}, Exception("duplicate key")
     )
 
+
+@pytest.mark.asyncio
+async def test_two_links_redeemed_at_once_sign_in_to_one_account(
+    tenant_work: _TenantWork,
+) -> None:
+    winner = _row()
+    _lose_the_insert_to(tenant_work, winner)
+
     user = await tenant_work.manager.magic_link_login(EMAIL, None)
 
     assert user is winner
     tenant_work.session.rollback.assert_awaited_once()
-    # The winner already ran the new-account steps.
+    # The new-account steps are the inserting request's job.
     tenant_work.seed.assert_not_awaited()
     tenant_work.on_after_register.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_racing_unverified_sign_up_is_verified(
+    tenant_work: _TenantWork,
+) -> None:
+    """A password sign-up inserted an unverified row first."""
+    winner = _row(verified=False)
+    verified = _row()
+    _lose_the_insert_to(tenant_work, winner)
+    tenant_work.user_db.update = AsyncMock(return_value=verified)
+
+    user = await tenant_work.manager.magic_link_login(EMAIL, None)
+
+    assert user is verified
+    tenant_work.user_db.update.assert_awaited_once_with(winner, {"is_verified": True})
+
+
+@pytest.mark.asyncio
+async def test_a_racing_placeholder_is_promoted(tenant_work: _TenantWork) -> None:
+    """A permission sync inserted a placeholder row first."""
+    winner = _row(web_login=False)
+    promoted = _row()
+    _lose_the_insert_to(tenant_work, winner)
+    tenant_work.promote.return_value = promoted
+
+    user = await tenant_work.manager.magic_link_login(EMAIL, None)
+
+    assert user is promoted
+    tenant_work.promote.assert_awaited_once_with(
+        tenant_work.session, winner, is_verified=True
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_racing_row_with_an_expired_sso_session_is_sent_to_sso(
+    tenant_work: _TenantWork,
+) -> None:
+    winner = _row()
+    winner.oidc_expiry = datetime.now(timezone.utc) - timedelta(hours=1)
+    _lose_the_insert_to(tenant_work, winner)
+
+    with pytest.raises(OnyxError) as excinfo:
+        await tenant_work.manager.magic_link_login(EMAIL, None)
+
+    assert excinfo.value.detail == MAGIC_LINK_USE_SSO_CODE
 
 
 @pytest.mark.asyncio
