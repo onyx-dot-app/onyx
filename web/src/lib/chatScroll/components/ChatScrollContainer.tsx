@@ -505,6 +505,7 @@ const ChatScrollContainer = React.memo(
         ) {
           return;
         }
+        const modeAtOpen = modeRef.current;
         modeRef.current = "reading";
         const inputAtOpen = userInputAtRef.current;
         return () => {
@@ -517,7 +518,11 @@ const ChatScrollContainer = React.memo(
             (viewport.bottom - footerHeight(contentWrapperRef.current));
           const roomAbove = rect.top - viewport.top - TURN_TOP_OFFSET_PX;
           const delta = Math.min(hiddenBelow, roomAbove);
-          if (delta <= 0) return;
+          if (modeRef.current !== "reading") return;
+          if (delta <= 0) {
+            modeRef.current = modeAtOpen;
+            return;
+          }
           container.scrollBy({
             top: delta,
             behavior: prefersReducedMotion() ? "instant" : "smooth",

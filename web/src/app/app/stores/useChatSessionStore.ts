@@ -38,6 +38,7 @@ import {
 /** An error that belongs to the session, not to a saved message. */
 export interface SessionError {
   error: string;
+  affectsRunStatus?: false;
   errorCode?: string;
   isRetryable?: boolean;
   details?: Record<string, any>;

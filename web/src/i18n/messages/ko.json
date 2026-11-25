@@ -12355,7 +12355,8 @@
       },
       "markdownImage": {
         "unavailable": {
-          "text": "이미지를 사용할 수 없습니다"
+          "text": "이미지를 사용할 수 없습니다",
+          "withAlt": "{alt} · 이미지를 사용할 수 없습니다"
         }
       },
       "markdownTable": {

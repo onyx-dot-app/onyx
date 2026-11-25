@@ -12355,7 +12355,8 @@
       },
       "markdownImage": {
         "unavailable": {
-          "text": "Imagem indisponível"
+          "text": "Imagem indisponível",
+          "withAlt": "{alt} · Imagem indisponível"
         }
       },
       "markdownTable": {

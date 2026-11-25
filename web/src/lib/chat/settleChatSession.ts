@@ -381,7 +381,10 @@ export async function settleChatSession({
     }
     // A replay or refresh can take ownership before settlement completes.
     if (sendError) {
-      useChatSessionStore.getState().setUncaughtError(sessionId, sendError);
+      useChatSessionStore.getState().setUncaughtError(sessionId, {
+        ...sendError,
+        affectsRunStatus: false,
+      });
     }
     // A reader that lost a running stream reattaches: from its saved cursor,
     // or from the start into reset rows. The received rows stay on screen

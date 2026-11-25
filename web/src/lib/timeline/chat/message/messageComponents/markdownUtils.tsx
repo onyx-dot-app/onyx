@@ -170,7 +170,7 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
       <span className="inline-block rounded-lg border border-01 px-2 py-1">
         <Text font="secondary-body" color="text-03">
           {alt
-            ? `${alt} · ${t("markdownImage.unavailable.text")}`
+            ? t("markdownImage.unavailable.withAlt", { alt })
             : t("markdownImage.unavailable.text")}
         </Text>
       </span>

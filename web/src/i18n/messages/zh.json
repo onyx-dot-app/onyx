@@ -12355,7 +12355,8 @@
       },
       "markdownImage": {
         "unavailable": {
-          "text": "图片不可用"
+          "text": "图片不可用",
+          "withAlt": "{alt} · 图片不可用"
         }
       },
       "markdownTable": {

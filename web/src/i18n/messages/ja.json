@@ -12355,7 +12355,8 @@
       },
       "markdownImage": {
         "unavailable": {
-          "text": "画像を表示できません"
+          "text": "画像を表示できません",
+          "withAlt": "{alt} · 画像を表示できません"
         }
       },
       "markdownTable": {
