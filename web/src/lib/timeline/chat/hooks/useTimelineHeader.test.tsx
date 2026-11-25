@@ -231,12 +231,33 @@ describe("useTimelineHeader", () => {
       },
       { placement: placement(1), obj: { type: PacketType.SECTION_END } },
     ]);
-    const { result } = renderHook(() =>
-      useTimelineHeader([
-        { turnIndex: 0, steps: [running] },
-        { turnIndex: 0, steps: [done] },
-      ])
+    const { result, rerender } = renderHook(
+      ({ later }: { later: typeof done }) =>
+        useTimelineHeader([
+          { turnIndex: 0, steps: [running] },
+          { turnIndex: 0, steps: [later] },
+        ]),
+      { initialProps: { later: done } }
     );
     expect(result.current.headerText).toBe("header.searchingWeb.label");
+
+    // Stderr marks a step failed, but it still runs until its end packet.
+    const warning = step(1, [
+      {
+        placement: placement(1),
+        obj: { type: PacketType.PYTHON_TOOL_START, code: "import x" },
+      },
+      {
+        placement: placement(1),
+        obj: {
+          type: PacketType.PYTHON_TOOL_DELTA,
+          stdout: "",
+          stderr: "DeprecationWarning",
+          file_ids: [],
+        },
+      },
+    ]);
+    rerender({ later: warning });
+    expect(result.current.headerText).toBe("header.executingCode.label");
   });
 });
