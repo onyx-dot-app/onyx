@@ -13,6 +13,7 @@ from functools import partial
 from itertools import count
 from uuid import UUID
 
+import regex
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
@@ -26,7 +27,12 @@ from onyx.db.chat import (
     save_chat_artifact,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.file_store.utils import chat_output_file_type
+from onyx.file_store.constants import ARTIFACT_TEXT_MAX_FILE_BYTES
+from onyx.file_store.models import ArtifactText
+from onyx.file_store.utils import (
+    chat_output_file_type,
+    get_or_extract_artifact_text,
+)
 from onyx.indexing.chat_artifact_index import (
     delete_chat_artifacts_from_index,
     send_chat_artifact_index_tasks,
@@ -47,13 +53,19 @@ from onyx.server.features.build.sandbox.harness_base import (
 from onyx.server.features.build.sandbox.models import session_workspace
 from onyx.tools.models import ToolApprovalDetails, ToolCallException
 from onyx.tools.tool_implementations.sandbox import file_copies
+from onyx.tools.tool_implementations.sandbox.artifact_text import (
+    artifact_lines,
+    find_lines,
+    read_lines,
+)
 from onyx.tools.tool_implementations.sandbox.errors import artifact_errors, tool_error
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
-    ARTIFACTS_LIST_MAX_CHARS,
+    ARTIFACT_RESULT_MAX_CHARS,
     ARTIFACTS_LIST_MAX_LIMIT,
     ARTIFACTS_QUERY_MAX_CHARS,
     DELETE_OF_A_VERSION,
+    FIND_TIMEOUT_SECONDS,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_TITLE_CHARS,
     VERSION_REASON_MAX_CHARS,
@@ -63,13 +75,18 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactFileReference,
     ArtifactList,
     ArtifactPublished,
+    ArtifactsFound,
+    ArtifactsRead,
     ArtifactVersionConflict,
     DeleteOperation,
+    FoundText,
     KeptTitle,
     LibraryFileTarget,
+    LibraryFindArguments,
     LibraryListArguments,
     LibraryListFilters,
     LibraryPrepareMaterializeArguments,
+    LibraryReadArguments,
     LibraryReplaceLibraryFileArguments,
     ListedArtifact,
     ManageLibraryArguments,
@@ -80,6 +97,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     MaterializedItems,
     PublishedFile,
     PublishFileArgument,
+    ReadText,
     RenameOperation,
     RestoreVersionOperation,
     UpdateOperation,
@@ -349,7 +367,7 @@ def replace_file(
 def list_artifacts(user_id: UUID, arguments: LibraryListArguments) -> ArtifactList:
     """A page of the published files in the user's listable chats, from the
     database only; it never starts the VM. A page keeps to
-    ARTIFACTS_LIST_MAX_CHARS, under the spill limit of one result, and the
+    ARTIFACT_RESULT_MAX_CHARS, under the spill limit of one result, and the
     step's budget does not spill it."""
     chat_id: UUID | None = None
     if arguments.chat_id is not None:
@@ -407,7 +425,7 @@ def list_artifacts(user_id: UUID, arguments: LibraryListArguments) -> ArtifactLi
             if more and shown
             else None,
         )
-        if len(page.model_dump_json()) <= ARTIFACTS_LIST_MAX_CHARS or len(shown) <= 1:
+        if len(page.model_dump_json()) <= ARTIFACT_RESULT_MAX_CHARS or len(shown) <= 1:
             return page
         shown, more = shown[:-1], True
 
@@ -932,3 +950,208 @@ def manage(
             + "\n".join(f"- {result.error}" for result in results)
         )
     return ManageResults(results=results)
+
+
+# Room in a read or find item's JSON for the numbers that its lines,
+# text or matches set (total_lines, total_pages, start_line, end_line,
+# next_start_line, total_matches_seen, next_match_offset, reached_line); the
+# empty item shows them as 0, null or not at all.
+_ITEM_NUMBERS_CHARS = 64
+
+
+def _published_texts(
+    user_id: UUID, references: Sequence[ArtifactFileReference], action: str
+) -> list[tuple[ListedArtifact, ArtifactText]]:
+    """Each reference's published file and its text, from the database and
+    the file store only; later calls reuse a version's cached text
+    (artifact_text.py). A call reads all of its files or none: a refused
+    reference, a file larger than ARTIFACT_TEXT_MAX_FILE_BYTES or a file
+    without text fails the call with every such error. Every lookup comes
+    before any text, so no database session waits on an extraction."""
+    errors: list[str] = []
+    files: list[ListedArtifact] = []
+    with artifact_errors(action):
+        with get_session_with_current_tenant() as db_session:
+            for reference in references:
+                try:
+                    files.append(_published_file(db_session, user_id, reference))
+                except ToolCallException as error:
+                    errors.append(error.llm_facing_message)
+    texts: list[tuple[ListedArtifact, ArtifactText]] = []
+    for file in files:
+        with artifact_errors(action):
+            text = get_or_extract_artifact_text(
+                file.file_id, file.file_name, file.file_size_bytes
+            )
+        if text is None:
+            errors.append(
+                f"{file.file_name} is larger than "
+                f"{ARTIFACT_TEXT_MAX_FILE_BYTES >> 20} MiB; copy it into the "
+                "sandbox to work with it"
+            )
+        elif not any(page.strip() for page in text.pages):
+            errors.append(
+                f"{file.file_name} has no text; copy it into the sandbox to "
+                "work with it"
+            )
+        else:
+            texts.append((file, text))
+    if errors:
+        raise tool_error("\n".join(errors))
+    return texts
+
+
+def _page_lines(
+    file: ListedArtifact,
+    page_starts: Sequence[int],
+    total_lines: int,
+    start_page: int,
+    end_page: int,
+) -> tuple[int, int]:
+    """The first and last line of pages `start_page` to `end_page` of
+    `file`; the last page stops at the file's last."""
+    if not page_starts:
+        raise tool_error(
+            f"{file.file_name} has no pages; read or search it by line instead"
+        )
+    if start_page > len(page_starts):
+        raise tool_error(f"{file.file_name} has {len(page_starts)} pages")
+    end_page = min(end_page, len(page_starts))
+    return page_starts[start_page - 1], (
+        page_starts[end_page] - 1 if end_page < len(page_starts) else total_lines
+    )
+
+
+def read(user_id: UUID, arguments: LibraryReadArguments) -> ArtifactsRead:
+    """The numbered lines of published files at any version, from the
+    database and the file store only; it never starts the VM. Every item
+    has its file (shown_artifact), and their text shares
+    ARTIFACT_RESULT_MAX_CHARS in order: an item that the limit cuts gives
+    the line where its text continues. One item's lines are in memory at a
+    time."""
+    texts = _published_texts(user_id, arguments.read, "The read")
+    result = ArtifactsRead(
+        items=[
+            ReadText(
+                file=shown_artifact(file),
+                total_lines=0,
+                total_pages=None,
+                start_line=0,
+                end_line=0,
+                text="",
+                next_start_line=None,
+                truncated=text.truncated,
+            )
+            for file, text in texts
+        ]
+    )
+    for index, (item, (file, text), shown) in enumerate(
+        zip(arguments.read, texts, result.items, strict=True)
+    ):
+        lines, page_starts = artifact_lines(text)
+        if item.mode == "pages":
+            end_page = item.end_page or item.start_page
+            first, last = _page_lines(
+                file, page_starts, len(lines), item.start_page, end_page
+            )
+            # A start_line resumes a read of the same pages that the limit cut.
+            if "start_line" in item.model_fields_set:
+                if not first <= item.start_line <= last:
+                    raise tool_error(
+                        f"start_line {item.start_line} is outside pages "
+                        f"{item.start_page} to {end_page} of {file.file_name}, "
+                        f"lines {first} to {last}"
+                    )
+                first = item.start_line
+        else:
+            first, last = item.start_line, item.start_line + item.max_lines - 1
+        shown.total_lines = len(lines)
+        shown.total_pages = len(page_starts) or None
+        shown.start_line = first
+        shown.text, shown.end_line = read_lines(
+            lines,
+            page_starts,
+            first,
+            last,
+            ARTIFACT_RESULT_MAX_CHARS
+            - len(result.model_dump_json())
+            - (len(texts) - index) * _ITEM_NUMBERS_CHARS,
+        )
+        # Pages mode continues only inside its pages; lines mode to the file's end.
+        shown.next_start_line = (
+            shown.end_line + 1
+            if shown.end_line < (last if item.mode == "pages" else len(lines))
+            else None
+        )
+    return result
+
+
+def find(user_id: UUID, arguments: LibraryFindArguments) -> ArtifactsFound:
+    """The lines of published files at any version in which a pattern
+    matches, as grep finds them, from the database and the file store
+    only; it never starts the VM. A literal pattern cannot backtrack; a
+    regular expression runs in `regex` under the item's time limit. Every
+    item has its file (shown_artifact), and their matches share
+    ARTIFACT_RESULT_MAX_CHARS in order. One item's lines are in memory at a
+    time."""
+    patterns: list[regex.Pattern[str]] = []
+    for item in arguments.find:
+        try:
+            patterns.append(
+                regex.compile(
+                    item.pattern if item.regex else regex.escape(item.pattern),
+                    0 if item.case_sensitive else regex.IGNORECASE,
+                )
+            )
+        except regex.error as error:
+            raise tool_error(
+                f"The pattern {item.pattern!r} is not a regular expression: {error}"
+            ) from error
+    texts = _published_texts(user_id, arguments.find, "The find")
+    result = ArtifactsFound(
+        items=[
+            FoundText(
+                file=shown_artifact(file),
+                total_matches_seen=0,
+                matches=[],
+                next_match_offset=None,
+                timed_out=False,
+                truncated=text.truncated,
+            )
+            for file, text in texts
+        ]
+    )
+    for index, (item, pattern, (file, text), found) in enumerate(
+        zip(arguments.find, patterns, texts, result.items, strict=True)
+    ):
+        lines, page_starts = artifact_lines(text)
+        first, last = (
+            _page_lines(
+                file,
+                page_starts,
+                len(lines),
+                item.start_page or 1,
+                item.end_page or len(page_starts),
+            )
+            if item.start_page is not None or item.end_page is not None
+            else (1, len(lines))
+        )
+        found.matches, found.total_matches_seen, found.reached_line = find_lines(
+            lines,
+            page_starts,
+            pattern,
+            max(first, item.start_line or 1),
+            min(last, item.end_line or last),
+            before=item.context_before_lines,
+            after=item.context_after_lines,
+            max_matches=item.max_matches,
+            offset=item.match_offset,
+            max_chars=ARTIFACT_RESULT_MAX_CHARS
+            - len(result.model_dump_json())
+            - (len(texts) - index) * _ITEM_NUMBERS_CHARS,
+            timeout=FIND_TIMEOUT_SECONDS,
+        )
+        shown = item.match_offset + len(found.matches)
+        found.next_match_offset = shown if found.total_matches_seen > shown else None
+        found.timed_out = found.reached_line is not None
+    return result

@@ -324,10 +324,11 @@ ARTIFACTS_PATH_MAX_CHARS = 300
 ARTIFACTS_CHAT_TITLE_MAX_CHARS = 200
 # The most extensions that one file type filter takes.
 ARTIFACTS_MAX_FILE_TYPES = 50
-# The longest library_list result; a page drops its last entries to fit.
-# Below spill.RESULT_MAX_CHARS, the spill limit of one result, so neither
-# that limit nor the step's budget spills a page.
-ARTIFACTS_LIST_MAX_CHARS = 40_000
+# The longest result of a list, read or find: a list page drops its last
+# entries to fit, and a read or find stops its text there. Below
+# spill.RESULT_MAX_CHARS, the spill limit of one result, and the spill
+# exempts these tools, so the step's budget does not spill one either.
+ARTIFACT_RESULT_MAX_CHARS = 40_000
 # Model text that a result or its error can echo. Such a result may never
 # spill, so the text has a cap.
 _EchoedText = Annotated[str, Field(max_length=ARTIFACTS_PATH_MAX_CHARS)]
@@ -592,8 +593,8 @@ ARTIFACT_CURSOR: TypeAdapter[ArtifactCursor] = TypeAdapter(ArtifactCursor)
 
 
 class ListedArtifact(BaseModel):
-    """A published file in an library_list page, or the file that
-    library_prepare_materialize looks up: one version of an artifact."""
+    """A published file in an library_list page, or the file that a copy,
+    read or find looks up: one version of an artifact."""
 
     # The artifact's ID, the same for every version.
     library_file_id: UUID
@@ -604,8 +605,8 @@ class ListedArtifact(BaseModel):
     # (db/chat.py:get_user_published_file); a list page has none, because
     # it shows the newest.
     latest_version_number: Annotated[int | None, OMITTED_WHEN_NONE] = None
-    # The artifact's name: a rename's, else the file record's; a page cuts
-    # it (shown_artifact).
+    # The artifact's name: a rename's, else the file record's. A result
+    # shows it, the chat title and the path cut (shown_artifact).
     file_name: str
     title: str | None
     artifact_type: ArtifactType
@@ -615,19 +616,17 @@ class ListedArtifact(BaseModel):
     created_at: datetime
     modified_at: datetime
     chat_id: UUID
-    # A page cuts it (shown_artifact).
     chat_title: str | None
-    # published_display_path of the artifact's path; a page cuts it
-    # (shown_artifact).
+    # published_display_path of the artifact's path.
     path: str
     # artifact_url of this version.
     url: str
 
 
 def shown_artifact(artifact: ListedArtifact) -> ListedArtifact:
-    """`artifact` as a list page shows it: its name and chat title cut to
-    ARTIFACTS_NAME_MAX_CHARS and ARTIFACTS_CHAT_TITLE_MAX_CHARS, and a longer
-    path to its last ARTIFACTS_PATH_MAX_CHARS."""
+    """`artifact` as a list page, read or find shows it: its name and chat
+    title cut to ARTIFACTS_NAME_MAX_CHARS and ARTIFACTS_CHAT_TITLE_MAX_CHARS,
+    and a longer path to its last ARTIFACTS_PATH_MAX_CHARS."""
     return artifact.model_copy(
         update={
             "file_name": artifact.file_name[:ARTIFACTS_NAME_MAX_CHARS],
@@ -903,6 +902,196 @@ class ManageResults(BaseModel):
     results: list[ManageResult]
 
 
+# library_read and library_find: the most items of one call.
+ARTIFACT_TEXT_MAX_ITEMS = 5
+# library_read: the lines of an item by default and at most, and the longest
+# line that it shows whole.
+READ_DEFAULT_LINES = 400
+READ_MAX_LINES = 2_000
+READ_LINE_MAX_CHARS = 1_000
+# library_find: the longest pattern, the matches of an item by default and
+# at most, the context lines on each side at most, the longest line that it
+# shows whole, and the time that the matching of one item may take.
+FIND_PATTERN_MAX_CHARS = 500
+FIND_DEFAULT_MATCHES = 20
+FIND_MAX_MATCHES = 100
+FIND_MAX_CONTEXT_LINES = 5
+FIND_LINE_MAX_CHARS = 400
+FIND_TIMEOUT_SECONDS = 1.0
+
+
+class ReadItem(ArtifactFileReference):
+    mode: Literal["lines", "pages"] = Field(
+        default="lines",
+        description="lines reads max_lines from start_line; pages reads whole "
+        "pages start_page to end_page of a PDF, a slide deck or a spreadsheet "
+        "(one page per sheet), from start_line, which must be inside them.",
+    )
+    start_line: int = Field(
+        default=1,
+        ge=1,
+        description="lines: the first line. pages: the next_start_line of a "
+        "result that the limit cut, with the same pages, to read on to their end.",
+    )
+    max_lines: int = Field(
+        default=READ_DEFAULT_LINES,
+        ge=1,
+        le=READ_MAX_LINES,
+        description=f"lines: the most lines, at most {READ_MAX_LINES}.",
+    )
+    start_page: int = Field(default=1, ge=1, description="pages: the first page.")
+    end_page: int | None = Field(
+        default=None,
+        ge=1,
+        description="pages: the last page. Defaults to start_page.",
+    )
+
+    @model_validator(mode="after")
+    def _forward_pages(self) -> "ReadItem":
+        if self.end_page is not None and self.end_page < self.start_page:
+            raise ValueError("end_page comes before start_page")
+        return self
+
+
+class LibraryReadArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    read: list[ReadItem] = Field(
+        min_length=1,
+        max_length=ARTIFACT_TEXT_MAX_ITEMS,
+        description="The files to read, in order.",
+    )
+
+
+class FindItem(ArtifactFileReference):
+    pattern: str = Field(
+        min_length=1,
+        max_length=FIND_PATTERN_MAX_CHARS,
+        description="The text to find in each line.",
+    )
+    regex: bool = Field(
+        default=False, description="The pattern is a regular expression."
+    )
+    case_sensitive: bool = False
+    start_line: int | None = Field(
+        default=None,
+        ge=1,
+        description="Search from this line; after a timed_out result with no "
+        "next_match_offset, its reached_line.",
+    )
+    end_line: int | None = Field(default=None, ge=1, description="Search to this line.")
+    start_page: int | None = Field(
+        default=None, ge=1, description="Search from this page."
+    )
+    end_page: int | None = Field(default=None, ge=1, description="Search to this page.")
+    context_before_lines: int = Field(
+        default=0,
+        ge=0,
+        le=FIND_MAX_CONTEXT_LINES,
+        description="Lines to show before each match.",
+    )
+    context_after_lines: int = Field(
+        default=0,
+        ge=0,
+        le=FIND_MAX_CONTEXT_LINES,
+        description="Lines to show after each match.",
+    )
+    max_matches: int = Field(
+        default=FIND_DEFAULT_MATCHES,
+        ge=1,
+        le=FIND_MAX_MATCHES,
+        description=f"The most matches to return, at most {FIND_MAX_MATCHES}.",
+    )
+    match_offset: int = Field(
+        default=0,
+        ge=0,
+        description="Skip this many matches: the next_match_offset of the "
+        "previous result.",
+    )
+
+    @model_validator(mode="after")
+    def _forward_ranges(self) -> "FindItem":
+        for start, end, name in (
+            (self.start_line, self.end_line, "line"),
+            (self.start_page, self.end_page, "page"),
+        ):
+            if start is not None and end is not None and end < start:
+                raise ValueError(f"end_{name} comes before start_{name}")
+        return self
+
+
+class LibraryFindArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    find: list[FindItem] = Field(
+        min_length=1,
+        max_length=ARTIFACT_TEXT_MAX_ITEMS,
+        description="The files to search, in order.",
+    )
+
+
+class ReadText(BaseModel):
+    """The text of one library_read item."""
+
+    file: ListedArtifact
+    total_lines: int
+    # None: the file's format has no pages.
+    total_pages: int | None
+    start_line: int
+    # The last line shown; start_line - 1 when none is.
+    end_line: int
+    # Numbered lines, as `cat -n` prints them, with a `--- page N ---` line
+    # where each page starts.
+    text: str
+    # The next line to read; None: the text ends at the file's last line, or
+    # in pages mode at the last line of the pages.
+    next_start_line: int | None
+    # The stored text stopped at ARTIFACT_TEXT_MAX_CHARS, or a sheet stopped
+    # at MAX_XLSX_CELLS_PER_SHEET.
+    truncated: bool
+
+
+class ArtifactsRead(BaseModel):
+    """What library_read returns."""
+
+    items: list[ReadText]
+
+
+class FindMatch(BaseModel):
+    """A line that matches; a long line shows its part around the match."""
+
+    line: int
+    page: Annotated[int | None, OMITTED_WHEN_NONE] = None
+    text: str
+    before: list[str]
+    after: list[str]
+
+
+class FoundText(BaseModel):
+    """The matches of one library_find item."""
+
+    file: ListedArtifact
+    # The matching lines that the search reached, the skipped ones included.
+    total_matches_seen: int
+    matches: list[FindMatch]
+    # The match_offset that shows the next matches; None: no more.
+    next_match_offset: int | None
+    # The search stopped at its time limit, before the line `reached_line`.
+    # Matches before it can be unshown (next_match_offset); once those are
+    # shown, a search from start_line=reached_line, match_offset 0, continues.
+    timed_out: bool
+    reached_line: Annotated[int | None, OMITTED_WHEN_NONE] = None
+    # The stored text stopped at ARTIFACT_TEXT_MAX_CHARS, or a sheet stopped
+    # at MAX_XLSX_CELLS_PER_SHEET.
+    truncated: bool
+
+
+class ArtifactsFound(BaseModel):
+    """What library_find returns."""
+
+    items: list[FoundText]
+
+
 # The arguments that each action of the artifact tool takes.
 ArtifactAction = Literal["publish", "list", "read", "delete", "rename", "restore"]
 ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
@@ -910,7 +1099,7 @@ ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
         {*ARTIFACT_PUBLISH_PATHS, "title", "url", "path", "force", "label"}
     ),
     "list": frozenset({"scope", "type", "query", "limit", "after"}),
-    "read": frozenset({"url", "path", "paths", "out_dir"}),
+    "read": frozenset({"url", "path", "paths", "out_dir", "query", "offset", "limit"}),
     "delete": frozenset({"url"}),
     "rename": frozenset({"url", "name"}),
     "restore": frozenset({"url", "label"}),
@@ -927,9 +1116,10 @@ class ArtifactArguments(BaseModel):
     action: ArtifactAction = Field(
         default="publish",
         description="publish (the default) gives files from the VM to the user; "
-        "list finds published files; read copies published files into the VM; "
-        "delete deletes a published file, after the user approves; rename "
-        "renames a published file; restore makes an older version the newest.",
+        "list finds published files; read shows their text, finds text in them "
+        "with query, or copies them into the VM with out_dir; delete deletes a "
+        "published file, after the user approves; rename renames a published "
+        "file; restore makes an older version the newest.",
     )
     file_path: _EchoedText | None = Field(
         default=None,
@@ -980,8 +1170,13 @@ class ArtifactArguments(BaseModel):
     )
     out_dir: _EchoedText | None = Field(
         default=None,
-        description="read: the directory for the copies, relative to the "
-        "working directory.",
+        description="read: copy the files into this directory, relative to the "
+        "working directory, instead of showing their text.",
+    )
+    offset: int | None = Field(
+        default=None,
+        description="read: the line number to start reading from; with query, "
+        "the matches to skip. Only with one file.",
     )
     scope: Literal["mine"] | None = Field(
         default=None, description="list: only mine, the user's own files."
@@ -992,11 +1187,13 @@ class ArtifactArguments(BaseModel):
     query: str | None = Field(
         default=None,
         description="list: text to find in the file name, the file's title or "
-        "the chat's title.",
+        "the chat's title. read: text to find in the files' lines, in any case.",
     )
     limit: int | None = Field(
         default=None,
-        description=f"list: the most files, from 1 to {ARTIFACTS_LIST_MAX_LIMIT}.",
+        description=f"list: the most files, from 1 to {ARTIFACTS_LIST_MAX_LIMIT}. "
+        f"read: the most lines, at most {READ_MAX_LINES}; with query, the most "
+        f"matches, at most {FIND_MAX_MATCHES}.",
     )
     after: str | None = Field(
         default=None, description="list: the next_cursor of the previous page."
@@ -1026,6 +1223,13 @@ class ArtifactArguments(BaseModel):
             )
         if self.action == "rename" and self.name is None:
             raise PydanticCustomError("action_arguments", "rename takes url and name")
+        # One offset holds for one file's lines or matches.
+        targets = [self.url, self.path, *(self.paths or [])]
+        if self.offset is not None and len(targets) - targets.count(None) > 1:
+            raise PydanticCustomError(
+                "action_arguments",
+                "offset pages one file; read one file at a time to page",
+            )
         if self.path is not None and (
             self.action == "publish"
             and (self.url is None or (self.file_path, self.file_paths, self.title))
