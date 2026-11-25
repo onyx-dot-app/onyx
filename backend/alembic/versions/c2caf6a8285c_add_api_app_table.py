@@ -279,7 +279,8 @@ def downgrade() -> None:
             "this revision cannot hold them. An admin must delete the GraphQL "
             "apps before the downgrade."
         )
-    # GraphQL apps break the old checks, so they stay unvalidated.
+    # The old checks come back NOT VALID, so the downgrade does not scan the
+    # tables while it holds the lock.
     _with_bounded_lock_wait(_restore_integration_action)
     _with_bounded_lock_wait(_restore_integration)
     op.drop_table("api_app")
