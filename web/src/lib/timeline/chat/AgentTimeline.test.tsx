@@ -165,32 +165,19 @@ describe("AgentTimeline's collapsed run card", () => {
     expect(screen.getByText(/^Worked for 12/)).toBeVisible();
   });
 
-  it("says when the user stopped the run", () => {
+  it("titles a stopped run as a finished one", () => {
     render(
       <AgentTimeline
         turnGroups={longRun}
         chatState={{ agent }}
         stopPacketSeen
         stopReason={StopReason.USER_CANCELLED}
-      />
-    );
-
-    expect(screen.getByText("You stopped this response")).toBeVisible();
-  });
-
-  it("keeps a run done when the user stops the text after it", () => {
-    render(
-      <AgentTimeline
-        turnGroups={longRun}
-        chatState={{ agent }}
-        stopPacketSeen
-        stopReason={StopReason.USER_CANCELLED}
-        hasDisplayContent
         processingDurationSeconds={12}
       />
     );
 
     expect(screen.getByText(/^Worked for 12/)).toBeVisible();
+    expect(screen.queryByText(/stopped/i)).not.toBeInTheDocument();
   });
 
   it("does not time a later run by the response's start", () => {

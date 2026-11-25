@@ -12594,12 +12594,6 @@
             "between": "de {start} a {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "Você parou após {duration}"
-        },
-        "interruptedThinking": {
-          "label": "Você parou esta resposta"
-        },
         "memory": {
           "default": {
             "status": "Memória"
@@ -13601,9 +13595,11 @@
       }
     },
     "find": {
+      "capped": "Pesquisou {count, plural, one {a última mensagem} other {as últimas # mensagens}}",
       "close": "Fechar localização",
       "count": "{current} de {total}",
       "label": "Localizar na sessão",
+      "loadingOlder": "Carregando mensagens anteriores…",
       "next": "Próximo resultado",
       "placeholder": "Localizar na sessão",
       "previous": "Resultado anterior"
