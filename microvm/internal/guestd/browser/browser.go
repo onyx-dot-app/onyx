@@ -61,7 +61,7 @@ type Browser struct {
 type running struct {
 	group  execs.Group
 	pid    int
-	port   int // DevTools port; 0 until Chrome reports it
+	port   int // DevTools port; set once it answers
 	start  time.Time
 	pipe   *os.File // write end of Chrome's --remote-debugging-pipe input
 	done   chan struct{}
@@ -98,6 +98,10 @@ func (b *Browser) Start(ctx context.Context, env []string) (port int, started bo
 	defer b.mu.Unlock()
 	if b.run != nil && !b.run.exited() && b.probe(ctx, b.run.port) {
 		return b.run.port, false, nil
+	}
+	// A canceled call says nothing about the browser: keep it.
+	if err := ctx.Err(); err != nil {
+		return 0, false, err
 	}
 	if b.run != nil {
 		if err := b.stopLocked(); err != nil {
@@ -203,10 +207,8 @@ func (b *Browser) waitReady(ctx context.Context, r *running) error {
 	tick := time.NewTicker(pollInterval)
 	defer tick.Stop()
 	for {
-		if r.port == 0 {
-			r.port = b.activePort(r.start)
-		}
-		if r.port != 0 && b.probe(ctx, r.port) {
+		if port := b.activePort(r.start); port != 0 && b.probe(ctx, port) {
+			r.port = port
 			return nil
 		}
 		select {
@@ -221,14 +223,21 @@ func (b *Browser) waitReady(ctx context.Context, r *running) error {
 
 // activePort reads the port that Chrome wrote to DevToolsActivePort in the
 // profile. A file from an earlier launch stays after Chrome exits, so only a
-// file written after start counts.
+// file written after start counts. The command user owns the profile, so
+// the file may be a FIFO or a link: open it without blocking or following.
 func (b *Browser) activePort(start time.Time) int {
 	path := filepath.Join(b.cfg.ProfileDir, "DevToolsActivePort")
-	fi, err := os.Stat(path)
-	if err != nil || fi.ModTime().Before(start) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
+	if err != nil {
 		return 0
 	}
-	data, err := os.ReadFile(path)
+	defer func() { _ = f.Close() }()
+	fi, err := f.Stat()
+	// File times come from the kernel's coarse clock, a few ms behind time.Now.
+	if err != nil || !fi.Mode().IsRegular() || fi.ModTime().Before(start.Add(-time.Second)) {
+		return 0
+	}
+	data, err := io.ReadAll(io.LimitReader(f, 256))
 	if err != nil {
 		return 0
 	}

@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -141,6 +142,44 @@ func TestStartIgnoresAnotherDevToolsServer(t *testing.T) {
 	}
 	if port, _, err := b.Start(context.Background(), env); err == nil {
 		t.Fatalf("start reported the other server on port %d as its browser", port)
+	}
+}
+
+func TestCanceledStartKeepsTheBrowser(t *testing.T) {
+	b, env := newFake(t, browsertest.ModeServe)
+	port, _, err := b.Start(context.Background(), env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := runningPID(b)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := b.Start(ctx, env); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled start: %v", err)
+	}
+	if runningPID(b) != pid || !answers(port) {
+		t.Fatal("a canceled start stopped the running browser")
+	}
+}
+
+func TestActivePortIgnoresAFIFO(t *testing.T) {
+	b, _ := newFake(t, browsertest.ModeServe)
+	if err := os.MkdirAll(b.cfg.ProfileDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(-time.Hour)
+	if err := syscall.Mkfifo(filepath.Join(b.cfg.ProfileDir, "DevToolsActivePort"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan int, 1)
+	go func() { got <- b.activePort(start) }()
+	select {
+	case port := <-got:
+		if port != 0 {
+			t.Fatalf("port from a FIFO: %d", port)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("activePort blocked on a FIFO")
 	}
 }
 
