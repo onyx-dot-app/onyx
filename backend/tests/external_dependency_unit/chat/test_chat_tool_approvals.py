@@ -2153,7 +2153,7 @@ def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
             user_id=chat.user.id,
             tool_call_id=f"call-{uuid4().hex[:8]}",
             tool_name="app__1__request",
-            display_name="Any other request",
+            details=ToolApprovalDetails(display_name="Any other request"),
             arguments={},
             scope=ToolApprovalScope(
                 integration_id=chat.integration_id,

@@ -16,7 +16,7 @@ from onyx.db.enums import (
     IntegrationAuthMode,
     IntegrationKind,
 )
-from onyx.db.models import ApiApp, ExternalApp, Integration, IntegrationAction, Tool
+from onyx.db.models import ApiApp, ExternalApp, Integration, IntegrationAction
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
@@ -186,9 +186,9 @@ def test_openapi_operation_cannot_take_a_builtin_action_key(
             }
         },
     }
-    tool = Tool(id=5, name="files", openapi_schema=spec)
-    monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
-    integration = _integration(tool_id=tool.id, external_app_id=None)
+    app = _api_app(5, spec)
+    monkeypatch.setattr(api_kind, "get_api_app_for_integration", lambda *_: app)
+    integration = _integration(api_app_id=app.id, external_app_id=None)
 
     with pytest.raises(OnyxError) as error:
         HANDLER.discover_actions(integration, DB)

@@ -36,6 +36,7 @@ from onyx.tools.models import (
     ToolApprovalScope,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.http_request import (
     TOOL_REQUEST_FAILURE_MESSAGES,
     ToolRequestError,
@@ -120,6 +121,8 @@ def _path_problem(path: str) -> str | None:
 class AppActionTool(Tool):
     """One action of a preset app. The action ``unspecified`` is
     the request tool: each request in the URL scope that is no other action."""
+
+    rank = ToolRank.INTEGRATION
 
     def __init__(
         self,
@@ -343,6 +346,8 @@ class AppConnectTool(Tool):
     """The one tool of an app that the user can use on the agent and has no
     usable sign-in for. A call tells the model why the app does not work,
     and the chat shows the user a card that opens the sign-in."""
+
+    rank = ToolRank.INTEGRATION
 
     def __init__(
         self,
