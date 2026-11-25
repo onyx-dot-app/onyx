@@ -3,7 +3,6 @@
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -76,64 +75,46 @@ export interface RunCardProps<S extends RunCardStep> {
 /** The open card's step list scrolls inside this height. */
 export const RUN_STEP_LIST_MAX_HEIGHT_CLASS = "max-h-[min(18rem,50dvh)]";
 
-/** Follow an append only when the list was at its end before it. */
-export function shouldFollowRunAppend(
-  previous: ReadonlyArray<{ readonly id: string }>,
-  steps: ReadonlyArray<{ readonly id: string }>,
-  distanceFromEnd: number
-): boolean {
-  return (
-    previous.length > 0 &&
-    steps.length > previous.length &&
-    distanceFromEnd <= 1 &&
-    previous.every((step, index) => step.id === steps[index]?.id)
-  );
-}
-
 function distanceFromEnd(element: HTMLElement): number {
   return element.scrollHeight - element.clientHeight - element.scrollTop;
 }
 
-function sameIds(
-  a: ReadonlyArray<{ readonly id: string }>,
-  b: ReadonlyArray<{ readonly id: string }>
-): boolean {
-  return (
-    a.length === b.length && a.every((step, index) => step.id === b[index]?.id)
-  );
-}
-
 /**
- * Keeps the step list at its end while new steps arrive, but only when the
- * user was already there. A scroll up stops the follow.
+ * Scrolls the step list as its content grows. While the run works and the
+ * user is at the end, the list stays at the end. Otherwise it keeps the step
+ * the user last opened in view. A scroll up stops both.
  */
-function useFollowAppendedSteps(steps: RunCardStep[], isRunning: boolean) {
+function useStepListScroll(isRunning: boolean) {
   const [list, setList] = useState<HTMLDivElement | null>(null);
+  const runningRef = useRef(isRunning);
+  useEffect(() => {
+    runningRef.current = isRunning;
+  }, [isRunning]);
   const atEndRef = useRef(true);
-  const followRef = useRef(false);
-  const previousRef = useRef(steps);
   const lastTopRef = useRef(0);
-
-  useLayoutEffect(() => {
-    const previous = previousRef.current;
-    previousRef.current = steps;
-    // A status update keeps the follow: an appended step still grows in.
-    if (sameIds(previous, steps)) return;
-    followRef.current =
-      isRunning &&
-      shouldFollowRunAppend(previous, steps, atEndRef.current ? 0 : Infinity);
-    if (followRef.current && list) list.scrollTop = list.scrollHeight;
-  }, [steps, isRunning, list]);
+  const revealIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!list) return;
-    atEndRef.current = distanceFromEnd(list) <= 1;
     lastTopRef.current = list.scrollTop;
     const content = list.firstElementChild;
     if (!content) return;
     const observer = new ResizeObserver(() => {
-      if (followRef.current) list.scrollTop = list.scrollHeight;
-      else atEndRef.current = distanceFromEnd(list) <= 1;
+      if (runningRef.current && atEndRef.current) {
+        list.scrollTop = list.scrollHeight;
+        return;
+      }
+      const row = Array.from(
+        list.querySelectorAll<HTMLElement>("[data-run-step-id]")
+      ).find((element) => element.dataset.runStepId === revealIdRef.current);
+      if (!row) return;
+      const rowBox = row.getBoundingClientRect();
+      const listBox = list.getBoundingClientRect();
+      const delta = Math.min(
+        rowBox.bottom - listBox.bottom,
+        rowBox.top - listBox.top
+      );
+      if (delta > 0) list.scrollTop += delta;
     });
     observer.observe(content);
     return () => observer.disconnect();
@@ -141,14 +122,24 @@ function useFollowAppendedSteps(steps: RunCardStep[], isRunning: boolean) {
 
   const onScroll = useCallback(() => {
     if (!list) return;
-    atEndRef.current = distanceFromEnd(list) <= 1;
-    // Only a scroll up stops the follow: a step that grows in can leave the
-    // list short of its end between two follow scrolls.
-    if (list.scrollTop < lastTopRef.current) followRef.current = false;
+    // Only a scroll up leaves the end: a growing step can leave the list
+    // short of its end between two follow scrolls.
+    if (list.scrollTop < lastTopRef.current) {
+      atEndRef.current = false;
+      revealIdRef.current = null;
+    } else if (distanceFromEnd(list) <= 1) {
+      atEndRef.current = true;
+    }
     lastTopRef.current = list.scrollTop;
   }, [list]);
 
-  return { listRef: setList, onScroll };
+  // Opening a step stops the follow until the user scrolls back to the end.
+  const reveal = useCallback((id: string | null) => {
+    revealIdRef.current = id;
+    if (id !== null) atEndRef.current = false;
+  }, []);
+
+  return { listRef: setList, onScroll, reveal };
 }
 
 /**
@@ -186,7 +177,8 @@ export function RunCard<S extends RunCardStep>({
   const [initialStepIds] = useState(
     () => new Set(steps.map((step) => step.id))
   );
-  const { listRef, onScroll } = useFollowAppendedSteps(steps, isRunning);
+  const { listRef, onScroll, reveal } = useStepListScroll(isRunning);
+  const { rowRef, onToggle } = useRevealOnOpen();
   // Kept here, so each step's open state survives a fold of the card.
   const [openStepIds, setOpenStepIds] = useState<ReadonlySet<string>>(
     () => new Set()
@@ -194,19 +186,23 @@ export function RunCard<S extends RunCardStep>({
   const stepOpenState = useMemo<RunStepOpenState>(
     () => ({
       openIds: openStepIds,
-      setOpen: (id, open) =>
+      contained: true,
+      setOpen: (id, open) => {
+        // The list keeps an opened step in view, and the chat the card.
+        reveal(open ? id : null);
+        onToggle(open);
         setOpenStepIds((previous) => {
           const next = new Set(previous);
           if (open) next.add(id);
           else next.delete(id);
           return next;
-        }),
+        });
+      },
     }),
-    [openStepIds]
+    [openStepIds, reveal, onToggle]
   );
   // A card the user folded or opened keeps their choice.
   const userToggled = useRef(false);
-  const { rowRef, onToggle } = useRevealOnOpen();
   const toggle = () => {
     userToggled.current = true;
     onToggle(!isOpen);

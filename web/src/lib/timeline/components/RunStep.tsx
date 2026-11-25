@@ -12,6 +12,8 @@ import type { TimelineEntryStatus } from "@/lib/timeline/types";
 export interface RunStepOpenState {
   openIds: ReadonlySet<string>;
   setOpen: (id: string, open: boolean) => void;
+  /** The steps sit in a run card's scrolling list, which reveals them. */
+  contained?: boolean;
 }
 
 export const RunStepOpenContext = createContext<RunStepOpenState | null>(null);
@@ -74,11 +76,12 @@ export function RunStep({
   const openState = useContext(RunStepOpenContext);
   const { rowRef, onToggle } = useRevealOnOpen();
   if (hideHeader) return <>{body}</>;
-  const open =
-    openState && id !== undefined ? openState.openIds.has(id) : localOpen;
+  const shared = openState !== null && id !== undefined;
+  const open = shared ? openState.openIds.has(id) : localOpen;
   const toggle = () => {
-    onToggle(!open);
-    if (openState && id !== undefined) openState.setOpen(id, !open);
+    // A run card's step list reveals its own steps.
+    if (!(shared && openState.contained)) onToggle(!open);
+    if (shared) openState.setOpen(id, !open);
     else setLocalOpen(!open);
   };
 
@@ -108,7 +111,7 @@ export function RunStep({
     : { expandable: false as const };
 
   return (
-    <div ref={rowRef}>
+    <div ref={rowRef} data-run-step-id={id}>
       <Line
         icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
         title={shownTitle ?? ""}
