@@ -493,8 +493,8 @@ run `ods stack prune --idle 6h --yes` from cron or a systemd timer.
 
 `ods stack restart` clears the current worktree's `web/.next/dev` cache after
 stopping the services. It then starts the services against the running infrastructure.
-If the other stack mode still runs a web server in this worktree, restart reports
-a cache cleanup error.
+If the other stack mode runs a web server in this worktree, restart returns an
+error before stopping services.
 
 **Examples:**
 

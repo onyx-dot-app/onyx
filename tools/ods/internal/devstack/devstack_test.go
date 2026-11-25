@@ -673,6 +673,19 @@ func TestRestart_preservesCacheUsedByOtherStackMode(t *testing.T) {
 			mustUp(t, running, p)
 			mustUp(t, restarting, p)
 			web := servicePID(t, running, "web")
+			original := servicePID(t, restarting, "web")
+			if mode == Shared {
+				state, err := running.ReadState()
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Model the state left by an exited launcher with a recorded child.
+				state.Services[0].Members = map[int]string{web.PID: web.StartMarker}
+				state.Services[0].PID = 0
+				if err := running.WriteState(state); err != nil {
+					t.Fatal(err)
+				}
+			}
 			cache := filepath.Join(local.Root, "web", ".next", "dev")
 			if err := os.MkdirAll(cache, 0700); err != nil {
 				t.Fatal(err)
@@ -682,9 +695,9 @@ func TestRestart_preservesCacheUsedByOtherStackMode(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%s stack runs web", running.Mode)) {
 				t.Fatalf("restart error = %v", err)
 			}
-			state, readErr := restarting.ReadState()
-			if readErr != nil || state == nil || state.Phase != PhaseFailed || len(state.Errors) != 1 || state.Errors[0] != err.Error() {
-				t.Fatalf("restart failure state = %+v, %v", state, readErr)
+			status, statusErr := restarting.Status()
+			if statusErr != nil || status == nil || !status.Ready || !isCurrent(original) {
+				t.Fatalf("refused restart disrupted its own stack: %+v, %v", status, statusErr)
 			}
 			if _, err := os.Stat(cache); err != nil || !isCurrent(web) {
 				t.Fatalf("restart disrupted the running web server or its cache: %v", err)

@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// The caller holds the checkout lock and has stopped its own web services.
-func (s *Stack) clearNextDevCache() error {
+// The checkout lock prevents the other mode from starting web during restart.
+func (s *Stack) checkOtherStackWeb() error {
 	otherMode := Shared
 	if s.Mode == Shared {
 		otherMode = Isolated
@@ -24,12 +24,15 @@ func (s *Stack) clearNextDevCache() error {
 	}
 	if st != nil && st.Root == s.Root {
 		for _, rec := range st.Services {
-			if rec.Slug == "web" && isCurrent(rec) {
+			if rec.Slug == "web" && groupIsOurs(rec) {
 				return fmt.Errorf("cannot clear Next.js development cache while the %s stack runs web in this checkout", otherMode)
 			}
 		}
 	}
+	return nil
+}
 
+func (s *Stack) clearNextDevCache() error {
 	root, err := os.OpenRoot(s.Root)
 	if err != nil {
 		return fmt.Errorf("open worktree for Next.js cache cleanup: %w", err)

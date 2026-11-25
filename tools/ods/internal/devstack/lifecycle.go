@@ -106,7 +106,7 @@ func (s *Stack) run(ctx context.Context, p Provider, opts Options, infra bool) (
 }
 
 // runLocked is run with the lifecycle lock already held.
-func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, clearNextCache bool) (*Status, error) {
+func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, restart bool) (*Status, error) {
 	st, err := s.ReadState()
 	if err != nil {
 		return nil, err
@@ -137,10 +137,16 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, 
 		}
 		defer release()
 	}
-	if s.Mode == Shared && st != nil && st.Root != s.Root {
-		if !infra {
-			return nil, s.ownerError(st)
+	handoff := s.Mode == Shared && st != nil && st.Root != s.Root
+	if handoff && !infra {
+		return nil, s.ownerError(st)
+	}
+	if restart {
+		if err := s.checkOtherStackWeb(); err != nil {
+			return nil, err
 		}
+	}
+	if restart || handoff {
 		if err := s.stopServices(opts.StopTimeout); err != nil {
 			return nil, err
 		}
@@ -178,7 +184,7 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, 
 	st.Profile = opts.Profile
 	st.SettleTime = opts.SettleTime
 	st.Errors = nil
-	if clearNextCache {
+	if restart {
 		if err := s.clearNextDevCache(); err != nil {
 			return nil, s.fail(st, err)
 		}
@@ -661,9 +667,6 @@ func (s *Stack) Restart(ctx context.Context, p Provider, opts Options) (*Status,
 	}
 	defer unlock()
 	if err := s.checkOwner(); err != nil {
-		return nil, err
-	}
-	if err := s.stopServices(opts.StopTimeout); err != nil {
 		return nil, err
 	}
 	return s.runLocked(ctx, p, opts, false, true)
