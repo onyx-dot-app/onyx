@@ -587,7 +587,7 @@ describe("Custom API", () => {
     expect(
       await screen.findByText(add.rest.baseUrl.required)
     ).toBeInTheDocument();
-    await user.type(baseUrl, "https://staging.pets.example.com/v1");
+    await user.type(baseUrl, "https://staging.pets.example.com/v1/");
     await submit(user);
 
     await waitFor(() =>

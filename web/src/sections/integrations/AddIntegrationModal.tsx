@@ -57,6 +57,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { Permission } from "@/lib/types";
 import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
 import {
+  apiBaseUrl,
   detectApi,
   isNotThisKind,
   type DetectedApi,
@@ -335,7 +336,7 @@ export default function AddIntegrationModal({
         return {
           shape: "openapi",
           openapi_document: detection.view.openapi_document,
-          base_url: base,
+          base_url: apiBaseUrl(base),
           endpoints: detection.view.endpoints,
         };
       }

@@ -314,6 +314,11 @@ test("sends an edited endpoint line, or a reimported spec", async () => {
 
   await u.clear(endpoints);
   await u.type(endpoints, "GET /reports List all reports");
+  // The tool appends paths that start with "/".
+  await u.type(
+    view.getByRole("textbox", { name: copy.add.rest.baseUrl.title }),
+    "/"
+  );
   await u.click(save);
   await waitFor(() =>
     expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({

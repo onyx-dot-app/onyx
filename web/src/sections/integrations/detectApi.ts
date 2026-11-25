@@ -104,7 +104,7 @@ export function specBaseUrl(
 }
 
 /** The tool appends paths that start with "/", so drop a trailing one. */
-function apiBaseUrl(url: string): string {
+export function apiBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
 }
 

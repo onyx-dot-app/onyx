@@ -44,6 +44,7 @@ import { integrationDetailHref } from "@/lib/integrations/utils";
 import IntegrationSignInFields from "@/sections/integrations/IntegrationSignInFields";
 import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
 import GraphQLFields from "@/sections/integrations/GraphQLFields";
+import { apiBaseUrl } from "@/sections/integrations/detectApi";
 import RestEndpointFields, {
   EMPTY_REST,
   restDraftFrom,
@@ -138,7 +139,7 @@ export default function IntegrationConfigurationTab({
       return {
         shape: "openapi",
         openapi_document: rest.document,
-        base_url: rest.baseUrl.trim(),
+        base_url: apiBaseUrl(rest.baseUrl.trim()),
         endpoints: rest.endpoints.split("\n"),
       };
     }
