@@ -131,13 +131,17 @@ artifact: `db/models.py:ChatArtifact` is one VM path in one root chat
 session, with the chat's owner (`user_id`, set from the chat when the
 artifact is created),
 and `ChatArtifactVersion` numbers its files from 1 and holds each
-file's title. A delete (`library_manage_library`, after the user approves) removes
+file's title and `version_reason` (a replace's, update's or restore's note).
+A delete (`library_manage_library`, after the user approves) removes
 an artifact (`db/chat.py:delete_chat_artifact`). Cleanup has one owner per
 level: `delete_chat_artifact_files` cleans up one version (its thumbnail,
 then its file, whose delete removes the version row), and whatever belongs
 to the whole artifact runs after the commit that removes the artifact row,
 in every path that removes one. Other chats' cards of a deleted artifact
-keep their saved name, and their download is not found. An artifact's name
+keep their saved name, and their download is not found. A restore or update
+(`library_manage_library`) copies a version's file and thumbnail into new records
+(`db/chat.py:append_copied_artifact_version`), since the file store has no
+copy. An artifact's name
 is `ChatArtifact.name` once a rename (`library_manage_library`) sets it, else the
 `FileRecord.display_name` of the version that the read selects, by default the
 newest available one; every read of the name
@@ -149,10 +153,12 @@ deleted; the default list order reads the index on `(user_id, updated_at
 DESC)`, and the other sorts read all of the owner's artifacts. The save writes the file record, upserts the artifact (its row
 lock serializes concurrent publishes of one path) and adds the next version in
 one commit. A replace (`library_replace_library_file`, or the artifact
-tool's publish with a url) adds the version to an existing artifact by ID
-instead (`ArtifactById`), also from another chat of the owner: the artifact
-keeps its chat, path, name and type (the file's extension must match), and
-the version's file joins the replacing chat's message files. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
+tool's publish with a url and file_path) adds the version to an existing
+artifact by ID instead (`ArtifactById`), also from another chat of the owner:
+the artifact keeps its chat, path, name and type (the file's extension must
+match), and the version's file joins the replacing chat's message files. The
+artifact tool's publish with a url and path is an update instead: it shows
+the generic tool card and attaches no file to the message. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
 thumbnail: `HarnessSandbox.render_first_page` draws a JPEG of its first page in
 the VM, and the save writes it first as a `FileOrigin.CHAT_ARTIFACT_THUMBNAIL`
 record that `ChatArtifactVersion.thumbnail_file_id` links (`ON DELETE SET

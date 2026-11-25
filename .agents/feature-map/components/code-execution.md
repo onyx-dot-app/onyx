@@ -61,12 +61,13 @@
   that it published in the user's own chats and copies them into the current
   chat's working directory (generic tool cards), and with
   `library_replace_library_file` it adds a version to one of them;
-  `library_manage_library` renames and deletes them, a delete after the user
-  approves. In code mode all of these are the deferred group `library`.
+  `library_manage_library` renames them, restores an older version, adds a
+  copy of any of their versions as a new version, or deletes them after the
+  user approves. In code mode all of these are the deferred group `library`.
   Claude models get the same operations as one `artifact` tool instead
-  (actions publish, list, read, rename and delete), in its own deferred
-  group `artifact`, for compatibility with how they work with artifacts.
-  Every result links each version as
+  (actions publish, list, read, rename, restore and delete), in its own
+  deferred group `artifact`, for compatibility with how they work with
+  artifacts. Every result links each version as
   `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
   the output panel.
 
@@ -541,24 +542,27 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
   LibraryManageLibraryTool (SEQUENTIAL)      library_manage_library, DEFERRED manage_library, the
                                         generic card; _LibraryTool and _FileTool, with the
                                         default interrupted result. `operations` (1-20) is a
-                                        list of a union on `operation` (delete, rename);
-                                        each target is {kind: "file", library_file_id | file_id
-                                        (any version), version_number?}.
+                                        list of a union on `operation` (delete, rename,
+                                        restore_version, update).
                                         artifact_operations.manage runs them in order, each
                                         in its own transaction, from the database and the
                                         file store only (never the VM), one ManageResult
                                         each ({operation, ok, error?, library_file_id,
                                         file_id, version_number, file_name, url,
-                                        deleted_versions}); the call fails only when none
-                                        succeeds. It checks the Stop before each operation,
-                                        as materialize does: a Stop ends the call, and the
-                                        next operation does not start. Each target resolves
-                                        with artifact_operations._published_file, the one
-                                        lookup of a file reference (get_user_published_file:
-                                        a listable chat of the user, from any chat; a
-                                        missing version is a tool error that names the
-                                        newest). delete (artifact_operations._deleted_file):
-                                        a version_number, or the artifact tool's /v<N>, must
+                                        version_reason, deleted_versions}); the call fails
+                                        only when none succeeds. It checks the Stop before
+                                        each operation, as materialize does: a Stop ends
+                                        the call, and the next operation does not start.
+                                        Every target and source resolves with
+                                        artifact_operations._published_file, the one lookup
+                                        of a file reference (get_user_published_file: a
+                                        listable chat of the user, from any chat; a missing
+                                        version is a tool error that names the newest).
+                                        delete and rename take target {kind: "file",
+                                        library_file_id | file_id of any version,
+                                        version_number?}. delete
+                                        (artifact_operations._deleted_file): a
+                                        version_number, or the artifact tool's /v<N>, must
                                         be the newest version, else the delete is refused,
                                         because it removes every version. Then
                                         db/chat.delete_chat_artifact holds the artifact's
@@ -572,18 +576,40 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         leaves a row without a version: a publish at its
                                         path replaces the row with a new artifact, and a
                                         save by its ID is not found
-                                        (db/chat.save_chat_artifact). rename: a new name that
-                                        safe_file_name keeps (the VM name rule) and with the
-                                        current extension, any case, by the list's last-dot
-                                        rule (models.py:artifact_extension), after a
-                                        non-empty name;
+                                        (db/chat.save_chat_artifact). Every new name passes
+                                        _checked_name: a name that safe_file_name keeps (the
+                                        VM name rule), with the artifact's current
+                                        extension, any case, by the list's last-dot rule
+                                        (models.py:artifact_extension), after a non-empty
+                                        name. rename:
                                         db/chat.rename_chat_artifact sets ChatArtifact.name
                                         and bumps updated_at as a publish does (an
                                         artifact whose chat is deleted raises
-                                        ArtifactNotFound, the not-found tool error); the result
-                                        is the artifact's newest version, whichever version
-                                        the target names. Approval: approval_details (both
-                                        families call
+                                        ArtifactNotFound, the not-found tool error); the result is
+                                        the artifact's newest version, whichever version the
+                                        target names. restore_version (library_file_id,
+                                        version_number) and update (library_file_id,
+                                        file_uri.file_id: a version of any of the user's
+                                        artifacts, by file ID or url
+                                        (models.py:parse_file_reference), never an upload;
+                                        its name, size and type are not used): the copy must
+                                        have the artifact's type (check_same_type, as for
+                                        replace_file); db/chat.append_copied_artifact_version
+                                        reads the file and its thumbnail and saves copies
+                                        under new IDs through save_chat_artifact by
+                                        artifact_id (row lock, expected_current_version
+                                        check in the commit hook, clean-up on failure). A
+                                        conflict is a tool error that each tool words (the
+                                        conflict_message that it passes to manage; one message per family,
+                                        _library_conflict_message or
+                                        _artifact_conflict_message, as for replace). The name
+                                        stays unless the operation's file_name renames it
+                                        (save_chat_artifact rename); the title is the
+                                        restored version's, or for update the newest
+                                        version's. version_reason (also on replace_file) is
+                                        cut to VERSION_REASON_MAX_CHARS and stored on
+                                        chat_artifact_version. Approval: approval_details
+                                        (both families call
                                         artifact_operations.delete_approval_details) parses
                                         the arguments with parse_tool_arguments and returns
                                         None, with no database work, for a call without a
@@ -594,7 +620,8 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         versions) from chat “<title>”"], "Also in this
                                         call": a line per other operation that names the
                                         file it changes (the lookup's "<path> from chat
-                                        “<title>”", else the target ID)}, where <path> is the display path's
+                                        “<title>”", else the target ID) and the new name
+                                        of a restore or update with file_name}, where <path> is the display path's
                                         folder with the file's name, N from the lookup's
                                         latest_version_number. A delete target that the
                                         delete refuses or finds nothing for still asks: an
@@ -604,8 +631,10 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         not published yet; the delete removes the file and
                                         every version)", and any other target shows as
                                         given ("<id> (not found yet)"), as another chat can
-                                        still publish it. One request covers the whole call,
-                                        other operations included
+                                        still publish it. An earlier restore or update of
+                                        the call can also make the newer version. One
+                                        request covers the whole call, other operations
+                                        included
   ArtifactTool (`artifact`, SEQUENTIAL)  one tool with an action per artifact operation,
                                         for Claude models. One flat ArtifactArguments
                                         model; each action takes only its own arguments
@@ -619,8 +648,8 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         -> publish, and with url and file_path ->
                                         replace_file (the url's /v<N> is
                                         expected_current_version; a url without /v<N> is
-                                        refused unless force, which drops the check);
-                                        both give
+                                        refused unless force, which drops the check; label
+                                        is the version_reason); both give
                                         PublishedFiles details, so the same publish card,
                                         message files and access; list (scope "mine", type
                                         = category, query, limit, after = cursor; newest
@@ -631,8 +660,12 @@ exec_command / write_stdin / apply_patch + library_create_library_file + library
                                         version_number; delete (url of the newest version, or
                                         without /v<N>) ->
                                         manage's delete, behind the same approval; rename
-                                        (url, name) -> manage's rename. Empty and too-long
-                                        lists are
+                                        (url, name) -> manage's rename; restore (url ending
+                                        in /v<N>, label) -> restore_version, with no version
+                                        check; publish with url and path (a file ID or url) ->
+                                        update, with the url's version rule and the generic
+                                        card (renderer publish_card_files gives None). Empty
+                                        and too-long lists are
                                         refused in the tool's own argument names before
                                         the VM wakes. It inherits _LibraryTool and
                                         _FileTool: execution settings are per tool, so the

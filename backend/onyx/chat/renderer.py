@@ -187,9 +187,14 @@ def publish_card_files(
     wrote them, when the call shows the publish card; None for any other
     call. Raises ValidationError when the arguments do not fit the card."""
     keys = _PUBLISH_PATH_ARGUMENTS.get(name)
-    # A missing or null action is a publish, as parse_tool_arguments reads it.
+    # A missing or null action is a publish, as parse_tool_arguments reads
+    # it. The artifact tool's publish with a path copies a stored file (an
+    # update), which shows the generic card.
     if keys is None or (
-        name == ArtifactTool.NAME and args.get("action") not in (None, "publish")
+        name == ArtifactTool.NAME
+        and (
+            args.get("action") not in (None, "publish") or args.get("path") is not None
+        )
     ):
         return None
     one, several = keys
