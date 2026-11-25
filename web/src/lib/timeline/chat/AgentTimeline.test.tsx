@@ -129,6 +129,35 @@ describe("AgentTimeline's collapsed run card", () => {
 
     expect(screen.getByText("You stopped this response")).toBeVisible();
   });
+
+  it("keeps a run done when the user stops the text after it", () => {
+    render(
+      <AgentTimeline
+        turnGroups={longRun}
+        chatState={{ agent }}
+        stopPacketSeen
+        stopReason={StopReason.USER_CANCELLED}
+        hasDisplayContent
+        processingDurationSeconds={12}
+      />
+    );
+
+    expect(screen.getByText(/^Worked for 12/)).toBeVisible();
+  });
+
+  it("does not time a later run by the response's start", () => {
+    render(
+      <AgentTimeline
+        turnGroups={longRun}
+        chatState={{ agent }}
+        stopPacketSeen
+        processingDurationSeconds={12}
+        isFirstRun={false}
+      />
+    );
+
+    expect(screen.getByText("Worked")).toBeVisible();
+  });
 });
 
 describe("AgentTimeline while a tool call waits for the user", () => {

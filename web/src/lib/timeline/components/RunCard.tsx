@@ -262,10 +262,10 @@ export function RunCard<S extends RunCardStep>({
     : stopped
       ? duration
         ? t("stoppedDuration.label", { duration })
-        : t("stoppedUnknownDuration.label")
+        : t("interruptedThinking.label")
       : duration
-        ? t("workedDuration.label", { duration })
-        : t("workedUnknownDuration.label");
+        ? t("thoughtDuration.label", { duration })
+        : t("thoughtUnknownDuration.label");
 
   return (
     <Presence show={visible} appear={arrivedLive} grow>

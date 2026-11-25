@@ -58,6 +58,9 @@ export interface AgentTimelineProps {
   /** A tool call in the latest turn waits for the user's approval or
    * answers */
   awaitingUser?: AwaitingUser | null;
+  /** The run is the response's first, so the response's start and duration
+   * time it. A later run times itself while it works here. */
+  isFirstRun?: boolean;
 }
 
 /**
@@ -78,7 +81,8 @@ function areAgentTimelinePropsEqual(
     prev.chatState === next.chatState &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.codeModeWorking === next.codeModeWorking &&
-    prev.awaitingUser === next.awaitingUser
+    prev.awaitingUser === next.awaitingUser &&
+    prev.isFirstRun === next.isFirstRun
   );
 }
 
@@ -128,6 +132,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   toolProcessingDuration,
   codeModeWorking = false,
   awaitingUser = null,
+  isFirstRun = true,
 }: AgentTimelineProps) {
   const { headerText, userStopped } = useTimelineHeader(
     turnGroups,
@@ -278,11 +283,14 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               appear={!cardHandedOver}
               startFolded={cardHandedOver}
               isActive={isActive}
-              isStopped={stopPacketSeen && userStopped}
+              // A stop after text followed did not end this run's work.
+              isStopped={stopPacketSeen && userStopped && !hasDisplayContent}
               autoCollapse={hasDisplayContent}
-              streamingStartTime={streamingStartTime}
+              streamingStartTime={isFirstRun ? streamingStartTime : undefined}
               durationSeconds={
-                toolProcessingDuration ?? processingDurationSeconds
+                isFirstRun
+                  ? (toolProcessingDuration ?? processingDurationSeconds)
+                  : undefined
               }
               summary={{
                 memoryText,

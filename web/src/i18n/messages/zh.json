@@ -12597,7 +12597,7 @@
         "stoppedDuration": {
           "label": "你在 {duration} 后停止了"
         },
-        "stoppedUnknownDuration": {
+        "interruptedThinking": {
           "label": "你停止了此回复"
         },
         "memory": {
@@ -12720,10 +12720,10 @@
         "stepsButton": {
           "label": "{count, plural, one {# 个步骤} other {# 个步骤}}"
         },
-        "workedDuration": {
+        "thoughtDuration": {
           "label": "工作了 {duration}"
         },
-        "workedUnknownDuration": {
+        "thoughtUnknownDuration": {
           "label": "已工作"
         },
         "toggleRow": {
