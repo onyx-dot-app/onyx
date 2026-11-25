@@ -76,7 +76,12 @@ interface ToolFieldsProps {
 
 function ToolFields({ fields }: ToolFieldsProps) {
   return (
-    <Section alignItems="stretch" gap={1} height="fit">
+    <Section
+      alignItems="stretch"
+      gap={1}
+      height="fit"
+      className="whitespace-pre-wrap"
+    >
       {fields.map(([key, value]) => (
         <Section
           key={key}
@@ -87,10 +92,10 @@ function ToolFields({ fields }: ToolFieldsProps) {
           height="fit"
         >
           <Text font="secondary-mono" color="text-03" wordWrap="wrap-anywhere">
-            <span className="whitespace-pre-wrap">{`${key}:`}</span>
+            {`${key}:`}
           </Text>
           <Text font="secondary-mono" color="text-04" wordWrap="wrap-anywhere">
-            <span className="whitespace-pre-wrap">{String(value)}</span>
+            {String(value)}
           </Text>
         </Section>
       ))}
