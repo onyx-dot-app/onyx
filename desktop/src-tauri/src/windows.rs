@@ -128,7 +128,7 @@ fn open_local(
     let size = initial_size(label).ok_or("not a local window")?;
     let window = local_window(app, label, page, title, size);
     if let Err(e) = &window {
-        webview_failed(app, e);
+        let _ = webview_failed(app, e);
     }
     window
 }
@@ -142,13 +142,18 @@ pub(crate) fn is_webview_start_error(error: &str) -> bool {
 
 /// On Windows, a web view does not start while the earlier desktop app still
 /// runs as another user token: both use the same WebView2 data folder. Says
-/// so once per run; the error is logged by the caller.
-pub(crate) fn webview_failed(app: &AppHandle, error: &str) {
+/// so once per run, and only when the earlier app is (or was just) on this
+/// computer; the error is logged by the caller. Returns whether it said so.
+pub(crate) fn webview_failed(app: &AppHandle, error: &str) -> bool {
     #[cfg(windows)]
     {
         use std::sync::atomic::{AtomicBool, Ordering};
         static SHOWN: AtomicBool = AtomicBool::new(false);
-        if is_webview_start_error(error) && !SHOWN.swap(true, Ordering::SeqCst) {
+        let evidence = crate::earlier_install::evidence(app);
+        if !shows_close_older(is_webview_start_error(error), evidence) {
+            return false;
+        }
+        if !SHOWN.swap(true, Ordering::SeqCst) {
             log::warn!("a window could not start its web view: {error}");
             notify(
                 app,
@@ -156,9 +161,21 @@ pub(crate) fn webview_failed(app: &AppHandle, error: &str) {
                 "Close the older version of Onyx, then open Onyx again.",
             );
         }
+        true
     }
     #[cfg(not(windows))]
-    let _ = (app, error);
+    {
+        let _ = (app, error);
+        false
+    }
+}
+
+/// Whether a window error is answered with "Close the older version of
+/// Onyx": a web view that did not start while the earlier app is around.
+/// Without that evidence, the usual error dialog and its retry stay.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn shows_close_older(webview_error: bool, earlier_app_evidence: bool) -> bool {
+    webview_error && earlier_app_evidence
 }
 
 pub fn open_onboarding(app: &AppHandle) -> Result<WebviewWindow, String> {
@@ -398,8 +415,7 @@ pub fn route_to(app: &AppHandle, path: &str) {
                 };
                 if let Err(e) = main_window::open(&app, &server, &token, &path).await {
                     log::warn!("could not open main window: {e}");
-                    if cfg!(windows) && is_webview_start_error(&e) {
-                        webview_failed(&app, &e);
+                    if webview_failed(&app, &e) {
                         return;
                     }
                     match state.api.health(&server).await {
@@ -500,6 +516,13 @@ pub fn show_primary_except(app: &AppHandle, closing: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_older_version_message_needs_evidence_of_it() {
+        assert!(super::shows_close_older(true, true));
+        assert!(!super::shows_close_older(true, false));
+        assert!(!super::shows_close_older(false, true));
+    }
 
     #[test]
     fn a_web_view_start_failure_is_recognized() {

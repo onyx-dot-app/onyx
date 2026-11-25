@@ -199,37 +199,60 @@ impl AppState {
         if skips_store(signed_out.as_deref(), server) {
             return None;
         }
-        // A sign-out that could not delete the token: the server is signed
-        // out, so the store is not read (a locked store asks each time). The
-        // delete is tried again once per run.
+        // A sign-out that could not delete the token: the store is read at
+        // most once per launch for that server (a locked store asks each
+        // time). A rejected token is deleted; another token (a sign-in whose
+        // record update failed) drops the record and is used.
         let rejected = self.config.get().rejected_tokens.contains_key(server);
         let tried = rejected && self.rejected_cleanup_tried.swap(true, Ordering::SeqCst);
-        match rejected_store_access(rejected, tried) {
-            StoreAccess::Read => {}
+        let token = match rejected_store_access(rejected, tried) {
             StoreAccess::Skip => return None,
             StoreAccess::CleanupOnce => {
-                match session_store::clear(server) {
-                    Ok(()) => self.forget_rejected(server),
-                    Err(e) => log::warn!("could not delete a signed-out session token: {e}"),
+                let stored = session_store::load(server);
+                let found = match &stored {
+                    Ok(None) => Stored::Empty,
+                    Ok(Some(token)) if self.config.get().rejects_token(server, token) => {
+                        Stored::Rejected
+                    }
+                    Ok(Some(_)) => Stored::Other,
+                    Err(_) => Stored::Unreadable,
+                };
+                match rejected_record_action(found) {
+                    RecordAction::Keep => {
+                        if let Err(e) = &stored {
+                            log::warn!("could not read the stored session: {e}");
+                        }
+                        return None;
+                    }
+                    RecordAction::Forget => {
+                        self.forget_rejected(server);
+                        return None;
+                    }
+                    RecordAction::DeleteToken => {
+                        match session_store::clear(server) {
+                            Ok(()) => self.forget_rejected(server),
+                            Err(e) => {
+                                log::warn!("could not delete a signed-out session token: {e}");
+                            }
+                        }
+                        return None;
+                    }
+                    RecordAction::ForgetAndUse => {
+                        self.forget_rejected(server);
+                        stored.ok().flatten()?
+                    }
                 }
-                return None;
             }
-        }
-        let mut failure = self.read_failure.lock().unwrap_or_else(|p| p.into_inner());
-        let token = read_token(
-            &mut failure,
-            server,
-            session_store::KEEP_READ_FAILURE,
-            || session_store::load(server),
-        )?;
-        if self.config.get().rejects_token(server, &token) {
-            // A sign-out could not delete it: try again, and never use it.
-            match session_store::clear(server) {
-                Ok(()) => self.forget_rejected(server),
-                Err(e) => log::warn!("could not delete a signed-out session token: {e}"),
+            StoreAccess::Read => {
+                let mut failure = self.read_failure.lock().unwrap_or_else(|p| p.into_inner());
+                read_token(
+                    &mut failure,
+                    server,
+                    session_store::KEEP_READ_FAILURE,
+                    || session_store::load(server),
+                )?
             }
-            return None;
-        }
+        };
         if !self
             .config
             .get()
@@ -441,6 +464,34 @@ enum StoreAccess {
     Skip,
 }
 
+/// What the one read of the store found for a server with a rejected
+/// token record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stored {
+    Unreadable,
+    Empty,
+    Rejected,
+    /// A token that is not rejected: a sign-in whose record update failed.
+    Other,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum RecordAction {
+    Keep,
+    Forget,
+    DeleteToken,
+    ForgetAndUse,
+}
+
+fn rejected_record_action(found: Stored) -> RecordAction {
+    match found {
+        Stored::Unreadable => RecordAction::Keep,
+        Stored::Empty => RecordAction::Forget,
+        Stored::Rejected => RecordAction::DeleteToken,
+        Stored::Other => RecordAction::ForgetAndUse,
+    }
+}
+
 /// How `token` uses the store for a server with a rejected token record.
 fn rejected_store_access(rejected: bool, cleanup_tried: bool) -> StoreAccess {
     match (rejected, cleanup_tried) {
@@ -487,6 +538,23 @@ fn read_token(
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn a_new_token_after_a_rejected_one_is_used() {
+        assert_eq!(
+            rejected_record_action(Stored::Other),
+            RecordAction::ForgetAndUse
+        );
+        assert_eq!(
+            rejected_record_action(Stored::Rejected),
+            RecordAction::DeleteToken
+        );
+        assert_eq!(rejected_record_action(Stored::Empty), RecordAction::Forget);
+        assert_eq!(
+            rejected_record_action(Stored::Unreadable),
+            RecordAction::Keep
+        );
+    }
 
     #[test]
     fn a_rejected_record_means_signed_out_without_a_read() {

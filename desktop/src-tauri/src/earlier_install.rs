@@ -21,6 +21,9 @@ pub enum Step {
     /// Delete the HKCU uninstall entry: then nothing can start the earlier
     /// uninstaller from Settings or Control Panel.
     RemoveUninstallEntry,
+    /// Delete the earlier setup program's own key (`manufacturer_keys`).
+    /// A retry tries again when an earlier launch could not.
+    RemoveSetupKey,
     RemoveShortcuts,
     RemoveFolder,
 }
@@ -32,10 +35,15 @@ pub fn plan(entry: bool, pending: bool) -> Vec<Step> {
         (true, _) => vec![
             Step::RecordFolder,
             Step::RemoveUninstallEntry,
+            Step::RemoveSetupKey,
             Step::RemoveShortcuts,
             Step::RemoveFolder,
         ],
-        (false, true) => vec![Step::RemoveShortcuts, Step::RemoveFolder],
+        (false, true) => vec![
+            Step::RemoveSetupKey,
+            Step::RemoveShortcuts,
+            Step::RemoveFolder,
+        ],
         (false, false) => Vec::new(),
     }
 }
@@ -347,6 +355,30 @@ fn remove_shortcuts(dir: &str) {
     }
 }
 
+/// Whether the earlier app is, or was at this launch, on this computer: its
+/// HKCU uninstall entry, or a folder that the retire step still has to
+/// clean up.
+#[cfg(windows)]
+pub fn evidence(app: &tauri::AppHandle) -> bool {
+    use tauri::Manager;
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    if app
+        .state::<crate::state::AppState>()
+        .config
+        .get()
+        .earlier_install_dir
+        .is_some()
+    {
+        return true;
+    }
+    let key = format!(
+        r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{}",
+        app.package_info().name
+    );
+    RegKey::predef(HKEY_CURRENT_USER).open_subkey(key).is_ok()
+}
+
 /// Runs at launch, after the config is loaded.
 #[cfg(all(windows, not(debug_assertions)))]
 pub fn retire(app: &tauri::AppHandle) {
@@ -461,15 +493,13 @@ pub fn retire(app: &tauri::AppHandle) {
                 }
             }
             Step::RemoveUninstallEntry => match hkcu.delete_subkey_all(&key) {
-                Ok(()) => {
-                    log::info!("deleted the earlier desktop app's uninstall entry");
-                    remove_manufacturer_key(&hkcu, &app.package_info().name, &dir);
-                }
+                Ok(()) => log::info!("deleted the earlier desktop app's uninstall entry"),
                 Err(e) => {
                     log::warn!("could not delete the earlier desktop app's uninstall entry: {e}");
                     return;
                 }
             },
+            Step::RemoveSetupKey => remove_manufacturer_key(&hkcu, &app.package_info().name, &dir),
             Step::RemoveShortcuts => remove_shortcuts(&dir),
             Step::RemoveFolder => match remove_earlier_files(Path::new(&dir)) {
                 Removal::Retry => log::warn!(
@@ -520,13 +550,19 @@ mod tests {
             [
                 Step::RecordFolder,
                 Step::RemoveUninstallEntry,
+                Step::RemoveSetupKey,
                 Step::RemoveShortcuts,
                 Step::RemoveFolder
             ]
         );
+        // A retry also tries the setup key again.
         assert_eq!(
             plan(false, true),
-            [Step::RemoveShortcuts, Step::RemoveFolder]
+            [
+                Step::RemoveSetupKey,
+                Step::RemoveShortcuts,
+                Step::RemoveFolder
+            ]
         );
         assert!(plan(false, false).is_empty());
     }
