@@ -42,7 +42,7 @@ def observation(cell: int, documents: list[int], status: str = "completed") -> s
 
 
 def searches(code: str) -> list[list[str]]:
-    """Queries of each internal_search call; also checks the program parses."""
+    """Queries of each tools.internal_search call; also checks the program parses."""
     tree = compile(
         code,
         "<program>",
@@ -53,8 +53,10 @@ def searches(code: str) -> list[list[str]]:
         ast.literal_eval(node.keywords[0].value)
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "internal_search"
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "tools"
+        and node.func.attr == "internal_search"
     ]
 
 
@@ -222,7 +224,8 @@ def test_code_mode_multi_tool_runs_retrieval_functions_in_one_program() -> None:
     steps, _ = run_turn(MULTI_TOOL, CODE_TOOLS, "Find the policy")
     assert len(steps) == 1
     code = json.loads(steps[0][0]["function"]["arguments"])["code"]
-    assert "internal_search(queries=" in code and "web_search(queries=" in code
+    assert "tools.internal_search(queries=" in code
+    assert "tools.web_search(queries=" in code
 
 
 def test_multi_tool_program_waits_for_its_running_cell_then_answers() -> None:
