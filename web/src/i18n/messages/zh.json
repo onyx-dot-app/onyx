@@ -12596,12 +12596,6 @@
             "between": "从 {start} 到 {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "你在 {duration} 后停止了"
-        },
-        "interruptedThinking": {
-          "label": "你停止了此回复"
-        },
         "memory": {
           "default": {
             "status": "记忆"
@@ -13603,9 +13597,11 @@
       }
     },
     "find": {
+      "capped": "已搜索最近的 {count, plural, other {# 条消息}}",
       "close": "关闭查找",
       "count": "第 {current} 个，共 {total} 个",
       "label": "在会话中查找",
+      "loadingOlder": "正在加载更早的消息…",
       "next": "下一个匹配项",
       "placeholder": "在会话中查找",
       "previous": "上一个匹配项"

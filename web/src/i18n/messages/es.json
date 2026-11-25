@@ -12596,12 +12596,6 @@
             "between": "del {start} al {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "Lo detuviste después de {duration}"
-        },
-        "interruptedThinking": {
-          "label": "Detuviste esta respuesta"
-        },
         "memory": {
           "default": {
             "status": "Memoria"
@@ -13603,9 +13597,11 @@
       }
     },
     "find": {
+      "capped": "Se buscó en {count, plural, one {el último mensaje} other {los últimos # mensajes}}",
       "close": "Cerrar búsqueda",
       "count": "{current} de {total}",
       "label": "Buscar en la sesión",
+      "loadingOlder": "Cargando mensajes anteriores…",
       "next": "Siguiente coincidencia",
       "placeholder": "Buscar en la sesión",
       "previous": "Coincidencia anterior"
