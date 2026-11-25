@@ -696,7 +696,8 @@ it. A yield (status `running`) ends the program's turn: the model acts next.
 `useTimelineHeader` takes `codeModeWorking`, so the run header reads
 "Working" while the program runs between calls.
 The header names a step's activity from its own first packet; nested packets
-do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
+do not decide it. A step with no activity of its own reads "Working". Before
+the first step, the response shows the cursor, not a run card. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a
 cell's new call can move later steps into another turn group. The rail

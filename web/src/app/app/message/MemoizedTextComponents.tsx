@@ -6,7 +6,6 @@ import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SubQuestionDetail, CitationMap } from "@/app/app/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { ProjectFile } from "@/lib/projects/types";
-import { BlinkingBar } from "./BlinkingBar";
 import { Text, type TextColor, type TextFont } from "@opal/components";
 import { richNodes } from "@opal/utils";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
@@ -187,9 +186,7 @@ export const MemoizedLink = memo(
     const isChatFile: boolean = !!url?.includes("/api/chat/file/");
     const plainLabel: string | null = getPlainLabel(value);
 
-    if (value?.toString().startsWith("*")) {
-      return <BlinkingBar addMargin />;
-    } else if (
+    if (
       !isChatFile &&
       plainLabel !== null &&
       CITATION_LABEL_PATTERN.test(plainLabel)

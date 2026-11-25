@@ -38,6 +38,9 @@ import { InMessageImage } from "@/app/app/components/files/images/InMessageImage
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
+import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
+import { useInResponse } from "@/lib/timeline/components/Response";
+import { ResponseCursorAnchor } from "@/lib/timeline/components/ResponseCursor";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -446,11 +449,22 @@ export const MessageTextRenderer: MessageRenderer<
       (!isStreamingAnimationEnabled && !stopPacketSeen) ||
       (shouldUseAutoPlaybackSync && content.length < fullContent.length));
 
-  // `[*]() ` is rendered by the anchor component as an inline blinking
-  // caret, keeping it flush with the trailing character.
-  const markdownInput = shouldShowCursor
-    ? processedContent + " [*]() "
-    : processedContent;
+  const baseRehypePlugins = streamFullyDisplayed
+    ? fullRehypePlugins
+    : STREAMING_REHYPE_PLUGINS;
+  // The cursor sits inline after the last character of the parsed tree. In
+  // a response, it is a marker for the response's one cursor.
+  const inResponse = useInResponse();
+  const rehypePlugins = useMemo<PluggableList>(
+    () =>
+      shouldShowCursor
+        ? [
+            ...baseRehypePlugins,
+            [rehypeStreamingCursor, { anchor: inResponse }],
+          ]
+        : baseRehypePlugins,
+    [shouldShowCursor, baseRehypePlugins, inResponse]
+  );
 
   return children([
     {
@@ -476,16 +490,14 @@ export const MessageTextRenderer: MessageRenderer<
                   ? FULL_REMARK_PLUGINS
                   : STREAMING_REMARK_PLUGINS
               }
-              rehypePlugins={
-                streamFullyDisplayed
-                  ? fullRehypePlugins
-                  : STREAMING_REHYPE_PLUGINS
-              }
+              rehypePlugins={rehypePlugins}
               urlTransform={transformLinkUri}
             >
-              {markdownInput}
+              {processedContent}
             </ReactMarkdown>
           </div>
+        ) : inResponse ? (
+          <ResponseCursorAnchor addMargin />
         ) : (
           <BlinkingBar addMargin />
         ),

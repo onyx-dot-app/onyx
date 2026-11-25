@@ -16,7 +16,7 @@ import {
   Response,
   type ResponseItem,
 } from "@/lib/timeline/components/Response";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import { responseCursorItem } from "@/lib/timeline/components/ResponseCursor";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
@@ -350,15 +350,7 @@ export default function BuildMessageList({
                       ),
                     },
                   ]),
-              ...(finalizing
-                ? [
-                    {
-                      kind: "text" as const,
-                      key: "cursor",
-                      node: <BlinkingBar />,
-                    },
-                  ]
-                : []),
+              ...(finalizing ? [responseCursorItem()] : []),
               ...(message.content.trim()
                 ? [
                     {
@@ -494,24 +486,7 @@ export default function BuildMessageList({
               <Response
                 items={[
                   ...(streamRender?.items ?? []),
-                  ...(showStreamCursor
-                    ? [
-                        {
-                          kind: "text" as const,
-                          key: "cursor",
-                          node: (
-                            <Section
-                              flexDirection="row"
-                              justifyContent="start"
-                              height={2.25}
-                              gap={0}
-                            >
-                              <BlinkingBar />
-                            </Section>
-                          ),
-                        },
-                      ]
-                    : []),
+                  ...(showStreamCursor ? [responseCursorItem()] : []),
                   ...(trailingAssistantSlot
                     ? [
                         {

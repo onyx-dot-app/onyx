@@ -199,7 +199,8 @@ export function prefersReducedMotion(): boolean {
   return (
     document.documentElement.dataset.motion === "reduced" ||
     (typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+      // A stubbed `matchMedia` (e.g. in tests) can return nothing.
+      window.matchMedia("(prefers-reduced-motion: reduce)")?.matches === true)
   );
 }
 
