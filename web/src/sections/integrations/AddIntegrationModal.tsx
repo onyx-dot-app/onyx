@@ -259,7 +259,8 @@ export default function AddIntegrationModal({
         : null;
     setTransport(
       found ??
-        (serverUrl === prefill?.serverUrl
+        (prefill &&
+        normalizedUrl(serverUrl) === normalizedUrl(prefill.serverUrl)
           ? prefill.transport
           : "STREAMABLE_HTTP")
     );

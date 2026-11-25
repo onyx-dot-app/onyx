@@ -196,6 +196,38 @@ describe("MCP server", () => {
     );
   });
 
+  test("a prefilled server keeps its transport after Back", async () => {
+    mockProbe.mockResolvedValueOnce(OAUTH_PROBE).mockResolvedValueOnce({
+      kind: "unreachable",
+      reason: "connection_failed",
+    });
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations": makeDetail({ id: 12 }),
+      "/api/admin/integrations": [],
+      "/api/integrations": [],
+    });
+    const { user } = open({
+      kind: "prefill",
+      prefill: {
+        name: "Docs",
+        serverUrl: "https://MCP.example.com/sse",
+        transport: "SSE",
+        returnTo: "/app/customize/plugins/7?tab=integrations",
+      },
+    });
+    await screen.findByText(add.mcp.probe.oauth);
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.click(screen.getByRole("button", { name: add.continue }));
+    await screen.findByText(add.mcp.probe.unreachable);
+    await submit(user);
+
+    await waitFor(() =>
+      expect(
+        requestBody(fetchMock, "POST", "/api/admin/integrations")
+      ).toMatchObject({ config: { transport: "SSE" } })
+    );
+  });
+
   test("asks for a name and a URL before the check", async () => {
     const { user } = open({ kind: "mcp_server" });
     await user.click(screen.getByRole("button", { name: add.continue }));
