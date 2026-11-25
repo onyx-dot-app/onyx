@@ -113,7 +113,7 @@ export default function IntegrationDetailPage({
             <IntegrationConfigurationTab
               key={`${data.id}:${data.auth_mode}:${data.auth_method ?? ""}`}
               integration={data}
-              onChanged={() => void mutate()}
+              onChanged={() => mutate()}
             />
           ),
         },

@@ -36,7 +36,6 @@ import type {
   GraphQLConfig,
   IntegrationConfig,
   IntegrationUpdate,
-  OpenApiConfigView,
 } from "@/lib/integrations/types";
 import { useIntegrationPresets } from "@/lib/integrations/hooks";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
@@ -47,12 +46,12 @@ import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs
 import GraphQLFields from "@/sections/integrations/GraphQLFields";
 import RestEndpointFields, {
   EMPTY_REST,
-  endpointLines,
   restDraftFrom,
   type RestDraft,
 } from "@/sections/integrations/RestEndpointFields";
 import {
   normalizedUrl,
+  presetAuthMethods,
   SIGN_IN_METHODS,
   signInDraftFromDetail,
   signInErrors,
@@ -62,7 +61,7 @@ import {
 
 interface IntegrationConfigurationTabProps {
   integration: AdminIntegrationDetail;
-  onChanged: () => void;
+  onChanged: () => Promise<AdminIntegrationDetail | undefined>;
 }
 
 export default function IntegrationConfigurationTab({
@@ -81,16 +80,15 @@ export default function IntegrationConfigurationTab({
       ? integration.config.server_url
       : ""
   );
-  const [savedOpenApi, setSavedOpenApi] = useState<OpenApiConfigView | null>(
-    integration.config.shape === "openapi" ? integration.config : null
-  );
-  const savedRest = savedOpenApi ? restDraftFrom(savedOpenApi) : EMPTY_REST;
+  const savedRest =
+    integration.config.shape === "openapi"
+      ? restDraftFrom(integration.config)
+      : EMPTY_REST;
   const [rest, setRest] = useState<RestDraft>(savedRest);
   const [lineErrors, setLineErrors] = useState<EndpointLineError[]>([]);
-  const [savedGraphql, setSavedGraphql] = useState<GraphQLConfig | null>(
+  const [graphql, setGraphql] = useState<GraphQLConfig | null>(
     integration.config.shape === "graphql" ? integration.config : null
   );
-  const [graphql, setGraphql] = useState<GraphQLConfig | null>(savedGraphql);
   const [alwaysAllow, setAlwaysAllow] = useState(
     integration.users_can_save_always_allow
   );
@@ -108,8 +106,11 @@ export default function IntegrationConfigurationTab({
   );
   const methods: readonly AuthMethod[] =
     integration.shape === "preset"
-      ? (preset?.auth_methods.flatMap((method) => (method ? [method] : [])) ??
-        (integration.auth_method ? [integration.auth_method] : []))
+      ? preset
+        ? presetAuthMethods(preset)
+        : integration.auth_method
+          ? [integration.auth_method]
+          : []
       : SIGN_IN_METHODS[integration.shape];
   const savedSignIn = signInPayload(signInDraftFromDetail(integration));
   const signInChanged = !isEqual(signInPayload(signIn), savedSignIn);
@@ -129,21 +130,16 @@ export default function IntegrationConfigurationTab({
       if (!graphql.endpoint_url.trim() || !graphql.graphql_schema.trim())
         return null;
       const next = { ...graphql, endpoint_url: graphql.endpoint_url.trim() };
-      return isEqual(next, savedGraphql) ? undefined : next;
+      return isEqual(next, config) ? undefined : next;
     }
     if (config.shape === "openapi") {
-      if (
-        rest.document === savedRest.document &&
-        rest.baseUrl === savedRest.baseUrl &&
-        rest.endpoints === savedRest.endpoints
-      )
-        return undefined;
+      if (isEqual(rest, savedRest)) return undefined;
       if (!rest.baseUrl.trim()) return null;
       return {
         shape: "openapi",
         openapi_document: rest.document,
         base_url: rest.baseUrl.trim(),
-        endpoints: endpointLines(rest),
+        endpoints: rest.endpoints.split("\n"),
       };
     }
     const filled = Object.fromEntries(
@@ -171,7 +167,7 @@ export default function IntegrationConfigurationTab({
 
   async function refresh() {
     await mutate(SWR_KEYS.adminIntegrations);
-    onChanged();
+    await onChanged();
   }
 
   async function save() {
@@ -193,14 +189,9 @@ export default function IntegrationConfigurationTab({
       const saved = await updateIntegration(integration.id, update);
       // The response leaves out secrets and gives the schema as stored.
       setSignIn(signInDraftFromDetail(saved));
-      if (saved.config.shape === "openapi") {
-        setSavedOpenApi(saved.config);
+      if (saved.config.shape === "openapi")
         setRest(restDraftFrom(saved.config));
-      }
-      if (saved.config.shape === "graphql") {
-        setSavedGraphql(saved.config);
-        setGraphql(saved.config);
-      }
+      if (saved.config.shape === "graphql") setGraphql(saved.config);
       setPresetCredentials({});
       toast.success(t("saved"));
       // A new schema or server syncs the actions again.
@@ -328,8 +319,7 @@ export default function IntegrationConfigurationTab({
                   draft={graphql}
                   onChange={setGraphql}
                   showErrors={showErrors}
-                  disabled={disabled}
-                  loading={loadingSchema}
+                  disabled={disabled || loadingSchema}
                   onLoadingChange={setLoadingSchema}
                 />
               ) : (
@@ -341,8 +331,7 @@ export default function IntegrationConfigurationTab({
                   }}
                   lineErrors={lineErrors}
                   showErrors={showErrors}
-                  disabled={disabled}
-                  importing={loadingSchema}
+                  disabled={disabled || loadingSchema}
                   onImportingChange={setLoadingSchema}
                 />
               )}

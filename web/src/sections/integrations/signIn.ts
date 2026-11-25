@@ -3,6 +3,7 @@ import type {
   AuthMethod,
   AuthMode,
   IntegrationCreate,
+  IntegrationPreset,
   IntegrationShape,
   OAuthClientInput,
   OAuthProviderMode,
@@ -18,6 +19,10 @@ export const SIGN_IN_METHODS: Record<
   graphql: ["oauth2", "api_key", "onyx_login"],
   custom: ["api_key"],
 };
+
+export function presetAuthMethods(preset: IntegrationPreset): AuthMethod[] {
+  return preset.auth_methods.flatMap((method) => (method ? [method] : []));
+}
 
 export const PROVIDER_MODES: Record<
   IntegrationShape,

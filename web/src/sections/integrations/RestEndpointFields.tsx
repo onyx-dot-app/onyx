@@ -38,18 +38,13 @@ export function restDraftFrom(view: OpenApiConfigView): RestDraft {
   };
 }
 
-export function endpointLines(draft: RestDraft): string[] {
-  return draft.endpoints.split("\n");
-}
-
 interface RestEndpointFieldsProps {
   draft: RestDraft;
   onChange: (draft: RestDraft) => void;
   lineErrors: EndpointLineError[];
   showErrors: boolean;
+  /** Also true while an import runs; the parent holds that state. */
   disabled: boolean;
-  /** True while an import runs; the parent holds it to block Save. */
-  importing: boolean;
   onImportingChange: (importing: boolean) => void;
 }
 
@@ -59,12 +54,10 @@ export default function RestEndpointFields({
   lineErrors,
   showErrors,
   disabled,
-  importing,
   onImportingChange,
 }: RestEndpointFieldsProps) {
   const t = useTranslations("admin.integrations.add.rest");
   const [specUrl, setSpecUrl] = useState("");
-  const busy = disabled || importing;
 
   async function runImport(
     body: { openapi_document: string } | { spec_url: string }
@@ -96,7 +89,7 @@ export default function RestEndpointFields({
           <InputSingleUpload
             accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
             placeholder={t("import.upload")}
-            variant={busy ? "disabled" : "primary"}
+            variant={disabled ? "disabled" : "primary"}
             setValue={(text) => {
               if (text.trim()) void runImport({ openapi_document: text });
             }}
@@ -106,13 +99,13 @@ export default function RestEndpointFields({
               aria-label={t("import.url")}
               placeholder={t("import.urlPlaceholder")}
               value={specUrl}
-              variant={busy ? "disabled" : "primary"}
+              variant={disabled ? "disabled" : "primary"}
               onChange={(event) => setSpecUrl(event.target.value)}
             />
             <Button
               type="button"
               prominence="secondary"
-              disabled={busy || !specUrl.trim()}
+              disabled={disabled || !specUrl.trim()}
               onClick={() => void runImport({ spec_url: specUrl.trim() })}
             >
               {t("import.submit")}
@@ -132,7 +125,7 @@ export default function RestEndpointFields({
           aria-label={t("baseUrl.title")}
           placeholder={t("baseUrl.placeholder")}
           value={draft.baseUrl}
-          variant={busy ? "disabled" : "primary"}
+          variant={disabled ? "disabled" : "primary"}
           onChange={(event) =>
             onChange({ ...draft, baseUrl: event.target.value })
           }
@@ -143,7 +136,7 @@ export default function RestEndpointFields({
         onChange={(endpoints) => onChange({ ...draft, endpoints })}
         lineErrors={lineErrors}
         showErrors={showErrors}
-        disabled={busy}
+        disabled={disabled}
       />
     </>
   );

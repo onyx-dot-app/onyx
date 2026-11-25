@@ -15,9 +15,8 @@ interface GraphQLFieldsProps {
   draft: GraphQLConfig;
   onChange: (draft: GraphQLConfig) => void;
   showErrors: boolean;
+  /** Also true while introspection runs; the parent holds that state. */
   disabled: boolean;
-  /** True while introspection runs; the parent holds it to block Save. */
-  loading: boolean;
   onLoadingChange: (loading: boolean) => void;
 }
 
@@ -27,11 +26,9 @@ export default function GraphQLFields({
   onChange,
   showErrors,
   disabled,
-  loading,
   onLoadingChange,
 }: GraphQLFieldsProps) {
   const t = useTranslations("admin.integrations.add.graphql");
-  const busy = disabled || loading;
 
   async function introspect() {
     onLoadingChange(true);
@@ -63,7 +60,7 @@ export default function GraphQLFields({
             aria-label={t("endpointUrl.title")}
             placeholder={t("endpointUrl.placeholder")}
             value={draft.endpoint_url}
-            variant={busy ? "disabled" : "primary"}
+            variant={disabled ? "disabled" : "primary"}
             onChange={(event) =>
               onChange({ ...draft, endpoint_url: event.target.value })
             }
@@ -71,7 +68,7 @@ export default function GraphQLFields({
           <Button
             type="button"
             prominence="secondary"
-            disabled={busy || !draft.endpoint_url.trim()}
+            disabled={disabled || !draft.endpoint_url.trim()}
             onClick={() => void introspect()}
           >
             {t("introspect.submit")}
@@ -91,7 +88,7 @@ export default function GraphQLFields({
           <InputSingleUpload
             accept=".graphql,.graphqls,.gql,text/plain"
             placeholder={t("schema.upload")}
-            variant={busy ? "disabled" : "primary"}
+            variant={disabled ? "disabled" : "primary"}
             setValue={(text) => {
               if (text.trim()) onChange({ ...draft, graphql_schema: text });
             }}
@@ -100,7 +97,7 @@ export default function GraphQLFields({
             aria-label={t("schema.title")}
             value={draft.graphql_schema}
             rows={12}
-            variant={busy ? "disabled" : "primary"}
+            variant={disabled ? "disabled" : "primary"}
             onChange={(event) =>
               onChange({ ...draft, graphql_schema: event.target.value })
             }
