@@ -455,7 +455,7 @@ export class ChatPage {
     const width = await this.rightPanelWidth();
     const viewport = this.page.viewportSize();
     if (!viewport) throw new Error("The page has no viewport");
-    // The panel slides open: drag once its edge is in place
+    // Drag once the panel's edge is in place
     await expect
       .poll(async () => (await handle.boundingBox())?.x ?? Infinity)
       .toBeLessThan(viewport.width - width + 2);

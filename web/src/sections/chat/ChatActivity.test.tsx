@@ -1,4 +1,5 @@
 import { act, render, screen } from "@tests/setup/test-utils";
+import { unstable_serialize } from "swr";
 import ChatActivity from "@/sections/chat/ChatActivity";
 import { PacketType, type Packet } from "@/app/app/services/streamingModels";
 import type { Message } from "@/app/app/types";
@@ -237,12 +238,57 @@ test("View all files shows the Files list even while a file is open", async () =
   expect(panel?.activeId).toBe(RIGHT_PANEL_FILES_TAB);
 });
 
-test("agents live when the chat loads leave the card closed", async () => {
+test("a new chat whose streaming reply started agents before the first list opens the card", async () => {
+  serve([agent("/root/poet", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  useChatSessionStore.getState().updateChatState("s", "streaming");
+  renderActivity();
+  expect(await screen.findByText("poet")).toBeVisible();
+});
+
+test("agents live when an idle chat loads leave the card closed", async () => {
   serve([agent("/root/poet", "running")], {
     ...STATUS,
     has_active_subagents: true,
   });
   renderActivity();
+  await screen.findByRole("button", { name: "Activity" });
+  await act(async () => undefined);
+  expect(screen.queryByText("poet")).toBeNull();
+});
+
+test("an empty list cached from an earlier visit does not open the card for agents already live", async () => {
+  serve([agent("/root/poet", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  // The cache still holds the chat as it was before its agents started
+  render(
+    <AppWorkspaceElementsContext.Provider
+      value={{
+        workspace: { current: null },
+        page: { current: null },
+        panelToggleSlot: null,
+        activitySlot: document.body,
+      }}
+    >
+      <ChatActivity sessionId="s" />
+    </AppWorkspaceElementsContext.Provider>,
+    {
+      swrConfig: {
+        fallback: {
+          "/api/chat/chat-session/s/status": STATUS,
+          [unstable_serialize([
+            "/api/chat/chat-session/s/agents",
+            false,
+            null,
+          ])]: [],
+        },
+      },
+    }
+  );
   await screen.findByRole("button", { name: "Activity" });
   await act(async () => undefined);
   expect(screen.queryByText("poet")).toBeNull();

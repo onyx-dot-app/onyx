@@ -1004,7 +1004,7 @@ const NO_SUBAGENTS: ChatSubagent[] = [];
  * active or which response is newest, and poll while agents are active. The
  * status polls as the queue's does, also for chats without a queue, and while
  * a reply streams (`streaming`), which can start agents. `loaded` turns true
- * with the first list.
+ * once a list has been read from the server since the hook mounted.
  */
 export function useChatSubagents(
   sessionId: string,
@@ -1024,7 +1024,11 @@ export function useChatSubagents(
   });
   const active = status?.has_active_subagents ?? false;
   const url = SWR_KEYS.chatSessionAgents(sessionId);
-  const { data, mutate: reloadAgents } = useSWR<ChatSubagent[], Error>(
+  const {
+    data,
+    isValidating,
+    mutate: reloadAgents,
+  } = useSWR<ChatSubagent[], Error>(
     status ? [url, active, status.latest_response_id] : null,
     () => errorHandlingFetcher<ChatSubagent[]>(url),
     {
@@ -1033,6 +1037,9 @@ export function useChatSubagents(
       onErrorRetry: skipRetryOnAuthError,
     }
   );
+  // A cached list from an earlier visit is stale until its first read here
+  const [loaded, setLoaded] = useState(false);
+  if (!loaded && data !== undefined && !isValidating) setLoaded(true);
   const stopAgent = useCallback(
     async (agentId: string) => {
       try {
@@ -1055,7 +1062,7 @@ export function useChatSubagents(
   );
   return {
     agents: data ?? NO_SUBAGENTS,
-    loaded: data !== undefined,
+    loaded,
     stopAgent,
   };
 }

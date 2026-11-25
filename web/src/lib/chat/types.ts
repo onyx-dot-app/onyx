@@ -119,7 +119,7 @@ export interface ChatSubagent {
 /** The chat's background agents, as `useChatSubagents` gives them. */
 export interface ChatSubagents {
   agents: ChatSubagent[];
-  /** The first list has loaded. */
+  /** A list has been read from the server, not only from the cache. */
   loaded: boolean;
   /** Stops the agent and the agents below it. */
   stopAgent: (agentId: string) => Promise<void>;

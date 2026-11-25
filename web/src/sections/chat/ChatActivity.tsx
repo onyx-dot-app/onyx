@@ -172,10 +172,8 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
       ),
     [tree, localStatuses, localAnswers]
   );
-  const { agents, loaded, stopAgent } = useChatSubagents(
-    sessionId,
-    useCurrentChatState() !== "input"
-  );
+  const streaming = useCurrentChatState() !== "input";
+  const { agents, loaded, stopAgent } = useChatSubagents(sessionId, streaming);
   const files = usePublishedFiles("current");
   // Finished agents fold under one row, as their own list
   const [showFinished, setShowFinished] = useState(false);
@@ -185,9 +183,11 @@ export default function ChatActivity({ sessionId }: ChatActivityProps) {
     <AgentRow key={agent.id} agent={agent} onStop={stopAgent} />
   );
   // Agents that start while the chat shows open the card, once per run of
-  // agents. Agents already live when the chat loads do not.
+  // agents. Agents already live when an idle chat loads do not. A chat that
+  // mounts while its reply streams, such as a new chat, counts from zero:
+  // that reply can start agents before the first list arrives.
   const liveCount = loaded ? liveAgents.length : null;
-  const previousLiveCount = useRef<number | null>(null);
+  const previousLiveCount = useRef<number | null>(streaming ? 0 : null);
   useEffect(() => {
     if (liveCount === null) return;
     if (previousLiveCount.current === 0 && liveCount > 0) setOpen(true);
