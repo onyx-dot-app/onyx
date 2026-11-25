@@ -55,4 +55,33 @@ describe("full image gallery", () => {
     await user.keyboard("{ArrowRight}");
     expect(fullImageSrc()).toBe("/api/chat/file/a");
   });
+
+  test("flips the arrow keys in right-to-left layouts", async () => {
+    const user = userEvent.setup();
+    document.documentElement.dir = "rtl";
+    try {
+      renderAnswer(["a", "b", "c"]);
+      await user.click(
+        screen.getAllByRole("button", { name: "View the full image" })[1]!
+      );
+      await user.keyboard("{ArrowLeft}");
+      expect(fullImageSrc()).toBe("/api/chat/file/c");
+      await user.keyboard("{ArrowRight}");
+      expect(fullImageSrc()).toBe("/api/chat/file/b");
+    } finally {
+      document.documentElement.dir = "";
+    }
+  });
+
+  test("keeps the opened image's own alt text", async () => {
+    const user = userEvent.setup();
+    renderAnswer(["a", "b"]);
+    await user.click(
+      screen.getAllByRole("button", { name: "View the full image" })[0]!
+    );
+    expect(screen.getByRole("dialog").querySelector("img")).toHaveAttribute(
+      "alt",
+      "Chat attachment"
+    );
+  });
 });

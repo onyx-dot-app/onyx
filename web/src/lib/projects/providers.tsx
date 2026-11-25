@@ -43,6 +43,7 @@ import {
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
 } from "@/lib/projects/svc";
+import { isFilePending } from "@/lib/projects/utils";
 import { trackUpload } from "@/lib/projects/uploadProgress";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppPosition } from "@/lib/navigation/hooks";
@@ -420,7 +421,23 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             );
             return;
           }
-          const uploadedFiles = uploaded.user_files || [];
+          // A file the user removed while its batch uploaded is deleted again.
+          const cancelledTempIds = new Set(
+            tempIds.filter((tempId) => upload.isCancelled(tempId))
+          );
+          const isCancelled = (f: ProjectFile) =>
+            Boolean(f.temp_id && cancelledTempIds.has(f.temp_id));
+          for (const f of (uploaded.user_files || []).filter(isCancelled)) {
+            void svcDeleteUserFile(f.id).catch((error: unknown) =>
+              console.error("Failed to delete a cancelled upload:", error)
+            );
+          }
+          if (cancelledTempIds.size > 0) {
+            removeOptimisticFilesByTempIds(cancelledTempIds, projectId);
+          }
+          const uploadedFiles = (uploaded.user_files || []).filter(
+            (f) => !isCancelled(f)
+          );
           settledFiles = uploadedFiles;
           const tempIdToUploadedFileMap = new Map(
             uploadedFiles.map((f) => [f.temp_id, f])
@@ -472,7 +489,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
             // A file that the server did not return was rejected.
             const failedTempIds = tempIds.filter(
-              (tempId) => !tempIdToUploadedFileMap.has(tempId)
+              (tempId) =>
+                !tempIdToUploadedFileMap.has(tempId) &&
+                !cancelledTempIds.has(tempId)
             );
             removeOptimisticFilesByTempIds(new Set(failedTempIds), projectId);
             if (failedTempIds.length > 0) {
@@ -589,10 +608,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     autoTrackedIdsRef.current.forEach((id) => {
       if (!attachedIds.has(id)) autoTrackedIdsRef.current.delete(id);
     });
+    // A completed file has no status left to poll, and a sent message's file
+    // may have no user file id to poll with.
     const toTrack = currentMessageFiles
       .filter(
         (f) =>
           f.status !== UserFileStatus.UPLOADING &&
+          isFilePending(f.status) &&
           !autoTrackedIdsRef.current.has(f.id)
       )
       .map((f) => f.id);

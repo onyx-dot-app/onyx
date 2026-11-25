@@ -55,21 +55,9 @@ export function ApplyPatchToolRenderer({
   }, [packets]);
   const tRead = useTranslations("craft.toolCards.read");
   const patch = start?.patch ?? "";
-  const patchFiles = useMemo(
-    () =>
-      patch === ""
-        ? []
-        : parseApplyPatch(patch, (count) =>
-            tRead("moreLines.label", { count })
-          ),
-    [patch, tRead]
-  );
-  const totals = patchFiles.reduce(
-    (sum, file) => ({
-      added: sum.added + file.added,
-      removed: sum.removed + file.removed,
-    }),
-    { added: 0, removed: 0 }
+  const parsed = useMemo(
+    () => (patch === "" ? null : parseApplyPatch(patch)),
+    [patch]
   );
   const { isComplete, error, stopped } = useSandboxCallStatus(
     packets,
@@ -135,14 +123,29 @@ export function ApplyPatchToolRenderer({
   // shows the error.
   const content = (
     <SandboxCallContent renderType={renderType}>
-      {patchFiles.map((file, index) => (
+      {parsed?.files.map((file, index) => (
         <DiffBody
           key={index}
           title={stripBidiControls(file.path) || t("sandbox.patch.title")}
           copyText={index === 0 ? patch : undefined}
           lines={file.lines}
+          counts={{ added: file.added, removed: file.removed }}
         />
       ))}
+      {parsed !== null && parsed.omittedLines > 0 && (
+        <DiffBody
+          title={t("sandbox.patch.title")}
+          copyText={patch}
+          lines={[
+            {
+              type: "header",
+              content: tRead("moreLines.label", {
+                count: parsed.omittedLines,
+              }),
+            },
+          ]}
+        />
+      )}
       <CommandBody
         command=""
         output={changedFiles}
@@ -162,7 +165,7 @@ export function ApplyPatchToolRenderer({
       statusKey: liveProgress === null ? undefined : "progress",
       headerAccessory:
         error === null && !stopped ? (
-          <DiffStat added={totals.added} removed={totals.removed} />
+          <DiffStat added={parsed?.added ?? 0} removed={parsed?.removed ?? 0} />
         ) : undefined,
       supportsCollapsible: true,
       // Nothing to open until the patch, its end or an error arrives; until

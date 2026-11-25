@@ -23,6 +23,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     create_chat_history_chain,
     get_chat_session_by_id,
+    replace_chat_session_name_if_unchanged,
     save_chat_session_name_if_unnamed,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -96,10 +97,12 @@ def generate_chat_session_name_or_fallback(
     chat_session_id: UUID,
     get_chat_llm: Callable[[], LLM],
     additional_headers: dict[str, str] | None,
+    raise_on_failure: bool = False,
 ) -> str:
     """Generate a name from `chat_history`, or fall back to the first question
     when generation is not allowed or fails. `get_chat_llm` gives the chat's
-    model; it is called only when no chat-naming model is set."""
+    model; it is called only when no chat-naming model is set. With
+    `raise_on_failure` a failure raises instead."""
     user_id = user.id
     fallback_name = get_fallback_chat_session_name(chat_history)
 
@@ -139,6 +142,8 @@ def generate_chat_session_name_or_fallback(
                 llm=llm,
             )
     except Exception as error:
+        if raise_on_failure:
+            raise
         logger.warning("Failed to generate chat session name: %s", error)
         return fallback_name
 
@@ -204,10 +209,12 @@ def name_chat_session(
     chat_session_id: UUID,
     user: User,
     additional_headers: dict[str, str] | None,
+    regenerate: bool = False,
 ) -> str:
     """Name a chat from its whole history unless it has a name, and return
     the chat's name. A name the chat turn is still generating is awaited and
-    returned, not generated a second time."""
+    returned, not generated a second time. With `regenerate`, a named chat
+    gets a new name; a failed generation raises and keeps the old one."""
     with _naming_lock(chat_session_id, wait_seconds=_NAMING_WAIT_SECONDS):
         with get_session_with_current_tenant() as db_session:
             chat_session = get_chat_session_by_id(
@@ -216,8 +223,9 @@ def name_chat_session(
                 db_session=db_session,
                 eager_load_persona=True,
             )
-            if chat_session.description:
-                return chat_session.description
+            previous_name = chat_session.description
+            if previous_name and not regenerate:
+                return previous_name
             chat_history = create_chat_history_chain(
                 chat_session_id=chat_session_id,
                 db_session=db_session,
@@ -239,14 +247,25 @@ def name_chat_session(
                 additional_headers=additional_headers,
             ),
             additional_headers=additional_headers,
+            raise_on_failure=regenerate and bool(previous_name),
         )
         with get_session_with_current_tenant() as db_session:
-            if save_chat_session_name_if_unnamed(
-                db_session=db_session,
-                user_id=user.id,
-                chat_session_id=chat_session_id,
-                name=name,
-            ):
+            if previous_name and regenerate:
+                saved = replace_chat_session_name_if_unchanged(
+                    db_session=db_session,
+                    user_id=user.id,
+                    chat_session_id=chat_session_id,
+                    expected_name=previous_name,
+                    name=name,
+                )
+            else:
+                saved = save_chat_session_name_if_unnamed(
+                    db_session=db_session,
+                    user_id=user.id,
+                    chat_session_id=chat_session_id,
+                    name=name,
+                )
+            if saved:
                 return name
             # Renamed while this name was generated: the rename stands.
             return (

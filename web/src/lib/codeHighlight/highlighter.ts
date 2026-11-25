@@ -54,10 +54,54 @@ function isBundledLanguage(language: string): language is BundledLanguage {
   return Object.hasOwn(bundledLanguages, language);
 }
 
+// Fence tags and file extensions that Shiki knows under another name.
+const LANGUAGE_ALIASES = new Map<string, BundledLanguage>([
+  ["gitignore", "ini"],
+  ["dos", "bat"],
+  ["golang", "go"],
+  ["patch", "diff"],
+  ["pwsh", "powershell"],
+  ["h", "c"],
+  ["cc", "cpp"],
+  ["cxx", "cpp"],
+  ["hh", "cpp"],
+  ["hpp", "cpp"],
+  ["hxx", "cpp"],
+  ["h++", "cpp"],
+  ["arduino", "cpp"],
+  ["ino", "cpp"],
+  ["apacheconf", "apache"],
+  ["nginxconf", "nginx"],
+  ["pgsql", "sql"],
+  ["postgres", "sql"],
+  ["postgresql", "sql"],
+  ["ex", "elixir"],
+  ["exs", "elixir"],
+  ["feature", "gherkin"],
+  ["pl", "perl"],
+  ["pm", "perl"],
+  ["objectivec", "objective-c"],
+  ["obj-c", "objective-c"],
+  ["mk", "makefile"],
+  ["mak", "makefile"],
+  ["svg", "xml"],
+  ["xhtml", "xml"],
+  ["rss", "xml"],
+  ["atom", "xml"],
+  ["xsd", "xml"],
+  ["plist", "xml"],
+  ["ipython", "python"],
+  ["jsp", "java"],
+  ["cr", "crystal"],
+  ["hx", "haxe"],
+  ["gradle", "groovy"],
+  ["vbscript", "vb"],
+  ["vbs", "vb"],
+]);
+
 function highlighterLanguageOf(language: string): string {
   const id = language.toLowerCase();
-  // Shiki has no gitignore grammar; ini is a close match.
-  return id === "gitignore" ? "ini" : id;
+  return LANGUAGE_ALIASES.get(id) ?? id;
 }
 
 function escapeHtml(text: string): string {

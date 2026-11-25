@@ -61,7 +61,7 @@ export function useHighlightedLines(
 
   useEffect(() => {
     if (!highlighter) return;
-    const source = code.split("\n");
+    const source = code.split(/\r?\n/);
     const lines: string[] = [];
     let state: GrammarState | undefined;
     let next = 0;
@@ -74,7 +74,8 @@ export function useHighlightedLines(
         );
         lines.push(...slice.lines);
         state = slice.state;
-      } catch {
+      } catch (error) {
+        console.error("Failed to highlight code", { language, error });
         return;
       }
       next += LINES_PER_TASK;
@@ -86,7 +87,7 @@ export function useHighlightedLines(
     }
     timer = setTimeout(() => highlightSlice(highlighter), 0);
     return () => clearTimeout(timer);
-  }, [code, highlighter]);
+  }, [code, highlighter, language]);
 
   return highlighted?.code === code && highlighted.highlighter === highlighter
     ? highlighted.lines

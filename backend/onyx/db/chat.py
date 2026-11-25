@@ -654,6 +654,32 @@ def save_chat_session_name_if_unnamed(
     return saved_id is not None
 
 
+def replace_chat_session_name_if_unchanged(
+    db_session: Session,
+    user_id: UUID | None,
+    chat_session_id: UUID,
+    expected_name: str,
+    name: str,
+) -> bool:
+    """Replace a generated name only while the chat still has `expected_name`,
+    so a rename made during generation wins. Returns whether it was saved."""
+    statement = (
+        update(ChatSession)
+        .where(
+            ChatSession.id == chat_session_id,
+            ChatSession.deleted.is_(False),
+            ChatSession.description == expected_name,
+        )
+        .values(description=name)
+        .returning(ChatSession.id)
+    )
+    if user_id is not None:
+        statement = statement.where(ChatSession.user_id == user_id)
+    saved_id = db_session.execute(statement).scalar_one_or_none()
+    db_session.commit()
+    return saved_id is not None
+
+
 def delete_all_chat_sessions_for_user(
     user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
 ) -> tuple[list[UUID], list[UUID]]:

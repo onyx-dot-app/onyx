@@ -2,46 +2,51 @@ import { render } from "@tests/setup/test-utils";
 import { AnswerMarkdown } from "@/lib/answerText/components";
 import {
   collectChatFindRanges,
-  openDetailsAround,
+  revealFoldedMatch,
 } from "@/lib/chatFind/highlights";
 import { answerFindSegments, findOccurrences } from "@/lib/chatFind/match";
 
-const ANSWER =
+const CALLOUT_AND_DETAILS =
   "> [!NOTE]\n> Mind the note.\n\n<details><summary>More note</summary>\n\nHidden note text.\n\n</details>";
+const HTML_AND_FOOTNOTE =
+  "A <b>note</b> here[^1].\n\n<div>note block</div>\n\n[^1]: The footnote note.";
 
-function renderAnswer(): HTMLElement {
+function renderAnswer(content: string): HTMLElement {
   const { container } = render(
     <div data-chat-find-text="answer:2">
-      <AnswerMarkdown content={ANSWER} />
+      <AnswerMarkdown content={content} />
     </div>
   );
   return container;
 }
 
-test("the rendered answer and its searched text hold the same matches", () => {
-  const root = renderAnswer();
-  const ranges = collectChatFindRanges(root, "note").get("answer:2") ?? [];
-  const counted = answerFindSegments(ANSWER).reduce(
-    (count, segment) => count + findOccurrences(segment, "note").length,
-    0
-  );
-  expect(ranges).toHaveLength(counted);
-  expect(ranges.map((range) => range.startContainer.textContent)).toEqual([
-    "Mind the note.",
-    "More note",
-    "Hidden note text.",
-  ]);
-});
+// The callout's "Note" title and the footnote are on the page, not searched.
+test.each([
+  [CALLOUT_AND_DETAILS, 3],
+  [HTML_AND_FOOTNOTE, 2],
+])(
+  "the rendered answer and its searched text hold the same matches",
+  (content, expected) => {
+    const root = renderAnswer(content);
+    const ranges = collectChatFindRanges(root, "note").get("answer:2") ?? [];
+    const counted = answerFindSegments(content).reduce(
+      (count, segment) => count + findOccurrences(segment, "note").length,
+      0
+    );
+    expect(counted).toBe(expected);
+    expect(ranges).toHaveLength(expected);
+  }
+);
 
 test("a match in a closed details opens it; one in its summary does not", () => {
-  const root = renderAnswer();
+  const root = renderAnswer(CALLOUT_AND_DETAILS);
   const details = root.querySelector("details");
   const [, inSummary, inBody] =
     collectChatFindRanges(root, "note").get("answer:2") ?? [];
   if (!details || !inSummary || !inBody) throw new Error("missing matches");
 
-  openDetailsAround(inSummary, root);
+  revealFoldedMatch(inSummary, root);
   expect(details.open).toBe(false);
-  openDetailsAround(inBody, root);
+  revealFoldedMatch(inBody, root);
   expect(details.open).toBe(true);
 });

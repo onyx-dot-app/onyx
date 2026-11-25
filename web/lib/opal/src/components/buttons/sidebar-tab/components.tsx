@@ -73,6 +73,9 @@ interface SidebarTabProps {
 
   /** Delay in ms before `tooltip` appears. */
   tooltipDelay?: number;
+
+  /** Hides `tooltip`, an open one too, and keeps the tab's tree as it is. */
+  tooltipSuppressed?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +166,7 @@ function SidebarTab({
   rightChildrenAtRest,
   tooltip,
   tooltipDelay,
+  tooltipSuppressed,
   children,
 }: SidebarTabProps) {
   const Icon =
@@ -247,7 +251,12 @@ function SidebarTab({
   const trigger =
     overlay &&
     (tooltip ? (
-      <Tooltip tooltip={tooltip} side="end" delayDuration={tooltipDelay}>
+      <Tooltip
+        tooltip={tooltip}
+        side="end"
+        delayDuration={tooltipDelay}
+        suppressed={tooltipSuppressed}
+      >
         {overlay}
       </Tooltip>
     ) : label !== undefined ? (

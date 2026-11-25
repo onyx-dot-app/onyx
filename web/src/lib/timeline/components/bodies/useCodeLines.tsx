@@ -18,12 +18,17 @@ interface UseCodeLinesOptions {
  * the grammar state after the last line, so each update costs the new lines,
  * and a block comment or multi-line string keeps its colors on every line.
  */
-function createIncrementalHighlighter(highlighter: CodeHighlighter) {
+function createIncrementalHighlighter(
+  highlighter: CodeHighlighter,
+  language: string | undefined
+) {
+  let failed = false;
   let source = "";
   let lines: string[] = [];
   let state: GrammarState | undefined;
 
   return (completed: string): string[] | null => {
+    if (failed) return null;
     const next = `${completed}\n`;
     if (!next.startsWith(source)) {
       source = "";
@@ -39,7 +44,9 @@ function createIncrementalHighlighter(highlighter: CodeHighlighter) {
         lines = [...lines, ...result.lines];
         state = result.state;
         source = next;
-      } catch {
+      } catch (error) {
+        failed = true;
+        console.error("Failed to highlight code", { language, error });
         return null;
       }
     }
@@ -58,8 +65,9 @@ export function useCodeLines(
 ): CodePanelLine[] {
   const highlighter = useCodeHighlighter(code ? language : undefined);
   const incremental = useMemo(
-    () => (highlighter ? createIncrementalHighlighter(highlighter) : null),
-    [highlighter]
+    () =>
+      highlighter ? createIncrementalHighlighter(highlighter, language) : null,
+    [highlighter, language]
   );
 
   const split = streaming ? code.lastIndexOf("\n") : code.length;

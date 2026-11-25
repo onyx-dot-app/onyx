@@ -12,9 +12,9 @@ export function getLanguageFromPath(
 
   const langMap: Record<string, string> = {
     js: "javascript",
-    jsx: "javascript",
+    jsx: "jsx",
     ts: "typescript",
-    tsx: "typescript",
+    tsx: "tsx",
     py: "python",
     json: "json",
     css: "css",

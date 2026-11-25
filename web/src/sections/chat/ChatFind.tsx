@@ -105,9 +105,13 @@ function ChatFindBar() {
       ? 0
       : Math.min(selection.index ?? startIndex, results.total - 1);
   const match = chatFindMatchAt(results.entries, activeIndex);
-  const matchKey = match
-    ? `${selection.id}:${searchedQuery}:${match.kind}:${match.nodeId}:${match.occurrence}`
-    : null;
+  // While a typed query waits for its search, the old results show but are
+  // not brought into view.
+  const searchPending = searchedQuery !== query.trim();
+  const matchKey =
+    match && !searchPending
+      ? `${selection.id}:${searchedQuery}:${match.scopeKey}:${match.occurrence}`
+      : null;
 
   useChatFindHighlights({
     scrollContainerRef,

@@ -12595,7 +12595,7 @@
         "stoppedDuration": {
           "label": "Von dir nach {duration} gestoppt"
         },
-        "stoppedUnknownDuration": {
+        "interruptedThinking": {
           "label": "Du hast diese Antwort gestoppt"
         },
         "memory": {
@@ -12718,10 +12718,10 @@
         "stepsButton": {
           "label": "{count, plural, one {# Schritt} other {# Schritte}}"
         },
-        "workedDuration": {
+        "thoughtDuration": {
           "label": "Hat {duration} gearbeitet"
         },
-        "workedUnknownDuration": {
+        "thoughtUnknownDuration": {
           "label": "Hat gearbeitet"
         },
         "toggleRow": {
