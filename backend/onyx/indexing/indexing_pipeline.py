@@ -385,6 +385,9 @@ def embed_and_stream(
             request_id=request_id,
             store=store,
         )
+        # The store holds the chunks now. This frame lives for the whole
+        # ``with`` body, so drop its reference and let the caller free them.
+        del chunks
         embed_duration_ms = max(0, int((time.monotonic() - embed_start) * 1000))
         emit_stage_counter(
             attempt_id,
@@ -1724,6 +1727,9 @@ def index_doc_batch(
                 chunks=embedded_chunks,
                 db_session=db_session,
             )
+            # The write reads the chunks back from the store, one batch file
+            # at a time. Free the full list before it starts.
+            del chunks, embedded_chunks
 
             doc_id_to_chunk_cnt_diff: dict[str, IndexingMetadata.ChunkCounts] = {}
             prev_and_new_doc_id_set = set(
