@@ -331,7 +331,8 @@ def test_a_nested_model_argument_lists_the_keys_of_its_model() -> None:
     )
     stub = (
         build_tool_stubs(
-            [FakeTool(definition.name, _unused, parameters=definition.parameters)]
+            OPENAI_CODE_MODE,
+            [FakeTool(definition.name, _unused, parameters=definition.parameters)],
         )
         .functions["library_list"]
         .stub

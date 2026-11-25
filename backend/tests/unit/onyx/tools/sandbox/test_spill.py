@@ -671,7 +671,7 @@ def test_a_library_list_page_stays_whole_in_a_full_step(
             result=ToolResult(content=page),
             step_results=(earlier,),
         ),
-        code_mode=False,
+        code_mode_run_name=None,
     )
 
     assert result.content == page
