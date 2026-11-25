@@ -21,8 +21,9 @@ exact count of 20,000 matches took 0.4 s.
 
 POSTGRES_QUERY_CONTENT_FIRST overrides the choice for every call.
 
-Sources that censor records at read time (Salesforce) are never matched: a
-phrase in a record the caller cannot read would still match its document.
+Sources that censor records at read time (Salesforce) match only under a
+public connector, where search does not censor them either: elsewhere a phrase
+in a record the caller cannot read would still match its document.
 
 A listing keeps the way of its first page, so that its cursor stays valid.
 """
@@ -51,6 +52,7 @@ from onyx.db.postgres_tool import (
     document_source_types,
     filter_document_ids_for_tool,
     hierarchy_node_own_document_ids,
+    public_cc_pair_ids_for_sources,
     query_document_keys_for_tool,
     query_documents_for_tool,
     try_count_documents_for_tool,
@@ -81,8 +83,11 @@ TIME_BUDGET_S = 15.0
 # Counting stops here and reports a lower bound.
 MAX_COUNT = 50_000
 
-# Filters that only Postgres applies. Without them, OpenSearch can count
-# alone, trusting its own copy of the permissions as search does.
+# Filters that only Postgres applies. Without them, OpenSearch counts alone,
+# trusting its own copy of the permissions as search does. That count can be
+# a little higher than the listing: it includes the boundary second of a
+# fractional date bound, uploaded files that have no document row, and
+# documents whose index permissions are behind Postgres.
 _POSTGRES_ONLY_FILTERS = ("title_contains", "owned_by", "parent_hierarchy_node_id")
 
 
@@ -184,13 +189,21 @@ class ContentFilter:
         self._external_group_ids = external_group_ids
         self._deadline = time.monotonic() + TIME_BUDGET_S
         # The tool's document filter kwargs for the Postgres queries, with
-        # the sources narrowed to those the scope allows and that can match.
+        # the sources narrowed to those the scope allows.
         self._filters: dict[str, Any] = {
             **filters,
-            "source_type": _matchable_sources(filters.get("source_type"), scope),
+            "source_type": document_source_types(filters.get("source_type"), scope),
         }
         self._scope = scope
         self._phrases = phrases
+        # Every match comes from OpenSearch, so this one check covers both
+        # ways and every count.
+        self._censoring_sources = sorted(_censoring_sources())
+        self._uncensored_cc_pair_ids = (
+            public_cc_pair_ids_for_sources(db_session, self._censoring_sources)
+            if self._censoring_sources
+            else []
+        )
         access = build_access_filters_for_user(user, db_session)
         self._access_filters = IndexFilters(
             access_control_list=access.access_control_list,
@@ -317,6 +330,8 @@ class ContentFilter:
             phrases=self._phrases,
             filters=self._access_filters,
             document_ids=[candidate.document_id for candidate in candidates],
+            restricted_sources=self._censoring_sources,
+            restricted_source_cc_pair_ids=self._uncensored_cc_pair_ids,
         )
         matches = self._document_index.match_documents_by_content(
             request, ContentMatchDateField.UPDATED, True, None, len(candidates)
@@ -373,6 +388,8 @@ class ContentFilter:
             ),
             updated_after=self._filters.get("updated_after"),
             updated_before=self._filters.get("updated_before"),
+            restricted_sources=self._censoring_sources,
+            restricted_source_cc_pair_ids=self._uncensored_cc_pair_ids,
         )
 
     def _passing(self, document_ids: list[str]) -> set[str]:
@@ -462,22 +479,6 @@ class ContentFilter:
         return [
             rows_by_id[key.document_id] for key in keys if key.document_id in rows_by_id
         ]
-
-
-def _matchable_sources(
-    source_type: list[DocumentSource] | None, scope: DocumentScope
-) -> list[DocumentSource] | None:
-    """The sources that the request and the scope allow, without the ones
-    that censor at read time. None allows every source."""
-    allowed = document_source_types(source_type, scope)
-    censoring = _censoring_sources()
-    if not censoring:
-        return allowed
-    return [
-        source
-        for source in (allowed if allowed is not None else list(DocumentSource))
-        if source not in censoring
-    ]
 
 
 def _as_cursor(key: ContentMatchKey) -> DocumentCursor:

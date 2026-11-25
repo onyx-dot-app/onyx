@@ -46,7 +46,7 @@ from onyx.db.document_access import (
     apply_resolved_document_access_filter,
     resolve_document_access_pairs,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus, HierarchyNodeType
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, HierarchyNodeType
 from onyx.db.hierarchy import escape_like_pattern, hierarchy_node_own_document_id
 from onyx.db.models import (
     ChatMessage,
@@ -645,6 +645,22 @@ def hierarchy_node_own_document_ids(
         for document_id in _execute_with_timeout(db_session, stmt).scalars()
         if document_id is not None
     ]
+
+
+def public_cc_pair_ids_for_sources(
+    db_session: Session, sources: list[DocumentSource]
+) -> list[int]:
+    """The live public cc-pairs of the sources."""
+    stmt = (
+        select(ConnectorCredentialPair.id)
+        .join(Connector, Connector.id == ConnectorCredentialPair.connector_id)
+        .where(
+            Connector.source.in_(sources),
+            ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+    )
+    return list(_execute_with_timeout(db_session, stmt).scalars())
 
 
 def _count_documents_stmt(

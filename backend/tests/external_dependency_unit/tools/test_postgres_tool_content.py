@@ -31,6 +31,7 @@ from onyx.db.models import (
     HierarchyNode,
 )
 from onyx.db.models import Document as DbDocument
+from onyx.db.postgres_tool import public_cc_pair_ids_for_sources
 from onyx.db.postgres_tool_models import DocumentScope
 from onyx.document_index.interfaces import (
     IndexingMetadata,
@@ -89,12 +90,16 @@ class ContentEnv:
     tag: str
     tool: PostgresTool
     ids: dict[str, str]
+    cc_pair_id: int
 
 
-def _chunk(doc_id: str, doc: _Doc, updated: datetime) -> DocMetadataAwareIndexChunk:
+def _chunk(
+    doc_id: str, doc: _Doc, updated: datetime, cc_pair_id: int
+) -> DocMetadataAwareIndexChunk:
     return DocMetadataAwareIndexChunk(
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         access=doc.access,
+        cc_pair_ids={cc_pair_id},
         document_sets=set(),
         user_project=[],
         personas=[],
@@ -163,65 +168,70 @@ def content_env(
         db_session, source=DocumentSource.WEB
     )
     ids = {doc.key: f"pgtool_content_{doc.key}_{tag}" for doc in _DOCS}
-    chunks = []
-    for doc in _DOCS:
-        updated = now - timedelta(days=doc.days_ago)
-        db_session.add(
-            DbDocument(
-                id=ids[doc.key],
-                semantic_id=f"{doc.key} {tag}",
-                link=f"https://example.com/{ids[doc.key]}",
-                doc_updated_at=updated,
-                hidden=doc.hidden,
-                kg_stage=KGStage.NOT_STARTED,
-            )
-        )
-        db_session.flush()
-        db_session.add(
-            DocumentByConnectorCredentialPair(
-                id=ids[doc.key],
-                connector_id=cc_pair.connector_id,
-                credential_id=cc_pair.credential_id,
-                has_been_indexed=True,
-            )
-        )
-        chunks.append(_chunk(ids[doc.key], doc, updated))
-    db_session.commit()
-
-    opensearch_index.index(
-        chunks,
-        IndexingMetadata(
-            doc_id_to_chunk_cnt_diff={
-                chunk.source_document.id: IndexingMetadata.ChunkCounts(
-                    old_chunk_cnt=0, new_chunk_cnt=1
+    try:
+        chunks = []
+        for doc in _DOCS:
+            updated = now - timedelta(days=doc.days_ago)
+            db_session.add(
+                DbDocument(
+                    id=ids[doc.key],
+                    semantic_id=f"{doc.key} {tag}",
+                    link=f"https://example.com/{ids[doc.key]}",
+                    doc_updated_at=updated,
+                    hidden=doc.hidden,
+                    kg_stage=KGStage.NOT_STARTED,
                 )
-                for chunk in chunks
-            }
-        ),
-    )
-    opensearch_index.update(
-        [
-            MetadataUpdateRequest(
-                document_ids=[ids["hidden"]],
-                doc_id_to_chunk_cnt={ids["hidden"]: 1},
-                hidden=True,
             )
-        ]
-    )
-    opensearch_index._client.refresh_index()
+            db_session.flush()
+            db_session.add(
+                DocumentByConnectorCredentialPair(
+                    id=ids[doc.key],
+                    connector_id=cc_pair.connector_id,
+                    credential_id=cc_pair.credential_id,
+                    has_been_indexed=True,
+                )
+            )
+            chunks.append(_chunk(ids[doc.key], doc, updated, cc_pair.id))
+        db_session.commit()
 
-    tool = PostgresTool(user=user, current_chat_session_id=None, scope=DocumentScope())
-    with patch.object(
-        postgres_tool,
-        "get_default_document_index",
-        return_value=opensearch_index,
-    ):
-        yield ContentEnv(tag=tag, tool=tool, ids=ids)
+        opensearch_index.index(
+            chunks,
+            IndexingMetadata(
+                doc_id_to_chunk_cnt_diff={
+                    chunk.source_document.id: IndexingMetadata.ChunkCounts(
+                        old_chunk_cnt=0, new_chunk_cnt=1
+                    )
+                    for chunk in chunks
+                }
+            ),
+        )
+        opensearch_index.update(
+            [
+                MetadataUpdateRequest(
+                    document_ids=[ids["hidden"]],
+                    doc_id_to_chunk_cnt={ids["hidden"]: 1},
+                    hidden=True,
+                )
+            ]
+        )
+        opensearch_index._client.refresh_index()
 
-    db_session.rollback()
-    opensearch_index.delete_documents(list(ids.values()))
-    opensearch_index._client.refresh_index()
-    cleanup_cc_pair(db_session, cc_pair)
+        tool = PostgresTool(
+            user=user, current_chat_session_id=None, scope=DocumentScope()
+        )
+        with patch.object(
+            postgres_tool,
+            "get_default_document_index",
+            return_value=opensearch_index,
+        ):
+            yield ContentEnv(tag=tag, tool=tool, ids=ids, cc_pair_id=cc_pair.id)
+    finally:
+        db_session.rollback()
+        try:
+            opensearch_index.delete_documents(list(ids.values()))
+            opensearch_index._client.refresh_index()
+        finally:
+            cleanup_cc_pair(db_session, cc_pair)
 
 
 def _invoke(tool: PostgresTool, **llm_kwargs: JsonValue) -> ToolResult:
@@ -499,12 +509,17 @@ def test_censoring_sources_come_from_ee() -> None:
 
 
 @pytest.mark.parametrize("postgres_first", [True, False])
-def test_censoring_sources_never_match(
-    content_env: ContentEnv, postgres_first: bool
+@pytest.mark.parametrize("public", [True, False])
+def test_censoring_sources_match_only_under_public_cc_pairs(
+    content_env: ContentEnv, postgres_first: bool, public: bool
 ) -> None:
+    uncensored = [content_env.cc_pair_id] if public else []
     with (
         _force_path(postgres_first),
         patch.object(content, "_censoring_sources", return_value={DocumentSource.WEB}),
+        patch.object(
+            content, "public_cc_pair_ids_for_sources", return_value=uncensored
+        ),
     ):
         for title_filter in ({}, {"title_contains": content_env.tag}):
             text = _run(
@@ -514,14 +529,28 @@ def test_censoring_sources_never_match(
                 count=True,
                 **title_filter,
             )
-            assert text.startswith("0 matching documents")
+            assert text.startswith("3" if public else "0")
             text = _run(
                 content_env.tool,
                 table="document",
                 content_contains=_PHRASE,
                 **title_filter,
             )
-            assert _listed(content_env, text) == []
+            assert _listed(content_env, text) == (
+                ["fox", "dog", "owl"] if public else []
+            )
+
+
+def test_public_cc_pair_ids_for_sources(
+    db_session: Session, content_env: ContentEnv
+) -> None:
+    # The fixture's pair is a public WEB pair.
+    assert content_env.cc_pair_id in public_cc_pair_ids_for_sources(
+        db_session, [DocumentSource.WEB]
+    )
+    assert content_env.cc_pair_id not in public_cc_pair_ids_for_sources(
+        db_session, [DocumentSource.SALESFORCE]
+    )
 
 
 def test_sources_outside_the_scope_match_nothing(content_env: ContentEnv) -> None:
