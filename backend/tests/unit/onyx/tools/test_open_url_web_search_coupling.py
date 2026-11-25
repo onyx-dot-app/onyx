@@ -7,6 +7,7 @@ links are still served from indexed documents, nothing is fetched from the
 live internet.
 """
 
+from collections.abc import Callable
 from contextlib import nullcontext
 from unittest.mock import MagicMock
 
@@ -123,7 +124,9 @@ def test_open_url_without_content_reports_an_error(
     url = "https://example.com"
 
     def fetch_nothing(
-        _urls: list[str], _url_snippet_map: dict[str, str]
+        _urls: list[str],
+        _url_snippet_map: dict[str, str],
+        _on_page: Callable[[str, OpenedPage], None] | None = None,
     ) -> tuple[list[OpenedPage], list[FailedFetch]]:
         return [], [FailedFetch(url=url, failure_reason="blocked")]
 

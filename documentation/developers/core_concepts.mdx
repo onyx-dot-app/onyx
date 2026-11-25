@@ -118,7 +118,10 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     show the queries, filters, and documents the search found
 
     **Web Search**
-    - `open_url_start`, `open_url_urls`, and `open_url_documents` show the pages Onyx opened
+    - `open_url_start`, `open_url_urls`, and `open_url_documents` show the pages Onyx opened. `open_url_urls`
+    lists the requested URLs. Each `open_url_documents` arrives as soon as its pages open: `documents` are the pages,
+    and `urls` are the requested URLs that those pages answer. A URL that no `urls` names has not opened yet.
+    A replayed call sends its pages with empty `urls`, so on a replay `urls` do not show which URLs opened
 
     **Image Generation**
     - `image_generation_start`, `image_generation_heartbeat`, and `image_generation_final`

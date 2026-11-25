@@ -232,6 +232,8 @@ export interface FetchToolUrls extends BaseObj {
 export interface FetchToolDocuments extends BaseObj {
   type: "open_url_documents";
   documents: OnyxDocument[];
+  /** The requested URLs (as in `open_url_urls`) these documents answer. */
+  urls?: string[];
 }
 
 // Custom Tool Packets

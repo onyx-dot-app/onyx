@@ -885,7 +885,11 @@ class ToolRenderer:
         new_docs = [doc for doc in docs if doc.document_id not in self._documents]
         self._documents.update(doc.document_id for doc in docs)
         if self.call.name == OpenURLTool.NAME:
-            return [packets.OpenUrlDocuments(documents=new_docs)] if new_docs else []
+            return (
+                [packets.OpenUrlDocuments(documents=new_docs, urls=details.opened_urls)]
+                if new_docs
+                else []
+            )
         if self.call.name == PostgresTool.NAME:
             return (
                 [packets.PostgresToolDocuments(documents=new_docs)] if new_docs else []
