@@ -10648,10 +10648,7 @@
           "connection": {
             "title": "Conexão",
             "serverUrl": "URL do servidor",
-            "serverUrlError": "Insira uma URL de servidor válida.",
-            "schema": "Esquema OpenAPI",
-            "schemaDescription": "O Onyx sincroniza as ações novamente quando você salva um esquema alterado.",
-            "schemaError": "Insira o esquema como um objeto JSON."
+            "serverUrlError": "Insira uma URL de servidor válida."
           },
           "signIn": {
             "title": "Login",

@@ -10648,10 +10648,7 @@
           "connection": {
             "title": "Connection",
             "serverUrl": "Server URL",
-            "serverUrlError": "Enter a valid server URL.",
-            "schema": "OpenAPI Schema",
-            "schemaDescription": "Onyx syncs the actions again when you save a changed schema.",
-            "schemaError": "Enter the schema as a JSON object."
+            "serverUrlError": "Enter a valid server URL."
           },
           "signIn": {
             "title": "Sign-in",

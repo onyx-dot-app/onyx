@@ -10648,10 +10648,7 @@
           "connection": {
             "title": "Verbindung",
             "serverUrl": "Server-URL",
-            "serverUrlError": "Geben Sie eine gültige Server-URL ein.",
-            "schema": "OpenAPI-Schema",
-            "schemaDescription": "Onyx synchronisiert die Aktionen erneut, wenn Sie ein geändertes Schema speichern.",
-            "schemaError": "Geben Sie das Schema als JSON-Objekt ein."
+            "serverUrlError": "Geben Sie eine gültige Server-URL ein."
           },
           "signIn": {
             "title": "Anmeldung",

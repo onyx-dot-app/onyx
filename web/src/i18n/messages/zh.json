@@ -10648,10 +10648,7 @@
           "connection": {
             "title": "连接",
             "serverUrl": "服务器 URL",
-            "serverUrlError": "请输入有效的服务器 URL。",
-            "schema": "OpenAPI 架构",
-            "schemaDescription": "保存修改后的架构时，Onyx 会重新同步操作。",
-            "schemaError": "请以 JSON 对象的形式输入架构。"
+            "serverUrlError": "请输入有效的服务器 URL。"
           },
           "signIn": {
             "title": "登录",

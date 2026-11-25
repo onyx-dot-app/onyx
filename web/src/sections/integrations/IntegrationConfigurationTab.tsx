@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   InputSwitch,
-  InputTextArea,
   InputTypeIn,
   MessageCard,
   Text,
@@ -88,9 +87,6 @@ export default function IntegrationConfigurationTab({
   const savedRest = savedOpenApi ? restDraftFrom(savedOpenApi) : EMPTY_REST;
   const [rest, setRest] = useState<RestDraft>(savedRest);
   const [lineErrors, setLineErrors] = useState<EndpointLineError[]>([]);
-  const [specText, setSpecText] = useState(
-    savedOpenApi?.openapi_document ?? ""
-  );
   const [savedGraphql, setSavedGraphql] = useState<GraphQLConfig | null>(
     integration.config.shape === "graphql" ? integration.config : null
   );
@@ -134,16 +130,8 @@ export default function IntegrationConfigurationTab({
       return isEqual(next, savedGraphql) ? undefined : next;
     }
     if (config.shape === "openapi") {
-      if (specText !== (savedOpenApi?.openapi_document ?? "")) {
-        if (!specText.trim()) return null;
-        return {
-          shape: "openapi",
-          openapi_document: specText,
-          base_url: null,
-          endpoints: null,
-        };
-      }
       if (
+        rest.document === savedRest.document &&
         rest.baseUrl === savedRest.baseUrl &&
         rest.endpoints === savedRest.endpoints
       )
@@ -206,7 +194,6 @@ export default function IntegrationConfigurationTab({
       if (saved.config.shape === "openapi") {
         setSavedOpenApi(saved.config);
         setRest(restDraftFrom(saved.config));
-        setSpecText(saved.config.openapi_document);
       }
       if (saved.config.shape === "graphql") {
         setSavedGraphql(saved.config);
@@ -342,35 +329,16 @@ export default function IntegrationConfigurationTab({
                   disabled={disabled}
                 />
               ) : (
-                <>
-                  <RestEndpointFields
-                    draft={rest}
-                    onChange={(next) => {
-                      setRest(next);
-                      setLineErrors([]);
-                    }}
-                    lineErrors={lineErrors}
-                    showErrors={showErrors}
-                    disabled={disabled}
-                  />
-                  <InputVertical
-                    title={t("connection.schema")}
-                    description={t("connection.schemaDescription")}
-                    error={
-                      showErrors && !specText.trim()
-                        ? t("connection.schemaError")
-                        : undefined
-                    }
-                  >
-                    <InputTextArea
-                      aria-label={t("connection.schema")}
-                      value={specText}
-                      rows={12}
-                      variant={disabled ? "disabled" : "primary"}
-                      onChange={(event) => setSpecText(event.target.value)}
-                    />
-                  </InputVertical>
-                </>
+                <RestEndpointFields
+                  draft={rest}
+                  onChange={(next) => {
+                    setRest(next);
+                    setLineErrors([]);
+                  }}
+                  lineErrors={lineErrors}
+                  showErrors={showErrors}
+                  disabled={disabled}
+                />
               )}
             </Section>
           </Card>

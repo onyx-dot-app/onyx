@@ -139,7 +139,7 @@ Onyx replaces them with the values of the current request at call time.
 | Tab | Contents |
 | --- | --- |
 | **Overview** | Name, description, owner, **Install Setting**, **Enabled**, and **Delete**. |
-| **Configuration** | The base URL, the endpoints, the full schema (or the endpoint URL and schema of a GraphQL API), the sign-in, and **Users Can Save Always Allow**. |
+| **Configuration** | **Import a Spec**, the base URL and the endpoints (or the endpoint URL and schema of a GraphQL API), the sign-in, and **Users Can Save Always Allow**. |
 | **Actions** | The operations that Onyx found in the schema, each with **Allow**, **Ask**, or **Blocked**. |
 
 <img className="rounded-image" src="/assets/admins/plugins/integration_openapi_actions_tab.webp" alt="The Actions tab with the operations from an OpenAPI schema"/>
@@ -147,7 +147,8 @@ Onyx replaces them with the values of the current request at call time.
 To add, remove, rename, or change an operation, edit the endpoints on the **Configuration** tab.
 Onyx applies the changed lines to the stored schema. An operation whose line did not change keeps its parameter types,
 body and description, and its action keeps its policy. A changed method or path makes a new action.
-For a schema that the lines cannot show, such as shared components, edit the **OpenAPI Schema** field.
+For a schema that the lines cannot show, such as shared components,
+upload or import the changed schema in **Import a Spec**. Onyx fills in the base URL and the endpoints from it.
 Onyx syncs the actions again when you save. A schema can be at most 5 MB.
 
 Changing the install setting of the integration does not remove it from custom agents.

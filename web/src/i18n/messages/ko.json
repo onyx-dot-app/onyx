@@ -10648,10 +10648,7 @@
           "connection": {
             "title": "연결",
             "serverUrl": "서버 URL",
-            "serverUrlError": "올바른 서버 URL을 입력하세요.",
-            "schema": "OpenAPI 스키마",
-            "schemaDescription": "변경된 스키마를 저장하면 Onyx가 작업을 다시 동기화합니다.",
-            "schemaError": "스키마를 JSON 객체로 입력하세요."
+            "serverUrlError": "올바른 서버 URL을 입력하세요."
           },
           "signIn": {
             "title": "로그인",

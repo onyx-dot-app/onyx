@@ -146,12 +146,17 @@ export class AdminIntegrationDetailPage {
     expect((await response).ok()).toBeTruthy();
   }
 
-  /** Replaces the OpenAPI schema on the Configuration tab and saves it. */
+  /** Imports a JSON OpenAPI spec on the Configuration tab and saves it. */
   async replaceSchema(schema: string): Promise<void> {
     await this.openTab("Configuration");
-    await this.activePanel
-      .getByRole("textbox", { name: "OpenAPI Schema", exact: true })
-      .fill(schema);
+    await this.activePanel.locator('input[type="file"]').setInputFiles({
+      name: "openapi.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(schema),
+    });
+    await expect(
+      this.page.getByText(/^Imported \d+ endpoints?\.$/)
+    ).toBeVisible();
     await this.saveConfiguration();
   }
 

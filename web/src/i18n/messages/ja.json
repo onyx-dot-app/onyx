@@ -10648,10 +10648,7 @@
           "connection": {
             "title": "接続",
             "serverUrl": "サーバー URL",
-            "serverUrlError": "有効なサーバー URL を入力してください。",
-            "schema": "OpenAPI スキーマ",
-            "schemaDescription": "変更したスキーマを保存すると、Onyx はアクションを再同期します。",
-            "schemaError": "スキーマを JSON オブジェクトとして入力してください。"
+            "serverUrlError": "有効なサーバー URL を入力してください。"
           },
           "signIn": {
             "title": "ログイン",

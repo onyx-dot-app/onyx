@@ -283,7 +283,8 @@ test("sends a changed server URL with the configuration", async () => {
   );
 });
 
-test("sends an edited endpoint line, or an edited document as text", async () => {
+test("sends an edited endpoint line, or a reimported spec", async () => {
+  const REIMPORTED = '{"openapi": "3.0.0", "components": {}}';
   const fetchMock = mockFetch({
     [URL_DETAIL]: makeDetail({
       kind: "api",
@@ -294,6 +295,10 @@ test("sends an edited endpoint line, or an edited document as text", async () =>
       config: OPENAPI_VIEW,
     }),
     [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    "POST /api/admin/integrations/openapi-import": {
+      ...OPENAPI_VIEW,
+      openapi_document: REIMPORTED,
+    },
     "/api/admin/integrations": [],
   });
   const u = user();
@@ -321,16 +326,26 @@ test("sends an edited endpoint line, or an edited document as text", async () =>
     })
   );
 
-  const schema = view.getByRole("textbox", {
-    name: detailCopy.configuration.connection.schema,
-  });
-  await u.clear(schema);
-  await u.click(schema);
-  await u.paste("openapi: 3.1.0");
+  // A reimport that changes only the document is still a change.
+  await u.type(
+    view.getByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://reports.example.com/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+  await waitFor(() =>
+    expect(endpoints).toHaveValue("GET /reports List reports")
+  );
   await u.click(save);
   await waitFor(() =>
     expect(patchBodies(fetchMock).at(-1)).toMatchObject({
-      config: { shape: "openapi", openapi_document: "openapi: 3.1.0" },
+      config: {
+        shape: "openapi",
+        openapi_document: REIMPORTED,
+        base_url: "https://reports.example.com",
+        endpoints: ["GET /reports List reports"],
+      },
     })
   );
 });
@@ -519,8 +534,12 @@ test("clears a saved client secret from the draft", async () => {
   });
 });
 
-test("shows a saved schema as the server returns it", async () => {
-  const saved = { ...OPENAPI_VIEW, openapi_document: "openapi: 3.1.0\n" };
+test("keeps the saved spec as the server returns it", async () => {
+  const saved = {
+    ...OPENAPI_VIEW,
+    openapi_document: "openapi: 3.1.0\n",
+    endpoints: ["GET /reports?limit List all reports"],
+  };
   let detail = makeDetail({
     kind: "api",
     shape: "openapi",
@@ -541,18 +560,20 @@ test("shows a saved schema as the server returns it", async () => {
   const u = user();
   open("configuration");
   const view = await inPanel();
-  const schema = await view.findByRole("textbox", {
-    name: detailCopy.configuration.connection.schema,
+  const endpoints = await view.findByRole("textbox", {
+    name: copy.add.rest.endpoints.title,
   });
-  await u.clear(schema);
-  await u.click(schema);
-  await u.paste("openapi: 3.1.0");
+  await u.clear(endpoints);
+  await u.type(endpoints, "GET /reports List all reports");
   const save = view.getByRole("button", {
     name: detailCopy.configuration.save,
   });
   await u.click(save);
-  await waitFor(() => expect(schema).toHaveValue(saved.openapi_document));
+  await waitFor(() =>
+    expect(endpoints).toHaveValue("GET /reports?limit List all reports")
+  );
 
+  // The stored spec, not the one sent, is the base of the next save.
   await u.click(save);
   await waitFor(() => expect(patchBodies(fetchMock)).toHaveLength(2));
   expect(patchBodies(fetchMock)[1]).toEqual({

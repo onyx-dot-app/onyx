@@ -10648,10 +10648,7 @@
           "connection": {
             "title": "الاتصال",
             "serverUrl": "عنوان URL للخادم",
-            "serverUrlError": "أدخل عنوان URL صالحًا للخادم.",
-            "schema": "مخطط OpenAPI",
-            "schemaDescription": "يزامن Onyx الإجراءات مرة أخرى عند حفظ مخطط معدّل.",
-            "schemaError": "أدخل المخطط ككائن JSON."
+            "serverUrlError": "أدخل عنوان URL صالحًا للخادم."
           },
           "signIn": {
             "title": "تسجيل الدخول",
