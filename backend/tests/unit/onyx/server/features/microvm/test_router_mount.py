@@ -1,4 +1,5 @@
-"""The microVM router is mounted only with `SANDBOX_RUNTIME=firecracker`."""
+"""The microVM router is mounted only with `SANDBOX_RUNTIME=firecracker|auto`;
+the admin sandbox status on every runtime."""
 
 import importlib
 
@@ -39,16 +40,35 @@ def test_signing_key_route_present_with_firecracker_runtime() -> None:
     assert _has_signing_key_route(SandboxRuntime.FIRECRACKER)
 
 
-def _has_post_route(runtime: SandboxRuntime, path: str) -> bool:
+def test_node_routes_follow_the_runtime() -> None:
+    assert _has_signing_key_route(SandboxRuntime.AUTO)
+    assert _has_post_route(SandboxRuntime.AUTO, SANDBOX_NODE_STATE_REPORT_PATH)
+    assert not _has_signing_key_route(SandboxRuntime.OFF)
+
+
+def test_admin_status_route_on_every_runtime() -> None:
+    for runtime in SandboxRuntime:
+        assert _has_get_route(runtime, "/admin/sandbox/status")
+
+
+def _has_route(runtime: SandboxRuntime, path: str, method: str) -> bool:
     onyx_main = importlib.import_module("onyx.main")
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(onyx_main, "SANDBOX_RUNTIME", runtime)
         mp.setattr(onyx_main, "APP_API_PREFIX", "")
         app = onyx_main.get_application()
     return any(
-        isinstance(route, APIRoute) and route.path == path and "POST" in route.methods
+        isinstance(route, APIRoute) and route.path == path and method in route.methods
         for route in app.routes
     )
+
+
+def _has_post_route(runtime: SandboxRuntime, path: str) -> bool:
+    return _has_route(runtime, path, "POST")
+
+
+def _has_get_route(runtime: SandboxRuntime, path: str) -> bool:
+    return _has_route(runtime, path, "GET")
 
 
 def test_state_report_route_only_with_firecracker_runtime() -> None:
