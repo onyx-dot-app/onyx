@@ -3,10 +3,12 @@ import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import {
   Packet,
   PacketType,
+  StopReason,
   ToolApprovalRequest,
 } from "@/app/app/services/streamingModels";
 import {
   useChatSessionQueue,
+  useJumpToLatestReason,
   usePublishedFiles,
   useSendChatMessageFromURL,
   useToolRequests,
@@ -16,6 +18,7 @@ import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { endedRunStatus } from "@/lib/chat/runStatus";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
 
 jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
@@ -452,5 +455,131 @@ describe("usePublishedFiles", () => {
     ]);
     rerender();
     expect(result.current).toBe(first);
+  });
+});
+
+describe("useJumpToLatestReason", () => {
+  const SESSION = "jump-session";
+
+  function setReply(packets: Packet[]) {
+    const node = (
+      nodeId: number,
+      type: Message["type"],
+      parentNodeId: number | null
+    ): Message => ({
+      nodeId,
+      messageId: nodeId,
+      type,
+      message: "",
+      files: [],
+      packets: type === "assistant" ? packets : [],
+      toolCall: null,
+      parentNodeId,
+      latestChildNodeId: type === "user" ? 2 : null,
+    });
+    useChatSessionStore.getState().updateSessionMessageTree(
+      SESSION,
+      new Map([
+        [1, node(1, "user", null)],
+        [2, node(2, "assistant", 1)],
+      ])
+    );
+  }
+
+  const delta = (content: string): Packet => ({
+    placement: { turn_index: 0, tab_index: 0 },
+    obj: { type: PacketType.MESSAGE_DELTA, content },
+  });
+
+  beforeEach(() => {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: SESSION,
+    });
+    useChatSessionStore
+      .getState()
+      .createSession(SESSION, { chatState: "streaming" });
+    setReply([delta("Hello")]);
+  });
+
+  it("names nothing while the button is hidden", () => {
+    setReply([request("a", 1)]);
+    const { result } = renderHook(() => useJumpToLatestReason(false));
+    expect(result.current).toBeNull();
+  });
+
+  it("names a waiting approval until this client decides it", () => {
+    setReply([request("a", 1), question("q", 2)]);
+    const { result, rerender } = renderHook(() => useJumpToLatestReason(true));
+    expect(result.current).toBe("approval");
+
+    useToolRequestUi.getState().recordStatus("a", "approved");
+    rerender();
+    expect(result.current).toBe("question");
+  });
+
+  it("names a new answer once the run ends with output after the scroll", () => {
+    const { result, rerender } = renderHook(
+      ({ visible }) => useJumpToLatestReason(visible),
+      { initialProps: { visible: true } }
+    );
+    expect(result.current).toBeNull();
+
+    setReply([delta("Hello"), delta(" world")]);
+    rerender({ visible: true });
+    // Still streaming: the plain button stays.
+    expect(result.current).toBeNull();
+
+    useChatSessionStore.getState().updateChatState(SESSION, "input");
+    rerender({ visible: true });
+    expect(result.current).toBe("newAnswer");
+
+    // Back at the end, then away again: nothing new since.
+    rerender({ visible: false });
+    rerender({ visible: true });
+    expect(result.current).toBeNull();
+  });
+
+  it("does not call a final stop packet a new answer", () => {
+    const { result } = renderHook(() => useJumpToLatestReason(true));
+    act(() => {
+      setReply([
+        delta("Hello"),
+        {
+          placement: { turn_index: 0, tab_index: 0 },
+          obj: { type: PacketType.STOP },
+        },
+      ]);
+      useChatSessionStore.getState().updateChatState(SESSION, "input");
+    });
+    expect(result.current).toBeNull();
+  });
+
+  it.each([
+    [StopReason.TIMED_OUT, "failed"],
+    [StopReason.USER_CANCELLED, null],
+    [StopReason.FINISHED, "done"],
+  ])("records the terminal status for %s", (stop_reason, expected) => {
+    setReply([
+      delta("Hello"),
+      {
+        placement: { turn_index: 0, tab_index: 0 },
+        obj: { type: PacketType.STOP, stop_reason },
+      },
+    ]);
+    useChatSessionStore.getState().updateChatState(SESSION, "input");
+    const session = useChatSessionStore.getState().sessions.get(SESSION);
+    if (!session) throw new Error("Expected a chat session");
+    expect(endedRunStatus(session)).toBe(expected);
+  });
+
+  it("names no new answer for output that loads into an idle chat", () => {
+    useChatSessionStore.getState().updateChatState(SESSION, "input");
+    const { result, rerender } = renderHook(() => useJumpToLatestReason(true));
+
+    // An opened chat's history arrives, or its settled run is fetched again.
+    act(() => setReply([delta("Hello"), delta(" world")]));
+    rerender();
+    expect(result.current).toBeNull();
   });
 });

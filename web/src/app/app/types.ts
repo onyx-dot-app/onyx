@@ -208,6 +208,9 @@ export interface Message {
 
   // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
+
+  // ISO timestamp; set by the client until the saved message loads.
+  timeSent?: string;
 }
 
 /** A live stream and the response rows it writes. A multi-model turn lists

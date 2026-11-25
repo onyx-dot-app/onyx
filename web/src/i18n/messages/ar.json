@@ -11792,7 +11792,12 @@
         "toast": "تمت المصادقة بنجاح"
       },
       "scrollToBottomButton": {
-        "label": "التمرير إلى الأسفل"
+        "label": "التمرير إلى الأسفل",
+        "reason": {
+          "approval": "مطلوب الموافقة",
+          "newAnswer": "إجابة جديدة",
+          "question": "سؤال بانتظار الإجابة"
+        }
       },
       "sessionAccessDenied": {
         "description": "ليس لديك إذن لعرض جلسة المحادثة هذه.",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "تم النسخ!",
           "label": "نسخ"
+        },
+        "wrapButton": {
+          "unwrapLabel": "إلغاء الالتفاف",
+          "wrapLabel": "التفاف"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "تعديل"
+        },
+        "foldButton": {
+          "collapseLabel": "عرض أقل",
+          "expandLabel": "إظهار الرسالة كاملة"
         }
       },
       "imageTool": {
@@ -12368,6 +12381,9 @@
         "previousButton": {
           "tooltip": "السابق"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "أمس في {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,6 +16698,24 @@
       "rename": {
         "label": "إعادة تسمية"
       },
+      "runStatus": {
+        "approval": {
+          "label": "بحاجة إلى موافقة"
+        },
+        "done": {
+          "label": "تم"
+        },
+        "failed": {
+          "label": "فشل"
+        },
+        "question": {
+          "label": "سؤال بانتظار الرد"
+        },
+        "working": {
+          "label": "قيد العمل"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "مشاركة"
       }

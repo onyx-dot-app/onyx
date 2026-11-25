@@ -18,7 +18,7 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
 import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,

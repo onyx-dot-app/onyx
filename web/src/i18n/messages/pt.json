@@ -11792,7 +11792,12 @@
         "toast": "Autenticação bem-sucedida"
       },
       "scrollToBottomButton": {
-        "label": "Ir para o final"
+        "label": "Ir para o final",
+        "reason": {
+          "approval": "Aprovação necessária",
+          "newAnswer": "Nova resposta",
+          "question": "Pergunta aguardando"
+        }
       },
       "sessionAccessDenied": {
         "description": "Você não tem permissão para ver esta sessão de chat.",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "Copiado!",
           "label": "Copiar"
+        },
+        "wrapButton": {
+          "unwrapLabel": "Não quebrar linhas",
+          "wrapLabel": "Quebrar linhas"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "Editar"
+        },
+        "foldButton": {
+          "collapseLabel": "Mostrar menos",
+          "expandLabel": "Mostrar mensagem completa"
         }
       },
       "imageTool": {
@@ -12368,6 +12381,9 @@
         "previousButton": {
           "tooltip": "Anterior"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "Ontem às {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,6 +16698,24 @@
       "rename": {
         "label": "Renomear"
       },
+      "runStatus": {
+        "approval": {
+          "label": "Aprovação necessária"
+        },
+        "done": {
+          "label": "Concluído"
+        },
+        "failed": {
+          "label": "Falhou"
+        },
+        "question": {
+          "label": "Pergunta aguardando"
+        },
+        "working": {
+          "label": "Trabalhando"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Compartilhar"
       }

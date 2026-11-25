@@ -35,19 +35,21 @@ Both tooltips (the folded name and an explicit `tooltip`) wrap the overlay contr
 
 ## Props
 
-| Prop            | Type                                 | Default           | Description                                                              |
-| --------------- | ------------------------------------ | ----------------- | ------------------------------------------------------------------------ |
-| `variant`       | `"sidebar-heavy" \| "sidebar-light"` | `"sidebar-heavy"` | Sidebar color variant                                                    |
-| `selected`      | `boolean`                            | `false`           | Active/selected state                                                    |
-| `icon`          | `IconFunctionComponent`              | —                 | Left icon                                                                |
-| `children`      | `ReactNode`                          | —                 | Label text or custom content                                             |
-| `disabled`      | `boolean`                            | `false`           | Disables the tab                                                         |
-| `folded`        | `boolean`                            | sidebar state     | Collapses label, shows tooltip on hover. Overrides the enclosing sidebar |
-| `nested`        | `boolean`                            | `false`           | Renders spacer instead of icon for indented items                        |
-| `href`          | `string`                             | —                 | Client-side navigation URL                                               |
-| `onClick`       | `MouseEventHandler`                  | —                 | Click handler                                                            |
-| `type`          | `ButtonType`                         | —                 | HTML button type                                                         |
-| `rightChildren` | `ReactNode`                          | —                 | Actions rendered on the right side                                       |
+| Prop                  | Type                                 | Default           | Description                                                                                               |
+| --------------------- | ------------------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `variant`             | `"sidebar-heavy" \| "sidebar-light"` | `"sidebar-heavy"` | Sidebar color variant                                                                                     |
+| `selected`            | `boolean`                            | `false`           | Active/selected state                                                                                     |
+| `icon`                | `IconFunctionComponent`              | —                 | Left icon                                                                                                 |
+| `children`            | `ReactNode`                          | —                 | Label text or custom content                                                                              |
+| `disabled`            | `boolean`                            | `false`           | Disables the tab                                                                                          |
+| `loading`             | `boolean`                            | `false`           | Shimmers a string label with `TextLoader`, for work still in progress                                     |
+| `folded`              | `boolean`                            | sidebar state     | Collapses label, shows tooltip on hover. Overrides the enclosing sidebar                                  |
+| `nested`              | `boolean`                            | `false`           | Renders spacer instead of icon for indented items                                                         |
+| `href`                | `string`                             | —                 | Client-side navigation URL                                                                                |
+| `onClick`             | `MouseEventHandler`                  | —                 | Click handler                                                                                             |
+| `type`                | `ButtonType`                         | —                 | HTML button type                                                                                          |
+| `rightChildren`       | `ReactNode`                          | —                 | Actions rendered on the right side                                                                        |
+| `rightChildrenAtRest` | `boolean`                            | `false`           | `rightChildren` show at rest too, so the label keeps their 1.5rem of room at all times, not only on hover |
 
 ## Usage
 

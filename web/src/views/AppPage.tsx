@@ -14,7 +14,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useLlmManager } from "@/lib/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
-import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
+import {
+  useJumpToLatestReason,
+  useSendChatMessageFromURL,
+} from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
@@ -299,6 +302,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const { hasBackground } = useAppBackground();
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const jumpToLatestReason = useJumpToLatestReason(showScrollButton);
 
   // Reset scroll button when session changes
   useEffect(() => {
@@ -1134,13 +1138,25 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appPosition.isChat() && showScrollButton && (
-                      <div className="absolute -top-14 self-center">
+                      <div className="absolute -top-11 self-center">
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
-                          aria-label={t("scrollToBottomButton.label")}
+                          aria-label={
+                            jumpToLatestReason
+                              ? undefined
+                              : t("scrollToBottomButton.label")
+                          }
                           prominence="secondary"
-                        />
+                          size="sm"
+                          rounding="full"
+                        >
+                          {jumpToLatestReason
+                            ? t(
+                                `scrollToBottomButton.reason.${jumpToLatestReason}`
+                              )
+                            : undefined}
+                        </Button>
                       </div>
                     )}
 

@@ -13,7 +13,7 @@ import {
 } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
 import { SvgLongWait } from "@opal/illustrations";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
 import { formatRunDuration, isRunUnviewed } from "@/app/craft/v1/tasks/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useAppPosition } from "@/lib/navigation/hooks";

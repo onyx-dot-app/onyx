@@ -11792,7 +11792,12 @@
         "toast": "身份验证成功"
       },
       "scrollToBottomButton": {
-        "label": "滚动到底部"
+        "label": "滚动到底部",
+        "reason": {
+          "approval": "需要批准",
+          "newAnswer": "新回答",
+          "question": "有问题待回答"
+        }
       },
       "sessionAccessDenied": {
         "description": "您没有查看此聊天会话的权限。",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "已复制！",
           "label": "复制"
+        },
+        "wrapButton": {
+          "unwrapLabel": "取消换行",
+          "wrapLabel": "自动换行"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "编辑"
+        },
+        "foldButton": {
+          "collapseLabel": "收起",
+          "expandLabel": "显示完整消息"
         }
       },
       "imageTool": {
@@ -12368,6 +12381,9 @@
         "previousButton": {
           "tooltip": "上一条"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "昨天 {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,6 +16698,24 @@
       "rename": {
         "label": "重命名"
       },
+      "runStatus": {
+        "approval": {
+          "label": "需要批准"
+        },
+        "done": {
+          "label": "完成"
+        },
+        "failed": {
+          "label": "失败"
+        },
+        "question": {
+          "label": "问题待回答"
+        },
+        "working": {
+          "label": "处理中"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共享"
       }

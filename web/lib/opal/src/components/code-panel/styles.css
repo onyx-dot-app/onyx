@@ -79,6 +79,11 @@
   @apply font-secondary-mono text-text-04;
 }
 
+/* Unwrapped lines keep their length; the panel scrolls sideways. */
+.opal-code-panel-lines[data-nowrap] .opal-code-panel-code {
+  @apply whitespace-pre wrap-normal;
+}
+
 .opal-code-panel-note {
   @apply px-2 py-0.5 text-center italic bg-background-tint-02;
   @apply font-secondary-mono text-text-02;

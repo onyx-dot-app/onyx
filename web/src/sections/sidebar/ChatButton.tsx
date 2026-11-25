@@ -8,6 +8,7 @@ import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
 import { ChatSession } from "@/app/app/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import {
   Dropdown,
   type DropdownMenuItem,
@@ -33,7 +34,10 @@ import { handleMoveOperation } from "@/lib/sidebar/svc";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import {
+  SvgAlertCircle,
+  SvgAlertTriangle,
   SvgChevronLeft,
+  SvgHelpCircle,
   SvgEdit,
   SvgFolder,
   SvgFolderIn,
@@ -44,7 +48,39 @@ import {
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 import { usePinChatAgent } from "@/lib/agents/hooks";
-import { useChatExportMenu } from "@/lib/chat/hooks";
+import { useChatExportMenu, useChatRunStatus } from "@/lib/chat/hooks";
+import type { ChatRunStatus } from "@/lib/chat/runStatus";
+import type { IconFunctionComponent } from "@opal/types";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
+
+const RUN_STATUS_ICONS = {
+  approval: { icon: SvgAlertTriangle, className: "stroke-status-warning-05" },
+  question: { icon: SvgHelpCircle, className: "stroke-status-warning-05" },
+  failed: { icon: SvgAlertCircle, className: "stroke-status-error-05" },
+} satisfies Record<
+  Exclude<ChatRunStatus, "working" | "done">,
+  { icon: IconFunctionComponent; className: string }
+>;
+
+/** The mark at the row's end for a status the user should see; none while
+ * working, as the title shimmers then. */
+function renderRunStatusMarker(
+  status: ChatRunStatus,
+  label: string
+): React.ReactNode {
+  if (status === "working") return null;
+  if (status === "done")
+    return <UnseenMarker label={label} className="mx-2 block" />;
+  const { icon: Icon, className } = RUN_STATUS_ICONS[status];
+  return (
+    <Icon
+      size={16}
+      role="img"
+      aria-label={label}
+      className={cn("mx-1 shrink-0", className)}
+    />
+  );
+}
 
 export interface ChatButtonProps {
   chatSession: ChatSession;
@@ -61,6 +97,7 @@ const ChatButton = memo(
       [appPosition, chatSession.id]
     );
     const mounted = useOnMount();
+    const runStatus = useChatRunStatus(chatSession.id);
     const [displayName, setDisplayName] = useState(
       chatSession.name || UNNAMED_CHAT
     );
@@ -349,6 +386,25 @@ const ChatButton = memo(
       }
     }
 
+    const runStatusLabel = runStatus
+      ? t(`chatButton.runStatus.${runStatus}.label`)
+      : undefined;
+    const runStatusMarker =
+      runStatus && runStatusLabel
+        ? renderRunStatusMarker(runStatus, runStatusLabel)
+        : null;
+    const optionsButton = (
+      <Dropdown.Trigger asChild>
+        <Button
+          icon={SvgMoreHorizontal}
+          prominence="internal"
+          size="sm"
+          interaction={menuOpen ? "hover" : "rest"}
+          aria-label={t("chatButton.options.label")}
+        />
+      </Dropdown.Trigger>
+    );
+
     const rightMenu = (
       <>
         {/* The click stays here: the row underneath opens the chat. */}
@@ -359,19 +415,28 @@ const ChatButton = memo(
         >
           {/* While renaming the row is an input, so the menu stays away unless
               its own list is already open. */}
-          {(!renaming || menuOpen) && (
-            <Hoverable.Item group="ChatButton">
-              <Dropdown.Trigger asChild>
-                <Button
-                  icon={SvgMoreHorizontal}
-                  prominence="internal"
-                  size="sm"
-                  interaction={menuOpen ? "hover" : "rest"}
-                  aria-label={t("chatButton.options.label")}
-                />
-              </Dropdown.Trigger>
-            </Hoverable.Item>
+          {!renaming && runStatusMarker && (
+            <span
+              data-touch-run-marker
+              className="pointer-events-none hidden no-hover:block absolute end-6 top-1/2 -translate-y-1/2"
+            >
+              {runStatusMarker}
+            </span>
           )}
+          {(!renaming || menuOpen) &&
+            (runStatusMarker ? (
+              <Hoverable.Item
+                group="ChatButton"
+                variant="replace-on-hover"
+                resting={runStatusMarker}
+              >
+                {optionsButton}
+              </Hoverable.Item>
+            ) : (
+              <Hoverable.Item group="ChatButton">
+                {optionsButton}
+              </Hoverable.Item>
+            ))}
         </div>
         <Dropdown.Data
           label={t("chatButton.options.label")}
@@ -393,7 +458,17 @@ const ChatButton = memo(
             href={isDragging || renaming ? undefined : chatLink.href}
             onClick={renaming ? undefined : handleClick}
             selected={active}
+            loading={runStatus === "working"}
+            tooltip={
+              renaming || !runStatusLabel
+                ? undefined
+                : t("chatButton.runStatusTooltip", {
+                    title: displayName,
+                    status: runStatusLabel,
+                  })
+            }
             rightChildren={rightMenu}
+            rightChildrenAtRest={!!runStatusMarker && !renaming}
             nested={!!project}
           >
             {renaming ? (

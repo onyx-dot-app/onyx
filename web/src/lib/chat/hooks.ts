@@ -12,6 +12,7 @@ import {
 import { getConfiguredSources } from "@/lib/connectors/utils";
 import type { OnSubmitProps } from "@/hooks/useChatController";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { PacketType } from "@/app/app/services/streamingModels";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
@@ -62,6 +63,7 @@ import { getUnresolvedMultiModelTurn } from "@/lib/timeline/chat/message/multiMo
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useChatSessionStore,
+  useCurrentChatState,
   useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
@@ -95,6 +97,14 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import type { DropdownAction } from "@opal/components";
 import { SvgChevronLeft, SvgDownload, SvgFileText, SvgHash } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import {
+  type ChatRunStatus,
+  endedRunStatus,
+  isWorking,
+  liveRunStatus,
+  useUnseenRuns,
+} from "@/lib/chat/runStatus";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const SERVER_WORK_POLL_MS = 2000;
@@ -369,6 +379,64 @@ export function useWaitingQuestionIds(): string[] {
   );
   // A string key keeps the same list while the tree streams.
   return useMemo(() => (ids ? ids.split(" ") : []), [ids]);
+}
+
+export type JumpToLatestReason = "approval" | "question" | "newAnswer";
+
+/**
+ * Why the user should return to the end of the chat while the
+ * scroll-to-bottom button shows (`visible`): an approval or a question
+ * waits, or a run that went on after the button appeared has ended with new
+ * output. Output that only loads, such as an opened chat's history, is not
+ * new.
+ */
+export function useJumpToLatestReason(
+  visible: boolean
+): JumpToLatestReason | null {
+  const tree = useCurrentMessageTree();
+  const chatState = useCurrentChatState();
+  const localStatuses = useToolRequestUi((state) => state.localStatuses);
+  const waitingQuestionIds = useWaitingQuestionIds();
+  const approvalWaits = useMemo(
+    () =>
+      tree
+        ? readWaitingToolRequests(tree).some(
+            (item) =>
+              item.kind === "approval" &&
+              !localStatuses.has(item.request.approval_id)
+          )
+        : false,
+    [tree, localStatuses]
+  );
+  const contentKey = useMemo(() => {
+    if (!tree) return "";
+    const chain = getLatestMessageChain(tree);
+    const last = chain[chain.length - 1];
+    const visiblePackets =
+      last?.packets.filter(({ obj }) => obj.type !== PacketType.STOP).length ??
+      0;
+    return `${chain.length}:${visiblePackets}`;
+  }, [tree]);
+  const sessionId = useChatSessionStore((state) => state.currentSessionId);
+  const running = chatState === "loading" || chatState === "streaming";
+  // The content when the button last appeared or went away, and whether a
+  // run went on since.
+  const [seen, setSeen] = useState({
+    visible,
+    sessionId,
+    contentKey,
+    ran: false,
+  });
+  if (seen.visible !== visible || seen.sessionId !== sessionId)
+    setSeen({ visible, sessionId, contentKey, ran: false });
+  else if (visible && running && !seen.ran) setSeen({ ...seen, ran: true });
+
+  if (!visible) return null;
+  if (approvalWaits) return "approval";
+  if (waitingQuestionIds.length > 0) return "question";
+  if (chatState === "input" && seen.ran && seen.contentKey !== contentKey)
+    return "newAnswer";
+  return null;
 }
 
 /**
@@ -1093,4 +1161,55 @@ export function useChatExportMenu(
         }),
     },
   };
+}
+
+/** The run status that a chat's sidebar row shows. */
+export function useChatRunStatus(sessionId: string): ChatRunStatus | null {
+  const localStatuses = useToolRequestUi((state) => state.localStatuses);
+  const localAnswers = useToolRequestUi((state) => state.localAnswers);
+  const session = useChatSessionStore((state) => state.sessions.get(sessionId));
+  const live = useMemo(
+    () =>
+      session ? liveRunStatus(session, localStatuses, localAnswers) : null,
+    [session, localStatuses, localAnswers]
+  );
+  const unseen = useUnseenRuns((state) => state.unseen.get(sessionId) ?? null);
+  return live ?? unseen;
+}
+
+/**
+ * Records how runs end while their chat is not on screen, and clears that
+ * record when the user opens the chat. Mount once, in the app sidebar.
+ */
+export function useTrackChatRuns(): void {
+  const visibleChatId = useAppPosition().chat();
+  const visibleChatIdRef = useRef(visibleChatId);
+
+  useEffect(() => {
+    visibleChatIdRef.current = visibleChatId;
+    if (visibleChatId) useUnseenRuns.getState().markSeen(visibleChatId);
+  }, [visibleChatId]);
+
+  useEffect(
+    () =>
+      useChatSessionStore.subscribe((state, prev) => {
+        if (state.sessions === prev.sessions) return;
+        for (const [sessionId, session] of state.sessions) {
+          const before = prev.sessions.get(sessionId);
+          if (
+            !before ||
+            before === session ||
+            session.incognito ||
+            !isWorking(before) ||
+            isWorking(session) ||
+            sessionId === visibleChatIdRef.current
+          )
+            continue;
+          const ended = endedRunStatus(session);
+          if (ended === "failed" || ended === "done")
+            useUnseenRuns.getState().markUnseen(sessionId, ended);
+        }
+      }),
+    []
+  );
 }

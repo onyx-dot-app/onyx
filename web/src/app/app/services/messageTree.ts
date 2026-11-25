@@ -346,6 +346,7 @@ export const buildEmptyMessage = (params: BuildEmptyMessageParams): Message => {
     toolCall: null,
     parentNodeId: params.parentNodeId,
     packets: [],
+    timeSent: new Date().toISOString(),
   };
 };
 

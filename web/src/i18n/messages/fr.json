@@ -11792,7 +11792,12 @@
         "toast": "Authentification réussie"
       },
       "scrollToBottomButton": {
-        "label": "Aller en bas"
+        "label": "Aller en bas",
+        "reason": {
+          "approval": "Approbation requise",
+          "newAnswer": "Nouvelle réponse",
+          "question": "Question en attente"
+        }
       },
       "sessionAccessDenied": {
         "description": "Vous n'avez pas la permission de voir cette session de discussion.",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "Copié !",
           "label": "Copier"
+        },
+        "wrapButton": {
+          "unwrapLabel": "Sans retour à la ligne",
+          "wrapLabel": "Retour à la ligne"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "Modifier"
+        },
+        "foldButton": {
+          "collapseLabel": "Afficher moins",
+          "expandLabel": "Afficher le message complet"
         }
       },
       "imageTool": {
@@ -12368,6 +12381,9 @@
         "previousButton": {
           "tooltip": "Précédent"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "Hier à {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,6 +16698,24 @@
       "rename": {
         "label": "Renommer"
       },
+      "runStatus": {
+        "approval": {
+          "label": "Approbation requise"
+        },
+        "done": {
+          "label": "Terminé"
+        },
+        "failed": {
+          "label": "Échec"
+        },
+        "question": {
+          "label": "Question en attente"
+        },
+        "working": {
+          "label": "En cours"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Partager"
       }

@@ -11792,7 +11792,12 @@
         "toast": "認証に成功しました"
       },
       "scrollToBottomButton": {
-        "label": "一番下までスクロール"
+        "label": "一番下までスクロール",
+        "reason": {
+          "approval": "承認が必要です",
+          "newAnswer": "新しい回答",
+          "question": "質問への回答待ち"
+        }
       },
       "sessionAccessDenied": {
         "description": "このチャットセッションを表示する権限がありません。",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "コピーしました！",
           "label": "コピー"
+        },
+        "wrapButton": {
+          "unwrapLabel": "折り返さない",
+          "wrapLabel": "折り返す"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "編集"
+        },
+        "foldButton": {
+          "collapseLabel": "表示を減らす",
+          "expandLabel": "メッセージ全体を表示"
         }
       },
       "imageTool": {
@@ -12368,6 +12381,9 @@
         "previousButton": {
           "tooltip": "前へ"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "昨日 {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,6 +16698,24 @@
       "rename": {
         "label": "名前を変更"
       },
+      "runStatus": {
+        "approval": {
+          "label": "承認が必要"
+        },
+        "done": {
+          "label": "完了"
+        },
+        "failed": {
+          "label": "失敗"
+        },
+        "question": {
+          "label": "質問が待機中"
+        },
+        "working": {
+          "label": "処理中"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共有"
       }

@@ -325,6 +325,7 @@ const ChatUI = React.memo(
                 content={message.message}
                 files={message.files}
                 mentions={message.mentions}
+                timeSent={message.timeSent}
                 messageId={message.messageId}
                 nodeId={message.nodeId}
                 onEdit={handleEditWithMessageId}
@@ -417,6 +418,7 @@ const ChatUI = React.memo(
                 onRegenerate={createRegenerator}
                 parentMessage={previousMessage}
                 processingDurationSeconds={message.processingDurationSeconds}
+                timeSent={message.timeSent}
                 hideFooter={message.type === "error"}
                 disableTTS={message.type === "error"}
               />

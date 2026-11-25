@@ -11792,7 +11792,12 @@
         "toast": "Authentication successful"
       },
       "scrollToBottomButton": {
-        "label": "Scroll to bottom"
+        "label": "Scroll to bottom",
+        "reason": {
+          "approval": "Approval needed",
+          "newAnswer": "New answer",
+          "question": "Question waiting"
+        }
       },
       "sessionAccessDenied": {
         "description": "You don't have permission to view this chat session.",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "Copied!",
           "label": "Copy"
+        },
+        "wrapButton": {
+          "unwrapLabel": "Unwrap",
+          "wrapLabel": "Wrap"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "Edit"
+        },
+        "foldButton": {
+          "collapseLabel": "Show less",
+          "expandLabel": "Show full message"
         }
       },
       "imageTool": {
@@ -12368,6 +12381,9 @@
         "previousButton": {
           "tooltip": "Previous"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "Yesterday at {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,6 +16698,24 @@
       "rename": {
         "label": "Rename"
       },
+      "runStatus": {
+        "approval": {
+          "label": "Needs approval"
+        },
+        "done": {
+          "label": "Done"
+        },
+        "failed": {
+          "label": "Failed"
+        },
+        "question": {
+          "label": "Question waiting"
+        },
+        "working": {
+          "label": "Working"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Share"
       }

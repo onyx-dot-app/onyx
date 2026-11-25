@@ -897,6 +897,20 @@ the admin and Craft sidebars share: the logo mark and the wordmark from
 column's edge as the sidebar folds. A sidebar renders it rather than setting
 up its own branding.
 
+**Run status on chat rows.** Each chat row (`sections/sidebar/ChatButton.tsx`)
+shows live status from the session store and unseen Done or Failed status
+from a separate store. The tooltip shows the title and status. Working shimmers
+the title (`SidebarTab` `loading`). The other statuses put a mark at the row's
+end. On hover, the options button replaces the warning icon, error icon, or
+blue unseen dot for Done. Working (`loading`, `streaming` or `cancelling`), Needs
+approval or Question waiting (`lib/chat/runStatus.ts:liveRunStatus`, from
+`readWaitingToolRequests`, less the requests that this client decided), and
+Failed or Done for a run that ended while its chat was not on screen.
+`lib/chat/hooks.ts:useTrackChatRuns`, which `AppSidebar` mounts, watches the
+store for runs that stop working and records Failed or Done in
+`useUnseenRuns`; opening the chat clears the record. The record lives only in
+the tab, and a chat that the store does not hold shows no status.
+
 ## Contracts and traps
 
 1. `packet-list-append-only` **A message's packet list grows by appending,
@@ -1062,6 +1076,11 @@ up its own branding.
     chat's end clear of the composer: a footer spacer (not content, so "at the
     bottom" ignores it), the latest turn's minimum height, and
     `scroll-padding-bottom` for focus and `scrollIntoView`.
+    The button names why to return (`lib/chat/hooks.ts:useJumpToLatestReason`):
+    a waiting approval, a waiting question, or new output from a run that went
+    on after the button appeared and has ended. Output that only loads, such
+    as an opened chat's history, does not count. Otherwise it is a bare
+    chevron.
     Each chat's position (end, or a row and offset) and its row heights live
     in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
     them from loaded rows only, so a switch never waits on the network. Rows
