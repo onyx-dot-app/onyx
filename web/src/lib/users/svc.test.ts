@@ -18,6 +18,10 @@ jest.mock("swr", () => ({ mutate: jest.fn() }));
 
 beforeEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
+  localStorage.setItem("onyx:draft:chat:new", "chat draft");
+  localStorage.setItem("onyx:draft:chat:session", "chat draft");
+  localStorage.setItem("unrelated-preference", "keep");
   for (const sessionId of ["first-session", "second-session"]) {
     saveOutputPanelPreferences(sessionId, {
       outputPanelMode: "medium",
@@ -63,6 +67,9 @@ test("successful logout removes all saved Craft tab names and preserves unrelate
   expect(readOutputPanelPreferences("second-session")).toBeUndefined();
   expect(sessionStorage.getItem("unrelated-preference")).toBe("keep");
   expect(sessionStorage.length).toBe(1);
+  expect(localStorage.getItem("onyx:draft:chat:new")).toBeNull();
+  expect(localStorage.getItem("onyx:draft:chat:session")).toBeNull();
+  expect(localStorage.getItem("unrelated-preference")).toBe("keep");
   expect(readOutputThumbnailCache("user")).toBeUndefined();
   expect(mutate).toHaveBeenCalledWith(SWR_KEYS.me, null, { revalidate: false });
 });

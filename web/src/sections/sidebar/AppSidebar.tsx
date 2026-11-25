@@ -99,7 +99,12 @@ import { NotificationType } from "@/lib/notifications/types";
 import { dismissNotification } from "@/lib/notifications/api";
 import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
-import { useQueryController } from "@/providers/QueryControllerProvider";
+import ChatShortcuts, {
+  useChatJumpHint,
+} from "@/sections/sidebar/ChatShortcuts";
+import { JUMP_TO_CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
+import { formatHotkey } from "@/lib/shortcuts/utils";
+import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
 
@@ -139,6 +144,12 @@ function RecentsSection({
   onLoadMore,
 }: RecentsSectionProps) {
   const t = useTranslations("sidebar");
+  const { modifier: jumpHintModifier, isMac } = useChatJumpHint();
+  const keyNames = {
+    ctrl: t("chatSearch.keys.ctrl"),
+    alt: t("chatSearch.keys.alt"),
+    shift: t("chatSearch.keys.shift"),
+  };
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -194,11 +205,23 @@ function RecentsSection({
           </div>
         ) : (
           <>
-            {chatSessions.map((chatSession) => (
+            {chatSessions.map((chatSession, index) => (
               <ChatButton
                 key={chatSession.id}
                 chatSession={chatSession}
                 draggable
+                jumpShortcut={
+                  jumpHintModifier && index < JUMP_TO_CHAT_SHORTCUTS.length
+                    ? {
+                        label: formatHotkey(
+                          `${jumpHintModifier}+${index + 1}`,
+                          isMac,
+                          keyNames
+                        ),
+                        width: isMac ? "2.5rem" : "4.5rem",
+                      }
+                    : undefined
+                }
               />
             ))}
             {hasMore && (
@@ -229,7 +252,7 @@ export default function AppSidebar() {
   const navigation = useNavigation();
   const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
-  const { setAppMode, reset } = useQueryController();
+  const { resetNewSession } = useChatShortcutActions();
   useTrackChatRuns();
 
   // Use SWR hooks for data fetching
@@ -513,13 +536,10 @@ export default function AppSidebar() {
     ]
   );
 
-  const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
+  const { hasAdminAccess, adminCapabilities, isAdmin } = useUser();
   const activeSidebarTab = useAppPosition();
   const craftLink = navigation.linkTo(CRAFT_PATH, { scroll: false });
   const createProjectModal = useCreateModal();
-  const defaultAppMode =
-    (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
-    "chat";
 
   const moreAgentsButton = (
     <div data-testid="AppSidebar/more-agents">
@@ -559,6 +579,7 @@ export default function AppSidebar() {
 
   return (
     <>
+      <ChatShortcuts />
       <createProjectModal.Provider>
         <CreateProjectModal />
       </createProjectModal.Provider>
@@ -627,13 +648,9 @@ export default function AppSidebar() {
               href={activeSidebarTab.linkToNewSession().href}
               selected={activeSidebarTab.isNewSession()}
               onClick={(event) => {
-                // Already on a new session: start it over instead.
-                if (activeSidebarTab.isNewSession()) {
-                  setAppMode(defaultAppMode);
-                  reset();
-                  return;
-                }
+                const handledBefore = event.defaultPrevented;
                 activeSidebarTab.linkToNewSession().onClick(event);
+                if (!handledBefore && event.defaultPrevented) resetNewSession();
               }}
             >
               {t("appSidebar.newSession.label")}

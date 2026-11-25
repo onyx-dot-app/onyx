@@ -65,7 +65,11 @@ export interface UseContentEditableReturn {
   mentions: PlacedMention[];
   /** Replaces the content and puts a mention tile where
    * `lib/chat/mentions.ts:placeMentions` places each of `mentions`. */
-  setMessage: (text: string, mentions?: readonly ComposedMention[]) => void;
+  setMessage: (
+    text: string,
+    mentions?: readonly ComposedMention[],
+    options?: { focus?: boolean }
+  ) => void;
   clearMessage: () => void;
   /** Delete `token` around the caret: `token.before` ends at the caret. */
   deleteToken: (token: CaretText) => boolean;
@@ -458,7 +462,11 @@ export function useContentEditable({
   }, [performUndo, performRedo, noteEdit]);
 
   const setMessage = useCallback(
-    (text: string, picked: readonly ComposedMention[] = []) => {
+    (
+      text: string,
+      picked: readonly ComposedMention[] = [],
+      { focus = true } = {}
+    ) => {
       const el = ref.current;
       if (!el) return;
 
@@ -486,11 +494,16 @@ export function useContentEditable({
       resize();
       onContentChangeRef.current?.(text);
 
-      if (disabledRef.current) return;
-
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
+      if (disabledRef.current) return;
+      if (!focus) {
+        if (el.ownerDocument.activeElement === el) setCursorToEndUtil(el);
+        return;
+      }
+
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;
         if (ref.current) {

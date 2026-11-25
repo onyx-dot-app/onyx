@@ -69,7 +69,6 @@ const props: ChatUIProps = {
   stopGenerating: jest.fn(),
   onSubmit: jest.fn(async () => {}),
   deepResearchEnabled: true,
-  currentMessageFiles: [],
   onResubmit: jest.fn(),
 };
 

@@ -16721,9 +16721,6 @@
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "Neues Projekt \"<name>{projectName}</name>\" erstellen"
-      },
       "footer": {
         "openAction": {
           "label": "Öffnen"
@@ -16735,25 +16732,21 @@
           "label": "Alle anzeigen"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Strg",
+        "shift": "Umschalt"
+      },
       "list": {
         "empty": {
-          "text": "Noch keine Chats oder Projekte"
+          "text": "Noch keine Chats"
         },
         "noResults": {
           "text": "Keine Ergebnisse gefunden"
         }
       },
-      "newProject": {
-        "label": "Neues Projekt"
-      },
       "newSession": {
         "label": "Neue Sitzung"
-      },
-      "noMoreResults": {
-        "text": "Keine weiteren Ergebnisse"
-      },
-      "projectsFilter": {
-        "label": "Projekte"
       },
       "recentFilter": {
         "label": "Zuletzt verwendet"
@@ -16762,10 +16755,25 @@
         "label": "Letzte Sitzungen"
       },
       "searchInput": {
-        "placeholder": "Chat-Sitzungen, Projekte durchsuchen..."
+        "placeholder": "Chat-Sitzungen durchsuchen..."
       },
       "sessionsFilter": {
         "label": "Sitzungen"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "Modell wechseln"
+        },
+        "nextChat": {
+          "label": "Nächste Sitzung"
+        },
+        "previousChat": {
+          "label": "Vorherige Sitzung"
+        },
+        "title": "Tastenkürzel",
+        "toggleSidebar": {
+          "label": "Seitenleiste umschalten"
+        }
       }
     },
     "notifications": {

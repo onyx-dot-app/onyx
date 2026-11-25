@@ -251,8 +251,9 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
     browser storage by prefix.** `web/src/lib/users/svc.ts:logout` removes
     every `sessionStorage` key that starts with `onyx:craft:`,
     `onyx:draft:craft:` or `onyx:chat:output-panel:v1:` (the chat's right panel
-    width, `web/src/lib/chat/rightPanel.ts:CHAT_PANEL_STORAGE_PREFIX`) and
-    clears the Craft thumbnail cache. New Craft browser storage must use the
+    width, `web/src/lib/chat/rightPanel.ts:CHAT_PANEL_STORAGE_PREFIX`),
+    every `localStorage` key that starts with `onyx:draft:chat:` (the chat
+    composer's drafts), and clears the Craft thumbnail cache. New Craft browser storage must use the
     `onyx:craft:` prefix, or it survives logout ([[craft-frontend]],
     [[chat-frontend]]).
 

@@ -71,9 +71,10 @@ jest.mock("@/lib/projects/providers", () => ({
     beginUpload: jest.fn(),
   }),
 }));
+const mockIncognitoEnabledRef = { current: false };
 jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({
-    incognitoEnabledRef: { current: false },
+    incognitoEnabledRef: mockIncognitoEnabledRef,
     incognitoSessionId: null,
   }),
 }));
@@ -140,6 +141,7 @@ const toolConfiguration: ToolConfigurationHandle = {
 
 const originalFetch = global.fetch;
 afterEach(() => {
+  mockIncognitoEnabledRef.current = false;
   global.fetch = originalFetch;
   jest.restoreAllMocks();
   jest.clearAllMocks();
@@ -175,6 +177,60 @@ function createLlmManager(): LlmManager {
     hasAnyProvider: false,
   };
 }
+
+test.each([false, true])(
+  "a failed private send restores its draft only if the composer stays private (switched: %s)",
+  async (switched) => {
+    const previousUrl = window.location.href;
+    window.history.replaceState(null, "", "/app");
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
+    });
+    mockIncognitoEnabledRef.current = true;
+    const creation = Promise.withResolvers<string>();
+    jest.mocked(createChatSession).mockReturnValueOnce(creation.promise);
+    const restoreInputBar = jest.fn();
+    const { result } = renderHook(() =>
+      useChatController({
+        llmManager: createLlmManager(),
+        toolConfiguration,
+        activeAgent: undefined,
+        availableAgents: [],
+        existingChatSessionId: null,
+        selectedDocuments: [],
+        searchParams: new ReadonlyURLSearchParams(),
+        resetInputBar: jest.fn(),
+        restoreInputBar,
+      })
+    );
+    try {
+      await act(async () => {
+        const send = result.current.onSubmit({
+          message: "private text",
+          mentions: [],
+          currentMessageFiles: [],
+          deepResearch: false,
+        });
+        mockIncognitoEnabledRef.current = !switched;
+        creation.reject(new Error("Session creation failed"));
+        await send;
+      });
+
+      expect(restoreInputBar).toHaveBeenCalledTimes(switched ? 0 : 1);
+      if (!switched) {
+        expect(restoreInputBar).toHaveBeenCalledWith({
+          message: "private text",
+          mentions: [],
+          files: [],
+        });
+      }
+    } finally {
+      window.history.replaceState(null, "", previousUrl);
+    }
+  }
+);
 
 test.each([
   { isNewSession: false, stop: true },

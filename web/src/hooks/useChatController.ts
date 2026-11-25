@@ -381,20 +381,14 @@ export default function useChatController({
       }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
+      const restoreSubmittedInput = () => {
+        if ((incognitoEnabledRef.current ?? false) !== incognito) return;
+        restoreInputBar({ message, mentions, files: currentMessageFiles });
+      };
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-      const paramsWithoutProject = new URLSearchParams(searchParams.toString());
-      paramsWithoutProject.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
       const startUrl = locationKey(pathname, searchParams.toString());
-      const urlWithoutProject = locationKey(pathname, paramsWithoutProject);
-      if (searchParams.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
-        // SAFETY: built from the current pathname, which is a route of this app.
-        navigation.go(urlWithoutProject as Route, {
-          replace: true,
-          scroll: false,
-        });
-      }
 
       updateSubmittedMessage(getCurrentSessionId(), message);
 
@@ -451,24 +445,10 @@ export default function useChatController({
           toast.error(t("createSessionFailed.toast"));
           // The user moved to a different page while the request was pending.
           // Do not take them back or put the message into that page.
-          if (
-            !isStillOnLocation([startUrl, urlWithoutProject], window.location)
-          ) {
+          if (!isStillOnLocation([startUrl], window.location)) {
             return;
           }
-          // Put the project back in the URL so a retry stays in the project.
-          if (projectId) {
-            // SAFETY: built from the current pathname, which is a route of this app.
-            navigation.go(startUrl as Route, {
-              replace: true,
-              scroll: false,
-            });
-          }
-          restoreInputBar({
-            message,
-            mentions,
-            files: currentMessageFiles,
-          });
+          restoreSubmittedInput();
           return;
         }
 
@@ -734,7 +714,7 @@ export default function useChatController({
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
-      resetInputBar();
+      if (!messageToResend) resetInputBar();
       // The server saved nothing for this turn: drop its nodes, restore the
       // links of the node they hung from, and give the text back for a retry.
       // Other live changes, such as a preference pick, stay.
@@ -768,11 +748,7 @@ export default function useChatController({
           store.currentSessionId === frozenSessionId &&
           !regenerationRequest
         ) {
-          restoreInputBar({
-            message,
-            mentions,
-            files: currentMessageFiles,
-          });
+          restoreSubmittedInput();
         }
       };
       const discardUnsentTurn = () => {

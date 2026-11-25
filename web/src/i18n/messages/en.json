@@ -16721,9 +16721,6 @@
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "Create New Project \"<name>{projectName}</name>\""
-      },
       "footer": {
         "openAction": {
           "label": "Open"
@@ -16735,25 +16732,21 @@
           "label": "Show all"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "No chats or projects yet"
+          "text": "No chats yet"
         },
         "noResults": {
           "text": "No results found"
         }
       },
-      "newProject": {
-        "label": "New Project"
-      },
       "newSession": {
         "label": "New Session"
-      },
-      "noMoreResults": {
-        "text": "No more results"
-      },
-      "projectsFilter": {
-        "label": "Projects"
       },
       "recentFilter": {
         "label": "Recent"
@@ -16762,10 +16755,25 @@
         "label": "Recent Sessions"
       },
       "searchInput": {
-        "placeholder": "Search chat sessions, projects..."
+        "placeholder": "Search chat sessions..."
       },
       "sessionsFilter": {
         "label": "Sessions"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "Change Model"
+        },
+        "nextChat": {
+          "label": "Next Session"
+        },
+        "previousChat": {
+          "label": "Previous Session"
+        },
+        "title": "Shortcuts",
+        "toggleSidebar": {
+          "label": "Toggle Sidebar"
+        }
       }
     },
     "notifications": {

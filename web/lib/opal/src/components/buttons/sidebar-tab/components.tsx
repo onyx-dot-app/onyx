@@ -62,10 +62,11 @@ interface SidebarTabProps {
   rightChildren?: React.ReactNode;
 
   /**
-   * `rightChildren` show at rest too, so the label keeps their room (1.5rem)
+   * `rightChildren` show at rest too, so the label keeps their room (1.5rem
+   * by default, or the supplied CSS width)
    * at all times, not only on hover.
    */
-  rightChildrenAtRest?: boolean;
+  rightChildrenAtRest?: boolean | string;
 
   /** Tooltip shown on hover. Takes precedence over the label tooltip. */
   tooltip?: string | RichStr;
@@ -182,6 +183,11 @@ function SidebarTab({
         "w-0 group-hover/SidebarTab:w-6",
         rightChildrenAtRest && "w-6"
       )}
+      style={
+        typeof rightChildrenAtRest === "string"
+          ? { width: rightChildrenAtRest }
+          : undefined
+      }
     />
   );
 

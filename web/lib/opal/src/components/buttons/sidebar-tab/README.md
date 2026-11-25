@@ -49,7 +49,7 @@ Both tooltips (the folded name and an explicit `tooltip`) wrap the overlay contr
 | `onClick`             | `MouseEventHandler`                  | —                 | Click handler                                                                                             |
 | `type`                | `ButtonType`                         | —                 | HTML button type                                                                                          |
 | `rightChildren`       | `ReactNode`                          | —                 | Actions rendered on the right side                                                                        |
-| `rightChildrenAtRest` | `boolean`                            | `false`           | `rightChildren` show at rest too, so the label keeps their 1.5rem of room at all times, not only on hover |
+| `rightChildrenAtRest` | `boolean \| string`                            | `false`           | `rightChildren` show at rest too, so the label keeps their room at all times. Pass a CSS width to override the default 1.5rem |
 
 ## Usage
 

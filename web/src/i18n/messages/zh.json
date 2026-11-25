@@ -16721,9 +16721,6 @@
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "创建新项目“<name>{projectName}</name>”"
-      },
       "footer": {
         "openAction": {
           "label": "打开"
@@ -16735,25 +16732,21 @@
           "label": "显示全部"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "暂无对话或项目"
+          "text": "暂无对话"
         },
         "noResults": {
           "text": "未找到结果"
         }
       },
-      "newProject": {
-        "label": "新建项目"
-      },
       "newSession": {
         "label": "新建会话"
-      },
-      "noMoreResults": {
-        "text": "没有更多结果"
-      },
-      "projectsFilter": {
-        "label": "项目"
       },
       "recentFilter": {
         "label": "最近"
@@ -16762,10 +16755,25 @@
         "label": "最近会话"
       },
       "searchInput": {
-        "placeholder": "搜索对话会话、项目…"
+        "placeholder": "搜索对话会话…"
       },
       "sessionsFilter": {
         "label": "会话"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "更换模型"
+        },
+        "nextChat": {
+          "label": "下一个会话"
+        },
+        "previousChat": {
+          "label": "上一个会话"
+        },
+        "title": "快捷键",
+        "toggleSidebar": {
+          "label": "切换侧边栏"
+        }
       }
     },
     "notifications": {

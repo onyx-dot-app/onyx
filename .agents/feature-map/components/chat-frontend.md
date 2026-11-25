@@ -44,6 +44,37 @@
   Pending submission takes no attached files and is unavailable in incognito
   and for anonymous users. Craft keeps its own queue; only the queue display and
   keyboard navigation are shared.
+- **A user drives the chat from the keyboard.** Cmd/Ctrl+Shift+O starts a
+  new session, Cmd/Ctrl+E folds the sidebar, Cmd/Ctrl+/ opens or closes the
+  model picker, Alt+Up and Alt+Down open the previous or next Recents chat,
+  and Cmd+Option on Mac or Ctrl+Alt with 1–9 opens the Nth Recents chat.
+  Holding those modifiers shows the shortcut at the end of each chat row. All but
+  Alt+Up and Alt+Down work from the chat input too, since those keys move
+  the caret by paragraph on macOS. Only the sidebar shortcut runs while
+  another modal is open.
+  `web/src/lib/shortcuts/constants.ts` lists them;
+  `sections/sidebar/ChatShortcuts.tsx` binds them with Opal's `useHotkey`.
+  Cmd/Ctrl+K opens or closes the sidebar's search menu
+  (`sections/sidebar/ChatSearchCommandMenu.tsx`). The menu shows Recent
+  Sessions and Shortcuts. Search matches chat sessions and shortcut labels.
+  Shortcuts includes New Session and shows the keys for the user's platform.
+  Each shortcut action runs after the menu closes.
+- **A user types or pastes with no field focused.** On the chat page, a
+  printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and
+  the browser types the character there. A paste goes to the input too. Keys
+  in a field, Space on a button, and keys while a dialog, menu or listbox is
+  open stay where they are (`web/src/lib/chat/typeToFocus.ts`). The handlers
+  are React props on the page's root element in `views/AppPage.tsx`, which
+  takes focus (`tabIndex={-1}`) on a click in empty space. So only keys with
+  focus inside the page count: not keys on the sidebar, or on `body` before
+  the first click.
+- **The composer keeps a draft for each chat** and one for the new chat
+  (`sections/input/AppInputBar.tsx`, `useDraft` with `storage: "local"`). The
+  draft holds the text, its `@` picks and the uploaded files, and survives
+  reload and browser closure. A send or an emptied input clears it, and
+  logout removes all of them. Incognito keeps its composer text and files
+  in memory. Persisted drafts are scoped to the signed-in account and tenant.
+  Drafts from older tabs without an account or privacy mode are not restored.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button stops every active

@@ -16721,9 +16721,6 @@
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "إنشاء مشروع جديد \"<name>{projectName}</name>\""
-      },
       "footer": {
         "openAction": {
           "label": "فتح"
@@ -16735,25 +16732,21 @@
           "label": "عرض الكل"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "لا توجد محادثات أو مشاريع بعد"
+          "text": "لا توجد محادثات بعد"
         },
         "noResults": {
           "text": "لم يتم العثور على نتائج"
         }
       },
-      "newProject": {
-        "label": "مشروع جديد"
-      },
       "newSession": {
         "label": "جلسة جديدة"
-      },
-      "noMoreResults": {
-        "text": "لا توجد نتائج أخرى"
-      },
-      "projectsFilter": {
-        "label": "المشاريع"
       },
       "recentFilter": {
         "label": "الأحدث"
@@ -16762,10 +16755,25 @@
         "label": "الجلسات الأخيرة"
       },
       "searchInput": {
-        "placeholder": "البحث في جلسات المحادثة والمشاريع..."
+        "placeholder": "البحث في جلسات المحادثة..."
       },
       "sessionsFilter": {
         "label": "الجلسات"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "تغيير النموذج"
+        },
+        "nextChat": {
+          "label": "الجلسة التالية"
+        },
+        "previousChat": {
+          "label": "الجلسة السابقة"
+        },
+        "title": "الاختصارات",
+        "toggleSidebar": {
+          "label": "إظهار الشريط الجانبي أو إخفاؤه"
+        }
       }
     },
     "notifications": {

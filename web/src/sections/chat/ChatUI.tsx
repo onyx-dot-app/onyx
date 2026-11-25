@@ -81,7 +81,6 @@ export interface ChatUIProps {
     }
   ) => Promise<void>;
   deepResearchEnabled: boolean;
-  currentMessageFiles: any[];
 
   onResubmit: () => void;
 
@@ -108,7 +107,6 @@ const ChatUI = React.memo(
     stopGenerating,
     onSubmit,
     deepResearchEnabled,
-    currentMessageFiles,
     onResubmit,
     anchorNodeId,
     selectedModels,
@@ -196,15 +194,13 @@ const ChatUI = React.memo(
     // Use refs to keep callbacks stable while always using latest values
     const onSubmitRef = useRef(onSubmit);
     const deepResearchEnabledRef = useRef(deepResearchEnabled);
-    const currentMessageFilesRef = useRef(currentMessageFiles);
     const selectedModelsRef = useRef(selectedModels);
 
     useEffect(() => {
       onSubmitRef.current = onSubmit;
       deepResearchEnabledRef.current = deepResearchEnabled;
-      currentMessageFilesRef.current = currentMessageFiles;
       selectedModelsRef.current = selectedModels;
-    }, [onSubmit, deepResearchEnabled, currentMessageFiles, selectedModels]);
+    }, [onSubmit, deepResearchEnabled, selectedModels]);
 
     const createRegenerator = useCallback(
       (regenerationRequest: { messageId: number; parentMessage: Message }) => {
@@ -212,7 +208,7 @@ const ChatUI = React.memo(
           return await onSubmitRef.current({
             message: regenerationRequest.parentMessage.message,
             mentions: regenerationRequest.parentMessage.mentions ?? [],
-            currentMessageFiles: currentMessageFilesRef.current,
+            currentMessageFiles: [],
             deepResearch: deepResearchEnabledRef.current,
             modelOverride,
             messageIdToResend: regenerationRequest.parentMessage.messageId,

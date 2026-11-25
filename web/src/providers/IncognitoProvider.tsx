@@ -45,7 +45,12 @@ interface IncognitoProviderProps {
 }
 
 export function IncognitoProvider({ children }: IncognitoProviderProps) {
-  const [incognitoEnabled, setIncognitoEnabled] = useState(false);
+  const [incognitoEnabled, setIncognitoEnabledState] = useState(false);
+  const incognitoEnabledRef = useRef(false);
+  const setIncognitoEnabled = useCallback((enabled: boolean) => {
+    incognitoEnabledRef.current = enabled;
+    setIncognitoEnabledState(enabled);
+  }, []);
   const [incognitoLocked, setIncognitoLocked] = useState(false);
 
   const { data: availability, mutate: revalidateAvailability } =
@@ -74,15 +79,10 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
   );
   const toggleIncognito = useCallback(() => {
     if (incognitoLocked) return;
-    const next = !incognitoEnabled;
+    const next = !incognitoEnabledRef.current;
     setIncognitoSessionId(next ? crypto.randomUUID() : null);
     setIncognitoEnabled(next);
-  }, [incognitoLocked, incognitoEnabled]);
-
-  const incognitoEnabledRef = useRef(false);
-  useEffect(() => {
-    incognitoEnabledRef.current = incognitoEnabled;
-  }, [incognitoEnabled]);
+  }, [incognitoLocked, setIncognitoEnabled]);
 
   // Memoized so consumers keying callbacks on the context object do not
   // rebuild them on every provider render.
@@ -104,6 +104,7 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
       incognitoLocked,
       incognitoSessionId,
       toggleIncognito,
+      setIncognitoEnabled,
     ]
   );
 

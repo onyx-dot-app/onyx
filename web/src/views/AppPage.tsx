@@ -115,6 +115,7 @@ import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
 import { useTranslations } from "next-intl";
+import { typeToFocusHandlers } from "@/lib/chat/typeToFocus";
 
 interface FadeProps {
   show: boolean;
@@ -294,6 +295,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles, t]);
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
+  const typeToFocus = typeToFocusHandlers(chatInputBarRef);
 
   // An unresolved agent reads as plain chat, so a named-agent layout never
   // flashes for an agent that is not there yet.
@@ -637,12 +639,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     isSearch ||
     (isNewSession && state.phase === "idle" && state.appMode === "search");
 
-  // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
-  // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
   useEffect(() => {
     if (isNewSession) setAppMode(defaultAppMode);
-    if (!isNewSession && isSearch) resetInputBar();
-  }, [isNewSession, defaultAppMode, isSearch, resetInputBar, setAppMode]);
+  }, [isNewSession, defaultAppMode, setAppMode]);
 
   // Declared after the default-mode reset so incognito wins the same commit:
   // search mode has its own persistence and no incognito safeguards.
@@ -872,18 +871,23 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       <div className="w-full h-full overflow-hidden">
         {/* noPaste: the input bar already uploads pasted files itself. Without
             it react-dropzone handles the same paste again and attaches the
-            image twice. */}
+            image twice. noKeyboard: Space on the focused page types into the
+            chat input instead of opening the file picker. The root takes focus
+            on a click in empty space, so its key and paste props send typing
+            there to the chat input. */}
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
           }
           noClick
           noPaste
+          noKeyboard
         >
           {({ getRootProps }) => (
             <div
               className="h-full w-full flex flex-col items-center outline-hidden relative"
               {...getRootProps({ tabIndex: -1 })}
+              {...typeToFocus}
             >
               {/* Main content grid — 3 rows, animated */}
               <div
@@ -953,7 +957,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           deepResearchEnabled={
                             deepResearchEnabledForCurrentWorkflow
                           }
-                          currentMessageFiles={currentMessageFiles}
                           setPresentingDocument={setPresentingDocument}
                           onSubmit={onSubmit}
                           onMessageSelection={onMessageSelection}

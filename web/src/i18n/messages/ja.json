@@ -16721,9 +16721,6 @@
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "新しいプロジェクト「<name>{projectName}</name>」を作成"
-      },
       "footer": {
         "openAction": {
           "label": "開く"
@@ -16735,25 +16732,21 @@
           "label": "すべて表示"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "チャットやプロジェクトはまだありません"
+          "text": "チャットはまだありません"
         },
         "noResults": {
           "text": "結果が見つかりません"
         }
       },
-      "newProject": {
-        "label": "新しいプロジェクト"
-      },
       "newSession": {
         "label": "新しいセッション"
-      },
-      "noMoreResults": {
-        "text": "これ以上の結果はありません"
-      },
-      "projectsFilter": {
-        "label": "プロジェクト"
       },
       "recentFilter": {
         "label": "最近"
@@ -16762,10 +16755,25 @@
         "label": "最近のセッション"
       },
       "searchInput": {
-        "placeholder": "チャットセッションやプロジェクトを検索..."
+        "placeholder": "チャットセッションを検索..."
       },
       "sessionsFilter": {
         "label": "セッション"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "モデルを変更"
+        },
+        "nextChat": {
+          "label": "次のセッション"
+        },
+        "previousChat": {
+          "label": "前のセッション"
+        },
+        "title": "ショートカット",
+        "toggleSidebar": {
+          "label": "サイドバーの切り替え"
+        }
       }
     },
     "notifications": {

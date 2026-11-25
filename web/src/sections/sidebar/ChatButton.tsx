@@ -23,7 +23,7 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { Button, SidebarTab, useCreateModal } from "@opal/components";
+import { Button, SidebarTab, Text, useCreateModal } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
@@ -86,10 +86,16 @@ export interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;
+  jumpShortcut?: { label: string; width: string };
 }
 
 const ChatButton = memo(
-  ({ chatSession, project, draggable = false }: ChatButtonProps) => {
+  ({
+    chatSession,
+    project,
+    draggable = false,
+    jumpShortcut,
+  }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
     const appPosition = useAppPosition();
     const active = useMemo(
@@ -116,6 +122,7 @@ const ChatButton = memo(
     const pinChatAgent = usePinChatAgent();
     const { exportMenuItem } = useChatExportMenu(chatSession);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [optionsFocused, setOptionsFocused] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
     >(null);
@@ -401,6 +408,8 @@ const ChatButton = memo(
           size="sm"
           interaction={menuOpen ? "hover" : "rest"}
           aria-label={t("chatButton.options.label")}
+          onFocus={() => setOptionsFocused(true)}
+          onBlur={() => setOptionsFocused(false)}
         />
       </Dropdown.Trigger>
     );
@@ -446,6 +455,19 @@ const ChatButton = memo(
       </>
     );
 
+    const jumpHint =
+      jumpShortcut && !renaming && !menuOpen && !optionsFocused ? (
+        <span dir="ltr" aria-hidden="true" className="pointer-events-none!">
+          <Text
+            font="figure-keystroke"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
+            {jumpShortcut.label}
+          </Text>
+        </span>
+      ) : null;
+
     const popover = (
       <Dropdown width={60} side="right" onOpenChange={setMenuOpen}>
         <Hoverable.Root
@@ -467,8 +489,11 @@ const ChatButton = memo(
                     status: runStatusLabel,
                   })
             }
-            rightChildren={rightMenu}
-            rightChildrenAtRest={!!runStatusMarker && !renaming}
+            rightChildren={jumpHint ?? rightMenu}
+            rightChildrenAtRest={
+              (jumpHint && jumpShortcut?.width) ||
+              (!!runStatusMarker && !renaming)
+            }
             nested={!!project}
           >
             {renaming ? (

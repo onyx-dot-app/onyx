@@ -85,6 +85,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
     // Its own instance, so source toggles made while previewing an agent do not
     // reach the chat this modal opened over.
     <AppInputBar
+      persistDraft={false}
       toolConfiguration={toolConfiguration}
       onSubmit={submit}
       llmManager={llmManager}

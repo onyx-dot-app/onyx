@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 export interface UseHotkeyOptions {
   /** Whether the hotkey is bound. @default true */
   enabled?: boolean;
+  shouldHandle?: (event: KeyboardEvent) => boolean;
   /**
    * Fire even while the user types in a field (an input, textarea, select or
    * contenteditable element). @default false
@@ -42,13 +43,29 @@ function isMac(): boolean {
   return /mac|iphone|ipad/i.test(navigator.userAgent);
 }
 
+function eventKey(event: KeyboardEvent): string {
+  // Option can change the character. Use the physical digit for
+  // Ctrl+Option and physical letters and digits for Cmd+Option.
+  if (event.metaKey && event.altKey) {
+    const physical = /^(?:Digit|Key)(.)$/.exec(event.code)?.[1];
+    if (physical) return physical;
+  }
+  if (event.ctrlKey && event.altKey && isMac()) {
+    const digit = /^Digit([0-9])$/.exec(event.code)?.[1];
+    if (digit) return digit;
+  }
+  return event.key;
+}
+
 function matches(event: KeyboardEvent, hotkey: ParsedHotkey): boolean {
-  if (event.key.toLowerCase() !== hotkey.key.toLowerCase()) return false;
+  if (eventKey(event).toLowerCase() !== hotkey.key.toLowerCase()) return false;
   const mac = isMac();
   const wantMeta = hotkey.meta || (hotkey.mod && mac);
   const wantCtrl = hotkey.ctrl || (hotkey.mod && !mac);
   if (event.metaKey !== wantMeta || event.ctrlKey !== wantCtrl) return false;
   if (event.altKey !== hotkey.alt) return false;
+  if (wantCtrl && hotkey.alt && event.getModifierState("AltGraph"))
+    return false;
   if (hotkey.shift !== undefined && event.shiftKey !== hotkey.shift) {
     return false;
   }
@@ -90,7 +107,7 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 export default function useHotkey(
   hotkey: string,
   handler: (event: KeyboardEvent) => void,
-  { enabled = true, whileTyping = false }: UseHotkeyOptions = {}
+  { enabled = true, whileTyping = false, shouldHandle }: UseHotkeyOptions = {}
 ): void {
   // The latest handler, so an inline callback does not rebind the listener.
   const handlerRef = useRef(handler);
@@ -105,12 +122,12 @@ export default function useHotkey(
     function handleKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || event.isComposing) return;
       if (!whileTyping && isTypingTarget(event.target)) return;
-      if (!matches(event, parsed)) return;
+      if (!matches(event, parsed) || shouldHandle?.(event) === false) return;
       event.preventDefault();
       handlerRef.current(event);
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [hotkey, enabled, whileTyping]);
+  }, [hotkey, enabled, whileTyping, shouldHandle]);
 }

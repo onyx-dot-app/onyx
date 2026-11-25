@@ -16721,9 +16721,6 @@
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "새 프로젝트 \"<name>{projectName}</name>\" 생성"
-      },
       "footer": {
         "openAction": {
           "label": "열기"
@@ -16735,25 +16732,21 @@
           "label": "모두 보기"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "아직 채팅이나 프로젝트가 없습니다"
+          "text": "아직 채팅이 없습니다"
         },
         "noResults": {
           "text": "결과가 없습니다"
         }
       },
-      "newProject": {
-        "label": "새 프로젝트"
-      },
       "newSession": {
         "label": "새 세션"
-      },
-      "noMoreResults": {
-        "text": "더 이상 결과가 없습니다"
-      },
-      "projectsFilter": {
-        "label": "프로젝트"
       },
       "recentFilter": {
         "label": "최근"
@@ -16762,10 +16755,25 @@
         "label": "최근 세션"
       },
       "searchInput": {
-        "placeholder": "채팅 세션, 프로젝트 검색..."
+        "placeholder": "채팅 세션 검색..."
       },
       "sessionsFilter": {
         "label": "세션"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "모델 변경"
+        },
+        "nextChat": {
+          "label": "다음 세션"
+        },
+        "previousChat": {
+          "label": "이전 세션"
+        },
+        "title": "단축키",
+        "toggleSidebar": {
+          "label": "사이드바 전환"
+        }
       }
     },
     "notifications": {
