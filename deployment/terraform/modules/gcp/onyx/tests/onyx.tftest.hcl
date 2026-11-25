@@ -228,6 +228,10 @@ run "data_services_wait_for_the_peering" {
 run "the_bucket_grant_goes_to_the_workload_service_account" {
   command = plan
 
+  variables {
+    craft_sandbox_runtime = "pod"
+  }
+
   assert {
     condition     = local.bucket_object_admin_members == ["principal://iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/example-project.svc.id.goog/subject/ns/onyx/sa/onyx-workload-access"]
     error_message = "The bucket should grant the Kubernetes service account the chart runs as, and nothing else."
@@ -243,9 +247,27 @@ run "the_bucket_grant_goes_to_the_workload_service_account" {
 run "the_pod_runtime_needs_no_iam_credentials_api" {
   command = plan
 
+  variables {
+    craft_sandbox_runtime = "pod"
+  }
+
   assert {
     condition     = !contains(local.project_apis, "iamcredentials.googleapis.com") && output.workload_google_service_account_email == null
-    error_message = "Only the Firecracker runtime signs GCS URLs, so the default adds no API and no Google service account."
+    error_message = "Only the Firecracker runtime signs GCS URLs, so the pod runtime adds no API and no Google service account."
+  }
+}
+
+run "the_default_sandbox_pool_is_firecracker" {
+  command = plan
+
+  assert {
+    condition     = contains(local.project_apis, "iamcredentials.googleapis.com")
+    error_message = "The default Firecracker pool signs GCS URLs through the IAM Credentials API."
+  }
+
+  assert {
+    condition     = output.craft_sandbox_runtime == "firecracker" && yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "auto"
+    error_message = "The composition must pass the sandbox runtime and the Helm values through from the gke module."
   }
 }
 
@@ -414,7 +436,7 @@ run "l7_ingress_builds_the_gateway_resources_behind_the_apis" {
   }
 
   assert {
-    condition     = contains(keys(google_project_service.this), "certificatemanager.googleapis.com") && length(google_project_service.this) == 11
+    condition     = contains(keys(google_project_service.this), "certificatemanager.googleapis.com") && length(google_project_service.this) == 12
     error_message = "The L7 load balancer needs Certificate Manager on top of the default APIs."
   }
 
@@ -463,8 +485,8 @@ run "the_project_apis_are_enabled_by_default" {
   command = plan
 
   assert {
-    condition     = length(google_project_service.this) == 10
-    error_message = "Every API a module calls should be enabled."
+    condition     = length(google_project_service.this) == 11
+    error_message = "Every API a module calls should be enabled, including IAM Credentials for the default Firecracker pool."
   }
 
   assert {

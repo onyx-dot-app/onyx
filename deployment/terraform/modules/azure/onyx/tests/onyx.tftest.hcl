@@ -451,6 +451,20 @@ run "the_pod_sandbox_pool_reaches_the_aks_module" {
   }
 }
 
+run "the_default_sandbox_pool_is_firecracker" {
+  command = plan
+
+  assert {
+    condition     = contains(module.aks.node_pool_names, "sandbox") && output.craft_sandbox_runtime == "firecracker"
+    error_message = "The composition must make the Firecracker sandbox pool by default."
+  }
+
+  assert {
+    condition     = yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "auto"
+    error_message = "The composition must pass the Helm values through from the aks module."
+  }
+}
+
 run "no_sandbox_archive_storage_by_default" {
   command = plan
 

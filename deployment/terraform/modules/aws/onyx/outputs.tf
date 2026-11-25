@@ -80,3 +80,13 @@ output "sandbox_archive_kms_key_arn" {
   description = "ARN of the KMS key that encrypts the sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
   value       = var.enable_sandbox_archive_bucket ? module.s3_sandbox_archive[0].kms_key_arn : null
 }
+
+output "craft_sandbox_runtime" {
+  description = "Sandbox runtime of the sandbox node group: \"firecracker\" or \"pod\". Null when enable_craft is false."
+  value       = module.eks.craft_sandbox_runtime
+}
+
+output "sandbox_helm_values" {
+  description = "Onyx Helm chart values (YAML) that match the sandbox node group. Pass them with -f to helm install or helm upgrade."
+  value       = module.eks.sandbox_helm_values
+}

@@ -322,8 +322,8 @@ variable "gpu_node_locations" {
 
 variable "enable_sandbox_node_pool" {
   type        = bool
-  description = "Create a tainted pool for Craft sandbox workloads"
-  default     = false
+  description = "Create the tainted sandbox pool. Chat sandbox tools and Craft run their sandboxes there. Set false for no sandbox nodes."
+  default     = true
 
   validation {
     condition     = !var.enable_sandbox_node_pool || !contains(keys(var.node_pools), "sandbox")
@@ -382,12 +382,12 @@ variable "sandbox_gvisor_enabled" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". \"firecracker\" turns on nested virtualization and needs an Intel n2 or c3 machine type. Opencode sessions still run as pods; see enable_craft_pod_sandbox_node_pool. \"firecracker\" also maps the workload service account to a Google service account that can sign GCS URLs. See \"Craft sandboxes on Firecracker\" in the gcp module README."
-  default     = "pod"
+  description = "How sandboxes run on the sandbox pool: \"auto\" (default), \"pod\" or \"firecracker\". \"firecracker\" turns on nested virtualization and needs an Intel n2 or c3 machine type. It also maps the workload service account to a Google service account that can sign GCS URLs. \"auto\" picks \"firecracker\" on an n2 or c3 sandbox_node_machine_type without gVisor, else \"pod\". Opencode sessions still run as pods; see enable_craft_pod_sandbox_node_pool. See \"Craft sandboxes on Firecracker\" in the gcp module README."
+  default     = "auto"
 
   validation {
-    condition     = contains(["pod", "firecracker"], var.craft_sandbox_runtime)
-    error_message = "craft_sandbox_runtime must be \"pod\" or \"firecracker\"."
+    condition     = contains(["auto", "pod", "firecracker"], var.craft_sandbox_runtime)
+    error_message = "craft_sandbox_runtime must be \"auto\", \"pod\" or \"firecracker\"."
   }
 
   # GCP offers nested virtualization on Intel types only. n2d, c2d, t2d and
@@ -406,12 +406,12 @@ variable "craft_sandbox_runtime" {
 
 variable "enable_craft_pod_sandbox_node_pool" {
   type        = bool
-  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox pool under the key \"sandboxpod\" (label onyx.app/workload=sandbox, taint workload=sandbox, no onyx.app/kvm). Pod sandboxes and the image prepuller run there, because the Firecracker pool carries the onyx.app/kvm taint."
+  description = "With the Firecracker runtime, also create a small pod sandbox pool under the key \"sandboxpod\" (label onyx.app/workload=sandbox, taint workload=sandbox, no onyx.app/kvm). Pod sandboxes and the image prepuller run there, because the Firecracker pool carries the onyx.app/kvm taint."
   default     = false
 
   validation {
-    condition     = !var.enable_craft_pod_sandbox_node_pool || (var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker")
-    error_message = "enable_craft_pod_sandbox_node_pool needs enable_sandbox_node_pool = true and craft_sandbox_runtime = \"firecracker\". With the pod runtime, the sandbox pool already runs pod sandboxes."
+    condition     = !var.enable_craft_pod_sandbox_node_pool || (var.enable_sandbox_node_pool && var.craft_sandbox_runtime != "pod")
+    error_message = "enable_craft_pod_sandbox_node_pool needs enable_sandbox_node_pool = true and the Firecracker runtime. With the pod runtime, the sandbox pool already runs pod sandboxes."
   }
 
   validation {

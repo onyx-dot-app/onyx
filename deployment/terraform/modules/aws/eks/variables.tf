@@ -104,8 +104,8 @@ variable "gpu_node_instance_types" {
 
 variable "enable_craft" {
   type        = bool
-  description = "Create a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1). Opt-in per workspace."
-  default     = false
+  description = "Create the sandbox node group (label onyx.app/workload=sandbox, taint workload=sandbox:NoSchedule, IMDSv2 hop limit 1). Chat sandbox tools and Craft run their sandboxes there. Set false for no sandbox nodes."
+  default     = true
 
   validation {
     condition     = !var.enable_craft || !contains(keys(var.eks_managed_node_groups), "sandbox")
@@ -155,40 +155,40 @@ variable "craft_sandbox_node_disk_size_gb" {
 
 variable "craft_sandbox_node_disk_iops" {
   type        = number
-  description = "Provisioned IOPS for the gp3 root volume of Craft sandbox nodes. Firecracker sandboxes do much more disk I/O than pods; 6000 is the tested value."
-  default     = 3000
+  description = "Provisioned IOPS for the gp3 root volume of Craft sandbox nodes. Null uses 6000 (the tested value) with the Firecracker runtime and 3000 with the pod runtime, because Firecracker sandboxes do much more disk I/O than pods."
+  default     = null
 
   validation {
-    condition     = var.craft_sandbox_node_disk_iops >= 3000 && var.craft_sandbox_node_disk_iops <= 80000
+    condition     = var.craft_sandbox_node_disk_iops == null || (var.craft_sandbox_node_disk_iops >= 3000 && var.craft_sandbox_node_disk_iops <= 80000)
     error_message = "craft_sandbox_node_disk_iops must be between 3000 and 80000 (the gp3 range)."
   }
 }
 
 variable "craft_sandbox_node_disk_throughput" {
   type        = number
-  description = "Provisioned throughput (MiB/s) for the gp3 root volume of Craft sandbox nodes. 500 is the tested value for Firecracker sandboxes."
-  default     = 125
+  description = "Provisioned throughput (MiB/s) for the gp3 root volume of Craft sandbox nodes. Null uses 500 (the tested value) with the Firecracker runtime and 125 with the pod runtime."
+  default     = null
 
   validation {
-    condition     = var.craft_sandbox_node_disk_throughput >= 125 && var.craft_sandbox_node_disk_throughput <= 2000
+    condition     = var.craft_sandbox_node_disk_throughput == null || (var.craft_sandbox_node_disk_throughput >= 125 && var.craft_sandbox_node_disk_throughput <= 2000)
     error_message = "craft_sandbox_node_disk_throughput must be between 125 and 2000 MiB/s (the gp3 range)."
   }
 
   # gp3 allows at most 0.25 MiB/s of throughput per provisioned IOPS.
   validation {
-    condition     = var.craft_sandbox_node_disk_throughput <= var.craft_sandbox_node_disk_iops * 0.25
+    condition     = var.craft_sandbox_node_disk_throughput == null || var.craft_sandbox_node_disk_iops == null || var.craft_sandbox_node_disk_throughput <= var.craft_sandbox_node_disk_iops * 0.25
     error_message = "craft_sandbox_node_disk_throughput can be at most craft_sandbox_node_disk_iops * 0.25 (gp3 limit). Raise craft_sandbox_node_disk_iops."
   }
 }
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "How Craft sandboxes run on the sandbox node group. \"pod\" is one container per sandbox. \"firecracker\" labels and taints the group onyx.app/kvm=true (only the host agent and preflight tolerate the taint) and, on non-metal types, turns on nested virtualization so nodes expose /dev/kvm. It needs Intel c8i, m8i or r8i (or -flex) types, or Intel .metal types."
-  default     = "pod"
+  description = "How sandboxes run on the sandbox node group. \"firecracker\" labels and taints the group onyx.app/kvm=true (only the host agent and preflight tolerate the taint) and, on non-metal types, turns on nested virtualization so nodes expose /dev/kvm. It needs Intel c8i, m8i or r8i (or -flex) types, or Intel .metal types. \"pod\" is one container per sandbox. \"auto\" (default) picks \"firecracker\" when every craft_sandbox_node_instance_types entry supports it, else \"pod\"."
+  default     = "auto"
 
   validation {
-    condition     = contains(["pod", "firecracker"], var.craft_sandbox_runtime)
-    error_message = "craft_sandbox_runtime must be \"pod\" or \"firecracker\"."
+    condition     = contains(["auto", "pod", "firecracker"], var.craft_sandbox_runtime)
+    error_message = "craft_sandbox_runtime must be \"auto\", \"pod\" or \"firecracker\"."
   }
 
   # EC2 nested virtualization exists on Intel 8th-generation types only. m7i
@@ -217,12 +217,12 @@ variable "craft_sandbox_runtime" {
 
 variable "enable_craft_pod_sandbox_node_group" {
   type        = bool
-  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox node group (label onyx.app/workload=sandbox, taint workload=sandbox, no onyx.app/kvm). Pod sandboxes and the image prepuller run there, because the Firecracker nodes carry the onyx.app/kvm taint."
+  description = "With the Firecracker runtime, also create a small pod sandbox node group (label onyx.app/workload=sandbox, taint workload=sandbox, no onyx.app/kvm). Pod sandboxes and the image prepuller run there, because the Firecracker nodes carry the onyx.app/kvm taint. Ignored when craft_sandbox_runtime = \"auto\" picks \"pod\"."
   default     = false
 
   validation {
-    condition     = !var.enable_craft_pod_sandbox_node_group || var.craft_sandbox_runtime == "firecracker"
-    error_message = "enable_craft_pod_sandbox_node_group needs craft_sandbox_runtime = \"firecracker\". With the pod runtime, the sandbox node group already runs pod sandboxes."
+    condition     = !var.enable_craft_pod_sandbox_node_group || var.craft_sandbox_runtime != "pod"
+    error_message = "enable_craft_pod_sandbox_node_group needs the Firecracker runtime. With the pod runtime, the sandbox node group already runs pod sandboxes."
   }
 }
 

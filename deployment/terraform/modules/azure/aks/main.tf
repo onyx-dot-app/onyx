@@ -3,7 +3,20 @@ locals {
   # separately from every other pool.
   main_pool = var.node_pools["main"]
 
-  sandbox_firecracker = var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker"
+  # Keep the pattern in sync with the craft_sandbox_runtime validation.
+  sandbox_kvm_capable = can(regex("^standard_[de][0-9]+(-[0-9]+)?[bdilmst]*_v[5-7]$", lower(var.sandbox_node_vm_size)))
+  craft_sandbox_runtime = (
+    var.craft_sandbox_runtime != "auto" ? var.craft_sandbox_runtime :
+    local.sandbox_kvm_capable ? "firecracker" : "pod"
+  )
+  sandbox_firecracker = var.enable_sandbox_node_pool && local.craft_sandbox_runtime == "firecracker"
+  # "auto" picks Firecracker once a node from the KVM pool registers, and
+  # hides chat sandbox tools until then.
+  sandbox_helm_values = yamlencode({
+    craft = {
+      sandboxRuntime = var.enable_sandbox_node_pool && local.craft_sandbox_runtime == "pod" ? "pod" : "auto"
+    }
+  })
   sandbox_node_labels = merge(
     { "onyx.app/workload" = "sandbox" },
     local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},

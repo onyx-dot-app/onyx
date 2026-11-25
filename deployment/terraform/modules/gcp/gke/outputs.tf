@@ -61,7 +61,7 @@ output "workload_service_account_name" {
 # account to exist yet. With the Firecracker runtime the pods act as the
 # Google service account, so grants go to it instead.
 output "workload_identity_principal" {
-  description = "IAM member for the workload service account. Use it as the member of a role binding, for example on a bucket, to grant that access to pods running as the account. With craft_sandbox_runtime = \"firecracker\" this is serviceAccount:<workload_google_service_account_email>."
+  description = "IAM member for the workload service account. Use it as the member of a role binding, for example on a bucket, to grant that access to pods running as the account. With the Firecracker runtime this is serviceAccount:<workload_google_service_account_email>."
   value       = local.workload_google_service_account ? "serviceAccount:${local.workload_google_service_account_email}" : local.workload_principal
 
   # GKE creates the identity pool with the first cluster that enables workload
@@ -72,7 +72,7 @@ output "workload_identity_principal" {
 }
 
 output "workload_google_service_account_email" {
-  description = "Google service account the workload service account maps to, which signs GCS URLs. Null unless craft_sandbox_runtime = \"firecracker\" with the sandbox pool on."
+  description = "Google service account the workload service account maps to, which signs GCS URLs. Null unless the sandbox pool is on with the Firecracker runtime."
   value       = local.workload_google_service_account ? local.workload_google_service_account_email : null
 
   # The workload identity and signBlob grants must exist before pods use it.
@@ -80,4 +80,14 @@ output "workload_google_service_account_email" {
     google_service_account_iam_member.workload_identity_user,
     google_service_account_iam_member.workload_token_creator,
   ]
+}
+
+output "craft_sandbox_runtime" {
+  description = "Sandbox runtime of the sandbox pool: \"firecracker\" or \"pod\". Null when enable_sandbox_node_pool is false."
+  value       = var.enable_sandbox_node_pool ? local.craft_sandbox_runtime : null
+}
+
+output "sandbox_helm_values" {
+  description = "Onyx Helm chart values (YAML) that match the sandbox pool. Pass them with -f. The chart defaults already select and tolerate the node labels and taints this module sets."
+  value       = local.sandbox_helm_values
 }

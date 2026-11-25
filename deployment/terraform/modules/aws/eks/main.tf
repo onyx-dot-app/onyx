@@ -173,7 +173,30 @@ locals {
     }
   } : {}
 
-  craft_sandbox_firecracker       = var.craft_sandbox_runtime == "firecracker"
+  # Keep these patterns in sync with the craft_sandbox_runtime validations.
+  craft_sandbox_nested_types = alltrue([
+    for t in var.craft_sandbox_node_instance_types :
+    can(regex("^(c8i|m8i|r8i)(-flex)?\\.[0-9]*x?large$", t))
+  ])
+  craft_sandbox_metal_types = alltrue([
+    for t in var.craft_sandbox_node_instance_types :
+    can(regex("^[a-z]+[0-9]+[b-fh-z]*\\.metal(-[0-9]+xl)?$", t)) && !startswith(t, "a1.") && !startswith(t, "mac")
+  ])
+  craft_sandbox_kvm_capable = length(var.craft_sandbox_node_instance_types) > 0 && (local.craft_sandbox_nested_types || local.craft_sandbox_metal_types)
+  craft_sandbox_runtime = (
+    var.craft_sandbox_runtime != "auto" ? var.craft_sandbox_runtime :
+    local.craft_sandbox_kvm_capable ? "firecracker" : "pod"
+  )
+  craft_sandbox_firecracker     = local.craft_sandbox_runtime == "firecracker"
+  craft_sandbox_disk_iops       = coalesce(var.craft_sandbox_node_disk_iops, local.craft_sandbox_firecracker ? 6000 : 3000)
+  craft_sandbox_disk_throughput = coalesce(var.craft_sandbox_node_disk_throughput, local.craft_sandbox_firecracker ? 500 : 125)
+  # "auto" picks Firecracker once a node from the KVM group registers, and
+  # hides chat sandbox tools until then.
+  sandbox_helm_values = yamlencode({
+    craft = {
+      sandboxRuntime = var.enable_craft && local.craft_sandbox_runtime == "pod" ? "pod" : "auto"
+    }
+  })
   craft_firecracker_max_map_count = 1048576
   craft_firecracker_sysctl_script = <<-EOT
     #!/bin/bash
@@ -239,8 +262,8 @@ locals {
             volume_type           = "gp3"
             encrypted             = true
             delete_on_termination = true
-            iops                  = var.craft_sandbox_node_disk_iops
-            throughput            = var.craft_sandbox_node_disk_throughput
+            iops                  = local.craft_sandbox_disk_iops
+            throughput            = local.craft_sandbox_disk_throughput
           }
         }
       }
@@ -267,7 +290,7 @@ locals {
   # Optional pod sandbox group beside a Firecracker group. It has the same
   # label and taint as a pod-runtime sandbox group but no onyx.app/kvm, so pod
   # sandboxes and the image prepuller land here and not on the KVM nodes.
-  craft_pod_sandbox_node_groups = var.enable_craft && var.enable_craft_pod_sandbox_node_group ? {
+  craft_pod_sandbox_node_groups = var.enable_craft && local.craft_sandbox_firecracker && var.enable_craft_pod_sandbox_node_group ? {
     sandbox_pod = {
       name             = "sandbox-pod-group"
       instance_types   = var.craft_pod_sandbox_node_instance_types
@@ -293,6 +316,18 @@ locals {
       tags = local.craft_sandbox_autoscaler_tags
     }
   } : {}
+}
+
+# The variable validation skips this when either value is null (resolved per runtime).
+resource "terraform_data" "craft_sandbox_disk_check" {
+  count = var.enable_craft ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.craft_sandbox_disk_throughput <= local.craft_sandbox_disk_iops * 0.25
+      error_message = "The sandbox node disk throughput (${local.craft_sandbox_disk_throughput} MiB/s) can be at most its IOPS (${local.craft_sandbox_disk_iops}) * 0.25 (gp3 limit). Set craft_sandbox_node_disk_iops higher or craft_sandbox_node_disk_throughput lower."
+    }
+  }
 }
 
 module "eks" {

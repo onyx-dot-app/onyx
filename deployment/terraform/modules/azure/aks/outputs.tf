@@ -89,3 +89,13 @@ output "client_key" {
   value       = try(azurerm_kubernetes_cluster.this.kube_config[0].client_key, null)
   sensitive   = true
 }
+
+output "craft_sandbox_runtime" {
+  description = "Sandbox runtime of the sandbox pool: \"firecracker\" or \"pod\". Null when enable_sandbox_node_pool is false."
+  value       = var.enable_sandbox_node_pool ? local.craft_sandbox_runtime : null
+}
+
+output "sandbox_helm_values" {
+  description = "Onyx Helm chart values (YAML) that match the sandbox pool. Pass them with -f. The chart defaults already select and tolerate the node labels and taints this module sets."
+  value       = local.sandbox_helm_values
+}

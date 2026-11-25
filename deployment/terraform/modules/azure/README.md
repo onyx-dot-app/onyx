@@ -183,7 +183,8 @@ attaches to the subnets that opt into it, so egress keeps one address.
 ### `aks`
 
 An AKS cluster with the OIDC issuer and workload identity on, a system pool, a
-document-index pool, and optional GPU and Craft sandbox pools. Given a list of
+document-index pool, a sandbox pool (on by default, Firecracker on the default
+VM size), and an optional GPU pool. Given a list of
 storage accounts it creates a managed identity, federates it to a Kubernetes
 service account, and grants it blob data access.
 
@@ -435,20 +436,40 @@ system pool and skip this.
 
 ## Craft sandboxes on Firecracker
 
-`craft_sandbox_runtime = "firecracker"` prepares the sandbox nodes for Craft
-Firecracker microVMs, which need `/dev/kvm`. The chart value
-`craft.sandboxRuntime: firecracker` then runs the Firecracker host agent on
-these nodes. Opencode sessions still run as pods, so add a pod sandbox pool
-too. Set both on the composition:
+Chat sandbox tools and Craft run each sandbox as a Firecracker microVM, which
+needs `/dev/kvm`. The defaults make a Firecracker sandbox pool:
 
 ```hcl
-enable_sandbox_node_pool           = true
-craft_sandbox_runtime              = "firecracker"
-sandbox_node_vm_size               = "Standard_D8ds_v5"
+enable_sandbox_node_pool = true               # default
+craft_sandbox_runtime    = "auto"             # default
+sandbox_node_vm_size     = "Standard_D8ds_v5" # default
+```
+
+`"auto"` picks `"firecracker"` on an Intel D or E v5, v6 or v7
+`sandbox_node_vm_size`, and `"pod"` on other sizes. Set `"firecracker"` to make
+the plan fail on a size that cannot run it. Set `"pod"` to keep a pod sandbox
+pool. Set `enable_sandbox_node_pool = false` for no sandbox nodes. Opencode
+Craft sessions still run as pods, so add a pod sandbox pool if you use them:
+
+```hcl
 enable_craft_pod_sandbox_node_pool = true
 ```
 
-With `"firecracker"`, the `aks` module:
+The `craft_sandbox_runtime` output gives the runtime that the module picked.
+The `sandbox_helm_values` output gives the Onyx chart values that match it, so
+you set the runtime in Terraform only:
+
+```bash
+terraform output -raw sandbox_helm_values > sandbox-values.yaml
+helm upgrade --install onyx onyx/onyx -n onyx -f values.yaml -f sandbox-values.yaml
+```
+
+For a Firecracker pool the output is `craft.sandboxRuntime: auto`, the chart
+default. The chart then runs the host agent on the `onyx.app/kvm=true` nodes.
+The chart defaults select and tolerate the labels and taints below, so you set
+no node values.
+
+With the Firecracker runtime, the `aks` module:
 
 - sets the sandbox pool OS to `Ubuntu2404`;
 - adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`.
@@ -471,12 +492,20 @@ The `aks` module names this pool `sandboxpod`. It has the label
 match the chart's `sandboxPod` defaults, so you set no extra values. The OS
 disk is `sandbox_node_disk_size_gb`. One pod sandbox requests about 1.1 vCPU,
 2.3 GiB of memory and 5.5 GiB of ephemeral storage. The flag needs
-`enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`.
+`enable_sandbox_node_pool = true` and a runtime other than `"pod"`. When
+`"auto"` picks `"pod"`, the module does not make this pool.
 
-The default, `"pod"`, keeps the AKS default `Ubuntu` image. A change to
-`craft_sandbox_runtime` changes the pool OS, so AKS replaces the sandbox nodes
-(through the pool's temporary rotation name). Pod sandboxes on the old nodes
-stop when AKS drains them, and new pod sandboxes go to the pod sandbox pool.
+The pod runtime keeps the AKS default `Ubuntu` image. A change of the picked
+runtime changes the pool OS, so AKS replaces the sandbox nodes (through the
+pool's temporary rotation name). Pod sandboxes on the old nodes stop when AKS
+drains them, and new pod sandboxes go to the pod sandbox pool.
+
+**Onyx v6: the sandbox pool is on by default.** `enable_sandbox_node_pool` now
+defaults to true and `craft_sandbox_runtime` to `"auto"`. Before you apply:
+
+- For no sandbox nodes, set `enable_sandbox_node_pool = false`.
+- To keep an existing pod sandbox pool, set `craft_sandbox_runtime = "pod"`.
+  Otherwise AKS replaces the pool nodes.
 
 `Ubuntu2404` needs `azurerm` 4.67 or later. The `aks` and `onyx` modules
 require `>= 4.67, < 5.0`; run `terraform init -upgrade` if your lock file pins
@@ -493,8 +522,9 @@ Node requirements:
 | OS | `Ubuntu2404` (set by the module) | — |
 | Pool | — | Pod Sandboxing (Kata) pools |
 
-The module refuses a blocked VM size. These setups must keep
-`craft_sandbox_runtime = "pod"`:
+With `"firecracker"`, the module refuses a blocked VM size. `"auto"` gives the
+pod runtime to AMD and Arm sizes. Set `craft_sandbox_runtime = "pod"` on these
+setups:
 
 - AMD or Arm VM sizes.
 - Kata (Pod Sandboxing) pools. Their pods get no `/dev/kvm`.
