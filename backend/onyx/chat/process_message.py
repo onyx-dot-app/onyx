@@ -237,6 +237,7 @@ def _select_models(
             llm_override=override,
             additional_headers=litellm_additional_headers,
             policy_fn=incognito_policy_fn,
+            db_session=db_session,
         )
         check_llm_cost_limit_for_provider(
             db_session=db_session,
