@@ -178,6 +178,8 @@ export default function AddIntegrationModal({
     prefill?.transport ?? "STREAMABLE_HTTP"
   );
   const [endpoints, setEndpoints] = useState("");
+  // The base URL of a spec with no single server URL.
+  const [baseUrl, setBaseUrl] = useState("");
   const [lineErrors, setLineErrors] = useState<EndpointLineError[]>([]);
   const [orgCredentials, setOrgCredentials] = useState<Record<string, string>>(
     {}
@@ -284,6 +286,7 @@ export default function AddIntegrationModal({
       setStep("connect");
       return;
     }
+    if (detected.shape === "openapi") setBaseUrl(detected.view.base_url);
     // Most APIs take a key; the method is ready for a later choice of sign-in.
     enterSetup(detected, { ...DEFAULT_SIGN_IN, authMethod: "api_key" });
   }
@@ -323,13 +326,18 @@ export default function AddIntegrationModal({
           ? { shape: "mcp_server", server_url: serverUrl, transport }
           : null;
       }
-      case "openapi":
+      case "openapi": {
+        const base = detection.baseUrlGuessed
+          ? normalizedUrl(baseUrl) && baseUrl.trim()
+          : detection.view.base_url;
+        if (!base) return null;
         return {
           shape: "openapi",
           openapi_document: detection.view.openapi_document,
-          base_url: detection.view.base_url,
+          base_url: base,
           endpoints: detection.view.endpoints,
         };
+      }
       case "rest": {
         const lines = endpoints.split("\n");
         if (!lines.some((line) => line.trim())) return null;
@@ -613,6 +621,24 @@ export default function AddIntegrationModal({
               ))}
             </Section>
           </Collapsible>
+        )}
+        {found.shape === "openapi" && found.baseUrlGuessed && (
+          <InputVertical
+            title={t("rest.baseUrl.title")}
+            error={
+              showErrors && !normalizedUrl(baseUrl)
+                ? t("rest.baseUrl.required")
+                : undefined
+            }
+          >
+            <InputTypeIn
+              aria-label={t("rest.baseUrl.title")}
+              placeholder={t("rest.baseUrl.placeholder")}
+              value={baseUrl}
+              variant={busy ? "disabled" : "primary"}
+              onChange={(event) => setBaseUrl(event.target.value)}
+            />
+          </InputVertical>
         )}
         {found.shape === "preset" && (
           <CredentialFieldInputs

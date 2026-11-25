@@ -8,7 +8,13 @@ import { normalizedUrl } from "@/sections/integrations/signIn";
 
 /** What the Add flow found at a URL or in an uploaded spec. */
 export type DetectedApi =
-  | { shape: "openapi"; view: OpenApiConfigView }
+  | {
+      shape: "openapi";
+      view: OpenApiConfigView;
+      /** The spec names no single server URL, so Onyx guessed the base URL
+       * for the admin to check. */
+      baseUrlGuessed: boolean;
+    }
   | { shape: "rest"; baseUrl: string }
   | {
       shape: "graphql";
@@ -48,14 +54,16 @@ export async function detectApi(
       : null;
   }
   if (file) {
+    // The URL is the API's base URL here, not where the spec came from.
     const view = await importOpenApiSpec({ openapi_document: file.text });
-    return openApiResult(view, url);
+    return openApiResult(view, url, url ? apiBaseUrl(url) : null);
   }
   if (!url) return null;
   try {
     const result = openApiResult(
       await importOpenApiSpec({ spec_url: url }),
-      url
+      url,
+      null
     );
     if (result) return result;
   } catch (error) {
@@ -66,7 +74,7 @@ export async function detectApi(
   try {
     return graphqlResult(await introspectGraphQL(url));
   } catch {
-    return { shape: "rest", baseUrl: url };
+    return { shape: "rest", baseUrl: apiBaseUrl(url) };
   }
 }
 
@@ -83,16 +91,32 @@ export function specBaseUrl(
   specUrl: string | null
 ): string | null {
   if (normalizedUrl(baseUrl) !== null) return baseUrl.trim();
-  return specUrl ? new URL(baseUrl.trim() || "/", specUrl).href : null;
+  return specUrl
+    ? apiBaseUrl(new URL(baseUrl.trim() || "/", specUrl).href)
+    : null;
 }
 
+/** The tool appends paths that start with "/", so drop a trailing one. */
+function apiBaseUrl(url: string): string {
+  return url.replace(/\/+$/, "");
+}
+
+/** The spec's server URL resolved against `url`. A spec with no single
+ * server URL takes `fallback`, else the root of `url`. */
 function openApiResult(
   view: OpenApiConfigView,
-  url: string | null
+  url: string | null,
+  fallback: string | null
 ): DetectedApi | null {
-  const baseUrl = specBaseUrl(view.base_url, url);
+  const baseUrlGuessed = !view.base_url.trim();
+  const baseUrl =
+    (baseUrlGuessed ? fallback : null) ?? specBaseUrl(view.base_url, url);
   return baseUrl
-    ? { shape: "openapi", view: { ...view, base_url: baseUrl } }
+    ? {
+        shape: "openapi",
+        view: { ...view, base_url: baseUrl },
+        baseUrlGuessed,
+      }
     : null;
 }
 

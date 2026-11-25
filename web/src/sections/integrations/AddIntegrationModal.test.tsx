@@ -456,6 +456,95 @@ describe("Custom API", () => {
     expect(await screen.findByText(skipped)).toBeInTheDocument();
   });
 
+  test("an uploaded spec with no server takes the URL as its base URL", async () => {
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": {
+        shape: "openapi",
+        openapi_document: "{}",
+        base_url: "",
+        endpoints: ["GET /pets List pets"],
+        skipped: [],
+      },
+      "POST /api/admin/integrations": makeDetail({ id: 15 }),
+      "/api/admin/integrations": [],
+    });
+    const { user } = open({ kind: "api" });
+    // jsdom's File has no text().
+    const spec = Object.assign(
+      new File(["{}"], "openapi.json", { type: "application/json" }),
+      { text: async () => "{}" }
+    );
+    await user.upload(screen.getByLabelText(add.api.upload.label), spec);
+    await screen.findByText(
+      add.api.upload.chosen.replace("{file}", "openapi.json")
+    );
+    await fillConnect(
+      user,
+      "Pets",
+      add.api.url.title,
+      "https://pets.example.com/api/v2/"
+    );
+    const baseUrl = await screen.findByRole("textbox", {
+      name: add.rest.baseUrl.title,
+    });
+    expect(baseUrl).toHaveValue("https://pets.example.com/api/v2");
+    await submit(user);
+
+    await waitFor(() =>
+      expect(
+        requestBody(fetchMock, "POST", "/api/admin/integrations")
+      ).toMatchObject({
+        config: {
+          shape: "openapi",
+          base_url: "https://pets.example.com/api/v2",
+        },
+      })
+    );
+  });
+
+  test("a spec with several servers asks which base URL to call", async () => {
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": {
+        shape: "openapi",
+        openapi_document: "{}",
+        base_url: "",
+        endpoints: ["GET /pets List pets"],
+        skipped: [],
+      },
+      "POST /api/admin/integrations": makeDetail({ id: 16 }),
+      "/api/admin/integrations": [],
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Pets",
+      add.api.url.title,
+      "https://pets.example.com/specs/openapi.json"
+    );
+    const baseUrl = await screen.findByRole("textbox", {
+      name: add.rest.baseUrl.title,
+    });
+    expect(baseUrl).toHaveValue("https://pets.example.com");
+    await user.clear(baseUrl);
+    await submit(user);
+    expect(
+      await screen.findByText(add.rest.baseUrl.required)
+    ).toBeInTheDocument();
+    await user.type(baseUrl, "https://staging.pets.example.com/v1");
+    await submit(user);
+
+    await waitFor(() =>
+      expect(
+        requestBody(fetchMock, "POST", "/api/admin/integrations")
+      ).toMatchObject({
+        config: {
+          shape: "openapi",
+          base_url: "https://staging.pets.example.com/v1",
+        },
+      })
+    );
+  });
+
   test("a spec that Onyx cannot add shows its error at the URL", async () => {
     const fetchMock = mockFetch({
       "POST /api/admin/integrations/openapi-import": () =>
@@ -499,7 +588,8 @@ describe("Custom API", () => {
       user,
       "Billing",
       add.api.url.title,
-      "https://billing.example.com/api"
+      // No path: the base URL must not end in "/".
+      "https://billing.example.com"
     );
     expect(await screen.findByText(add.detected.rest)).toBeInTheDocument();
     await submit(user);
@@ -525,7 +615,7 @@ describe("Custom API", () => {
           config: {
             shape: "openapi",
             openapi_document: null,
-            base_url: "https://billing.example.com/api",
+            base_url: "https://billing.example.com",
             endpoints: [
               "GET /invoices?status List invoices",
               "POST /invoices Create an invoice",
