@@ -4,7 +4,9 @@ import { getLanguageFromPath } from "@/lib/codeHighlight/language";
 
 const FENCE_TITLE_ATTR_REGEX =
   /(?:^|\s)(?:title|file(?:name)?)=(?:"([^"]+)"|'([^']+)'|(\S+))/i;
-const FENCE_FILENAME_TOKEN_REGEX = /^[\w@][\w@./-]*\.[A-Za-z0-9]+$/;
+// `src/a.ts`, `./src/a.ts`, or a dotfile such as `.gitignore`.
+const FENCE_FILENAME_TOKEN_REGEX =
+  /^(?:[\w@.][\w@./-]*\.[A-Za-z0-9]+|\.[\w-]+)$/;
 
 export interface CodeFence {
   /** The highlighter language, or undefined for untagged code. */

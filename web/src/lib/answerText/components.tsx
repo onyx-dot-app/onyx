@@ -21,12 +21,8 @@ import {
   SvgLightbulbSimple,
   SvgXOctagon,
 } from "@opal/icons";
-import { Content } from "@opal/layouts";
-import type {
-  IconFunctionComponent,
-  IconProps,
-  StatusColor,
-} from "@opal/types";
+import { Content, Section } from "@opal/layouts";
+import type { IconFunctionComponent, StatusColor } from "@opal/types";
 import { cn } from "@opal/utils";
 import {
   MemoizedLink,
@@ -36,11 +32,17 @@ import { ScrollableTable } from "@/lib/timeline/chat/message/messageComponents/m
 import { tableToCopyContent } from "@/lib/timeline/chat/message/tableCopyUtils";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
-import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
+import {
+  RESPONSE_CURSOR_ANCHOR_ATTRIBUTE,
+  rehypeStreamingCursor,
+} from "@/lib/rehypeStreamingCursor";
 import { useInResponse } from "@/lib/timeline/components/Response";
 import { CodeBlockBody } from "@/lib/timeline/components/bodies/CodeBlockBody";
 import { prepareAnswerMarkdown } from "@/lib/answerText/utils";
-import { splitMarkdownBlocks } from "@/lib/answerText/streamBlocks";
+import {
+  endsInOpenCodeFence,
+  splitMarkdownBlocks,
+} from "@/lib/answerText/streamBlocks";
 import { remarkDetails } from "@/lib/answerText/remarkDetails";
 import { remarkGithubAlerts } from "@/lib/answerText/remarkGithubAlerts";
 import { parseCodeFence } from "@/lib/answerText/codeFence";
@@ -184,15 +186,6 @@ function AnswerBlockquote({
   );
 }
 
-function DetailsChevron({ className, ...props }: IconProps) {
-  return (
-    <SvgChevronRight
-      {...props}
-      className={cn(className, "transition-transform group-open:rotate-90")}
-    />
-  );
-}
-
 /** `<details>` from `remarkDetails`: a native disclosure. */
 function AnswerDetails({
   node: _node,
@@ -201,7 +194,14 @@ function AnswerDetails({
   ...rest
 }: React.ComponentProps<"details"> & ExtraProps) {
   return (
-    <details {...rest} className={cn(className, "group my-4")}>
+    <details
+      {...rest}
+      // Child combinators, so an open block never turns a nested block's chevron.
+      className={cn(
+        className,
+        "my-4 [&>summary_svg]:transition-transform [&[open]>summary_svg]:rotate-90"
+      )}
+    >
       {children}
     </details>
   );
@@ -211,7 +211,7 @@ function AnswerSummary({ node }: React.ComponentProps<"summary"> & ExtraProps) {
   return (
     <summary className="not-prose list-none cursor-pointer [&::-webkit-details-marker]:hidden">
       <Content
-        icon={DetailsChevron}
+        icon={SvgChevronRight}
         title={node ? textOf(node.children) : ""}
         font="main-ui-action"
         width="fit"
@@ -220,36 +220,59 @@ function AnswerSummary({ node }: React.ComponentProps<"summary"> & ExtraProps) {
   );
 }
 
-/** A GFM task list item: no bullet; its checkbox is `TaskCheckbox`. */
+/**
+ * The checkbox GFM puts first in a task item, or first in its paragraph
+ * when the list is loose.
+ */
+function taskCheckbox(item: Element | undefined): Element | undefined {
+  const first = item?.children.find(
+    (child): child is Element => child.type === "element"
+  );
+  const box =
+    first?.tagName === "p"
+      ? first.children.find(
+          (child): child is Element => child.type === "element"
+        )
+      : first;
+  return box?.tagName === "input" ? box : undefined;
+}
+
+/**
+ * A GFM task item: a read-only checkbox and no bullet. The checkbox sits
+ * beside the item's content, not inside its paragraph, because the Opal
+ * checkbox is a block element.
+ */
 function AnswerListItem({
-  node: _node,
+  node,
   className,
   children,
   ...rest
 }: React.ComponentProps<"li"> & ExtraProps) {
+  const box = taskCheckbox(node);
+  if (!box) {
+    return (
+      <li {...rest} className={className}>
+        {children}
+      </li>
+    );
+  }
   return (
-    <li
-      {...rest}
-      className={cn(
-        className,
-        className?.includes("task-list-item") && "list-none"
-      )}
-    >
-      {children}
+    <li {...rest} className={cn(className, "list-none")}>
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        alignItems="start"
+        gap={2}
+        height="auto"
+      >
+        <div className="mt-1">
+          <InputCheckbox checked={box.properties.checked === true} disabled />
+        </div>
+        <div className="min-w-0 grow [&>:first-child]:mt-0 [&>:last-child]:mb-0">
+          {children}
+        </div>
+      </Section>
     </li>
-  );
-}
-
-/** GFM renders a task's box as a disabled input; show it read-only. */
-function TaskCheckbox({
-  type,
-  checked,
-}: React.ComponentProps<"input"> & ExtraProps) {
-  if (type !== "checkbox") return null;
-  return (
-    <span className="-ms-6 me-2 inline-block align-middle">
-      <InputCheckbox checked={checked === true} disabled />
-    </span>
   );
 }
 
@@ -259,7 +282,8 @@ const BASE_COMPONENTS: Components = {
   details: AnswerDetails,
   summary: AnswerSummary,
   li: AnswerListItem,
-  input: TaskCheckbox,
+  // GFM's task box: `AnswerListItem` draws it.
+  input: () => null,
   p: ({ dir, children }) => (
     <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
   ),
@@ -318,7 +342,7 @@ interface AnswerMarkdownProps {
  * Answer text, the same in chat and Craft: one markdown pipeline (GFM, `$$`
  * math, per-block direction), one look (`prose prose-onyx` on the main
  * content font), code blocks as `CodeBlockBody`, and the streaming cursor.
- * While streaming, finished blocks keep their render and only the last block
+ * Each block renders on its own, so while streaming only the last block
  * re-renders.
  */
 export function AnswerMarkdown({
@@ -328,21 +352,27 @@ export function AnswerMarkdown({
   components,
 }: AnswerMarkdownProps) {
   const inResponse = useInResponse();
-  const lastBlockRehypePlugins = useMemo<PluggableList>(
-    () =>
-      cursor
-        ? [...REHYPE_PLUGINS, [rehypeStreamingCursor, { anchor: inResponse }]]
-        : REHYPE_PLUGINS,
-    [cursor, inResponse]
-  );
   const markdownComponents = useMemo<Components>(
     () => ({ ...BASE_COMPONENTS, ...components }),
     [components]
   );
   const markdown = useMemo(() => prepareAnswerMarkdown(content), [content]);
-  const blocks = (streaming ? splitMarkdownBlocks(markdown) : null) ?? [
-    markdown,
-  ];
+  // Split finished answers too: a block that changes parent on completion
+  // remounts and loses its state, such as a code block's wrap choice.
+  const blocks = useMemo(
+    () => splitMarkdownBlocks(markdown) ?? [markdown],
+    [markdown]
+  );
+  // The cursor would sit under an open code block, as code never holds it.
+  const cursorHidden =
+    cursor && endsInOpenCodeFence(blocks[blocks.length - 1] ?? "");
+  const lastBlockRehypePlugins = useMemo<PluggableList>(
+    () =>
+      cursor && !cursorHidden
+        ? [...REHYPE_PLUGINS, [rehypeStreamingCursor, { anchor: inResponse }]]
+        : REHYPE_PLUGINS,
+    [cursor, cursorHidden, inResponse]
+  );
 
   return (
     <StreamingContext.Provider value={streaming}>
@@ -367,6 +397,11 @@ export function AnswerMarkdown({
             }
           />
         ))}
+        {/* The response's cursor fades out here instead of holding its
+            place above the code. */}
+        {cursorHidden && inResponse && (
+          <span hidden {...{ [RESPONSE_CURSOR_ANCHOR_ATTRIBUTE]: "hidden" }} />
+        )}
       </div>
     </StreamingContext.Provider>
   );
