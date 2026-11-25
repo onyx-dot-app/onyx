@@ -52,15 +52,21 @@ def test_concurrent_cache_misses_load_one_tokenizer(
 
     first = threading.Thread(target=load)
     second = threading.Thread(target=load)
-    first.start()
-    assert load_started.wait(_TIMEOUT_S)
-    second.start()
-    # The second thread must wait for the lock while the first one loads.
-    assert spy_lock.requests.acquire(timeout=_TIMEOUT_S)
-    assert spy_lock.requests.acquire(timeout=_TIMEOUT_S)
-    finish_load.set()
-    first.join(_TIMEOUT_S)
-    second.join(_TIMEOUT_S)
+    started: list[threading.Thread] = []
+    try:
+        first.start()
+        started.append(first)
+        assert load_started.wait(_TIMEOUT_S)
+        second.start()
+        started.append(second)
+        # The second thread must wait for the lock while the first one loads.
+        assert spy_lock.requests.acquire(timeout=_TIMEOUT_S)
+        assert spy_lock.requests.acquire(timeout=_TIMEOUT_S)
+    finally:
+        # No thread may run after the fixture puts the globals back.
+        finish_load.set()
+        for thread in started:
+            thread.join(_TIMEOUT_S)
 
     assert loads == [_MODEL]
     assert len(results) == 2
