@@ -12832,7 +12832,17 @@
             "runningUnnamed": "サブエージェントを中断中",
             "doneUnnamed": "サブエージェントを中断しました",
             "failedUnnamed": "サブエージェントを中断できませんでした"
-          }
+          },
+          "open": "エージェントを開く"
+        },
+        "agentGroup": {
+          "title": "{count, plural, other {# 件のサブエージェント}}",
+          "working": "{count, number} 件作業中",
+          "done": "完了",
+          "failed": "{count, plural, other {# 件失敗}}",
+          "activity": "{tool} を使用中",
+          "running": "実行中",
+          "open": "{name} を開く"
         }
       },
       "toolApproval": {
@@ -13587,6 +13597,10 @@
       },
       "resizeHandle": {
         "label": "パネルのサイズを変更"
+      },
+      "agentTab": {
+        "failed": "このエージェントの会話を読み込めませんでした。",
+        "empty": "このエージェントにはまだメッセージがありません。"
       }
     },
     "export": {

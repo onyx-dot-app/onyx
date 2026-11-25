@@ -25,6 +25,8 @@ function agent(path: string, status: ChatSubagent["status"]): ChatSubagent {
     status,
     stopped_by_user: false,
     started_at: null,
+    stream_id: null,
+    activity_tool: null,
   };
 }
 
@@ -327,6 +329,25 @@ test("each live agent has its own Stop, which stops only that agent", async () =
   expect(stops[0]?.[1]?.method).toBe("POST");
   expect(stops[0]?.[1]?.body).toBe(JSON.stringify({ agent_id: "/root/poet" }));
   expect(screen.getByRole("button", { name: "Stop critic" })).toBeVisible();
+  // Stop does not open the agent
+  expect(
+    useChatSessionStore.getState().sessions.get("s")?.rightPanel.agentTabs
+  ).toEqual([]);
+});
+
+test("an agent row opens the agent's transcript in the right panel", async () => {
+  serve([agent("/root/poet", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  renderActivity();
+  const trigger = await screen.findByRole("button", { name: "Activity" });
+  act(() => trigger.click());
+  act(() => screen.getByText("poet").click());
+
+  const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
+  expect(panel?.mode).not.toBe("closed");
+  expect(panel?.activeId).toBe("agent:/root/poet");
 });
 
 test("a live agent shows its run time and no status word; a finished one its outcome only", async () => {

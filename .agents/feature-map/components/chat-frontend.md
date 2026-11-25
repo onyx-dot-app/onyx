@@ -946,6 +946,26 @@ overlaid `Hoverable.Item`s, so the Stop stays in the tab order; a touch screen
 shows the Stop): `useChatSubagents().stopAgent` posts
 `/api/chat/chat-session/{id}/stop-subagents` with `{ "agent_id": ... }`, then
 reloads the status and the list. A finished row shows its outcome and no time.
+A row opens the agent in the right panel (`lib/chat/subagents.ts:openSubagent`).
+
+**Subagent tabs.** `lib/chat/rightPanel.ts` keeps `agentTabs` after the file
+tabs (`agent:{id}`, action `openAgent`); they follow the same tab rules and
+count as Files-side tabs, so the panel stays open on them.
+`sections/chat/SubagentTranscript.tsx` renders the agent's conversation
+read-only, as the shared view does (`HumanMessage`, `AgentMessage`), from
+`GET .../agents/{agent_id}/history`. `useSubagentTranscript` follows the live
+stream that the history names (`.../agents/{agent_id}/stream`, one batch of
+packets per frame); its packets replace the running response's saved ones.
+The history reloads when the stream ends or the agents list names another
+`stream_id`. `SubagentBar` shows the agent's path, run time and Stop over the
+tab. `SubagentPathContext` gives the path of the agent whose conversation
+renders, so its spawns resolve to `{path}/{name}`. In the timeline, a spawn
+step whose agent the list holds has an open button
+(`lib/timeline/chat/renderers/agent/AgentToolRenderer.tsx`), and consecutive spawns of one turn
+form one step (`lib/timeline/chat/transformers.ts:groupSpawnSteps`) that
+`lib/timeline/chat/renderers/agent/AgentGroupRenderer.tsx` draws as T3 Code's subagent card: the
+count, how many work (blue), the group's run time, and a row per agent with its
+current activity (`activity_tool`) or task, which opens it.
 The card portals into the page column's
 `activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
 at the chat region's top end, so the header keeps its width and buttons. With

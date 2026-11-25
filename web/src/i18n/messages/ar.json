@@ -12832,7 +12832,17 @@
             "runningUnnamed": "جارٍ إيقاف الوكيل الفرعي",
             "doneUnnamed": "تم إيقاف الوكيل الفرعي",
             "failedUnnamed": "تعذّر إيقاف الوكيل الفرعي"
-          }
+          },
+          "open": "فتح الوكيل"
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {وكيل فرعي واحد} other {# وكلاء فرعيون}}",
+          "working": "{count, number} قيد العمل",
+          "done": "تم",
+          "failed": "{count, plural, one {فشل واحد} other {فشل #}}",
+          "activity": "يستخدم {tool}",
+          "running": "قيد التشغيل",
+          "open": "فتح {name}"
         }
       },
       "toolApproval": {
@@ -13587,6 +13597,10 @@
       },
       "resizeHandle": {
         "label": "تغيير حجم اللوحة"
+      },
+      "agentTab": {
+        "failed": "تعذّر تحميل محادثة هذا الوكيل.",
+        "empty": "لا توجد رسائل لهذا الوكيل بعد."
       }
     },
     "export": {

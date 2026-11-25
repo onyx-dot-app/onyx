@@ -3,6 +3,7 @@ import {
   RIGHT_PANEL_FILES_TAB,
   openCardFileAction,
   RIGHT_PANEL_SOURCES_TAB,
+  rightPanelAgentTab,
   rightPanelFileTab,
   rightPanelReducer,
   showsFiles,
@@ -240,4 +241,34 @@ describe("rightPanelReducer", () => {
     state = rightPanelReducer(state, showFiles);
     expect(state.mode).toBe("medium");
   });
+});
+
+test("a subagent opens in its own tab after the file tabs, and closing it goes back", () => {
+  const opened = apply(openFile("a"), {
+    type: "openAgent",
+    agentId: "agent-1",
+    name: "researcher",
+  });
+  expect(opened.activeId).toBe(rightPanelAgentTab("agent-1"));
+  expect(opened.agentTabs).toEqual([
+    { agentId: "agent-1", name: "researcher" },
+  ]);
+  expect(opened.fileTabs).toHaveLength(1);
+  // The agent tab keeps the panel open, as the Files tabs do
+  expect(showsFiles(opened)).toBe(true);
+  // Opening it again only shows it
+  expect(
+    rightPanelReducer(opened, {
+      type: "openAgent",
+      agentId: "agent-1",
+      name: "researcher",
+    }).agentTabs
+  ).toHaveLength(1);
+
+  const closed = rightPanelReducer(opened, {
+    type: "closeTab",
+    tabId: rightPanelAgentTab("agent-1"),
+  });
+  expect(closed.agentTabs).toEqual([]);
+  expect(closed.activeId).toBe(FILE_A);
 });

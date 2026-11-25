@@ -12832,7 +12832,17 @@
             "runningUnnamed": "正在中断子代理",
             "doneUnnamed": "已中断子代理",
             "failedUnnamed": "无法中断子代理"
-          }
+          },
+          "open": "打开智能体"
+        },
+        "agentGroup": {
+          "title": "{count, plural, other {# 个子智能体}}",
+          "working": "{count, number} 个工作中",
+          "done": "完成",
+          "failed": "{count, plural, other {# 个失败}}",
+          "activity": "正在使用 {tool}",
+          "running": "运行中",
+          "open": "打开 {name}"
         }
       },
       "toolApproval": {
@@ -13587,6 +13597,10 @@
       },
       "resizeHandle": {
         "label": "调整面板大小"
+      },
+      "agentTab": {
+        "failed": "无法加载此智能体的对话。",
+        "empty": "此智能体还没有消息。"
       }
     },
     "export": {

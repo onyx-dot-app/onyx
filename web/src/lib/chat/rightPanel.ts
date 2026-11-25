@@ -1,9 +1,10 @@
 /**
  * The state and transitions of the chat's right panel: its mode, its tabs,
  * width, Files search and seen files. The Files list and Sources are fixed
- * tabs before the file tabs, so only the file tabs are stored in order. The
- * Files list and the file tabs follow the output panel's shared tab rules;
- * Sources stands apart. The chat store applies the transitions per chat
+ * tabs before the file tabs, then the subagent tabs, so only the file and
+ * subagent tabs are stored in order. The Files list, the file tabs and the
+ * subagent tabs follow the output panel's shared tab rules; Sources stands
+ * apart. The chat store applies the transitions per chat
  * session; the shared view applies them with useReducer.
  */
 import {
@@ -21,6 +22,7 @@ import { artifactKey, newestVersion } from "@/lib/chat/publishedFiles";
 export const RIGHT_PANEL_FILES_TAB = "files";
 export const RIGHT_PANEL_SOURCES_TAB = "sources";
 const FILE_TAB_PREFIX = "file:";
+const AGENT_TAB_PREFIX = "agent:";
 // Session storage of each chat's panel width, as Craft keeps its panel's
 export const CHAT_PANEL_STORAGE_PREFIX = "onyx:chat:output-panel:v1:";
 
@@ -31,7 +33,12 @@ export function rightPanelFileTab(
   return `${FILE_TAB_PREFIX}${artifactKey(file)}`;
 }
 
-/** The Files list or a file's tab, as opposed to Sources. */
+/** The tab ID of a subagent's transcript. */
+export function rightPanelAgentTab(agentId: string): string {
+  return `${AGENT_TAB_PREFIX}${agentId}`;
+}
+
+/** The Files list, a file's or a subagent's tab, as opposed to Sources. */
 function isFilesTab(tabId: string): boolean {
   return tabId !== RIGHT_PANEL_SOURCES_TAB;
 }
@@ -46,21 +53,37 @@ export interface ChatFileTab {
   pinned: boolean;
 }
 
-// The shared tab rules take the Files list's ID and the open files
-type FilesPanelTab = string | ChatFileTab;
+/** An open subagent tab: the agent's live, read-only transcript. */
+export interface ChatAgentTab {
+  agentId: string;
+  // The agent's name, as its path's last part
+  name: string;
+}
+
+// The shared tab rules take the Files list's ID, the open files and the open
+// subagents
+type FilesPanelTab = string | ChatFileTab | ChatAgentTab;
 const idOf = (tab: FilesPanelTab): string =>
-  typeof tab === "string" ? tab : rightPanelFileTab(tab.file);
+  typeof tab === "string"
+    ? tab
+    : "file" in tab
+      ? rightPanelFileTab(tab.file)
+      : rightPanelAgentTab(tab.agentId);
 const isFile = (tab: FilesPanelTab): tab is ChatFileTab =>
-  typeof tab !== "string";
+  typeof tab !== "string" && "file" in tab;
+const isAgent = (tab: FilesPanelTab): tab is ChatAgentTab =>
+  typeof tab !== "string" && "agentId" in tab;
 
 export interface ChatRightPanelState {
   mode: OutputPanelMode;
   // The open file tabs, in order: each with the file that it opened with,
   // also when the Files list does not hold it
   fileTabs: ChatFileTab[];
-  // The active tab: the Files list, Sources or a file tab
+  // The open subagent tabs, in order, after the file tabs
+  agentTabs: ChatAgentTab[];
+  // The active tab: the Files list, Sources, a file or a subagent tab
   activeId: string;
-  // The Files list and the open file tabs by most recent use. It picks the
+  // The Files list and the open file and subagent tabs by most recent use. It picks the
   // tab after a closed one, and the tab that the panel toggle shows again.
   history: string[];
   // The panel's share of the workspace at medium size
@@ -76,6 +99,7 @@ export interface ChatRightPanelState {
 export const INITIAL_RIGHT_PANEL: ChatRightPanelState = {
   mode: "closed",
   fileTabs: [],
+  agentTabs: [],
   activeId: RIGHT_PANEL_SOURCES_TAB,
   history: [],
   proportion: DEFAULT_PANEL_PROPORTION,
@@ -92,6 +116,8 @@ export type ChatRightPanelAction =
   // Opens a file in its artifact's tab, pinned to its version or following
   // the newest
   | ({ type: "openFile" } & ChatFileTab)
+  // Opens a subagent's transcript in its tab
+  | ({ type: "openAgent" } & ChatAgentTab)
   // Hands the active state to the last shown Files tab, as `showFiles`
   | { type: "closeTab"; tabId: string }
   // Moves a file tab to another file tab's place, as a drop on that tab does
@@ -116,7 +142,7 @@ function activate(
     return { ...state, mode, activeId: target };
   const opened = openPanelTab<FilesPanelTab>(
     {
-      tabs: [RIGHT_PANEL_FILES_TAB, ...state.fileTabs],
+      tabs: [RIGHT_PANEL_FILES_TAB, ...state.fileTabs, ...state.agentTabs],
       history: state.history,
     },
     target,
@@ -131,6 +157,7 @@ function activate(
       .map((tab) =>
         isFile(target) && idOf(tab) === idOf(target) ? target : tab
       ),
+    agentTabs: opened.tabs.filter(isAgent),
     activeId: idOf(target),
     history: opened.history,
   };
@@ -138,6 +165,10 @@ function activate(
 
 function isOpenFileTab(state: ChatRightPanelState, tabId: string): boolean {
   return state.fileTabs.some((file) => idOf(file) === tabId);
+}
+
+function isOpenAgentTab(state: ChatRightPanelState, tabId: string): boolean {
+  return state.agentTabs.some((agent) => idOf(agent) === tabId);
 }
 
 function markSeen(
@@ -161,7 +192,8 @@ export function rightPanelReducer(
     case "showTab":
       return action.tabId === RIGHT_PANEL_FILES_TAB ||
         action.tabId === RIGHT_PANEL_SOURCES_TAB ||
-        isOpenFileTab(state, action.tabId)
+        isOpenFileTab(state, action.tabId) ||
+        isOpenAgentTab(state, action.tabId)
         ? activate(state, action.tabId)
         : state;
     case "showFiles":
@@ -172,12 +204,18 @@ export function rightPanelReducer(
         file: action.file,
         pinned: action.pinned,
       });
+    case "openAgent":
+      return activate(state, { agentId: action.agentId, name: action.name });
     case "closeTab": {
-      if (!isOpenFileTab(state, action.tabId)) return state;
+      if (
+        !isOpenFileTab(state, action.tabId) &&
+        !isOpenAgentTab(state, action.tabId)
+      )
+        return state;
       // The Files list leads the tabs, so it is the last tab left
       const closed = closePanelTab<FilesPanelTab>(
         {
-          tabs: [RIGHT_PANEL_FILES_TAB, ...state.fileTabs],
+          tabs: [RIGHT_PANEL_FILES_TAB, ...state.fileTabs, ...state.agentTabs],
           activeId: state.activeId,
           history: state.history,
         },
@@ -187,6 +225,7 @@ export function rightPanelReducer(
       return {
         ...state,
         fileTabs: closed.tabs.filter(isFile),
+        agentTabs: closed.tabs.filter(isAgent),
         activeId: closed.activeId ?? RIGHT_PANEL_FILES_TAB,
         history: closed.history,
       };

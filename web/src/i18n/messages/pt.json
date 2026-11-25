@@ -12832,7 +12832,17 @@
             "runningUnnamed": "Interrompendo o subagente",
             "doneUnnamed": "Subagente interrompido",
             "failedUnnamed": "Não foi possível interromper o subagente"
-          }
+          },
+          "open": "Abrir agente"
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {# subagente} other {# subagentes}}",
+          "working": "{count, number} trabalhando",
+          "done": "Concluído",
+          "failed": "{count, plural, one {# falhou} other {# falharam}}",
+          "activity": "Usando {tool}",
+          "running": "Em execução",
+          "open": "Abrir {name}"
         }
       },
       "toolApproval": {
@@ -13587,6 +13597,10 @@
       },
       "resizeHandle": {
         "label": "Redimensionar painel"
+      },
+      "agentTab": {
+        "failed": "Não foi possível carregar a conversa deste agente.",
+        "empty": "Este agente ainda não tem mensagens."
       }
     },
     "export": {

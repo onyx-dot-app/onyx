@@ -1007,29 +1007,33 @@ const NO_SUBAGENTS: ChatSubagent[] = [];
  * once a list has been read from the server since the hook mounted.
  */
 export function useChatSubagents(
-  sessionId: string,
+  sessionId: string | null,
   streaming: boolean
 ): ChatSubagents {
   const t = useTranslations("chat.activity.agents");
   const { data: status, mutate: reloadStatus } = useSWR<
     ChatSessionStatus,
     Error
-  >(SWR_KEYS.chatSessionStatus(sessionId), errorHandlingFetcher, {
-    // A number while a reply streams: each streamed packet renders the
-    // caller again, and a new function would restart SWR's timer
-    refreshInterval: streaming
-      ? SERVER_WORK_POLL_MS
-      : (current) => statusPollInterval(current),
-    onErrorRetry: skipRetryOnAuthError,
-  });
+  >(
+    sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null,
+    errorHandlingFetcher,
+    {
+      // A number while a reply streams: each streamed packet renders the
+      // caller again, and a new function would restart SWR's timer
+      refreshInterval: streaming
+        ? SERVER_WORK_POLL_MS
+        : (current) => statusPollInterval(current),
+      onErrorRetry: skipRetryOnAuthError,
+    }
+  );
   const active = status?.has_active_subagents ?? false;
-  const url = SWR_KEYS.chatSessionAgents(sessionId);
+  const url = sessionId ? SWR_KEYS.chatSessionAgents(sessionId) : "";
   const {
     data,
     isValidating,
     mutate: reloadAgents,
   } = useSWR<ChatSubagent[], Error>(
-    status ? [url, active, status.latest_response_id] : null,
+    status && sessionId ? [url, active, status.latest_response_id] : null,
     () => errorHandlingFetcher<ChatSubagent[]>(url),
     {
       refreshInterval: active ? SERVER_WORK_POLL_MS : 0,
@@ -1042,6 +1046,7 @@ export function useChatSubagents(
   if (!loaded && data !== undefined && !isValidating) setLoaded(true);
   const stopAgent = useCallback(
     async (agentId: string) => {
+      if (!sessionId) return;
       try {
         await errorHandlingFetchWith<unknown>(
           `/api/chat/chat-session/${sessionId}/stop-subagents`,

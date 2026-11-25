@@ -112,6 +112,10 @@ export interface ChatSubagent {
   stopped_by_user: boolean;
   /** When its current or latest run started, as an ISO date. */
   started_at: string | null;
+  /** The live stream of its running response, while it runs. */
+  stream_id: number | null;
+  /** The tool that its running response last called. */
+  activity_tool: string | null;
 }
 
 /** The chat's background agents, as `useChatSubagents` gives them. */

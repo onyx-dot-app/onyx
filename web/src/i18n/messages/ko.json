@@ -12832,7 +12832,17 @@
             "runningUnnamed": "하위 에이전트 중단 중",
             "doneUnnamed": "하위 에이전트 중단함",
             "failedUnnamed": "하위 에이전트를 중단할 수 없음"
-          }
+          },
+          "open": "에이전트 열기"
+        },
+        "agentGroup": {
+          "title": "{count, plural, other {서브에이전트 #개}}",
+          "working": "{count, number}개 작업 중",
+          "done": "완료",
+          "failed": "{count, plural, other {#개 실패}}",
+          "activity": "{tool} 사용 중",
+          "running": "실행 중",
+          "open": "{name} 열기"
         }
       },
       "toolApproval": {
@@ -13587,6 +13597,10 @@
       },
       "resizeHandle": {
         "label": "패널 크기 조정"
+      },
+      "agentTab": {
+        "failed": "이 에이전트의 대화를 불러올 수 없습니다.",
+        "empty": "이 에이전트에는 아직 메시지가 없습니다."
       }
     },
     "export": {

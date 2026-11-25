@@ -25,7 +25,9 @@ import CustomToolRenderer from "@/lib/timeline/chat/message/messageComponents/re
 import {
   AgentToolRenderer,
   isAgentToolPacket,
+  isSpawnPacket,
 } from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
+import AgentGroupRenderer from "@/lib/timeline/chat/renderers/agent/AgentGroupRenderer";
 import {
   isSkillToolPacket,
   SkillToolRenderer,
@@ -189,6 +191,10 @@ export function findRenderer(
   }
   if (packets.some(isPublishFilesToolPacket)) {
     return PublishFilesToolRenderer;
+  }
+  // Spawns of one turn, which the timeline groups into one step
+  if (packets.filter(isSpawnPacket).length > 1) {
+    return AgentGroupRenderer;
   }
   if (packets.some(isAgentToolPacket)) {
     return AgentToolRenderer;

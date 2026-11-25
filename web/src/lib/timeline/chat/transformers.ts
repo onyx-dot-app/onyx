@@ -1,4 +1,5 @@
 import { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
+import { isSpawnPacket } from "@/lib/timeline/chat/renderers/agent/agentTools";
 import {
   CodeModeProgram,
   NestedCall,
@@ -293,4 +294,36 @@ export function expandCodeModeSteps(
     slots.every((slot) => slot.cellKey !== cellKey || slot.call.complete)
   );
   return { steps: out, codeModeWorking };
+}
+
+/**
+ * Consecutive subagent spawns of one turn as one step, which renders as one
+ * subagent card, as T3 Code groups them. A lone spawn keeps its own step.
+ */
+export function groupSpawnSteps(steps: TransformedStep[]): TransformedStep[] {
+  const grouped: TransformedStep[] = [];
+  let spawns: TransformedStep[] = [];
+  const flush = () => {
+    const [first] = spawns;
+    if (first && spawns.length > 1)
+      grouped.push({
+        ...first,
+        key: `${first.key}-agents`,
+        packets: spawns.flatMap((step) => step.packets),
+        nestedCalls: spawns.flatMap((step) => step.nestedCalls),
+        streamPackets: spawns.flatMap((step) => step.streamPackets),
+      });
+    else grouped.push(...spawns);
+    spawns = [];
+  };
+  for (const step of steps) {
+    if (step.packets.some(isSpawnPacket)) {
+      spawns.push(step);
+      continue;
+    }
+    flush();
+    grouped.push(step);
+  }
+  flush();
+  return grouped;
 }

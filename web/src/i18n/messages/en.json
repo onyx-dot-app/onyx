@@ -12832,7 +12832,17 @@
             "runningUnnamed": "Interrupting subagent",
             "doneUnnamed": "Interrupted subagent",
             "failedUnnamed": "Could not interrupt subagent"
-          }
+          },
+          "open": "Open agent"
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {# subagent} other {# subagents}}",
+          "working": "{count, number} working",
+          "done": "Done",
+          "failed": "{count, plural, one {# failed} other {# failed}}",
+          "activity": "Using {tool}",
+          "running": "Running",
+          "open": "Open {name}"
         }
       },
       "toolApproval": {
@@ -13587,6 +13597,10 @@
       },
       "resizeHandle": {
         "label": "Resize panel"
+      },
+      "agentTab": {
+        "failed": "Could not load this agent's conversation.",
+        "empty": "This agent has no messages yet."
       }
     },
     "export": {

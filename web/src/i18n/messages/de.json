@@ -12832,7 +12832,17 @@
             "runningUnnamed": "Subagent wird unterbrochen",
             "doneUnnamed": "Subagent unterbrochen",
             "failedUnnamed": "Subagent konnte nicht unterbrochen werden"
-          }
+          },
+          "open": "Agent öffnen"
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {# Subagent} other {# Subagenten}}",
+          "working": "{count, number} arbeiten",
+          "done": "Fertig",
+          "failed": "{count, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}",
+          "activity": "Nutzt {tool}",
+          "running": "Läuft",
+          "open": "{name} öffnen"
         }
       },
       "toolApproval": {
@@ -13587,6 +13597,10 @@
       },
       "resizeHandle": {
         "label": "Bereichsgröße ändern"
+      },
+      "agentTab": {
+        "failed": "Das Gespräch dieses Agenten konnte nicht geladen werden.",
+        "empty": "Dieser Agent hat noch keine Nachrichten."
       }
     },
     "export": {
