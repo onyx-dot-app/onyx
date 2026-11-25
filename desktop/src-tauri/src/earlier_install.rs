@@ -204,18 +204,51 @@ pub fn same_install(recorded: Option<&str>, now: Option<&str>) -> bool {
 }
 
 /// The identity of `dir`'s `uninstall.exe`, if it is a plain file.
-fn uninstaller_identity(dir: &str) -> Option<String> {
-    let meta = std::fs::symlink_metadata(Path::new(dir).join("uninstall.exe")).ok()?;
+fn uninstaller_identity(dir: &str) -> Identity {
+    let meta = match std::fs::symlink_metadata(Path::new(dir).join("uninstall.exe")) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Identity::Missing,
+        Err(_) => return Identity::Unreadable,
+    };
     if is_link(&meta) || !meta.is_file() {
-        return None;
+        return Identity::Missing;
     }
-    let modified = meta
+    match meta
         .modified()
-        .ok()?
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_nanos();
-    Some(file_identity(meta.len(), modified))
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+    {
+        Some(modified) => Identity::Found(file_identity(meta.len(), modified.as_nanos())),
+        None => Identity::Unreadable,
+    }
+}
+
+/// What a launch knows about the folder's `uninstall.exe`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Identity {
+    Found(String),
+    /// Gone, or not a plain file (a link, a folder).
+    Missing,
+    /// It could not be read now (for example, access denied).
+    Unreadable,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum RetryDecision {
+    Proceed,
+    /// Another install, or none: drop the record, delete nothing.
+    Drop,
+    /// Try again at the next launch; keep the record.
+    Later,
+}
+
+/// Whether a retry deletes files, drops the record, or waits.
+pub fn retry_decision(recorded: Option<&str>, now: &Identity) -> RetryDecision {
+    match now {
+        Identity::Unreadable => RetryDecision::Later,
+        Identity::Found(now) if same_install(recorded, Some(now)) => RetryDecision::Proceed,
+        _ => RetryDecision::Drop,
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -379,18 +412,29 @@ pub fn retire(app: &tauri::AppHandle) {
     // A retry runs only for the same uninstall.exe that was recorded.
     if from_entry.is_none() {
         if let Some(dir) = &pending {
-            let now = uninstaller_identity(dir);
-            if !same_install(config.earlier_install_id.as_deref(), now.as_deref()) {
-                log::warn!(
+            match retry_decision(
+                config.earlier_install_id.as_deref(),
+                &uninstaller_identity(dir),
+            ) {
+                RetryDecision::Proceed => {}
+                RetryDecision::Later => {
+                    log::warn!(
+                        "could not read the earlier desktop app's uninstaller; the next launch tries again"
+                    );
+                    return;
+                }
+                RetryDecision::Drop => {
+                    log::warn!(
                     "the earlier desktop app's folder changed since it was recorded; left alone"
                 );
-                if let Err(e) = state.config.update(|c| {
-                    c.earlier_install_dir = None;
-                    c.earlier_install_id = None;
-                }) {
-                    log::warn!("could not update the earlier desktop app's record: {e}");
+                    if let Err(e) = state.config.update(|c| {
+                        c.earlier_install_dir = None;
+                        c.earlier_install_id = None;
+                    }) {
+                        log::warn!("could not update the earlier desktop app's record: {e}");
+                    }
+                    return;
                 }
-                return;
             }
         }
     }
@@ -400,7 +444,7 @@ pub fn retire(app: &tauri::AppHandle) {
     for step in plan(from_entry.is_some(), pending.is_some()) {
         match step {
             Step::RecordFolder => {
-                let Some(id) = uninstaller_identity(&dir) else {
+                let Identity::Found(id) = uninstaller_identity(&dir) else {
                     log::warn!(
                         "the earlier desktop app's uninstaller is not a plain file; left alone"
                     );
@@ -568,6 +612,31 @@ mod tests {
         assert!(manufacturer_key_is_earlier(&format!("\"{dir}\""), dir));
         assert!(!manufacturer_key_is_earlier(r"C:\Program Files\Onyx", dir));
         assert!(!manufacturer_key_is_earlier("", dir));
+    }
+
+    #[test]
+    fn a_retry_waits_when_the_uninstaller_cannot_be_read() {
+        let id = file_identity(1, 2);
+        assert_eq!(
+            retry_decision(Some(&id), &Identity::Found(id.clone())),
+            RetryDecision::Proceed
+        );
+        assert_eq!(
+            retry_decision(Some(&id), &Identity::Found(file_identity(1, 3))),
+            RetryDecision::Drop
+        );
+        assert_eq!(
+            retry_decision(Some(&id), &Identity::Missing),
+            RetryDecision::Drop
+        );
+        assert_eq!(
+            retry_decision(Some(&id), &Identity::Unreadable),
+            RetryDecision::Later
+        );
+        assert_eq!(
+            retry_decision(None, &Identity::Found(id)),
+            RetryDecision::Drop
+        );
     }
 
     #[test]

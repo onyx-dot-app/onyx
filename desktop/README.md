@@ -169,7 +169,8 @@ and binary name (`onyx`), so this app takes its place:
      the folder (`earlierInstallDir`) and the size and last write time of its `uninstall.exe`
      (`earlierInstallId`). The next launch tries again only if that `uninstall.exe` is still the
      same file; otherwise, or for a record without that identity, it drops the record and deletes
-     nothing. If `config.json` cannot record the folder, the app stops before
+     nothing. If the file cannot be read (for example, access is denied), the record stays for
+     the next launch. If `config.json` cannot record the folder, the app stops before
      it deletes the uninstall entry, so the next launch starts again from that entry.
 
   An elevated (administrator) process skips this. The earlier app's data folder
