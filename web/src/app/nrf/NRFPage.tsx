@@ -533,7 +533,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   <ChatUI
                     activeAgent={resolvedAgent}
                     llmManager={llmManager}
-                    currentMessageFiles={currentMessageFiles}
                     setPresentingDocument={setPresentingDocument}
                     onSubmit={onSubmit}
                     onMessageSelection={() => {}}

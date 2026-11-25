@@ -926,7 +926,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           deepResearchEnabled={
                             deepResearchEnabledForCurrentWorkflow
                           }
-                          currentMessageFiles={currentMessageFiles}
                           setPresentingDocument={setPresentingDocument}
                           onSubmit={onSubmit}
                           onMessageSelection={onMessageSelection}

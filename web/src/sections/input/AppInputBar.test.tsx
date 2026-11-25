@@ -313,10 +313,11 @@ test("an immediate reload restores draft text and completed uploads", async () =
   mockProjectsContext.currentMessageFiles = [];
   render(<Composer />);
   expect(screen.getByRole("textbox")).toHaveTextContent("unsent text");
-  expect(mockProjectsContext.setCurrentMessageFiles).toHaveBeenCalledWith([
-    projectFile("draft-file"),
-    processing,
-  ]);
+  const restoreFiles =
+    mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+  expect(restoreFiles([])).toEqual([projectFile("draft-file"), processing]);
+  const currentFiles = [projectFile("new-attachment")];
+  expect(restoreFiles(currentFiles)).toBe(currentFiles);
 });
 
 test("keeps the query in the editor when an auto-routed search returns", async () => {

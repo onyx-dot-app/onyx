@@ -24,7 +24,6 @@ import {
   type ProjectFile,
   type UserFileDeleteResult,
 } from "@/lib/projects/types";
-import { isFilePending } from "@/lib/projects/utils";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -563,7 +562,6 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       .filter(
         (f) =>
           f.status !== UserFileStatus.UPLOADING &&
-          isFilePending(f.status) &&
           !autoTrackedIdsRef.current.has(f.id)
       )
       .map((f) => f.id);
