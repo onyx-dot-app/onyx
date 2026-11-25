@@ -35,7 +35,7 @@ import { AnswerMarkdown } from "@/lib/answerText/components";
 import { prefersReducedMotion } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { chatFindTextKey } from "@/lib/chatFind/highlights";
+import { chatFindTextKey } from "@/lib/chatFind/match";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */

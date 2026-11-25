@@ -70,8 +70,10 @@
   near the view so it mounts, then the CSS Custom Highlight API paints the
   matches inside rows marked `data-chat-find-text`
   (`lib/chatFind/highlights.ts`, `lib/chatFind/hooks.ts`). Citation chips and
-  callout titles are marked `data-chat-find-ignore`. A match in a closed
-  `<details>` opens it. A search starts at the top row of the view.
+  callout titles are marked `data-chat-find-ignore`; footnotes are left out.
+  It searches every answer of a multi-model turn and the user messages a
+  reply shows in place. A match in a closed `<details>` opens it, and one
+  below a long question's fold unfolds the bubble (`data-chat-find-fold`). A search starts at the top row of the view.
   Enter and Shift+Enter step; Escape closes and returns focus.
 - **A user types or pastes with no field focused.** On the chat page, a
   printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and

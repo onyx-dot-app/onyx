@@ -9,10 +9,9 @@ import {
   useRef,
 } from "react";
 import {
-  chatFindTextKey,
   collectChatFindRanges,
   createChatFindPainter,
-  openDetailsAround,
+  revealFoldedMatch,
   scrollRangeIntoView,
   scrollRowIntoView,
   type ChatFindPainter,
@@ -62,9 +61,7 @@ export function useChatFindHighlights({
     const state = stateRef.current;
     const { match, matchKey, releaseFollowing } = latestRef.current;
     const range = match
-      ? (state.ranges.get(chatFindTextKey(match.kind, match.nodeId))?.[
-          match.occurrence
-        ] ?? null)
+      ? (state.ranges.get(match.scopeKey)?.[match.occurrence] ?? null)
       : null;
     state.painter?.select(range);
     const container = scrollContainerRef.current;
@@ -72,8 +69,9 @@ export function useChatFindHighlights({
       return;
     }
     if (range) {
+      // An unfolded bubble changes `data-chat-find-fold`, which repaints.
+      if (revealFoldedMatch(range, container)) return;
       state.revealed = matchKey;
-      openDetailsAround(range, container);
       scrollRangeIntoView(container, range, releaseFollowing);
       return;
     }
@@ -107,6 +105,7 @@ export function useChatFindHighlights({
       childList: true,
       subtree: true,
       characterData: true,
+      attributeFilter: ["data-chat-find-fold"],
     });
     repaint();
     return () => {
