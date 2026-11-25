@@ -261,7 +261,5 @@ def list_pending_command_action_approvals(
     return list(
         db_session.scalars(
             stmt.order_by(ActionApproval.created_at, ActionApproval.approval_id)
-            # Readers poll the decisions of rows that they read before.
-            .execution_options(populate_existing=True)
         )
     )

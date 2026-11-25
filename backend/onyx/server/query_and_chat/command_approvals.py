@@ -79,7 +79,6 @@ def decide_command_approval(
             error,
         )
         for_command = False
-        granted = []
     decision = (
         ApprovalDecision.REJECTED
         if choice == ApprovalChoice.REJECT
@@ -118,8 +117,6 @@ def decide_command_approval(
         Ask actions of a waiting request, as the proxy checks them."""
         if not required or integration_id is None:
             return False
-        if set(required).issubset(granted):
-            return True
         try:
             return cache is not None and approval_cache.command_grants_cover(
                 command_id, integration_id, required, cache
