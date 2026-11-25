@@ -135,6 +135,43 @@ describe("MCP server", () => {
     );
   });
 
+  test("a server with no detected transport does not keep the last one", async () => {
+    mockProbe.mockResolvedValueOnce(OAUTH_PROBE).mockResolvedValueOnce({
+      kind: "unreachable",
+      reason: "connection_failed",
+    });
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations": makeDetail({ id: 12 }),
+      "/api/admin/integrations": [],
+    });
+    const { user } = open({ kind: "mcp_server" });
+    await fillConnect(
+      user,
+      "Docs",
+      add.mcp.url.title,
+      "https://mcp.example.com/sse"
+    );
+    await screen.findByText(add.mcp.probe.oauth);
+    await user.click(screen.getByRole("button", { name: add.back }));
+    const url = screen.getByRole("textbox", { name: add.mcp.url.title });
+    await user.clear(url);
+    await user.type(url, "https://other.example.com/mcp");
+    await user.click(screen.getByRole("button", { name: add.continue }));
+    await screen.findByText(add.mcp.probe.unreachable);
+    await submit(user);
+
+    await waitFor(() =>
+      expect(
+        requestBody(fetchMock, "POST", "/api/admin/integrations")
+      ).toMatchObject({
+        config: {
+          server_url: "https://other.example.com/mcp",
+          transport: "STREAMABLE_HTTP",
+        },
+      })
+    );
+  });
+
   test("asks for a name and a URL before the check", async () => {
     const { user } = open({ kind: "mcp_server" });
     await user.click(screen.getByRole("button", { name: add.continue }));

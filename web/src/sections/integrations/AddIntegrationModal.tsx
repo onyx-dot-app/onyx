@@ -247,12 +247,18 @@ export default function AddIntegrationModal({
           : { kind: "unreachable", reason: "connection_failed" };
     }
     if (controller.signal.aborted) return;
-    if (
-      probe.kind !== "unreachable" &&
-      probe.kind !== "forbidden" &&
-      probe.transport
-    )
-      setTransport(probe.transport);
+    // A probe with no transport falls back to the default, not to the
+    // transport of the server before Back.
+    const found =
+      probe.kind !== "unreachable" && probe.kind !== "forbidden"
+        ? probe.transport
+        : null;
+    setTransport(
+      found ??
+        (serverUrl === prefill?.serverUrl
+          ? prefill.transport
+          : "STREAMABLE_HTTP")
+    );
     enterSetup({ shape: "mcp_server", probe }, mcpSignIn(probe));
   }
 
