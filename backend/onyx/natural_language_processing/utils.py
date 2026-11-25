@@ -79,6 +79,12 @@ class HuggingFaceTokenizer(BaseTokenizer):
             if revision is None
             else Tokenizer.from_pretrained(model_name, revision=revision)
         )
+        # Some tokenizer.json files enable truncation or fixed-length padding
+        # (thenlper/gte-small: both at 128). Callers count and split tokens,
+        # so encodes must cover the whole text and nothing more. The model
+        # server truncates embedding input with its own tokenizer.
+        self.encoder.no_truncation()
+        self.encoder.no_padding()
 
     def _safer_encode(self, string: str) -> Encoding:
         """

@@ -10,6 +10,8 @@ from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
+from onyx.natural_language_processing.utils import HuggingFaceTokenizer
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 from tests.unit.onyx.indexing.conftest import MockHeartbeat
 
 
@@ -107,3 +109,31 @@ def test_chunker_heartbeat(
 
     assert mock_heartbeat.call_count == 1
     assert len(chunks) > 0
+
+
+def test_chunker_counts_whole_text_when_tokenizer_config_truncates() -> None:
+    """thenlper/gte-small ships a tokenizer.json that truncates and pads every
+    encode to 128 tokens."""
+    tokenizer = HuggingFaceTokenizer("thenlper/gte-small")
+    long_text = "This sentence adds about ten tokens to the document. " * 400
+
+    assert len(tokenizer.encode("hello")) == 1
+    assert len(tokenizer.encode(long_text)) > 3 * DOC_EMBEDDING_CONTEXT_SIZE
+
+    document = Document(
+        id="test_doc",
+        source=DocumentSource.WEB,
+        semantic_identifier="Test Document",
+        metadata={},
+        doc_updated_at=None,
+        sections=[TextSection(text=long_text, link="link1")],
+    )
+    chunks = Chunker(
+        tokenizer=tokenizer, enable_multipass=False, enable_contextual_rag=False
+    ).chunk(process_image_sections([document]))
+
+    assert len(chunks) > 3
+    assert all(
+        len(tokenizer.encode(chunk.content)) <= DOC_EMBEDDING_CONTEXT_SIZE
+        for chunk in chunks
+    )
