@@ -24,6 +24,7 @@ from onyx.configs.app_configs import (
     EMAIL_ARCHIVE_BCC_ADDRESSES,
     EMAIL_CONFIGURED,
     EMAIL_FROM,
+    MAGIC_LINK_TTL_SECONDS,
     SENDGRID_API_KEY,
     SMTP_PASS,
     SMTP_PORT,
@@ -155,6 +156,18 @@ HTML_EMAIL_TEMPLATE = """\
 </body>
 </html>
 """
+
+
+def _load_application_name() -> str:
+    """The name the admin gave the deployment, or the default when there is none."""
+    try:
+        load_runtime_settings_fn = fetch_versioned_implementation(
+            "onyx.server.enterprise_settings.store", "load_runtime_settings"
+        )
+        settings = load_runtime_settings_fn()
+        return settings.application_name or ONYX_DEFAULT_APPLICATION_NAME
+    except ModuleNotFoundError:
+        return ONYX_DEFAULT_APPLICATION_NAME
 
 
 def build_html_email(
@@ -323,14 +336,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     """This is templated but isn't meaningful for whitelabeling."""
 
     # Example usage of the reusable HTML
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
+    application_name = _load_application_name()
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
@@ -403,14 +409,7 @@ def build_user_email_invite(
 
 
 def send_user_email_invite(user_email: str, current_user: User) -> None:
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
+    application_name = _load_application_name()
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
@@ -436,14 +435,7 @@ def send_forgot_password_email(
     mail_from: str = EMAIL_FROM,
 ) -> None:
     # Builds a forgot password email with or without fancy HTML
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
+    application_name = _load_application_name()
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
@@ -481,14 +473,7 @@ def send_user_verification_email(
     mail_from: str = EMAIL_FROM,
 ) -> None:
     # Builds a verification email
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
+    application_name = _load_application_name()
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
@@ -508,6 +493,54 @@ def send_user_verification_email(
     send_email(
         user_email,
         subject,
+        html_content,
+        text_content,
+        mail_from,
+        inline_png=("logo.png", onyx_file.data),
+    )
+
+
+def build_magic_link_email(
+    application_name: str, link: str, minutes_valid: int
+) -> tuple[str, str]:
+    """Plain-text and HTML bodies of the sign-in link email."""
+    heading = f"Sign in to {application_name}"
+    message = (
+        f"<p>Click the button below to sign in to {application_name}. "
+        f"The link works once and expires in {minutes_valid} minutes.</p>"
+        "<p>If you did not ask for this email, you can ignore it. "
+        "Nothing happens until the link is clicked.</p>"
+    )
+    html_content = build_html_email(
+        application_name,
+        heading,
+        message,
+        "Sign in",
+        link,
+    )
+    text_content = (
+        f"Sign in to {application_name} with this link. "
+        f"It works once and expires in {minutes_valid} minutes.\n"
+        f"{link}\n"
+        "If you did not ask for this email, you can ignore it. "
+        "Nothing happens until the link is clicked.\n"
+    )
+    return text_content, html_content
+
+
+def send_magic_link_email(
+    user_email: str, link: str, mail_from: str = EMAIL_FROM
+) -> None:
+    application_name = _load_application_name()
+    onyx_file = OnyxRuntime.get_emailable_logo()
+    minutes_valid = max(1, MAGIC_LINK_TTL_SECONDS // 60)
+
+    text_content, html_content = build_magic_link_email(
+        application_name, link, minutes_valid
+    )
+    send_email(
+        user_email,
+        f"Sign in to {application_name}",
         html_content,
         text_content,
         mail_from,

@@ -1,0 +1,350 @@
+"""The magic link routes: what is refused before an email goes out, what the
+email carries, what a click gets back, and the playground's two extra rules."""
+
+from collections.abc import Callable, Iterator
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi import FastAPI, Response
+from fastapi.testclient import TestClient
+
+from onyx.auth.magic_link import MagicLinkRecord
+from onyx.auth.users import auth_backend, get_user_manager
+from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
+from onyx.server.auth import magic_link_api
+from onyx.server.auth.magic_link_api import MAGIC_LINK_INVALID_CODE, router
+
+_MODULE = "onyx.server.auth.magic_link_api"
+EMAIL = "Someone@Example.com"
+
+
+@pytest.fixture
+def user_manager() -> MagicMock:
+    manager = MagicMock()
+    manager.magic_link_login = AsyncMock()
+    manager.on_after_login = AsyncMock()
+    return manager
+
+
+@pytest.fixture
+def client(user_manager: MagicMock) -> TestClient:
+    app = FastAPI()
+    register_onyx_exception_handlers(app)
+    app.include_router(router)
+    app.dependency_overrides[get_user_manager] = lambda: user_manager
+    app.dependency_overrides[auth_backend.get_strategy] = lambda: object()
+    return TestClient(app)
+
+
+@pytest.fixture
+def mail_is_configured() -> Iterator[None]:
+    with patch(f"{_MODULE}.EMAIL_CONFIGURED", True):
+        yield
+
+
+@pytest.fixture
+def address_passes() -> Iterator[dict[str, MagicMock]]:
+    """A work address: the domain checks pass and the store and sender are
+    stand-ins."""
+    settings = MagicMock()
+    settings.valid_email_domains = ()
+    with (
+        patch(f"{_MODULE}.get_security_settings", return_value=settings),
+        patch(f"{_MODULE}.verify_email_domain") as verify_domain,
+        patch(f"{_MODULE}.store_magic_link", AsyncMock(return_value="tok")) as store,
+        patch(f"{_MODULE}.send_magic_link_email") as send,
+    ):
+        yield {"verify_domain": verify_domain, "store": store, "send": send}
+
+
+def _playground(hooks: dict[str, Any]) -> Callable[..., Any]:
+    """The EE hooks the routes reach for on the playground."""
+
+    def fetch(_module: str, attribute: str, noop: Any) -> Any:
+        return hooks.get(attribute, noop)
+
+    return fetch
+
+
+class TestRequest:
+    @pytest.mark.usefixtures("mail_is_configured")
+    def test_a_work_address_gets_a_link_and_nothing_else(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        response = client.post(
+            "/auth/magic-link/request",
+            json={"email": EMAIL, "start_new_team": True, "next_url": "/app?x=1"},
+            cookies={"referral_source": "ads"},
+        )
+
+        assert response.status_code == 202
+        assert response.json() == {"email": "someone@example.com"}
+        address_passes["store"].assert_awaited_once_with(
+            MagicLinkRecord(
+                email="someone@example.com",
+                start_new_team=True,
+                next_url="/app?x=1",
+                referral_source="ads",
+            )
+        )
+        address_passes["send"].assert_called_once_with(
+            "someone@example.com", f"{WEB_DOMAIN}/auth/magic-link?token=tok"
+        )
+        # The domain checks ran as a registration: dotted gmail and the like.
+        address_passes["verify_domain"].assert_called_once_with(
+            "someone@example.com", valid_email_domains=(), is_registration=True
+        )
+
+    @pytest.mark.usefixtures("mail_is_configured")
+    def test_an_off_site_next_url_is_dropped_before_storage(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        response = client.post(
+            "/auth/magic-link/request",
+            json={"email": EMAIL, "next_url": "https://evil.example.com/"},
+        )
+
+        assert response.status_code == 202
+        (record,) = address_passes["store"].await_args.args
+        assert record.next_url == "/"
+        assert record.start_new_team is False
+        assert record.referral_source is None
+
+    @pytest.mark.usefixtures("mail_is_configured")
+    def test_a_disposable_address_is_refused_before_any_email(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        address_passes["verify_domain"].side_effect = OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Disposable email addresses are not allowed."
+        )
+
+        response = client.post(
+            "/auth/magic-link/request", json={"email": "x@mailinator.com"}
+        )
+
+        assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
+        address_passes["store"].assert_not_awaited()
+        address_passes["send"].assert_not_called()
+
+    @pytest.mark.usefixtures("mail_is_configured")
+    def test_the_playground_refuses_a_free_mail_address_before_any_email(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        def refuse(_email: str) -> None:
+            raise OnyxError(OnyxErrorCode.REGISTRATION_DISABLED, "PLAYGROUND_FREE_MAIL")
+
+        with (
+            patch(f"{_MODULE}.IS_PLAYGROUND", True),
+            patch(
+                f"{_MODULE}.fetch_ee_implementation_or_noop",
+                _playground({"check_playground_address": refuse}),
+            ),
+        ):
+            response = client.post(
+                "/auth/magic-link/request", json={"email": "someone@gmail.com"}
+            )
+
+        assert response.status_code == OnyxErrorCode.REGISTRATION_DISABLED.status_code
+        assert response.json()["detail"] == "PLAYGROUND_FREE_MAIL"
+        address_passes["store"].assert_not_awaited()
+        address_passes["send"].assert_not_called()
+
+    @pytest.mark.usefixtures("mail_is_configured")
+    def test_off_the_playground_the_address_rule_is_not_asked(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        with (
+            patch(f"{_MODULE}.IS_PLAYGROUND", False),
+            patch(f"{_MODULE}.fetch_ee_implementation_or_noop") as fetch,
+        ):
+            response = client.post(
+                "/auth/magic-link/request", json={"email": "someone@gmail.com"}
+            )
+
+        assert response.status_code == 202
+        fetch.assert_not_called()
+        address_passes["send"].assert_called_once()
+
+    def test_without_an_email_sender_nothing_is_stored(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        with patch(f"{_MODULE}.EMAIL_CONFIGURED", False):
+            response = client.post("/auth/magic-link/request", json={"email": EMAIL})
+
+        assert response.status_code == OnyxErrorCode.SERVICE_UNAVAILABLE.status_code
+        address_passes["store"].assert_not_awaited()
+
+    @pytest.mark.usefixtures("mail_is_configured")
+    def test_a_failed_send_is_reported(
+        self, client: TestClient, address_passes: dict[str, MagicMock]
+    ) -> None:
+        address_passes["send"].side_effect = RuntimeError("smtp down")
+
+        response = client.post("/auth/magic-link/request", json={"email": EMAIL})
+
+        assert response.status_code == OnyxErrorCode.SERVICE_UNAVAILABLE.status_code
+        assert response.json()["detail"] == "Failed to send the sign-in email."
+
+
+RECORD = MagicLinkRecord(
+    email="someone@example.com",
+    start_new_team=True,
+    next_url="/app",
+    referral_source="ads",
+)
+TEAM_CHOICE = OnyxError(OnyxErrorCode.REGISTRATION_DISABLED, "PLAYGROUND_ACTIVE_TENANT")
+
+
+def _login_response() -> Response:
+    response = Response()
+    response.set_cookie("fastapiusersauth", "session-token")
+    response.headers.append("set-cookie", "second=2; Path=/")
+    return response
+
+
+def _user(*, is_active: bool = True) -> MagicMock:
+    user = MagicMock()
+    user.is_active = is_active
+    return user
+
+
+def _is_team_choice(error: OnyxError) -> bool:
+    return error.detail == "PLAYGROUND_ACTIVE_TENANT"
+
+
+class TestRedeem:
+    def test_a_good_token_signs_in_and_sets_the_cookies(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        user = _user()
+        user_manager.magic_link_login.return_value = user
+        with (
+            patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=RECORD)),
+            patch.object(
+                magic_link_api.auth_backend,
+                "login",
+                AsyncMock(return_value=_login_response()),
+            ),
+        ):
+            response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "state": "signed_in",
+            "next_url": "/app",
+            "team_choice_token": None,
+        }
+        cookies = response.headers.get_list("set-cookie")
+        assert any(c.startswith("fastapiusersauth=session-token") for c in cookies)
+        assert any(c.startswith("second=2") for c in cookies)
+
+        kwargs: dict[str, Any] = user_manager.magic_link_login.await_args.kwargs
+        assert user_manager.magic_link_login.await_args.args[0] == RECORD.email
+        assert kwargs == {"start_new_team": True, "referral_source": "ads"}
+        user_manager.on_after_login.assert_awaited_once()
+
+    def test_a_used_or_expired_token_is_one_generic_refusal(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        with patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=None)):
+            response = client.post("/auth/magic-link/redeem", json={"token": "old"})
+
+        assert response.status_code == OnyxErrorCode.INVALID_TOKEN.status_code
+        assert response.json()["detail"] == MAGIC_LINK_INVALID_CODE
+        user_manager.magic_link_login.assert_not_awaited()
+        assert "set-cookie" not in response.headers
+
+    def test_a_refusal_reaches_the_page_as_its_code(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        user_manager.magic_link_login.side_effect = OnyxError(
+            OnyxErrorCode.REGISTRATION_DISABLED, "PLAYGROUND_EMAIL_USED"
+        )
+        with patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=RECORD)):
+            response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.status_code == OnyxErrorCode.REGISTRATION_DISABLED.status_code
+        assert response.json()["detail"] == "PLAYGROUND_EMAIL_USED"
+        assert "set-cookie" not in response.headers
+
+    def test_a_running_trial_from_the_domain_becomes_a_question(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        first_click = RECORD.model_copy(update={"start_new_team": False})
+        user_manager.magic_link_login.side_effect = TEAM_CHOICE
+        with (
+            patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=first_click)),
+            patch(
+                f"{_MODULE}.store_magic_link", AsyncMock(return_value="tok2")
+            ) as store,
+            patch(
+                f"{_MODULE}.fetch_ee_implementation_or_noop",
+                _playground({"is_team_choice_refusal": _is_team_choice}),
+            ),
+            patch.object(magic_link_api.auth_backend, "login", AsyncMock()) as login,
+        ):
+            response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "state": "team_choice",
+            "next_url": None,
+            "team_choice_token": "tok2",
+        }
+        # The same address and landing, with only the choice changed.
+        store.assert_awaited_once_with(
+            first_click.model_copy(update={"start_new_team": True})
+        )
+        login.assert_not_awaited()
+        assert "set-cookie" not in response.headers
+
+    def test_the_question_is_asked_once(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        # RECORD already carries the choice; a refusal now is final.
+        user_manager.magic_link_login.side_effect = TEAM_CHOICE
+        with (
+            patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=RECORD)),
+            patch(f"{_MODULE}.store_magic_link", AsyncMock()) as store,
+            patch(
+                f"{_MODULE}.fetch_ee_implementation_or_noop",
+                _playground({"is_team_choice_refusal": _is_team_choice}),
+            ),
+        ):
+            response = client.post("/auth/magic-link/redeem", json={"token": "tok2"})
+
+        assert response.status_code == OnyxErrorCode.REGISTRATION_DISABLED.status_code
+        assert response.json()["detail"] == "PLAYGROUND_ACTIVE_TENANT"
+        store.assert_not_awaited()
+
+    def test_off_the_playground_no_refusal_is_a_question(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        first_click = RECORD.model_copy(update={"start_new_team": False})
+        user_manager.magic_link_login.side_effect = TEAM_CHOICE
+        with (
+            patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=first_click)),
+            patch(f"{_MODULE}.store_magic_link", AsyncMock()) as store,
+            # No EE hook: the fetch hands back the module's own no-op.
+            patch(f"{_MODULE}.fetch_ee_implementation_or_noop", _playground({})),
+        ):
+            response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.status_code == OnyxErrorCode.REGISTRATION_DISABLED.status_code
+        store.assert_not_awaited()
+
+    def test_a_disabled_account_is_not_signed_in(
+        self, client: TestClient, user_manager: MagicMock
+    ) -> None:
+        user_manager.magic_link_login.return_value = _user(is_active=False)
+        with (
+            patch(f"{_MODULE}.consume_magic_link", AsyncMock(return_value=RECORD)),
+            patch.object(magic_link_api.auth_backend, "login", AsyncMock()) as login,
+        ):
+            response = client.post("/auth/magic-link/redeem", json={"token": "tok"})
+
+        assert response.status_code == OnyxErrorCode.VALIDATION_ERROR.status_code
+        login.assert_not_awaited()

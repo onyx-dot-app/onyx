@@ -85,6 +85,18 @@ Set `SMTP_STARTTLS=false` if your server does not support STARTTLS.
 The same SMTP settings send invitation emails.
 Set `ENABLE_EMAIL_INVITES=true` to email new users when an admin invites them.
 
+## Sign In With an Email Link
+
+Set `MAGIC_LINK_ENABLED=true` to add **Get a link by email** to the sign-in page.
+A user types their email address and Onyx sends a link. One click signs them in. No password is needed.
+
+- Onyx needs the same SMTP settings as email verification. Without them the option does not show.
+- A link works once and expires after 15 minutes. Set `MAGIC_LINK_TTL_SECONDS` to change this.
+- A new email address creates a new account. **Restrict Open Sign-Up** and **Allowed Email Domains** apply.
+- A new account counts as verified, because the click proves the email address.
+- An existing account signs in with the link too, whether it was created with a password or with SSO.
+- A used or expired link shows an error page with a button to request a new link.
+
 ## Sessions
 
 A session lasts 7 days by default. Set `SESSION_EXPIRE_TIME_SECONDS` to change this.

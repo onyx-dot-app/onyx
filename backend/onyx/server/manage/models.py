@@ -94,6 +94,9 @@ class AuthConfigResponse(BaseModel):
     oauth_enabled: bool = False
     # Kill switch (single-tenant). UI hint only, the backend guards enforce.
     password_auth_enabled: bool = True
+    # "Get a link by email" is on and an email sender is configured, so the
+    # sign-in page can offer it.
+    magic_link_enabled: bool = False
     # Enabled DB-backed SSO providers, one login button each. Empty on cloud and
     # on instances with no provider rows, so the page falls back to the built-in
     # password (and Google when oauth_enabled) login.

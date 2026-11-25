@@ -120,6 +120,23 @@ workspace, by membership first and verified domain second, and returns a
 short-lived signed workspace token that pins the next authorize call to that
 tenant. Mobile SSO puts its parameters in the signed OAuth state and returns a
 one-time PKCE-bound code to the app (`auth/mobile_sso/`, [[mobile-app]]).
+
+**Magic link.** `MAGIC_LINK_ENABLED` mounts two public routes
+(`onyx/server/auth/magic_link_api.py`) and `GET /auth/type` reports
+`magic_link_enabled` when an email sender is configured too. The request route
+answers "link sent" for every well-formed address, whether or not it has an
+account, so nothing leaks before the inbox is proven. The link carries a random
+token. The cache keeps the token's hash and what the click should do: the
+address, the `start_new_team` choice and the next URL (`onyx/auth/magic_link.py`).
+A token works once and expires after `MAGIC_LINK_TTL_SECONDS`. The link opens a
+web page that POSTs the token, so a mail scanner that fetches the link cannot use
+it up. Nothing is created until the token is redeemed
+(`onyx/auth/users.py:UserManager.magic_link_login`). Redeeming resolves the
+tenant, runs the same gates as a password sign-up (invite-only, allowed
+domains, the seat limit), then creates the user, verified, with a random
+password, or signs the existing user in, and sets the session cookie. A used or
+expired token is `MAGIC_LINK_INVALID`. The playground adds its sign-up rules
+through EE hooks; see [[multi-tenancy]].
 The custom login's token refresh
 (`backend/ee/onyx/server/enterprise_settings/api.py:refresh_access_token`) sits
 in the enterprise settings router, but it is an identity rule: `_caller_owns_subject`

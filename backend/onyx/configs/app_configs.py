@@ -368,6 +368,16 @@ MOBILE_SSO_CODE_PREFIX = "mobile_sso_code:"
 MOBILE_SSO_CODE_TTL_SECONDS = int(os.environ.get("MOBILE_SSO_CODE_TTL_SECONDS") or 60)
 if MOBILE_SSO_CODE_TTL_SECONDS < 1:
     raise ValueError("MOBILE_SSO_CODE_TTL_SECONDS must be >= 1")
+# Sign in with a link sent by email, next to the password form and SSO. Off by
+# default. Needs a working email sender (SMTP or SendGrid).
+MAGIC_LINK_ENABLED = os.environ.get("MAGIC_LINK_ENABLED", "").lower() == "true"
+# The emailed link carries a random token; the shared cache holds the token's
+# hash for this long. Long enough to open the inbox on another device, short
+# enough that a forwarded or leaked email is soon useless.
+MAGIC_LINK_TOKEN_PREFIX = "magic_link:"
+MAGIC_LINK_TTL_SECONDS = int(os.environ.get("MAGIC_LINK_TTL_SECONDS") or 15 * 60)
+if MAGIC_LINK_TTL_SECONDS < 1:
+    raise ValueError("MAGIC_LINK_TTL_SECONDS must be >= 1")
 # Deep-link URIs the SSO completion is allowed to 302 to. Defaults to the app's
 # custom scheme; override (comma-separated) to add Universal/App Links later.
 _DEFAULT_MOBILE_REDIRECT_URIS = frozenset({"onyx://auth/callback"})

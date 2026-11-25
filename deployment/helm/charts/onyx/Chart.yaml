@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.60
+version: 0.9.61
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,9 +20,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: The Craft host agent Dial allows guest port 3011 (the
-        chat browser service) by default (craft.hostAgent.dialPorts).
+    - kind: added
+      description: configMap values MAGIC_LINK_ENABLED and MAGIC_LINK_TTL_SECONDS
+        add "Get a link by email" sign-in and set how long a link works. Empty
+        keeps it off.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
