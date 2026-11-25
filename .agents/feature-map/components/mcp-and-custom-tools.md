@@ -341,11 +341,7 @@ admin value is not Ask.
   its server URL. For one release each create and spec change writes both
   the `tool` row and the `api_app` row
   (`db/integration.py:write_openapi_document__no_commit`). The readers read
-  `api_app`. An integration with only its `tool` row, which an older server
-  writes during a rolling deploy, reads as an unsaved REST app built from
-  that row (`db/integration.py:_rest_app_from_tool`); its next spec save
-  writes the `api_app` row. Migration
-  `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
+  `api_app` only. Migration `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
   sets the install setting AVAILABLE; else the integration is private and
   starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
