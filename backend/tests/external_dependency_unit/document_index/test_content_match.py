@@ -7,7 +7,7 @@ hidden filters as search.
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,6 +22,7 @@ from onyx.document_index.interfaces import (
     ContentMatchRequest,
     MetadataUpdateRequest,
 )
+from onyx.document_index.opensearch import client as client_module
 from onyx.document_index.opensearch import opensearch_document_index
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
@@ -296,13 +297,22 @@ def test_shard_failures_are_errors(content_index: OpenSearchDocumentIndex) -> No
         "aggregations": {"document_ids": {"buckets": []}},
     }
     request = _request(["quick brown"])
-    with patch.object(content_index._client._client, "search", return_value=partial):
+    record_error = MagicMock()
+    observe = MagicMock()
+    with (
+        patch.object(content_index._client._client, "search", return_value=partial),
+        patch.object(content_index._client, "_emit_metrics", True),
+        patch.object(client_module, "record_opensearch_search_error", record_error),
+        patch.object(client_module, "observe_opensearch_search", observe),
+    ):
         with pytest.raises(RuntimeError, match="shard failures"):
             content_index.match_documents_by_content(
                 request, ContentMatchDateField.UPDATED, True, None, 10
             )
         with pytest.raises(RuntimeError, match="shard failures"):
             content_index.count_documents_by_content(request, max_count=100)
+    assert record_error.call_count == 2
+    observe.assert_not_called()
 
 
 def test_restricted_source_matches_only_through_its_cc_pairs(

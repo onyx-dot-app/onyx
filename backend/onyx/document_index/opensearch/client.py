@@ -2177,9 +2177,11 @@ class OpenSearchIndexClient(OpenSearchClient):
                 or a hit is missing its document ID.
         """
         result = self._run_search_request(
-            body=body, search_pipeline_id=None, search_type=search_type
+            body=body,
+            search_pipeline_id=None,
+            search_type=search_type,
+            raise_on_shard_failures=True,
         )
-        _raise_on_shard_failures(result)
         hits, *_ = self._get_hits_and_profile_from_search_result(result)
         key_hits: list[ContentMatchKey] = []
         for hit in hits:
@@ -2215,9 +2217,11 @@ class OpenSearchIndexClient(OpenSearchClient):
                 or the result has no such aggregation.
         """
         result = self._run_search_request(
-            body=body, search_pipeline_id=None, search_type=search_type
+            body=body,
+            search_pipeline_id=None,
+            search_type=search_type,
+            raise_on_shard_failures=True,
         )
-        _raise_on_shard_failures(result)
         try:
             aggregation = result["aggregations"][DOCUMENT_ID_AGGREGATION_NAME]
         except KeyError as e:
@@ -2267,12 +2271,13 @@ class OpenSearchIndexClient(OpenSearchClient):
         search_pipeline_id: str | None,
         search_type: OpenSearchSearchType,
         preference: str | None = None,
+        raise_on_shard_failures: bool = False,
     ) -> dict[str, Any]:
         """Runs a search, records its metrics, and returns the whole result.
 
         Raises:
-            Exception: There was an error searching the index, or the search
-                timed out.
+            Exception: There was an error searching the index, the search
+                timed out, or a shard failed and raise_on_shard_failures is set.
         """
         result: dict[str, Any]
         params = {"phase_took": "true"}
@@ -2306,6 +2311,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                     search_pipeline_id=search_pipeline_id,
                     raise_on_timeout=True,
                 )
+                if raise_on_shard_failures:
+                    _raise_on_shard_failures(result)
                 if self._emit_metrics:
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
