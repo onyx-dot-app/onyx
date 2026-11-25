@@ -3,7 +3,6 @@ from collections.abc import Iterable
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy import Select, and_, delete, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, aliased
@@ -11,6 +10,7 @@ from sqlalchemy.orm import Session, aliased
 from onyx.configs.constants import DocumentSource
 from onyx.db.document_access import apply_document_access_filter
 from onyx.db.models import Document, Document__Tag, Tag
+from onyx.db.tag_models import DocumentTagInput
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -124,12 +124,6 @@ def create_or_add_document_tag_list(
 
     db_session.commit()
     return all_tags
-
-
-class DocumentTagInput(BaseModel):
-    document_id: str
-    source: DocumentSource
-    metadata: dict[str, str | list[str]]
 
 
 # (tag_key, tag_value, source, is_list): the unique key of a Tag row.

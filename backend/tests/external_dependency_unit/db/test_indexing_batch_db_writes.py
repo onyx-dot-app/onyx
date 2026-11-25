@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document, Document__Tag, Tag
-from onyx.db.tag import DocumentTagInput, upsert_document_tags_batch
+from onyx.db.tag import upsert_document_tags_batch
+from onyx.db.tag_models import DocumentTagInput
 
 _SOURCE = DocumentSource.FILE
 _Metadata = dict[str, str | list[str]]

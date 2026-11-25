@@ -60,7 +60,8 @@ from onyx.db.search_settings import (
     get_search_settings_by_id,
     lock_search_settings_for_share,
 )
-from onyx.db.tag import DocumentTagInput, upsert_document_tags_batch
+from onyx.db.tag import upsert_document_tags_batch
+from onyx.db.tag_models import DocumentTagInput
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.document_index.interfaces import (
