@@ -50,7 +50,7 @@ test("lists each marketplace with its source, plugins and sync", async () => {
 
 test("a marketplace named after its repository shows no source line", async () => {
   mockFetch({ "/api/marketplaces": { marketplaces: [summaryFixture()] } });
-  render(<MarketplacesTable />);
+  render(<Table />);
 
   const table = await screen.findByRole("table", { name: "Marketplaces" });
   expect(within(table).getAllByText("acme/plugins")).toHaveLength(1);
