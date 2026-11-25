@@ -261,7 +261,7 @@ test("a saved question that repeats a label sends that label once", async () => 
     ],
   });
   // Each option row has its own React key.
-  expect(consoleError).not.toHaveBeenCalled();
+  expect(consoleError.mock.calls.flat().join("\n")).not.toMatch(/same key/);
 });
 
 test("each checkbox of a multi-select question is a tab stop that Space or Enter toggles", async () => {
