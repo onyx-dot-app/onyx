@@ -109,8 +109,8 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     EditTool,
     ExecCommandTool,
+    LibraryCreateLibraryFileTool,
     LibraryReplaceLibraryFileTool,
-    PublishFilesTool,
     WriteStdinTool,
     WriteTool,
 )
@@ -162,7 +162,12 @@ OWN_END_PACKETS: dict[str, OwnEndPacket] = {
     WriteStdinTool.NAME: packets.ExecEnd,
     **dict.fromkeys(FILE_TOOL_ARGUMENTS, packets.ApplyPatchEnd),
 }
-_PUBLISH_FILE_ARGUMENTS = TypeAdapter(list[PublishFileArgument])
+# The arguments that name the file, or the files, of each tool's publish.
+_PUBLISH_PATH_ARGUMENTS: dict[str, tuple[str, str | None]] = {
+    LibraryCreateLibraryFileTool.NAME: ("file", "files"),
+    LibraryReplaceLibraryFileTool.NAME: ("file", None),
+    ArtifactTool.NAME: ARTIFACT_PUBLISH_PATHS,
+}
 # The shortest time between two reports of a call's streamed arguments.
 # Between reports the renderer only collects fragments, so it parses the
 # arguments at most this often, not once per fragment.
@@ -181,27 +186,21 @@ def publish_card_files(
     """The files that a call of tool `name` asks to publish, as the model
     wrote them, when the call shows the publish card; None for any other
     call. Raises ValidationError when the arguments do not fit the card."""
-    if name == PublishFilesTool.NAME:
-        return _PUBLISH_FILE_ARGUMENTS.validate_python(args.get("files", []))
-    if name == LibraryReplaceLibraryFileTool.NAME:
-        return [
-            PublishFileArgument(
-                path=_STRING.validate_python(args.get("file", "")),
-                title=_OPTIONAL_STRING.validate_python(args.get("title")),
-            )
-        ]
+    keys = _PUBLISH_PATH_ARGUMENTS.get(name)
     # A missing or null action is a publish, as parse_tool_arguments reads it.
-    if name == ArtifactTool.NAME and args.get("action") in (None, "publish"):
-        one, several = ARTIFACT_PUBLISH_PATHS
-        path = args.get(one)
-        title = _OPTIONAL_STRING.validate_python(args.get("title"))
-        return [
-            PublishFileArgument(path=path, title=title)
-            for path in _STRINGS.validate_python(
-                [path] if path is not None else args.get(several) or []
-            )
-        ]
-    return None
+    if keys is None or (
+        name == ArtifactTool.NAME and args.get("action") not in (None, "publish")
+    ):
+        return None
+    one, several = keys
+    path = args.get(one)
+    title = _OPTIONAL_STRING.validate_python(args.get("title"))
+    return [
+        PublishFileArgument(path=path, title=title)
+        for path in _STRINGS.validate_python(
+            [path] if path is not None else (several and args.get(several)) or []
+        )
+    ]
 
 
 def _spilled_card_text(spilled: SpilledOutput) -> str:

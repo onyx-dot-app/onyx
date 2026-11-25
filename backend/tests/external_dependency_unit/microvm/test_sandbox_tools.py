@@ -1,4 +1,4 @@
-"""exec_command, write_stdin, apply_patch, edit, write and publish_files
+"""exec_command, write_stdin, apply_patch, edit, write and library_create_library_file
 against FirecrackerHarnessSandbox with a fake host agent: chat turns through the chat flow (streamed and
 replayed packets, code mode values, approvals, Stop, turns that offer no
 sandbox), the tools' model text and file effects, published files (access,
@@ -214,17 +214,19 @@ from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_FILES,
     ApplyPatchFileChange,
     ApplyPatchResult,
+    ArtifactPublished,
     PublishedFile,
     PublishedFiles,
     PublishFileArgument,
     SandboxExecResult,
     SpilledOutput,
+    artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
     EditTool,
     ExecCommandTool,
-    PublishFilesTool,
+    LibraryCreateLibraryFileTool,
     WriteStdinTool,
     WriteTool,
 )
@@ -309,7 +311,7 @@ class SandboxTools(BaseModel):
     apply_patch: ApplyPatchTool
     edit: EditTool
     write: WriteTool
-    publish_files: PublishFilesTool
+    create_file: LibraryCreateLibraryFileTool
 
     @property
     def all(self) -> list[Tool]:
@@ -384,7 +386,7 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
             apply_patch=ApplyPatchTool(turn),
             edit=EditTool(turn),
             write=WriteTool(turn),
-            publish_files=PublishFilesTool(turn),
+            create_file=LibraryCreateLibraryFileTool(turn),
         )
 
     return make
@@ -2277,7 +2279,7 @@ def test_a_bulk_delete_keeps_a_chat_created_while_it_runs(
     assert db_session.get(ChatSession, created[0]) is not None
 
 
-# publish_files
+# library_create_library_file
 
 
 def _published_records(db_session: Session, chat_session_id: UUID) -> list[FileRecord]:
@@ -2333,18 +2335,19 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
     llm = ChatLLM(
         [
             tool_step(
-                PublishFilesTool.NAME,
+                LibraryCreateLibraryFileTool.NAME,
                 "publish",
                 {
-                    "files": [
-                        {"path": "out/report.csv", "title": "Report"},
-                        {"path": chart},
-                    ],
+                    "files": ["out/report.csv", chart],
                     "description": "The report and its chart.",
                 },
             ),
             # Publishing a path again adds a version of its artifact.
-            tool_step(PublishFilesTool.NAME, "again", {"files": [{"path": report}]}),
+            tool_step(
+                LibraryCreateLibraryFileTool.NAME,
+                "again",
+                {"file": report, "title": "Report"},
+            ),
             Delta(content="Done."),
         ]
     )
@@ -2357,9 +2360,9 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
         (file.name, file.title, file.path, file.size, file.mime_type, file.version)
         for file in published
     ] == [
-        ("report.csv", "Report", report, 8, "text/csv", 1),
+        ("report.csv", None, report, 8, "text/csv", 1),
         ("chart.svg", None, chart, 6, "image/svg+xml", 1),
-        ("report.csv", None, report, 8, "text/csv", 2),
+        ("report.csv", "Report", report, 8, "text/csv", 2),
     ]
     assert len({file.file_id for file in published}) == 3
     assert published[0].artifact_id == published[2].artifact_id
@@ -2367,26 +2370,37 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
     assert live == [
         packets.PublishFilesStart(
             files=[
-                PublishFileArgument(path="out/report.csv", title="Report"),
+                PublishFileArgument(path="out/report.csv"),
                 PublishFileArgument(path=chart),
             ],
             description="The report and its chart.",
         ),
         ends[0],
         packets.SectionEnd(),
-        packets.PublishFilesStart(files=[PublishFileArgument(path=report)]),
+        packets.PublishFilesStart(
+            files=[PublishFileArgument(path=report, title="Report")]
+        ),
         ends[1],
         packets.SectionEnd(),
     ]
     [replayed] = chat.replayed(db_session)
     assert _sandbox_packets(replayed) == live
-    text = last_tool_text(llm, "publish")
-    assert text.startswith("Published.")
-    assert (
-        f"- {report}: version 1, file ID {published[0].file_id}, 8 bytes, text/csv"
-        in text
-    )
-    assert chart in text
+    # The model gets each file's version and link.
+    assert [
+        (file.file_id, file.version_number, file.path, file.url)
+        for file in ArtifactPublished.model_validate_json(
+            last_tool_text(llm, "publish")
+        ).files
+    ] == [
+        (
+            file.file_id,
+            1,
+            file.display_path,
+            artifact_url(file.artifact_id, 1),
+        )
+        for file in published[:2]
+        if file.artifact_id is not None
+    ]
 
     store = get_default_file_store()
     for file, data in zip(
@@ -2444,7 +2458,7 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
     )
     tools = make_tools(chat_session.id)
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
-    result, _ = _run(tools.publish_files, {"files": [{"path": "report.md"}]})
+    result, _ = _run(tools.create_file, {"file": "report.md"})
     assert isinstance(result.details, PublishedFiles)
     [file] = result.details.files
     other = make_test_user("published_viewer")
@@ -2509,14 +2523,14 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
     node.agent.files[(str(tools.ref.sandbox_id), "", chart)] = b"%PDF-1.7 chart"
 
     result, _ = _run(
-        tools.publish_files,
+        tools.create_file,
         {
             "files": [
-                {"path": "out/report.pdf"},
-                {"path": "out/q3.deck.pptx"},
-                {"path": "memo.docx"},
-                {"path": chart},
-                {"path": "notes.md"},
+                "out/report.pdf",
+                "out/q3.deck.pptx",
+                "memo.docx",
+                chart,
+                "notes.md",
             ]
         },
     )
@@ -2607,9 +2621,9 @@ def test_a_chat_delete_deletes_the_thumbnail_of_a_file_that_its_message_lists(
         ChatLLM(
             [
                 tool_step(
-                    PublishFilesTool.NAME,
+                    LibraryCreateLibraryFileTool.NAME,
                     "publish",
-                    {"files": [{"path": "report.pdf"}]},
+                    {"file": "report.pdf"},
                 ),
                 Delta(content="Done."),
             ]
@@ -2645,9 +2659,9 @@ def test_a_failed_thumbnail_delete_keeps_the_file_for_the_next_chat_delete(
         ChatLLM(
             [
                 tool_step(
-                    PublishFilesTool.NAME,
+                    LibraryCreateLibraryFileTool.NAME,
                     "publish",
-                    {"files": [{"path": "report.pdf"}]},
+                    {"file": "report.pdf"},
                 ),
                 Delta(content="Done."),
             ]
@@ -2726,9 +2740,7 @@ def test_a_failed_publish_keeps_a_file_whose_thumbnail_delete_fails(
 
     monkeypatch.setattr(store_type, "delete_file", failing_delete)
 
-    result, _ = _run(
-        tools.publish_files, {"files": [{"path": first}, {"path": "missing.md"}]}
-    )
+    result, _ = _run(tools.create_file, {"files": [first, "missing.md"]})
 
     assert result.is_error
     [thumbnail_id] = _thumbnail_ids(db_session, first)
@@ -2765,7 +2777,7 @@ def test_a_file_that_does_not_render_publishes_without_a_thumbnail(
     name = f"{uuid4().hex}.pdf"
     sandbox.write_file(tools.ref, name, b"not a pdf")
 
-    result, _ = _run(tools.publish_files, {"files": [{"path": name}]})
+    result, _ = _run(tools.create_file, {"file": name})
 
     assert not result.is_error
     assert isinstance(result.details, PublishedFiles)
@@ -2815,7 +2827,7 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
     for vm_path in ("/tmp/chart.svg", f"{ONYX_VM_FILES_ROOT}/dir/a.svg"):
         node.agent.files[(str(tools.ref.sandbox_id), "", vm_path)] = b"<svg/>"
 
-    result, _ = _run(tools.publish_files, {"files": [{"path": first}, {"path": path}]})
+    result, _ = _run(tools.create_file, {"files": [first, path]})
 
     assert result.is_error
     assert result.text.endswith(error)
@@ -2853,14 +2865,9 @@ def test_a_paged_chat_load_lists_the_latest_version_of_each_artifact(
             ChatLLM(
                 [
                     tool_step(
-                        PublishFilesTool.NAME,
+                        LibraryCreateLibraryFileTool.NAME,
                         "publish",
-                        {
-                            "files": [
-                                {"path": "report.md", "title": "Report"},
-                                {"path": "chart.svg"},
-                            ]
-                        },
+                        {"files": ["report.md", "chart.svg"]},
                     ),
                     Delta(content="Done."),
                 ]
@@ -2872,7 +2879,7 @@ def test_a_paged_chat_load_lists_the_latest_version_of_each_artifact(
                 [
                     code_step(
                         "code",
-                        "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
+                        "print(await tools.library__create_library_file(file='report.md'))\n",
                     ),
                     Delta(content="Done."),
                 ]
@@ -2944,14 +2951,15 @@ def test_a_program_publishes_files_that_belong_to_the_message(
         [
             code_step(
                 "code",
-                "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
+                "print(await tools.library__create_library_file(file='report.md'))\n",
             ),
             Delta(content="Done."),
         ]
     )
     chat.send(llm, code_mode=True)
 
-    assert "Published." in last_tool_text(llm, "code")
+    # The program gets the publish result as a dict.
+    assert "{'files': [{'library_file_id': " in last_tool_text(llm, "code")
     [cell] = saved_cells(db_session, chat.chat_session_id)
     [call] = cell.calls
     assert isinstance(call.details, PublishedFiles)
@@ -2973,7 +2981,7 @@ def test_the_non_streaming_response_lists_published_files(
     llm = ChatLLM(
         [
             tool_step(
-                PublishFilesTool.NAME, "publish", {"files": [{"path": "report.md"}]}
+                LibraryCreateLibraryFileTool.NAME, "publish", {"file": "report.md"}
             ),
             Delta(content="Done."),
         ]
@@ -3054,8 +3062,8 @@ def test_a_publish_in_the_step_of_a_patch_publishes_the_patched_file(
                             ("patch", ApplyPatchTool.NAME, {"input": ADD_A}),
                             (
                                 "publish",
-                                PublishFilesTool.NAME,
-                                {"files": [{"path": "a.txt"}]},
+                                LibraryCreateLibraryFileTool.NAME,
+                                {"file": "a.txt"},
                             ),
                         ]
                     )
@@ -3067,8 +3075,9 @@ def test_a_publish_in_the_step_of_a_patch_publishes_the_patched_file(
     chat.send(llm)
 
     # The file tools take turns, so the publish sees the patch's file.
-    assert last_tool_text(llm, "publish").startswith("Published.")
     [record] = _published_records(db_session, chat.chat_session_id)
+    [file] = ArtifactPublished.model_validate_json(last_tool_text(llm, "publish")).files
+    assert file.file_id == record.file_id
     assert get_default_file_store().read_file(record.file_id).read() == b"x\n"
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
@@ -3087,9 +3096,9 @@ def test_a_later_turn_reads_no_text_of_published_files(
         ChatLLM(
             [
                 tool_step(
-                    PublishFilesTool.NAME,
+                    LibraryCreateLibraryFileTool.NAME,
                     "publish",
-                    {"files": [{"path": "report.csv"}]},
+                    {"file": "report.csv"},
                 ),
                 Delta(content="Done."),
             ]
@@ -3142,10 +3151,10 @@ def test_a_stop_during_the_last_copy_publishes_nothing(
     monkeypatch.setattr(artifact_operations, "save_chat_artifact", save_then_stop)
 
     with pytest.raises(AgentCancelled):
-        tools.publish_files.run(
+        tools.create_file.run(
             ToolInvocation(
                 call_id="publish",
-                arguments={"files": [{"path": "report.md"}]},
+                arguments={"file": "report.md"},
                 cancellation=cancellation,
                 update=lambda _progress: None,
             ),
@@ -3176,7 +3185,7 @@ def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_delet
     llm = ChatLLM(
         [
             tool_step(
-                PublishFilesTool.NAME, "publish", {"files": [{"path": "report.md"}]}
+                LibraryCreateLibraryFileTool.NAME, "publish", {"file": "report.md"}
             ),
             tool_step(gated.name, "send", {"value": "team"}),
             Delta(content="Done."),
@@ -3247,8 +3256,8 @@ def test_a_publish_of_too_many_files_publishes_none(
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
 
     result, _ = _run(
-        tools.publish_files,
-        {"files": [{"path": "report.md"}] * (PUBLISH_FILES_MAX_FILES + 1)},
+        tools.create_file,
+        {"files": ["report.md"] * (PUBLISH_FILES_MAX_FILES + 1)},
     )
 
     assert result.is_error

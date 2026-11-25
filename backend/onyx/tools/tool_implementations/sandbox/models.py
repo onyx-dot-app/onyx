@@ -203,42 +203,59 @@ class ApplyPatchResult(BaseModel):
     files: list[ApplyPatchFileChange]
 
 
-# Largest file that publish_files copies to the file store.
+# Largest file that a publish copies to the file store.
 PUBLISH_FILES_MAX_BYTES = 100 << 20
-# Most files that one publish_files call publishes.
+# Most files that one library_create_library_file call publishes.
 PUBLISH_FILES_MAX_FILES = 20
-# Longest title that publish_files keeps; it cuts a longer one.
+# Longest title that a publish keeps; it cuts a longer one.
 PUBLISH_FILES_MAX_TITLE_CHARS = 200
 
 
 class PublishFileArgument(BaseModel):
+    """A file that a publish asks for, as the model wrote it: a VM path and
+    an optional title."""
+
+    path: str
+    title: str | None = None
+
+
+class LibraryCreateLibraryFileArguments(BaseModel):
+    """One file with an optional title, or several files."""
+
     model_config = ConfigDict(extra="forbid")
 
-    path: str = Field(
-        description="Path of the file in the VM: relative to the working "
-        "directory, or absolute."
+    file: str | None = Field(
+        default=None,
+        description="A file in the VM: relative to the working directory, or "
+        "absolute. Give this or files.",
+    )
+    files: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=PUBLISH_FILES_MAX_FILES,
+        description="Several files in the VM instead of file; all are published, "
+        "or none.",
     )
     title: str | None = Field(
         default=None,
-        description="A short title for the user. Defaults to the file name.",
-    )
-
-
-class PublishFilesArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    files: list[PublishFileArgument] = Field(
-        min_length=1,
-        max_length=PUBLISH_FILES_MAX_FILES,
-        description="The files to give the user.",
+        description="With file: a short title for the user. Defaults to the file name.",
     )
     description: str | None = Field(
         default=None, description="One sentence about the files, for the user."
     )
 
+    @model_validator(mode="after")
+    def _one_source(self) -> "LibraryCreateLibraryFileArguments":
+        if (self.file is None) == (self.files is None):
+            raise ValueError("give exactly one of file and files")
+        if self.title is not None and self.file is None:
+            raise ValueError("title goes with file")
+        return self
+
 
 class PublishedFile(BaseModel):
-    """A file that publish_files copied from the VM to the file store."""
+    """A file that a publish (library_create_library_file, library_replace_library_file
+    or the artifact tool) copied from the VM to the file store."""
 
     file_id: str
     # The chat's artifact at this path and this file's version of it, from 1.
@@ -264,7 +281,7 @@ class PublishedFile(BaseModel):
 def published_display_path(path: str) -> str:
     """The path to show of a published file at `path`: relative to the
     working directory of the chat that published it, or the whole path
-    outside it. publish_files accepts only that chat's working directory under
+    outside it. A publish accepts only that chat's working directory under
     SESSION_WORKSPACE_ROOT."""
     workspaces = f"{SESSION_WORKSPACE_ROOT}/"
     if not path.startswith(workspaces):
@@ -284,7 +301,7 @@ class PublishedFileView(PublishedFile):
 
 
 class PublishedFiles(BaseModel):
-    """Saved details of a publish_files call."""
+    """Saved details of a call that published files: the publish card."""
 
     type: Literal["published_files"] = "published_files"
     files: list[PublishedFile]

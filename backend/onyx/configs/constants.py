@@ -496,7 +496,7 @@ CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
-    # A file that the model published from its sandbox (publish_files).
+    # A file that the model published from its sandbox (artifact_operations).
     CHAT_ARTIFACT = "chat_artifact"
     # A JPEG of a published file's first page (ChatArtifactVersion).
     CHAT_ARTIFACT_THUMBNAIL = "chat_artifact_thumbnail"

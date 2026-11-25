@@ -420,7 +420,7 @@ its child sessions: first the files and thumbnails of the root session's
 `chat_artifact` versions, through `delete_chat_artifact_files` (this covers a
 response that ended without its save, such as an interrupted parked one),
 then message files (`save_chat_turn` also adds each
-`publish_files` call's `PublishedFiles` to the response's `ChatMessage.files`
+publishing call's `PublishedFiles` to the response's `ChatMessage.files`
 in its one save), except a file that is still a `chat_artifact_version` file
 or thumbnail: this chat's versions are gone by then, so it belongs to another
 chat's artifact that a replace from this chat versioned, and that chat's

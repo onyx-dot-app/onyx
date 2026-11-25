@@ -482,7 +482,7 @@ export interface ApplyPatchEnd extends BaseObj {
   error: string | null;
 }
 
-// A file that a publish_files call asks for, as the model wrote it
+// A file that a publishing call asks for, as the model wrote it
 export interface PublishFileArgument {
   path: string;
   title: string | null;
@@ -495,7 +495,7 @@ export interface PublishFilesStart extends BaseObj {
   description: string | null;
 }
 
-// A file that publish_files copied from the sandbox; it downloads from
+// A file that a publish copied from the sandbox; it downloads from
 // /api/chat/file/{file_id}
 export interface PublishedFile {
   file_id: string;

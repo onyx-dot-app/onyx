@@ -291,7 +291,7 @@ that the model got (cut to its character budget), which replaces the streamed
 preview. When the output went to a file in the sandbox VM, it is the head and
 tail of the output with a plain note instead ([[code-execution]]); `session_id` is set while the command runs, and `error` (with no
 output) when the call failed. A replayed call sends the start and `exec_end`
-only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `publish_files`
+only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `library_create_library_file` or `library_replace_library_file`
 call, or an `artifact` publish (its `file_path` and `title`, or each of its
 `file_paths`, as the entries), starts with `publish_files_start`: `files`, the `{path, title}` entries
 as the model wrote them, and `description`. It ends with
@@ -570,7 +570,7 @@ its background task end ([[#pure-asgi-middleware]]).
 ## Known issues
 
 - Only the web client knows `publish_files_start` and `publish_files_end`, so
-  the mobile, widget and CLI clients show nothing for a `publish_files` call
+  the mobile, widget and CLI clients show nothing for a publishing call
   ([[#unknown-packet-renders-nothing]]).
 - The web enum keeps `MESSAGE_END`. The mobile enum keeps `MESSAGE_END` and
   `TOP_LEVEL_BRANCHING`. The backend sends neither. Mobile drops

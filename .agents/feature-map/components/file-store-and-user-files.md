@@ -124,8 +124,8 @@ does them ([[indexing-pipeline]]).
 `file_store/utils.py:save_files`) and the Python tool save blobs with
 `FileOrigin.CHAT_IMAGE_GEN` and the session stamp, through
 `file_store/utils.py:save_chat_output_file`. The sandbox tool
-`publish_files` saves files from the user's VM with `FileOrigin.CHAT_ARTIFACT`
-(`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`)
+`library_create_library_file` saves files from the user's VM with `FileOrigin.CHAT_ARTIFACT`
+(`tools/tool_implementations/sandbox/sandbox_tools.py:LibraryCreateLibraryFileTool`)
 through `db/chat.py:save_chat_artifact`. Each file is a version of an
 artifact: `db/models.py:ChatArtifact` is one VM path in one root chat
 session, with the chat's owner (`user_id`, set from the chat when the

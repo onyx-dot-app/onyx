@@ -53,17 +53,20 @@
   turns. The user sees each command and its output as it streams, and the
   files that each patch, edit or write changed, on the same patch card. While
   the model writes a `write` or `edit` call, the card names the file; an
-  `apply_patch` card names the files and counts them. Models
-  other than Claude models also get `publish_files`, which gives files from
-  the VM to the user as download cards; owners and viewers of a shared chat
-  can download them, and a hard chat delete deletes them. With `library_list` and
-  `library_prepare_materialize` these models find, sort and filter the files
-  that they published in the user's own chats and copy them into the current
-  chat's working directory; they show as generic tool cards. Claude models
-  get the same operations instead, as one `artifact` tool (actions publish,
-  list and read), for compatibility with how they work with artifacts. Every result
-  links each version as `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`,
-  which opens the file in the output panel.
+  `apply_patch` card names the files and counts them. With
+  `library_create_library_file` the model gives files from the VM to the user
+  as download cards; owners and viewers of a shared chat can download them,
+  and a hard chat delete deletes them. With `library_list` and
+  `library_prepare_materialize` the model finds, sorts and filters the files
+  that it published in the user's own chats and copies them into the current
+  chat's working directory (generic tool cards), and with
+  `library_replace_library_file` it adds a version to one of them. In code
+  mode all of these are the deferred group `library`. Claude models get the
+  same operations as one `artifact` tool instead (actions publish, list and
+  read), in its own deferred group `artifact`, for compatibility with how
+  they work with artifacts. Every result links each version as
+  `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
+  the output panel.
 
 ---
 
@@ -73,7 +76,7 @@ This component owns `PythonTool`, the Code Interpreter client, the settings
 table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
-`apply_patch`, `edit`, `write`, `publish_files`, `library_list`,
+`apply_patch`, `edit`, `write`, `library_create_library_file`, `library_list`,
 `library_prepare_materialize`, `artifact`) and the artifact operations that they
 share. Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
@@ -218,7 +221,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch + publish_files + library_list + library_prepare_materialize | edit + write + artifact (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_replace_library_file | edit + write + artifact (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -237,8 +240,10 @@ exec_command / write_stdin / apply_patch + publish_files + library_list + librar
                                         (model_capabilities.is_claude_model, the one rule that
                                         LLM requests and prompt caching use too), EditTool,
                                         WriteTool and ArtifactTool, the tools Claude models
-                                        work with; else ApplyPatchTool, PublishFilesTool,
-                                        LibraryListTool and LibraryPrepareMaterializeTool. No turn
+                                        work with; else ApplyPatchTool,
+                                        LibraryCreateLibraryFileTool, LibraryListTool,
+                                        LibraryPrepareMaterializeTool and
+                                        LibraryReplaceLibraryFileTool. No turn
                                         gets both sets; a model switch leaves calls of the other
                                         set in the history, which still render. The
                                         reserved-token prompt (calculate_reserved_tokens) names
@@ -248,9 +253,18 @@ exec_command / write_stdin / apply_patch + publish_files + library_list + librar
                                         SandboxTool that the turn offers, in order, named
                                         as the model calls it (CodeModeTool.called_name in
                                         code mode), except tools whose USE is None
-                                        (publish_files, the artifact tools, artifact); the
-                                        tool descriptions describe only the tools, and
-                                        publish_files's names the artifact tools
+                                        (the artifact tools of both families); the tool
+                                        descriptions describe only the tools. In code mode
+                                        every artifact function is deferred, so only the
+                                        deferred-groups note names its group (`library`,
+                                        or `artifact` for Claude models), with the line
+                                        that _LibraryTool.CODE_MODE_NAMESPACE_DESCRIPTION
+                                        or, for `artifact`,
+                                        ArtifactTool.CODE_MODE_NAMESPACE_DESCRIPTION
+                                        gives (what the group does, no tool names);
+                                        immediate text
+                                        (skills included) names the operation, such as
+                                        publishing a file, never a function
   SandboxTurn.start_call                first call: the user's Sandbox row
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
@@ -319,12 +333,17 @@ exec_command / write_stdin / apply_patch + publish_files + library_list + librar
                                         Claude Code's texts. write creates or overwrites
                                         (parents created); no read-first rule, as reads are
                                         not tracked. Both save ApplyPatchResult.
-                                        The file tools and publish_files share one
+                                        The file tools and the publishing tools share one
                                         sequence_group: their calls of one step run one at
                                         a time, so a publish sees the step's earlier edits
-  PublishFilesTool (SEQUENTIAL)         artifact_operations.publish (the artifact
-                                        tool's publish and replace_file run it too): at
-                                        most
+  LibraryCreateLibraryFileTool (SEQUENTIAL)  library_create_library_file, DEFERRED
+                                        library.create_library_file; `file` with an
+                                        optional `title`, or `files` (exactly one), and
+                                        the card's `description`; returns
+                                        ArtifactPublished to the model, and its call is
+                                        not run again after a lost server.
+                                        artifact_operations.publish (the artifact tool's
+                                        publish and replace_file run it too): at most
                                         PUBLISH_FILES_MAX_FILES (20) files a call;
                                         for each file in order: HarnessSandbox.read_file
                                         (a working-directory path, or an absolute path
@@ -487,7 +506,7 @@ exec_command / write_stdin / apply_patch + publish_files + library_list + librar
                                         extension, in any case, is not the artifact's
                                         (check_same_type, for every new version), so a
                                         refused one never wakes the VM; then publish
-                                        reads the VM file with the publish_files rules and
+                                        reads the VM file with the create rules and
                                         saves it into that artifact
                                         (db/chat.save_chat_artifact with
                                         ArtifactById: an UPDATE locks the row and bumps
@@ -544,8 +563,8 @@ exec_command / write_stdin / apply_patch + publish_files + library_list + librar
                                         link (also without /v<N>; the query and fragment
                                         are dropped; the web's parseArtifactLink takes the
                                         same paths); the library tools' results
-                                        (ListedArtifact, MaterializedItem, the
-                                        publish_files text) carry it too
+                                        (ListedArtifact, MaterializedItem,
+                                        ArtifactPublished) carry it too
   Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose
                                         configured tools hold a SandboxTool. A result
                                         with ToolResult.full_value always spills: the tool
