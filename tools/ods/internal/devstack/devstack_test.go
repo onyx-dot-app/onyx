@@ -691,9 +691,12 @@ func TestRestart_preservesCacheUsedByOtherStackMode(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, err = restarting.Restart(context.Background(), p, testOptions())
+			refused, err := restarting.Restart(context.Background(), p, testOptions())
 			if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%s stack runs web", running.Mode)) {
 				t.Fatalf("restart error = %v", err)
+			}
+			if refused == nil || refused.Ready || refused.Phase != PhaseFailed || len(refused.Errors) != 1 || refused.Errors[0] != err.Error() {
+				t.Fatalf("refused restart status = %+v", refused)
 			}
 			status, statusErr := restarting.Status()
 			if statusErr != nil || status == nil || !status.Ready || !isCurrent(original) {

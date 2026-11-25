@@ -143,7 +143,13 @@ func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra, 
 	}
 	if restart {
 		if err := s.checkOtherStackWeb(); err != nil {
-			return nil, err
+			refused := State{Root: s.Root, Project: s.Project, Profile: opts.Profile}
+			if st != nil {
+				refused = *st
+			}
+			refused.Phase = PhaseFailed
+			refused.Errors = []string{err.Error()}
+			return s.status(&refused, false), err
 		}
 	}
 	if restart || handoff {
