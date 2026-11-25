@@ -37,3 +37,12 @@ test("a streaming answer renders the same text as a finished one", () => {
   expect(text(streamed)).toBe(text(finished));
   expect(streamed.querySelectorAll(".prose")).toHaveLength(1);
 });
+
+test("a fence title names the code block", async () => {
+  render(
+    <AnswerMarkdown content={'```ts title="src/a.ts"\nconst a = 1;\n```\n'} />
+  );
+
+  const block = await screen.findByTestId("answer-code-block");
+  expect(block).toHaveTextContent("src/a.ts");
+});

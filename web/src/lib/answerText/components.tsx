@@ -43,6 +43,7 @@ import { prepareAnswerMarkdown } from "@/lib/answerText/utils";
 import { splitMarkdownBlocks } from "@/lib/answerText/streamBlocks";
 import { remarkDetails } from "@/lib/answerText/remarkDetails";
 import { remarkGithubAlerts } from "@/lib/answerText/remarkGithubAlerts";
+import { parseCodeFence } from "@/lib/answerText/codeFence";
 
 // Math is `$$…$$` only (see `prepareAnswerMarkdown`).
 const REMARK_PLUGINS: PluggableList = [
@@ -81,13 +82,18 @@ function AnswerCodeBlock({ node }: React.ComponentProps<"pre"> & ExtraProps) {
           typeof name === "string" && name.startsWith("language-")
       )
     : undefined;
+  const { language, fileName } = parseCodeFence(
+    languageClass?.slice("language-".length),
+    code?.data?.meta ?? undefined
+  );
   return (
     // not-prose: the answer's typography styles tables, so without it every
     // code line gets a row border, cell padding and the answer's font size.
     <div data-testid="answer-code-block" className="not-prose">
       <CodeBlockBody
         code={code ? textOf(code.children).replace(/\n$/, "") : ""}
-        language={languageClass?.slice("language-".length)}
+        language={language}
+        fileName={fileName}
         streaming={streaming}
       />
     </div>

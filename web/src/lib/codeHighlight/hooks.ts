@@ -1,35 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { CodeHighlighter } from "@/lib/codeHighlight/highlighter";
 
-export type CodeHighlighter = typeof import("@/lib/codeHighlight/highlighter");
+interface Loaded {
+  language: string;
+  highlighter: CodeHighlighter;
+}
 
 /**
- * Lazily loads the highlight.js-backed highlighter (`highlighter.ts`) so hljs
- * and its grammars are split out of the first-load bundle. Returns `null`
- * until the chunk resolves; callers render plain text in the meantime and
- * re-render with highlighting once it's ready. Pass `enabled=false` to skip
- * loading entirely (e.g. when there's nothing to highlight).
+ * The Shiki highlighter for `language`, loaded with import() on first use.
+ * Null until it loads, for an unknown language, or when `language` is
+ * undefined: callers show plain text until then.
  */
-export function useCodeHighlighter(enabled: boolean): CodeHighlighter | null {
-  const [highlighter, setHighlighter] = useState<CodeHighlighter | null>(null);
+export function useCodeHighlighter(
+  language: string | undefined
+): CodeHighlighter | null {
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
 
   useEffect(() => {
-    if (!enabled || highlighter) return;
+    if (!language || loaded?.language === language) return;
     let cancelled = false;
     import("@/lib/codeHighlight/highlighter")
-      .then((module) => {
-        if (!cancelled) setHighlighter(module);
+      .then(({ loadCodeHighlighter }) => loadCodeHighlighter(language))
+      .then((highlighter) => {
+        if (!cancelled && highlighter) setLoaded({ language, highlighter });
       })
-      .catch((error) => {
-        // The chunk failed to load; code stays plain rather than rejecting
-        // unhandled.
+      .catch((error: unknown) => {
         console.error("Failed to load the code highlighter", error);
       });
     return () => {
       cancelled = true;
     };
-  }, [enabled, highlighter]);
+  }, [language, loaded]);
 
-  return highlighter;
+  return loaded && loaded.language === language ? loaded.highlighter : null;
 }

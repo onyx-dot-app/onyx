@@ -79,6 +79,15 @@
   @apply font-secondary-mono text-text-04;
 }
 
+/* Shiki dual-theme tokens: each span carries both colors as variables. */
+.opal-code-panel-code span[style*="--shiki-light"] {
+  color: var(--shiki-light);
+}
+
+.dark .opal-code-panel-code span[style*="--shiki-dark"] {
+  color: var(--shiki-dark);
+}
+
 /* Unwrapped lines keep their length; the panel scrolls sideways. */
 .opal-code-panel-lines[data-nowrap] .opal-code-panel-code {
   @apply whitespace-pre wrap-normal;
