@@ -85,21 +85,20 @@ export function ExecToolRenderer({
   const commandFailed = end !== null && didExecFail(end, sentInterrupt);
   const phase = !isComplete
     ? "running"
-    : error !== null ||
-        (start.type === PacketType.EXEC_COMMAND_START && commandFailed)
+    : error !== null || commandFailed
       ? "failed"
       : end?.completion === "canceled"
         ? "canceled"
         : "done";
   const showDeadlineInTitle =
     isComplete && !stopped && end?.completion === "deadline_exceeded";
+  // Input or a poll that ends the command in failure names how it ended.
   const showPollFailure =
     isComplete &&
     !stopped &&
     commandFailed &&
     error === null &&
-    start.type === PacketType.WRITE_STDIN_START &&
-    !start.chars;
+    start.type === PacketType.WRITE_STDIN_START;
   const status = stopped
     ? t("sandbox.stopped.status")
     : showDeadlineInTitle || (showPollFailure && end?.completion === "signaled")

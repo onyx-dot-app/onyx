@@ -159,7 +159,8 @@ export default function useChatController({
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
-  const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
+  const { incognitoEnabledRef, incognitoSessionId, incognitoSessionIdRef } =
+    useIncognito();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -465,6 +466,9 @@ export default function useChatController({
           (controller.signal.aborted ||
             !stillOnComposer() ||
             !incognitoEnabledRef.current ||
+            // Back/forward restore or a new private session replaced the one
+            // this send created its chat for.
+            incognitoSessionIdRef.current !== incognitoSessionId ||
             !isStillOnLocation([startUrl], window.location))
         ) {
           try {

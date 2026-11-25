@@ -78,10 +78,12 @@ jest.mock("@/lib/projects/providers", () => ({
   }),
 }));
 const mockIncognitoEnabledRef = { current: false };
+const mockIncognitoSessionIdRef: { current: string | null } = { current: null };
 jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({
     incognitoEnabledRef: mockIncognitoEnabledRef,
-    incognitoSessionId: null,
+    incognitoSessionId: mockIncognitoSessionIdRef.current,
+    incognitoSessionIdRef: mockIncognitoSessionIdRef,
   }),
 }));
 jest.mock("@/app/app/services/lib", () => {
@@ -149,6 +151,7 @@ const toolConfiguration: ToolConfigurationHandle = {
 const originalFetch = global.fetch;
 afterEach(() => {
   mockIncognitoEnabledRef.current = false;
+  mockIncognitoSessionIdRef.current = null;
   global.fetch = originalFetch;
   jest.restoreAllMocks();
   jest.clearAllMocks();
@@ -294,6 +297,45 @@ test.each([false, true])(
     expect(resetInputBar).not.toHaveBeenCalled();
   }
 );
+
+test("a private chat created for a replaced private session never opens", async () => {
+  mockIncognitoEnabledRef.current = true;
+  mockIncognitoSessionIdRef.current = "private-a";
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  const creation = Promise.withResolvers<string>();
+  jest.mocked(createChatSession).mockReturnValueOnce(creation.promise);
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: null,
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+
+  await act(async () => {
+    const send = result.current.onSubmit({
+      message: "private text",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+    // A back/forward restore, or Exit and a new private session, mints a new
+    // private session while private mode stays on.
+    mockIncognitoSessionIdRef.current = "private-b";
+    creation.resolve("session");
+    await send;
+  });
+
+  expect(endIncognitoSession).toHaveBeenCalledWith("session");
+  expect(sendMessage).not.toHaveBeenCalled();
+  expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+});
 
 test.each([
   { isNewSession: false, stop: true },

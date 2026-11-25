@@ -1179,3 +1179,39 @@ test("a Ctrl+C that stops a running process is not a failure", async () => {
     view.unmount();
   }
 });
+
+test("input that ends the command with a failure names it in a red title", async () => {
+  const input = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      input({
+        type: PacketType.WRITE_STDIN_START,
+        session_id: "4",
+        chars: "exit 1\n",
+      }),
+      input({
+        type: PacketType.EXEC_END,
+        exit_code: 1,
+        completion: "exited",
+        session_id: null,
+        wall_time_seconds: 0.2,
+        truncated: false,
+        output: "",
+        error: null,
+      }),
+      input(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getAllByText("Exit code 1")[0]!;
+    expect(title.closest(".opal-line")).toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
+    expect(view.container).not.toHaveTextContent("Sent input to session 4");
+  } finally {
+    view.unmount();
+  }
+});

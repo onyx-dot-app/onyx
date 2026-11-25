@@ -34,6 +34,9 @@ interface IncognitoContextValue {
   // Minted when incognito is switched on and sent with every upload, so a file
   // names its session before the first message creates it.
   incognitoSessionId: string | null;
+  // Always-current mirror of incognitoSessionId. A send that created a private
+  // chat checks it, so a chat of a replaced private session never opens.
+  incognitoSessionIdRef: React.RefObject<string | null>;
   toggleIncognito: () => void;
   setIncognitoSessionId: (sessionId: string | null) => void;
   setIncognitoEnabled: (enabled: boolean) => void;
@@ -76,15 +79,20 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
     void revalidateAvailability();
   }, [pathname, revalidateAvailability]);
 
-  const [incognitoSessionId, setIncognitoSessionId] = useState<string | null>(
-    null
-  );
+  const [incognitoSessionId, setIncognitoSessionIdState] = useState<
+    string | null
+  >(null);
+  const incognitoSessionIdRef = useRef<string | null>(null);
+  const setIncognitoSessionId = useCallback((sessionId: string | null) => {
+    incognitoSessionIdRef.current = sessionId;
+    setIncognitoSessionIdState(sessionId);
+  }, []);
   const toggleIncognito = useCallback(() => {
     if (incognitoLocked) return;
     const next = !incognitoEnabledRef.current;
     setIncognitoSessionId(next ? crypto.randomUUID() : null);
     setIncognitoEnabled(next);
-  }, [incognitoLocked, setIncognitoEnabled]);
+  }, [incognitoLocked, setIncognitoEnabled, setIncognitoSessionId]);
 
   useEffect(
     () =>
@@ -97,7 +105,7 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
           );
         }
       }),
-    [incognitoSessionId]
+    [incognitoSessionId, setIncognitoSessionId]
   );
 
   // Memoized so consumers keying callbacks on the context object do not
@@ -109,6 +117,7 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
       incognitoEnabledRef,
       incognitoLocked,
       incognitoSessionId,
+      incognitoSessionIdRef,
       toggleIncognito,
       setIncognitoEnabled,
       setIncognitoSessionId,
@@ -121,6 +130,7 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
       incognitoSessionId,
       toggleIncognito,
       setIncognitoEnabled,
+      setIncognitoSessionId,
     ]
   );
 
