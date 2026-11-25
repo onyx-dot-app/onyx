@@ -4440,7 +4440,7 @@
         "azureDatalakeAccountKey": "在 Azure 门户中打开存储帐户,然后打开“安全性 + 网络”,再打开“访问密钥”。",
         "smbDomain": "可选。Active Directory 域的 NetBIOS 名称或 DNS 名称。如果是文件服务器的本地帐户，请留空。",
         "smbKerberosRealm": "Active Directory 域的 DNS 名称（大写），例如 CORP.EXAMPLE.COM。",
-        "smbKerberosKdc": "可选。颁发票据的域控制器的主机名。留空则通过 DNS SRV 记录查找。",
+        "smbKerberosKdc": "签发票据的域控制器的主机名。仅当 Onyx 主机的 Kerberos 设置 (/etc/krb5.conf) 已指定该领域的 KDC 时才留空。",
         "smbLdapHost": "仅用于权限同步。域控制器的 DNS 名称，例如 dc01.corp.example.com。它必须与域控制器 TLS 证书中的名称一致。",
         "smbLdapTls": "仅用于权限同步。Onyx 加密与域控制器之间连接的方式。默认值为 LDAPS。",
         "smbLdapPort": "可选。LDAPS 的默认值为 636，StartTLS 的默认值为 389。",

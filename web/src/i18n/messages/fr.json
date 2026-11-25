@@ -4440,7 +4440,7 @@
         "azureDatalakeAccountKey": "Dans le portail Azure, ouvrez le compte de stockage, puis Sécurité + mise en réseau, puis Clés d'accès.",
         "smbDomain": "Facultatif. Le nom NetBIOS ou DNS du domaine Active Directory. Laissez vide pour un compte local du serveur de fichiers.",
         "smbKerberosRealm": "Le nom DNS du domaine Active Directory en majuscules, par exemple CORP.EXAMPLE.COM.",
-        "smbKerberosKdc": "Facultatif. Le nom d'hôte d'un contrôleur de domaine qui émet des tickets. Laissez vide pour le trouver via les enregistrements DNS SRV.",
+        "smbKerberosKdc": "Le nom d'hôte d'un contrôleur de domaine qui émet des tickets. Laissez vide uniquement si les paramètres Kerberos de l'hôte Onyx (/etc/krb5.conf) indiquent le KDC du domaine Kerberos.",
         "smbLdapHost": "Pour la synchronisation des autorisations uniquement. Le nom DNS d'un contrôleur de domaine, par exemple dc01.corp.example.com. Il doit correspondre au nom figurant dans le certificat TLS du contrôleur de domaine.",
         "smbLdapTls": "Pour la synchronisation des autorisations uniquement. La façon dont Onyx chiffre la connexion au contrôleur de domaine. La valeur par défaut est LDAPS.",
         "smbLdapPort": "Facultatif. La valeur par défaut est 636 pour LDAPS et 389 pour StartTLS.",

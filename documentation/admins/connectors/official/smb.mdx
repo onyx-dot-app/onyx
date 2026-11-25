@@ -271,7 +271,7 @@ You need the following:
     | Field              | Value                                                                                                              |
     | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
     | **Kerberos Realm** | The DNS name of the Active Directory domain in upper case, for example `CORP.EXAMPLE.COM`.                         |
-    | **Kerberos KDC**   | Optional. The host name of a KDC. With the field empty, Onyx finds a KDC through the DNS SRV records of the realm. |
+    | **Kerberos KDC**   | The host name of a KDC. Onyx does not look for a KDC through DNS. Leave the field empty only if the Kerberos settings of the Onyx host (`/etc/krb5.conf`) name the KDC of the realm. Onyx keeps the first KDC that it gets for a realm. To use a different one, restart the Onyx background containers. |
   </Step>
 
   <Step title="Run the checks">
@@ -323,7 +323,7 @@ The connector form also has these optional fields.
 
   <Accordion title="Onyx cannot get a Kerberos ticket">
     Check **Kerberos Realm**. Make sure that **File Server** is a fully qualified DNS name, not an IP address.
-    Make sure that Onyx can reach a KDC on port 88, or enter one in **Kerberos KDC**.
+    Enter a KDC in **Kerberos KDC**, and make sure that Onyx can reach it on port 88.
     Then make sure that the clock of Onyx and the clocks of the domain controllers are less than 5 minutes apart.
   </Accordion>
 

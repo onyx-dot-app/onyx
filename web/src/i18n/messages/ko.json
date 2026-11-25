@@ -4440,7 +4440,7 @@
         "azureDatalakeAccountKey": "Azure Portal에서 스토리지 계정을 열고 보안 + 네트워킹, 액세스 키를 차례로 엽니다.",
         "smbDomain": "선택 사항입니다. Active Directory 도메인의 NetBIOS 또는 DNS 이름입니다. 파일 서버의 로컬 계정이면 비워 두세요.",
         "smbKerberosRealm": "Active Directory 도메인의 DNS 이름(대문자)입니다. 예: CORP.EXAMPLE.COM.",
-        "smbKerberosKdc": "선택 사항입니다. 티켓을 발급하는 도메인 컨트롤러의 호스트 이름입니다. 비워 두면 DNS SRV 레코드로 찾습니다.",
+        "smbKerberosKdc": "티켓을 발급하는 도메인 컨트롤러의 호스트 이름입니다. Onyx 호스트의 Kerberos 설정(/etc/krb5.conf)에 영역의 KDC가 지정된 경우에만 비워 두세요.",
         "smbLdapHost": "권한 동기화에만 사용합니다. 도메인 컨트롤러의 DNS 이름입니다(예: dc01.corp.example.com). 도메인 컨트롤러의 TLS 인증서에 있는 이름과 일치해야 합니다.",
         "smbLdapTls": "권한 동기화에만 사용합니다. Onyx가 도메인 컨트롤러 연결을 암호화하는 방식입니다. 기본값은 LDAPS입니다.",
         "smbLdapPort": "선택 사항입니다. 기본값은 LDAPS의 경우 636, StartTLS의 경우 389입니다.",

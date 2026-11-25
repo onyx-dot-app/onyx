@@ -6,8 +6,14 @@ Onyx keeps one file for the process, names it in ``KRB5_CONFIG`` ahead of the
 system's file, and writes each realm a credential names into it. The library
 reads the files again for each new context, so a new realm needs no restart.
 
-A realm without a KDC host gets no entry: the library then finds the KDC
-through DNS SRV records.
+The file is shared by every credential in the process, so the first
+credential to name a realm or a server decides its entry. A later credential
+with a different KDC host or a different realm for the server is refused: it
+could otherwise send another credential's sign-in to a KDC of its choice.
+
+The library never looks for a KDC or a realm through DNS, because the network
+policy cannot check a host that DNS names. A realm without a KDC host gets no
+entry, and then works only if the system's own file names its KDC.
 """
 
 import os
@@ -28,7 +34,9 @@ _REALM_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9.-]{0,253}")
 _HOST_PATTERN = re.compile(r"[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
 
 _lock = threading.Lock()
-# Realm -> its KDC hosts.
+# Realm -> the KDC host its first credential named.
+_kdc_hosts: dict[str, str] = {}
+# Realm -> the addresses of that host that passed the network policy.
 _kdcs: dict[str, set[str]] = {}
 # Host -> the realm that issues tickets for it.
 _host_realms: dict[str, str] = {}
@@ -49,6 +57,9 @@ def _render() -> str:
         # The name an admin entered is the name in the service ticket.
         "    dns_canonicalize_hostname = false",
         "    rdns = false",
+        # A host that DNS names would skip the network policy.
+        "    dns_lookup_kdc = false",
+        "    dns_lookup_realm = false",
         # UDP answers that are too large fail behind some firewalls.
         "    udp_preference_limit = 1",
         "",
@@ -65,26 +76,53 @@ def _render() -> str:
     return "\n".join(lines) + "\n"
 
 
-def register_realm(realm: str, kdc: str | None, service_hosts: list[str]) -> None:
-    """Makes the realm usable in this process. ``service_hosts`` are the
-    servers whose tickets the realm issues, which matters when a server's DNS
-    domain differs from the realm's name."""
+class KerberosConflictError(ValueError):
+    """Another credential in this process already set a different value."""
+
+
+def register_realm(
+    realm: str,
+    kdc_host: str | None,
+    kdc_addresses: list[str],
+    service_hosts: list[str],
+) -> None:
+    """Makes the realm usable in this process. ``kdc_addresses`` are the
+    addresses of ``kdc_host`` that passed the network policy: the file holds
+    them, not the name, so the library connects to what was checked.
+    ``service_hosts`` are the servers whose tickets the realm issues, which
+    matters when a server's DNS domain differs from the realm's name."""
     global _config_path  # noqa: PLW0603 - one settings file per process
     if not is_valid_realm(realm):
         raise ValueError("The Kerberos realm holds a character that is not allowed.")
     hosts: list[str] = [host.lower() for host in service_hosts if host]
-    for host in [*hosts, *([kdc] if kdc else [])]:
-        if not is_valid_host(host):
+    for host in [*hosts, *kdc_addresses, *([kdc_host] if kdc_host else [])]:
+        if not is_valid_host(host.replace(":", ".")):
             raise ValueError(
                 "A Kerberos host name holds a character that is not allowed."
             )
     with _lock:
-        changed: bool = _config_path is None
-        if kdc and kdc not in _kdcs.setdefault(realm, set()):
-            _kdcs[realm].add(kdc)
-            changed = True
+        known_kdc: str | None = _kdc_hosts.get(realm)
+        if kdc_host and known_kdc and known_kdc.lower() != kdc_host.lower():
+            raise KerberosConflictError(
+                f"Another credential uses the KDC '{known_kdc}' for the realm "
+                f"{realm}. Use the same KDC host, or restart Onyx to change it."
+            )
         for host in hosts:
-            if _host_realms.get(host) != realm:
+            known_realm: str | None = _host_realms.get(host)
+            if known_realm is not None and known_realm != realm:
+                raise KerberosConflictError(
+                    f"Another credential uses the realm {known_realm} for the "
+                    f"server '{host}'. Use the same realm, or restart Onyx to "
+                    "change it."
+                )
+        changed: bool = _config_path is None
+        if kdc_host:
+            _kdc_hosts.setdefault(realm, kdc_host)
+            if not set(kdc_addresses) <= _kdcs.setdefault(realm, set()):
+                _kdcs[realm].update(kdc_addresses)
+                changed = True
+        for host in hosts:
+            if host not in _host_realms:
                 _host_realms[host] = realm
                 changed = True
         if not changed:

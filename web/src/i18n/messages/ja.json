@@ -4440,7 +4440,7 @@
         "azureDatalakeAccountKey": "Azure portal でストレージアカウントを開き、[セキュリティとネットワーク]、[アクセスキー] の順に開きます。",
         "smbDomain": "任意。Active Directory ドメインの NetBIOS 名または DNS 名。ファイルサーバーのローカルアカウントの場合は空のままにします。",
         "smbKerberosRealm": "Active Directory ドメインの DNS 名（大文字）。例: CORP.EXAMPLE.COM。",
-        "smbKerberosKdc": "任意。チケットを発行するドメインコントローラーのホスト名。空のままにすると、DNS SRV レコードから検出します。",
+        "smbKerberosKdc": "チケットを発行するドメインコントローラーのホスト名。Onyx ホストの Kerberos 設定 (/etc/krb5.conf) にレルムの KDC が記載されている場合のみ空欄にしてください。",
         "smbLdapHost": "権限同期でのみ使用します。ドメインコントローラーの DNS 名（例: dc01.corp.example.com）。ドメインコントローラーの TLS 証明書にある名前と一致する必要があります。",
         "smbLdapTls": "権限同期でのみ使用します。Onyx がドメインコントローラーへの接続を暗号化する方法。既定値は LDAPS です。",
         "smbLdapPort": "任意。既定値は LDAPS では 636、StartTLS では 389 です。",

@@ -79,8 +79,7 @@ it to emails, group SIDs and exclusion groups.
    server before the connection and the address the socket reached before the
    sign-in. It depends on the order in which `smbclient.register_session` reads
    and writes the cache, so check it when the pinned `smbprotocol` changes. The
-   LDAP connection does not follow referrals for the same reason. A KDC host
-   that DNS names is not checked: only the KDC host of the credential is.
+   LDAP connection does not follow referrals for the same reason.
 2. `slim-walk-raises` **The slim walk raises on each listing error except a
    refused one.** A folder left out by mistake loses its documents to pruning,
    and an unchanged file is not indexed again by a later poll.
@@ -118,10 +117,12 @@ it to emails, group SIDs and exclusion groups.
 10. `kerberos-settings-are-process-wide` **Kerberos settings are one file for
    the process.** The Kerberos library reads its settings from files, so
    `connectors/smb/kerberos_config.py:register_realm` writes each realm a
-   credential names into one file and puts it first in `KRB5_CONFIG`. Two
-   credentials that name different KDC hosts for one realm both get their host
-   in the list. The values are checked before they are written, because they
-   come from a credential and go into a settings file.
+   credential names into one file and puts it first in `KRB5_CONFIG`. The
+   first credential to name a realm or a server decides its entry, and a
+   later one with a different KDC host is refused until the process restarts.
+   The file holds the KDC addresses that passed the network policy, and turns
+   off the KDC lookup through DNS. The values are checked before they are
+   written, because they come from a credential and go into a settings file.
 11. `kerberos-libraries-are-optional` **The Kerberos libraries are in the
    backend image only.** `gssapi` and `krb5` compile against system headers, so
    they are in the `kerberos` dependency group and outside the default groups.

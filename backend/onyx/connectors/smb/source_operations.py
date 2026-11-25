@@ -504,12 +504,25 @@ class SmbSourceOperations(SourceOperations):
         with the account's password, so the password proof goes to the KDC,
         which follows the network policy like each other server."""
         _kerberos_library("gssapi")
+        principal_realm: str = credentials.kerberos_principal.rsplit("@", 1)[-1]
+        if principal_realm.upper() != credentials.kerberos_realm:
+            raise CredentialInvalidError(
+                f"The username names the realm {principal_realm}, and the "
+                f"credential names the realm {credentials.kerberos_realm}."
+            )
+        kdc_addresses: list[str] = []
         if credentials.kerberos_kdc:
             validate_network_host(credentials.kerberos_kdc, "Kerberos KDC")
+            kdc_addresses = _resolve_addresses(credentials.kerberos_kdc)
+            # The Kerberos library connects to these addresses, not to the
+            # name, so a name that resolves differently later changes nothing.
+            for address in kdc_addresses:
+                validate_network_host(address, "Kerberos KDC address")
         try:
             register_realm(
                 credentials.kerberos_realm,
                 credentials.kerberos_kdc or None,
+                kdc_addresses,
                 [self._host(), credentials.ldap_host],
             )
         except ValueError as e:
@@ -1146,6 +1159,17 @@ class SmbSourceOperations(SourceOperations):
         raise RuntimeError(f"The members of {group.sid} passed {_MAX_LDAP_PAGES} pages")
 
 
+def _resolve_addresses(host: str) -> list[str]:
+    """The addresses a host name resolves to, each once."""
+    try:
+        resolved = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError as e:
+        raise UnreachableValidationError(
+            f"Onyx cannot resolve the host name '{host}': {e}"
+        ) from e
+    return sorted({str(info[4][0]) for info in resolved})
+
+
 def _kerberos_error(error: Exception, host: str) -> Exception | None:
     """A Kerberos failure as the error an admin can act on. None for an error
     that is not from Kerberos. The libraries give no error codes that are the
@@ -1157,7 +1181,8 @@ def _kerberos_error(error: Exception, host: str) -> Exception | None:
     if "cannot contact any kdc" in lowered or "cannot find kdc" in lowered:
         return UnreachableValidationError(
             f"Onyx cannot reach a Kerberos KDC of the realm: {message}. Set the "
-            "KDC host of the credential, and open port 88 from Onyx to it."
+            "KDC host of the credential, and open port 88 from Onyx to it. Onyx "
+            "does not look for a KDC through DNS."
         )
     if "clock skew" in lowered:
         return ConnectorValidationError(
