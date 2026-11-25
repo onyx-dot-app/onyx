@@ -110,3 +110,8 @@ export function useProjectSearch(query: string): ProjectSearchMatch[] {
 export function useUploadProgress(tempId: string): number | undefined {
   return useUploadProgressStore((state) => state.progressByTempId[tempId]);
 }
+
+/** Changes each time a held upload settles (`holdUploads`). */
+export function useHeldUploadsSettled(): number {
+  return useUploadProgressStore((state) => state.heldSettled);
+}

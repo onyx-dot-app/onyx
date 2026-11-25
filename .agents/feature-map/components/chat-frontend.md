@@ -925,7 +925,10 @@ Status polls every 2 seconds while `has_startable_input` or
 `has_active_subagents` is true.
 The header's activity button (`sections/chat/ChatActivity.tsx`) shows once a
 chat has a waiting request, a background agent or a published file. It sits
-after the share menu. It is always the icon alone, so the header never shifts,
+after the share menu. The extension page (`app/nrf/NRFPage.tsx`) has no app
+chrome, so it gives the card its own `activitySlot` and puts the button in the
+side panel's header or beside the new tab's settings button; that is the only
+subagent Stop there. It is always the icon alone, so the header never shifts,
 and toggles a card that stays open until that button closes it. The card also
 opens when the count of live agents goes from zero to more while the chat
 shows; agents already live when the chat loads leave it closed, and a card

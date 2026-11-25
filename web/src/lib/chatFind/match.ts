@@ -12,6 +12,8 @@ import { messageRowId } from "@/lib/chat/rowIds";
 import { MENTION_TRIGGER, placeMentions } from "@/lib/chat/mentions";
 import type { ComposedMention } from "@/lib/chat/types";
 import { readToolQuestions } from "@/lib/chat/toolApprovals";
+import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
+import { isNestedPacket } from "@/lib/timeline/chat/packetHelpers";
 
 /**
  * The `data-chat-find-text` value of a message's text: a user row's text or
@@ -111,6 +113,16 @@ function plainText(node: MarkdownAstNode): string {
   return node.value ?? (node.children ?? []).map(plainText).join("");
 }
 
+/** A link the answer shows as a citation chip or an image, not as its label. */
+function isLinkWithoutText(node: MarkdownAstNode): boolean {
+  if (node.type !== "link") return false;
+  const label = plainText(node);
+  const url = "url" in node && typeof node.url === "string" ? node.url : "";
+  return (
+    CITATION_LABEL.test(label) || extractChatImageFileId(url, label) !== null
+  );
+}
+
 /**
  * The text runs of an answer as `AnswerMarkdown` shows them. A match never
  * spans two runs; the find highlights split the rendered text the same way.
@@ -126,10 +138,7 @@ export function answerFindSegments(content: string): string[] {
     text = "";
   };
   const visit = (node: MarkdownAstNode) => {
-    if (
-      SKIPPED_TYPES.has(node.type) ||
-      (node.type === "link" && CITATION_LABEL.test(plainText(node)))
-    ) {
+    if (SKIPPED_TYPES.has(node.type) || isLinkWithoutText(node)) {
       flush();
       return;
     }
@@ -200,7 +209,10 @@ function agentMessageParts(message: Message): MessagePart[] {
   const answers = new Map<string, MessagePart & { text: string }>();
   const parts: MessagePart[] = [];
   const userTurns = new Set<number>();
-  for (const { obj, placement } of message.packets) {
+  for (const packet of message.packets) {
+    // A nested call's text belongs to its tool step, which find skips.
+    if (isNestedPacket(packet)) continue;
+    const { obj, placement } = packet;
     if (obj.type === PacketType.USER_MESSAGE) {
       userTurns.add(placement.turn_index);
       parts.push({

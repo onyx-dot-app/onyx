@@ -69,6 +69,12 @@ describe("answerFindSegments", () => {
     ).toEqual(["Mind the note.", "More note", "Hidden note text."]);
   });
 
+  it("skips a link that shows as an image", () => {
+    expect(
+      answerFindSegments("See [plot.png](/api/chat/file/abc) and [notes](/x).")
+    ).toEqual(["See ", " and notes."]);
+  });
+
   it("skips math", () => {
     expect(answerFindSegments("Area $$x^2$$ here")).toEqual(["Area ", " here"]);
   });
@@ -148,6 +154,27 @@ describe("findChatMatches", () => {
       { scopeKey: "inline:2:u1", occurrenceStart: 0 },
       { scopeKey: "answer:2", occurrenceStart: 1 },
     ]);
+  });
+
+  it("skips answer text of a nested call", () => {
+    const reply = message({
+      nodeId: 2,
+      type: "assistant",
+      parentNodeId: 1,
+      packets: [
+        ...answerPackets("Main foo."),
+        {
+          placement: { turn_index: 0, sub_turn_index: 0 },
+          obj: {
+            type: "message_start",
+            id: "child",
+            content: "Child foo.",
+            final_documents: null,
+          },
+        },
+      ],
+    });
+    expect(findChatMatches(chatFindTexts([reply], null), "foo").total).toBe(1);
   });
 
   it("splits a user message at its mention chips", () => {
