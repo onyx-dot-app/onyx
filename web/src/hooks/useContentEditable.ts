@@ -498,7 +498,11 @@ export function useContentEditable({
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
-      if (!focus || disabledRef.current) return;
+      if (disabledRef.current) return;
+      if (!focus) {
+        if (el.ownerDocument.activeElement === el) setCursorToEndUtil(el);
+        return;
+      }
 
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;
