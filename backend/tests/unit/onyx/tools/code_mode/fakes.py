@@ -18,6 +18,7 @@ from onyx.tools.models import (
     IntegrationActionRef,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.code_mode.models import (
     SandboxLimits,
 )
@@ -28,6 +29,8 @@ RunFunction = Callable[[ToolInvocation, ToolContext], ToolOutcome]
 
 
 class FakeTool(Tool):
+    rank = ToolRank.INTEGRATION
+
     def __init__(
         self,
         name: str,

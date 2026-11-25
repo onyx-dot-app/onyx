@@ -695,7 +695,12 @@ def test_stub_text_is_deterministic() -> None:
     first = _full_text(build_tool_stubs(OPENAI_CODE_MODE, tools))
     second = _full_text(build_tool_stubs(OPENAI_CODE_MODE, list(reversed(tools))))
     assert first == second
-    assert first.index("async def a(") < first.index("async def web_search(")
+    # By rank, then by name: the built-in tool before the other tools.
+    assert (
+        first.index("async def web_search(")
+        < first.index("async def a(")
+        < first.index("async def zeta(")
+    )
 
 
 class FakeImageGenerationTool(ImageGenerationTool):

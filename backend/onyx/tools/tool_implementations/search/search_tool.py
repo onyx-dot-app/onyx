@@ -154,6 +154,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.sandbox.models import (
     SEARCH_FILE_MAX_BYTES,
     SearchResultFile,
@@ -341,6 +342,7 @@ def _trim_sections_by_tokens(
 
 
 class SearchTool(Tool):
+    rank = ToolRank.INTERNAL_SEARCH
     merge_list_argument = "queries"
     merge_list_limit = MAX_QUERIES_PER_CALL
 

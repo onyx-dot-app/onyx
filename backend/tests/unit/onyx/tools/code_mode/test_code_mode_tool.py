@@ -37,6 +37,7 @@ from onyx.tools.models import (
     ToolContext,
     ToolExecutionError,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations import utils as tool_utils
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.code_mode.cells import (
@@ -689,10 +690,20 @@ def _block_bytes(lines: list[str]) -> int:
     return sum(len(f"{line}\n".encode()) for line in lines) + 1
 
 
+class _PublishedFilesTool(FakeTool):
+    """A deferred built-in tool, as the library tools are."""
+
+    rank = ToolRank.PUBLISHED_FILES
+
+
 def _deferred(
-    name: str, namespace: str | None, namespace_description: str | None = None
+    name: str,
+    namespace: str | None,
+    namespace_description: str | None = None,
+    *,
+    built_in: bool = False,
 ) -> FakeTool:
-    return FakeTool(
+    return (_PublishedFilesTool if built_in else FakeTool)(
         name,
         echo,
         exposure=CodeModeExposure.DEFERRED,
@@ -742,9 +753,9 @@ def test_deferred_namespace_names_take_the_budget_before_descriptions() -> None:
 def test_built_in_namespaces_come_first_and_keep_their_descriptions() -> None:
     lines = _deferred_lines(
         FakeMCPTool("hello", echo, {"type": "object"}, server_description="m" * 200),
-        _deferred("f", "zeta", "z" * 200),
+        _deferred("f", "zeta", "z" * 200, built_in=True),
         # Bare names that leave room for about one description.
-        *(_deferred("f", f"group_{n:03}_{'n' * 4}") for n in range(197)),
+        *(_deferred("f", f"group_{n:03}_{'n' * 4}", built_in=True) for n in range(197)),
     )
     assert lines[1] == "  - group_000_nnnn"
     # The built-in namespace keeps its description; the MCP one loses it.

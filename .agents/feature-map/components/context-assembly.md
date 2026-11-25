@@ -264,7 +264,7 @@ counts what is sent, not the stored token counts.
    prompt resolves to empty. The same tag in a persona task prompt resolves to
    the guidance once citing applies (saved history has citations, a citeable tool
    ran, or the turn has project files), because the task prompt is in the reminder.
-   `include_all_guidance` adds the guidance only for the token estimate.
+   `all_guidance_family` adds the guidance only for the token estimate.
 3. `agent-prompt-separate-message` **The custom agent prompt is a separate user
    message.** With a base prompt, it stays in the fixed preamble before history.
    With no base prompt or base-prompt replacement, it becomes the system message.
@@ -420,12 +420,13 @@ counts what is sent, not the stored token counts.
 
 ## Recipes
 
-- `tool-guidance-section` **A new tool guidance section.** Copy the memory tool: `MEMORY_GUIDANCE` in
-  `prompts/tool_prompts.py` appears twice in `build_system_prompt`. Add the new
-  text to both places. The `all_guidance_family` branch returns early with its
-  own list of every section, and only that list reaches the reservation. The
-  `has_memory` branch keys the live prompt on the configured tools. List the
-  current sections with `git grep -n "_GUIDANCE" backend/onyx/chat/prompt_utils.py`.
+- `tool-guidance-section` **A new tool guidance section.** Copy the memory tool: add a
+  row to `chat/prompt_utils.py:_TOOL_GUIDANCE` with the tool type, its section
+  from `prompts/tool_prompts.py` (`MEMORY_GUIDANCE`), and the name each tool
+  family calls it by. Both branches of `build_system_prompt` read the table:
+  the live prompt guides the offered tools by their called names, and the
+  token estimate (`all_guidance_family`) guides every row by that family's name.
+  The sections follow the tool rank (`tools/ordering.py`).
 - `workspace-setting-in-prompt` **A workspace setting in the system prompt.** Copy the company name and
   description: `prompts/prompt_utils.py:get_company_context` reads them from
   `Settings`, and `build_system_prompt` appends the result. Read the setting

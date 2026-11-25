@@ -5,12 +5,14 @@ from onyx.db.kg_config import get_kg_config_settings
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool, tool_definition_from_arguments
 from onyx.tools.models import CodeModeExposure, KnowledgeGraphArguments, ToolContext
+from onyx.tools.ordering import ToolRank
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 class KnowledgeGraphTool(Tool):
+    rank = ToolRank.KNOWLEDGE_GRAPH
     _NAME = "run_kg_search"
     _DESCRIPTION = "Search the knowledge graph for information. Never call this tool."
     _DISPLAY_NAME = "Knowledge Graph Search"

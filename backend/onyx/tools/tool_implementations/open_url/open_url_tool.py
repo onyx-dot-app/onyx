@@ -43,6 +43,7 @@ from onyx.tools.models import (
     SearchResults,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
     OpenURLArguments,
@@ -438,6 +439,7 @@ def _report_opened(
 
 
 class OpenURLTool(Tool):
+    rank = ToolRank.OPEN_URL
     merge_list_argument = "urls"
     merge_list_limit = MAX_URLS_PER_CALL
 

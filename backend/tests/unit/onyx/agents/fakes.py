@@ -55,6 +55,7 @@ from onyx.llm.models import (
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
+from onyx.tools.ordering import ToolRank
 
 
 class FakeAgentDirectory(AgentDirectory):
@@ -294,6 +295,8 @@ class FakeModelClient(LLM):
 
 
 class EchoTool(Tool):
+    rank = ToolRank.INTEGRATION
+
     @property
     def id(self) -> int:
         return 1
