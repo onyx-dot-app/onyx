@@ -59,12 +59,14 @@ function constructCustomToolState(
 
   const isRunning = Boolean(toolStart && !toolEnd);
   const isComplete = Boolean(toolStart && toolEnd);
-  // A call whose approval did not pass never ran.
+  // A call whose approval did not pass never ran. A background agent's
+  // request shows in the card of the call that started it, which ran.
   const notRun = readToolApprovals(packets).entries.some(
     (entry) =>
-      entry.outcome === "rejected" ||
-      entry.outcome === "disabled" ||
-      entry.outcome === "cancelled"
+      entry.request.agent_name === null &&
+      (entry.outcome === "rejected" ||
+        entry.outcome === "disabled" ||
+        entry.outcome === "cancelled")
   );
 
   return {

@@ -204,4 +204,41 @@ describe("CustomToolRenderer", () => {
       expect(screen.queryByText(/Executed/)).not.toBeInTheDocument();
     }
   );
+
+  test("a rejected request of a background agent leaves its starting call run", () => {
+    renderPackets([
+      {
+        placement,
+        obj: {
+          type: PacketType.CUSTOM_TOOL_START,
+          tool_name: "spawn_agent",
+          display_name: "Start an agent",
+        },
+      },
+      {
+        placement,
+        obj: {
+          type: PacketType.TOOL_APPROVAL_REQUEST,
+          approval_id: "a1",
+          tool_call_id: "call-1",
+          tool_name: "create_ticket",
+          display_name: "Create a ticket",
+          arguments: {},
+          agent_name: "mailer",
+        },
+      },
+      {
+        placement,
+        obj: {
+          type: PacketType.TOOL_APPROVAL_RESOLVED,
+          approval_id: "a1",
+          outcome: "rejected",
+        },
+      },
+      { placement, obj: { type: PacketType.SECTION_END } },
+    ] as unknown as CustomToolPacket[]);
+
+    expect(screen.queryByText(/was blocked/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Executed/)).toBeVisible();
+  });
 });
