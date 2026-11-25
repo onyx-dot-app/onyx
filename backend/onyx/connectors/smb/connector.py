@@ -55,6 +55,9 @@ PATH_METADATA_KEY = "path"
 # Files read per checkpoint step.
 FILES_PER_STEP = 100
 SLIM_BATCH_SIZE = 1000
+# A deeper folder is a loop. A link that the server itself follows shows as a
+# plain folder, not as a reparse point, so only the depth gives it away.
+MAX_FOLDER_DEPTH = 100
 # Office lock files, and the files Explorer writes into folders.
 _LOCK_FILE_PREFIX = "~$"
 _SYSTEM_FILE_NAMES = frozenset({"thumbs.db", "desktop.ini"})
@@ -219,6 +222,13 @@ class SmbConnector(
         )
 
     def _is_skipped(self, entry: SmbEntry, path: str) -> bool:
+        if entry.is_directory and path.count("/") >= MAX_FOLDER_DEPTH:
+            logger.warning(
+                "Skipping %s: it is more than %s folders deep, which is a loop",
+                path,
+                MAX_FOLDER_DEPTH,
+            )
+            return True
         return self._is_excluded(path) or is_skipped_entry(
             entry, index_offline_files=self.index_offline_files
         )
@@ -270,6 +280,11 @@ class SmbConnector(
             raise
         except SmbNotFoundError:
             logger.info("%s was deleted after the listing", path)
+            return None
+        except SmbAccessDeniedError:
+            # The service account's view of the share defines the scope, for
+            # a file as for a folder.
+            logger.info("Skipping %s: the service account may not read it", path)
             return None
         except Exception as e:
             logger.exception("Failed to index %s", path)

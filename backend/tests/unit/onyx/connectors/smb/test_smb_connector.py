@@ -440,3 +440,35 @@ def test_reindex_reads_a_failed_file_again_and_rejects_other_shares() -> None:
         f"{ROOT_ID}/Projects",
         f"{ROOT_ID}/Projects/Alpha",
     ]
+
+
+def test_a_folder_loop_stops_at_the_depth_limit() -> None:
+    """A link that the server follows shows as a plain folder inside itself."""
+
+    connector, ops = _connector({})
+    ops.list_folder.side_effect = lambda *, path: [_folder("again")]  # noqa: ARG005
+
+    with patch.object(smb_connector, "MAX_FOLDER_DEPTH", 3):
+        indexed = _node_ids(_run(connector))
+        listed = _slim(connector)
+
+    assert indexed == [
+        ROOT_ID,
+        f"{ROOT_ID}/again",
+        f"{ROOT_ID}/again/again",
+        f"{ROOT_ID}/again/again/again",
+    ]
+    assert sorted(listed) == sorted(indexed)
+
+
+def test_a_file_the_service_account_may_not_read_is_out_of_scope() -> None:
+    connector, ops = _connector({"": [_file("a.txt"), _file("b.txt")]})
+    ops.read_file.side_effect = [
+        SmbAccessDeniedError("denied"),
+        SmbFile(size=1, content=b"b"),
+    ]
+
+    items = _run(connector)
+
+    assert not [item for item in items if isinstance(item, ConnectorFailure)]
+    assert _document_ids(items) == {f"{ROOT_ID}/b.txt"}
