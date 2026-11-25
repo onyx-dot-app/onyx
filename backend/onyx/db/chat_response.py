@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import Integer, column, delete, exists, func, inspect, select, values
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
+from sqlalchemy.orm.interfaces import ORMOption
 
 from onyx.agents.compaction import count_tokens, is_input_context
 from onyx.agents.execution_records import run_input_message_id
@@ -377,7 +378,7 @@ def save_chat_response_to_db(
         answer = response.answer
     with get_session_with_current_tenant() as session:
         configure_response_transaction__no_commit(session)
-        message = session.get(ChatMessage, message_id)
+        message = session.get(ChatMessage, message_id, options=_root_save_loads())
         if message is None:
             raise ValueError("Chat response is unavailable")
         if message.chat_session_id != chat_session_id:
@@ -1254,14 +1255,26 @@ def read_response_status__no_commit(
     )
 
 
-def find_response__no_commit(session: Session, response_id: int) -> ChatMessage | None:
+def find_response__no_commit(
+    session: Session, response_id: int, *, for_root_save: bool = False
+) -> ChatMessage | None:
+    """`for_root_save` also loads what a root save reads, in the same statement."""
     return session.scalar(
         select(ChatMessage)
         .where(ChatMessage.id == response_id)
         .options(
             selectinload(ChatMessage.response_items),
             selectinload(ChatMessage.tool_calls),
+            *(_root_save_loads() if for_root_save else ()),
         )
+    )
+
+
+def _root_save_loads() -> tuple[ORMOption, ...]:
+    """The session and the question's type, which a root save checks."""
+    return (
+        joinedload(ChatMessage.chat_session),
+        joinedload(ChatMessage.parent_message).load_only(ChatMessage.message_type),
     )
 
 
