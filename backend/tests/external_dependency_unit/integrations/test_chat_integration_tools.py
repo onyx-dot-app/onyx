@@ -10,15 +10,19 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.agents.tools import ToolInvocation
 from onyx.auth.users import get_anonymous_user
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.enums import (
+    ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationAuthMethod,
     IntegrationAuthMode,
+    IntegrationConnectionStatus,
     PluginInstallationPolicy,
 )
+from onyx.db.integration_connection import get_connection_by_id
 from onyx.db.models import (
     Integration,
     Integration__User,
@@ -32,14 +36,18 @@ from onyx.integrations.chat_tools import (
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.models import ActionSettings, ApprovalMode, IntegrationConfig
 from onyx.integrations.registry import get_kind_handler
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolResult
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
+    CustomToolCallSummary,
     IntegrationChatRequest,
     IntegrationEntry,
     IntegrationLinkConfiguration,
     PersonaToolConfiguration,
     ToolApprovalScope,
+    ToolContext,
     ToolOptions,
 )
 from onyx.tools.tool_constructor import CustomToolConfig, construct_tools
@@ -49,6 +57,7 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
+    make_app_integration,
     make_mcp_integration,
     make_openapi_integration,
     set_policy,
@@ -351,7 +360,7 @@ def test_the_user_token_wins_over_a_literal_authorization_header(
     assert templated_tool.headers == {"Authorization": "token mine"}
 
 
-def test_an_integration_with_no_usable_credential_offers_nothing(
+def test_an_integration_with_no_usable_credential_offers_no_action(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
     individual = _mcp(
@@ -371,7 +380,10 @@ def test_an_integration_with_no_usable_credential_offers_nothing(
     _access(db_session, [individual, shared])
     configuration = _configuration({individual.id: {}, shared.id: {}})
 
-    assert _build(db_session, user, configuration) == {}
+    # A REST app still gives the tool that asks the user to connect.
+    assert set(_build(db_session, user, configuration)) == {
+        f"app__{shared.id}__connect"
+    }
 
     add_connection(
         db_session, individual, user.id, ConnectionSecret(fields={"api_key": "mine"})
@@ -385,6 +397,49 @@ def test_an_integration_with_no_usable_credential_offers_nothing(
     orders = tools[f"custom__{shared.id}__listOrders"]
     assert isinstance(orders, CustomTool)
     assert orders.headers == {"X-Key": "org"}
+
+
+def test_a_rest_tool_that_gets_401_marks_its_connection(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    rest = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
+    )
+    _access(db_session, [rest])
+    connection = add_connection(
+        db_session, rest, user.id, ConnectionSecret(fields={"api_key": "revoked"})
+    )
+    tool = _build(db_session, user, _configuration({rest.id: {}}))[
+        f"custom__{rest.id}__listOrders"
+    ]
+    rejected = MagicMock()
+    rejected.is_redirect = False
+    rejected.status_code = 401
+    rejected.headers = {"Content-Type": "application/json"}
+    rejected.iter_content.return_value = [b"{}"]
+
+    with patch(
+        "onyx.tools.tool_implementations.http_request.ssrf_safe_request",
+        return_value=rejected,
+    ):
+        tool.run(
+            ToolInvocation(
+                call_id="orders",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+
+    db_session.expire_all()
+    stored = get_connection_by_id(db_session, connection.id)
+    assert stored is not None
+    assert stored.status is IntegrationConnectionStatus.NEEDS_RECONNECT
 
 
 def test_a_disabled_integration_offers_nothing(
@@ -434,6 +489,118 @@ def test_ask_actions_follow_the_approval_mode(
     )
     assert create not in no_approver
     assert evals[create].approval is None
+
+
+def test_a_preset_app_gives_a_tool_for_each_action_and_a_request_tool(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    app, _ = make_app_integration(
+        db_session,
+        app_type=ExternalAppType.LINEAR,
+        upstream_url_patterns=[r"https://api\.linear\.app/.*"],
+    )
+    integration_ids.append(app.id)
+    _access(db_session, [app])
+    read = f"app__{app.id}__linear_issues_read"
+    create = f"app__{app.id}__linear_issues_create"
+    request = f"app__{app.id}__request"
+    # The agent allows each action, and the user saved Always allow for each.
+    configuration = _configuration({app.id: {"default": "allow"}})
+    set_policy(
+        db_session,
+        app.id,
+        "unspecified",
+        IntegrationActionPolicyValue.ALLOW,
+        user_id=user.id,
+    )
+
+    interactive = _build(db_session, user, configuration)
+    no_approver = _build(db_session, user, configuration, ApprovalMode.NO_APPROVER)
+    evals = _build(db_session, user, configuration, ApprovalMode.RUN_WITHOUT_ASKING)
+    blocked = _build(
+        db_session,
+        user,
+        _configuration({app.id: {"actions": {"linear.issues.create": "blocked"}}}),
+    )
+
+    assert interactive[read].approval is None
+    assert interactive[create].approval is None
+    # No setting makes the request tool run with no question.
+    assert interactive[request].approval == ToolApprovalScope(
+        integration_id=app.id, action_id="unspecified"
+    )
+    assert request not in no_approver and read in no_approver
+    assert request not in evals and create in evals
+    assert create not in blocked and read in blocked
+
+
+def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    def app(
+        mode: IntegrationAuthMode,
+        app_type: ExternalAppType = ExternalAppType.LINEAR,
+    ) -> Integration:
+        integration, _ = make_app_integration(
+            db_session,
+            app_type=app_type,
+            upstream_url_patterns=[r"https://api\.linear\.app/.*"],
+            auth_mode=mode,
+            auth_method=IntegrationAuthMethod.API_KEY,
+            header_template={"Authorization": "Bearer {api_key}"},
+        )
+        integration_ids.append(integration.id)
+        return integration
+
+    # The user can connect the first app. Only an admin can set up the second.
+    personal = app(IntegrationAuthMode.INDIVIDUAL)
+    shared = app(IntegrationAuthMode.SHARED)
+    rest = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"Authorization": "Bearer {api_key}"},
+    )
+    # A URL-pattern custom app gives no chat tool.
+    url_glob = app(IntegrationAuthMode.INDIVIDUAL, ExternalAppType.CUSTOM)
+    _access(db_session, [personal, shared, rest, url_glob])
+
+    tools = _build(
+        db_session,
+        user,
+        _configuration({personal.id: {}, shared.id: {}, rest.id: {}, url_glob.id: {}}),
+    )
+    blocked = _build(
+        db_session, user, _configuration({personal.id: {"default": "blocked"}})
+    )
+
+    assert set(tools) == {
+        f"app__{personal.id}__connect",
+        f"app__{shared.id}__connect",
+        f"app__{rest.id}__connect",
+    }
+    assert blocked == {}
+    for integration, user_can_connect in (
+        (personal, True),
+        (shared, False),
+        (rest, True),
+    ):
+        result = tools[f"app__{integration.id}__connect"].run(
+            ToolInvocation(
+                call_id="connect",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+        assert isinstance(result, ToolResult)
+        assert isinstance(result.details, CustomToolCallSummary)
+        assert result.details.integration_id == integration.id
+        assert result.details.error is not None
+        # The chat shows the connect card only when the user can sign in.
+        assert result.details.error.is_auth_error is user_can_connect
 
 
 def test_a_new_openapi_operation_asks_while_a_migrated_one_runs(
@@ -625,7 +792,9 @@ def test_an_onyx_login_integration_sends_the_login_token(
             return_value=None,
         ),
     ):
-        assert _build(db_session, user, configuration) == {}
+        assert set(_build(db_session, user, configuration)) == {
+            f"app__{api.id}__connect"
+        }
     with (
         login_account,
         patch(
