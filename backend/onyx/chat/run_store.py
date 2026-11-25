@@ -1245,6 +1245,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         snapshot = run.snapshot(include_children=False)
         with self._lock:
             lease = self._leases.get(response_id)
+        created = lease is None
         if lease is None:
             # Child runs take their lease when they are reserved.
             if response_id != self.response_id or snapshot.parent_run_id is not None:
@@ -1275,8 +1276,12 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 raise RuntimeError(
                     "Response ownership failed during restoration"
                 ) from lease.error
-            started = time.monotonic()
-            self._refresh_owner(response_id, lease.owner)
+            if created:
+                # The key was set with the full TTL after the lease's start time.
+                started = lease.refreshed
+            else:
+                started = time.monotonic()
+                self._refresh_owner(response_id, lease.owner)
             if (
                 time.monotonic() - started
                 >= OWNER_TTL_SECONDS - OWNER_EXPIRY_MARGIN_SECONDS
