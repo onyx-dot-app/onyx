@@ -19,6 +19,7 @@ import useShareableGroups, {
 } from "@/hooks/useShareableGroups";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type {
+  CustomSkill,
   SkillInstallationPolicy,
   SkillSharePermission,
 } from "@/lib/skills/types";
@@ -32,6 +33,7 @@ import { usePolicyOptions, useSharingAllowed } from "@/lib/skills/hooks";
 import SharingOffNotice from "@/sections/modals/skills/SharingOffNotice";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { SharePermissionMenu } from "@/lib/permissions/components";
+import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 
 const KEEP = "KEEP";
 
@@ -41,10 +43,8 @@ export type BulkSkillNoun = "skill" | "plugin";
 interface BulkSkillSharingModalProps {
   /** @default "skill" */
   noun?: BulkSkillNoun;
-  count: number;
-  // False when a selected skill's organization access is not the caller's to
-  // change (see canChangeOrganizationAccess); the API would reject it.
-  canChangeOrgAccess: boolean;
+  /** The selected skills. */
+  items: readonly CustomSkill[];
   open: boolean;
   saving: boolean;
   onClose: () => void;
@@ -53,8 +53,7 @@ interface BulkSkillSharingModalProps {
 
 export default function BulkSkillSharingModal({
   noun = "skill",
-  count,
-  canChangeOrgAccess,
+  items,
   open,
   saving,
   onClose,
@@ -67,6 +66,11 @@ export default function BulkSkillSharingModal({
   const shareCopy = useTranslations("skills.modals.share");
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
+  );
+  const count = items.length;
+  // The API rejects an organization access change the caller may not make.
+  const canChangeOrgAccess = items.every((item) =>
+    canChangeOrganizationAccess(item, isOrganizationManager)
   );
   const sharingAllowed = useSharingAllowed();
   const companyOptions = usePolicyOptions({

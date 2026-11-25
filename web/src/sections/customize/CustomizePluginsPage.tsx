@@ -254,8 +254,7 @@ export default function CustomizePluginsPage() {
   );
   const adminRows = entries
     .filter((entry) => shownGroups.has(entry.id))
-    .flatMap((entry) => entry.skills)
-    .map((skill) => ({ ...skill, enabled: enablement.enabledOf(skill) }));
+    .flatMap((entry) => entry.skills);
   const bulk = useSkillBulkActions({
     items: adminRows,
     enablement,
@@ -381,14 +380,8 @@ export default function CustomizePluginsPage() {
           <AdminSkillsTable
             label={adminCopy("title")}
             skills={adminRows}
-            selectedIds={bulk.selectedIds}
-            onSelectionChange={bulk.select}
-            busy={bulk.busy}
-            isPending={enablement.isPending}
-            enabledOf={enablement.enabledOf}
-            onEnabledChange={(skill, enabled) =>
-              void enablement.setEnabled(skill, enabled)
-            }
+            bulk={bulk}
+            enablement={enablement}
             onOpen={(skill) =>
               navigation.go(pluginHref(skill.id, undefined, panel))
             }

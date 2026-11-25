@@ -25,18 +25,13 @@ import {
   SvgTrash,
   SvgXCircle,
 } from "@opal/icons";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
 import {
   bulkUpdateSkills,
   type SkillShareUpdatePayload,
 } from "@/lib/skills/api";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import type { SkillEnablement } from "@/lib/skills/hooks";
-import {
-  canChangeOrganizationAccess,
-  canShareSkill,
-} from "@/lib/skills/sharing";
+import { canShareSkill } from "@/lib/skills/sharing";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
 import BulkSkillSharingModal, {
@@ -46,7 +41,6 @@ import BulkSkillSharingModal, {
 type BulkAction = "share" | "enable" | "disable" | "delete";
 
 interface SkillBulkActionsOptions {
-  /** The rows the user sees, with `enabled` as the page shows it. */
   items: readonly CustomSkill[];
   enablement: SkillEnablement;
   noun: BulkSkillNoun;
@@ -79,9 +73,6 @@ export function useSkillBulkActions({
   // The strings that name the rows say "plugin" or "skill".
   const nounCopy = noun === "plugin" ? pluginNounCopy : bulkCopy;
   const listCopy = useTranslations("skills");
-  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
-    Permission.MANAGE_PLUGINS
-  );
   const { mutate, cache } = useSWRConfig();
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
     new Set()
@@ -93,7 +84,9 @@ export function useSkillBulkActions({
     []
   );
 
-  const selectedItems = items.filter((item) => selectedIds.has(item.id));
+  const selectedItems = items
+    .filter((item) => selectedIds.has(item.id))
+    .map((item) => ({ ...item, enabled: enablement.enabledOf(item) }));
   // The skills the delete confirm lists. Snapshotted on open: the selection
   // clears when the delete lands, while the card still fades out.
   const [deleteTargets, setDeleteTargets] = useState<CustomSkill[]>([]);
@@ -105,11 +98,14 @@ export function useSkillBulkActions({
     busy || selectedItems.some((item) => enablement.isPending(item.id));
 
   async function run(action: BulkAction, sharing?: SkillShareUpdatePayload) {
-    const pool = action === "delete" ? deleteTargets : selectedItems;
-    if (locked || pool.length === 0) return;
     // Delete acts on exactly the skills its confirm listed.
     const targets =
-      action === "enable" || action === "disable" ? toggleableItems : pool;
+      action === "delete"
+        ? deleteTargets
+        : action === "share"
+          ? selectedItems
+          : toggleableItems;
+    if (locked || targets.length === 0) return;
     setBusy(true);
     setFailures([]);
     try {
@@ -231,10 +227,7 @@ export function useSkillBulkActions({
     <>
       <BulkSkillSharingModal
         noun={noun}
-        count={selectedItems.length}
-        canChangeOrgAccess={selectedItems.every((item) =>
-          canChangeOrganizationAccess(item, isOrganizationManager)
-        )}
+        items={selectedItems}
         open={sharingOpen}
         saving={busy}
         onClose={() => setSharingOpen(false)}

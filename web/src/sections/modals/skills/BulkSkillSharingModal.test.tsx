@@ -6,6 +6,13 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
+import { customFixture } from "@/lib/skills/__fixtures__/picker";
+
+function owned(count: number) {
+  return Array.from({ length: count }, (_, index) =>
+    customFixture({ id: `skill-${index}`, user_permission: "OWNER" })
+  );
+}
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
@@ -34,8 +41,7 @@ describe("BulkSkillSharingModal", () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
       <BulkSkillSharingModal
-        count={80}
-        canChangeOrgAccess
+        items={owned(80)}
         open
         saving={false}
         onClose={jest.fn()}
@@ -68,8 +74,7 @@ describe("BulkSkillSharingModal", () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
       <BulkSkillSharingModal
-        count={2}
-        canChangeOrgAccess
+        items={owned(2)}
         open
         saving={false}
         onClose={jest.fn()}
@@ -93,8 +98,7 @@ describe("BulkSkillSharingModal", () => {
     const user = setupUser();
     const onClose = jest.fn();
     const props = {
-      count: 2,
-      canChangeOrgAccess: true,
+      items: owned(2),
       saving: false,
       onClose,
       onSave: jest.fn(),
@@ -125,8 +129,7 @@ describe("BulkSkillSharingModal", () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
       <BulkSkillSharingModal
-        count={2}
-        canChangeOrgAccess
+        items={owned(2)}
         open
         saving={false}
         onClose={jest.fn()}

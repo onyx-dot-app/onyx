@@ -39,12 +39,12 @@ function renderTable(skills: CustomSkill[]) {
   render(
     <AdminSkillsTable
       skills={skills}
-      selectedIds={new Set()}
-      onSelectionChange={jest.fn()}
-      busy={false}
-      isPending={() => false}
-      enabledOf={(skill) => skill.enabled}
-      onEnabledChange={jest.fn()}
+      bulk={{ selectedIds: new Set(), select: jest.fn(), busy: false }}
+      enablement={{
+        isPending: () => false,
+        enabledOf: (skill) => skill.enabled,
+        setEnabled: jest.fn(),
+      }}
       onOpen={onOpen}
       onShare={onShare}
       onDelete={onDelete}

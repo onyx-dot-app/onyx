@@ -11,19 +11,19 @@ import {
 } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgMoreHorizontal, SvgShare, SvgTrash } from "@opal/icons";
-import { useInstallationPolicyCopy } from "@/lib/skills/hooks";
+import {
+  useInstallationPolicyCopy,
+  type SkillEnablement,
+} from "@/lib/skills/hooks";
 import { canShareSkill, hasUnpublishedChanges } from "@/lib/skills/sharing";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
+import type { SkillBulkActions } from "@/sections/skills/useSkillBulkActions";
 
 interface AdminSkillsTableProps {
   skills: CustomSkill[];
-  selectedIds: ReadonlySet<string>;
-  onSelectionChange: (ids: ReadonlySet<string>) => void;
-  busy: boolean;
-  isPending: (id: string) => boolean;
-  enabledOf: (skill: CustomSkill) => boolean;
-  onEnabledChange: (skill: CustomSkill, enabled: boolean) => void;
+  bulk: Pick<SkillBulkActions, "selectedIds" | "select" | "busy">;
+  enablement: Pick<SkillEnablement, "isPending" | "enabledOf" | "setEnabled">;
   onOpen: (skill: CustomSkill) => void;
   onShare: (skill: CustomSkill) => void;
   onDelete: (skill: CustomSkill) => void;
@@ -37,12 +37,8 @@ interface AdminSkillsTableProps {
 
 export default function AdminSkillsTable({
   skills,
-  selectedIds,
-  onSelectionChange,
-  busy,
-  isPending,
-  enabledOf,
-  onEnabledChange,
+  bulk,
+  enablement,
   onOpen,
   onShare,
   onDelete,
@@ -178,9 +174,13 @@ export default function AdminSkillsTable({
         >
           <InputSwitch
             aria-label={skill.name}
-            checked={enabledOf(skill)}
-            disabled={busy || isPending(skill.id) || !skill.can_toggle}
-            onCheckedChange={(checked) => onEnabledChange(skill, checked)}
+            checked={enablement.enabledOf(skill)}
+            disabled={
+              bulk.busy || enablement.isPending(skill.id) || !skill.can_toggle
+            }
+            onCheckedChange={(checked) =>
+              void enablement.setEnabled(skill, checked)
+            }
           />
         </Section>
       ),
@@ -247,8 +247,8 @@ export default function AdminSkillsTable({
       getRowId={(skill) => skill.id}
       pageSize={false}
       selectionBehavior="multi-select"
-      values={selectedIds}
-      onSelectionChange={onSelectionChange}
+      values={bulk.selectedIds}
+      onSelectionChange={bulk.select}
       onRowClick={onOpen}
       getRowLabel={(skill) => t("open", { name: skill.name })}
     />
