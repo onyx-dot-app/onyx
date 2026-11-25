@@ -165,7 +165,8 @@ export default function CustomizeIntegrationPage({
                     : undefined
                 }
               />,
-              ...(reason === null
+              // Disconnect stays while the integration is turned off.
+              ...(reason === null || state === "connected"
                 ? [
                     <IntegrationConnectButton
                       key="connect"

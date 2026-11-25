@@ -216,6 +216,27 @@ test("the header offers Disconnect after the API key form connects", async () =>
   ).toBeVisible();
 });
 
+test("a turned off integration keeps Disconnect for the user's connection", async () => {
+  const fetchMock = open(
+    makeMemberIntegration({
+      status: connected,
+      access: makeAccess({ state: "turned_off" }),
+    }),
+    { "DELETE /api/integrations/1/connection": { state: "not_connected" } }
+  );
+  expect(await screen.findByText("Turned off by an admin.")).toBeVisible();
+  await user().click(screen.getByRole("button", { name: "Disconnect Linear" }));
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith("/api/integrations/1/connection") &&
+          init?.method === "DELETE"
+      )
+    ).toBe(true)
+  );
+});
+
 test("OAuth continues in this tab when the browser blocks the new tab", async () => {
   jest.spyOn(window, "open").mockReturnValue(null);
   open(makeMemberIntegration(), {
