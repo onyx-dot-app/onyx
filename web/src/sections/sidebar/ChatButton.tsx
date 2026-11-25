@@ -347,10 +347,21 @@ const ChatButton = memo(
       await pinChatAgent(chatSession);
     }
 
+    // A project's chat rows read the projects cache, not the recents list.
+    async function refreshAfterRename() {
+      await Promise.all([
+        refreshChatSessions(),
+        project ? fetchProjects() : undefined,
+        project && currentProjectId
+          ? refreshCurrentProjectDetails()
+          : undefined,
+      ]);
+    }
+
     async function handleRename(newName: string) {
       setDisplayName(newName);
       await renameChatSession(chatSession.id, newName);
-      await refreshChatSessions();
+      await refreshAfterRename();
     }
 
     async function handleRegenerateTitle() {
@@ -358,7 +369,7 @@ const ChatButton = memo(
       try {
         const response = await renameChatSession(chatSession.id, null, true);
         if (!response.ok) throw new Error(`Rename failed: ${response.status}`);
-        await refreshChatSessions();
+        await refreshAfterRename();
       } catch (error) {
         console.error("Failed to regenerate chat title:", error);
         showErrorNotification(t("chatButton.regenerateTitleError.message"));
