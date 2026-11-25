@@ -6722,7 +6722,7 @@
           },
           "field": {
             "description": "이 제공자에서 사용할 모델을 선택하세요.",
-            "title": "모델"
+            "title": "채팅 모델"
           },
           "foldButton": {
             "label": "모델 접기"
@@ -14022,8 +14022,8 @@
       },
       "labels": {
         "default": "기본",
-        "defaultText": "기본 텍스트 모델",
-        "defaultImage": "기본 이미지 생성 모델"
+        "defaultChat": "기본 채팅",
+        "defaultImage": "기본 이미지"
       },
       "modelTypes": {
         "decision": "판단",

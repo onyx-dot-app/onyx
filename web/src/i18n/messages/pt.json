@@ -6722,7 +6722,7 @@
           },
           "field": {
             "description": "Selecione os modelos que ficarão disponíveis para este provedor.",
-            "title": "Modelos"
+            "title": "Modelos de chat"
           },
           "foldButton": {
             "label": "Recolher modelos"
@@ -14022,8 +14022,8 @@
       },
       "labels": {
         "default": "Padrão",
-        "defaultText": "Modelo de texto padrão",
-        "defaultImage": "Modelo padrão de geração de imagens"
+        "defaultChat": "Chat padrão",
+        "defaultImage": "Imagem padrão"
       },
       "modelTypes": {
         "decision": "Decisão",

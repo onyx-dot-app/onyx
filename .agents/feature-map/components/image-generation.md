@@ -22,8 +22,8 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   images too, and they show the same way.
 - **An admin** opens the Chat & Image Models page (`/admin/language-models`).
   A provider's edit modal lists its recommended catalog image models and any
-  connected ones, each with a switch. A switch links or unlinks the model at
-  once, with the provider's credentials; the first linked model becomes the
+  connected ones, each a checkbox row like the chat models. A row links or
+  unlinks the model at once, with the provider's credentials; the first linked model becomes the
   default. The page's "Default Image Generation Model" select picks the
   default, and "No Default" turns image generation off. Provider cards tag the
   default text and image providers. Any provider can serve image models. The
@@ -104,8 +104,8 @@ stored model of the provider for the unfiltered view. A linked config has the ID
 `IMAGE_GENERATION` model flow, so chat model lists skip them. The admin
 settings live on the Chat & Image Models page (`/admin/language-models`):
 `web/src/lib/imageGeneration/components.tsx` holds the default image model
-select and the "Image Models" switches in each provider's edit modal
-(`ModalWrapper`). Legacy own-key configs have no edit form; they stay hidden
+select; `web/src/sections/modals/languageModels/shared.tsx:ImageModelsField`
+holds the "Image Models" rows in each provider's edit modal (`ModalWrapper`). Legacy own-key configs have no edit form; they stay hidden
 from the provider list and can only be chosen as the default.
 
 **Ownership.** `ImageGenerationConfig.llm_provider_owned` is true for legacy

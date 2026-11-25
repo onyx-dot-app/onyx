@@ -1,7 +1,15 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { ImageModelsField } from "@/lib/imageGeneration/components";
+import {
+  useImageGenerationConfigs,
+  useImageGenerationProviders,
+} from "@/lib/imageGeneration/hooks";
+import {
+  deleteImageGenerationConfig,
+  linkImageGenerationModel,
+} from "@/lib/imageGeneration/svc";
+import type { ImageGenerationProviderModel } from "@/lib/imageGeneration/types";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
@@ -747,6 +755,152 @@ function ModelRow({
         </Interactive.Container>
       </Interactive.Stateful>
     </Hoverable.Root>
+  );
+}
+
+interface ImageModelRowProps {
+  model: ImageGenerationProviderModel;
+  isDefaultModel: boolean;
+  disabled: boolean;
+  onToggle: (connect: boolean) => void;
+}
+
+/** One image model, laid out like a chat model's `ModelRow`. */
+function ImageModelRow({
+  model,
+  isDefaultModel,
+  disabled,
+  onToggle,
+}: ImageModelRowProps) {
+  const t = useTranslations("admin.languageModels.modals");
+  const isConnected = model.image_provider_id !== null;
+  const title = model.display_name || model.name;
+  const toggle = () => {
+    if (!disabled) onToggle(!isConnected);
+  };
+
+  return (
+    <Interactive.Stateful
+      variant="select-heavy"
+      state={isConnected ? "selected" : "empty"}
+      onClick={toggle}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e: React.KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggle();
+        }
+      }}
+      data-model-name={model.name}
+    >
+      <Interactive.Container width="full" size="fit" rounding={3}>
+        <OpalSection alignItems="stretch" height="auto" padding={1.5}>
+          <ContentAction
+            font="main-ui-action"
+            color="interactive"
+            center
+            icon={() => <InputCheckbox checked={isConnected} />}
+            title={title}
+            description={title === model.name ? undefined : model.name}
+            rightChildren={
+              isDefaultModel ? (
+                <span className="px-1.5">
+                  <Text
+                    as="p"
+                    font="secondary-action"
+                    wordWrap="whitespace-nowrap"
+                    color="action-selection-05"
+                  >
+                    {t("models.row.defaultLabel")}
+                  </Text>
+                </span>
+              ) : undefined
+            }
+            padding={0}
+          />
+        </OpalSection>
+      </Interactive.Container>
+    </Interactive.Stateful>
+  );
+}
+
+interface ImageModelsFieldProps {
+  llmProviderId: number;
+}
+
+/**
+ * A provider's image models: the recommended ones and any already connected.
+ * Checking one connects it at once, outside the form's save; the first
+ * connected model becomes the default image model.
+ */
+function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
+  const t = useTranslations("admin.languageModels.imageGeneration");
+  const { providers, refetch: refetchProviders } =
+    useImageGenerationProviders();
+  const { defaultConfig, refetch: refetchConfigs } =
+    useImageGenerationConfigs();
+  const [isPending, setIsPending] = useState(false);
+
+  const provider = providers?.find((p) => p.llm_provider_id === llmProviderId);
+  const models =
+    provider?.models.filter(
+      (model) => model.is_recommended || model.image_provider_id !== null
+    ) ?? [];
+  if (!provider || models.length === 0) return null;
+
+  async function handleToggle(
+    model: ImageGenerationProviderModel,
+    connect: boolean
+  ) {
+    setIsPending(true);
+    try {
+      if (connect) {
+        await linkImageGenerationModel(
+          llmProviderId,
+          model.name,
+          defaultConfig === null
+        );
+      } else if (model.image_provider_id) {
+        await deleteImageGenerationConfig(model.image_provider_id);
+      }
+      await Promise.all([refetchProviders(), refetchConfigs()]);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("imageModels.error")
+      );
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return (
+    <>
+      <InputDivider />
+      <Card color="background-tint-00" border="none" padding={2}>
+        <OpalSection gap={2}>
+          <InputHorizontal
+            title={t("imageModels.title")}
+            description={t("imageModels.description")}
+            center
+          />
+          <OpalSection gap={1} alignItems="stretch">
+            {models.map((model) => (
+              <ImageModelRow
+                key={model.name}
+                model={model}
+                isDefaultModel={
+                  model.image_provider_id !== null &&
+                  defaultConfig?.image_provider_id === model.image_provider_id
+                }
+                disabled={isPending}
+                onToggle={(connect) => void handleToggle(model, connect)}
+              />
+            ))}
+          </OpalSection>
+        </OpalSection>
+      </Card>
+    </>
   );
 }
 

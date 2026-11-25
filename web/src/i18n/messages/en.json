@@ -6722,7 +6722,7 @@
           },
           "field": {
             "description": "Select models to make available for this provider.",
-            "title": "Models"
+            "title": "Chat Models"
           },
           "foldButton": {
             "label": "Fold Models"
@@ -14022,8 +14022,8 @@
       },
       "labels": {
         "default": "Default",
-        "defaultText": "Default Text Model",
-        "defaultImage": "Default Image Generation Model"
+        "defaultChat": "Default Chat",
+        "defaultImage": "Default Image"
       },
       "modelTypes": {
         "decision": "Decision",

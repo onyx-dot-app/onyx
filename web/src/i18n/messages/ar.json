@@ -6722,7 +6722,7 @@
           },
           "field": {
             "description": "اختر النماذج المراد إتاحتها لهذا الموفر.",
-            "title": "النماذج"
+            "title": "نماذج الدردشة"
           },
           "foldButton": {
             "label": "طي النماذج"
@@ -14022,8 +14022,8 @@
       },
       "labels": {
         "default": "افتراضي",
-        "defaultText": "نموذج النص الافتراضي",
-        "defaultImage": "نموذج إنشاء الصور الافتراضي"
+        "defaultChat": "الدردشة الافتراضية",
+        "defaultImage": "الصورة الافتراضية"
       },
       "modelTypes": {
         "decision": "قرار",

@@ -1,19 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  InputSingleSelect,
-  InputSwitch,
-  type SelectDivider,
-} from "@opal/components";
-import {
-  Content,
-  InputDivider,
-  InputHorizontal,
-  Section,
-  toast,
-} from "@opal/layouts";
+import { InputSingleSelect, type SelectDivider } from "@opal/components";
+import { InputHorizontal, toast } from "@opal/layouts";
 import { SvgSlash } from "@opal/icons";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import {
@@ -21,8 +10,6 @@ import {
   useImageGenerationProviders,
 } from "@/lib/imageGeneration/hooks";
 import {
-  deleteImageGenerationConfig,
-  linkImageGenerationModel,
   setDefaultImageGenerationConfig,
   unsetDefaultImageGenerationConfig,
 } from "@/lib/imageGeneration/svc";
@@ -119,87 +106,5 @@ export function DefaultImageModelSetting() {
         ]}
       />
     </InputHorizontal>
-  );
-}
-
-interface ImageModelsFieldProps {
-  llmProviderId: number;
-}
-
-/**
- * A provider's image models in its edit modal: the recommended ones and any
- * already connected, each with a switch that connects or disconnects it at
- * once, outside the form's save. The first connected model becomes the
- * default.
- */
-export function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
-  const t = useTranslations("admin.languageModels.imageGeneration");
-  const { providers, refetch: refetchProviders } =
-    useImageGenerationProviders();
-  const { defaultConfig, refetch: refetchConfigs } =
-    useImageGenerationConfigs();
-  const [pendingModel, setPendingModel] = useState<string | null>(null);
-
-  const provider = providers?.find((p) => p.llm_provider_id === llmProviderId);
-  const models =
-    provider?.models.filter(
-      (model) => model.is_recommended || model.image_provider_id !== null
-    ) ?? [];
-  if (!provider || models.length === 0) return null;
-
-  async function handleToggle(
-    model: ImageGenerationProviderModel,
-    connect: boolean
-  ) {
-    setPendingModel(model.name);
-    try {
-      if (connect) {
-        await linkImageGenerationModel(
-          llmProviderId,
-          model.name,
-          defaultConfig === null
-        );
-      } else if (model.image_provider_id) {
-        await deleteImageGenerationConfig(model.image_provider_id);
-      }
-      await Promise.all([refetchProviders(), refetchConfigs()]);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("imageModels.error")
-      );
-    } finally {
-      setPendingModel(null);
-    }
-  }
-
-  return (
-    <>
-      <InputDivider />
-      <Section alignItems="stretch" gap={1} height="fit">
-        <Content
-          font="main-ui-action"
-          title={t("imageModels.title")}
-          description={t("imageModels.description")}
-        />
-        {models.map((model) => {
-          const title = modelTitle(model);
-          return (
-            <InputHorizontal
-              key={model.name}
-              title={title}
-              description={title === model.name ? undefined : model.name}
-              center
-              withLabel
-            >
-              <InputSwitch
-                checked={model.image_provider_id !== null}
-                disabled={pendingModel !== null}
-                onCheckedChange={(checked) => void handleToggle(model, checked)}
-              />
-            </InputHorizontal>
-          );
-        })}
-      </Section>
-    </>
   );
 }

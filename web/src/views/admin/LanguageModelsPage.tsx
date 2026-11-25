@@ -106,10 +106,10 @@ function ExistingProviderCard({
   isLastProvider,
 }: ExistingProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const defaultTextBadge = useLabelBadge("defaultText");
+  const defaultChatBadge = useLabelBadge("defaultChat");
   const defaultImageBadge = useLabelBadge("defaultImage");
   const badges = [
-    ...(isDefaultText ? [defaultTextBadge] : []),
+    ...(isDefaultText ? [defaultChatBadge] : []),
     ...(isDefaultImage ? [defaultImageBadge] : []),
   ];
   const { mutate } = useSWRConfig();

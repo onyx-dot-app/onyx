@@ -6722,7 +6722,7 @@
           },
           "field": {
             "description": "选择要为此提供商启用的模型。",
-            "title": "模型"
+            "title": "聊天模型"
           },
           "foldButton": {
             "label": "收起模型"
@@ -14022,8 +14022,8 @@
       },
       "labels": {
         "default": "默认",
-        "defaultText": "默认文本模型",
-        "defaultImage": "默认图像生成模型"
+        "defaultChat": "默认聊天",
+        "defaultImage": "默认图像"
       },
       "modelTypes": {
         "decision": "决策",

@@ -6722,7 +6722,7 @@
           },
           "field": {
             "description": "Sélectionnez les modèles à rendre disponibles pour ce fournisseur.",
-            "title": "Modèles"
+            "title": "Modèles de chat"
           },
           "foldButton": {
             "label": "Replier les modèles"
@@ -14022,8 +14022,8 @@
       },
       "labels": {
         "default": "Par défaut",
-        "defaultText": "Modèle de texte par défaut",
-        "defaultImage": "Modèle de génération d'images par défaut"
+        "defaultChat": "Chat par défaut",
+        "defaultImage": "Image par défaut"
       },
       "modelTypes": {
         "decision": "Décision",

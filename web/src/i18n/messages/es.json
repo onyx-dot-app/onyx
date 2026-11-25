@@ -6722,7 +6722,7 @@
           },
           "field": {
             "description": "Selecciona los modelos que estarán disponibles para este proveedor.",
-            "title": "Modelos"
+            "title": "Modelos de chat"
           },
           "foldButton": {
             "label": "Plegar los modelos"
@@ -14022,8 +14022,8 @@
       },
       "labels": {
         "default": "Predeterminado",
-        "defaultText": "Modelo de texto predeterminado",
-        "defaultImage": "Modelo predeterminado de generación de imágenes"
+        "defaultChat": "Chat predeterminado",
+        "defaultImage": "Imagen predeterminada"
       },
       "modelTypes": {
         "decision": "Decisión",

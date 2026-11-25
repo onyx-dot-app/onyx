@@ -6722,7 +6722,7 @@
           },
           "field": {
             "description": "このプロバイダーで利用可能にするモデルを選択してください。",
-            "title": "モデル"
+            "title": "チャットモデル"
           },
           "foldButton": {
             "label": "モデルを折りたたむ"
@@ -14022,8 +14022,8 @@
       },
       "labels": {
         "default": "デフォルト",
-        "defaultText": "デフォルトのテキストモデル",
-        "defaultImage": "デフォルトの画像生成モデル"
+        "defaultChat": "デフォルトのチャット",
+        "defaultImage": "デフォルトの画像"
       },
       "modelTypes": {
         "decision": "判断",
