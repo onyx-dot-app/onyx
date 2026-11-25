@@ -128,11 +128,10 @@ def decide_command_approval(
             return False
 
     if for_command and integration_id is not None:
-        for other in action_approval.list_command_action_approvals(
+        for other in action_approval.list_pending_command_action_approvals(
             db_session,
             chat_session_id=row.chat_session_id,
             command_id=command_id,
-            pending_only=True,
             created_after=cutoff,
         ):
             if other.integration_id != integration_id or not covered(

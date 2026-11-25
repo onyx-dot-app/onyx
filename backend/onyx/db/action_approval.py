@@ -3,7 +3,6 @@
 `try_record_decision`'s conditional UPDATE is the only race arbiter.
 """
 
-from collections.abc import Collection
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -240,25 +239,20 @@ def get_chat_action_approval_for_user(
     )
 
 
-def list_command_action_approvals(
+def list_pending_command_action_approvals(
     db_session: Session,
     *,
     chat_session_id: UUID,
     command_id: UUID,
-    approval_ids: Collection[UUID] | None = None,
-    pending_only: bool = False,
     created_after: datetime | None = None,
 ) -> list[ActionApproval]:
-    """The rows of one chat command, oldest first, optionally only the given
-    IDs, the pending rows, or the rows created at or after `created_after`."""
+    """The pending rows of one chat command, oldest first, optionally only
+    the rows created at or after `created_after`."""
     stmt = select(ActionApproval).where(
         ActionApproval.chat_session_id == chat_session_id,
         ActionApproval.command_id == command_id,
+        ActionApproval.decision.is_(None),
     )
-    if approval_ids is not None:
-        stmt = stmt.where(ActionApproval.approval_id.in_(approval_ids))
-    if pending_only:
-        stmt = stmt.where(ActionApproval.decision.is_(None))
     if created_after is not None:
         stmt = stmt.where(ActionApproval.created_at >= created_after)
     return list(

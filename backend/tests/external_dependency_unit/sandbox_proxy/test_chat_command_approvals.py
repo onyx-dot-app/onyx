@@ -485,7 +485,7 @@ def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
     )
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
     seen: list[tuple[bool, ApprovalDecision | None]] = []
-    original = command_approvals.action_approval.list_command_action_approvals
+    original = command_approvals.action_approval.list_pending_command_action_approvals
 
     def scan(db: Session, **kwargs: Any) -> list[ActionApproval]:
         with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as other:
@@ -498,7 +498,7 @@ def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
         return original(db, **kwargs)
 
     monkeypatch.setattr(
-        command_approvals.action_approval, "list_command_action_approvals", scan
+        command_approvals.action_approval, "list_pending_command_action_approvals", scan
     )
     try:
         _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_COMMAND)

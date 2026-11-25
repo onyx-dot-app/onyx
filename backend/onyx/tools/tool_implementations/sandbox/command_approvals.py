@@ -5,7 +5,7 @@ A command's app requests carry its command ID to the egress proxy
 write_stdin call waits on the command, `CommandApprovals` marks the command
 as in the foreground, so the proxy holds an Ask request of the command
 instead of refusing it (`sandbox_proxy/addons/gate.py`). A thread shows each
-held request as an approval card on the call, and its end as the card's
+waiting request as an approval card on the call, and its end as the card's
 resolution. The user decides through `POST /chat/approvals/{id}/decision`,
 which wakes the proxy. The call does not yield while a card waits (`holds`).
 
@@ -22,6 +22,8 @@ holds none, so the proxy refuses the command's Ask requests.
 import threading
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
+
+from sqlalchemy.orm import Session
 
 from onyx.agents.tools import ToolProgress, ToolUpdate
 from onyx.cache.factory import get_cache_backend
@@ -47,7 +49,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # The watcher blocks this long on the announce list, then renews the
-# foreground mark and reads the decisions of the cards it shows.
+# foreground mark and reads the command's waiting requests and the decisions
+# of the cards it shows.
 _POLL_SECONDS = 1
 _JOIN_SECONDS = 5.0
 
@@ -55,6 +58,13 @@ _JOIN_SECONDS = 5.0
 # calls can wait on one command; only the last one to end ends its requests.
 _WAITING_LOCK = threading.Lock()
 _waiting: dict[UUID, int] = {}
+
+
+def _waiting_since() -> datetime:
+    """Older pending rows wait on no proxy (the proxy's wait timeout)."""
+    return datetime.now(timezone.utc) - timedelta(
+        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+    )
 
 
 def _outcome(row: ActionApproval) -> CommandApprovalOutcome:
@@ -83,6 +93,14 @@ def _card(row: ActionApproval) -> CommandApprovalRequest:
     )
 
 
+def _rows(db: Session, approval_ids: set[UUID]) -> list[ActionApproval]:
+    return [
+        row
+        for approval_id in approval_ids
+        if (row := action_approval.get_action_approval(db, approval_id)) is not None
+    ]
+
+
 class CommandApprovals:
     """The proxy approvals of the command that one call waits on. Implements
     `harness_base.CommandHold`; the call calls `end` once it returns."""
@@ -97,8 +115,6 @@ class CommandApprovals:
         self._command_id: UUID | None = None
         # Cards on screen whose request still waits.
         self._shown: set[UUID] = set()
-        # Cards that ended; a stale pending read must not show them again.
-        self._resolved: set[UUID] = set()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -125,30 +141,18 @@ class CommandApprovals:
         self._thread.start()
 
     def holds(self) -> bool:
-        """A request of the command waits for the user. Shows a waiting
-        request whose announcement the watcher missed."""
+        """A request of the command waits for the user."""
         command_id = self._command_id
         if command_id is None:
             return False
         try:
             with get_session_with_tenant(tenant_id=self._tenant_id) as db:
-                rows = action_approval.list_command_action_approvals(
-                    db,
-                    chat_session_id=self._chat_session_id,
-                    command_id=command_id,
-                    pending_only=True,
-                    # Older rows wait on no proxy (the proxy's wait timeout).
-                    created_after=datetime.now(timezone.utc)
-                    - timedelta(seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS),
-                )
-            for row in rows:
-                self._show(row)
+                return bool(self._waiting(db, command_id))
         except AgentCancelled:
             return False
         except Exception:
             logger.exception("command_approvals_read_failed command=%s", command_id)
             return False
-        return bool(rows)
 
     def end(self, *, cancelled: bool) -> None:
         """The call returned. When no other call waits on the command, it
@@ -177,12 +181,7 @@ class CommandApprovals:
             return
         try:
             with get_session_with_tenant(tenant_id=self._tenant_id) as db:
-                rows = action_approval.list_command_action_approvals(
-                    db,
-                    chat_session_id=self._chat_session_id,
-                    command_id=command_id,
-                    approval_ids=shown,
-                )
+                rows = _rows(db, shown)
             for row in rows:
                 self._report(
                     CommandApprovalResolved(
@@ -211,11 +210,10 @@ class CommandApprovals:
         ended: list[UUID] = []
         try:
             with get_session_with_tenant(tenant_id=self._tenant_id) as db:
-                pending = action_approval.list_command_action_approvals(
+                pending = action_approval.list_pending_command_action_approvals(
                     db,
                     chat_session_id=self._chat_session_id,
                     command_id=command_id,
-                    pending_only=True,
                 )
                 ended = [
                     row.approval_id
@@ -247,10 +245,9 @@ class CommandApprovals:
                 approval_cache.mark_command_foreground(
                     command_id, self._chat_session_id, cache
                 )
-                announced = approval_cache.pop_announcement(
-                    command_id, _POLL_SECONDS, cache
-                )
-                self._poll(command_id, announced)
+                # An announcement only wakes the watcher early.
+                approval_cache.pop_announcement(command_id, _POLL_SECONDS, cache)
+                self._poll(command_id)
             except AgentCancelled:
                 return
             except Exception:
@@ -259,45 +256,35 @@ class CommandApprovals:
                 )
                 self._stop.wait(_POLL_SECONDS)
 
-    def _poll(self, command_id: UUID, announced: UUID | None) -> None:
-        with self._lock:
-            ids = set(self._shown)
-        if announced is not None:
-            ids.add(announced)
-        if not ids:
-            return
-        with get_session_with_tenant(tenant_id=self._tenant_id) as db:
-            rows = action_approval.list_command_action_approvals(
-                db,
-                chat_session_id=self._chat_session_id,
-                command_id=command_id,
-                approval_ids=ids,
-            )
-        for row in rows:
-            self._show(row)
-            with self._lock:
-                resolved = row.decision is not None and row.approval_id in self._shown
-                if resolved:
-                    self._shown.discard(row.approval_id)
-                    self._resolved.add(row.approval_id)
-            if resolved:
-                self._report(
-                    CommandApprovalResolved(
-                        approval_id=str(row.approval_id), outcome=_outcome(row)
-                    )
-                )
+    def _waiting(self, db: Session, command_id: UUID) -> list[ActionApproval]:
+        return action_approval.list_pending_command_action_approvals(
+            db,
+            chat_session_id=self._chat_session_id,
+            command_id=command_id,
+            created_after=_waiting_since(),
+        )
 
-    def _show(self, row: ActionApproval) -> None:
-        """Show the card of a waiting request once."""
-        with self._lock:
-            if (
-                row.decision is not None
-                or row.approval_id in self._shown
-                or row.approval_id in self._resolved
-            ):
-                return
-            self._shown.add(row.approval_id)
-        self._report(_card(row))
+    def _poll(self, command_id: UUID) -> None:
+        """Show the new waiting requests and resolve the decided cards."""
+        with get_session_with_tenant(tenant_id=self._tenant_id) as db:
+            waiting = self._waiting(db, command_id)
+            with self._lock:
+                left = self._shown - {row.approval_id for row in waiting}
+            decided = [row for row in _rows(db, left) if row.decision is not None]
+        for row in waiting:
+            with self._lock:
+                new = row.approval_id not in self._shown
+                self._shown.add(row.approval_id)
+            if new:
+                self._report(_card(row))
+        for row in decided:
+            with self._lock:
+                self._shown.discard(row.approval_id)
+            self._report(
+                CommandApprovalResolved(
+                    approval_id=str(row.approval_id), outcome=_outcome(row)
+                )
+            )
 
     def _report(
         self, details: CommandApprovalRequest | CommandApprovalResolved
