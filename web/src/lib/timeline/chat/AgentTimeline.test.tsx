@@ -158,6 +158,40 @@ describe("AgentTimeline's collapsed run card", () => {
 
     expect(screen.getByText("Worked")).toBeVisible();
   });
+
+  it("times a later run from its first step", async () => {
+    let now = 1_000_000;
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const view = render(
+        <AgentTimeline
+          turnGroups={longRun.slice(0, 1)}
+          chatState={{ agent }}
+          isFirstRun={false}
+        />
+      );
+      now += 40_000;
+      view.rerender(
+        <AgentTimeline
+          turnGroups={longRun}
+          chatState={{ agent }}
+          isFirstRun={false}
+        />
+      );
+      view.rerender(
+        <AgentTimeline
+          turnGroups={longRun}
+          chatState={{ agent }}
+          isFirstRun={false}
+          stopPacketSeen
+        />
+      );
+
+      expect(await screen.findByText(/^Worked for 40/)).toBeVisible();
+    } finally {
+      clock.mockRestore();
+    }
+  });
 });
 
 describe("AgentTimeline while a tool call waits for the user", () => {
