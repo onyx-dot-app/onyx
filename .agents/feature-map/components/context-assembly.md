@@ -166,7 +166,10 @@ preamble and growing history.
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the
 `{{CURRENT_DATETIME}}`, `{{CITATION_GUIDANCE}}` and `{{REMINDER_TAG_DESCRIPTION}}`
 tags, adds the shared user-information framing and company context, then adds
-one guidance section per configured tool. `build_chat_prompt` calls it with
+a `# Tools` section with the guidance that spans tools: the search guidance,
+open a URL after a web search, code mode and the sandbox. Each built-in tool's
+own guidance is in its description (`prompts/tool_prompts.py`, for example
+`MEMORY_DESCRIPTION`), so it reaches code mode stubs too. `build_chat_prompt` calls it with
 `include_user_info=False` and without `should_cite_documents`. The per-user
 block goes into a separate message from `build_user_information_prompt`, so the
 system message stays the same for every user. Two callers use
@@ -212,7 +215,8 @@ Failed image calls without images do not add the image reminder.
 `<system-reminder>` tags.
 
 **Budget.** In setup, `calculate_reserved_tokens` reserves a worst-case system
-prompt (`all_guidance_family`, so it overshoots on purpose), the
+prompt (`all_guidance_family`, so it overshoots on purpose), the longest
+description of each built-in tool with guidance, the
 replacement and agent prompts, and the files attached to the new message. Then
 `chat/files.py:extract_context_files` uses the window that remains, for the
 smallest model of the turn, to decide whether project files go inline
@@ -420,13 +424,15 @@ counts what is sent, not the stored token counts.
 
 ## Recipes
 
-- `tool-guidance-section` **A new tool guidance section.** Copy the memory tool: add a
-  row to `chat/prompt_utils.py:_TOOL_GUIDANCE` with the tool type, its section
-  from `prompts/tool_prompts.py` (`MEMORY_GUIDANCE`), and the name each tool
-  family calls it by. Both branches of `build_system_prompt` read the table:
-  the live prompt guides the offered tools by their called names, and the
-  token estimate (`all_guidance_family`) guides every row by that family's name.
-  The sections follow the tool rank (`tools/ordering.py`).
+- `tool-guidance-section` **New tool guidance.** Guidance about one tool goes in
+  that tool's description. Copy the memory tool: `MemoryTool.DESCRIPTION` is
+  `prompts/tool_prompts.py:MEMORY_DESCRIPTION`, which says "this tool" and
+  names no other tool. Add the longest description of a built-in tool to the
+  descriptions that `calculate_reserved_tokens` counts. Guidance that spans
+  tools goes in the `# Tools` section: add it to both branches of
+  `build_system_prompt`, the live prompt by the offered tools' called names and
+  the token estimate (`all_guidance_family`) by that family's names. The
+  sections follow the tool rank (`tools/ordering.py`).
 - `workspace-setting-in-prompt` **A workspace setting in the system prompt.** Copy the company name and
   description: `prompts/prompt_utils.py:get_company_context` reads them from
   `Settings`, and `build_system_prompt` appends the result. Read the setting

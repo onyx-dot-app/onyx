@@ -9,6 +9,17 @@ RESEARCH_AGENT_TOOL_NAME = "research_agent"
 
 # ruff: noqa: E501, W605 start
 
+# The research agent's tool definitions show only each tool's summary, so its
+# prompt carries the tools' guidance.
+INTERNAL_SEARCH_TOOL_DESCRIPTION = """
+## internal_search
+Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
+- Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
+- Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
+- Keyword Queries: queries that are heavily keyword based are often internal document search queries.
+- Ambiguity: questions about something that is not widely known or understood.
+""".lstrip()
+
 # Hard for the URL reading tool to be called for a ton of search results all at once so limit to 3
 WEB_SEARCH_TOOL_DESCRIPTION = """
 
