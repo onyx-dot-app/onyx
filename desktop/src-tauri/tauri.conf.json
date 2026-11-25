@@ -80,7 +80,7 @@
       },
       "rpm": {
         "depends": [
-          "glibc >= 2.35",
+          "libc.so.6(GLIBC_2.35)(64bit)",
           "ca-certificates",
           "xdg-utils"
         ],

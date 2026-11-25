@@ -647,6 +647,9 @@ How the app differs from macOS:
   often lack it; then the AppImage exits with "Couldn't open libGLESv2.so.2".
 - Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 and later). CI builds them on
   Ubuntu 22.04 and fails if a file in the `.deb` or the AppImage needs a newer glibc.
+  The `.deb` depends on `libc6 (>= 2.35)`. The `.rpm` requires `libc.so.6(GLIBC_2.35)(64bit)`, the
+  capability that glibc 2.35 and later provide: the Tauri rpm bundler writes each `depends` entry as one
+  unversioned name, so `glibc >= 2.35` cannot be used there.
 
 Linux needs some desktop services:
 
