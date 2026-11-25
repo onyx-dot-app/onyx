@@ -3,13 +3,17 @@ points at into api_app and links the integration to it. The rows are seeded
 at the revision before it, then the chain upgrades."""
 
 import ast
+import importlib.util
 import json
 import sys
 from collections.abc import Generator
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.exc import IntegrityError
 
@@ -26,6 +30,15 @@ from tests.integration.common_utils.reset import downgrade_postgres, upgrade_pos
 PREVIOUS_REVISION = "4d900adc4242"
 REVISION = "c2caf6a8285c"
 
+MIGRATION_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "alembic"
+    / "versions"
+    / f"{REVISION}_add_api_app_table.py"
+)
+
+# openapi_to_url raises for a spec with several server URLs, so the copy
+# gives ''.
 WITH_SERVERS = {
     "openapi": "3.0.0",
     "info": {"title": "t", "version": "1"},
@@ -34,6 +47,28 @@ WITH_SERVERS = {
         {"url": "https://second.example.com"},
     ],
     "paths": {"/a": {"get": {"operationId": "getA"}}},
+}
+EMPTY_FIRST_URL = {
+    "openapi": "3.0.0",
+    "info": {"title": "t", "version": "1"},
+    "servers": [
+        {"url": ""},
+        {"description": "no url"},
+        {"url": "https://e.example.com"},
+    ],
+    "paths": {},
+}
+SERVERS_NOT_A_LIST = {
+    "openapi": "3.0.0",
+    "info": {"title": "t", "version": "1"},
+    "servers": {"url": "https://obj.example.com"},
+    "paths": {},
+}
+URL_NOT_A_STRING = {
+    "openapi": "3.0.0",
+    "info": {"title": "t", "version": "1"},
+    "servers": [{"url": 5}, {"url": "https://n.example.com"}],
+    "paths": {},
 }
 NO_SERVERS = {
     "openapi": "3.0.0",
@@ -54,6 +89,19 @@ TOOL_NO_SERVERS = 990002
 TOOL_PASSTHROUGH = 990003
 TOOL_ORPHAN = 990004
 TOOL_NOT_OPENAPI = 990005
+TOOL_EMPTY_FIRST_URL = 990006
+TOOL_SERVERS_NOT_A_LIST = 990007
+TOOL_URL_NOT_A_STRING = 990008
+ALL_TOOLS = [
+    TOOL_WITH_SERVERS,
+    TOOL_NO_SERVERS,
+    TOOL_PASSTHROUGH,
+    TOOL_ORPHAN,
+    TOOL_NOT_OPENAPI,
+    TOOL_EMPTY_FIRST_URL,
+    TOOL_SERVERS_NOT_A_LIST,
+    TOOL_URL_NOT_A_STRING,
+]
 
 
 def _migrate(direction: str, revision: str) -> None:
@@ -133,11 +181,22 @@ def seeded(engine: Engine) -> Generator[dict[int, int], None, None]:
         _insert_tool(conn, TOOL_PASSTHROUGH, PASSTHROUGH, passthrough_auth=True)
         _insert_tool(conn, TOOL_ORPHAN, WITH_SERVERS)
         _insert_tool(conn, TOOL_NOT_OPENAPI, None)
+        _insert_tool(conn, TOOL_EMPTY_FIRST_URL, EMPTY_FIRST_URL)
+        _insert_tool(conn, TOOL_SERVERS_NOT_A_LIST, SERVERS_NOT_A_LIST)
+        _insert_tool(conn, TOOL_URL_NOT_A_STRING, URL_NOT_A_STRING)
         integrations = {
             TOOL_WITH_SERVERS: _insert_integration(conn, TOOL_WITH_SERVERS, None),
             TOOL_NO_SERVERS: _insert_integration(conn, TOOL_NO_SERVERS, None),
             TOOL_PASSTHROUGH: _insert_integration(conn, TOOL_PASSTHROUGH, "onyx_login"),
             TOOL_NOT_OPENAPI: _insert_integration(conn, TOOL_NOT_OPENAPI, None),
+            **{
+                tool_id: _insert_integration(conn, tool_id, None)
+                for tool_id in (
+                    TOOL_EMPTY_FIRST_URL,
+                    TOOL_SERVERS_NOT_A_LIST,
+                    TOOL_URL_NOT_A_STRING,
+                )
+            },
         }
     _migrate("upgrade", REVISION)
     yield integrations
@@ -157,18 +216,7 @@ def seeded(engine: Engine) -> Generator[dict[int, int], None, None]:
         conn.execute(
             text("DELETE FROM api_app WHERE id = ANY(:ids)"), {"ids": app_id_list}
         )
-        conn.execute(
-            text("DELETE FROM tool WHERE id = ANY(:ids)"),
-            {
-                "ids": [
-                    TOOL_WITH_SERVERS,
-                    TOOL_NO_SERVERS,
-                    TOOL_PASSTHROUGH,
-                    TOOL_ORPHAN,
-                    TOOL_NOT_OPENAPI,
-                ]
-            },
-        )
+        conn.execute(text("DELETE FROM tool WHERE id = ANY(:ids)"), {"ids": ALL_TOOLS})
 
 
 def _copied(conn: Connection, integration_id: int) -> dict[str, Any] | None:
@@ -198,7 +246,7 @@ def _expected(
     return {
         seeded[TOOL_WITH_SERVERS]: {
             "api_type": "rest",
-            "base_url": "https://api.example.com/v1",
+            "base_url": "",
             "openapi_document": WITH_SERVERS,
             "graphql_schema": None,
         },
@@ -215,6 +263,24 @@ def _expected(
             "graphql_schema": None,
         },
         seeded[TOOL_NOT_OPENAPI]: None,
+        seeded[TOOL_EMPTY_FIRST_URL]: {
+            "api_type": "rest",
+            "base_url": "https://e.example.com",
+            "openapi_document": EMPTY_FIRST_URL,
+            "graphql_schema": None,
+        },
+        seeded[TOOL_SERVERS_NOT_A_LIST]: {
+            "api_type": "rest",
+            "base_url": "",
+            "openapi_document": SERVERS_NOT_A_LIST,
+            "graphql_schema": None,
+        },
+        seeded[TOOL_URL_NOT_A_STRING]: {
+            "api_type": "rest",
+            "base_url": "",
+            "openapi_document": URL_NOT_A_STRING,
+            "graphql_schema": None,
+        },
     }
 
 
@@ -276,9 +342,9 @@ def test_new_row_ids_follow_the_copied_ids(
         ).scalar_one()
         conn.execute(text("DELETE FROM api_app WHERE id = :id"), {"id": new_id})
     copied = [
-        seeded[TOOL_WITH_SERVERS],
-        seeded[TOOL_NO_SERVERS],
-        seeded[TOOL_PASSTHROUGH],
+        integration_id
+        for integration_id, expected in _expected(seeded).items()
+        if expected is not None
     ]
     assert new_id > max(copied)
 
@@ -323,15 +389,95 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         _assert_copied(conn, seeded)
 
 
+def _current_revision(conn: Connection) -> str:
+    return conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+
+
+@pytest.mark.usefixtures("seeded")
+def test_downgrade_refuses_to_orphan_graphql_apps(engine: Engine) -> None:
+    with engine.begin() as conn:
+        app_id = conn.execute(
+            text(
+                "INSERT INTO api_app (api_type, base_url, graphql_schema) "
+                "VALUES ('graphql', 'https://gql.example.com', "
+                "'type Query { a: Int }') RETURNING id"
+            )
+        ).scalar_one()
+        integration_id = conn.execute(
+            text(
+                "INSERT INTO integration (kind, name, auth_mode, api_app_id) "
+                "VALUES ('api', 'api_app_migration_graphql', 'none', :app_id) "
+                "RETURNING id"
+            ),
+            {"app_id": app_id},
+        ).scalar_one()
+    try:
+        with pytest.raises(
+            RuntimeError, match="1 GraphQL app integration.*must delete"
+        ):
+            _migrate("downgrade", PREVIOUS_REVISION)
+        with engine.connect() as conn:
+            assert _current_revision(conn) == REVISION
+            assert (
+                conn.execute(
+                    text("SELECT api_app_id FROM integration WHERE id = :id"),
+                    {"id": integration_id},
+                ).scalar_one()
+                == app_id
+            )
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM integration WHERE id = :id"), {"id": integration_id}
+            )
+            conn.execute(text("DELETE FROM api_app WHERE id = :id"), {"id": app_id})
+
+
+def _load_migration() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("api_app_migration", MIGRATION_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_upgrade_retries_while_integration_is_locked(
+    engine: Engine, seeded: dict[int, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reader holds a lock on integration when the upgrade starts. The ALTER
+    times out, the reader ends during the retry delay, and the retry
+    succeeds."""
+    _migrate("downgrade", PREVIOUS_REVISION)
+    migration = _load_migration()
+    monkeypatch.setattr(migration, "_LOCK_TIMEOUT", "100ms")
+    reader = engine.connect()
+    reader.execute(text("SELECT count(*) FROM integration"))
+    retries: list[float] = []
+
+    def end_the_reader(delay: float) -> None:
+        retries.append(delay)
+        reader.rollback()
+
+    monkeypatch.setattr(migration.time, "sleep", end_the_reader)
+    try:
+        with engine.connect() as conn:
+            with Operations.context(MigrationContext.configure(conn)):
+                migration.upgrade()
+            conn.execute(
+                text("UPDATE alembic_version SET version_num = :revision"),
+                {"revision": REVISION},
+            )
+            conn.commit()
+    finally:
+        reader.close()
+    assert retries == [migration._RETRY_DELAY_S]
+    with engine.connect() as conn:
+        _assert_copied(conn, seeded)
+
+
 def test_migration_imports_no_app_code() -> None:
-    path = (
-        Path(__file__).resolve().parents[4]
-        / "alembic"
-        / "versions"
-        / f"{REVISION}_add_api_app_table.py"
-    )
     modules: set[str] = set()
-    for node in ast.walk(ast.parse(path.read_text())):
+    for node in ast.walk(ast.parse(MIGRATION_PATH.read_text())):
         if isinstance(node, ast.Import):
             modules.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module is not None:

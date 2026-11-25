@@ -42,18 +42,45 @@ _RETRY_DELAY_S = 2
 _LOCK_NOT_AVAILABLE = "55P03"
 
 # The id of each copied row is the id of its integration, so the link needs
-# no lookup. A spec with no server URL cannot make a call; it gets ''.
+# no lookup. base_url is the value openapi_to_url gives: the one non-empty
+# string url among the servers. Where openapi_to_url raises (no such url,
+# several, a server that is not an object, a url that is not a string), the
+# spec cannot make a call and the copy gives ''.
 _COPY_OPENAPI_TOOLS = """
     INSERT INTO api_app (
         id, api_type, base_url, openapi_document, graphql_schema
     )
     SELECT i.id, 'rest',
-        coalesce(t.openapi_schema -> 'servers' -> 0 ->> 'url', ''),
+        coalesce((
+            SELECT min(s.value ->> 'url') FILTER (
+                WHERE jsonb_typeof(s.value -> 'url') = 'string'
+                AND s.value ->> 'url' <> ''
+            )
+            FROM jsonb_array_elements(
+                CASE WHEN jsonb_typeof(t.openapi_schema -> 'servers') = 'array'
+                THEN t.openapi_schema -> 'servers' ELSE '[]'::jsonb END
+            ) AS s
+            HAVING count(*) FILTER (
+                WHERE jsonb_typeof(s.value -> 'url') = 'string'
+                AND s.value ->> 'url' <> ''
+            ) = 1
+            AND count(*) FILTER (
+                WHERE jsonb_typeof(s.value) <> 'object'
+                OR jsonb_typeof(s.value -> 'url') NOT IN ('string', 'null')
+            ) = 0
+        ), ''),
         t.openapi_schema::text, NULL
     FROM integration i
     JOIN tool t ON t.id = i.tool_id
     WHERE t.openapi_schema IS NOT NULL
     ORDER BY i.id
+"""
+
+# A GraphQL app has api_app_id and no tool_id. The old schema has no kind row
+# for it.
+_COUNT_GRAPHQL_INTEGRATIONS = """
+    SELECT count(*) FROM integration
+    WHERE api_app_id IS NOT NULL AND tool_id IS NULL
 """
 
 _LINK_INTEGRATIONS = """
@@ -223,13 +250,15 @@ def _build_index_and_validate(conn: sa.engine.Connection, schema: str) -> None:
         )
 
 
-def downgrade() -> None:
-    # GraphQL apps break the old checks, so they stay unvalidated.
+def _restore_integration_action() -> None:
     _replace_check(
         "integration_action",
         ACTION_SOURCE,
         "source IN ('mcp', 'openapi', 'external_app')",
     )
+
+
+def _restore_integration() -> None:
     _replace_check(
         "integration",
         SINGLE_KIND,
@@ -238,4 +267,19 @@ def downgrade() -> None:
     op.drop_index(INDEX_NAME, table_name="integration")
     op.drop_constraint(FK_NAME, "integration", type_="foreignkey")
     op.drop_column("integration", "api_app_id")
+
+
+def downgrade() -> None:
+    graphql_apps: int = (
+        op.get_bind().execute(sa.text(_COUNT_GRAPHQL_INTEGRATIONS)).scalar_one()
+    )
+    if graphql_apps:
+        raise RuntimeError(
+            f"{graphql_apps} GraphQL app integration(s) exist. The schema before "
+            "this revision cannot hold them. An admin must delete the GraphQL "
+            "apps before the downgrade."
+        )
+    # GraphQL apps break the old checks, so they stay unvalidated.
+    _with_bounded_lock_wait(_restore_integration_action)
+    _with_bounded_lock_wait(_restore_integration)
     op.drop_table("api_app")
