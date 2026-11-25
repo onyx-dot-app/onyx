@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import re
 import threading
 import time
@@ -700,6 +701,7 @@ class BoundedTelemetry:
             return False
         if not (self._pending or self._queue or self._stage_sums):
             return True
+        retry_after: float = 0.0
         try:
             if transport is None:
                 if self._session is None:
@@ -741,12 +743,16 @@ class BoundedTelemetry:
                     self.rejected += len(self._pending)
                     self.dropped += len(self._pending)
                     self._pending = []
+                if response.status_code == 429:
+                    retry_after = _retry_after_seconds(
+                        response.headers.get("Retry-After")
+                    )
                 if not response.ok:
                     raise RuntimeError("telemetry delivery failed")
                 result: Any = read_json_body(response, 65536)
         except Exception:
             # An outage keeps the batch and backs off.
-            self._back_off()
+            self._back_off(retry_after)
             return False
         counts: dict[str, Any] = result if isinstance(result, dict) else {}
         retry: list[dict[str, Any]] = self._retry_events(counts.get("results"))
@@ -767,9 +773,12 @@ class BoundedTelemetry:
         self._pending = []
         return True
 
-    def _back_off(self) -> None:
+    def _back_off(self, retry_after: float = 0.0) -> None:
         self.failures = min(self.failures + 1, 8)
-        self._blocked_until = time.monotonic() + min(300, 2**self.failures)
+        window: float = min(300, 2**self.failures)
+        # Jitter spreads the retries of processes that failed at the same time.
+        delay: float = window / 2 + random.uniform(0, window / 2)
+        self._blocked_until = time.monotonic() + max(delay, min(300.0, retry_after))
 
     def _retry_events(self, results: Any) -> list[dict[str, Any]]:
         """The events of the batch that the service asks to send again."""
@@ -928,6 +937,14 @@ class BoundedTelemetry:
         ) and time.monotonic() < deadline:
             if not self.flush_once():
                 return
+
+
+def _retry_after_seconds(value: str | None) -> float:
+    """The delay of a `Retry-After` header in seconds. HTTP dates count as none."""
+    try:
+        return max(0.0, float(value or 0))
+    except ValueError:
+        return 0.0
 
 
 def poll_due(previous: float | None, now: float, interval: float) -> bool:

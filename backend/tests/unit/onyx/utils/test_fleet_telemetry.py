@@ -128,6 +128,33 @@ def test_outage_keeps_the_batch_and_backs_off(clock: list[float]) -> None:
     assert sender.sent == 1 and sender.failures == 0 and not sender._pending
 
 
+def test_rate_limited_batch_waits_for_retry_after(clock: list[float]) -> None:
+    sender = make_sender()
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    limited = Response({}, status=429)
+    limited.headers["Retry-After"] = "30"
+    assert not sender.flush_once(Mock(return_value=limited))
+    transport = RecordingTransport()
+    clock[0] += 29
+    assert not sender.flush_once(transport) and not transport.events
+    clock[0] += 2
+    assert sender.flush_once(transport) and len(transport.events) == 1
+
+
+def test_backoff_jitter_stays_inside_the_window(
+    clock: list[float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sender = make_sender()
+    # The first failure waits half of its 2-second window, plus up to the other half.
+    for draw, expected in ((0.0, 1.0), (1.0, 2.0)):
+        monkeypatch.setattr(
+            fleet.random, "uniform", lambda low, high, d=draw: low + d * (high - low)
+        )
+        sender.failures = 0
+        sender._back_off()
+        assert sender._blocked_until == clock[0] + expected
+
+
 def test_rejected_batch_is_dropped_and_not_sent_again() -> None:
     sender = make_sender()
     assert sender.emit("heartbeat", {"dropped_events": 0})
