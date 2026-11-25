@@ -10,7 +10,7 @@ import {
 import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
 import { isModalOpen } from "@/lib/shortcuts/utils";
 
-export function useChatJumpHintModifier(): "ctrl+alt" | "mod+alt" | null {
+export function useChatJumpHint() {
   const { isMac } = useBrowserInfo();
   const [modifier, setModifier] = useState<"ctrl+alt" | "mod+alt" | null>(null);
 
@@ -43,7 +43,7 @@ export function useChatJumpHintModifier(): "ctrl+alt" | "mod+alt" | null {
     };
   }, [isMac]);
 
-  return modifier;
+  return { modifier, isMac };
 }
 
 interface ShortcutBindingProps {

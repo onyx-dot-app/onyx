@@ -9,7 +9,7 @@ import { useSidebarState } from "@opal/layouts";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import { CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
 import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
-import { formatHotkey } from "@/lib/shortcuts/utils";
+import { formatHotkey, isModalOpen } from "@/lib/shortcuts/utils";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
@@ -119,23 +119,29 @@ export default function ChatSearchCommandMenu({
     setActiveFilter("all");
   }, []);
 
-  const handleChatSelect = useCallback(
-    (chatId: string) => {
-      appPosition.openChat(chatId);
-      setOpen(false);
-    },
-    [appPosition]
-  );
-
-  const handleOpen = useCallback(() => setOpen(true), []);
-
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const handleOpenChange = useCallback((newOpen: boolean) => {
-    setOpen(newOpen);
-    if (!newOpen) {
+    if (newOpen) {
+      const focused = document.activeElement;
+      restoreFocusRef.current = focused instanceof HTMLElement ? focused : null;
+    } else {
       setSearchValue("");
       setActiveFilter("all");
     }
+    setOpen(newOpen);
   }, []);
+
+  const handleOpen = useCallback(
+    () => handleOpenChange(true),
+    [handleOpenChange]
+  );
+  const handleChatSelect = useCallback(
+    (chatId: string) => {
+      appPosition.openChat(chatId);
+      handleOpenChange(false);
+    },
+    [appPosition, handleOpenChange]
+  );
 
   const handleEmptyBackspace = useCallback(() => {
     if (activeFilter !== "all") {
@@ -143,15 +149,19 @@ export default function ChatSearchCommandMenu({
       setActiveFilter("all");
     } else {
       // No filter active, close the menu
-      setOpen(false);
+      handleOpenChange(false);
     }
-  }, [activeFilter]);
+  }, [activeFilter, handleOpenChange]);
 
   const hasSearchValue = searchValue.trim().length > 0;
 
-  useHotkey(CHAT_SHORTCUTS.commandPalette, () => handleOpenChange(!open), {
-    whileTyping: true,
-  });
+  useHotkey(
+    CHAT_SHORTCUTS.commandPalette,
+    () => {
+      if (open || !isModalOpen()) handleOpenChange(!open);
+    },
+    { whileTyping: true }
+  );
 
   const { isMac } = useBrowserInfo();
   const { setFolded } = useSidebarState();
@@ -168,11 +178,15 @@ export default function ChatSearchCommandMenu({
   // does not close at once.
   const afterCloseRef = useRef<(() => void) | null>(null);
   const handleCloseAutoFocus = (event: Event) => {
+    const target = restoreFocusRef.current;
+    restoreFocusRef.current = null;
+    if (target?.isConnected) {
+      event.preventDefault();
+      target.focus();
+    }
     const action = afterCloseRef.current;
-    if (!action) return;
     afterCloseRef.current = null;
-    event.preventDefault();
-    action();
+    action?.();
   };
 
   const shortcutItems: ShortcutAction[] = [
@@ -232,7 +246,7 @@ export default function ChatSearchCommandMenu({
             onValueChange={setSearchValue}
             filters={headerFilters}
             onFilterRemove={handleFilterRemove}
-            onClose={() => setOpen(false)}
+            onClose={() => handleOpenChange(false)}
             onEmptyBackspace={handleEmptyBackspace}
           />
 

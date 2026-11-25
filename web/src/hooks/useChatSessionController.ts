@@ -161,15 +161,6 @@ export default function useChatSessionController({
     // configuration, so the next chat reads its own.
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
-
-      // Remove uploaded files
-      setCurrentMessageFiles([]);
-
-      // If switching from one chat to another, then need to scroll again
-      // If we're creating a brand new chat, then don't need to scroll
-      if (priorChatSessionId !== null) {
-        setSelectedDocuments([]);
-      }
     }
 
     // Each run owns its load: cleanup cancels the request and stops the run.

@@ -3,7 +3,7 @@ import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { fireEvent, render, screen, setupUser } from "@tests/setup/test-utils";
 import type { ChatShortcutActions } from "@/lib/shortcuts/hooks";
 import ChatShortcuts, {
-  useChatJumpHintModifier,
+  useChatJumpHint,
 } from "@/sections/sidebar/ChatShortcuts";
 
 const mockActions: ChatShortcutActions = {
@@ -22,7 +22,7 @@ beforeEach(() => jest.clearAllMocks());
 
 test("Ctrl+Alt reveals chat jump hints until release or window blur", async () => {
   function Hints() {
-    const modifier = useChatJumpHintModifier();
+    const { modifier } = useChatJumpHint();
     return modifier ? <span>{modifier}</span> : null;
   }
 

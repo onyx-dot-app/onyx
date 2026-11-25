@@ -50,15 +50,16 @@ describe("useHotkey", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("ignores an AltGr character on its digit key", () => {
+  it("ignores a digit typed with AltGr", () => {
     setUserAgent("Windows");
     const handler = jest.fn();
     renderHook(() => useHotkey("mod+alt+7", handler));
     fireEvent.keyDown(document, {
-      key: "{",
+      key: "7",
       code: "Digit7",
       ctrlKey: true,
       altKey: true,
+      modifierAltGraph: true,
     });
     expect(handler).not.toHaveBeenCalled();
   });

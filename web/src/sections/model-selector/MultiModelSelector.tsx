@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsPresent } from "motion/react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { getModelIcon } from "@/lib/languageModels/utils";
@@ -66,6 +67,7 @@ export default function MultiModelSelector({
   const [menuKey, setMenuKey] = useState(0);
   // A removal unmounts the content with no exit animation; the next open resets it.
   const [closedByRemoval, setClosedByRemoval] = useState<boolean>(false);
+  const isPresent = useIsPresent();
   const rowRef = useRef<HTMLDivElement>(null);
   // The opener's rect frozen at open: a pick can move or unmount the opener
   // (pills prepend, + hides at max, a replaced pill remounts) while the menu fades.
@@ -299,7 +301,9 @@ export default function MultiModelSelector({
                   return (
                     <div
                       key={llmOptionKey(model)}
-                      data-model-picker-pill
+                      data-model-picker-pill={
+                        isPresent && index === 0 ? "" : undefined
+                      }
                       className="flex items-center"
                     >
                       {index > 0 && (

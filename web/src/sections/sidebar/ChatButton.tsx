@@ -52,8 +52,6 @@ import { useChatExportMenu, useChatRunStatus } from "@/lib/chat/hooks";
 import type { ChatRunStatus } from "@/lib/chat/runStatus";
 import type { IconFunctionComponent } from "@opal/types";
 import UnseenMarker from "@/refresh-components/UnseenMarker";
-import useBrowserInfo from "@/hooks/useBrowserInfo";
-import { formatHotkey } from "@/lib/shortcuts/utils";
 
 const RUN_STATUS_ICONS = {
   approval: { icon: SvgAlertTriangle, className: "stroke-status-warning-05" },
@@ -88,7 +86,7 @@ export interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;
-  jumpShortcut?: string;
+  jumpShortcut?: { label: string; width: string };
 }
 
 const ChatButton = memo(
@@ -99,7 +97,6 @@ const ChatButton = memo(
     jumpShortcut,
   }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
-    const { isMac } = useBrowserInfo();
     const appPosition = useAppPosition();
     const active = useMemo(
       () => appPosition.isChat() && appPosition.chat() === chatSession.id,
@@ -463,11 +460,7 @@ const ChatButton = memo(
             color="text-03"
             wordWrap="whitespace-nowrap"
           >
-            {formatHotkey(jumpShortcut, isMac, {
-              ctrl: t("chatSearch.keys.ctrl"),
-              alt: t("chatSearch.keys.alt"),
-              shift: t("chatSearch.keys.shift"),
-            })}
+            {jumpShortcut.label}
           </Text>
         </span>
       ) : null;
@@ -495,11 +488,8 @@ const ChatButton = memo(
             }
             rightChildren={jumpHint ?? rightMenu}
             rightChildrenAtRest={
-              jumpHint
-                ? isMac
-                  ? "2.5rem"
-                  : "4.5rem"
-                : !!runStatusMarker && !renaming
+              (jumpHint && jumpShortcut?.width) ||
+              (!!runStatusMarker && !renaming)
             }
             nested={!!project}
           >

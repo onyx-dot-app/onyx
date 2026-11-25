@@ -344,21 +344,23 @@ const AppInputBar = React.memo(
     // Keyed by chat session id, or "new" until the session is created.
     const chatSessionId = appPosition.chat();
     const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
+    const composerScope = incognitoEnabled ? null : chatDraftStorageKey;
     const {
       draft: chatDraft,
       loaded: chatDraftLoaded,
       save: saveChatDraft,
       clear: clearChatDraft,
     } = useDraft<StoredChatDraft>({
-      key: chatDraftStorageKey,
+      key: composerScope,
       isEmpty: isChatDraftEmpty,
       storage: "local",
+      debounceMs: 0,
     });
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
     const draftSeededRef = useRef(false);
     const skipNextDraftSaveRef = useRef(false);
-    const prevDraftKeyRef = useRef(chatDraftStorageKey);
+    const previousScopeRef = useRef(composerScope);
     // Snapshot of the input, read non-reactively in the restore effect so
     // seeding doesn't re-run on every keystroke, and after awaits.
     const composedRef = useRef(composed);
@@ -381,14 +383,16 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       draftSeededRef.current = false;
-      // Clear the previous session's leftover text instead of leaking it into
-      // this one.
-      if (prevDraftKeyRef.current !== chatDraftStorageKey) {
-        prevDraftKeyRef.current = chatDraftStorageKey;
+      const previousScope = previousScopeRef.current;
+      if (previousScope !== composerScope) {
+        previousScopeRef.current = composerScope;
         setHeldSendKey(null);
         clearMessage();
+        if (previousScope === null || composerScope === null) {
+          setCurrentMessageFiles([]);
+        }
       }
-    }, [chatDraftStorageKey, clearMessage]);
+    }, [composerScope, clearMessage, setCurrentMessageFiles]);
 
     // Restore once read: a URL prompt wins and a non-empty input is never
     // clobbered.
@@ -574,7 +578,9 @@ const AppInputBar = React.memo(
     function returnText(sessionId: string, returned: ComposedMessage) {
       const isOpen =
         mountedRef.current &&
+        previousScopeRef.current === composerScope &&
         useChatSessionStore.getState().currentSessionId === sessionId;
+      if (!isOpen && incognitoEnabled) return;
       const key = draftKey("chat", sessionId);
       const newer: ChatDraft = isOpen
         ? { ...composedRef.current, files: currentMessageFiles }
@@ -593,14 +599,15 @@ const AppInputBar = React.memo(
             ],
           }
         : returned;
-      const stored = toStoredChatDraft(combined, newer.files ?? []);
-      if (!isOpen) {
-        writeDraft(key, stored, isChatDraftEmpty, "local");
-        return;
+      if (!incognitoEnabled) {
+        writeDraft(
+          isOpen ? chatDraftStorageKey : key,
+          toStoredChatDraft(combined, newer.files ?? []),
+          isChatDraftEmpty,
+          "local"
+        );
       }
-      // The composer saves its draft after a delay that a chat switch cancels;
-      // the server no longer holds this text, so it is saved at once.
-      writeDraft(chatDraftStorageKey, stored, isChatDraftEmpty, "local");
+      if (!isOpen) return;
       setMessage(combined.message, combined.mentions);
       setCursorToEnd();
     }

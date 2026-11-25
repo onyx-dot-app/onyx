@@ -100,9 +100,10 @@ import { dismissNotification } from "@/lib/notifications/api";
 import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import ChatShortcuts, {
-  useChatJumpHintModifier,
+  useChatJumpHint,
 } from "@/sections/sidebar/ChatShortcuts";
 import { JUMP_TO_CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
+import { formatHotkey } from "@/lib/shortcuts/utils";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
@@ -143,7 +144,12 @@ function RecentsSection({
   onLoadMore,
 }: RecentsSectionProps) {
   const t = useTranslations("sidebar");
-  const jumpHintModifier = useChatJumpHintModifier();
+  const { modifier: jumpHintModifier, isMac } = useChatJumpHint();
+  const keyNames = {
+    ctrl: t("chatSearch.keys.ctrl"),
+    alt: t("chatSearch.keys.alt"),
+    shift: t("chatSearch.keys.shift"),
+  };
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -206,7 +212,14 @@ function RecentsSection({
                 draggable
                 jumpShortcut={
                   jumpHintModifier && index < JUMP_TO_CHAT_SHORTCUTS.length
-                    ? `${jumpHintModifier}+${index + 1}`
+                    ? {
+                        label: formatHotkey(
+                          `${jumpHintModifier}+${index + 1}`,
+                          isMac,
+                          keyNames
+                        ),
+                        width: isMac ? "2.5rem" : "4.5rem",
+                      }
                     : undefined
                 }
               />

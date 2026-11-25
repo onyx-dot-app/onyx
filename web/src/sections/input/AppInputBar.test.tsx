@@ -280,34 +280,52 @@ function projectFile(id: string): ProjectFile {
   };
 }
 
-test("a reload restores the draft text and its uploaded files", async () => {
-  jest.useFakeTimers();
-  try {
-    const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
-    const uploading = {
-      ...projectFile("uploading-file"),
-      status: UserFileStatus.UPLOADING,
-    };
-    mockProjectsContext.currentMessageFiles = [
-      projectFile("draft-file"),
-      uploading,
-    ];
-    const first = render(<Composer />);
-    await user.type(screen.getByRole("textbox"), "unsent text");
-    // The draft saves after a delay.
-    act(() => jest.advanceTimersByTime(300));
-    first.unmount();
-    expect(sessionStorage.length).toBe(0);
+test("an immediate reload restores draft text and completed uploads", async () => {
+  const uploading = {
+    ...projectFile("uploading-file"),
+    status: UserFileStatus.UPLOADING,
+  };
+  mockProjectsContext.currentMessageFiles = [
+    projectFile("draft-file"),
+    uploading,
+  ];
+  const first = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "unsent text");
+  first.unmount();
 
-    mockProjectsContext.currentMessageFiles = [];
-    render(<Composer />);
-    expect(screen.getByRole("textbox")).toHaveTextContent("unsent text");
-    expect(mockProjectsContext.setCurrentMessageFiles).toHaveBeenCalledWith([
-      projectFile("draft-file"),
-    ]);
-  } finally {
-    jest.useRealTimers();
-  }
+  expect(sessionStorage.length).toBe(0);
+  mockProjectsContext.currentMessageFiles = [];
+  render(<Composer />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("unsent text");
+  expect(mockProjectsContext.setCurrentMessageFiles).toHaveBeenCalledWith([
+    projectFile("draft-file"),
+  ]);
+});
+
+test("incognito keeps its draft out of storage and restores the regular draft on exit", async () => {
+  const user = setupUser();
+  const { rerender } = render(<Composer />);
+  const message = () => screen.getByRole("textbox");
+
+  await user.type(message(), "regular draft");
+  mockIncognitoEnabled = true;
+  rerender(<Composer />);
+  expect(message()).toBeEmptyDOMElement();
+
+  await user.type(message(), "private draft");
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  expect(localStorage.getItem(draftKey("chat", "new"))).toContain(
+    "regular draft"
+  );
+  expect(localStorage.getItem(draftKey("chat", "new"))).not.toContain(
+    "private draft"
+  );
+  expect(sessionStorage.length).toBe(0);
+
+  mockIncognitoEnabled = false;
+  rerender(<Composer />);
+  expect(message()).toHaveTextContent("regular draft");
+  expect(message()).not.toHaveTextContent("private draft");
 });
 
 describe("restore after a failed send", () => {

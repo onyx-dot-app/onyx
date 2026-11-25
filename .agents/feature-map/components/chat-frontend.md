@@ -71,7 +71,8 @@
   (`sections/input/AppInputBar.tsx`, `useDraft` with `storage: "local"`). The
   draft holds the text, its `@` picks and the uploaded files, and survives
   reload and browser closure. A send or an emptied input clears it, and
-  logout removes all of them.
+  logout removes all of them. Incognito keeps its composer text and files
+  in memory.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
   pending-input hint. Its Stop subagents button stops every active

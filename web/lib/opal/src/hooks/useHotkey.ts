@@ -63,6 +63,8 @@ function matches(event: KeyboardEvent, hotkey: ParsedHotkey): boolean {
   const wantCtrl = hotkey.ctrl || (hotkey.mod && !mac);
   if (event.metaKey !== wantMeta || event.ctrlKey !== wantCtrl) return false;
   if (event.altKey !== hotkey.alt) return false;
+  if (wantCtrl && hotkey.alt && event.getModifierState("AltGraph"))
+    return false;
   if (hotkey.shift !== undefined && event.shiftKey !== hotkey.shift) {
     return false;
   }

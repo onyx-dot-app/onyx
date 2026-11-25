@@ -73,7 +73,7 @@ export function writeDraft<T>(
 }
 
 export interface UseDraftOptions<T> {
-  key: string;
+  key: string | null;
   debounceMs?: number;
   isEmpty?: (value: T) => boolean;
   storage?: DraftStorage;
@@ -110,7 +110,7 @@ export function useDraft<T>({
   }, [isEmpty]);
 
   useEffect(() => {
-    setEntry({ key, draft: readDraft<T>(key, storage) });
+    setEntry(key === null ? null : { key, draft: readDraft<T>(key, storage) });
   }, [key, storage]);
 
   // Cancel a pending write on key change/unmount so it can't land under the old
@@ -138,6 +138,7 @@ export function useDraft<T>({
 
   const save = useCallback(
     (value: T) => {
+      if (key === null) return;
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       const write = () => {
         timerRef.current = null;
@@ -153,6 +154,7 @@ export function useDraft<T>({
   );
 
   const clear = useCallback(() => {
+    if (key === null) return;
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
