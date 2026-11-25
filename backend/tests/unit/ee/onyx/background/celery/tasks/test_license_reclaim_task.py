@@ -18,6 +18,14 @@ from onyx.configs.constants import OnyxCeleryTask
 TASKS_MODULE = "ee.onyx.background.celery.tasks.license_reclaim.tasks"
 
 
+@pytest.fixture(autouse=True)
+def isolated_throttle(monkeypatch: pytest.MonkeyPatch) -> None:
+    redis = MagicMock()
+    redis.get.return_value = None
+    redis.set.return_value = True
+    monkeypatch.setattr(f"{TASKS_MODULE}.get_redis_client", lambda: redis)
+
+
 def _make_payload(
     *,
     expires_delta: timedelta,
