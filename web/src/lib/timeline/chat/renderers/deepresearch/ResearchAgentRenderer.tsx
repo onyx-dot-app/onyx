@@ -1,8 +1,6 @@
-import React, { useMemo, useCallback, useState } from "react";
+import React, { useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { formatDurationSeconds } from "@opal/time";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 
 import {
   PacketType,
@@ -92,25 +90,6 @@ export const ResearchAgentRenderer: MessageRenderer<
 
   // Determine if report is actively streaming
   const isReportStreaming = !isComplete && !stopPacketSeen;
-
-  // Packets carry no times, so only an agent that runs here is timed.
-  const [startedAt] = useState(() =>
-    isReportStreaming ? Date.now() : undefined
-  );
-  const elapsedSeconds = useStreamingDuration(isReportStreaming, startedAt);
-  const timer =
-    isReportStreaming && elapsedSeconds > 0 ? (
-      <div className="px-(--padding-text-4)">
-        <Text
-          as="p"
-          font="secondary-body"
-          color="text-03"
-          wordWrap="whitespace-nowrap"
-        >
-          {formatDurationSeconds(elapsedSeconds)}
-        </Text>
-      </div>
-    ) : undefined;
 
   // Build report content from parent packets. Each report start begins the
   // report again: the step that writes the report can follow a step whose
@@ -278,7 +257,6 @@ export const ResearchAgentRenderer: MessageRenderer<
           status="done"
           icon={STEP_ICONS.thinking}
           title={t("researchAgent.task.title")}
-          headerAccessory={timer}
           defaultExpanded
           body={
             <Text as="p" font="main-ui-muted" color="text-02">

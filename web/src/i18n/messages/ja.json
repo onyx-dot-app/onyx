@@ -12597,7 +12597,7 @@
         "stoppedDuration": {
           "label": "{duration} 後に停止しました"
         },
-        "stoppedUnknownDuration": {
+        "interruptedThinking": {
           "label": "この応答を停止しました"
         },
         "memory": {
@@ -12720,10 +12720,10 @@
         "stepsButton": {
           "label": "{count, plural, one {# ステップ} other {# ステップ}}"
         },
-        "workedDuration": {
+        "thoughtDuration": {
           "label": "{duration} 作業しました"
         },
-        "workedUnknownDuration": {
+        "thoughtUnknownDuration": {
           "label": "作業しました"
         },
         "toggleRow": {
