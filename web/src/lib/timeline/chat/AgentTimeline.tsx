@@ -332,8 +332,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               startFolded={cardHandedOver && !handedOverOpen}
               stepOpenState={stepOpenState}
               isActive={isActive}
-              // A stop after text followed did not end this run's work.
-              isStopped={stopPacketSeen && userStopped && !hasDisplayContent}
               autoCollapse={hasDisplayContent}
               streamingStartTime={
                 isFirstRun ? streamingStartTime : runStartedAt
