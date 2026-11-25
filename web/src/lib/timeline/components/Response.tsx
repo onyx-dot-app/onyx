@@ -4,7 +4,6 @@ import React, {
   createContext,
   useContext,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -52,6 +51,8 @@ export interface ResponseItem {
 
 export interface ResponseProps {
   items: ResponseItem[];
+  /** The response still works; see `ResponseCursorScope`. */
+  working?: boolean;
 }
 
 /**
@@ -59,13 +60,13 @@ export interface ResponseProps {
  * `RESPONSE_CURSOR_ANCHOR_ATTRIBUTE`). The cursor is a single element, so it
  * never restarts its pulse. Text pushes it along at once; a move between a
  * waiting slot and text, or back after it was hidden, glides. It follows its
- * marker each frame while one exists, and fades out, in place, when none
- * does.
+ * marker each frame while one exists. With no marker, it holds its place
+ * while the turn works (e.g. between text that ended and the next tool call),
+ * and fades out, in place, once the turn has finished.
  */
 function useTurnCursor(
   rootRef: React.RefObject<HTMLDivElement | null>,
-  cursorRef: React.RefObject<HTMLSpanElement | null>,
-  hiddenRef: React.RefObject<boolean>
+  cursorRef: React.RefObject<HTMLSpanElement | null>
 ): void {
   useEffect(() => {
     const root = rootRef.current;
@@ -84,14 +85,22 @@ function useTurnCursor(
       );
       const anchor = anchors.item(anchors.length - 1);
       // Hidden (e.g. while the turn waits for the user): fade out in place,
-      // and keep checking so the cursor returns once it may show again.
-      if (anchor && hiddenRef.current) {
+      // also where the turn would hold it, and keep checking so the cursor
+      // returns once it may show again.
+      // The root's `data-cursor-hidden` says it may not show.
+      if (root.hasAttribute("data-cursor-hidden") && (anchor || placed)) {
         cursor.style.opacity = "0";
         visible = false;
         frame = requestAnimationFrame(place);
         return;
       }
       if (!anchor) {
+        // The root's `data-working` says the turn still works.
+        if (placed && root.hasAttribute("data-working")) {
+          // Hold where it is until the next marker arrives or the turn ends.
+          frame = requestAnimationFrame(place);
+          return;
+        }
         cursor.style.opacity = "0";
         visible = false;
         return;
@@ -126,12 +135,17 @@ function useTurnCursor(
       observer.disconnect();
       if (frame !== null) cancelAnimationFrame(frame);
     };
-  }, [rootRef, cursorRef, hiddenRef]);
+  }, [rootRef, cursorRef]);
 }
 
 interface ResponseCursorScopeProps {
+  /**
+   * The turn still works. The cursor stays visible until it has finished,
+   * also while no block holds it.
+   */
+  working?: boolean;
   /** Hide the cursor, e.g. while the turn waits for the user to approve a
-   *  tool call or answer a question. */
+   *  tool call or answer a question. It wins over `working`. */
   hidden?: boolean;
   children: React.ReactNode;
 }
@@ -142,23 +156,24 @@ interface ResponseCursorScopeProps {
  * already open around it.
  */
 export function ResponseCursorScope({
+  working = false,
   hidden = false,
   children,
 }: ResponseCursorScopeProps) {
   const inScope = useContext(InCursorScopeContext);
   const rootRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
-  // Read by the placement loop on each frame.
-  const hiddenRef = useRef(hidden);
-  useLayoutEffect(() => {
-    hiddenRef.current = hidden;
-  });
-  useTurnCursor(rootRef, cursorRef, hiddenRef);
+  useTurnCursor(rootRef, cursorRef);
 
   if (inScope) return <>{children}</>;
   return (
     <InCursorScopeContext.Provider value>
-      <div ref={rootRef} className="relative">
+      <div
+        ref={rootRef}
+        className="relative"
+        data-working={working || undefined}
+        data-cursor-hidden={hidden || undefined}
+      >
         {children}
         {/* The outer element places and fades the cursor; the inner one
             pulses. A pulse animates opacity, which would override the fade. */}
@@ -186,7 +201,7 @@ export function ResponseCursorScope({
  * Text that takes the cursor item's place appears at once too: the cursor
  * moves into it.
  */
-export function Response({ items }: ResponseProps) {
+export function Response({ items, working = false }: ResponseProps) {
   const [initialKeys] = useState(() => new Set(items.map((item) => item.key)));
   // The keys of the previous render, and the text that took the cursor
   // item's place in the last change. They update together: a state update
@@ -223,7 +238,7 @@ export function Response({ items }: ResponseProps) {
   }
 
   return (
-    <ResponseCursorScope>
+    <ResponseCursorScope working={working}>
       <Section alignItems="stretch" gap={3} height="auto">
         {items.map((item) =>
           item.kind === "run" ? (
