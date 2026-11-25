@@ -6991,7 +6991,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "Standardmodell für Bildgenerierung",
+          "title": "Standard-Bildmodell",
           "description": "Das Modell, das die Aktion Bildgenerierung verwendet.",
           "emptyDescription": "Aktivieren Sie ein Bildmodell in den Einstellungen eines Anbieters, um Bilder zu generieren.",
           "placeholder": "Modell auswählen",
@@ -7020,7 +7020,7 @@
             "lost": "Kein anderes Chatmodell ist ausgewählt. Der Chat wird deaktiviert."
           },
           "image": {
-            "title": "Standardmodell für Bildgenerierung",
+            "title": "Standard-Bildmodell",
             "lost": "Kein anderes Bildmodell ist verbunden. Die Bildgenerierung wird deaktiviert."
           },
           "vision": {

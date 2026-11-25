@@ -6991,7 +6991,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "Default Image Generation Model",
+          "title": "Default Image Model",
           "description": "The model that the Image Generation action uses.",
           "emptyDescription": "Turn on an image model in a provider's settings to generate images.",
           "placeholder": "Select a model",
@@ -7020,7 +7020,7 @@
             "lost": "No other chat model is selected. Chat turns off."
           },
           "image": {
-            "title": "Default Image Generation Model",
+            "title": "Default Image Model",
             "lost": "No other image model is connected. Image generation turns off."
           },
           "vision": {

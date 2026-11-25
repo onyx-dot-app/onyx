@@ -6991,7 +6991,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "Modelo padrão de geração de imagens",
+          "title": "Modelo de imagem padrão",
           "description": "O modelo que a ação Geração de imagens usa.",
           "emptyDescription": "Ative um modelo de imagem nas configurações de um provedor para gerar imagens.",
           "placeholder": "Selecione um modelo",
@@ -7020,7 +7020,7 @@
             "lost": "Nenhum outro modelo de chat está selecionado. O chat é desativado."
           },
           "image": {
-            "title": "Modelo padrão de geração de imagens",
+            "title": "Modelo de imagem padrão",
             "lost": "Nenhum outro modelo de imagem está conectado. A geração de imagens é desativada."
           },
           "vision": {

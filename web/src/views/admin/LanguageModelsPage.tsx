@@ -748,8 +748,6 @@ export default function LanguageModelsPage() {
                   }}
                 />
               </InputHorizontal>
-              <ChatNamingModelSetting />
-              <SearchDecisionModelSetting />
               <InputHorizontal
                 title={t("modelRouting.autoMode.title")}
                 description={t("modelRouting.autoMode.description")}
@@ -896,6 +894,16 @@ export default function LanguageModelsPage() {
         {hasProviders && (
           <Card border="solid" rounding={4}>
             <DefaultImageModelSetting />
+          </Card>
+        )}
+
+        {/* ── Task models: chat naming and search decisions ── */}
+        {hasProviders && (
+          <Card border="solid" rounding={4}>
+            <Section alignItems="stretch">
+              <ChatNamingModelSetting />
+              <SearchDecisionModelSetting />
+            </Section>
           </Card>
         )}
 

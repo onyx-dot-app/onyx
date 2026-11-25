@@ -6991,7 +6991,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "默认图像生成模型",
+          "title": "默认图像模型",
           "description": "图像生成操作使用的模型。",
           "emptyDescription": "在提供商设置中开启一个图像模型即可生成图像。",
           "placeholder": "选择模型",
@@ -7020,7 +7020,7 @@
             "lost": "没有选中其他聊天模型。聊天将关闭。"
           },
           "image": {
-            "title": "默认图像生成模型",
+            "title": "默认图像模型",
             "lost": "没有连接其他图像模型。图像生成将关闭。"
           },
           "vision": {

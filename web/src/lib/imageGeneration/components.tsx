@@ -13,7 +13,7 @@ import {
 const IMAGE_MODEL_KINDS = ["image"] as const;
 
 /**
- * The Default Image Generation Model row: the connected image models, by
+ * The Default Image Model row: the connected image models, by
  * provider, and "No Default", which turns image generation off.
  */
 export function DefaultImageModelSetting() {

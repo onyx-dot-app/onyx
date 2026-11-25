@@ -6991,7 +6991,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "Modèle de génération d'images par défaut",
+          "title": "Modèle d'image par défaut",
           "description": "Le modèle qu'utilise l'action Génération d'images.",
           "emptyDescription": "Activez un modèle d'image dans les paramètres d'un fournisseur pour générer des images.",
           "placeholder": "Sélectionnez un modèle",
@@ -7020,7 +7020,7 @@
             "lost": "Aucun autre modèle de chat n'est sélectionné. Le chat est désactivé."
           },
           "image": {
-            "title": "Modèle de génération d'images par défaut",
+            "title": "Modèle d'image par défaut",
             "lost": "Aucun autre modèle d'image n'est connecté. La génération d'images est désactivée."
           },
           "vision": {

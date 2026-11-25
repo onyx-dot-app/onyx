@@ -26,7 +26,7 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   the change in the form (`image_model_changes`); **Update** saves the
   provider, then links or unlinks the staged models with the provider's
   credentials (`sections/modals/languageModels/svc.ts:submitProvider`). The
-  first linked model becomes the default. The page's "Default Image Generation Model" select picks the
+  first linked model becomes the default. The page's "Default Image Model" select picks the
   default, and "No Default" turns image generation off. Provider cards tag the
   default text and image providers. Any provider can serve image models. The
   default image model follows its provider's access: the tool and
