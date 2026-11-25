@@ -1259,7 +1259,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     `ToolResult` decision becomes the call's result, so a denial raises in the
     program as a tool error does. The cell keeps one gate (`CodeCell._gate`):
     each of its requests belongs to the call that started it, or that rebuilt
-    it in this process, also while `wait` observes it, so the run offers
+    it in this process, also while a wait tool call observes it, so the run offers
     their answers together; `before_tool_call` sees that call's step, or for
     a cell rebuilt from a saved run, the step in which it continued. A request decision shows the request at once,
     also for a cell that runs in the background, and the call waits without a
@@ -1333,7 +1333,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     source, and the result formatter builds those types; `tools/tool_implementations/code_mode/stubs.py` imports no other tool
     implementation. An error result raises
     `RuntimeError` with the error text. Each `CodeModeCall` keeps its tool call id
-    (`<exec call id>:<index>`, the same in traces, saved history and the
+    (`<run call id>:<index>`, the same in traces, saved history and the
     UI), the tool row id (for reconnect cards) and a bounded copy of the text
     (`MAX_SAVED_CALL_CHARS`, `MAX_SAVED_EXECUTION_CHARS`). `chat/tool_results.py`
     owns two fields with phases: `metadata` (search planning) is set while the
@@ -1437,8 +1437,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     run suspends (see `ToolInvocation.run_work`), `Agent.on_suspend`
     (`chat/agent.py:_suspended_cells`) calls `CodeCells.suspend`, which does
     the same with `reason="suspended"` before the run captures its state. A
-    cell that ended keeps its end in that closing record; a later `wait`
-    of the cell says so (`tools/tool_implementations/code_mode/prompt.py:closed_cell_text`). A cell whose program
+    cell that ended keeps its end in that closing record; a later wait tool
+    call on the cell says so (`tools/tool_implementations/code_mode/prompt.py:closed_cell_text`). A cell whose program
     waits for input, with or without an observation, is saved instead
     (`CodeCells.saved`); its requests stay open. For a
     restored run, `tools/tool_implementations/code_mode/cells.py:_interrupted_amendments` closes such observations
@@ -1446,7 +1446,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     after them is not known; a cell that stays saved gets none. A cell that a
     restored run rebuilds takes its last running observation from the
     recorded results, so it gets its closing record as a live cell does, also
-    when it ends in the background with no `wait`. The run applies the amendments before it saves
+    when it ends in the background with no wait tool call. The run applies the amendments before it saves
     and publishes `ToolResultAmendedEvent` for each, before `AgentEndEvent`.
     Their calls, also the unfinished ones, may have had effects. The final
     `code_mode_delta` has `status="cancelled"` live and on replay. A tool whose
@@ -1591,7 +1591,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   `web/src/lib/timeline/chat/hooks/packetProcessor.test.ts`
   (cells and closing records, live and replay order).
   Playwright: `web/tests/e2e/chat/code_mode.spec.ts` (a call that outlives a yield reads
-  as one direct call, with `wait` or at response end) and
+  as one direct call, with a wait tool call or at response end) and
   `web/tests/e2e/chat/tool_history.spec.ts` (a custom tool call, direct or from
   a program, after a reload). Mobile:
   `mobile/src/chat/timeline/__tests__/grouping.test.ts` and
