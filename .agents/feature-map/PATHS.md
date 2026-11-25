@@ -31,6 +31,7 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/subagents/` | core-chat-loop, tools-framework |
 | `backend/onyx/tools/tool_implementations/skills/` | skills, tools-framework |
 | `backend/onyx/chat/files.py` | context-assembly, projects |
+| `backend/onyx/chat/file_preview.py` | file-store-and-user-files, code-execution |
 | `backend/onyx/chat/README.md` | core-chat-loop, context-assembly |
 | `backend/onyx/chat/models.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/mention_models.py` | skills, streaming-protocol, chat-persistence |

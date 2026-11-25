@@ -102,7 +102,7 @@ def delete_files_best_effort(
             deleted += 1
         except Exception:
             logger.exception(
-                "[%s] Failed to delete file_id=%s; will be retried on next sweep.",
+                "[%s] Failed to delete file_id=%s; the file stays in the store.",
                 context,
                 file_id,
             )
