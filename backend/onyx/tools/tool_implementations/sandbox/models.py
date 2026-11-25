@@ -19,6 +19,7 @@ from pydantic import (
     computed_field,
     model_validator,
 )
+from pydantic_core import PydanticCustomError
 
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.server.features.build.sandbox.exec_output import (
@@ -593,8 +594,11 @@ class ListedArtifact(BaseModel):
     file_id: str
     # More than 1: older versions exist.
     version_number: int
-    # The file record's display name; at most ARTIFACTS_NAME_MAX_CHARS in a
-    # page.
+    # The artifact's newest available version, in a lookup
+    # (db/chat.py:get_user_published_file); a list page has none, because
+    # it shows the newest.
+    latest_version_number: Annotated[int | None, OMITTED_WHEN_NONE] = None
+    # The file record's display name; a page cuts it (shown_artifact).
     file_name: str
     title: str | None
     artifact_type: ArtifactType
@@ -604,13 +608,30 @@ class ListedArtifact(BaseModel):
     created_at: datetime
     modified_at: datetime
     chat_id: UUID
-    # At most ARTIFACTS_CHAT_TITLE_MAX_CHARS in a page.
+    # A page cuts it (shown_artifact).
     chat_title: str | None
-    # published_display_path of the artifact's path; in a page, a longer one
-    # keeps its last ARTIFACTS_PATH_MAX_CHARS.
+    # published_display_path of the artifact's path; a page cuts it
+    # (shown_artifact).
     path: str
     # artifact_url of this version.
     url: str
+
+
+def shown_artifact(artifact: ListedArtifact) -> ListedArtifact:
+    """`artifact` as a list page shows it: its name and chat title cut to
+    ARTIFACTS_NAME_MAX_CHARS and ARTIFACTS_CHAT_TITLE_MAX_CHARS, and a longer
+    path to its last ARTIFACTS_PATH_MAX_CHARS."""
+    return artifact.model_copy(
+        update={
+            "file_name": artifact.file_name[:ARTIFACTS_NAME_MAX_CHARS],
+            "chat_title": None
+            if artifact.chat_title is None
+            else artifact.chat_title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS],
+            "path": artifact.path
+            if len(artifact.path) <= ARTIFACTS_PATH_MAX_CHARS
+            else "…" + artifact.path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :],
+        }
+    )
 
 
 class ArtifactList(BaseModel):
@@ -628,9 +649,10 @@ _DIRECTORY_RULE = (
 )
 
 
-class MaterializeItem(BaseModel):
-    """One file to copy: a version by its file ID, or an artifact's newest
-    available version by its library file ID."""
+class ArtifactFileReference(BaseModel):
+    """A published file version: by its file ID, or an artifact's newest
+    available version by its library file ID, or that artifact's version
+    `version_number`."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -646,6 +668,19 @@ class MaterializeItem(BaseModel):
         default=None,
         description="With library_file_id: that version instead of the newest.",
     )
+
+    @model_validator(mode="after")
+    def _one_reference(self) -> "ArtifactFileReference":
+        if (self.file_id is None) == (self.library_file_id is None):
+            raise ValueError("give exactly one of file_id and library_file_id")
+        if self.version_number is not None and self.library_file_id is None:
+            raise ValueError("version_number goes with library_file_id")
+        return self
+
+
+class MaterializeItem(ArtifactFileReference):
+    """One file to copy, and the name and directory of the copy."""
+
     file_name: _EchoedText | None = Field(
         default=None,
         description="The name of the copy, not a path. Defaults to the file's name.",
@@ -655,16 +690,6 @@ class MaterializeItem(BaseModel):
         description="A directory relative to the destination directory, "
         f"{_DIRECTORY_RULE}. `..` is allowed while the path stays there.",
     )
-
-    @model_validator(mode="after")
-    def _one_reference(self) -> "MaterializeItem":
-        if (self.file_id is None) == (self.library_file_id is None):
-            raise ValueError(
-                "each item takes exactly one of file_id and library_file_id"
-            )
-        if self.version_number is not None and self.library_file_id is None:
-            raise ValueError("version_number goes with library_file_id")
-        return self
 
 
 ConflictPolicy = Literal["dedupe", "overwrite", "error"]
@@ -729,12 +754,73 @@ class MaterializedItems(BaseModel):
 # The arguments of the artifact tool's publish that name its file, or its
 # files; the renderer reads them for the publish card.
 ARTIFACT_PUBLISH_PATHS = ("file_path", "file_paths")
+
+
+# library_manage_library: the most operations of one call.
+MANAGE_LIBRARY_MAX_OPERATIONS = 20
+
+
+class LibraryFileTarget(ArtifactFileReference):
+    """The file that an operation changes: the artifact of the version that
+    the reference names."""
+
+    kind: Literal["file"] = "file"
+
+
+# A delete removes every version, so a target that names a version names
+# the newest one.
+DELETE_OF_A_VERSION = (
+    "delete removes every version, so name the file by its newest version"
+)
+
+
+class DeleteOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: Literal["delete"]
+    target: LibraryFileTarget
+
+
+class ManageLibraryArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operations: list[DeleteOperation] = Field(
+        min_length=1,
+        max_length=MANAGE_LIBRARY_MAX_OPERATIONS,
+        description="The operations, run in order.",
+    )
+
+
+class ManageResult(BaseModel):
+    """The outcome of one library_manage_library operation, in the operations'
+    order: the artifact as the operation left it, or the error."""
+
+    operation: Literal["delete"]
+    ok: bool
+    error: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    library_file_id: Annotated[UUID | None, OMITTED_WHEN_NONE] = None
+    # The artifact's version that the operation read or added.
+    file_id: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    version_number: Annotated[int | None, OMITTED_WHEN_NONE] = None
+    file_name: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    url: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    # A delete's: the versions that it deleted.
+    deleted_versions: Annotated[int | None, OMITTED_WHEN_NONE] = None
+
+
+class ManageResults(BaseModel):
+    """What library_manage_library returns."""
+
+    results: list[ManageResult]
+
+
 # The arguments that each action of the artifact tool takes.
-ArtifactAction = Literal["publish", "list", "read"]
+ArtifactAction = Literal["publish", "list", "read", "delete"]
 ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
     "publish": frozenset({*ARTIFACT_PUBLISH_PATHS, "title", "url", "force"}),
     "list": frozenset({"scope", "type", "query", "limit", "after"}),
     "read": frozenset({"url", "path", "paths", "out_dir"}),
+    "delete": frozenset({"url"}),
 }
 
 
@@ -748,7 +834,8 @@ class ArtifactArguments(BaseModel):
     action: ArtifactAction = Field(
         default="publish",
         description="publish (the default) gives files from the VM to the user; "
-        "list finds published files; read copies published files into the VM.",
+        "list finds published files; read copies published files into the VM; "
+        "delete deletes a published file, after the user approves.",
     )
     file_path: _EchoedText | None = Field(
         default=None,
@@ -767,7 +854,9 @@ class ArtifactArguments(BaseModel):
         default=None,
         description="read: the url of a published file from an earlier result; "
         "one that ends in /v<N> names that version. publish with file_path: "
-        "the file to add a version to, by the url of the version you last saw.",
+        "the file to add a version to, by the url of the version you last saw. "
+        "delete: the file to delete, with all its versions, by the url of its "
+        "newest version.",
     )
     force: bool | None = Field(
         default=None,
@@ -804,6 +893,26 @@ class ArtifactArguments(BaseModel):
     after: str | None = Field(
         default=None, description="list: the next_cursor of the previous page."
     )
+
+    @model_validator(mode="after")
+    def _action_arguments(self) -> "ArtifactArguments":
+        takes = ARTIFACT_ACTION_ARGUMENTS[self.action]
+        extra = sorted(
+            name
+            for name, value in self
+            if value is not None and name != "action" and name not in takes
+        )
+        if extra:
+            raise PydanticCustomError(
+                "action_arguments",
+                "Action {action} does not take {extra}; it takes {takes}",
+                {
+                    "action": self.action,
+                    "extra": ", ".join(extra),
+                    "takes": ", ".join(sorted(takes)),
+                },
+            )
+        return self
 
 
 class PublishedArtifact(BaseModel):

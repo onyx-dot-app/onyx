@@ -227,7 +227,7 @@ function applyLoad(listed: PublishedFile[], replies: PublishedFile[][]) {
   act(() =>
     useChatSessionStore
       .getState()
-      .applyLoadedSession("session", load, startChatLoad(), {})
+      .applyLoadedSession("session", load, startChatLoad(undefined), {})
   );
 }
 

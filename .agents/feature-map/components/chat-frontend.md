@@ -260,7 +260,10 @@
   starts (`lib/chat/publishedFiles.ts:startChatLoad`), and a load's list
   replaces the chat's list only when no load that started later gave it, so an
   older load never overwrites a newer list. The button is off while the reload
-  runs, and a failure shows a toast. A file tab's URL bar shows the file's
+  runs, and a failure shows a toast. Settlement runs the same reload when a
+  settled stream's answers hold a finished `library_manage_library` or
+  `artifact` call (a `custom_tool_delta`), whose changes send no file packets,
+  unless it loaded the saved history. A file tab's URL bar shows the file's
   path, then the preview's actions: source toggle, copy and download. It
   opens at half the page; the user drags its edge, or uses the arrow keys on
   the edge, to resize it, and the width is kept per chat through a reload. A
@@ -594,11 +597,14 @@ the loads, such as live publishes and an answer that resumes after an
 approval, merged per artifact (`artifactKey`) into its highest version. A
 file saved without `artifact_id` is its own one-version artifact. The
 session's `loadedPublishedFiles` holds the list, the sequence of the load
-that gave it, and the file IDs that the loads' packets replayed
-(`addLoadedPublishedFiles`; every load and settle applies it with the
-sequence it took as its fetch started, and an older page adds its packets). A replayed file that the
-list leaves out stays out: an older version, a file saved without an
-artifact or one whose object is missing. Without a list, the packets give all the
+that gave it, and the file IDs that the list covers: the files that the
+loads' packets replayed, and the files that the chat's packets held when a
+load with a list started (`addLoadedPublishedFiles`; every load and settle
+applies the `ChatLoad` that it took as its fetch started, and an older page
+adds its packets). A covered file that the list leaves out stays out: an
+older version, a deleted file, a file saved without an artifact or one whose
+object is missing. So a live publish on a message that a reload's page
+leaves out does not come back after a delete. Without a list, the packets give all the
 files. A version that the chat added to another chat's artifact (its
 `chat_id` is that chat) stays out, as the list leaves it out; its reply
 card shows it.

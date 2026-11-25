@@ -113,7 +113,7 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
   if (oldest?.messageId === undefined || oldest.messageId === null) return;
 
   store.updateSessionData(sessionId, { isLoadingOlderMessages: true });
-  const loadSequence = startChatLoad();
+  const chatLoad = startChatLoad(session.messageTree);
   try {
     const response = await fetch(
       chatPageUrl(sessionId, { beforeMessageId: oldest.messageId })
@@ -167,7 +167,7 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
       loadedPublishedFiles: addLoadedPublishedFiles(
         current.loadedPublishedFiles,
         page,
-        loadSequence
+        chatLoad
       ),
     });
   } catch (error) {
@@ -197,7 +197,9 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
 export async function reloadChatPublishedFiles(
   sessionId: string
 ): Promise<void> {
-  const loadSequence = startChatLoad();
+  const chatLoad = startChatLoad(
+    useChatSessionStore.getState().sessions.get(sessionId)?.messageTree
+  );
   const page = await fetchSettledChatSession(sessionId);
   const store = useChatSessionStore.getState();
   const session = store.sessions.get(sessionId);
@@ -206,7 +208,7 @@ export async function reloadChatPublishedFiles(
     loadedPublishedFiles: addLoadedPublishedFiles(
       session.loadedPublishedFiles,
       page,
-      loadSequence
+      chatLoad
     ),
   });
 }
@@ -218,7 +220,9 @@ export async function reloadChatPublishedFiles(
  */
 export async function reloadLatestChatPage(sessionId: string): Promise<void> {
   const tailAtStart = latestMessageNodeId(sessionId);
-  const loadSequence = startChatLoad();
+  const chatLoad = startChatLoad(
+    useChatSessionStore.getState().sessions.get(sessionId)?.messageTree
+  );
   try {
     const response = await fetch(chatPageUrl(sessionId));
     if (!response.ok) {
@@ -239,7 +243,7 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
       sessionId,
       processRawChatHistory(page.messages, page.packets)
     );
-    store.applyLoadedSession(sessionId, page, loadSequence, {
+    store.applyLoadedSession(sessionId, page, chatLoad, {
       hasOlderMessages: page.has_older_messages ?? false,
     });
   } catch (error) {

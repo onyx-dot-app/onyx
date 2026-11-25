@@ -50,6 +50,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ExecCommandTool,
     LibraryCreateLibraryFileTool,
     LibraryListTool,
+    LibraryManageLibraryTool,
     LibraryPrepareMaterializeTool,
     LibraryReplaceLibraryFileTool,
     WriteStdinTool,
@@ -78,6 +79,7 @@ def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() 
         LibraryListTool,
         LibraryPrepareMaterializeTool,
         LibraryReplaceLibraryFileTool,
+        LibraryManageLibraryTool,
     )
     shared = {ExecCommandTool, WriteStdinTool}
     assert not (set(claude) - shared) & (set(other) - shared)
@@ -91,14 +93,14 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
     )
 
     assert stubs.deferred_namespaces == {
-        "library": "Find the user's published files, copy them into this chat "
-        "and add versions to them; create a file here to give it to the user."
+        "library": LibraryListTool.CODE_MODE_NAMESPACE_DESCRIPTION
     }
     assert {
         name for name, function in stubs.functions.items() if function.deferred
     } == {
         "library__create_library_file",
         "library__list",
+        "library__manage_library",
         "library__prepare_materialize",
         "library__replace_library_file",
     }
@@ -166,9 +168,8 @@ def test_the_deferred_note_says_what_the_library_group_is_for() -> None:
         if tool.name == "execute_code"
     ]
     assert (
-        "\n  - library: Find the user's published files, copy them into this "
-        "chat and add versions to them; create a file here to give it to the "
-        "user.\n" in description
+        f"\n  - library: {LibraryListTool.CODE_MODE_NAMESPACE_DESCRIPTION}\n"
+        in description
     )
 
 
@@ -490,12 +491,12 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
     [
         (
             {"file_path": "a.md", "out_dir": "x"},
-            "Action publish does not take out_dir; it takes file_path, "
+            "Invalid tool arguments: Action publish does not take out_dir; it takes file_path, "
             "file_paths, force, title, url",
         ),
         (
             {"action": "list", "url": "x"},
-            "Action list does not take url; it takes after, limit, query, scope, type",
+            "Invalid tool arguments: Action list does not take url; it takes after, limit, query, scope, type",
         ),
         (
             {
@@ -543,6 +544,7 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
             {"action": "read", "url": "report.pdf", "out_dir": "x"},
             "'report.pdf' is not an artifact url",
         ),
+        ({"action": "delete"}, "delete takes url"),
         ({"action": "open"}, None),
         ({"icon": "x"}, None),
         *(
@@ -612,3 +614,38 @@ def test_create_file_takes_one_file_or_several_without_starting_the_vm(
     if error is not None:
         assert error in outcome.content
     turn.start_call.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments"),
+    [
+        (ArtifactTool, {"file_path": "a.md"}),
+        (ArtifactTool, {"action": "list"}),
+        (ArtifactTool, {"action": "delete", "url": "not a url"}),
+        (ArtifactTool, {"action": "delete", "icon": "x"}),
+        # The call refuses the argument, so the hook does not ask.
+        (
+            ArtifactTool,
+            {
+                "action": "delete",
+                "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b",
+                "out_dir": "x",
+            },
+        ),
+        (LibraryManageLibraryTool, {"operations": []}),
+        (LibraryManageLibraryTool, {"operations": [{"operation": "move"}]}),
+    ],
+)
+def test_a_call_that_does_not_delete_asks_nothing_and_reads_no_database(
+    monkeypatch: pytest.MonkeyPatch,
+    tool: type[ArtifactTool] | type[LibraryManageLibraryTool],
+    arguments: dict[str, JsonValue],
+) -> None:
+    """The approval hook runs before every call of a gated tool, so a call
+    that deletes nothing costs only its argument parse."""
+
+    def no_lookup(*_args: object) -> None:
+        raise AssertionError("the hook must not look anything up")
+
+    monkeypatch.setattr(artifact_operations, "delete_approval_details", no_lookup)
+    assert tool(MagicMock(spec=SandboxTurn)).approval_details(arguments) is None

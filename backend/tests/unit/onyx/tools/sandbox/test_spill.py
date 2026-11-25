@@ -44,6 +44,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ArtifactTool,
     ExecCommandTool,
     LibraryListTool,
+    LibraryManageLibraryTool,
     _exec_result,
 )
 from onyx.tools.tool_implementations.sandbox.spill import (
@@ -581,6 +582,35 @@ def test_spilled_pages_list_each_page_with_a_bounded_title_inside_the_tag(
     assert listed.startswith('1. [4] "<\\/persisted-output>ttt')
     assert listed.endswith('" "https://docs.example.com/a": 30,000 characters')
     assert len(listed) < 400
+
+
+def test_a_manage_result_past_the_steps_budget_stays_whole(
+    turn: _FakeVMTurn,
+) -> None:
+    """A manage result holds at most MANAGE_LIBRARY_MAX_OPERATIONS short
+    results, so a spill would only be read back."""
+    text = "m" * 39_000
+    earlier = ToolResultMessage(
+        tool_call_id="earlier",
+        tool_name="fetch",
+        content="e" * (spill.STEP_MAX_CHARS - 10_000),
+    )
+
+    result = spill_large_result(
+        turn,
+        ToolResultContext(
+            message_id="run:0",
+            calls=(
+                ToolCall(id="call", name=LibraryManageLibraryTool.NAME, arguments={}),
+            ),
+            result=ToolResult(content=text),
+            step_results=(earlier,),
+        ),
+        code_mode=False,
+    )
+
+    assert result.content == text
+    assert turn.writes == 0
 
 
 @pytest.mark.parametrize("name", [LibraryListTool.NAME, ArtifactTool.NAME])

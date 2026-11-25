@@ -69,6 +69,7 @@ from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ExtractedContextFiles
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
 from onyx.llm.interfaces import LLM
@@ -1098,7 +1099,7 @@ def create_chat_agent(
             else None
         )
         if turn is not None:
-            tools += [
+            sandbox_tools = [
                 tool(turn)
                 for tool in sandbox_tools_for_model(
                     model_identity_names(
@@ -1106,6 +1107,12 @@ def create_chat_agent(
                     )
                 )
             ]
+            # A turn that runs without asking (evals) gates no built-in
+            # action, as integration policies allow its Ask actions.
+            if setup.approval_mode is ApprovalMode.RUN_WITHOUT_ASKING:
+                for tool in sandbox_tools:
+                    tool.approval = None
+            tools += sandbox_tools
             if setup.has_chat_skills:
                 tools.append(LoadSkillTool(turn))
         return build_chat_agent(

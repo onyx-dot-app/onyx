@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 
 import { Button, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { stripBidiControls } from "@opal/utils";
 
 interface PayloadViewProps {
   payload: Record<string, unknown>;
@@ -58,7 +59,8 @@ function ShowMoreValue({
   );
 }
 
-function StringValue({ text }: { text: string }) {
+function StringValue({ text: raw }: { text: string }) {
+  const text = stripBidiControls(raw);
   return (
     <ShowMoreValue
       text={text}
@@ -70,7 +72,7 @@ function StringValue({ text }: { text: string }) {
 }
 
 function NestedJsonValue({ value }: { value: unknown }) {
-  const full = JSON.stringify(value, null, 2);
+  const full = stripBidiControls(JSON.stringify(value, null, 2));
   const lines = full.split("\n");
   // Truncate at a line boundary so the preview doesn't end mid-token.
   return (
@@ -120,7 +122,8 @@ function StructuredValue({ value }: { value: unknown }) {
 /**
  * Renders each top-level key of a payload as a labelled row. Short strings
  * show inline, long strings and large JSON values get Show more, and nested
- * objects render as pretty-printed JSON.
+ * objects render as pretty-printed JSON. Keys and values show without bidi
+ * controls: a tool or the model chooses them.
  */
 export default function PayloadView({ payload }: PayloadViewProps) {
   const t = useTranslations("common.payloadView");
@@ -148,7 +151,7 @@ export default function PayloadView({ payload }: PayloadViewProps) {
               maxLines={1}
               overflowTooltip
             >
-              {key}
+              {stripBidiControls(key)}
             </Text>
           </dt>
           <dd className="m-0 min-w-0">

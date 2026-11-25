@@ -25,6 +25,7 @@ import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 import {
   addLoadedPublishedFiles,
+  type ChatLoad,
   NO_LOADED_PUBLISHED_FILES,
   startChatLoad,
 } from "@/lib/chat/publishedFiles";
@@ -75,7 +76,7 @@ export default function SharedChatDisplay({
   // list.
   const [reloaded, setReloaded] = useState<{
     page: BackendChatSession;
-    loadSequence: number;
+    chatLoad: ChatLoad;
   } | null>(null);
   const sharedMessageTree = useMemo(
     () =>
@@ -89,18 +90,14 @@ export default function SharedChatDisplay({
     const loaded = addLoadedPublishedFiles(
       NO_LOADED_PUBLISHED_FILES,
       chatSession,
-      0
+      { sequence: 0, heldFileIds: new Set() }
     );
     return {
       sessionId: chatSession.chat_session_id,
       messageTree: sharedMessageTree,
       loadedPublishedFiles:
         reloaded?.page.chat_session_id === chatSession.chat_session_id
-          ? addLoadedPublishedFiles(
-              loaded,
-              reloaded.page,
-              reloaded.loadSequence
-            )
+          ? addLoadedPublishedFiles(loaded, reloaded.page, reloaded.chatLoad)
           : loaded,
     };
   }, [chatSession, sharedMessageTree, reloaded]);
@@ -108,13 +105,14 @@ export default function SharedChatDisplay({
   const sessionId = chatSession?.chat_session_id ?? null;
   const reloadFiles = useCallback(async () => {
     if (sessionId === null) return;
-    const loadSequence = startChatLoad();
+    // No live publish adds packet files to a shared chat
+    const chatLoad = startChatLoad(undefined);
     const page = await fetchSettledChatSession(sessionId, { shared: true });
     // A reload that started earlier and ended later keeps the newer list
     setReloaded((current) =>
-      current && current.loadSequence > loadSequence
+      current && current.chatLoad.sequence > chatLoad.sequence
         ? current
-        : { page, loadSequence }
+        : { page, chatLoad }
     );
   }, [sessionId]);
 
