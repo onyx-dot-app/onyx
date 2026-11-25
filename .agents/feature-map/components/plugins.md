@@ -130,7 +130,8 @@ sign-in. A custom API URL or uploaded spec goes through
 then `POST /admin/integrations/graphql-introspect`, else a REST base URL that
 takes endpoint lines (`EndpointLinesField`). An import `VALIDATION_ERROR` (a
 spec that Onyx cannot add) stops there and shows under the URL. Step 2 lists
-the endpoints that the import skipped. A catalog tile fills a preset or
+the endpoints that the import skipped, and asks for the base URL when the
+spec has no single server URL. A catalog tile fills a preset or
 a suggested MCP server. Step 2 shows the sign-in mode; the method, OAuth
 client, header template, transport and owner are under Advanced. The Actions tab
 (`sections/integrations/IntegrationActionsTab.tsx`) is built from
