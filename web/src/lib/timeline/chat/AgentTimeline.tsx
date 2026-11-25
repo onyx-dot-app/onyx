@@ -169,6 +169,14 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // approval or an answer keeps it working after text.
   const isActive =
     !stopPacketSeen && (!hasDisplayContent || awaitingUser !== null);
+  // A later run starts when its first step arrives here, which can be well
+  // before its run card mounts.
+  const [runStartedAt, setRunStartedAt] = useState<number | undefined>(() =>
+    isActive && steps.length > 0 ? Date.now() : undefined
+  );
+  if (runStartedAt === undefined && isActive && steps.length > 0) {
+    setRunStartedAt(Date.now());
+  }
 
   // Hoisted: each step of a short run is its own run card, with the step's
   // title as its header. Once the run has more steps, they collapse into one
@@ -327,7 +335,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               // A stop after text followed did not end this run's work.
               isStopped={stopPacketSeen && userStopped && !hasDisplayContent}
               autoCollapse={hasDisplayContent}
-              streamingStartTime={isFirstRun ? streamingStartTime : undefined}
+              streamingStartTime={
+                isFirstRun ? streamingStartTime : runStartedAt
+              }
               durationSeconds={
                 isFirstRun
                   ? (toolProcessingDuration ?? processingDurationSeconds)
