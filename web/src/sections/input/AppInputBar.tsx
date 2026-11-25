@@ -434,7 +434,7 @@ const AppInputBar = React.memo(
       if (!chatDraftLoaded || draftSeededRef.current) return;
       draftSeededRef.current = true;
       const draft = chatDraft === null ? null : toChatDraft(chatDraft);
-      const hasMessage = Boolean(composedRef.current.message);
+      const hasMessage = Boolean(composedRef.current.message.trim());
       skipNextDraftSaveRef.current = !hasMessage;
       setCurrentMessageFiles((files) =>
         files.length > 0 || hasMessage ? files : (draft?.files ?? [])
