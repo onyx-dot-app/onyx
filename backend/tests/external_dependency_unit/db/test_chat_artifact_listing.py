@@ -47,6 +47,7 @@ from onyx.server.features.build.sandbox.models import (
 from onyx.server.query_and_chat.chat_backend import get_chat_artifact
 from onyx.server.query_and_chat.models import ChatArtifactFile
 from onyx.tools.models import ToolCallException
+from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.artifact_operations import replace_file
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACTS_CHAT_TITLE_MAX_CHARS,
@@ -57,11 +58,14 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactCursor,
     ArtifactSort,
     ArtifactVersionConflict,
+    FileUri,
     LibraryListFilters,
     LibraryReplaceLibraryFileArguments,
     ListedArtifact,
+    ManageLibraryArguments,
     PublishedFile,
     SortOrder,
+    UpdateOperation,
     artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -913,3 +917,53 @@ def test_a_replace_into_a_chat_deleted_during_it_writes_no_version(
             ChatArtifactVersion.artifact_id == artifact_id
         )
     ).all() == [1]
+
+
+def test_an_update_keeps_a_title_published_after_its_lookup(
+    db_session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An update takes the newest version's title when it saves, so a new
+    title that another chat publishes after the update looked the file up
+    stays."""
+    first = _publish(db_session, _chat(db_session, owner), "/w/a.md", "Old")
+    source = _publish(db_session, _chat(db_session, owner), "/w/b.md", "Source")
+    artifact_id = first.artifact_id
+    assert artifact_id is not None
+    check = artifact_operations.check_same_type
+
+    def check_after_a_retitle(artifact: ListedArtifact, file: str) -> None:
+        save_chat_artifact(
+            b"retitled",
+            name="a.md",
+            mime_type="text/plain",
+            title="New",
+            thumbnail=None,
+            target=ArtifactById(artifact_id=artifact_id),
+        )
+        check(artifact, file)
+
+    monkeypatch.setattr(artifact_operations, "check_same_type", check_after_a_retitle)
+    [result] = artifact_operations.manage(
+        owner.id,
+        CancellationSignal(),
+        ManageLibraryArguments(
+            operations=[
+                UpdateOperation(
+                    operation="update",
+                    library_file_id=artifact_id,
+                    file_uri=FileUri(file_id=source.file_id),
+                )
+            ]
+        ),
+        conflict_message=str,
+    ).results
+
+    assert (result.ok, result.version_number) == (True, 3)
+    assert (
+        db_session.scalar(
+            select(ChatArtifactVersion.title).where(
+                ChatArtifactVersion.file_id == result.file_id
+            )
+        )
+        == "New"
+    )
