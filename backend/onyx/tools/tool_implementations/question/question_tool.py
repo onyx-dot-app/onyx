@@ -12,6 +12,7 @@ from onyx.tools.interface import (
     tool_definition_from_arguments,
 )
 from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.question.models import MAX_QUESTIONS_BYTES
 from onyx.tools.tool_implementations.question.shapes import QuestionShape
 from onyx.utils.postgres_sanitization import sanitize_json_like
@@ -21,6 +22,8 @@ class QuestionTool(Tool):
     """A response's question tool, in the shape of the family of the model
     that runs the response (`QUESTION_SHAPES`), also when a restored run
     continues with another model."""
+
+    rank = ToolRank.QUESTION
 
     id = None
     code_mode_exposure = CodeModeExposure.DIRECT

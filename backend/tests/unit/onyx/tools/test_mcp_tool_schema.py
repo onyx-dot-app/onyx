@@ -21,6 +21,7 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
@@ -81,6 +82,8 @@ class TestNormalizeParametersSchema:
 
 
 class _StaticTool(Tool):
+    rank = ToolRank.INTEGRATION
+
     def __init__(self, name: str) -> None:
         self._name = name
 

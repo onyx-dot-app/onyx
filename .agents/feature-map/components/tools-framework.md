@@ -125,6 +125,23 @@ OpenAPI actions receive stable qualified names with the integration id
 (`mcp__<integration id>__<name>__<tool>`, `custom__<integration id>__<operationId>`),
 independent of the other selected tools, and have `id = None`.
 
+**Tool order.** The construction order does not reach the model. Each concrete
+`Tool` class sets `rank` (`tools/ordering.py:ToolRank`), and
+`tools/ordering.py:tool_order` sorts by rank, then namespace and name. Both
+tool families use one ranking: code mode run and wait, `internal_search`, the
+sandbox tools (shell, shell input, file edits, published files), the other
+built-in tools, skills (list, read, and `load_skill`, which runs in the VM but is a
+skill operation), agent tools, the question tool, then MCP and OpenAPI
+tools. `ChatAgent` sorts its offered tools with it once, when it is built
+(new, restored and child agents). The code mode description lists its
+functions and deferred namespaces in this order
+(`tools/tool_implementations/code_mode/stubs.py:build_tool_stubs`), and
+`chat/prompt_utils.py:build_system_prompt` orders the tool guidance sections
+by the rank of their tools, and the sandbox section's tools, in the token
+estimate too. A new tool class must set `rank`;
+`backend/tests/unit/onyx/tools/test_tool_ranks.py` fails for a tool class
+without one.
+
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
 such as arguments, `call_index`, the cancellation signal and the progress

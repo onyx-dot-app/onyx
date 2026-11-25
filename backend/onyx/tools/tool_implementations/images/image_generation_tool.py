@@ -43,6 +43,7 @@ from onyx.tools.models import (
     ToolContext,
     ToolExecutionException,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageGenerationArguments,
@@ -59,6 +60,7 @@ CANCELLATION_POLL_INTERVAL = 5.0
 
 
 class ImageGenerationTool(Tool):
+    rank = ToolRank.IMAGE_GENERATION
     NAME = "generate_image"
     DESCRIPTION = "Generate an image based on a prompt. Do not use unless the user specifically requests an image."
     DISPLAY_NAME = "Image Generation"

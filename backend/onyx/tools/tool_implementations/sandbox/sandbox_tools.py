@@ -85,6 +85,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.errors import (
     sandbox_errors_as_tool_errors,
@@ -330,6 +331,7 @@ class ExecCommandTool(SandboxTool):
     """Runs a command; the turn's shell shape names it and takes its
     arguments."""
 
+    rank = ToolRank.SHELL
     USE = EXEC_COMMAND_USE
     DESCRIPTION = EXEC_COMMAND_DESCRIPTION
     # Matches the web card title.
@@ -370,6 +372,7 @@ class ExecCommandTool(SandboxTool):
 
 
 class WriteStdinTool(SandboxTool):
+    rank = ToolRank.SHELL_INPUT
     NAME = WRITE_STDIN_TOOL_NAME
     USE = WRITE_STDIN_USE
     DESCRIPTION = WRITE_STDIN_DESCRIPTION
@@ -536,6 +539,7 @@ def _noted(content: str, changes: Sequence[ApplyPatchFileChange]) -> str:
 
 
 class ApplyPatchTool(_FileTool):
+    rank = ToolRank.FILE_EDIT
     NAME: FileToolName = "apply_patch"
     USE = APPLY_PATCH_USE
     DESCRIPTION = APPLY_PATCH_DESCRIPTION
@@ -729,6 +733,8 @@ class EditTool(_FileTool):
     """Replaces a string in a file (`patch.edit_text`), in the shape of
     Claude Code's Edit tool."""
 
+    rank = ToolRank.FILE_EDIT
+
     NAME: FileToolName = "edit"
     USE = EDIT_USE
     DESCRIPTION = EDIT_DESCRIPTION
@@ -771,6 +777,8 @@ class WriteTool(_FileTool):
     Claude Code's rule that a file is read before it is overwritten does not
     apply: the sandbox tools do not track reads."""
 
+    rank = ToolRank.FILE_EDIT
+
     NAME: FileToolName = "write"
     USE = WRITE_USE
     DESCRIPTION = WRITE_DESCRIPTION
@@ -812,6 +820,8 @@ class _LibraryTool(SandboxTool):
     is for, and no listed function or prompt names a function. Running a list
     or copy again changes nothing, so a call that a lost server left running
     runs again; the tools that publish say otherwise."""
+
+    rank = ToolRank.PUBLISHED_FILES
 
     USE = None
     RUNS_AGAIN = True
@@ -1028,6 +1038,7 @@ class LoadSkillArguments(BaseModel):
 class LoadSkillTool(SandboxTool):
     """Copies one of the user's skills into its read-only sandbox folder."""
 
+    rank = ToolRank.SKILLS_LOAD
     NAME = LOAD_SKILL_TOOL_NAME
     USE = None
     DESCRIPTION = (
@@ -1063,7 +1074,7 @@ class LoadSkillTool(SandboxTool):
 
 class SandboxToolset(NamedTuple):
     """The sandbox tools of one tool family: the shell shape that its turns
-    carry, and the tool classes in the order the prompt names them."""
+    carry, and the tool classes by rank (onyx/tools/ordering.py)."""
 
     shell: ShellShape
     tools: tuple[type[SandboxTool], ...]

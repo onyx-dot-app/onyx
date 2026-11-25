@@ -2,7 +2,7 @@ import abc
 import traceback
 from collections.abc import Callable, Collection
 from functools import cache, partial
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, ClassVar, final
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
@@ -33,6 +33,7 @@ from onyx.tools.models import (
     ToolExecutionException,
     ToolPreference,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tracing.framework.create import function_span
 from onyx.tracing.framework.spans import SpanError
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION
@@ -209,6 +210,9 @@ class Tool(abc.ABC):
     approval: ToolApprovalScope | None = None
     # Set on the tool of an integration action; a preference names it.
     integration_action: IntegrationActionRef | None = None
+    # The tool's slot in the order that the model reads the tools
+    # (onyx/tools/ordering.py). Every concrete tool class sets it.
+    rank: ClassVar[ToolRank]
 
     @property
     def execution_mode(self) -> ToolExecutionMode:

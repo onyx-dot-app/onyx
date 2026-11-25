@@ -23,6 +23,7 @@ from onyx.tools.models import (
     ToolContext,
     ToolPreference,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.code_mode.cells import (
     CodeCells,
     Program,
@@ -60,6 +61,7 @@ INTERRUPTED_PROGRAM_RESULT = ToolResult(content=RESTORED_RUNNING_MESSAGE, is_err
 
 
 class CodeModeTool(Tool):
+    rank = ToolRank.CODE_MODE_RUN
     DISPLAY_NAME = "Code"
     DESCRIPTION = "Run a Python program that calls tools."
     interrupted_result = INTERRUPTED_PROGRAM_RESULT
@@ -243,6 +245,7 @@ class CodeModeTool(Tool):
 
 
 class WaitCodeTool(Tool):
+    rank = ToolRank.CODE_MODE_WAIT
     DISPLAY_NAME = "Code"
     DESCRIPTION = "Wait for a running code cell."
 

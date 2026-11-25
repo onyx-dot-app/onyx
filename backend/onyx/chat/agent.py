@@ -74,6 +74,7 @@ from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext, ToolPreference
+from onyx.tools.ordering import tool_order
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     CodeModeTool,
     WaitCodeTool,
@@ -355,6 +356,9 @@ class ChatAgent(Agent, RestorableFeature):
             own = next((name for name in names if name in offered), None)
             if own is not None:
                 self._own_names |= dict.fromkeys(names - {own}, own)
+        # The model reads the tools in tool order, whatever order the
+        # configuration, code mode and the agent tools add them in.
+        self.application_tools = sorted(self.application_tools, key=tool_order)
         # The root agent's sandbox and code mode results end with the file
         # copy status line when it changed. Subagents and the calls inside a
         # code mode program never read it, so they cannot use it up.

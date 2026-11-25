@@ -24,6 +24,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.utils import (
     SEARCH_RESULTS_CODE_MODE_RESULT,
     convert_inference_sections_to_llm_string,
@@ -49,6 +50,7 @@ logger = setup_logger()
 
 
 class WebSearchTool(Tool):
+    rank = ToolRank.WEB_SEARCH
     merge_list_argument = "queries"
 
     NAME = WEB_SEARCH_TOOL_NAME

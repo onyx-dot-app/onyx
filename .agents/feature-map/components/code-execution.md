@@ -306,8 +306,8 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         family's ShellShape, which the turn carries
                                         (SandboxTurn.shell; it names the shell tool, takes
                                         its arguments, and names it in the other tools'
-                                        descriptions and results), and owns the set and
-                                        its order
+                                        descriptions and results), and owns the set, by
+                                        rank (tools/ordering.py)
                                         (LLMConfig.tool_family; the family picks each
                                         tool's shape): for ToolFamily.CLAUDE, EditTool,
                                         WriteTool and ArtifactTool, the tools Claude models
@@ -328,7 +328,7 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         them with no scope
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
                                         (sandbox_tools.py:sandbox_guidance): one use per
-                                        SandboxTool that the turn offers, in order, named
+                                        SandboxTool that the turn offers, in tool order, named
                                         as the model calls it (CodeModeTool.called_name in
                                         code mode), except tools whose USE is None
                                         (the artifact tools of both families); the tool
@@ -1236,8 +1236,11 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     description (`CodeModeFunctionName.namespace_description`, set by the
     group's owner: a fixed line for a built-in group such as `library`, the
     integration's description for an MCP server), cut to 250 characters.
-    Built-in namespaces come first, then those of integrations (tools with
-    `integration_action`), each sorted by name. The lines fit 4 KiB: names
+    Namespaces follow the tool order (`tools/ordering.py:tool_order`): by
+    the rank of their tools, then by namespace name, so built-in namespaces
+    come before those of integrations (rank `INTEGRATION`). The listed
+    functions follow the same order; the name order only gives repeated
+    names their suffixes. The lines fit 4 KiB: names
     take the budget first, then descriptions in that order, so an MCP
     server's description is cut before a built-in one. When the names alone
     do not fit, the list keeps the first ones and counts the rest in a last

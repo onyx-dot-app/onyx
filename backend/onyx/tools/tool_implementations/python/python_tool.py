@@ -39,6 +39,7 @@ from onyx.tools.models import (
     PythonExecutionFile,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
     FileInput,
@@ -238,6 +239,8 @@ class PythonTool(Tool):
     This tool allows executing Python code in a secure, isolated sandbox environment.
     It supports uploading files from the chat session and downloading generated files.
     """
+
+    rank = ToolRank.PYTHON
 
     # OpenAI reserves the function name "python" for its own harness and
     # rejects requests that define a tool with that name (400 invalid_request_error,

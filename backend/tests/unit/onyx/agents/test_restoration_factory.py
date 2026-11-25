@@ -396,14 +396,22 @@ def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint
 
 
 _CODE_MODE_ECHO = "tools.echo (a function in `exec` programs)"
+_AGENT_TOOLS = [
+    "spawn_agent",
+    "list_agents",
+    "interrupt_agent",
+    "send_message",
+    "wait_agent",
+]
 
 
 @pytest.mark.parametrize(
     ("saved_code_mode", "offered", "preferred"),
     [
         # Code mode names the preferred tool as a function of its programs.
-        (True, [EXEC_TOOL_NAME, WAIT_TOOL_NAME], _CODE_MODE_ECHO),
-        (False, [EchoTool().name], EchoTool().name),
+        (True, [EXEC_TOOL_NAME, WAIT_TOOL_NAME, *_AGENT_TOOLS], _CODE_MODE_ECHO),
+        # The echo tool ranks as an integration, after the agent tools.
+        (False, [*_AGENT_TOOLS, EchoTool().name], EchoTool().name),
     ],
 )
 def test_restored_chat_keeps_the_saved_code_mode(
@@ -430,14 +438,7 @@ def test_restored_chat_keeps_the_saved_code_mode(
     rebuilt.restore_state(state)
     run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
     names, choice, request_text = _offered(llm)
-    assert names == [
-        *offered,
-        "spawn_agent",
-        "list_agents",
-        "interrupt_agent",
-        "send_message",
-        "wait_agent",
-    ]
+    assert names == offered
     assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text
 
@@ -601,7 +602,7 @@ def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
     run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
 
     names, _, _ = _offered(llm)
-    assert names == [EchoTool().name, "skills_list", "skills_read"]
+    assert names == ["skills_list", "skills_read", EchoTool().name]
 
 
 def test_code_mode_offers_the_skill_tools_as_program_functions(
