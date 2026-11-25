@@ -669,3 +669,69 @@ def test_first_cancellation_reason_survives_an_expired_run_deadline(
     else:
         assert state.failure is None
     assert run.wait_for_idle(5)
+
+
+def test_run_deadline_uses_the_shared_timer_and_is_cancelled_at_the_end() -> None:
+    delays: list[float] = []
+    cancelled: list[bool] = []
+
+    def call_later(delay: float, _callback: object) -> object:
+        delays.append(delay)
+        return lambda: cancelled.append(True)
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="Done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    with (
+        patch("onyx.agents.runtime.call_later", side_effect=call_later),
+        # A thread per run for a deadline that almost never fires is the regression.
+        patch.object(threading, "Timer", side_effect=AssertionError("Timer thread")),
+    ):
+        run = agent.start(
+            background=False,
+            max_steps=1,
+            deadline_at=datetime.now(timezone.utc) + timedelta(seconds=60),
+        )
+        assert run.wait_for_idle(5)
+    assert run.snapshot().status == RunStatus.COMPLETE
+    assert len(delays) == 1 and 0 < delays[0] <= 60
+    assert cancelled == [True]
+
+
+def test_run_deadline_cancels_the_run_off_the_shared_timer_thread() -> None:
+    cancel_threads: list[str] = []
+    deadline_reached = Event()
+    release = Event()
+    cancel = Run.cancel
+
+    def recording_cancel(run: Run, reason: CancelReason = "requested") -> None:
+        cancel(run, reason)
+        if reason == "deadline":
+            cancel_threads.append(threading.current_thread().name)
+            deadline_reached.set()
+
+    def generate(*_: object) -> AssistantMessage:
+        release.wait(5)
+        return AssistantMessage(content=[TextContent(text="Late")])
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    with patch.object(Run, "cancel", recording_cancel):
+        run = agent.start(
+            max_steps=1,
+            deadline_at=datetime.now(timezone.utc) + timedelta(seconds=0.2),
+        )
+        assert deadline_reached.wait(5)
+        release.set()
+        assert run.wait_for_idle(5)
+    state = run.snapshot()
+    assert state.status == RunStatus.CANCELLED
+    assert state.failure is not None
+    assert state.failure.kind == RunFailureKind.DEADLINE
+    # A cancel callback can block, so it must not hold up other deadlines.
+    assert cancel_threads == ["agent-deadline"]
