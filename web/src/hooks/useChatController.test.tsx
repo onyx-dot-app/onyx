@@ -4,6 +4,7 @@ import useChatController from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   createChatSession,
+  endIncognitoSession,
   processRawChatHistory,
   resumeStream,
   sendMessage,
@@ -92,6 +93,7 @@ jest.mock("@/app/app/services/lib", () => {
     resumeStream: jest.fn(),
     setPreferredResponse: jest.fn(),
     createChatSession: jest.fn(),
+    endIncognitoSession: jest.fn(async () => true),
     buildChatUrl: () => "/app?chatId=session",
     ChatSendRejectedError,
     ApprovalPendingError: class extends ChatSendRejectedError {},
@@ -237,46 +239,61 @@ test.each([false, true])(
   }
 );
 
-test("New Session leaves a pending first send in its original chat", async () => {
-  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
-  const creation = Promise.withResolvers<string>();
-  jest.mocked(createChatSession).mockReturnValueOnce(creation.promise);
-  jest.mocked(sendMessage).mockImplementationOnce(async function* () {
-    yield sentTurn;
-    yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
-  });
-  const resetInputBar = jest.fn();
-  const { result } = renderHook(() => ({
-    position: useAppPosition(),
-    controller: useChatController({
-      llmManager: createLlmManager(),
-      toolConfiguration,
-      activeAgent: undefined,
-      availableAgents: [],
-      existingChatSessionId: null,
-      selectedDocuments: [],
-      searchParams: new ReadonlyURLSearchParams(),
-      resetInputBar,
-      restoreInputBar: jest.fn(),
-    }),
-  }));
-
-  await act(async () => {
-    const send = result.current.controller.onSubmit({
-      message: "Send before opening a fresh session",
-      mentions: [],
-      currentMessageFiles: [],
-      deepResearch: false,
+test.each([false, true])(
+  "New Session handles a pending first send (private: %s)",
+  async (incognito) => {
+    mockIncognitoEnabledRef.current = incognito;
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
     });
-    result.current.position.openNewSession();
-    creation.resolve("session");
-    await send;
-  });
+    const creation = Promise.withResolvers<string>();
+    jest.mocked(createChatSession).mockReturnValueOnce(creation.promise);
+    if (!incognito) {
+      jest.mocked(sendMessage).mockImplementationOnce(async function* () {
+        yield sentTurn;
+        yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+      });
+    }
+    const resetInputBar = jest.fn();
+    const { result } = renderHook(() => ({
+      position: useAppPosition(),
+      controller: useChatController({
+        llmManager: createLlmManager(),
+        toolConfiguration,
+        activeAgent: undefined,
+        availableAgents: [],
+        existingChatSessionId: null,
+        selectedDocuments: [],
+        searchParams: new ReadonlyURLSearchParams(),
+        resetInputBar,
+        restoreInputBar: jest.fn(),
+      }),
+    }));
 
-  expect(sendMessage).toHaveBeenCalled();
-  expect(useChatSessionStore.getState().currentSessionId).toBeNull();
-  expect(resetInputBar).not.toHaveBeenCalled();
-});
+    await act(async () => {
+      const send = result.current.controller.onSubmit({
+        message: "Send before opening a fresh session",
+        mentions: [],
+        currentMessageFiles: [],
+        deepResearch: false,
+      });
+      result.current.position.openNewSession();
+      creation.resolve("session");
+      await send;
+    });
+
+    if (incognito) {
+      expect(endIncognitoSession).toHaveBeenCalledWith("session");
+      expect(sendMessage).not.toHaveBeenCalled();
+    } else {
+      expect(endIncognitoSession).not.toHaveBeenCalled();
+      expect(sendMessage).toHaveBeenCalled();
+    }
+    expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+    expect(resetInputBar).not.toHaveBeenCalled();
+  }
+);
 
 test.each([
   { isNewSession: false, stop: true },

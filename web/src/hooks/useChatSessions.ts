@@ -17,6 +17,7 @@ import { useAgents } from "@/lib/agents/hooks";
 import { useActiveProject } from "@/lib/projects/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useUnseenRuns } from "@/lib/chat/runStatus";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 const PAGE_SIZE = 50;
 const MIN_LOADING_DURATION_MS = 500;
@@ -297,6 +298,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
     (sessionId: string) => {
       pendingSessionsStore.remove(sessionId);
       // A deleted chat has nothing left to view.
+      useChatSessionStore.getState().suppressDeletedRunMarkers(sessionId);
       useUnseenRuns.getState().markSeen(sessionId);
       // Optimistically remove from all loaded pages
       mutate(

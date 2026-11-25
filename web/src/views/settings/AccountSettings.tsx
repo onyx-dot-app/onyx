@@ -38,6 +38,7 @@ import { WORK_ROLE_OPTIONS, WORK_ROLE_VALUES } from "@/lib/users/workRoles";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useUnseenRuns } from "@/lib/chat/runStatus";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
@@ -204,6 +205,7 @@ export default function AccountSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
+        useChatSessionStore.getState().suppressDeletedRunMarkers();
         useUnseenRuns.getState().clearAll();
         await refreshChatSessions();
         deleteAllChatsModal.toggle(false);

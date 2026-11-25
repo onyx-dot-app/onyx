@@ -489,7 +489,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       removeOptimisticFilesByTempIds,
       userFileMaxUploadSizeMb,
       incognitoUploadsEnabled,
-      incognitoUploadsEnabled,
+      incognitoSessionId,
       t,
     ]
   );

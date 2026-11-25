@@ -47,6 +47,7 @@ export interface SessionError {
 
 interface ChatSessionData {
   sessionId: string;
+  runMarkerSuppressed?: boolean;
   messageTree: MessageTreeState;
   chatState: ChatState;
   regenerationState: RegenerationState | null;
@@ -117,6 +118,7 @@ interface ChatSessionStore {
 
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
+  suppressDeletedRunMarkers: (sessionId?: string) => void;
   createSession: (
     sessionId: string,
     initialData?: Partial<ChatSessionData>
@@ -312,6 +314,18 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     });
     // A long-lived tab would otherwise keep every chat it ever opened.
     get().cleanupOldSessions();
+  },
+
+  suppressDeletedRunMarkers: (sessionId) => {
+    set((state) => {
+      const sessions = new Map(state.sessions);
+      for (const [id, session] of sessions) {
+        if (!sessionId || sessionId === id) {
+          sessions.set(id, { ...session, runMarkerSuppressed: true });
+        }
+      }
+      return { sessions };
+    });
   },
 
   createSession: (

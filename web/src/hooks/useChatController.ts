@@ -46,7 +46,7 @@ import {
   UserKnowledgeFilePacket,
 } from "@/app/app/types";
 import { StreamStopReason } from "@/lib/search/types";
-import { createChatSession } from "@/app/app/services/lib";
+import { createChatSession, endIncognitoSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
   modelSupportsImageInput,
@@ -457,6 +457,20 @@ export default function useChatController({
           return;
         }
 
+        if (
+          incognito &&
+          (controller.signal.aborted ||
+            !stillOnComposer() ||
+            !incognitoEnabledRef.current ||
+            !isStillOnLocation([startUrl, urlWithoutProject], window.location))
+        ) {
+          try {
+            await endIncognitoSession(currChatSessionId);
+          } catch (error) {
+            console.error("Failed to end abandoned incognito session:", error);
+          }
+          return;
+        }
         if (controller.signal.aborted) return;
 
         // This send is what created the chat, so the configuration chosen for

@@ -1198,6 +1198,7 @@ export function useTrackChatRuns(): void {
             !before ||
             before === session ||
             session.incognito ||
+            session.runMarkerSuppressed ||
             !isWorking(before) ||
             isWorking(session) ||
             sessionId === visibleChatIdRef.current
