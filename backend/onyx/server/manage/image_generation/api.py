@@ -14,6 +14,7 @@ from onyx.db.image_generation import (
     get_all_image_generation_configs,
     get_image_generation_config,
     link_image_generation_model__no_commit,
+    rename_image_generation_model__no_commit,
     set_default_image_generation_config,
     unlink_image_generation_model__no_commit,
     unset_default_image_generation_config,
@@ -47,6 +48,7 @@ from onyx.llm.utils import collect_credential_values
 from onyx.server.manage.image_generation.models import (
     ImageGenerationConfigCreate,
     ImageGenerationConfigLink,
+    ImageGenerationConfigRename,
     ImageGenerationConfigUpdate,
     ImageGenerationConfigView,
     ImageGenerationCredentials,
@@ -399,6 +401,33 @@ def link_config(
         llm_provider_id=llm_provider.id,
         model_name=model_name,
         is_default=config_link.is_default,
+        custom_display_name=config_link.custom_display_name,
+    )
+    db_session.commit()
+    invalidate_provider_listing_cache()
+    db_session.refresh(config)
+    return ImageGenerationConfigView.from_model(
+        config, fetch_default_image_model_configuration_id(db_session)
+    )
+
+
+@admin_router.patch("/config/{image_provider_id}")
+def rename_config(
+    image_provider_id: str,
+    rename: ImageGenerationConfigRename,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> ImageGenerationConfigView:
+    """Rename a connected image model."""
+    config = get_image_generation_config(db_session, image_provider_id)
+    if config is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
+        )
+    name = rename.custom_display_name
+    rename_image_generation_model__no_commit(
+        config, name.strip() if name and name.strip() else None
     )
     db_session.commit()
     invalidate_provider_listing_cache()

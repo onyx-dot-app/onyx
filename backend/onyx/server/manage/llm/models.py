@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import resolve_api_surface
@@ -202,6 +202,11 @@ class LLMProviderUpsertRequest(LLMProvider):
     # only adds or updates.
     keep_existing_models: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
+    # Deployment defaults this save moves (a model) or clears (None), by flow.
+    # A save that hides or removes a role's model names each such role here;
+    # the changes apply in the same transaction, and a role listed here never
+    # blocks the save.
+    default_changes: dict[ModelRole, "DefaultModel | None"] = {}
 
     @model_validator(mode="after")
     def validate_typesafe_configuration(self) -> LLMProviderUpsertRequest:

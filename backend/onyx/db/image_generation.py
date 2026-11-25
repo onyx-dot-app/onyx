@@ -286,6 +286,7 @@ def link_image_generation_model__no_commit(
     llm_provider_id: int,
     model_name: str,
     is_default: bool = False,
+    custom_display_name: str | None = None,
 ) -> ImageGenerationConfig:
     """Point a new image generation config at a model on an existing LLM
     provider. The provider's own credentials are used at call time."""
@@ -300,6 +301,8 @@ def link_image_generation_model__no_commit(
         )
         db_session.add(model_configuration)
         db_session.flush()
+    if custom_display_name is not None:
+        model_configuration.custom_display_name = custom_display_name
 
     if (
         LLMModelFlowType.IMAGE_GENERATION
@@ -341,6 +344,13 @@ def unlink_image_generation_model__no_commit(
     if not model_configuration.is_visible and not model_configuration.llm_model_flows:
         db_session.delete(model_configuration)
     db_session.flush()
+
+
+def rename_image_generation_model__no_commit(
+    config: ImageGenerationConfig, custom_display_name: str | None
+) -> None:
+    """Sets the admin's name for a connected image model, on its model row."""
+    config.model_configuration.custom_display_name = custom_display_name
 
 
 def can_user_generate_images(

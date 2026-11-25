@@ -414,6 +414,7 @@
   "PATCH /admin/default-assistant": "admin",
   "PATCH /admin/default-assistant/tools": "admin",
   "PATCH /admin/hooks/{hook_id}": "admin",
+  "PATCH /admin/image-generation/config/{image_provider_id}": "manage:llms",
   "PATCH /admin/integrations/{integration_id}": "manage:actions +scope",
   "PATCH /admin/llm/model-routing": "manage:llms",
   "PATCH /admin/mcp/server/{server_id}": "manage:actions +scope",
