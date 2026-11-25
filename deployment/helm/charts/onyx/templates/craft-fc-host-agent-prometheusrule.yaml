@@ -1,5 +1,5 @@
 {{- /* Alert rules for the Craft Firecracker host agent. Needs
-craft.sandboxRuntime=firecracker, craft.hostAgent.metrics.enabled and
+Firecracker (craft.sandboxRuntime auto or firecracker), craft.hostAgent.metrics.enabled and
 monitoring.prometheusRules.enabled. Metrics: microvm/README.md (Metrics).
 Runbook links: craft.hostAgent.alerts.runbookUrl + "#<alert name in lower
 case>" (docs.onyx.app; source microvm/RUNBOOKS.md). Thresholds:
@@ -7,7 +7,7 @@ craft.hostAgent.alerts. */}}
 {{- $agent := (.Values.craft | default dict).hostAgent | default dict }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- $rules := .Values.monitoring.prometheusRules | default dict }}
-{{- if and (eq (include "onyx.craftSandboxRuntime" .) "firecracker") $metrics.enabled $rules.enabled }}
+{{- if and (include "onyx.craftFcEnabled" .) $metrics.enabled $rules.enabled }}
 {{- $alerts := $agent.alerts | default dict }}
 {{- $runbook := $alerts.runbookUrl | default "https://docs.onyx.app/deployment/kubernetes/craft-firecracker-operations" }}
 {{- $ns := include "onyx.craftHostAgentNamespace" . }}

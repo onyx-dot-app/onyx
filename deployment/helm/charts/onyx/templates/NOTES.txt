@@ -27,3 +27,12 @@ It logs "Legacy MinIO copy complete" once every file is copied. Rollback
 and retiring MinIO are in
 https://github.com/onyx-dot-app/onyx/blob/main/deployment/helm/MIGRATION.md
 {{- end }}
+{{- if and (eq (include "onyx.craftSandboxRuntime" .) "auto") (not (include "onyx.craftFcEnabled" .)) }}
+
+Firecracker sandboxes are off: craft.sandboxRuntime=auto needs a pinned
+global.version (an Onyx release tag, not latest, edge or beta) and
+auth.sandboxNodeRegistration. The preflight pods on onyx.app/kvm=true nodes
+show if a node can run Firecracker:
+
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=craft-fc-preflight
+{{- end }}

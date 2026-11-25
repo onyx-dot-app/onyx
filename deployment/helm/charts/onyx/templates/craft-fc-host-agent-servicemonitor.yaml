@@ -1,11 +1,11 @@
 {{- /* ServiceMonitor for the Craft Firecracker host agent metrics.
-Needs craft.sandboxRuntime=firecracker, craft.hostAgent.metrics.enabled and
+Needs Firecracker (craft.sandboxRuntime auto or firecracker), craft.hostAgent.metrics.enabled and
 monitoring.serviceMonitors.enabled. Same auth as the api_server
 ServiceMonitor: with auth.metricsAuth, Prometheus sends the token from the
 agent namespace copy (craft-fc-host-agent.yaml). */}}
 {{- $agent := (.Values.craft | default dict).hostAgent | default dict }}
 {{- $metrics := $agent.metrics | default dict }}
-{{- if and (eq (include "onyx.craftSandboxRuntime" .) "firecracker") $metrics.enabled .Values.monitoring.serviceMonitors.enabled }}
+{{- if and (include "onyx.craftFcEnabled" .) $metrics.enabled .Values.monitoring.serviceMonitors.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
