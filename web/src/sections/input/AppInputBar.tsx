@@ -587,11 +587,19 @@ const AppInputBar = React.memo(
     }
 
     // A switch to another version hides the edited message, and a resend of a
-    // hidden message fails, so the edit ends and the draft comes back.
+    // hidden message fails, so the edit ends and the draft comes back. A
+    // message not loaded yet, such as one older than the first page, counts
+    // as shown.
     const editedMessageShown = useChatSessionStore((state) => {
       if (!editing || state.currentSessionId === null) return true;
       const tree = state.sessions.get(state.currentSessionId)?.messageTree;
-      if (!tree || tree.size === 0) return true;
+      if (
+        !tree ||
+        !Array.from(tree.values()).some(
+          (message) => message.messageId === editing.messageId
+        )
+      )
+        return true;
       return getLatestMessageChain(tree).some(
         (message) => message.messageId === editing.messageId
       );
