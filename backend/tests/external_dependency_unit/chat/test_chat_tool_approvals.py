@@ -31,6 +31,7 @@ from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
+    PendingToolInput,
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
@@ -49,6 +50,7 @@ from onyx.chat.run_store import (
     fail_suspended_response,
     resume_failure,
 )
+from onyx.chat.tool_approvals import open_tool_approval
 from onyx.chat.tool_questions import CANCELLED_QUESTION_MESSAGE
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.approval_request import create_approval_request__no_commit
@@ -2136,30 +2138,39 @@ def test_an_action_with_no_integration_needs_a_builtin_key() -> None:
     assert ToolApprovalScope(integration_id=None, action_id=BUILTIN_ACTION)
 
 
-def test_an_action_that_always_asks_takes_no_chat_grant(
+def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
     db_session: Session, chat: ApprovalChat
 ) -> None:
-    """A chat grant would approve the other waiting requests of the action
-    without a look at each."""
-    approval_ids = [
-        create_approval_request__no_commit(
-            db_session,
+    """The request tool of an app (`unspecified`) asks each time: an
+    approval for the chat is saved as a single approval, and the next call
+    asks again."""
+
+    def ask() -> PendingToolInput | ToolResult | None:
+        return open_tool_approval(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chat_session_id=chat.chat_session_id,
-            chat_message_id=chat.response_id,
-            integration_id=chat.integration_id,
-            action_id=WHOLE_DOMAIN_ACTION_TYPE,
-            tool_call_id=call_id,
-            tool_name="request",
+            response_id=chat.response_id,
+            user_id=chat.user.id,
+            tool_call_id=f"call-{uuid4().hex[:8]}",
+            tool_name="app__1__request",
             display_name="Any other request",
             arguments={},
+            scope=ToolApprovalScope(
+                integration_id=chat.integration_id,
+                action_id=WHOLE_DOMAIN_ACTION_TYPE,
+            ),
+            signed_out=False,
         )
-        for call_id in ("first", "second")
-    ]
-    db_session.commit()
 
-    with pytest.raises(OnyxError) as refused:
-        chat.decide(db_session, approval_ids[0], ApprovalChoice.APPROVE_SESSION)
+    first = ask()
+    assert isinstance(first, PendingToolInput)
+    assert not first.can_approve_for_chat
 
-    assert refused.value.error_code is OnyxErrorCode.INVALID_INPUT
-    db_session.rollback()
-    assert [row.decision for row in chat.rows(db_session)] == [None, None]
+    chat.decide(db_session, first.request_id, ApprovalChoice.APPROVE_SESSION)
+
+    [row] = chat.rows(db_session)
+    assert (row.decision, row.decided_via) == (
+        ApprovalDecision.APPROVED,
+        ApprovalDecidedVia.USER,
+    )
+    assert isinstance(ask(), PendingToolInput)

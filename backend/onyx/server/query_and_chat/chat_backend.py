@@ -2191,16 +2191,13 @@ def decide_approval(
     approval = get_approval_request_for_user(db_session, approval_id, user.id)
     if approval is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
-    if body.decision == ApprovalChoice.APPROVE_SESSION and always_asks(
-        approval.action_id
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "This action asks for approval for each request. Approve it once.",
-        )
     rejected = body.decision == ApprovalChoice.REJECT
+    # An action that asks each time takes a chat approval as a single one.
+    standing = body.decision == ApprovalChoice.APPROVE_SESSION and not always_asks(
+        approval.action_id
+    )
     upgrades_to_grant = (
-        body.decision == ApprovalChoice.APPROVE_SESSION
+        standing
         and approval.decision == ApprovalDecision.APPROVED
         and approval.decided_via == ApprovalDecidedVia.USER
     )
@@ -2221,7 +2218,7 @@ def decide_approval(
             ApprovalDecidedVia.POLICY
             if blocked and not rejected
             else ApprovalDecidedVia.SESSION_GRANT
-            if body.decision == ApprovalChoice.APPROVE_SESSION
+            if standing
             else ApprovalDecidedVia.USER,
         )
     db_session.refresh(approval)
