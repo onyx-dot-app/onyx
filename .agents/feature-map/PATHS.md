@@ -403,7 +403,7 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/configs/`, `backend/ee/onyx/configs/app_configs.py`, `backend/shared_configs/` | Settings for every area. Read the component that documents the setting. |
 | `backend/onyx/server/runtime/` | `OnyxRuntime` resolves a setting from the database, the cache, env vars and defaults. |
 | `backend/onyx/server/middleware/api_prefix.py` | Removes the API prefix from a request path for the middlewares that match on routes. |
-| `backend/onyx/server/manage/get_state.py`, `backend/onyx/server/manage/models.py`, `backend/onyx/server/models.py`, `backend/onyx/server/utils.py`, `backend/onyx/server/utils_vector_db.py` | Health, version and auth-type probes, and models and helpers that many routes share. |
+| `backend/onyx/server/manage/get_state.py`, `backend/onyx/server/manage/models.py`, `backend/onyx/server/models.py`, `backend/onyx/server/playground.py`, `backend/onyx/server/utils.py`, `backend/onyx/server/utils_vector_db.py` | Health, version and auth-type probes, the playground restrictions, and models and helpers that many routes share. |
 | `deployment/` | Deployment files. Read the component of the service you deploy. |
 | `backend/Dockerfile`, `backend/Dockerfile.model_server`, `web/Dockerfile` | Image builds. `.github/workflows/deployment.yml` sets their build args, such as the version and the git details on the About page. |
 | `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | Reverse-proxy templates. The `cli/` copies are generated: run `ods generate-compose --write` after you change `deployment/data/nginx/`. |
