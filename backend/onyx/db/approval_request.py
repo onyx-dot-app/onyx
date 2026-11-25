@@ -162,19 +162,6 @@ def close_pending_approval_requests__no_commit(
     )
 
 
-def get_response_approval_requests(
-    db_session: Session, chat_message_ids: Collection[int]
-) -> list[ApprovalRequest]:
-    """The requests of these responses, in the order they were made."""
-    return list(
-        db_session.scalars(
-            select(ApprovalRequest)
-            .where(ApprovalRequest.chat_message_id.in_(chat_message_ids))
-            .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
-        )
-    )
-
-
 def approvals_version(db_session: Session, chat_session_id: UUID) -> str:
     """A marker that changes when an approval request or a question of the
     chat opens, ends or is deleted, for clients that show the requests of a
