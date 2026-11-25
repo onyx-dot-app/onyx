@@ -828,7 +828,7 @@ const AgentMessage = React.memo(function AgentMessage({
                 />
               )}
               {timeSent && (
-                <div className="ms-auto shrink-0 px-2 opacity-0 group-hover/agent-message:opacity-100 group-focus-within/agent-message:opacity-100 no-hover:opacity-100">
+                <div className="ms-auto shrink-0 px-2 opacity-0 transition-opacity duration-150 group-hover/agent-message:opacity-100 group-hover/agent-message:delay-300 group-focus-within/agent-message:opacity-100 no-hover:opacity-100">
                   <MessageTime timeSent={timeSent} />
                 </div>
               )}
