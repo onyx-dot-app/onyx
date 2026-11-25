@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import JsonValue, TypeAdapter
 from sqlalchemy import any_, exists, select, true, union
 from sqlalchemy.orm import Session, aliased
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.agents.models import InputSource, RunFailure, RunFailureKind, RunStatus
 from onyx.chat.models import ParkedRun, ResponseCheckpoint, SavedCheckpoint
@@ -247,14 +248,15 @@ def interrupt_response__no_commit(
 def chat_has_checkpoint(session: Session, chat_session_id: UUID) -> bool:
     """Whether a response of the chat itself, not of its agents, has a
     checkpoint; a root response can be parked only then."""
-    return bool(
-        session.scalar(
-            select(
-                exists()
-                .where(ChatResponseCheckpoint.chat_message_id == ChatMessage.id)
-                .where(ChatMessage.chat_session_id == chat_session_id)
-            )
-        )
+    return bool(session.scalar(select(chat_checkpoint_exists(chat_session_id))))
+
+
+def chat_checkpoint_exists(chat_session_id: UUID) -> ColumnElement[bool]:
+    """The condition of `chat_has_checkpoint`, for a statement that reads more."""
+    return (
+        exists()
+        .where(ChatResponseCheckpoint.chat_message_id == ChatMessage.id)
+        .where(ChatMessage.chat_session_id == chat_session_id)
     )
 
 
