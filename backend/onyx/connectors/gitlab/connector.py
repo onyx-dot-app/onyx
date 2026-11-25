@@ -1,4 +1,3 @@
-import fnmatch
 import itertools
 from collections import deque
 from collections.abc import Iterable, Iterator
@@ -12,11 +11,13 @@ import requests
 from gitlab.v4.objects import Project
 
 from onyx.configs.app_configs import (
+    GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS,
     GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
     INDEX_BATCH_SIZE,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.cross_connector_utils.path_exclusion import is_path_excluded
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -42,13 +43,19 @@ T = TypeVar("T")
 
 logger = setup_logger()
 
-# List of directories/Files to exclude
-exclude_patterns = [
+# Paths always excluded; user-configured excluded_paths are added to these.
+# GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS replaces the built-in list.
+_BUILTIN_GITLAB_EXCLUDED_PATHS: list[str] = [
     "logs",
-    ".github/",
-    ".gitlab/",
+    ".github",
+    ".gitlab",
     ".pre-commit-config.yaml",
 ]
+DEFAULT_GITLAB_EXCLUDED_PATHS: list[str] = (
+    GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS
+    if GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS is not None
+    else _BUILTIN_GITLAB_EXCLUDED_PATHS
+)
 
 
 def _batch_gitlab_objects(git_objs: Iterable[T], batch_size: int) -> Iterator[list[T]]:
@@ -151,11 +158,6 @@ def _convert_code_to_document(
     return doc
 
 
-def _should_exclude(path: str) -> bool:
-    """Check if a path matches any of the exclude patterns."""
-    return any(fnmatch.fnmatch(path, pattern) for pattern in exclude_patterns)
-
-
 def _validate_credential_url(gitlab_url: str) -> None:
     enforced: bool = connector_ssrf_enforced(
         get_security_settings().ssrf_protection_level
@@ -202,7 +204,15 @@ class GitlabConnector(LoadConnector, PollConnector):
         include_mrs: bool = True,
         include_issues: bool = True,
         include_code_files: bool = GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+        excluded_paths: list[str] | None = None,
     ) -> None:
+        """excluded_paths are globs matched against the full repo path and the
+        file name (see is_path_excluded). `*.lock` matches at any depth, `docs/*`
+        matches everything under docs, and `logs` matches any file or directory
+        named logs. Excluded directories are pruned with their whole subtree.
+        These are added to DEFAULT_GITLAB_EXCLUDED_PATHS, which always apply.
+        None and [] both give the defaults only.
+        """
         self.project_owner = project_owner
         self.project_name = project_name
         self.batch_size = batch_size
@@ -210,6 +220,13 @@ class GitlabConnector(LoadConnector, PollConnector):
         self.include_mrs = include_mrs
         self.include_issues = include_issues
         self.include_code_files = include_code_files
+        user_paths = [
+            p for p in (raw.strip().rstrip("/") for raw in excluded_paths or []) if p
+        ]
+        # dict.fromkeys de-duplicates while keeping order, defaults first.
+        self.excluded_paths: list[str] = list(
+            dict.fromkeys([*DEFAULT_GITLAB_EXCLUDED_PATHS, *user_paths])
+        )
         self.gitlab_client: gitlab.Gitlab | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -241,7 +258,7 @@ class GitlabConnector(LoadConnector, PollConnector):
                 for file_batch in _batch_gitlab_objects(files, self.batch_size):
                     code_doc_batch: list[Document | HierarchyNode] = []
                     for file in file_batch:
-                        if _should_exclude(file["path"]):
+                        if is_path_excluded(file["path"], self.excluded_paths):
                             continue
 
                         if file["type"] == "blob":

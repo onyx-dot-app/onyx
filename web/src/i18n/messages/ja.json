@@ -3088,6 +3088,10 @@
             "include_issues": {
               "label": "Issue を含める",
               "description": "リポジトリの Issue をインデックスします"
+            },
+            "excluded_paths": {
+              "label": "除外するパス",
+              "description": "スキップするコードファイルとフォルダーの glob パターン。デプロイのデフォルト除外設定に追加されます: `.github`、`.gitlab`、`logs`、`.pre-commit-config.yaml`。環境変数 `GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS` を設定すると、デフォルト除外設定が置き換えられます。パターンは、相対パス全体と名前の両方に対して照合されます。例: `*.lock`(すべての lock ファイル)、`docs/*`(フォルダー)。コードファイルにのみ適用され、マージリクエストと Issue には適用されません。"
             }
           }
         },

@@ -3088,6 +3088,10 @@
             "include_issues": {
               "label": "Issues einbeziehen",
               "description": "Issues aus Repositories indexieren"
+            },
+            "excluded_paths": {
+              "label": "Ausgeschlossene Pfade",
+              "description": "Glob-Muster für Code-Dateien und Ordner, die übersprungen werden. Sie werden zu den Standardausschlüssen der Bereitstellung hinzugefügt: `.github`, `.gitlab`, `logs`, `.pre-commit-config.yaml`, sofern die Umgebungsvariable `GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS` sie nicht ersetzt. Die Muster werden mit dem vollständigen relativen Pfad und mit dem Namen abgeglichen. Beispiele: `*.lock` (jede Lock-Datei), `docs/*` (ein Ordner). Gilt nur für Code-Dateien, nicht für Merge Requests oder Issues."
             }
           }
         },

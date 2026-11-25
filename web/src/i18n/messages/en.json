@@ -3088,6 +3088,10 @@
             "include_issues": {
               "label": "Include Issues",
               "description": "Index issues from repositories"
+            },
+            "excluded_paths": {
+              "label": "Excluded Paths",
+              "description": "Glob patterns for code files and folders to skip. They are added to the deployment's default exclusions: `.github`, `.gitlab`, `logs`, `.pre-commit-config.yaml`, unless the `GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS` environment variable replaces them. Patterns are matched against both the full relative path and the name. Examples: `*.lock` (any lock file), `docs/*` (a folder). Applies only to code files, not to merge requests or issues."
             }
           }
         },

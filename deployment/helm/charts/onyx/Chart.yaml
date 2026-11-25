@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.59
+version: 0.9.60
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,8 +21,8 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: The light Celery worker also consumes the
-        suggested_questions queue (used only by the Playground).
+      description: GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS replaces the GitLab
+        connector's built-in excluded paths.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

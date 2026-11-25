@@ -253,4 +253,33 @@ describe("editInitialValues", () => {
 
     expect(values.gitlab_url).toBe("https://gitlab.acme.com");
   });
+
+  it("proposes no GitLab excluded_paths key when it is unset and untouched", () => {
+    const ccPair = githubPair({ project_owner: "acme" });
+    const gitlabPair: CCPairFullInfo = {
+      ...ccPair,
+      connector: { ...ccPair.connector, source: ValidSources.GitLab },
+      credential: { ...ccPair.credential, source: ValidSources.GitLab },
+    };
+    const configuration = connectorConfigs[ValidSources.GitLab];
+    const initialValues = editInitialValues(
+      ValidSources.GitLab,
+      configuration,
+      gitlabPair,
+      []
+    );
+
+    expect(initialValues.excluded_paths).toEqual([]);
+
+    const proposal = buildEditProposal({
+      values: { ...initialValues, excluded_paths: ["*.lock"] },
+      initialValues,
+      configuration,
+      ccPair: gitlabPair,
+      credentialId: CREDENTIAL_ID,
+    });
+    expect(proposal.connector_specific_config.excluded_paths).toEqual([
+      "*.lock",
+    ]);
+  });
 });

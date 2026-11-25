@@ -3088,6 +3088,10 @@
             "include_issues": {
               "label": "包含议题",
               "description": "索引仓库中的议题"
+            },
+            "excluded_paths": {
+              "label": "排除的路径",
+              "description": "要跳过的代码文件和文件夹的 glob 模式。它们会添加到部署的默认排除项中:`.github`、`.gitlab`、`logs`、`.pre-commit-config.yaml`。环境变量 `GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS` 可替换这些默认排除项。模式会同时与完整的相对路径和名称进行匹配。示例:`*.lock`(任何 lock 文件)、`docs/*`(文件夹)。仅适用于代码文件,不适用于合并请求或议题。"
             }
           }
         },

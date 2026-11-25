@@ -3088,6 +3088,10 @@
             "include_issues": {
               "label": "Incluir issues",
               "description": "Indexa as issues dos repositórios"
+            },
+            "excluded_paths": {
+              "label": "Caminhos excluídos",
+              "description": "Padrões glob de arquivos de código e pastas a ignorar. Eles são adicionados às exclusões padrão da implantação: `.github`, `.gitlab`, `logs`, `.pre-commit-config.yaml`, a menos que a variável de ambiente `GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS` as substitua. Os padrões são comparados com o caminho relativo completo e com o nome. Exemplos: `*.lock` (qualquer arquivo lock), `docs/*` (uma pasta). Aplica-se apenas a arquivos de código, não a merge requests nem a issues."
             }
           }
         },

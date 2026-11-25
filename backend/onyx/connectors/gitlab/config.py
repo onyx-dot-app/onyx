@@ -8,6 +8,7 @@ from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
+    ScopeExclude,
     ScopeOpaque,
     ScopeToggle,
 )
@@ -31,3 +32,6 @@ class GitlabConnectorConfig(ConnectorConfig):
     include_code_files: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = (
         GITLAB_CONNECTOR_INCLUDE_CODE_FILES
     )
+    excluded_paths: Annotated[
+        list[str] | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeExclude())
+    ] = None

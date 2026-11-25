@@ -3088,6 +3088,10 @@
             "include_issues": {
               "label": "Inclure les tickets",
               "description": "Indexer les tickets des dépôts"
+            },
+            "excluded_paths": {
+              "label": "Chemins exclus",
+              "description": "Motifs glob des fichiers de code et des dossiers à ignorer. Ils s'ajoutent aux exclusions par défaut du déploiement : `.github`, `.gitlab`, `logs`, `.pre-commit-config.yaml`, sauf si la variable d'environnement `GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS` les remplace. Les motifs sont comparés au chemin relatif complet et au nom. Exemples : `*.lock` (tout fichier lock), `docs/*` (un dossier). S'applique uniquement aux fichiers de code, pas aux merge requests ni aux tickets."
             }
           }
         },

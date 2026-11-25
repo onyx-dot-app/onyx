@@ -3088,6 +3088,10 @@
             "include_issues": {
               "label": "Incluir issues",
               "description": "Indexa los issues de los repositorios"
+            },
+            "excluded_paths": {
+              "label": "Rutas excluidas",
+              "description": "Patrones glob de archivos de código y carpetas que se omiten. Se añaden a las exclusiones predeterminadas del despliegue: `.github`, `.gitlab`, `logs`, `.pre-commit-config.yaml`, salvo que la variable de entorno `GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS` las reemplace. Los patrones se comparan con la ruta relativa completa y con el nombre. Ejemplos: `*.lock` (cualquier archivo lock), `docs/*` (una carpeta). Solo se aplica a los archivos de código, no a las merge requests ni a los issues."
             }
           }
         },

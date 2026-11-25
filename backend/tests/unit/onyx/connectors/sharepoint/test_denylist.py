@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
+from onyx.connectors.cross_connector_utils.path_exclusion import is_path_excluded
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
     build_item_relative_path,
-    is_path_excluded,
 )
 from onyx.connectors.sharepoint.connector import (
     SharepointConnector,

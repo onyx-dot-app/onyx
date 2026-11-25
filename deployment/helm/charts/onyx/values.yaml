@@ -1974,6 +1974,9 @@ configMap:
   PIT_KEEP_ALIVE: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
+  # Comma-separated globs that replace the GitLab connector's built-in excluded
+  # paths (.github,.gitlab,logs,.pre-commit-config.yaml); "" keeps the built-ins.
+  GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS: ""
   JIRA_CLOUD_API_VERSION: ""
   JIRA_SERVER_API_VERSION: ""
   CANVAS_PERMISSION_DOC_SYNC_FREQUENCY: ""
