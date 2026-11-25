@@ -31,7 +31,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.external_apps.matching.graphql_parsing import (
     operation_invocations,
-    parse_invocations,
+    request_queries,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.registry import get_endpoint_catalog
@@ -508,8 +508,8 @@ class ApiKindHandler(IntegrationKindHandler):
     ) -> RequestMatch | None:
         """A request to the endpoint URL calls the action of each root field
         in its body and in the ``query`` of its URL (the GET form). A request
-        with no root field, or with a root field that is no action, also calls
-        the request action, which asks. A request to another path under the
+        with no root field, with a document that names none, or with a root
+        field that is no action, also calls the request action, which asks. A request to another path under the
         endpoint is no match."""
         proxied = http.Request.make(request.method, url)
         if match_request((target,), proxied) is None or normalized_request_path(
@@ -520,24 +520,26 @@ class ApiKindHandler(IntegrationKindHandler):
             action.key: action
             for action in api_integration_actions(integration_id, db_session)
         }
-        url_queries = parse_qs(urlsplit(url).query).get("query", [])
+        queries = [
+            *request_queries(request.body),
+            *parse_qs(urlsplit(url).query).get("query", []),
+        ]
+        documents = [
+            operation_invocations(query) if query is not None else []
+            for query in queries
+        ]
         invoked = {
             f"{operation}.{field}"
-            for operation, field in [
-                *parse_invocations(request.body),
-                *(
-                    invocation
-                    for query in url_queries
-                    for invocation in operation_invocations(query)
-                ),
-            ]
+            for invocations in documents
+            for operation, field in invocations
         }
         matched = [
             _matched_action(integration_id, actions[key])
             for key in sorted(invoked)
             if key in actions
         ]
-        if not invoked or len(matched) < len(invoked):
+        # A document that names no root field could run any operation.
+        if not invoked or not all(documents) or len(matched) < len(invoked):
             matched.append(
                 _whole_domain_action(
                     integration_id, f"{request.method.upper()} {request.path}"

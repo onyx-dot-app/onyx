@@ -27,23 +27,30 @@ def parse_invocations(body: bytes | None) -> list[tuple[str, str]]:
     empty list if the body isn't JSON / isn't a GraphQL request / can't be
     parsed — such a request simply matches no GraphQL rule.
     """
+    return [
+        invocation
+        for query in request_queries(body)
+        if query is not None
+        for invocation in operation_invocations(query)
+    ]
+
+
+def request_queries(body: bytes | None) -> list[str | None]:
+    """The ``query`` of each GraphQL document in a body, single or batched.
+    None stands for a document with no string ``query``, or for a body that
+    is not JSON."""
     if not body:
         return []
     try:
         payload = json.loads(body)
     except (ValueError, TypeError):
-        return []
-
+        return [None]
     documents = payload if isinstance(payload, list) else [payload]
-    invocations: list[tuple[str, str]] = []
+    queries: list[str | None] = []
     for document in documents:
-        if not isinstance(document, dict):
-            continue
-        query = document.get("query")
-        if not isinstance(query, str):
-            continue
-        invocations.extend(operation_invocations(query))
-    return invocations
+        query = document.get("query") if isinstance(document, dict) else None
+        queries.append(query if isinstance(query, str) else None)
+    return queries
 
 
 def operation_invocations(query: str) -> list[tuple[str, str]]:

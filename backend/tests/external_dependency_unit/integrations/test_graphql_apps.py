@@ -173,7 +173,10 @@ def _matched_keys(
     query: str,
     url: str = ENDPOINT,
     method: str = "POST",
+    body: bytes | None = None,
 ) -> list[str] | None:
+    if body is None and query:
+        body = json.dumps({"query": query}).encode()
     (target,) = load_match_targets(db_session, integration.id)
     match = ApiKindHandler().match_request(
         integration,
@@ -182,7 +185,7 @@ def _matched_keys(
             method=method,
             path=url.removeprefix("https://tickets.example.com"),
             url=url,
-            body=json.dumps({"query": query}).encode(),
+            body=body,
         ),
         db_session,
     )
@@ -209,6 +212,33 @@ def test_proxy_matches_a_script_request_by_root_field(
         )
         is None
     )
+
+
+def test_a_batch_document_with_no_query_asks(
+    db_session: Session, integration: Integration
+) -> None:
+    """A persisted-query document sends a hash in place of ``query``. The
+    matcher cannot see its operation, so the request asks."""
+    body = json.dumps(
+        [
+            {"query": '{ ticket(id: "7") { id } }'},
+            {"extensions": {"persistedQuery": {"sha256Hash": "abc"}}},
+        ]
+    ).encode()
+    assert _matched_keys(db_session, integration, "", body=body) == [
+        "query.ticket",
+        "unspecified",
+    ]
+    fragment_only = json.dumps(
+        [
+            {"query": '{ ticket(id: "7") { id } }'},
+            {"query": "fragment F on Ticket { id }"},
+        ]
+    ).encode()
+    assert _matched_keys(db_session, integration, "", body=fragment_only) == [
+        "query.ticket",
+        "unspecified",
+    ]
 
 
 def test_a_request_to_another_path_under_the_endpoint_is_no_match(
