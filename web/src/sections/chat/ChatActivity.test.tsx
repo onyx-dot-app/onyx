@@ -97,7 +97,7 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 // The app chrome's slot, where the card pins
-function renderActivity() {
+function renderActivity(showFiles?: boolean) {
   return render(
     <AppWorkspaceElementsContext.Provider
       value={{
@@ -107,10 +107,23 @@ function renderActivity() {
         activitySlot: document.body,
       }}
     >
-      <ChatActivity sessionId="s" />
+      <ChatActivity sessionId="s" showFiles={showFiles} />
     </AppWorkspaceElementsContext.Provider>
   );
 }
+
+const PUBLISHED_FILE = {
+  file_id: "file-1",
+  name: "main.py",
+  title: null,
+  path: "/w/main.py",
+  display_path: "/w/main.py",
+  size: 10,
+  mime_type: "text/x-python",
+  artifact_id: "artifact-1",
+  version: 1,
+  thumbnail_file_id: null,
+};
 
 test("shows nothing for a chat without requests, agents or files", async () => {
   serve([]);
@@ -206,18 +219,7 @@ test("lists running agents on one line each and folds the finished ones", async 
 
 test("View all files shows the Files list even while a file is open", async () => {
   serve([]);
-  const file = {
-    file_id: "file-1",
-    name: "main.py",
-    title: null,
-    path: "/w/main.py",
-    display_path: "/w/main.py",
-    size: 10,
-    mime_type: "text/x-python",
-    artifact_id: "artifact-1",
-    version: 1,
-    thumbnail_file_id: null,
-  };
+  const file = PUBLISHED_FILE;
   showReply([
     {
       placement: { turn_index: 0, tab_index: 0 },
@@ -235,6 +237,46 @@ test("View all files shows the Files list even while a file is open", async () =
   const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
   expect(panel?.mode).not.toBe("closed");
   expect(panel?.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+});
+
+test("a page without a Files panel leaves the files out of the card", async () => {
+  serve([agent("/root/poet", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  showReply([
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: PacketType.PUBLISH_FILES_END,
+        files: [PUBLISHED_FILE],
+        error: null,
+      },
+    },
+  ]);
+  renderActivity(false);
+
+  const trigger = await screen.findByRole("button", { name: "Activity" });
+  act(() => trigger.click());
+  expect(screen.getByText("poet")).toBeVisible();
+  expect(screen.queryByText("View 1 file")).toBeNull();
+});
+
+test("files alone do not show the toggle on a page without a Files panel", async () => {
+  serve([]);
+  showReply([
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: PacketType.PUBLISH_FILES_END,
+        files: [PUBLISHED_FILE],
+        error: null,
+      },
+    },
+  ]);
+  const view = renderActivity(false);
+  await act(async () => undefined);
+  expect(view.container).toBeEmptyDOMElement();
 });
 
 // The run's start in the past, as an ISO date

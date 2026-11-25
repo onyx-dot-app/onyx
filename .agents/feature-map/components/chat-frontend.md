@@ -924,7 +924,8 @@ chat has a waiting request, a background agent or a published file. It sits
 after the share menu. The extension page (`app/nrf/NRFPage.tsx`) has no app
 chrome, so it gives the card its own `activitySlot` and puts the button in the
 side panel's header or beside the new tab's settings button; that is the only
-subagent Stop there. It is always the icon alone, so the header never shifts,
+subagent Stop there. It has no Files panel, so its card leaves out the files
+(`showFiles={false}`). It is always the icon alone, so the header never shifts,
 and toggles a card that stays open until that button closes it. The card also
 opens when the count of live agents goes from zero to more while the chat
 shows. `loaded` from `useChatSubagents` turns true only after a list read from
