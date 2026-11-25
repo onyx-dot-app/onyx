@@ -3,14 +3,14 @@ sandbox tools. Mounted on every runtime, so admins can see why tools are off.
 Single tenant only: the node registry is cluster-wide."""
 
 from fastapi import APIRouter, Depends
-from fastapi.concurrency import run_in_threadpool
 
 from onyx.auth.permissions import require_permission
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.microvm.availability import SandboxStatus, get_sandbox_status
+from onyx.microvm.availability import get_sandbox_status
+from onyx.microvm.models import SandboxStatus
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -32,7 +32,7 @@ admin_router = APIRouter(
 
 
 @admin_router.get("/status")
-async def get_admin_sandbox_status(
+def get_admin_sandbox_status(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> SandboxStatus:
-    return await run_in_threadpool(get_sandbox_status)
+    return get_sandbox_status()
