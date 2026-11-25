@@ -85,24 +85,78 @@ export function endedRunStatus(
   return "done";
 }
 
+export const UNSEEN_RUNS_STORAGE_KEY = "onyx:unseen-runs:v1";
+// The newest records kept; older ones (e.g. of deleted chats) are dropped.
+const MAX_UNSEEN_RUNS = 50;
+const ENDED_RUNS: ReadonlySet<string> = new Set<EndedRun>([
+  "failed",
+  "done",
+]);
+
+function isEndedRun(value: unknown): value is EndedRun {
+  return typeof value === "string" && ENDED_RUNS.has(value);
+}
+
+/** The records this browser saved, so a reload keeps them. */
+function readUnseenRuns(): Map<string, EndedRun> {
+  try {
+    const parsed: unknown = JSON.parse(
+      window.localStorage.getItem(UNSEEN_RUNS_STORAGE_KEY) ?? "[]"
+    );
+    if (!Array.isArray(parsed)) return new Map();
+    const unseen = new Map<string, EndedRun>();
+    for (const entry of parsed) {
+      if (
+        Array.isArray(entry) &&
+        typeof entry[0] === "string" &&
+        isEndedRun(entry[1])
+      )
+        unseen.set(entry[0], entry[1]);
+    }
+    return unseen;
+  } catch {
+    return new Map();
+  }
+}
+
+function saveUnseenRuns(unseen: ReadonlyMap<string, EndedRun>): void {
+  try {
+    window.localStorage.setItem(
+      UNSEEN_RUNS_STORAGE_KEY,
+      JSON.stringify([...unseen].slice(-MAX_UNSEEN_RUNS))
+    );
+  } catch {
+    // Blocked storage keeps the records for this page only.
+  }
+}
+
 interface UnseenRunsState {
   unseen: ReadonlyMap<string, EndedRun>;
   markUnseen: (sessionId: string, ended: EndedRun) => void;
   markSeen: (sessionId: string) => void;
 }
 
-/** Runs that ended while their chat was not on screen. */
+/**
+ * Runs that ended while their chat was off-screen. The browser keeps these
+ * records across reloads until the user opens the chat.
+ */
 export const useUnseenRuns = create<UnseenRunsState>()((set) => ({
-  unseen: new Map(),
-  markUnseen: (sessionId, ended) =>
-    set((state) => ({
-      unseen: new Map(state.unseen).set(sessionId, ended),
-    })),
+  unseen: typeof window === "undefined" ? new Map() : readUnseenRuns(),
+  markUnseen: (sessionId, stopped) =>
+    set((state) => {
+      // A new record goes last, so the cap drops the oldest first.
+      const unseen = new Map(state.unseen);
+      unseen.delete(sessionId);
+      unseen.set(sessionId, stopped);
+      saveUnseenRuns(unseen);
+      return { unseen };
+    }),
   markSeen: (sessionId) =>
     set((state) => {
       if (!state.unseen.has(sessionId)) return {};
       const unseen = new Map(state.unseen);
       unseen.delete(sessionId);
+      saveUnseenRuns(unseen);
       return { unseen };
     }),
 }));

@@ -20,6 +20,7 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   localStorage.setItem("onyx:draft:chat:new", "chat draft");
+  localStorage.setItem("onyx:unseen-runs:v1", '[["chat-1","done"]]');
   localStorage.setItem("onyx:draft:chat:session", "chat draft");
   localStorage.setItem("unrelated-preference", "keep");
   for (const sessionId of ["first-session", "second-session"]) {
@@ -69,6 +70,7 @@ test("successful logout removes all saved Craft tab names and preserves unrelate
   expect(sessionStorage.length).toBe(1);
   expect(localStorage.getItem("onyx:draft:chat:new")).toBeNull();
   expect(localStorage.getItem("onyx:draft:chat:session")).toBeNull();
+  expect(localStorage.getItem("onyx:unseen-runs:v1")).toBeNull();
   expect(localStorage.getItem("unrelated-preference")).toBe("keep");
   expect(readOutputThumbnailCache("user")).toBeUndefined();
   expect(mutate).toHaveBeenCalledWith(SWR_KEYS.me, null, { revalidate: false });

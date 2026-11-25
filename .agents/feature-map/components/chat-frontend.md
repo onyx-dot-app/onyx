@@ -943,8 +943,8 @@ approval or Question waiting (`lib/chat/runStatus.ts:liveRunStatus`, from
 Failed or Done for a run that ended while its chat was not on screen.
 `lib/chat/hooks.ts:useTrackChatRuns`, which `AppSidebar` mounts, watches the
 store for runs that stop working and records Failed or Done in
-`useUnseenRuns`; opening the chat clears the record. The record lives only in
-the tab, and a chat that the store does not hold shows no status.
+`useUnseenRuns`. Browser storage keeps the 50 newest records across reloads.
+Opening or deleting the chat clears its record. Signing out clears all records.
 
 ## Contracts and traps
 

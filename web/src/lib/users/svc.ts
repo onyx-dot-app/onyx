@@ -9,6 +9,7 @@ import {
   invalidateChatDraftWrites,
   type DraftStorage,
 } from "@/hooks/useDraft";
+import { UNSEEN_RUNS_STORAGE_KEY } from "@/lib/chat/runStatus";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -60,7 +61,7 @@ export async function logout(): Promise<Response> {
       draftKey("craft", ""),
       CHAT_PANEL_STORAGE_PREFIX,
     ]);
-    removeStorageKeys("local", [draftKey("chat", "")]);
+    removeStorageKeys("local", [draftKey("chat", ""), UNSEEN_RUNS_STORAGE_KEY]);
     // Drop the cached /api/me so any subsequent useCurrentUser read does not
     // hand callers the just-signed-out user from the SWR dedup window.
     await mutate(SWR_KEYS.me, null, { revalidate: false });
