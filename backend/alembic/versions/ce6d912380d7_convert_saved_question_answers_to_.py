@@ -10,8 +10,18 @@ the question request rows, the results of question tool calls, and the
 checkpoints of parked responses, whose runs hold the answers they received.
 This revision rewrites each answer, `{"question_id", "option_label": X}`, to
 `{"question_id", "option_labels": [X]}`; an answer without an option gets an
-empty list. The downgrade keeps the first option, and removes `multi_select`
-from the request rows' questions, which the earlier code does not accept.
+empty list. It changes only the answers of the request rows and of question
+results ("type": "question"), not other JSON with the same keys. The downgrade
+keeps the first option, and removes `multi_select` from the request rows'
+questions, which the earlier code does not accept.
+
+Limits, accepted because no release has the question tool:
+- A response that waits when the upgrade runs, and whose saved steps or
+  earlier history hold an answered question, cannot resume: its checkpoint
+  digests hash the answers as they were.
+- After a downgrade, a question that a Claude model asked after the upgrade
+  keeps its question text as its ID and can have a fourth option, which the
+  earlier code does not load.
 """
 
 import json
@@ -28,13 +38,13 @@ down_revision = "c14c2689b392"
 branch_labels = None
 depends_on = None
 
-# The JSON columns that hold answers: table, row key, column, and the filter
-# that finds the rows to rewrite. Only an answered question request has
-# answers, and only its call's result and its response's checkpoint hold them,
-# so the filters select those rows by the request rows.
+# Only an answered question request has answers, and only its call's result
+# and its response's checkpoint hold them, so the filters select those rows
+# by the request rows.
 _ANSWERED = "FROM question_request WHERE answers IS NOT NULL"
-_ANSWER_COLUMNS = (
-    ("question_request", "id", "answers", "answers IS NOT NULL"),
+# The JSON columns whose question results (`QuestionToolDetails`, with
+# "type": "question") hold answers: table, row key, column and filter.
+_RESULT_COLUMNS = (
     (
         "tool_call",
         "id",
@@ -49,62 +59,98 @@ _ANSWER_COLUMNS = (
         f"chat_message_id IN (SELECT chat_message_id {_ANSWERED})",
     ),
 )
-_QUESTION_COLUMN = ("question_request", "id", "questions", "TRUE")
+
+Change = Callable[[dict[str, JsonValue]], dict[str, JsonValue]]
 
 
-def _to_option_labels(value: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    if "question_id" in value and "option_label" in value:
-        label = value.pop("option_label")
-        value["option_labels"] = [label] if label else []
-    return value
+def _to_option_labels(answer: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    if "option_label" in answer:
+        label = answer.pop("option_label")
+        answer["option_labels"] = [label] if label else []
+    return answer
 
 
-def _to_option_label(value: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    if "question_id" in value and "option_labels" in value:
-        labels = value.pop("option_labels")
-        value["option_label"] = (
+def _to_option_label(answer: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    if "option_labels" in answer:
+        labels = answer.pop("option_labels")
+        answer["option_label"] = (
             labels[0] if isinstance(labels, list) and labels else None
         )
-    if "question" in value and "options" in value:
-        value.pop("multi_select", None)
-    return value
+    return answer
+
+
+def _each(value: JsonValue, change: Change) -> JsonValue:
+    """`change` applied to each object of a list."""
+    if not isinstance(value, list):
+        return value
+    return [change(dict(item)) if isinstance(item, dict) else item for item in value]
+
+
+def _in_question_results(value: JsonValue, change: Change) -> JsonValue:
+    """`change` applied to each answer of the question results in `value`."""
+    if isinstance(value, list):
+        return [_in_question_results(item, change) for item in value]
+    if not isinstance(value, dict):
+        return value
+    rewritten = {key: _in_question_results(item, change) for key, item in value.items()}
+    if rewritten.get("type") == "question" and "answers" in rewritten:
+        rewritten["answers"] = _each(rewritten.get("answers"), change)
+    return rewritten
 
 
 def _rewrite(
-    value: JsonValue, change: Callable[[dict[str, JsonValue]], dict[str, JsonValue]]
-) -> JsonValue:
-    if isinstance(value, dict):
-        return change({key: _rewrite(item, change) for key, item in value.items()})
-    if isinstance(value, list):
-        return [_rewrite(item, change) for item in value]
-    return value
-
-
-def _rewrite_columns(
-    columns: tuple[tuple[str, str, str, str], ...],
-    change: Callable[[dict[str, JsonValue]], dict[str, JsonValue]],
+    table: str,
+    key: str,
+    column: str,
+    where: str,
+    rewrite: Callable[[JsonValue], JsonValue],
 ) -> None:
     bind = op.get_bind()
-    for table, key, column, where in columns:
-        rows = bind.execute(
-            sa.text(f"SELECT {key}, {column} FROM {table} WHERE {where}")
-        ).all()
-        for row_key, value in rows:
-            rewritten = _rewrite(value, change)
-            if rewritten == value:
-                continue
-            bind.execute(
-                sa.text(
-                    f"UPDATE {table} SET {column} = CAST(:value AS jsonb) "
-                    f"WHERE {key} = :key"
-                ),
-                {"value": json.dumps(rewritten), "key": row_key},
-            )
+    rows = bind.execute(
+        sa.text(f"SELECT {key}, {column} FROM {table} WHERE {where}")
+    ).all()
+    for row_key, value in rows:
+        rewritten = rewrite(value)
+        if rewritten == value:
+            continue
+        bind.execute(
+            sa.text(
+                f"UPDATE {table} SET {column} = CAST(:value AS jsonb) "
+                f"WHERE {key} = :key"
+            ),
+            {"value": json.dumps(rewritten), "key": row_key},
+        )
+
+
+def _rewrite_answers(change: Change) -> None:
+    _rewrite(
+        "question_request",
+        "id",
+        "answers",
+        "answers IS NOT NULL",
+        lambda answers: _each(answers, change),
+    )
+    for table, key, column, where in _RESULT_COLUMNS:
+        _rewrite(
+            table, key, column, where, lambda value: _in_question_results(value, change)
+        )
 
 
 def upgrade() -> None:
-    _rewrite_columns(_ANSWER_COLUMNS, _to_option_labels)
+    _rewrite_answers(_to_option_labels)
 
 
 def downgrade() -> None:
-    _rewrite_columns((*_ANSWER_COLUMNS, _QUESTION_COLUMN), _to_option_label)
+    _rewrite_answers(_to_option_label)
+    _rewrite(
+        "question_request",
+        "id",
+        "questions",
+        "TRUE",
+        lambda questions: _each(
+            questions,
+            lambda question: {
+                key: item for key, item in question.items() if key != "multi_select"
+            },
+        ),
+    )
