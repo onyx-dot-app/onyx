@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,7 +25,6 @@ import (
 // Defaults for the zero Config fields.
 const (
 	DefaultBinary       = "/opt/chrome/chrome"
-	DefaultPort         = 9222
 	DefaultStartTimeout = 20 * time.Second
 )
 
@@ -41,8 +41,6 @@ type Config struct {
 	Binary string
 	// ProfileDir is the persistent --user-data-dir.
 	ProfileDir string
-	// Port is the DevTools port on 127.0.0.1.
-	Port int
 	// Isolator must not be the executions' isolator: a cgroup root of its
 	// own keeps the browser out of the execution records and kills.
 	Isolator execs.Isolator
@@ -63,6 +61,8 @@ type Browser struct {
 type running struct {
 	group  execs.Group
 	pid    int
+	port   int // DevTools port; 0 until Chrome reports it
+	start  time.Time
 	pipe   *os.File // write end of Chrome's --remote-debugging-pipe input
 	done   chan struct{}
 	stderr *tail
@@ -82,9 +82,6 @@ func New(cfg Config) *Browser {
 	if cfg.Binary == "" {
 		cfg.Binary = DefaultBinary
 	}
-	if cfg.Port == 0 {
-		cfg.Port = DefaultPort
-	}
 	if cfg.StartTimeout <= 0 {
 		cfg.StartTimeout = DefaultStartTimeout
 	}
@@ -99,8 +96,8 @@ func New(cfg Config) *Browser {
 func (b *Browser) Start(ctx context.Context, env []string) (port int, started bool, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.run != nil && !b.run.exited() && b.probe(ctx) {
-		return b.cfg.Port, false, nil
+	if b.run != nil && !b.run.exited() && b.probe(ctx, b.run.port) {
+		return b.run.port, false, nil
 	}
 	if b.run != nil {
 		if err := b.stopLocked(); err != nil {
@@ -119,8 +116,8 @@ func (b *Browser) Start(ctx context.Context, env []string) (port int, started bo
 		}
 		return 0, false, err
 	}
-	b.cfg.Log.Info("browser started", "pid", r.pid, "port", b.cfg.Port)
-	return b.cfg.Port, true, nil
+	b.cfg.Log.Info("browser started", "pid", r.pid, "port", r.port)
+	return r.port, true, nil
 }
 
 // Stop closes Chrome and ends every process in its group. stopped is false
@@ -185,13 +182,14 @@ func (b *Browser) launch(env []string) (*running, error) {
 		}
 		cmd.SysProcAttr.Credential = b.cfg.Credential
 	}
+	start := time.Now()
 	if err := cmd.Start(); err != nil {
 		_ = pipeW.Close()
 		_ = g.Close()
 		return nil, fmt.Errorf("start chrome: %w", err)
 	}
 	g.Started(cmd.Process.Pid)
-	r := &running{group: g, pid: cmd.Process.Pid, pipe: pipeW, done: make(chan struct{}), stderr: stderr}
+	r := &running{group: g, pid: cmd.Process.Pid, start: start, pipe: pipeW, done: make(chan struct{}), stderr: stderr}
 	go func() {
 		_ = cmd.Wait()
 		close(r.done)
@@ -205,22 +203,46 @@ func (b *Browser) waitReady(ctx context.Context, r *running) error {
 	tick := time.NewTicker(pollInterval)
 	defer tick.Stop()
 	for {
-		if b.probe(ctx) {
+		if r.port == 0 {
+			r.port = b.activePort(r.start)
+		}
+		if r.port != 0 && b.probe(ctx, r.port) {
 			return nil
 		}
 		select {
 		case <-r.done:
 			return errors.New("chrome exited before its DevTools endpoint answered")
 		case <-ctx.Done():
-			return fmt.Errorf("chrome DevTools endpoint on port %d did not answer: %w", b.cfg.Port, ctx.Err())
+			return fmt.Errorf("chrome DevTools endpoint did not answer: %w", ctx.Err())
 		case <-tick.C:
 		}
 	}
 }
 
-// probe reports whether the DevTools endpoint answers.
-func (b *Browser) probe(ctx context.Context) bool {
-	url := "http://127.0.0.1:" + strconv.Itoa(b.cfg.Port) + "/json/version"
+// activePort reads the port that Chrome wrote to DevToolsActivePort in the
+// profile. A file from an earlier launch stays after Chrome exits, so only a
+// file written after start counts.
+func (b *Browser) activePort(start time.Time) int {
+	path := filepath.Join(b.cfg.ProfileDir, "DevToolsActivePort")
+	fi, err := os.Stat(path)
+	if err != nil || fi.ModTime().Before(start) {
+		return 0
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	line, _, _ := strings.Cut(string(data), "\n")
+	port, err := strconv.Atoi(strings.TrimSpace(line))
+	if err != nil || port <= 0 || port > 65535 {
+		return 0
+	}
+	return port
+}
+
+// probe reports whether the DevTools endpoint on port answers.
+func (b *Browser) probe(ctx context.Context, port int) bool {
+	url := "http://127.0.0.1:" + strconv.Itoa(port) + "/json/version"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return false
@@ -239,7 +261,9 @@ func chromeArgs(cfg Config, env []string) []string {
 	args := []string{
 		"--headless",
 		"--remote-debugging-address=127.0.0.1",
-		"--remote-debugging-port=" + strconv.Itoa(cfg.Port),
+		// Port 0: Chrome picks a free port, so a process that holds a fixed one
+		// cannot pass for this browser.
+		"--remote-debugging-port=0",
 		"--remote-debugging-pipe",
 		"--user-data-dir=" + cfg.ProfileDir,
 		// The guest kernel has no user namespaces, so Chrome's sandbox cannot start.

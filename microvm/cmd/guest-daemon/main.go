@@ -73,7 +73,6 @@ func main() {
 	zlevel := flag.String("capture-zstd-level", "fastest", "zstd level of CaptureSession: fastest, default, better or best")
 	fileOwner := flag.String("file-owner", files.DefaultOwner, "uid:gid that gets the files and directories that WriteFile, UploadFile and RestoreSession make in the sessions root and the onyx root (the image's sandbox user); empty: they stay root's")
 	browserBin := flag.String("browser-binary", browser.DefaultBinary, "Chrome that BrowserStart runs; empty turns the browser calls off")
-	browserPort := flag.Int("browser-port", browser.DefaultPort, "DevTools port of the browser on 127.0.0.1")
 	cmdUser := flag.String("command-user", files.DefaultOwner, "uid:gid that runs every command (the image's sandbox user); empty: commands run as root")
 	flag.Parse()
 	var ok bool
@@ -156,13 +155,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	if *browserPort <= 0 || *browserPort > 65535 {
-		fmt.Fprintf(os.Stderr, "bad --browser-port %d\n", *browserPort)
-		os.Exit(2)
-	}
 	var bcfg *browser.Config
 	if *browserBin != "" {
-		bcfg = &browser.Config{Binary: *browserBin, Port: *browserPort, ProfileDir: browserProfileDir(ident), Log: log}
+		bcfg = &browser.Config{Binary: *browserBin, ProfileDir: browserProfileDir(ident), Log: log}
 		if ident != nil {
 			bcfg.Credential = ident.cred
 		}

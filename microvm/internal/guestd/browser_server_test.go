@@ -19,20 +19,19 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func browserHarness(t *testing.T, mode string) (*harness, int) {
+func browserHarness(t *testing.T, mode string) *harness {
 	t.Helper()
-	port := browsertest.FreePort(t)
 	b := browser.New(browser.Config{
-		Binary: browsertest.Binary(t), ProfileDir: filepath.Join(t.TempDir(), "onyx-browser"), Port: port,
+		Binary: browsertest.Binary(t), ProfileDir: filepath.Join(t.TempDir(), "onyx-browser"),
 		Isolator: execs.ProcessGroups{}, StartTimeout: 10 * time.Second,
 	})
 	t.Cleanup(func() { _, _ = b.Stop() })
 	h := newHarness(t, execs.Config{}, Config{Browser: b, BaseEnv: map[string]string{browsertest.EnvMode: mode}})
-	return h, port
+	return h
 }
 
 func TestBrowserStartStop(t *testing.T) {
-	h, port := browserHarness(t, browsertest.ModeServe)
+	h := browserHarness(t, browsertest.ModeServe)
 	c, _ := h.client()
 	if _, err := c.SetKey(context.Background(), &pb.SetKeyRequest{Key: testKey}); err != nil {
 		t.Fatal(err)
@@ -46,11 +45,12 @@ func TestBrowserStartStop(t *testing.T) {
 	}
 
 	r, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{})
-	if err != nil || !r.GetStarted() || r.GetCdpPort() != uint32(port) {
+	if err != nil || !r.GetStarted() || r.GetCdpPort() == 0 {
 		t.Fatalf("first start: %v %v", r, err)
 	}
+	port := r.GetCdpPort()
 	r, err = c.BrowserStart(ctx, &pb.BrowserStartRequest{})
-	if err != nil || r.GetStarted() || r.GetCdpPort() != uint32(port) {
+	if err != nil || r.GetStarted() || r.GetCdpPort() != port {
 		t.Fatalf("second start: %v %v", r, err)
 	}
 	if hr, err := c.Health(context.Background(), &pb.HealthRequest{}); err != nil || hr.GetRunningExecutions() != 0 {
@@ -65,7 +65,7 @@ func TestBrowserStartStop(t *testing.T) {
 }
 
 func TestBrowserStartFailed(t *testing.T) {
-	h, _ := browserHarness(t, browsertest.ModeFail)
+	h := browserHarness(t, browsertest.ModeFail)
 	c := h.initialized()
 	_, err := c.BrowserStart(keyed(context.Background()), &pb.BrowserStartRequest{})
 	if reason(err) != "BROWSER_START_FAILED" || !strings.Contains(err.Error(), "boom") {

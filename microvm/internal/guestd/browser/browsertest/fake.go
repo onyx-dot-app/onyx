@@ -18,7 +18,9 @@ import (
 const EnvMode = "GUESTD_FAKE_CHROME"
 
 const (
-	// ModeServe answers /json/version on --remote-debugging-port. When its
+	// ModeServe answers /json/version on --remote-debugging-port (0 picks a
+	// free port) and writes the port to DevToolsActivePort in --user-data-dir,
+	// like Chrome. When its
 	// DevTools pipe (fd 3) closes, it writes FlushedFile in --user-data-dir
 	// and exits 0, like Chrome flushing its profile.
 	ModeServe = "serve"
@@ -56,6 +58,13 @@ func Main() {
 		os.Exit(0)
 	}()
 	ln, err := net.Listen("tcp", "127.0.0.1:"+port)
+	if err == nil {
+		err = os.MkdirAll(profile, 0o700)
+	}
+	if err == nil {
+		active := fmt.Sprintf("%d\n/devtools/browser/fake\n", ln.Addr().(*net.TCPAddr).Port)
+		err = os.WriteFile(filepath.Join(profile, "DevToolsActivePort"), []byte(active), 0o600)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake chrome:", err)
 		os.Exit(1)
@@ -77,15 +86,4 @@ func Binary(t testing.TB) string {
 		t.Fatal(err)
 	}
 	return p
-}
-
-// FreePort returns a loopback TCP port that is free now.
-func FreePort(t testing.TB) int {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
-	return ln.Addr().(*net.TCPAddr).Port
 }

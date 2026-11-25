@@ -2,7 +2,9 @@ package browser
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -26,7 +28,6 @@ func newFake(t *testing.T, mode string) (*Browser, []string) {
 	b := New(Config{
 		Binary:       browsertest.Binary(t),
 		ProfileDir:   filepath.Join(t.TempDir(), "home", ".config", "onyx-browser"),
-		Port:         browsertest.FreePort(t),
 		Isolator:     execs.ProcessGroups{},
 		StartTimeout: 10 * time.Second,
 	})
@@ -58,7 +59,7 @@ func TestStartReusesAndRelaunches(t *testing.T) {
 	ctx := context.Background()
 
 	port, started, err := b.Start(ctx, env)
-	if err != nil || !started || port != b.cfg.Port {
+	if err != nil || !started || port == 0 {
 		t.Fatalf("first start: port %d started %v err %v", port, started, err)
 	}
 	if !answers(port) {
@@ -74,7 +75,7 @@ func TestStartReusesAndRelaunches(t *testing.T) {
 	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
-	_, started, err = b.Start(ctx, env)
+	port, started, err = b.Start(ctx, env)
 	if err != nil || !started {
 		t.Fatalf("start after a crash: started %v err %v", started, err)
 	}
@@ -120,13 +121,36 @@ func TestStartFailureHasStderr(t *testing.T) {
 	}
 }
 
+func TestStartIgnoresAnotherDevToolsServer(t *testing.T) {
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"Browser":"OtherChrome/1.0"}`))
+	}))
+	defer other.Close()
+	otherPort := other.Listener.Addr().(*net.TCPAddr).Port
+	b, env := newFake(t, browsertest.ModeFail)
+	stale := filepath.Join(b.cfg.ProfileDir, "DevToolsActivePort")
+	if err := os.MkdirAll(b.cfg.ProfileDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte(strconv.Itoa(otherPort)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if port, _, err := b.Start(context.Background(), env); err == nil {
+		t.Fatalf("start reported the other server on port %d as its browser", port)
+	}
+}
+
 func TestChromeArgsProxy(t *testing.T) {
-	cfg := Config{Port: 9222, ProfileDir: "/home/sandbox/.config/onyx-browser"}
+	cfg := Config{ProfileDir: "/home/sandbox/.config/onyx-browser"}
 	with := chromeArgs(cfg, []string{"PATH=/bin", "HTTPS_PROXY=http://127.0.0.1:3128"})
 	if !slices.Contains(with, "--proxy-server=http://127.0.0.1:3128") {
 		t.Fatalf("HTTPS_PROXY set: %v", with)
 	}
-	for _, want := range []string{"--remote-debugging-port=9222", "--user-data-dir=/home/sandbox/.config/onyx-browser", "--remote-debugging-address=127.0.0.1"} {
+	for _, want := range []string{"--remote-debugging-port=0", "--user-data-dir=/home/sandbox/.config/onyx-browser", "--remote-debugging-address=127.0.0.1"} {
 		if !slices.Contains(with, want) {
 			t.Errorf("missing %s in %v", want, with)
 		}

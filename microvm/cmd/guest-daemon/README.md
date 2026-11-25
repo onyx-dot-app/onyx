@@ -42,8 +42,7 @@ executions), `--max-running` (64), `--max-tracked` (64 records, running and ende
 managed calls off), `--ca-anchor`
 (`/usr/local/share/ca-certificates/craft-egress-ca.crt`), `--ca-bundle` (`/etc/ssl/certs/ca-certificates.crt`;
 empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty to skip), `--certutil`
-(`/usr/bin/certutil`), `--browser-binary` (`/opt/chrome/chrome`; empty turns the browser calls off), `--browser-port`
-(9222, the DevTools port on 127.0.0.1), the file flags (`--sessions-root`, `--onyx-root`, `--skills-root`,
+(`/usr/bin/certutil`), `--browser-binary` (`/opt/chrome/chrome`; empty turns the browser calls off), the file flags (`--sessions-root`, `--onyx-root`, `--skills-root`,
 `--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
 `--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
 `--capture-zstd-level`, `--file-owner`; see Files), `--command-user` (`1000:1000`; empty runs commands as
@@ -142,6 +141,9 @@ Browser (`internal/guestd/browser`):
 
 - The daemon owns one headless Chrome (`--browser-binary`) per VM. Clients attach to it over CDP on
   `http://127.0.0.1:<cdp_port>`. Commands end, but the browser stays up.
+- Chrome picks a free DevTools port (`--remote-debugging-port=0`) and writes it to
+  `DevToolsActivePort` in the profile. The daemon reads the port from that file, so a process that
+  holds some fixed port cannot pass for the browser. Each start can get a different port.
 - Chrome runs as `--command-user` in its own cgroup `/sys/fs/cgroup/guestd-browser/chrome`, outside the
   command cgroups. It is not an execution: `List` does not show it and `running_executions` does not
   count it.
