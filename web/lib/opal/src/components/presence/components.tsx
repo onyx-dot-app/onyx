@@ -302,6 +302,8 @@ function PresenceSwap({
   });
 
   // Track the content's size on `axis`, so the box animates to every new size.
+  // Also measure on each new key: capped at the old box, the content's own
+  // box may not change, so the observer would not report a longer title.
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
@@ -310,7 +312,7 @@ function PresenceSwap({
     const observer = new ResizeObserver(measure);
     observer.observe(content);
     return () => observer.disconnect();
-  }, [axis]);
+  }, [axis, shownKey]);
 
   // Resizing: go straight on when the new content is the same size as the old,
   // and never stall if `transitionend` does not arrive. Runs once per phase
@@ -322,10 +324,14 @@ function PresenceSwap({
   useLayoutEffect(() => {
     if (phase !== "resizing") return;
     const content = contentRef.current;
-    if (!content || contentSize(content, axis) === sizeRef.current) {
+    const next = content ? contentSize(content, axis) : null;
+    if (next === null || next === sizeRef.current) {
       setPhase("idle");
       return;
     }
+    // The content's own box can stay capped at the old width, so the
+    // observer may never report the new size; set it here.
+    setSize(next);
     const fallback = window.setTimeout(
       () => setPhase("idle"),
       TRANSITION_FALLBACK_MS
