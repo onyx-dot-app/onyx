@@ -9,6 +9,7 @@ import os
 import threading
 import time
 from collections.abc import Buffer, Callable, Generator
+from copy import copy
 from typing import IO, Protocol
 from uuid import UUID, uuid4
 
@@ -403,7 +404,7 @@ def test_each_failure_has_its_reason(
     chat_files = [_file(file_id, "attachments/a.txt")]
     downloads: list[str] = []
     if reason == "the file store did not return the file":
-        store = get_default_file_store()
+        store = copy(get_default_file_store())
 
         def unreadable(
             file_id: str,
@@ -475,7 +476,7 @@ def test_a_file_without_a_size_or_a_stored_object_is_not_copied_alone(
         update(FileRecord).where(FileRecord.file_id == gone).values(file_size=None)
     )
     db_session.commit()
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     get_file_size = store.get_file_size
 
     def missing_object(file_id: str, db_session: Session | None = None) -> int | None:
@@ -517,7 +518,7 @@ def test_a_file_whose_stored_object_is_known_gone_is_not_copied(
     )
     db_session.commit()
     downloads: list[str] = []
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     read_file = store.read_file
 
     def counted(
@@ -683,7 +684,7 @@ def test_a_copy_in_its_first_download_keeps_the_vm_busy(
     file_id = store_file(b"a")
     downloading = threading.Event()
     release = threading.Event()
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     read_file = store.read_file
 
     def slow(
@@ -980,7 +981,7 @@ def test_one_download_serves_every_try(
         SandboxDaemonErrorReason.INTERNAL, count=2
     )
     downloads: list[str] = []
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     read_file = store.read_file
 
     def counted(

@@ -11792,7 +11792,12 @@
         "toast": "تمت المصادقة بنجاح"
       },
       "scrollToBottomButton": {
-        "label": "التمرير إلى الأسفل"
+        "label": "التمرير إلى الأسفل",
+        "reason": {
+          "approval": "مطلوب الموافقة",
+          "newAnswer": "إجابة جديدة",
+          "question": "سؤال بانتظار الإجابة"
+        }
       },
       "sessionAccessDenied": {
         "description": "ليس لديك إذن لعرض جلسة المحادثة هذه.",
@@ -12201,6 +12206,10 @@
         "copyButton": {
           "copiedLabel": "تم النسخ!",
           "label": "نسخ"
+        },
+        "wrapButton": {
+          "unwrapLabel": "إلغاء الالتفاف",
+          "wrapLabel": "التفاف"
         }
       },
       "customTool": {
@@ -12324,6 +12333,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "تعديل"
+        },
+        "foldButton": {
+          "collapseLabel": "عرض أقل",
+          "expandLabel": "إظهار الرسالة كاملة"
         }
       },
       "imageTool": {
@@ -12338,6 +12351,12 @@
         },
         "stoppedStatus": {
           "text": "تم إيقاف توليد الصورة"
+        }
+      },
+      "markdownImage": {
+        "unavailable": {
+          "text": "الصورة غير متاحة",
+          "withAlt": "{alt} · الصورة غير متاحة"
         }
       },
       "markdownTable": {
@@ -12368,6 +12387,9 @@
         "previousButton": {
           "tooltip": "السابق"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "أمس في {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -16682,14 +16704,29 @@
       "rename": {
         "label": "إعادة تسمية"
       },
+      "runStatus": {
+        "approval": {
+          "label": "بحاجة إلى موافقة"
+        },
+        "done": {
+          "label": "تم"
+        },
+        "failed": {
+          "label": "فشل"
+        },
+        "question": {
+          "label": "سؤال بانتظار الرد"
+        },
+        "working": {
+          "label": "قيد العمل"
+        }
+      },
+      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "مشاركة"
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "إنشاء مشروع جديد \"<name>{projectName}</name>\""
-      },
       "footer": {
         "openAction": {
           "label": "فتح"
@@ -16701,25 +16738,21 @@
           "label": "عرض الكل"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "لا توجد محادثات أو مشاريع بعد"
+          "text": "لا توجد محادثات بعد"
         },
         "noResults": {
           "text": "لم يتم العثور على نتائج"
         }
       },
-      "newProject": {
-        "label": "مشروع جديد"
-      },
       "newSession": {
         "label": "جلسة جديدة"
-      },
-      "noMoreResults": {
-        "text": "لا توجد نتائج أخرى"
-      },
-      "projectsFilter": {
-        "label": "المشاريع"
       },
       "recentFilter": {
         "label": "الأحدث"
@@ -16728,10 +16761,25 @@
         "label": "الجلسات الأخيرة"
       },
       "searchInput": {
-        "placeholder": "البحث في جلسات المحادثة والمشاريع..."
+        "placeholder": "البحث في جلسات المحادثة..."
       },
       "sessionsFilter": {
         "label": "الجلسات"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "تغيير النموذج"
+        },
+        "nextChat": {
+          "label": "الجلسة التالية"
+        },
+        "previousChat": {
+          "label": "الجلسة السابقة"
+        },
+        "title": "الاختصارات",
+        "toggleSidebar": {
+          "label": "إظهار الشريط الجانبي أو إخفاؤه"
+        }
       }
     },
     "notifications": {

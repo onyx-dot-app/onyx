@@ -38,6 +38,7 @@ import {
 /** An error that belongs to the session, not to a saved message. */
 export interface SessionError {
   error: string;
+  affectsRunStatus?: false;
   errorCode?: string;
   isRetryable?: boolean;
   details?: Record<string, any>;
@@ -46,6 +47,7 @@ export interface SessionError {
 
 interface ChatSessionData {
   sessionId: string;
+  runMarkerSuppressed?: boolean;
   messageTree: MessageTreeState;
   chatState: ChatState;
   regenerationState: RegenerationState | null;
@@ -56,8 +58,8 @@ interface ChatSessionData {
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
   sendAcknowledged?: Promise<ChatStream | null>;
-  // Resolves after the reader applies its final packets and message state.
-  readerFinished?: Promise<void>;
+  // Resolves after the reader applies its final packets, with any send rejection.
+  readerFinished?: Promise<SessionError | void>;
   hasPerformedInitialScroll: boolean;
   // The chat's right panel (lib/chat/rightPanel.ts). It stays while the
   // panel is closed, so reopening it, or coming back to the chat, restores
@@ -116,6 +118,7 @@ interface ChatSessionStore {
 
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
+  suppressRunMarkers: (sessionId?: string) => void;
   createSession: (
     sessionId: string,
     initialData?: Partial<ChatSessionData>
@@ -311,6 +314,18 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     });
     // A long-lived tab would otherwise keep every chat it ever opened.
     get().cleanupOldSessions();
+  },
+
+  suppressRunMarkers: (sessionId) => {
+    set((state) => {
+      const sessions = new Map(state.sessions);
+      for (const [id, session] of sessions) {
+        if (!sessionId || sessionId === id) {
+          sessions.set(id, { ...session, runMarkerSuppressed: true });
+        }
+      }
+      return { sessions };
+    });
   },
 
   createSession: (

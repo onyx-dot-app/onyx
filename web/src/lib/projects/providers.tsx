@@ -15,6 +15,7 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
+import { endIncognitoSession } from "@/app/app/services/lib";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import {
   UserFileStatus,
@@ -24,7 +25,6 @@ import {
   type ProjectFile,
   type UserFileDeleteResult,
 } from "@/lib/projects/types";
-import { isFilePending } from "@/lib/projects/utils";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -142,6 +142,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const incognitoSessionId = incognitoUploadsEnabled
     ? (incognitoCtx?.incognitoSessionId ?? null)
     : null;
+  const incognitoUploadSessionRef = useRef(incognitoSessionId);
+  useEffect(() => {
+    incognitoUploadSessionRef.current = incognitoSessionId;
+  }, [incognitoSessionId]);
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
   const [currentProjectDetails, setCurrentProjectDetails] =
     useState<ProjectDetails | null>(null);
@@ -394,6 +398,18 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       }
       svcUploadFiles(validFiles, projectId, tempIds, incognitoSessionId)
         .then((uploaded) => {
+          if (
+            incognitoSessionId &&
+            incognitoUploadSessionRef.current !== incognitoSessionId
+          ) {
+            void endIncognitoSession(incognitoSessionId).catch((error) =>
+              console.error(
+                "Failed to clean up discarded private upload:",
+                error
+              )
+            );
+            return;
+          }
           const uploadedFiles = uploaded.user_files || [];
           const tempIdToUploadedFileMap = new Map(
             uploadedFiles.map((f) => [f.temp_id, f])
@@ -490,7 +506,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       removeOptimisticFilesByTempIds,
       userFileMaxUploadSizeMb,
       incognitoUploadsEnabled,
-      incognitoUploadsEnabled,
+      incognitoSessionId,
       t,
     ]
   );
@@ -563,7 +579,6 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       .filter(
         (f) =>
           f.status !== UserFileStatus.UPLOADING &&
-          isFilePending(f.status) &&
           !autoTrackedIdsRef.current.has(f.id)
       )
       .map((f) => f.id);
@@ -621,22 +636,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       try {
         const statuses = await svcGetUserFileStatuses(ids);
         if (!statuses) return;
-        if (statuses.length === 0) {
-          // The server reports none of the REQUESTED files: they were deleted
-          // (e.g. incognito teardown). Drop only those, not ids registered
-          // while this request was in flight.
-          const requested = new Set(ids);
-          setTrackedUploadIds((prev) => {
-            const remaining = new Set<string>();
-            prev.forEach((id) => {
-              if (!requested.has(id)) remaining.add(id);
-            });
-            return remaining;
-          });
-          return;
-        }
-
-        // Build maps for quick lookup
+        const requestedIds = new Set(ids);
         const statusById = new Map(statuses.map((f) => [f.id, f]));
 
         // Newly-failed detection uses the last committed snapshot.
@@ -662,6 +662,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           const next: ProjectFile[] = [];
           for (const f of prev) {
             const latest = statusById.get(f.id);
+            if (!latest && requestedIds.has(f.id)) {
+              changed = true;
+              continue;
+            }
             if (latest) {
               const latestStatus = String(latest.status).toLowerCase();
               if (latestStatus === "failed") {

@@ -15,7 +15,8 @@
 /* The height and the fade run one after the other, so content is never
    half-faded while the edge sweeps over it. A transition takes the timings of
    the state it moves to, so each rule times the move into its own state.
-   Keep the total close time in sync with FOLD_CLOSE_MS in components.tsx. */
+   Keep the total close time in sync with FOLD_CLOSE_MS and the open height
+   time in sync with FOLD_OPEN_MS in components.tsx. */
 
 /* Closing: the content fades out first, then the height collapses. */
 .opal-fold-grid {

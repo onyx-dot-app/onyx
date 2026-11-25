@@ -10,6 +10,12 @@ import {
   WriteStdinStart,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
+import { stripAnsi } from "@/lib/sandbox/ansi";
+import {
+  didExecFail,
+  isExpectedInterrupt,
+  isInterruptInput,
+} from "@/lib/timeline/chat/transformers";
 import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import {
   SandboxCallContent,
@@ -64,37 +70,59 @@ export function ExecToolRenderer({
     stopPacketSeen,
     onComplete
   );
-  const output = end === null ? liveOutput : (end.output ?? "");
+  const output = stripAnsi(end === null ? liveOutput : (end.output ?? ""));
+
+  // A call replayed from history starts at the top of its output.
+  const [followOutput] = useState(!isComplete);
 
   if (start === null) {
     return children([{ icon: null, status: null, content: <></> }]);
   }
 
+  const sentInterrupt =
+    start.type === PacketType.WRITE_STDIN_START &&
+    isInterruptInput(start.chars);
+  const commandFailed = end !== null && didExecFail(end, sentInterrupt);
   const phase = !isComplete
     ? "running"
-    : error !== null
+    : error !== null || commandFailed
       ? "failed"
       : end?.completion === "canceled"
         ? "canceled"
         : "done";
+  const showDeadlineInTitle =
+    isComplete && !stopped && end?.completion === "deadline_exceeded";
+  // Input or a poll that ends the command in failure names how it ended.
+  const showPollFailure =
+    isComplete &&
+    !stopped &&
+    commandFailed &&
+    error === null &&
+    start.type === PacketType.WRITE_STDIN_START;
   const status = stopped
     ? t("sandbox.stopped.status")
-    : start.type === PacketType.EXEC_COMMAND_START
-      ? t("sandbox.exec.status", {
-          // A command still running at its exec_end has only started
-          phase: phase === "done" && end?.session_id ? "started" : phase,
+    : showDeadlineInTitle || (showPollFailure && end?.completion === "signaled")
+      ? t("sandbox.completion.label", {
+          completion: end?.completion ?? "exited",
         })
-      : start.session_id
-        ? t("sandbox.stdin.status", {
-            kind: start.chars ? "send" : "check",
-            phase,
-            sessionId: start.session_id,
-          })
-        : // Interrupted or wrong-typed arguments have no session ID
-          t("sandbox.stdin.noSession.status", {
-            kind: start.chars ? "send" : "check",
-            phase,
-          });
+      : showPollFailure && end?.exit_code != null
+        ? t("sandbox.exitCode.label", { exitCode: end.exit_code })
+        : start.type === PacketType.EXEC_COMMAND_START
+          ? t("sandbox.exec.status", {
+              // A command still running at its exec_end has only started
+              phase: phase === "done" && end?.session_id ? "started" : phase,
+            })
+          : start.session_id
+            ? t("sandbox.stdin.status", {
+                kind: start.chars ? "send" : "check",
+                phase,
+                sessionId: start.session_id,
+              })
+            : // Interrupted or wrong-typed arguments have no session ID
+              t("sandbox.stdin.noSession.status", {
+                kind: start.chars ? "send" : "check",
+                phase,
+              });
 
   // The output shares the command's panel: it streams into the output band,
   // which waits with a loading shimmer until the first output arrives. A
@@ -106,11 +134,13 @@ export function ExecToolRenderer({
       ? t("sandbox.noOutput.text")
       : "");
   const outputLoading = !isComplete && !output;
-  // Output that streamed in keeps following through the final output, which
-  // can add lines; a call that was already done when shown stays at its top.
-  const [followOutput] = useState(!isComplete);
+  const interrupted = isExpectedInterrupt(end, sentInterrupt);
+  // Only a failure names its exit code.
   const exitCode =
-    end !== null && end.exit_code !== null
+    end !== null &&
+    end.exit_code !== null &&
+    end.exit_code !== 0 &&
+    !interrupted
       ? t("sandbox.exitCode.label", { exitCode: end.exit_code })
       : undefined;
 
@@ -163,11 +193,22 @@ export function ExecToolRenderer({
         </CodePanel>
       )}
 
-      {end?.completion && end.completion !== "exited" && (
-        <Text font="secondary-body" color="status-warning-05">
-          {t("sandbox.completion.label", { completion: end.completion })}
-        </Text>
-      )}
+      {end?.completion &&
+        end.completion !== "exited" &&
+        !showDeadlineInTitle &&
+        !(showPollFailure && end.completion === "signaled") && (
+          // A kill or a time limit fails the step, so it reads as an error.
+          <Text
+            font="secondary-body"
+            color={
+              end.completion === "canceled" || interrupted
+                ? "status-warning-05"
+                : "status-error-05"
+            }
+          >
+            {t("sandbox.completion.label", { completion: end.completion })}
+          </Text>
+        )}
       {end?.session_id && (
         <Text font="secondary-body" color="text-03">
           {t("sandbox.stillRunning.label", { sessionId: end.session_id })}

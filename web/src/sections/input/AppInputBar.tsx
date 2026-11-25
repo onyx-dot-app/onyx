@@ -35,7 +35,13 @@ import type {
   UnsentMessage,
 } from "@/lib/chat/types";
 import { MAX_MENTIONS_PER_MESSAGE } from "@/lib/chat/types";
-import { useDraft, draftKey, readDraft, writeDraft } from "@/hooks/useDraft";
+import {
+  useDraft,
+  draftKey,
+  readDraft,
+  writeDraft,
+  getChatDraftGeneration,
+} from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
@@ -55,7 +61,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
-import { ProjectFile } from "@/lib/projects/types";
+import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { isFilePending } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
@@ -104,6 +110,8 @@ export interface AppInputBarHandle {
   /** Puts back a question that failed to send, unless a newer draft exists. */
   restore: (unsent: UnsentMessage) => void;
   focus: () => void;
+  /** Focuses the input and pastes the clipboard data at its end. */
+  paste: (data: DataTransfer) => void;
 }
 
 export interface AppInputBarProps {
@@ -127,6 +135,7 @@ export interface AppInputBarProps {
    * the same one and two instances would drift.
    */
   toolConfiguration: ToolConfigurationHandle;
+  persistDraft?: boolean;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -136,20 +145,50 @@ export interface AppInputBarProps {
   queue: ChatSessionQueue;
 }
 
-// Older drafts are plain text, or have mentions without an `index`.
-type StoredChatDraft = ComposedMessage | string;
+interface ChatDraft extends ComposedMessage {
+  // Uploaded files only; a file still uploading has no stable id.
+  files?: ProjectFile[];
+}
 
-function toChatDraft(draft: StoredChatDraft): ComposedMessage {
+// Older drafts are plain text, or have mentions without an `index`.
+type StoredChatDraft = ChatDraft | string;
+
+function toChatDraft(draft: StoredChatDraft): ChatDraft {
   return typeof draft === "string" ? { message: draft, mentions: [] } : draft;
 }
 
-function isChatDraftEmpty(draft: StoredChatDraft): boolean {
-  return !toChatDraft(draft).message.trim();
+function toStoredChatDraft(
+  composed: ComposedMessage,
+  files: ProjectFile[]
+): ChatDraft {
+  return {
+    message: composed.message,
+    mentions: composed.mentions,
+    files: files.filter(
+      (file) =>
+        file.status === UserFileStatus.COMPLETED ||
+        file.status === UserFileStatus.SKIPPED ||
+        (file.status !== UserFileStatus.UPLOADING && isFilePending(file.status))
+    ),
+  };
 }
+
+function isChatDraftEmpty(draft: StoredChatDraft): boolean {
+  const { message, files } = toChatDraft(draft);
+  return !message.trim() && !files?.length;
+}
+
+/**
+ * The composer scope that the shared attachment list belongs to. The list
+ * lives in `ProjectsProvider`, which outlives each composer, so a composer
+ * that mounts for another chat must not keep or save the files it finds.
+ */
+let attachmentsScope: string | null = null;
 
 const AppInputBar = React.memo(
   ({
     initialMessage = "",
+    persistDraft = true,
     stopGenerating,
     onSubmit,
     chatState,
@@ -169,7 +208,7 @@ const AppInputBar = React.memo(
     queue,
   }: AppInputBarProps) => {
     const t = useTranslations("chat.input");
-    const { incognitoEnabled } = useIncognito();
+    const { incognitoEnabled, incognitoSessionId } = useIncognito();
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
@@ -322,21 +361,48 @@ const AppInputBar = React.memo(
               ? t("appInputBar.input.searchPlaceholder")
               : t("appInputBar.input.placeholder");
 
-    // Keyed by chat session id, or "new" until the session is created.
     const chatSessionId = appPosition.chat();
-    const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
+    const projectIdForDraft = appPosition.project();
+    const agentIdForDraft = appPosition.agent();
+    const draftConversation =
+      chatSessionId ??
+      (projectIdForDraft !== null
+        ? `new:project:${projectIdForDraft}`
+        : agentIdForDraft !== null
+          ? `new:agent:${agentIdForDraft}`
+          : "new");
+    const draftGeneration = useRef(getChatDraftGeneration()).current;
+    const draftOwner = user?.id ? `${user.tenant_id ?? ""}:${user.id}` : null;
+    const chatDraftStorageKey = draftOwner
+      ? draftKey("chat", `${draftOwner}:${draftConversation}`)
+      : null;
+    const composerScope =
+      !persistDraft || incognitoEnabled || isSearchMode || initialMessage
+        ? null
+        : chatDraftStorageKey;
+    const editorScope = JSON.stringify([
+      draftConversation,
+      draftOwner,
+      incognitoEnabled,
+      incognitoEnabled ? incognitoSessionId : null,
+    ]);
+    const submitScope = JSON.stringify([editorScope, isSearchMode]);
     const {
       draft: chatDraft,
       loaded: chatDraftLoaded,
       save: saveChatDraft,
       clear: clearChatDraft,
     } = useDraft<StoredChatDraft>({
-      key: chatDraftStorageKey,
+      key: composerScope,
       isEmpty: isChatDraftEmpty,
+      storage: "local",
+      debounceMs: 0,
     });
+    const { currentMessageFiles, setCurrentMessageFiles } =
+      useProjectsContext();
     const draftSeededRef = useRef(false);
     const skipNextDraftSaveRef = useRef(false);
-    const prevDraftKeyRef = useRef(chatDraftStorageKey);
+    const previousScopeRef = useRef(editorScope);
     // Snapshot of the input, read non-reactively in the restore effect so
     // seeding doesn't re-run on every keystroke, and after awaits.
     const composedRef = useRef(composed);
@@ -359,37 +425,66 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       draftSeededRef.current = false;
-      // Clear the previous session's leftover text instead of leaking it into
-      // this one.
-      if (prevDraftKeyRef.current !== chatDraftStorageKey) {
-        prevDraftKeyRef.current = chatDraftStorageKey;
-        setHeldSendKey(null);
-        clearMessage();
-      }
-    }, [chatDraftStorageKey, clearMessage]);
+      skipNextDraftSaveRef.current = false;
+    }, [composerScope]);
+
+    useEffect(() => {
+      if (previousScopeRef.current === editorScope) return;
+      previousScopeRef.current = editorScope;
+      attachmentsScope = editorScope;
+      setHeldSendKey(null);
+      clearMessage();
+      setCurrentMessageFiles([]);
+    }, [editorScope, clearMessage, setCurrentMessageFiles]);
 
     // Restore once read: a URL prompt wins and a non-empty input is never
     // clobbered.
     useEffect(() => {
       if (!chatDraftLoaded || draftSeededRef.current) return;
       draftSeededRef.current = true;
-      if (chatDraft && !initialMessage && !composedRef.current.message) {
-        // Skip the save effect's next run; it would fire with the stale empty
-        // message and wipe what we just seeded.
-        skipNextDraftSaveRef.current = true;
-        const draft = toChatDraft(chatDraft);
-        setMessage(draft.message, draft.mentions);
+      const draft = chatDraft === null ? null : toChatDraft(chatDraft);
+      const hasMessage = Boolean(composedRef.current.message.trim());
+      skipNextDraftSaveRef.current = !hasMessage;
+      // Files left by a composer of another chat (e.g. before a visit to
+      // Settings) give way to this chat's draft files.
+      const ownsFiles = attachmentsScope === editorScope;
+      attachmentsScope = editorScope;
+      setCurrentMessageFiles((files) =>
+        ownsFiles && (files.length > 0 || hasMessage)
+          ? files
+          : (draft?.files ?? [])
+      );
+      if (draft && !initialMessage && !hasMessage) {
+        setMessage(draft.message, draft.mentions, { focus: false });
       }
-    }, [chatDraftLoaded, chatDraft, initialMessage, setMessage]);
+    }, [
+      chatDraftLoaded,
+      chatDraft,
+      editorScope,
+      initialMessage,
+      setMessage,
+      setCurrentMessageFiles,
+    ]);
 
     useEffect(() => {
-      if (!chatDraftLoaded || !draftSeededRef.current) return;
+      if (
+        !chatDraftLoaded ||
+        !draftSeededRef.current ||
+        draftGeneration !== getChatDraftGeneration()
+      )
+        return;
       if (skipNextDraftSaveRef.current) {
         skipNextDraftSaveRef.current = false;
         return;
       }
-      saveChatDraft(composed);
-    }, [composed, chatDraftLoaded, saveChatDraft]);
+      saveChatDraft(toStoredChatDraft(composed, currentMessageFiles));
+    }, [
+      composed,
+      currentMessageFiles,
+      chatDraftLoaded,
+      draftGeneration,
+      saveChatDraft,
+    ]);
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
       const wasRecording = isRecordingRef.current;
@@ -399,9 +494,6 @@ const AppInputBar = React.memo(
       }
       setIsRecording(nextIsRecording);
     }, []);
-
-    const { currentMessageFiles, setCurrentMessageFiles } =
-      useProjectsContext();
 
     // While the agent's questions wait, typed text answers them instead of
     // starting a turn, also while a foreground part of the response runs.
@@ -420,7 +512,7 @@ const AppInputBar = React.memo(
       }
       if (chatState !== "input") return;
       if (!toolConfiguration.optionsLoaded) {
-        setHeldSendKey(chatDraftStorageKey);
+        setHeldSendKey(submitScope);
         return;
       }
       // Stop TTS first to prevent overlapping voices.
@@ -445,6 +537,12 @@ const AppInputBar = React.memo(
       focus: () => {
         inputRef.current?.focus();
         setCursorToEnd();
+      },
+      paste: (data: DataTransfer) => {
+        if (disabled) return;
+        inputRef.current?.focus();
+        setCursorToEnd();
+        pasteClipboard(data);
       },
     }));
 
@@ -491,7 +589,7 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       if (
-        heldSendKey !== chatDraftStorageKey ||
+        heldSendKey !== submitScope ||
         !toolConfiguration.optionsLoaded ||
         hasPendingFiles ||
         disabled
@@ -501,7 +599,7 @@ const AppInputBar = React.memo(
       submitMessage(composedRef.current);
     }, [
       heldSendKey,
-      chatDraftStorageKey,
+      submitScope,
       toolConfiguration.optionsLoaded,
       hasPendingFiles,
       disabled,
@@ -540,13 +638,19 @@ const AppInputBar = React.memo(
     // Returned text goes before any newer text, in the composer or, for a chat
     // that is no longer open, in that chat's own draft.
     function returnText(sessionId: string, returned: ComposedMessage) {
+      if (draftGeneration !== getChatDraftGeneration()) return;
       const isOpen =
         mountedRef.current &&
+        previousScopeRef.current === editorScope &&
         useChatSessionStore.getState().currentSessionId === sessionId;
-      const key = draftKey("chat", sessionId);
-      const newer = isOpen
-        ? composedRef.current
-        : toChatDraft(readDraft<StoredChatDraft>(key) ?? "");
+      const key =
+        draftOwner && !incognitoEnabled
+          ? draftKey("chat", `${draftOwner}:${sessionId}`)
+          : null;
+      if (!isOpen && !key) return;
+      const newer: ChatDraft = isOpen
+        ? { ...composedRef.current, files: currentMessageFiles }
+        : toChatDraft((key && readDraft<StoredChatDraft>(key, "local")) || "");
       const offset = returned.message.length + 2;
       const combined: ComposedMessage = newer.message.trim()
         ? {
@@ -561,13 +665,16 @@ const AppInputBar = React.memo(
             ],
           }
         : returned;
-      if (!isOpen) {
-        writeDraft(key, combined, isChatDraftEmpty);
-        return;
+      const restoreKey = isOpen ? composerScope : key;
+      if (restoreKey) {
+        writeDraft(
+          restoreKey,
+          toStoredChatDraft(combined, newer.files ?? []),
+          isChatDraftEmpty,
+          "local"
+        );
       }
-      // The composer saves its draft after a delay that a chat switch cancels;
-      // the server no longer holds this text, so it is saved at once.
-      writeDraft(chatDraftStorageKey, combined, isChatDraftEmpty);
+      if (!isOpen) return;
       setMessage(combined.message, combined.mentions);
       setCursorToEnd();
     }
@@ -706,20 +813,20 @@ const AppInputBar = React.memo(
       }
     }, [showFiles, currentMessageFiles]);
 
-    function handlePaste(event: React.ClipboardEvent) {
-      if (disabled) return;
-      const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
+    function pasteClipboard(data: DataTransfer) {
+      const pastedFiles = getPastedFilesIfNoText(data);
       if (pastedFiles.length > 0) {
-        event.preventDefault();
         handleFileUpload(pastedFiles);
         return;
       }
+      const text = data.getData("text/plain");
+      if (text) pasteText(text);
+    }
 
+    function handlePaste(event: React.ClipboardEvent) {
+      if (disabled) return;
       event.preventDefault();
-      const text = event.clipboardData.getData("text/plain");
-      if (!text) return;
-
-      pasteText(text);
+      pasteClipboard(event.clipboardData);
     }
 
     const handleRemoveMessageFile = useCallback(

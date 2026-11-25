@@ -22,7 +22,7 @@ import SvgLock from "@opal/icons/lock";
 import { markdown } from "@opal/utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { toast, Section } from "@opal/layouts";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
 import {
   listScheduledTaskRuns,
   markScheduledRunsViewed,

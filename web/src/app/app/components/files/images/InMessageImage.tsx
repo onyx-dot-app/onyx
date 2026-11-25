@@ -74,7 +74,7 @@ export const InMessageImage = memo(function InMessageImage({
   return (
     <>
       <FullImageModal
-        fileId={fileId}
+        src={buildImgUrl(fileId)}
         open={fullImageShowing}
         onOpenChange={(open) => setFullImageShowing(open)}
       />

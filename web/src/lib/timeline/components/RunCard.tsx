@@ -11,6 +11,7 @@ import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
 import { STEP_ICONS } from "@/lib/timeline/icons";
+import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 import type {
   TimelineEntryStatus,
   TimelineStepPosition,
@@ -100,9 +101,11 @@ export function RunCard<S extends RunCardStep>({
   );
   // A card the user folded or opened keeps their choice.
   const userToggled = useRef(false);
+  const { rowRef, onToggle } = useRevealOnOpen();
   const toggle = () => {
     userToggled.current = true;
-    setIsOpen((prev) => !prev);
+    onToggle(!isOpen);
+    setIsOpen(!isOpen);
   };
 
   // Fold closed once text follows; fire once so a manual re-open sticks.
@@ -159,7 +162,7 @@ export function RunCard<S extends RunCardStep>({
 
   return (
     <Presence show={visible} appear={arrivedLive} grow>
-      <TimelineRoot>
+      <TimelineRoot ref={rowRef}>
         <Line
           // Filled while open; otherwise only on hover, as a step card is.
           filled={isOpen}

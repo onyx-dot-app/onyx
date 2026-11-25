@@ -29,7 +29,8 @@ export function useTypewriter(
   target: string,
   enabled: boolean,
   streamFinished: boolean = false,
-  visiblePrefixLength: number = 0
+  visiblePrefixLength: number = 0,
+  skipAnimation?: () => boolean
 ): UseTypewriterResult {
   // Ref so the rAF loop reads latest length without restarting.
   const targetRef = useRef(target);
@@ -99,6 +100,10 @@ export function useTypewriter(
       const elapsed = Math.max(0, Math.min(now - lastFrameTime, MAX_FRAME_MS));
       lastFrameTime = now;
       const targetLen = targetRef.current.length;
+      if (skipAnimation?.()) {
+        displayedLengthRef.current = targetLen;
+        setDisplayedLength(targetLen);
+      }
       const prev = displayedLengthRef.current;
       if (prev >= targetLen) {
         // Caught up — pause the loop. The sibling effect below will
@@ -146,7 +151,7 @@ export function useTypewriter(
       // voice-mode path where content is driven by audio position, and
       // any "gap" (e.g. user stops audio early) must jump instantly
       // instead of animating a 1500-char typewriter burst.
-      if (!enabledRef.current) {
+      if (!enabledRef.current || skipAnimation?.()) {
         const targetLen = targetRef.current.length;
         if (displayedLengthRef.current !== targetLen) {
           displayedLengthRef.current = targetLen;
@@ -173,7 +178,7 @@ export function useTypewriter(
       }
       startLoopRef.current = null;
     };
-  }, []);
+  }, [skipAnimation]);
 
   // Restart the loop when target grows past what's currently displayed.
   useEffect(() => {

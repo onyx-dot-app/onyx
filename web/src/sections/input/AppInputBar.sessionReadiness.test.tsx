@@ -50,7 +50,10 @@ jest.mock("@/lib/chat/sessionReadiness", () => ({
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
-    user: { preferences: { interrupt_on_send: mockInterruptOnSend } },
+    user: {
+      id: "test-user",
+      preferences: { interrupt_on_send: mockInterruptOnSend },
+    },
     isAdmin: false,
   }),
 }));
@@ -79,7 +82,12 @@ jest.mock("next/navigation", () => ({
 }));
 let mockChatId: string | null = "session";
 jest.mock("@/lib/navigation/hooks", () => ({
-  useAppPosition: () => ({ isNewSession: () => false, chat: () => mockChatId }),
+  useAppPosition: () => ({
+    isNewSession: () => false,
+    chat: () => mockChatId,
+    project: () => null,
+    agent: () => null,
+  }),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
@@ -110,9 +118,11 @@ jest.mock("@/hooks/usePromptShortcuts", () => ({
   default: () => ({ activePromptShortcuts: [] }),
 }));
 jest.mock("@/hooks/useDraft", () => ({
+  ...jest.requireActual("@/hooks/useDraft"),
   draftKey: (scope: string, id: string) => `${scope}:${id}`,
   writeDraft: (...args: unknown[]) => mockWriteDraft(...args),
   readDraft: () => null,
+  clearDraft: jest.fn(),
   useDraft: () => ({
     loaded: true,
     draft: undefined,
@@ -1413,9 +1423,10 @@ test("an edited queued message is saved as the draft before the composer shows i
   await waitFor(() => expect(textbox).toHaveTextContent(/^Queued follow-up$/));
   // A chat switch cancels the composer's delayed save, so the text is saved now.
   expect(mockWriteDraft).toHaveBeenCalledWith(
-    "chat:session",
-    { message: "Queued follow-up", mentions: [] },
-    expect.any(Function)
+    "chat::test-user:session",
+    expect.objectContaining({ message: "Queued follow-up", mentions: [] }),
+    expect.any(Function),
+    "local"
   );
 });
 
@@ -1475,9 +1486,10 @@ test("an edit that finishes after a chat switch returns its text to its own chat
   );
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
-      "chat:session",
-      { message: "Queued follow-up", mentions: [] },
-      expect.any(Function)
+      "chat::test-user:session",
+      expect.objectContaining({ message: "Queued follow-up", mentions: [] }),
+      expect.any(Function),
+      "local"
     )
   );
   expect(textbox).toHaveTextContent(/^$/);
@@ -1505,13 +1517,14 @@ test.each([
     );
     await waitFor(() =>
       expect(mockWriteDraft).toHaveBeenCalledWith(
-        "chat:session",
-        { message: "Keep this draft", mentions: [] },
-        expect.any(Function)
+        "chat::test-user:session",
+        expect.objectContaining({ message: "Keep this draft", mentions: [] }),
+        expect.any(Function),
+        "local"
       )
     );
     expect(mockWriteDraft).not.toHaveBeenCalledWith(
-      "chat:new",
+      "chat::test-user:new",
       expect.anything()
     );
   }
@@ -1539,9 +1552,10 @@ test("a failed submission that ends after the composer closes goes to the chat's
   );
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
-      "chat:session",
-      { message: "Keep this draft", mentions: [] },
-      expect.any(Function)
+      "chat::test-user:session",
+      expect.objectContaining({ message: "Keep this draft", mentions: [] }),
+      expect.any(Function),
+      "local"
     )
   );
 });

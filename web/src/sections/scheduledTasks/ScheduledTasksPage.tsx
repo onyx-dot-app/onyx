@@ -17,7 +17,7 @@ import { SvgFilter, SvgPlus } from "@opal/icons";
 import { SvgLongWait, SvgNoResult } from "@opal/illustrations";
 import { useScreenSize } from "@opal/hooks";
 import { useNavigation } from "@opal/navigation";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   TASK_REFRESH_INTERVAL_MS,

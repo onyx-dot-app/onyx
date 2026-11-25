@@ -542,6 +542,7 @@ export function processRawChatHistory(
       overridden_model: messageInfo.overridden_model,
       packets: packetsForMessage || [],
       currentFeedback: messageInfo.current_feedback as FeedbackType | null,
+      timeSent: messageInfo.time_sent,
       // Multi-model answer generation
       preferredResponseId: messageInfo.preferred_response_id ?? null,
       modelDisplayName: messageInfo.model_display_name ?? null,

@@ -137,6 +137,7 @@
   },
   "overrides": {
     "dompurify": "3.4.17",
+    "katex": "$katex",
     "react-is": "^19.0.0-rc-69d4b800-20241021",
     "tinypool": "2.1.2"
   }

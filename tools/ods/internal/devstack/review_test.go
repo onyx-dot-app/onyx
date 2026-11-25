@@ -4,8 +4,11 @@ package devstack
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -71,6 +74,32 @@ func TestUpRetriesActualChildBindFailure(t *testing.T) {
 	}
 	if bindable(foreignPort) {
 		t.Fatal("stack interfered with the competing listener")
+	}
+}
+
+// A later service can lose its port while an earlier health probe is running.
+func TestWaitReadySeesBindFailureDuringProbe(t *testing.T) {
+	s := newTestStack(t, t.TempDir())
+	logPath := filepath.Join(t.TempDir(), "web.log")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if err := os.WriteFile(logPath, []byte("bind: address already in use"), 0o600); err != nil {
+			t.Error(err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	probe, err := startService(Spec{
+		Name: "API", Slug: "api", Command: []string{"sleep", "60"}, Env: os.Environ(), Health: server.URL,
+	}, filepath.Join(t.TempDir(), "api.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stopRecords([]ServiceRecord{probe}, time.Second) })
+	st := &State{Services: []ServiceRecord{probe, {Name: "Web", Slug: "web", Port: 8080, Log: logPath}}}
+	_, err = s.waitReady(context.Background(), st, testOptions().ReadyTimeout, 0)
+	var conflict *bindFailure
+	if !errors.As(err, &conflict) || len(conflict.services) != 1 || conflict.services[0] != "web" {
+		t.Fatalf("expected web bind failure, got %v", err)
 	}
 }
 
