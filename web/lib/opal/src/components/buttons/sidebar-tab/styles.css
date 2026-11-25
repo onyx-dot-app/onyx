@@ -63,6 +63,12 @@
   @apply flex shrink-0 items-stretch;
 }
 
+@media (hover: none) {
+  .opal-sidebar-tab:has([data-touch-run-marker]) .opal-sidebar-tab__spacer {
+    padding-inline-end: 1.25rem;
+  }
+}
+
 /* The fold wrapper holds the label and `rightChildren`, so both fade as one.
 
    `visibility` (not `opacity` alone) keeps the folded label out of the

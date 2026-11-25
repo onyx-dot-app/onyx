@@ -9,6 +9,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { Badge, Button, CopyButton, Text } from "@opal/components";
 import { SvgChevronDown, SvgChevronUp, SvgEdit, SvgSparkle } from "@opal/icons";
 import { Hoverable } from "@opal/core";
+import { Section } from "@opal/layouts";
 import { useOverflow } from "@opal/hooks";
 import FileDisplay from "./FileDisplay";
 import MessageTime from "@/lib/timeline/chat/message/MessageTime";
@@ -350,7 +351,13 @@ const HumanMessage = React.memo(function HumanMessage({
             <HumanMessageBubble content={content} mentions={mentions} />
           </div>
         )}
-        <div className="flex justify-end items-center pt-1">
+        <Section
+          flexDirection="row"
+          justifyContent="end"
+          alignItems="center"
+          height="fit"
+          className="pt-1"
+        >
           {!isEditing && isMobile && copyEditButton}
           {/* The send time sits under the bubble, at its end. */}
           {!isEditing && timeSent && (
@@ -384,7 +391,7 @@ const HumanMessage = React.memo(function HumanMessage({
                 }}
               />
             )}
-        </div>
+        </Section>
       </div>
     </Hoverable.Root>
   );

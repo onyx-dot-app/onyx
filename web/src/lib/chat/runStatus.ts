@@ -3,6 +3,7 @@
  * what a chat does now, and how a run ended while the user was elsewhere.
  */
 import { create } from "zustand";
+import { PacketType, StopReason } from "@/app/app/services/streamingModels";
 import type { ChatState } from "@/app/app/types";
 import {
   getLatestMessageChain,
@@ -61,14 +62,26 @@ export function liveRunStatus(
 /** How a run that just stopped working ended. */
 export function endedRunStatus(
   session: RunSession
-): "approval" | "question" | EndedRun {
+): "approval" | "question" | EndedRun | null {
   const live = liveRunStatus(session);
   if (live === "approval" || live === "question") return live;
+  const lastMessage = getLatestMessageChain(session.messageTree).at(-1);
+  const finished = lastMessage?.packets?.findLast(
+    (packet) => packet.obj.type === PacketType.STOP
+  )?.obj;
   const failed =
     session.chatState === "unconfirmed" ||
     session.uncaughtError != null ||
-    getLatestMessageChain(session.messageTree).at(-1)?.type === "error";
-  return failed ? "failed" : "done";
+    lastMessage?.type === "error" ||
+    (finished?.type === PacketType.STOP &&
+      finished.stop_reason === StopReason.TIMED_OUT);
+  if (failed) return "failed";
+  if (
+    finished?.type === PacketType.STOP &&
+    finished.stop_reason === StopReason.USER_CANCELLED
+  )
+    return null;
+  return "done";
 }
 
 interface UnseenRunsState {

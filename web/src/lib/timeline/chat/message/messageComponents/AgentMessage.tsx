@@ -19,7 +19,7 @@ import ToolQuestionCard from "@/lib/timeline/chat/message/messageComponents/Tool
 import { FullChatState } from "@/lib/timeline/chat/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
-import { Hoverable } from "@opal/core";
+import MessageTime from "@/lib/timeline/chat/message/MessageTime";
 import { HumanMessageBubble } from "@/lib/timeline/chat/message/HumanMessage";
 import type {
   TransformedStep,
@@ -558,7 +558,7 @@ const AgentMessage = React.memo(function AgentMessage({
   let nextAnswerRef = 0;
 
   return (
-    <Hoverable.Root group="agentMessage" width="full">
+    <div className="group/agent-message w-full">
       {/* One cursor for the whole turn, across its sections. It stays until
           the answer has finished, and hides while the turn waits for the user
           to approve a tool call or answer a question. */}
@@ -792,32 +792,40 @@ const AgentMessage = React.memo(function AgentMessage({
           })}
 
           {/* Feedback buttons - only show when streaming and rendering complete */}
-          {isComplete && !hideFooter && (
-            <MessageToolbar
-              nodeId={nodeId}
-              messageId={messageId}
-              includeMessageSwitcher={includeMessageSwitcher}
-              currentMessageInd={currentMessageInd}
-              otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
-              getPreviousMessage={getPreviousMessage}
-              getNextMessage={getNextMessage}
-              onMessageSelection={onMessageSelection}
-              rawPackets={rawPackets}
-              answerRefs={answerRefs}
-              currentFeedback={currentFeedback}
-              onRegenerate={onRegenerate}
-              parentMessage={parentMessage}
-              llmManager={llmManager}
-              currentModelName={chatState.overriddenModel}
-              currentModelProvider={chatState.overriddenModelProvider}
-              citations={citations}
-              documentMap={documentMap}
-              timeSent={timeSent}
-            />
+          {isComplete && (!hideFooter || timeSent) && (
+            <Section flexDirection="row" alignItems="center" height="fit">
+              {!hideFooter && (
+                <MessageToolbar
+                  nodeId={nodeId}
+                  messageId={messageId}
+                  includeMessageSwitcher={includeMessageSwitcher}
+                  currentMessageInd={currentMessageInd}
+                  otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
+                  getPreviousMessage={getPreviousMessage}
+                  getNextMessage={getNextMessage}
+                  onMessageSelection={onMessageSelection}
+                  rawPackets={rawPackets}
+                  answerRefs={answerRefs}
+                  currentFeedback={currentFeedback}
+                  onRegenerate={onRegenerate}
+                  parentMessage={parentMessage}
+                  llmManager={llmManager}
+                  currentModelName={chatState.overriddenModel}
+                  currentModelProvider={chatState.overriddenModelProvider}
+                  citations={citations}
+                  documentMap={documentMap}
+                />
+              )}
+              {timeSent && (
+                <div className="ms-auto shrink-0 px-2 opacity-0 group-hover/agent-message:opacity-100 group-focus-within/agent-message:opacity-100 no-hover:opacity-100">
+                  <MessageTime timeSent={timeSent} />
+                </div>
+              )}
+            </Section>
           )}
         </div>
       </ResponseCursorScope>
-    </Hoverable.Root>
+    </div>
   );
 }, arePropsEqual);
 

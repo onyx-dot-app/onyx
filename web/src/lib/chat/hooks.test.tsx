@@ -3,6 +3,7 @@ import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import {
   Packet,
   PacketType,
+  StopReason,
   ToolApprovalRequest,
 } from "@/app/app/services/streamingModels";
 import {
@@ -17,6 +18,7 @@ import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { endedRunStatus } from "@/lib/chat/runStatus";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
 
 jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
@@ -536,6 +538,39 @@ describe("useJumpToLatestReason", () => {
     rerender({ visible: false });
     rerender({ visible: true });
     expect(result.current).toBeNull();
+  });
+
+  it("does not call a final stop packet a new answer", () => {
+    const { result } = renderHook(() => useJumpToLatestReason(true));
+    act(() => {
+      setReply([
+        delta("Hello"),
+        {
+          placement: { turn_index: 0, tab_index: 0 },
+          obj: { type: PacketType.STOP },
+        },
+      ]);
+      useChatSessionStore.getState().updateChatState(SESSION, "input");
+    });
+    expect(result.current).toBeNull();
+  });
+
+  it.each([
+    [StopReason.TIMED_OUT, "failed"],
+    [StopReason.USER_CANCELLED, null],
+    [StopReason.FINISHED, "done"],
+  ])("records the terminal status for %s", (stop_reason, expected) => {
+    setReply([
+      delta("Hello"),
+      {
+        placement: { turn_index: 0, tab_index: 0 },
+        obj: { type: PacketType.STOP, stop_reason },
+      },
+    ]);
+    useChatSessionStore.getState().updateChatState(SESSION, "input");
+    const session = useChatSessionStore.getState().sessions.get(SESSION);
+    if (!session) throw new Error("Expected a chat session");
+    expect(endedRunStatus(session)).toBe(expected);
   });
 
   it("names no new answer for output that loads into an idle chat", () => {

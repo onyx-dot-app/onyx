@@ -415,6 +415,14 @@ const ChatButton = memo(
         >
           {/* While renaming the row is an input, so the menu stays away unless
               its own list is already open. */}
+          {!renaming && runStatusMarker && (
+            <span
+              data-touch-run-marker
+              className="hidden no-hover:block absolute end-6 top-1/2 -translate-y-1/2"
+            >
+              {runStatusMarker}
+            </span>
+          )}
           {(!renaming || menuOpen) &&
             (runStatusMarker ? (
               <Hoverable.Item
@@ -451,7 +459,11 @@ const ChatButton = memo(
             onClick={renaming ? undefined : handleClick}
             selected={active}
             loading={runStatus === "working"}
-            tooltip={runStatusLabel}
+            tooltip={
+              renaming || !runStatusLabel
+                ? undefined
+                : `${displayName} · ${runStatusLabel}`
+            }
             rightChildren={rightMenu}
             rightChildrenAtRest={!!runStatusMarker && !renaming}
             nested={!!project}

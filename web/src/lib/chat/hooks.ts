@@ -12,6 +12,7 @@ import {
 import { getConfiguredSources } from "@/lib/connectors/utils";
 import type { OnSubmitProps } from "@/hooks/useChatController";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { PacketType } from "@/app/app/services/streamingModels";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
@@ -411,7 +412,10 @@ export function useJumpToLatestReason(
     if (!tree) return "";
     const chain = getLatestMessageChain(tree);
     const last = chain[chain.length - 1];
-    return `${chain.length}:${last?.packets.length ?? 0}`;
+    const visiblePackets =
+      last?.packets.filter(({ obj }) => obj.type !== PacketType.STOP).length ??
+      0;
+    return `${chain.length}:${visiblePackets}`;
   }, [tree]);
   const sessionId = useChatSessionStore((state) => state.currentSessionId);
   const running = chatState === "loading" || chatState === "streaming";

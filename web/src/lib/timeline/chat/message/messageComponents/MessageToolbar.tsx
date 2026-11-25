@@ -40,8 +40,7 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
 import { getModelIcon } from "@/lib/languageModels/utils";
-import MessageTime from "@/lib/timeline/chat/message/MessageTime";
-import { Hoverable } from "@opal/core";
+import { Section } from "@opal/layouts";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
@@ -135,8 +134,6 @@ export interface MessageToolbarProps {
   // Citations
   citations: StreamingCitation[];
   documentMap: Map<string, OnyxDocument>;
-
-  timeSent?: string;
 }
 
 export default function MessageToolbar({
@@ -158,7 +155,6 @@ export default function MessageToolbar({
   currentModelProvider,
   citations,
   documentMap,
-  timeSent,
 }: MessageToolbarProps) {
   const t = useTranslations("chat.messages");
   // The message's own model. chatState carries the globally selected model,
@@ -275,12 +271,21 @@ export default function MessageToolbar({
         <FeedbackModal {...feedbackModalProps!} />
       </modal.Provider>
 
-      <div
+      <Section
         data-testid="AgentMessage/toolbar"
-        className="flex justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 ps-1"
+        flexDirection="row"
+        justifyContent="start"
+        alignItems="center"
+        height="fit"
+        className="min-w-0 ps-1"
       >
         <TooltipGroup>
-          <div className="flex items-center">
+          <Section
+            flexDirection="row"
+            alignItems="center"
+            height="fit"
+            width="fit"
+          >
             {includeMessageSwitcher && (
               <div className="-mx-1">
                 <MessageSwitcher
@@ -447,17 +452,9 @@ export default function MessageToolbar({
                 }
               />
             )}
-          </div>
+          </Section>
         </TooltipGroup>
-        {/* The send time sits at the row's end, apart from the actions. */}
-        {timeSent && (
-          <Hoverable.Item group="agentMessage" variant="appear-on-hover">
-            <div className="px-2">
-              <MessageTime timeSent={timeSent} />
-            </div>
-          </Hoverable.Item>
-        )}
-      </div>
+      </Section>
     </>
   );
 }
