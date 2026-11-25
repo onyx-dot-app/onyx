@@ -167,6 +167,17 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   if (runStartedAt === undefined && isActive && steps.length > 0) {
     setRunStartedAt(Date.now());
   }
+  // When the run stopped working here, for a run card that first mounts
+  // after that and so never timed the run itself.
+  const [runEndedAt, setRunEndedAt] = useState<number | undefined>();
+  if (runStartedAt !== undefined && !isActive && runEndedAt === undefined) {
+    setRunEndedAt(Date.now());
+  }
+  if (isActive && runEndedAt !== undefined) setRunEndedAt(undefined);
+  const localDurationSeconds =
+    runStartedAt !== undefined && runEndedAt !== undefined
+      ? Math.max(1, Math.round((runEndedAt - runStartedAt) / 1000))
+      : undefined;
 
   // Hoisted: each step of a short run is its own run card, with the step's
   // title as its header. Once the run has more steps, they collapse into one
@@ -296,9 +307,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
                 isFirstRun ? streamingStartTime : runStartedAt
               }
               durationSeconds={
-                isFirstRun
+                (isFirstRun
                   ? (toolProcessingDuration ?? processingDurationSeconds)
-                  : undefined
+                  : undefined) ?? localDurationSeconds
               }
               summary={{
                 memoryText,
