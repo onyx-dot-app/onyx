@@ -1107,7 +1107,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appPosition.isChat() && showScrollButton && (
-                      <div className="absolute -top-14 self-center">
+                      <div className="absolute -top-11 self-center">
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
@@ -1117,6 +1117,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                               : t("scrollToBottomButton.label")
                           }
                           prominence="secondary"
+                          size="sm"
+                          rounding="full"
                         >
                           {jumpToLatestReason
                             ? t(
