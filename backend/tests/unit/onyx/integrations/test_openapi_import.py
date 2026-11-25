@@ -207,6 +207,37 @@ def test_yaml_timestamps_stay_text() -> None:
     json.dumps(spec)
 
 
+def test_yaml_reads_as_the_same_json() -> None:
+    """YAML 1.2: on, off, yes and no are text; true and false are booleans."""
+    spec = parse_openapi_document(
+        "openapi: 3.0.0\ninfo: {title: T}\npaths: {}\n"
+        "x-switch: {type: string, enum: [on, off, yes, no], nullable: true}\n"
+        "x-flags: [True, FALSE]\n"
+    )
+
+    assert spec["x-switch"] == {
+        "type": "string",
+        "enum": ["on", "off", "yes", "no"],
+        "nullable": True,
+    }
+    assert spec["x-flags"] == [True, False]
+
+
+def test_a_yaml_value_that_is_not_json_is_refused_at_import() -> None:
+    with pytest.raises(ValueError, match="not JSON"):
+        parse_openapi_document(
+            "openapi: 3.0.0\ninfo: {title: T}\npaths: {}\nx-tags: !!set {a, b}\n"
+        )
+    with pytest.raises(OnyxError) as error:
+        import_openapi_document(
+            OpenApiEndpointsRequest(
+                openapi_document="openapi: 3.0.0\ninfo: {title: T}\n"
+                "paths: {}\nx-tags: !!set {a, b}\n"
+            )
+        )
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
 def _apply(spec: dict[str, Any], lines: list[str]) -> dict[str, Any]:
     return parse_openapi_document(
         apply_endpoint_lines(

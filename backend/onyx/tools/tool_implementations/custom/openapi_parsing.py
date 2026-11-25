@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Mapping
 from typing import Any, cast
 from urllib.parse import quote, urlencode
@@ -16,7 +17,9 @@ OPENAPI_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "
 
 
 class _OpenApiYamlLoader(yaml.SafeLoader):
-    """Keeps timestamps as text: the parsed spec must stay JSON."""
+    """Keeps timestamps as text: the parsed spec must stay JSON. As in YAML
+    1.2, only true and false are booleans: ``on``, ``off``, ``yes`` and ``no``
+    stay text."""
 
 
 def _construct_timestamp(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> str:
@@ -24,6 +27,17 @@ def _construct_timestamp(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> str:
 
 
 _OpenApiYamlLoader.add_constructor("tag:yaml.org,2002:timestamp", _construct_timestamp)
+_OpenApiYamlLoader.yaml_implicit_resolvers = {
+    first: [
+        (tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"
+    ]
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_OpenApiYamlLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"),
+    list("tTfF"),
+)
 
 
 def parse_openapi_document(document: str) -> dict[str, Any]:
@@ -37,6 +51,12 @@ def parse_openapi_document(document: str) -> dict[str, Any]:
             raise ValueError(f"The OpenAPI document is not JSON or YAML: {e}") from e
     if not isinstance(parsed, dict):
         raise ValueError("The OpenAPI document is not an object.")
+    try:
+        json.dumps(parsed)
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"The OpenAPI document has a value that is not JSON: {e}"
+        ) from e
     return parsed
 
 
