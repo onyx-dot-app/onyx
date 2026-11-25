@@ -1,11 +1,10 @@
 import abc
 import copy
-import csv
 import json
 import uuid
 from collections.abc import Callable
-from io import BytesIO, StringIO
-from typing import Any, Dict, List
+from io import BytesIO
+from typing import Any, List
 from uuid import UUID
 
 from pydantic import JsonValue, TypeAdapter
@@ -55,8 +54,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.url import validate_outbound_http_url
 
 logger = setup_logger()
-
-CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
 
 
 def validate_custom_tool_url(url: str, *, resolve_dns: bool = True) -> None:
@@ -177,11 +174,6 @@ class ApiTool(Tool):
         )
 
         return [file_id]
-
-    def _parse_csv(self, csv_text: str) -> List[Dict[str, Any]]:
-        csv_file = StringIO(csv_text)
-        reader = csv.DictReader(csv_file)
-        return list(reader)
 
     def _failed_response(
         self,
