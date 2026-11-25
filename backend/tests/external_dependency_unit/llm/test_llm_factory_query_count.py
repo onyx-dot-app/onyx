@@ -6,12 +6,12 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import ModelRole
 from onyx.db.llm import (
     fetch_all_accessible_llm_providers,
-    fetch_default_model,
+    fetch_role_model,
     remove_llm_provider,
-    update_default_model,
+    set_role_model,
     upsert_llm_provider,
 )
 from onyx.db.models import Persona
@@ -38,7 +38,7 @@ def _query_counts(
     filler_model_count: int,
 ) -> dict[str, int]:
     user = make_test_user("llm-factory-queries")
-    previous = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    previous = fetch_role_model(db_session, ModelRole.CHAT)
     previous_default = (
         None if previous is None else (previous.llm_provider_id, previous.name)
     )
@@ -70,9 +70,7 @@ def _query_counts(
         db_session,
     )
     try:
-        update_default_model(
-            db_session, provider.id, "gpt-factory", LLMModelFlowType.CHAT
-        )
+        set_role_model(db_session, ModelRole.CHAT, provider.id, "gpt-factory")
         ids = {mc.name: mc.id for mc in provider.model_configurations}
         builds: dict[str, tuple[Callable[[], object], int | None]] = {
             "default": (get_default_llm, None),
@@ -129,7 +127,7 @@ def _query_counts(
     finally:
         db_session.rollback()
         if previous_default is not None:
-            update_default_model(db_session, *previous_default, LLMModelFlowType.CHAT)
+            set_role_model(db_session, ModelRole.CHAT, *previous_default)
         remove_llm_provider(db_session, provider.id)
 
 

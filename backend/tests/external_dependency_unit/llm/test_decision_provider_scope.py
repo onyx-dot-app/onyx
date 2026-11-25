@@ -7,11 +7,11 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.db.llm import (
-    clear_decision_model,
-    fetch_default_model,
-    update_default_model,
+    clear_role,
+    fetch_role_model,
+    set_role_model,
     upsert_decision_provider,
     upsert_llm_provider,
 )
@@ -63,7 +63,7 @@ def test_decision_scope_preserves_shared_chat_model_and_default(
         ),
         transaction,
     )
-    update_default_model(transaction, provider.id, name, LLMModelFlowType.CHAT)
+    set_role_model(transaction, ModelRole.CHAT, provider.id, name)
     model = transaction.scalar(
         select(ModelConfiguration).where(
             ModelConfiguration.llm_provider_id == provider.id
@@ -111,7 +111,7 @@ def test_decision_scope_preserves_shared_chat_model_and_default(
         LLMModelFlowType.CHAT,
         LLMModelFlowType.VISION,
     }
-    default = fetch_default_model(transaction, LLMModelFlowType.CHAT)
+    default = fetch_role_model(transaction, ModelRole.CHAT)
     assert default is not None and default.id == model_id
     saved = transaction.get(LLMProvider, provider.id)
     assert saved is not None and saved.is_public is False
@@ -122,7 +122,7 @@ def test_decision_scope_preserves_shared_chat_model_and_default(
 def test_provider_setup_does_not_select_decision_model_or_enable_chat(
     transaction: Session,
 ) -> None:
-    clear_decision_model(transaction)
+    clear_role(transaction, ModelRole.DECISION)
     provider = upsert_decision_provider(
         DecisionProviderUpsertRequest(
             name=f"decision-unset-{uuid4().hex}",
@@ -133,7 +133,7 @@ def test_provider_setup_does_not_select_decision_model_or_enable_chat(
         transaction,
         discovered_models={"test/dual": True},
     )
-    assert fetch_default_model(transaction, LLMModelFlowType.DECISION) is None
+    assert fetch_role_model(transaction, ModelRole.DECISION) is None
     model = transaction.scalar(
         select(ModelConfiguration).where(
             ModelConfiguration.llm_provider_id == provider.id
@@ -169,9 +169,7 @@ def test_selected_shared_zoom_connection_cannot_be_deleted(
     assert saved.zoom_voice_provider_id == voice.id
     assert saved.api_key is None
     assert saved.custom_config is None
-    update_default_model(
-        transaction, provider.id, "zoom-decisions", LLMModelFlowType.DECISION
-    )
+    set_role_model(transaction, ModelRole.DECISION, provider.id, "zoom-decisions")
     with pytest.raises(OnyxError) as error:
         delete_voice_provider(transaction, voice.id)
     assert error.value.error_code == OnyxErrorCode.RESOURCE_IN_USE
@@ -180,7 +178,7 @@ def test_selected_shared_zoom_connection_cannot_be_deleted(
 
 
 def test_shared_zoom_setup_rotation_and_deletion(transaction: Session) -> None:
-    clear_decision_model(transaction)
+    clear_role(transaction, ModelRole.DECISION)
     name = f"zoom-shared-{uuid4().hex}"
     voice = upsert_voice_provider(
         db_session=transaction,
@@ -210,7 +208,7 @@ def test_shared_zoom_setup_rotation_and_deletion(transaction: Session) -> None:
         and model.llm_model_flow_types == [LLMModelFlowType.DECISION]
         for model in models
     )
-    assert fetch_default_model(transaction, LLMModelFlowType.DECISION) is None
+    assert fetch_role_model(transaction, ModelRole.DECISION) is None
     assert not voice.is_default_stt and not voice.is_default_tts
     upsert_voice_provider(
         db_session=transaction,
@@ -250,7 +248,7 @@ def test_shared_zoom_setup_rotation_and_deletion(transaction: Session) -> None:
 async def test_only_decision_setup_links_zoom_decisions(
     transaction: Session, mode: Literal["voice", "decision"]
 ) -> None:
-    clear_decision_model(transaction)
+    clear_role(transaction, ModelRole.DECISION)
     with (
         patch(
             "onyx.voice.providers.zoom.ZoomVoiceProvider.validate_credentials",
@@ -280,7 +278,7 @@ async def test_only_decision_setup_links_zoom_decisions(
         select(LLMProvider.id).where(LLMProvider.zoom_voice_provider_id == saved.id)
     )
     assert (linked is not None) is (mode == "decision")
-    assert fetch_default_model(transaction, LLMModelFlowType.DECISION) is None
+    assert fetch_role_model(transaction, ModelRole.DECISION) is None
 
 
 @pytest.mark.asyncio
@@ -380,9 +378,7 @@ def test_decision_update_cannot_remove_selected_default(transaction: Session) ->
         ),
         transaction,
     )
-    update_default_model(
-        transaction, provider.id, "gpt-6-luna", LLMModelFlowType.DECISION
-    )
+    set_role_model(transaction, ModelRole.DECISION, provider.id, "gpt-6-luna")
     with pytest.raises(ValueError, match="Clear the selected decision model"):
         upsert_decision_provider(
             DecisionProviderUpsertRequest(
@@ -390,7 +386,7 @@ def test_decision_update_cannot_remove_selected_default(transaction: Session) ->
             ),
             transaction,
         )
-    selected = fetch_default_model(transaction, LLMModelFlowType.DECISION)
+    selected = fetch_role_model(transaction, ModelRole.DECISION)
     assert selected is not None and selected.name == "gpt-6-luna"
 
 

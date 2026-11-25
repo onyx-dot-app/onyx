@@ -10,7 +10,7 @@ from onyx.chat.session_naming import (
     name_new_chat_session,
 )
 from onyx.configs.constants import MessageType
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import ModelRole
 from onyx.db.models import ChatMessage, LLMProvider, ModelConfiguration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -111,15 +111,13 @@ def test_configured_naming_model_names_chat_without_session_model(
     additional_headers = {"x-request-id": "naming-request"}
     session_llm = MagicMock(side_effect=ValueError("Session model is unavailable"))
 
-    def fetch_default(
-        _session: object, flow: LLMModelFlowType
-    ) -> ModelConfiguration | None:
-        return utility_model if flow == LLMModelFlowType.CHAT_NAMING else None
+    def fetch_default(_session: object, role: ModelRole) -> ModelConfiguration | None:
+        return utility_model if role == ModelRole.CHAT_NAMING else None
 
     with (
         patch("onyx.chat.session_naming.check_token_rate_limits"),
         patch("onyx.llm.factory.get_session_with_current_tenant") as session_factory,
-        patch("onyx.llm.factory.fetch_default_model", side_effect=fetch_default),
+        patch("onyx.llm.factory.fetch_role_model", side_effect=fetch_default),
         patch(
             "onyx.llm.factory.llm_from_provider", return_value=naming_llm
         ) as build_utility,
@@ -179,7 +177,7 @@ def test_unset_utilities_check_session_provider_cost_once(
     with (
         patch("onyx.chat.session_naming.check_token_rate_limits"),
         patch("onyx.llm.factory.get_session_with_current_tenant"),
-        patch("onyx.llm.factory.fetch_default_model", return_value=None),
+        patch("onyx.llm.factory.fetch_role_model", return_value=None),
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as utility_cost,
         patch(
             "onyx.chat.session_naming.get_session_with_current_tenant"
@@ -233,7 +231,7 @@ def test_configured_utility_failure_returns_text_fallback(
     with (
         patch("onyx.chat.session_naming.check_token_rate_limits"),
         patch("onyx.llm.factory.get_session_with_current_tenant"),
-        patch("onyx.llm.factory.fetch_default_model", return_value=utility_model),
+        patch("onyx.llm.factory.fetch_role_model", return_value=utility_model),
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as utility_cost,
         patch("onyx.llm.factory.llm_from_provider", return_value=naming_llm) as build,
         patch("onyx.llm.factory.get_current_tenant_id", return_value="naming-tenant"),

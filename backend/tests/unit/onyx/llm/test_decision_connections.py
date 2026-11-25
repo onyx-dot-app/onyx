@@ -343,7 +343,7 @@ def test_decision_page_catalog_contains_supported_providers_without_selecting_a_
 ):
     with (
         patch.object(api, "fetch_existing_models", return_value=[]),
-        patch.object(api, "fetch_default_model", return_value=None),
+        patch.object(api, "fetch_role_model", return_value=None),
     ):
         response = api.get_decision_model_configuration(MagicMock(), MagicMock())
     assert response.model is None

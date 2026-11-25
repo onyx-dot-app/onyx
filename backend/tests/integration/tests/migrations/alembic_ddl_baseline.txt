@@ -537,12 +537,7 @@ op.alter_column('kg_term', 'time_created',
 
 op.alter_column('llm_model_flow', 'llm_model_flow_type',
            existing_type=sa.VARCHAR(length=20),
-           type_=sa.Enum('CHAT', 'VISION', 'CONTEXTUAL_RAG', 'REASONING', 'CHAT_NAMING', 'SEARCH_SELECTION', 'DECISION', 'CRAFT', 'IMAGE_GENERATION', name='llmmodelflowtype', native_enum=False),
-           existing_nullable=False)
-
-op.alter_column('llm_model_flow', 'is_default',
-           existing_type=sa.BOOLEAN(),
-           server_default=None,
+           type_=sa.Enum('CHAT', 'VISION', 'REASONING', 'DECISION', 'IMAGE_GENERATION', name='llmmodelflowtype', native_enum=False),
            existing_nullable=False)
 
 op.alter_column('llm_provider', 'provider',

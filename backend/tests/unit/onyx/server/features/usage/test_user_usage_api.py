@@ -200,7 +200,7 @@ def test_returns_only_callers_rows_and_aggregates(
     )
 
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
     client = TestClient(_make_app(db_session, _StubUser(caller)))
     resp = client.get("/user/usage")
@@ -248,7 +248,7 @@ def test_default_range_uses_usage_limit_window(
         usage_api, "get_user_usage_by_day_and_model", _capture_usage_bounds
     )
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
 
     resp = TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage")
@@ -288,7 +288,7 @@ def test_days_range_uses_legacy_rolling_bounds(
         usage_api, "get_user_usage_by_day_and_model", _capture_usage_bounds
     )
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
 
     resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
@@ -344,7 +344,7 @@ def test_custom_date_range_uses_inclusive_calendar_bounds(
     )
     db_session.commit()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
 
     body = (
@@ -378,8 +378,8 @@ def test_selected_model_price_known_model(
     monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
     cost_overrides.invalidate_override_cache()  # no override; price from litellm
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model",
-        lambda _db, _flow: _StubModelConfig("gpt-6-sol", "openai"),
+        "onyx.server.features.usage.api.fetch_role_model",
+        lambda _db, _role: _StubModelConfig("gpt-6-sol", "openai"),
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
@@ -402,8 +402,8 @@ def test_selected_model_price_unknown_model_nulls(
     _seed_current_window(db_session, caller)
     monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model",
-        lambda _db, _flow: _StubModelConfig("totally-unknown-model-xyz", None),
+        "onyx.server.features.usage.api.fetch_role_model",
+        lambda _db, _role: _StubModelConfig("totally-unknown-model-xyz", None),
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
@@ -423,8 +423,8 @@ def test_selected_model_price_requires_model_access(
     caller = str(uuid4())
     _seed_current_window(db_session, caller)
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model",
-        lambda _db, _flow: _StubModelConfig("gpt-6-sol", "openai", model_id=2),
+        "onyx.server.features.usage.api.fetch_role_model",
+        lambda _db, _role: _StubModelConfig("gpt-6-sol", "openai", model_id=2),
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
@@ -527,7 +527,7 @@ def test_budget_reflects_user_cost_limit(
     )
     db_session.commit()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
 
     body = (
@@ -564,7 +564,7 @@ def test_budget_reflects_global_cost_limit(
     )
     db_session.commit()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
 
     body = (
@@ -583,7 +583,7 @@ def test_available_model_prices_lists_priced_models(
     monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
     cost_overrides.invalidate_override_cache()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
@@ -626,7 +626,7 @@ def test_available_model_prices_lists_each_overridden_copy(
     db_session.commit()
     cost_overrides.invalidate_override_cache()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
@@ -666,7 +666,7 @@ def test_budget_reflects_group_cost_limit(
     db_session.add(User__UserGroup(user_id=caller, user_group_id=1))
     db_session.commit()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+        "onyx.server.features.usage.api.fetch_role_model", lambda _db, _role: None
     )
 
     body = (

@@ -110,9 +110,12 @@ class ImageGenerationConfigView(BaseModel):
 
     @classmethod
     def from_model(
-        cls, config: "ImageGenerationConfigModel"
+        cls,
+        config: "ImageGenerationConfigModel",
+        default_model_configuration_id: int | None,
     ) -> "ImageGenerationConfigView":
-        """Convert database model to view model."""
+        """Convert database model to view model. `default_model_configuration_id`
+        is the model holding the IMAGE_GENERATION role."""
         return cls(
             image_provider_id=config.image_provider_id,
             model_configuration_id=config.model_configuration_id,
@@ -121,7 +124,7 @@ class ImageGenerationConfigView(BaseModel):
             llm_provider_name=config.model_configuration.llm_provider.name,
             llm_provider_type=config.model_configuration.llm_provider.provider,
             llm_provider_owned=config.llm_provider_owned,
-            is_default=config.is_default,
+            is_default=config.model_configuration_id == default_model_configuration_id,
         )
 
 
