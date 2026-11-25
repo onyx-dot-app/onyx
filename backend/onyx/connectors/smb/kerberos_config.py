@@ -34,7 +34,8 @@ _REALM_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9.-]{0,253}")
 _HOST_PATTERN = re.compile(r"[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
 
 _lock = threading.Lock()
-# Realm -> the KDC host its first credential named.
+# Realm -> the KDC host its first credential named, in lower case. Empty for
+# a credential that named none.
 _kdc_hosts: dict[str, str] = {}
 # Realm -> the addresses of that host that passed the network policy.
 _kdcs: dict[str, set[str]] = {}
@@ -101,11 +102,17 @@ def register_realm(
                 "A Kerberos host name holds a character that is not allowed."
             )
     with _lock:
+        # A realm's first credential decides, also when it names no KDC host
+        # and relies on the system's file. Without this, a later credential
+        # could give that realm a KDC of its choice.
         known_kdc: str | None = _kdc_hosts.get(realm)
-        if kdc_host and known_kdc and known_kdc.lower() != kdc_host.lower():
+        requested_kdc: str = (kdc_host or "").lower()
+        if known_kdc is not None and known_kdc != requested_kdc:
             raise KerberosConflictError(
-                f"Another credential uses the KDC '{known_kdc}' for the realm "
-                f"{realm}. Use the same KDC host, or restart Onyx to change it."
+                f"Another credential uses "
+                f"{f"the KDC '{known_kdc}'" if known_kdc else 'no KDC host'} for "
+                f"the realm {realm}. Use the same value, or restart Onyx to "
+                "change it."
             )
         for host in hosts:
             known_realm: str | None = _host_realms.get(host)
@@ -116,8 +123,8 @@ def register_realm(
                     "change it."
                 )
         changed: bool = _config_path is None
+        _kdc_hosts.setdefault(realm, requested_kdc)
         if kdc_host:
-            _kdc_hosts.setdefault(realm, kdc_host)
             if not set(kdc_addresses) <= _kdcs.setdefault(realm, set()):
                 _kdcs[realm].update(kdc_addresses)
                 changed = True

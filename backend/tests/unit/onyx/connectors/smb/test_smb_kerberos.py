@@ -90,6 +90,16 @@ def test_a_second_credential_cannot_move_a_realm_or_a_server(
     with pytest.raises(kerberos_config.KerberosConflictError, match="realm"):
         kerberos_config.register_realm("ROGUE.EXAMPLE.NET", None, [], ["fs01"])
 
+    # A realm that relies on the system's settings cannot get a KDC later.
+    kerberos_config.register_realm("SYSTEM.EXAMPLE.COM", None, [], [])
+    with pytest.raises(kerberos_config.KerberosConflictError, match="no KDC host"):
+        kerberos_config.register_realm(
+            "SYSTEM.EXAMPLE.COM", "rogue.example.net", ["203.0.113.9"], []
+        )
+    # And a realm with a KDC host cannot lose it.
+    with pytest.raises(kerberos_config.KerberosConflictError, match="KDC"):
+        kerberos_config.register_realm("CORP.EXAMPLE.COM", None, [], [])
+
     text = kerberos_settings.read_text()
     assert "203.0.113.9" not in text and "ROGUE" not in text
     # The same values again are no conflict.
