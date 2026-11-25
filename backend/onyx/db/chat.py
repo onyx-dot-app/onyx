@@ -176,10 +176,11 @@ def get_chat_session_by_id(
     )
 
     if eager_load_persona:
+        # Not `user_files`: a turn reads them only for a custom agent
+        # (`resolve_context_user_files`), in this session.
         stmt = stmt.options(
             joinedload(ChatSession.persona).options(
                 selectinload(Persona.tools),
-                selectinload(Persona.user_files),
                 selectinload(Persona.document_sets),
                 selectinload(Persona.attached_documents),
                 selectinload(Persona.hierarchy_nodes),

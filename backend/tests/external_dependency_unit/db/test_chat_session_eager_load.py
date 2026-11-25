@@ -7,7 +7,8 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 
 def test_eager_load_persona_loads_relationships(db_session: Session) -> None:
-    """Verify that eager_load_persona pre-loads persona, its collections, and project."""
+    """Verify that eager_load_persona pre-loads persona, the collections that
+    every turn reads, and project."""
     user = create_test_user(db_session, "eager-load")
     persona = Persona(name="eager-load-test", description="test")
     project = UserProject(name="eager-load-project", user_id=user.id)
@@ -40,7 +41,9 @@ def test_eager_load_persona_loads_relationships(db_session: Session) -> None:
         assert tmp is not None
         persona_unloaded = tmp.unloaded
         assert "tools" not in persona_unloaded
-        assert "user_files" not in persona_unloaded
+        # Only a custom agent's turn reads the files, so they load on use.
+        assert "user_files" in persona_unloaded
+        assert loaded.persona.user_files == []
         assert "document_sets" not in persona_unloaded
         assert "attached_documents" not in persona_unloaded
         assert "hierarchy_nodes" not in persona_unloaded
