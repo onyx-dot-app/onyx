@@ -106,7 +106,8 @@ func nodeRuntimeReport(runtimes []NodeRuntime, advisories map[string]nodeAdvisor
 			f.Ecosystem = "Node.js"
 			f.Version = v.String()
 			for _, consumer := range runtime.Consumers {
-				f.Manifest = consumer + " (" + runtime.Image + ")"
+				f.Manifest = consumer
+				f.Image = runtime.Image
 				result.Findings = append(result.Findings, f)
 			}
 		}
