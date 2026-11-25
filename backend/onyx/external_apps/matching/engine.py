@@ -12,6 +12,10 @@ from onyx.db.enums import (
     ExternalAppType,
     IntegrationKind,
 )
+from onyx.external_apps.matching.graphql_parsing import (
+    operation_invocations,
+    request_queries,
+)
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.models import WHOLE_DOMAIN_ACTION_TYPE
@@ -133,7 +137,9 @@ def _has_unknown_graphql_field(
 ) -> bool:
     """Whether a GraphQL request also invokes a root field that no matched
     action covers. A document or batch can mix a known read with an unknown
-    mutation, and the unknown field must not take the read's policy."""
+    mutation, and the unknown field must not take the read's policy. A
+    document that names no root field (no ``query``, a persisted query, a
+    syntax error) could run any operation."""
     known = {
         (rule.operation_type, rule.field)
         for endpoint in matched_endpoints
@@ -142,6 +148,11 @@ def _has_unknown_graphql_field(
     }
     if not known:
         return False
+    if any(
+        query is None or not operation_invocations(query)
+        for query in request_queries(context.request.body)
+    ):
+        return True
     return any(invocation not in known for invocation in context.graphql_invocations)
 
 

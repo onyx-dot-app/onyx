@@ -70,8 +70,19 @@ def _linear_actions(body: object) -> list[str]:
             {"query": "{ viewer { id } }"},
             {"query": 'mutation { issueDelete(id: "x") { success } }'},
         ],
+        [
+            {"query": "{ viewer { id } }"},
+            {"extensions": {"persistedQuery": {"sha256Hash": "abc"}}},
+        ],
+        [{"query": "{ viewer { id } }"}, {"query": "mutation {"}],
     ],
-    ids=["two_operations", "two_root_fields", "batch"],
+    ids=[
+        "two_operations",
+        "two_root_fields",
+        "batch",
+        "batch_with_persisted_query",
+        "batch_with_unreadable_document",
+    ],
 )
 def test_unknown_graphql_field_next_to_a_known_one_asks(body: object) -> None:
     actions = _linear_actions(body)
