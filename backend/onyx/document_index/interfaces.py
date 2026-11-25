@@ -80,7 +80,12 @@ class ContentMatchDateField(str, Enum):
 
 
 class ContentMatchRequest(BaseModel):
-    """Documents with a chunk whose content contains any of the phrases."""
+    """Documents with a chunk whose content contains any of the phrases.
+
+    Content is the indexed chunk text, which also holds the title, the
+    document summary and the metadata values, so a phrase found only in the
+    title matches.
+    """
 
     phrases: list[str]
     filters: IndexFilters
@@ -90,7 +95,9 @@ class ContentMatchRequest(BaseModel):
     document_ids: list[str] | None = None
     # A strict window on the updated date: undated documents never match.
     # `filters.updated_at_range` instead follows search's looser rules
-    # (FILTER_SEMANTICS.md).
+    # (FILTER_SEMANTICS.md). Index dates are whole seconds, so both bounds
+    # also admit documents in their boundary second; check exact bounds in
+    # Postgres.
     updated_after: datetime | None = None
     updated_before: datetime | None = None
 
@@ -580,7 +587,9 @@ class ContentMatchCapable(abc.ABC):
         """Returns one page of the documents that match, each once.
 
         Documents come in `date_field` order, then document ID in the same
-        direction. Documents without the date come last.
+        direction. Documents without the date come last. Each page reads the
+        live index, like a keyset listing in Postgres: a document whose date
+        changes between pages can be skipped or listed twice.
 
         Args:
             request: The phrases, filters and optional document IDs.
@@ -594,13 +603,18 @@ class ContentMatchCapable(abc.ABC):
 
     @abc.abstractmethod
     def count_documents_by_content(
-        self, request: ContentMatchRequest, max_count: int
+        self,
+        request: ContentMatchRequest,
+        max_count: int,
+        deadline: float | None = None,
     ) -> ContentMatchCount:
         """Counts the distinct documents that match, up to about `max_count`.
 
         Args:
             request: The phrases, filters and optional document IDs.
             max_count: Counting stops once it reaches this many documents.
+            deadline: A `time.monotonic()` value. Counting stops after the
+                first page that ends past it.
         """
         raise NotImplementedError
 

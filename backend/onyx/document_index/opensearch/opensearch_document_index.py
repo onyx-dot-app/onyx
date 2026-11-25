@@ -1,6 +1,7 @@
 import contextvars
 import json
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -1347,7 +1348,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
     def count_documents_by_content(
-        self, request: ContentMatchRequest, max_count: int
+        self,
+        request: ContentMatchRequest,
+        max_count: int,
+        deadline: float | None = None,
     ) -> ContentMatchCount:
         count = 0
         after_document_id: str | None = None
@@ -1364,7 +1368,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             count += len(page.document_ids)
             if len(page.document_ids) < _CONTENT_COUNT_PAGE_SIZE:
                 return ContentMatchCount(count=count, is_complete=True)
-            if count >= max_count:
+            if count >= max_count or (
+                deadline is not None and time.monotonic() >= deadline
+            ):
                 return ContentMatchCount(count=count, is_complete=False)
             after_document_id = page.after_document_id
 
@@ -1626,9 +1632,12 @@ class OpenSearchIndexPair(DocumentIndex):
         )
 
     def count_documents_by_content(
-        self, request: ContentMatchRequest, max_count: int
+        self,
+        request: ContentMatchRequest,
+        max_count: int,
+        deadline: float | None = None,
     ) -> ContentMatchCount:
-        return self._primary.count_documents_by_content(request, max_count)
+        return self._primary.count_documents_by_content(request, max_count, deadline)
 
     def semantic_retrieval(
         self,

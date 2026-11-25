@@ -1,3 +1,4 @@
+import math
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypeAlias, TypeVar
@@ -540,11 +541,13 @@ class DocumentQuery:
                     f"terms query allows ({MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY})."
                 )
             filters.append({"terms": {DOCUMENT_ID_FIELD_NAME: request.document_ids}})
+        # The index stores floor(t) seconds. These bounds keep every document
+        # whose exact date is in the window.
         updated_range: dict[str, int] = {}
         if request.updated_after is not None:
-            updated_range["gte"] = int(request.updated_after.timestamp())
+            updated_range["gte"] = math.floor(request.updated_after.timestamp())
         if request.updated_before is not None:
-            updated_range["lt"] = int(request.updated_before.timestamp())
+            updated_range["lt"] = math.ceil(request.updated_before.timestamp())
         if updated_range:
             filters.append({"range": {LAST_UPDATED_FIELD_NAME: updated_range}})
         return filters

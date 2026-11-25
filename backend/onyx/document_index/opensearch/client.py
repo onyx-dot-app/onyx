@@ -138,6 +138,14 @@ def _report_written_chunks(written: int, failed: int, started: float) -> None:
         )
 
 
+def _raise_on_shard_failures(result: dict[str, Any]) -> None:
+    """OpenSearch returns partial results when a shard fails. Exhaustive
+    listings and counts must not take a partial result as complete."""
+    shards: dict[str, Any] = result.get("_shards", {})
+    if shards.get("failed", 0):
+        raise RuntimeError(f"Search hit shard failures ({shards}).")
+
+
 class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     """Represents a hit from OpenSearch in response to a query.
 
@@ -2165,12 +2173,14 @@ class OpenSearchIndexClient(OpenSearchClient):
         DocumentQuery.get_content_match_query).
 
         Raises:
-            Exception: There was an error searching the index, or a hit is
-                missing its document ID.
+            Exception: There was an error searching the index, a shard failed,
+                or a hit is missing its document ID.
         """
-        hits = self._run_search(
+        result = self._run_search_request(
             body=body, search_pipeline_id=None, search_type=search_type
         )
+        _raise_on_shard_failures(result)
+        hits, *_ = self._get_hits_and_profile_from_search_result(result)
         key_hits: list[ContentMatchKey] = []
         for hit in hits:
             fields: dict[str, list[Any]] = hit.get("fields", {})
@@ -2201,12 +2211,13 @@ class OpenSearchIndexClient(OpenSearchClient):
         of IDs (see DocumentQuery.get_content_count_query).
 
         Raises:
-            Exception: There was an error searching the index, or the result
-                has no such aggregation.
+            Exception: There was an error searching the index, a shard failed,
+                or the result has no such aggregation.
         """
         result = self._run_search_request(
             body=body, search_pipeline_id=None, search_type=search_type
         )
+        _raise_on_shard_failures(result)
         try:
             aggregation = result["aggregations"][DOCUMENT_ID_AGGREGATION_NAME]
         except KeyError as e:

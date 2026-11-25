@@ -139,5 +139,6 @@ class DisabledDocumentIndex(DocumentIndex):
         self,
         request: ContentMatchRequest,  # noqa: ARG002
         max_count: int,  # noqa: ARG002
+        deadline: float | None = None,  # noqa: ARG002
     ) -> ContentMatchCount:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)

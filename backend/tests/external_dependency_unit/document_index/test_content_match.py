@@ -6,7 +6,7 @@ hidden filters as search.
 """
 
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -214,6 +214,19 @@ def test_updated_window_is_strict(content_index: OpenSearchDocumentIndex) -> Non
     assert _match_ids(content_index, request) == ["d1"]
 
 
+def test_updated_window_keeps_the_boundary_second(
+    content_index: OpenSearchDocumentIndex,
+) -> None:
+    # The index stores whole seconds, so both bounds admit their boundary
+    # second: d1 is before the fractional end, and d6 is in the start's second.
+    request = _request(
+        ["quick brown"],
+        updated_after=_day(1) + timedelta(milliseconds=500),
+        updated_before=_day(5) + timedelta(milliseconds=500),
+    )
+    assert _match_ids(content_index, request) == ["d1", "d6"]
+
+
 @pytest.mark.parametrize("descending", [True, False])
 def test_single_document_pages_match_one_page(
     content_index: OpenSearchDocumentIndex, descending: bool
@@ -253,3 +266,31 @@ def test_counts_across_pages_and_stops_at_the_limit(
         assert content_index.count_documents_by_content(
             request, max_count=3
         ) == ContentMatchCount(count=4, is_complete=False)
+
+
+def test_count_stops_at_the_deadline(
+    content_index: OpenSearchDocumentIndex,
+) -> None:
+    request = _request(["quick brown", "tie breaker", "zebra"])
+    with patch.object(opensearch_document_index, "_CONTENT_COUNT_PAGE_SIZE", 2):
+        assert content_index.count_documents_by_content(
+            request, max_count=100, deadline=0.0
+        ) == ContentMatchCount(count=2, is_complete=False)
+
+
+def test_shard_failures_are_errors(content_index: OpenSearchDocumentIndex) -> None:
+    partial = {
+        "took": 1,
+        "timed_out": False,
+        "_shards": {"total": 3, "successful": 2, "failed": 1},
+        "hits": {"hits": []},
+        "aggregations": {"document_ids": {"buckets": []}},
+    }
+    request = _request(["quick brown"])
+    with patch.object(content_index._client._client, "search", return_value=partial):
+        with pytest.raises(RuntimeError, match="shard failures"):
+            content_index.match_documents_by_content(
+                request, ContentMatchDateField.UPDATED, True, None, 10
+            )
+        with pytest.raises(RuntimeError, match="shard failures"):
+            content_index.count_documents_by_content(request, max_count=100)
