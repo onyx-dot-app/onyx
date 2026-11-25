@@ -45,8 +45,8 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
-from onyx.tools.tool_implementations.question.models import (
-    QUESTION_TOOL_NAME,
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_SHAPES,
     QUESTION_TOOL_NAMES,
 )
 from onyx.tools.tool_implementations.sandbox.models import LibraryListArguments
@@ -820,7 +820,7 @@ def test_the_names_of_different_operations_never_overlap() -> None:
         shape = CODE_MODE_SHAPES[family]
         assert shape.run_name in RUN_TOOL_NAMES
         assert shape.wait_name in WAIT_TOOL_NAMES
-        assert QUESTION_TOOL_NAME[family] in QUESTION_TOOL_NAMES
+        assert QUESTION_SHAPES[family].name in QUESTION_TOOL_NAMES
     assert len({shape.run_name for shape in CODE_MODE_SHAPES.values()}) == len(
         ToolFamily
     )

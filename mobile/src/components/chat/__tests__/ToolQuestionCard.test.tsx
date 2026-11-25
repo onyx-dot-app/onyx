@@ -58,6 +58,7 @@ const request: ToolQuestionRequest = {
         { label: "Small (Recommended)", description: "One file." },
         { label: "Large", description: "The whole app." },
       ],
+      multi_select: false,
     },
     {
       id: "tests",
@@ -67,6 +68,7 @@ const request: ToolQuestionRequest = {
         { label: "Yes", description: "Unit tests." },
         { label: "No", description: "No tests." },
       ],
+      multi_select: false,
     },
   ],
 };
@@ -258,8 +260,8 @@ describe("ToolQuestionCard", () => {
     fireEvent.press(submit);
 
     const answers = [
-      { question_id: "scope", option_label: "Large" },
-      { question_id: "tests", user_note: "Later" },
+      { question_id: "scope", option_labels: ["Large"] },
+      { question_id: "tests", option_labels: [], user_note: "Later" },
     ];
     await waitFor(() => expect(recoverMock).toHaveBeenCalled());
     expect(postMock).toHaveBeenCalledWith("q1", { answers });
@@ -269,6 +271,89 @@ describe("ToolQuestionCard", () => {
       answers,
     });
     expect(recoverMock.mock.calls[0]?.slice(0, 2)).toEqual(["s", continuation]);
+  });
+
+  it("takes several options and a note on a multi-select question", async () => {
+    postMock.mockResolvedValue({ question_request_id: "q1", continuation });
+    const value: ToolQuestion = {
+      turnIndex: 0,
+      request: {
+        ...request,
+        questions: [
+          {
+            id: "channels",
+            header: "Channels",
+            question: "Where should the update go?",
+            options: [
+              { label: "Email", description: "" },
+              { label: "Slack", description: "" },
+              { label: "Wiki", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      },
+      resolution: null,
+    };
+    const view = render(<ToolQuestionCard question={value} showsTypedAnswer />);
+
+    expect(view.getByText("Choose all that apply.")).toBeTruthy();
+    fireEvent.press(view.getByText("Wiki"));
+    fireEvent.press(view.getByText("Slack"));
+    fireEvent.press(view.getByText("Email"));
+    // A second press clears an option; "Other" adds a note to the others.
+    fireEvent.press(view.getByText("Slack"));
+    fireEvent.press(view.getByText("Other"));
+    fireEvent.changeText(view.getByLabelText("Your answer: Channels"), "Teams");
+    expect(
+      view.getByRole("checkbox", { name: /^Email/ }).props.accessibilityState
+        .checked,
+    ).toBe(true);
+    fireEvent.press(view.getByLabelText("Submit your answers"));
+
+    await waitFor(() => expect(recoverMock).toHaveBeenCalled());
+    expect(postMock).toHaveBeenCalledWith("q1", {
+      answers: [
+        {
+          question_id: "channels",
+          option_labels: ["Email", "Wiki"],
+          user_note: "Teams",
+        },
+      ],
+    });
+  });
+
+  it("sends a label that a saved question repeats once", async () => {
+    postMock.mockResolvedValue({ question_request_id: "q1", continuation });
+    const value: ToolQuestion = {
+      turnIndex: 0,
+      request: {
+        ...request,
+        questions: [
+          {
+            id: "cadence",
+            header: "Cadence",
+            question: "How often?",
+            options: [
+              { label: "Weekly", description: "" },
+              { label: "Weekly", description: "" },
+              { label: "Daily", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      },
+      resolution: null,
+    };
+    const view = render(<ToolQuestionCard question={value} showsTypedAnswer />);
+
+    fireEvent.press(view.getAllByText("Weekly")[0]!);
+    fireEvent.press(view.getByLabelText("Submit your answers"));
+
+    await waitFor(() => expect(recoverMock).toHaveBeenCalled());
+    expect(postMock).toHaveBeenCalledWith("q1", {
+      answers: [{ question_id: "cadence", option_labels: ["Weekly"] }],
+    });
   });
 
   it("reads no inherited value for a question ID such as constructor", () => {
@@ -398,8 +483,8 @@ describe("ToolQuestionCard", () => {
         outcome: "answered",
         answered_via: "card",
         answers: [
-          { question_id: "scope", option_label: "Large" },
-          { question_id: "tests", user_note: "Later" },
+          { question_id: "scope", option_labels: ["Large"] },
+          { question_id: "tests", option_labels: [], user_note: "Later" },
         ],
       }),
     );

@@ -15,6 +15,7 @@ interface AskedQuestion {
   header: string;
   question: string;
   options: string[];
+  multiSelect?: boolean;
 }
 
 function askReply(callId: string, questions: AskedQuestion[]): MockLlmReply {
@@ -32,6 +33,7 @@ function askReply(callId: string, questions: AskedQuestion[]): MockLlmReply {
               label,
               description: `Choose ${label}.`,
             })),
+            multi_select: question.multiSelect ?? false,
           })),
         },
       },
@@ -158,6 +160,81 @@ test("the user answers the agent's questions on the card and in the chat", async
     );
     await chatPage.expectHumanMessageBubble("Use a short table");
     await chatPage.expectAnswerParagraph("The release notes are drafted.");
+  } finally {
+    await api.deleteChatSession(sessionId);
+  }
+});
+
+/**
+ * A multi-select question shows checkboxes. The user chooses several
+ * options and an Other answer; the agent reads every chosen option, in the
+ * question's order, and a reload shows the same record.
+ */
+test("the user chooses several options of a multi-select question", async ({
+  chatPage,
+  api,
+  page,
+}) => {
+  const nonce = mockLlmNonce();
+  const call = `call-channels-${nonce}`;
+  await addMockLlmConversation({
+    name: nonce,
+    conditions: { prompt_contains: [nonce] },
+    replies: [
+      askReply(call, [
+        {
+          id: "channels",
+          header: "Channels",
+          question: "Where should the update go?",
+          options: ["Email", "Slack", "Wiki"],
+          multiSelect: true,
+        },
+      ]),
+      {
+        text: "The update is posted.",
+        conditions: { has_results_for: [call] },
+      },
+    ],
+  });
+  const questions = new ToolQuestionCard(page);
+  const sessionId = await api.createChatSession("Multi-select question");
+  try {
+    await chatPage.goto(sessionId);
+    await chatPage.inputBar.fill(`Post the update. ${nonce}`);
+    await chatPage.inputBar.send();
+    await questions.expectPending("Where should the update go?");
+    await questions.expectMultiSelectHint();
+
+    await questions.toggle("Wiki");
+    await questions.toggle("Slack");
+    await questions.toggle("Email");
+    await questions.toggle("Slack");
+    await questions.typeOther("Channels", "Teams too");
+    await questions.expectChecked(["Email", "Wiki"]);
+    await questions.submit();
+
+    await chatPage.expectAnswerParagraph("The update is posted.");
+    await questions.expectRecord(
+      "Answered",
+      "Channels: Email and Wiki (Teams too)"
+    );
+    const requests = await getMockLlmConversationRequests(nonce);
+    const result = requests
+      .flatMap((request) => request.messages)
+      .find(
+        (message) => message.role === "tool" && message.tool_call_id === call
+      );
+    expect(JSON.parse(result?.content ?? "null")).toEqual({
+      answers: {
+        channels: { answers: ["Email", "Wiki", "user_note: Teams too"] },
+      },
+    });
+
+    await chatPage.reload();
+    await questions.expectRecord(
+      "Answered",
+      "Channels: Email and Wiki (Teams too)"
+    );
   } finally {
     await api.deleteChatSession(sessionId);
   }

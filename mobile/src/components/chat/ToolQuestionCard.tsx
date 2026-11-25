@@ -1,6 +1,7 @@
 // The questions that the agent asks the user. A waiting request shows one question per page with
-// its options and an "Other" choice that answers with typed text; an answered one leaves a record of the answers, or of the
-// message that the user typed in the chat instead.
+// its options and an "Other" choice that answers with typed text; a single-select question takes one
+// of them, a multi-select question any of them. An answered one leaves a record of the answers, or
+// of the message that the user typed in the chat instead.
 import { memo, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Platform, Pressable, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -33,6 +34,7 @@ import SvgCheckSquare from "@/icons/check-square";
 import SvgCircle from "@/icons/circle";
 import SvgClock from "@/icons/clock";
 import SvgLoader from "@/icons/loader";
+import SvgSquare from "@/icons/square";
 import { cn } from "@/lib/utils";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
@@ -42,7 +44,10 @@ const OTHER = { label: "Other", description: "Type your own answer." };
 
 const SUBMIT_FAILED = "Could not submit your answers. Try again.";
 
-type Choice = { kind: "option"; label: string } | { kind: "other" };
+// The chosen options, and whether "Other" is chosen.
+type Choice = { labels: readonly string[]; other: boolean };
+
+const NO_CHOICE: Choice = { labels: [], other: false };
 
 // iOS has no live regions; Android reads `accessibilityLiveRegion` instead.
 function announce(message: string): void {
@@ -51,7 +56,7 @@ function announce(message: string): void {
 }
 
 function answerText(answer: ToolQuestionAnswer): string {
-  return [answer.option_label, answer.user_note]
+  return [answer.option_labels.join(", "), answer.user_note]
     .filter((part): part is string => !!part)
     .join(" · ");
 }
@@ -66,15 +71,18 @@ function recordText(resolution: QuestionResolution): string {
 // A note answers only when it has text.
 function questionAnswer(
   question: ToolQuestionItem,
-  choice: Choice | undefined,
+  choice: Choice,
   note: string | undefined,
 ): ToolQuestionAnswer | null {
-  if (choice?.kind === "option")
-    return { question_id: question.id, option_label: choice.label };
-  const text = note?.trim();
-  return choice?.kind === "other" && text
-    ? { question_id: question.id, user_note: text }
-    : null;
+  // A saved question can repeat a label; each label counts once.
+  const labels = [
+    ...new Set(question.options.map((option) => option.label)),
+  ].filter((label) => choice.labels.includes(label));
+  const text = choice.other ? note?.trim() : undefined;
+  if (labels.length === 0 && !text) return null;
+  return text
+    ? { question_id: question.id, option_labels: labels, user_note: text }
+    : { question_id: question.id, option_labels: labels };
 }
 
 function unansweredHint(pages: number[]): string {
@@ -88,11 +96,13 @@ function unansweredHint(pages: number[]): string {
 
 function OptionRow({
   option,
+  multiSelect,
   selected,
   disabled,
   onPress,
 }: {
   option: ToolQuestionOption;
+  multiSelect: boolean;
   selected: boolean;
   disabled: boolean;
   onPress: () => void;
@@ -101,7 +111,7 @@ function OptionRow({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      accessibilityRole="radio"
+      accessibilityRole={multiSelect ? "checkbox" : "radio"}
       accessibilityLabel={`${option.label}. ${option.description}`}
       accessibilityState={{ checked: selected, disabled }}
       className={cn(
@@ -112,7 +122,15 @@ function OptionRow({
       )}
     >
       <Icon
-        as={selected ? SvgCheckCircle : SvgCircle}
+        as={
+          multiSelect
+            ? selected
+              ? SvgCheckSquare
+              : SvgSquare
+            : selected
+              ? SvgCheckCircle
+              : SvgCircle
+        }
         size={16}
         className={selected ? "text-action-selection-05" : "text-text-03"}
       />
@@ -240,7 +258,7 @@ function ToolQuestionCardComponent({
   }
 
   const questionAnswers = request.questions.map((item) =>
-    questionAnswer(item, choices.get(item.id), notes.get(item.id)),
+    questionAnswer(item, choices.get(item.id) ?? NO_CHOICE, notes.get(item.id)),
   );
   const answers = questionAnswers.every(
     (answer): answer is ToolQuestionAnswer => answer !== null,
@@ -253,9 +271,21 @@ function ToolQuestionCardComponent({
   const pageCount = request.questions.length;
   const lastPage = page === pageCount - 1;
   const item = request.questions[page]!;
-  const choice = choices.get(item.id);
+  const choice = choices.get(item.id) ?? NO_CHOICE;
   const choose = (next: Choice) =>
     setChoices((current) => new Map(current).set(item.id, next));
+  // A multi-select question toggles each choice; a single-select one keeps only the last.
+  const chooseOption = (label: string) =>
+    choose(
+      item.multi_select
+        ? {
+            ...choice,
+            labels: choice.labels.includes(label)
+              ? choice.labels.filter((each) => each !== label)
+              : [...choice.labels, label],
+          }
+        : { labels: [label], other: false },
+    );
   const goToPage = (next: number) => {
     setPage(next);
     announce(`Question ${next + 1} of ${pageCount}`);
@@ -337,7 +367,7 @@ function ToolQuestionCardComponent({
         ) : null}
         <View
           key={item.id}
-          accessibilityRole="radiogroup"
+          accessibilityRole={item.multi_select ? undefined : "radiogroup"}
           accessibilityLabel={item.question}
           className="gap-6"
         >
@@ -347,24 +377,35 @@ function ToolQuestionCardComponent({
           <Text font="main-ui-body" color="text-05">
             {item.question}
           </Text>
+          {item.multi_select ? (
+            <Text font="secondary-body" color="text-03">
+              Choose all that apply.
+            </Text>
+          ) : null}
           {item.options.map((option, index) => (
             <OptionRow
               key={index}
               option={option}
-              selected={
-                choice?.kind === "option" && choice.label === option.label
-              }
+              multiSelect={item.multi_select}
+              selected={choice.labels.includes(option.label)}
               disabled={submitting}
-              onPress={() => choose({ kind: "option", label: option.label })}
+              onPress={() => chooseOption(option.label)}
             />
           ))}
           <OptionRow
             option={OTHER}
-            selected={choice?.kind === "other"}
+            multiSelect={item.multi_select}
+            selected={choice.other}
             disabled={submitting}
-            onPress={() => choose({ kind: "other" })}
+            onPress={() =>
+              choose(
+                item.multi_select
+                  ? { ...choice, other: !choice.other }
+                  : { labels: [], other: true },
+              )
+            }
           />
-          {choice?.kind === "other" ? (
+          {choice.other ? (
             <TextInput
               value={notes.get(item.id) ?? ""}
               onChangeText={(text) =>

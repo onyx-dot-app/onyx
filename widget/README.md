@@ -402,7 +402,7 @@ Response:
 }
 
 POST /chat/question-requests/{question_request_id}/answers
-{"answers": [{"question_id": "env", "option_label": "Staging"}]}
+{"answers": [{"question_id": "env", "option_labels": ["Staging"]}]}
 // or {"answers": [{"question_id": "env", "user_note": "Both"}]}
 // or {"message": "Use staging"}   // the text that the user typed in the chat
 

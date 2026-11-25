@@ -86,10 +86,10 @@ from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
-from onyx.tools.tool_implementations.question.models import (
+from onyx.tools.tool_implementations.question.models import QuestionToolDetails
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_SHAPES_BY_NAME,
     QUESTION_TOOL_NAMES,
-    QuestionArguments,
-    QuestionToolDetails,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_PUBLISH_PATHS,
@@ -1246,8 +1246,9 @@ class QuestionToolRenderer(ToolRenderer):
                 question_request_id=event.request.request_id,
                 tool_call_id=self.call.id,
                 questions=parse_tool_arguments(
-                    QuestionArguments, tool_arguments_for_display(self.call)
-                ).questions,
+                    QUESTION_SHAPES_BY_NAME[self.call.name].arguments,
+                    tool_arguments_for_display(self.call),
+                ).request(),
             )
         elif isinstance(event, InputEndedEvent):
             obj = question_resolved(event.request.request_id, event.answer)

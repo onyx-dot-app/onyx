@@ -1,4 +1,10 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import ToolQuestionCard from "@/lib/timeline/chat/message/messageComponents/ToolQuestionCard";
 import { PENDING_QUESTION, useToolRequestUi } from "@/lib/chat/toolApprovals";
 import {
@@ -35,6 +41,7 @@ const request: ToolQuestionRequest = {
         { label: "All files (Recommended)", description: "Every file." },
         { label: "Docs", description: "Only the docs." },
       ],
+      multi_select: false,
     },
   ],
 };
@@ -52,6 +59,7 @@ const threeQuestions: ToolQuestionRequest = {
         { label: "Bullets", description: "" },
         { label: "Prose", description: "" },
       ],
+      multi_select: false,
     },
     {
       id: "tone",
@@ -61,6 +69,7 @@ const threeQuestions: ToolQuestionRequest = {
         { label: "Formal", description: "" },
         { label: "Casual", description: "" },
       ],
+      multi_select: false,
     },
   ],
 };
@@ -145,13 +154,202 @@ test("the Other note is one of the choices and the answer follows the continuati
     answers: [
       {
         question_id: "scope",
-        option_label: null,
+        option_labels: [],
         user_note: "Docs and the README",
       },
     ],
   });
   expect(screen.getByRole("status")).toHaveTextContent("Answered");
   expect(screen.getByText("Scope: Docs and the README")).toBeInTheDocument();
+});
+
+test("a multi-select question takes several options and a note", async () => {
+  const fetchSpy = respond(200, {
+    question_request_id: "question-3",
+    continuation,
+  });
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-3",
+        questions: [
+          {
+            id: "channels",
+            header: "Channels",
+            question: "Where should the update go?",
+            options: [
+              { label: "Email", description: "" },
+              { label: "Slack", description: "" },
+              { label: "Wiki", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  expect(screen.getByText("Choose all that apply.")).toBeInTheDocument();
+  expect(screen.queryByRole("radio")).toBeNull();
+  const wiki = screen.getByRole("checkbox", { name: "Wiki" });
+  const slack = screen.getByRole("checkbox", { name: "Slack" });
+  const email = screen.getByRole("checkbox", { name: "Email" });
+  await user.click(wiki);
+  await user.click(slack);
+  await user.click(email);
+  // A second click clears an option; the note keeps the others.
+  await user.click(slack);
+  await user.type(
+    screen.getByRole("textbox", { name: "Other answer to Channels" }),
+    "Teams too"
+  );
+  expect(
+    [email, slack, wiki].map((option) => option.getAttribute("aria-checked"))
+  ).toEqual(["true", "false", "true"]);
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+
+  await waitFor(() => expect(followChatStream).toHaveBeenCalled());
+  const [, init] = fetchSpy.mock.calls[0]!;
+  // The chosen options keep the question's order.
+  expect(JSON.parse(String(init?.body))).toEqual({
+    answers: [
+      {
+        question_id: "channels",
+        option_labels: ["Email", "Wiki"],
+        user_note: "Teams too",
+      },
+    ],
+  });
+  expect(
+    screen.getByText("Channels: Email and Wiki (Teams too)")
+  ).toBeInTheDocument();
+});
+
+test("each option of a multi-select question shows whether it is chosen with a mark", async () => {
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-5",
+        questions: [
+          {
+            id: "channels",
+            header: "Channels",
+            question: "Where should the update go?",
+            options: [
+              { label: "Email", description: "" },
+              { label: "Wiki", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  const email = screen.getByRole("checkbox", { name: "Email" });
+  const mark = () => email.querySelector("svg")?.innerHTML;
+  const unchecked = mark();
+  expect(unchecked).toBeDefined();
+  await user.click(email);
+  // Not color alone: the mark changes when the option is chosen.
+  expect(mark()).toBeDefined();
+  expect(mark()).not.toEqual(unchecked);
+});
+
+test("a saved question that repeats a label sends that label once", async () => {
+  const consoleError = jest.spyOn(console, "error");
+  const fetchSpy = respond(200, {
+    question_request_id: "question-4",
+    continuation,
+  });
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-4",
+        questions: [
+          {
+            id: "cadence",
+            header: "Cadence",
+            question: "How often?",
+            options: [
+              { label: "Weekly", description: "" },
+              { label: "Weekly", description: "" },
+              { label: "Daily", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  await user.click(screen.getAllByRole("checkbox", { name: "Weekly" })[0]!);
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+
+  await waitFor(() => expect(followChatStream).toHaveBeenCalled());
+  const [, init] = fetchSpy.mock.calls[0]!;
+  expect(JSON.parse(String(init?.body))).toEqual({
+    answers: [
+      { question_id: "cadence", option_labels: ["Weekly"], user_note: null },
+    ],
+  });
+  // Each option row has its own React key.
+  expect(consoleError.mock.calls.flat().join("\n")).not.toMatch(/same key/);
+});
+
+test("each checkbox of a multi-select question is a tab stop that Space or Enter toggles", async () => {
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-4",
+        questions: [
+          {
+            id: "channels",
+            header: "Channels",
+            question: "Where should the update go?",
+            options: [
+              { label: "Email", description: "" },
+              { label: "Slack", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  expect(
+    screen.getByRole("group", { name: "Where should the update go?" })
+  ).toHaveAccessibleDescription("Choose all that apply.");
+  const email = screen.getByRole("checkbox", { name: "Email" });
+  const slack = screen.getByRole("checkbox", { name: "Slack" });
+  email.focus();
+  await user.keyboard(" ");
+  await user.tab();
+  expect(slack).toHaveFocus();
+  await user.keyboard("{Enter}");
+  expect(
+    [email, slack].map((option) => option.getAttribute("aria-checked"))
+  ).toEqual(["true", "true"]);
+  // Arrow keys move no choice in a group of checkboxes.
+  await user.keyboard("{ArrowUp}");
+  expect(slack).toHaveFocus();
+  await user.keyboard(" ");
+  expect(slack).toHaveAttribute("aria-checked", "false");
+  expect(email).toHaveAttribute("aria-checked", "true");
+  // A held key toggles once: its repeats change nothing.
+  for (const key of ["Enter", " "]) {
+    fireEvent.keyDown(slack, { key, repeat: true });
+    expect(slack).toHaveAttribute("aria-checked", "false");
+  }
 });
 
 test("a question that no longer waits shows so and reads the chat status", async () => {
@@ -291,9 +489,9 @@ test("each question has its own page, and the choices stay across pages", async 
   const [, init] = fetchSpy.mock.calls[0]!;
   expect(JSON.parse(String(init?.body))).toEqual({
     answers: [
-      { question_id: "scope", option_label: "Docs", user_note: null },
-      { question_id: "format", option_label: null, user_note: "A table" },
-      { question_id: "tone", option_label: "Formal", user_note: null },
+      { question_id: "scope", option_labels: ["Docs"], user_note: null },
+      { question_id: "format", option_labels: [], user_note: "A table" },
+      { question_id: "tone", option_labels: ["Formal"], user_note: null },
     ],
   });
   // The record lists every answer.

@@ -12823,6 +12823,9 @@
           "placeholder": "その他: 独自の回答を入力",
           "ariaLabel": "{header} へのその他の回答"
         },
+        "multiSelect": {
+          "hint": "当てはまるものをすべて選択してください。"
+        },
         "submit": "送信",
         "page": {
           "progress": "質問 {current} / {total}",

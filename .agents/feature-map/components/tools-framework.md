@@ -272,17 +272,33 @@ Tool replies use concise text, and models see agent paths, never IDs. `send_mess
 path any visible agent holds, finished agents included (`agents/agent_coordination.py:register_child`).
 
 **Question tool.** `tools/tool_implementations/question/question_tool.py:QuestionTool`
-asks the user 1-3 multiple-choice questions and waits for the answers. Only the
+asks the user 1-4 multiple-choice questions and waits for the answers. Only the
 root `ChatAgent` gets it (`question_tool`, a factory that the agent calls with
-the name), after code mode wraps the configured tools, so it stays direct and
-subagents never get it. Its name is `ask_user_question` for Claude models and
-`request_user_input` for others (`tools/tool_implementations/question/models.py:QUESTION_TOOL_NAME` of the
-agent's `tool_family`); a restored root gets it when its saved step declared one,
-named for the active model's family (`chat/restoration.py:restore_chat_agent`). Which
-turns offer it, and how its call parks and resumes, is
-[[mcp-and-custom-tools#chat-approval-needs-waiting-client]]. Its arguments are not
-strict: the nested question models are `$defs` references. The model reads a card
-answer as `{"answers": {"<id>": {"answers": ["<label>", "user_note: <text>"]}}}`,
+the shape), after code mode wraps the configured tools, so it stays direct and
+subagents never get it. Each tool family has one shape
+(`tools/tool_implementations/question/shapes.py:QUESTION_SHAPES`, keyed by the
+agent's `tool_family`): its name, its arguments and its description, whose limits
+come from the arguments' field bounds. The name is `ask_user_question` for Claude
+models and `request_user_input` for others; a restored root gets the tool when its
+saved step declared one, in the active model's shape
+(`chat/restoration.py:restore_chat_agent`). Which turns offer it, and how its call
+parks and resumes, is [[mcp-and-custom-tools#chat-approval-needs-waiting-client]].
+The renderer parses a live call's arguments in the shape of its name
+(`QUESTION_SHAPES_BY_NAME`); a reload rebuilds the card from the request row.
+The shapes differ:
+`request_user_input` takes 1-3 questions with 2-3 options and an `id` each;
+`ask_user_question` takes the shape Claude models are trained on, 1-4 questions
+with 2-4 options, `multiSelect` and no `id`. Both are `ToolArguments` and ignore the
+extra keys that the model adds. Each shape's `request()` gives the same `ToolQuestion` list; a
+Claude question's ID is its text, which must be unique, so the model reads
+Claude's answers by question text. The card, the saved row, the answers and
+restoration use only that list. Its arguments are not
+strict: the nested question models are `$defs` references. A question sets
+`multi_select` when more than one option can apply; the answers route
+(`chat/tool_questions.py:card_answers`) takes several options only for such a
+question and keeps the chosen options in the question's order. The model reads a card
+answer as `{"answers": {"<id>": {"answers": ["<label>", ..., "user_note: <text>"]}}}`,
+with every chosen label in the question's order,
 or the text that the user typed, after the query hook and with nothing added
 (`chat/tool_questions.py:question_answer`).
 

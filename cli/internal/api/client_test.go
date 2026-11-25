@@ -156,7 +156,7 @@ func TestAnswerQuestionsSendsTheAnswers(t *testing.T) {
 	defer srv.Close()
 
 	client := testutil.NewClient(srv.URL)
-	result, err := client.AnswerQuestions(t.Context(), "q1", models.QuestionAnswers{Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Team"}}})
+	result, err := client.AnswerQuestions(t.Context(), "q1", models.QuestionAnswers{Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabels: []string{"Team"}}}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestAnswerQuestionsSendsTheAnswers(t *testing.T) {
 		t.Fatalf("path = %s", gotPath)
 	}
 	// Exactly one of answers and message is sent.
-	if want := map[string]any{"answers": []any{map[string]any{"question_id": "scope", "option_label": "Team"}}}; !reflect.DeepEqual(gotBody, want) {
+	if want := map[string]any{"answers": []any{map[string]any{"question_id": "scope", "option_labels": []any{"Team"}}}}; !reflect.DeepEqual(gotBody, want) {
 		t.Fatalf("body = %v, want %v", gotBody, want)
 	}
 	if want := (models.QuestionAnswersResult{QuestionRequestID: "q1", Continuation: &models.ChatStream{StreamID: 9, ResponseIDs: []int{4}}}); !reflect.DeepEqual(result, want) {

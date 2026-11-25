@@ -12823,6 +12823,9 @@
           "placeholder": "Other: type your own answer",
           "ariaLabel": "Other answer to {header}"
         },
+        "multiSelect": {
+          "hint": "Choose all that apply."
+        },
         "submit": "Submit",
         "page": {
           "progress": "Question {current} of {total}",

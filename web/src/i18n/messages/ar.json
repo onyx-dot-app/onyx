@@ -12823,6 +12823,9 @@
           "placeholder": "أخرى: اكتب إجابتك الخاصة",
           "ariaLabel": "إجابة أخرى عن {header}"
         },
+        "multiSelect": {
+          "hint": "اختر كل ما ينطبق."
+        },
         "submit": "إرسال",
         "page": {
           "progress": "السؤال {current} من {total}",
