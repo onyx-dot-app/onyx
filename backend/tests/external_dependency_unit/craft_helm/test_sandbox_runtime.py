@@ -278,3 +278,54 @@ def test_kvm_toleration_check_only_with_firecracker() -> None:
     result = render_chart([*tolerate_all, *_PINNED, *_REGISTRATION])
     assert result.returncode != 0
     assert "sandboxPod.tolerations" in result.stderr
+
+
+@pytest.mark.parametrize("version", ["v5", "5.1", "v5.1.3", "5.1.3-dev"])
+def test_short_and_unprefixed_old_tags_act_as_pod(version: str) -> None:
+    docs = _render(["--set-string", f"global.version={version}", *_REGISTRATION])
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "pod"
+
+
+def test_unprefixed_version_uses_the_git_tag_of_the_images() -> None:
+    """Releases publish the Firecracker images only under the git tag."""
+    docs = _render(["--set-string", "global.version=6.0.0", *_REGISTRATION])
+    agent = _agent(docs)
+    assert agent is not None
+    assert _pod_spec(agent)["containers"][0]["image"].endswith(":v6.0.0")
+    assert _configmap(docs)["SANDBOX_FC_TEMPLATE"] == "v6.0.0"
+
+
+@pytest.mark.parametrize("version", ["6", "v6.1"])
+def test_short_v6_tags_float(version: str) -> None:
+    docs = _render(["--set-string", f"global.version={version}", *_REGISTRATION])
+    assert _agent(docs) is None
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "auto"
+
+
+def test_registration_existing_secret_needs_the_agent_copy() -> None:
+    """auth.sandboxNodeRegistration.existingSecret lives in the release
+    namespace; without the agent copy, "auto" stays off instead of failing."""
+    reg = [
+        "--set",
+        "auth.sandboxNodeRegistration.enabled=true",
+        "--set-string",
+        "auth.sandboxNodeRegistration.existingSecret=reg",
+    ]
+    assert _agent(_render([*_PINNED, *reg])) is None
+    docs = _render(
+        [
+            *_PINNED,
+            *reg,
+            "--set-string",
+            "craft.hostAgent.registrationExistingSecret=agent-reg",
+        ]
+    )
+    assert _agent(docs) is not None
+
+
+def test_bundled_store_host_is_the_fqdn_with_firecracker() -> None:
+    """The agents upload session saves from their own namespace."""
+    store = ["--set", "minio.enabled=true"]
+    assert "svc" not in _configmap(_render(store))["S3_ENDPOINT_URL"]
+    data = _configmap(_render([*store, *_PINNED, *_REGISTRATION]))
+    assert ".onyx.svc." in data["S3_ENDPOINT_URL"]
