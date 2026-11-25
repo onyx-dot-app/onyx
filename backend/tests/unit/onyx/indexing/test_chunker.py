@@ -1,7 +1,11 @@
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
+from tokenizers import Tokenizer
+from tokenizers.models import WordLevel
+from tokenizers.normalizers import Lowercase
+from tokenizers.pre_tokenizers import Whitespace
 
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY, USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import DocumentSource
@@ -10,6 +14,8 @@ from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
+from onyx.natural_language_processing.utils import HuggingFaceTokenizer
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 from tests.unit.onyx.indexing.conftest import MockHeartbeat
 
 
@@ -107,3 +113,46 @@ def test_chunker_heartbeat(
 
     assert mock_heartbeat.call_count == 1
     assert len(chunks) > 0
+
+
+def test_chunker_counts_whole_text_when_tokenizer_config_truncates() -> None:
+    """Mirrors thenlper/gte-small, whose tokenizer.json truncates and pads every
+    encode to 128 tokens."""
+    words = "this sentence adds about ten tokens to the document the end".split()
+    hub_tokenizer = Tokenizer(
+        WordLevel(
+            {"[UNK]": 0, "[PAD]": 1} | {w: i + 2 for i, w in enumerate(words)},
+            unk_token="[UNK]",
+        )
+    )
+    hub_tokenizer.normalizer = Lowercase()
+    hub_tokenizer.pre_tokenizer = Whitespace()
+    hub_tokenizer.enable_truncation(max_length=128)
+    hub_tokenizer.enable_padding(length=128, pad_id=1, pad_token="[PAD]")
+    with patch.object(Tokenizer, "from_pretrained", return_value=hub_tokenizer):
+        tokenizer = HuggingFaceTokenizer("thenlper/gte-small")
+
+    long_text = "This sentence adds about ten tokens to the document. " * 400
+    last_sentence = "The end."
+
+    assert len(tokenizer.encode("sentence")) == 1
+    assert len(tokenizer.encode(long_text)) == 4000
+
+    document = Document(
+        id="test_doc",
+        source=DocumentSource.WEB,
+        semantic_identifier="Test Document",
+        metadata={},
+        doc_updated_at=None,
+        sections=[TextSection(text=long_text + last_sentence, link="link1")],
+    )
+    chunks = Chunker(
+        tokenizer=tokenizer, enable_multipass=False, enable_contextual_rag=False
+    ).chunk(process_image_sections([document]))
+
+    assert len(chunks) > 3
+    assert all(
+        len(tokenizer.encode(chunk.content)) <= DOC_EMBEDDING_CONTEXT_SIZE
+        for chunk in chunks
+    )
+    assert last_sentence in chunks[-1].content
