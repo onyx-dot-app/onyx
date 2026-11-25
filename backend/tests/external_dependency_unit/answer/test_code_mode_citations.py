@@ -30,6 +30,8 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     SearchToolDocumentsDelta,
 )
+from onyx.tools.constants import EXEC_TOOL_NAME
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.search.constants import MAX_QUERIES_PER_CALL
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
@@ -111,6 +113,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
     first = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "search",
                 "r = await tools.internal_search(queries=['Q2 revenue'])\n"
                 "for doc in r['results']:\n"
@@ -118,6 +121,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
                 "store('k', 1)\n",
             ),
             code_step(
+                OPENAI_CODE_MODE,
                 "python",
                 "out = await tools.run_python(code=\"import os\\nprint(os.listdir('.'))\")\n"
                 "print(out)\n"
@@ -162,14 +166,14 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         for message in first.requests[0]["prompt"]
         if isinstance(message, SystemMessage)
     )
-    assert CODE_MODE_GUIDANCE in system
+    assert CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME) in system
     assert INTERNAL_SEARCH_GUIDANCE.format(name="tools.internal_search") in system
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in system
     # The real search tool's stub asks for one call per information need.
     [description] = [
         tool["function"]["description"]
         for tool in first.requests[0]["tools"]
-        if tool["function"]["name"] == "execute_code"
+        if tool["function"]["name"] == "exec"
     ]
     assert CODE_MODE_SEARCH_USAGE in description
     # The tool's own query limit reaches its stub.
@@ -221,6 +225,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
     second = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "web",
                 "r = await tools.web_search(queries=['beta topic'])\n"
                 "print(r['results'][0]['document'])\n",

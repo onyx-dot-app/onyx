@@ -68,7 +68,7 @@ from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -105,6 +105,10 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolCallException, ToolContext, ToolOptions
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CLAUDE_CODE_MODE,
+    OPENAI_CODE_MODE,
+)
 from onyx.tools.tool_implementations.sandbox import (
     artifact_operations,
     file_copies,
@@ -1459,6 +1463,7 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 "matches = await tool_search('copy a published file')\n"
                 "print([match['name'] for match in matches])\n"
@@ -1475,7 +1480,7 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "execute_code"
+        if tool["function"]["name"] == "exec"
     ]
     assert (
         f"\n  - library: {LibraryListTool.CODE_MODE_NAMESPACE_DESCRIPTION}\n"
@@ -1497,6 +1502,7 @@ def test_a_program_finds_the_publish_tool_with_tool_search(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 "matches = await tool_search('publish a file for the user')\n"
                 "print([match['name'] for match in matches][:3])\n",
@@ -1509,7 +1515,7 @@ def test_a_program_finds_the_publish_tool_with_tool_search(
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "execute_code"
+        if tool["function"]["name"] == OPENAI_CODE_MODE.run_name
     ]
     assert "library__create_library_file" not in description
     # It is among the three best matches.
@@ -1549,16 +1555,6 @@ def test_only_the_chats_owner_gets_the_sandbox_tools(
 
 # Both tool families, the library tools and the artifact tool of Claude
 # models, run the same operations, so each case runs through both.
-
-
-class _ClaudeLLM(ChatLLM):
-    """A scripted Claude model: its turns get the artifact tool."""
-
-    @property
-    def config(self) -> LLMConfig:
-        return super().config.model_copy(
-            update={"model_provider": "anthropic", "model_name": "claude-sonnet-4-5"}
-        )
 
 
 class _Family:
@@ -1854,7 +1850,7 @@ class _Library(_Family):
 
 class _Artifact(_Family):
     def llm(self, steps: list[Delta]) -> ChatLLM:
-        return _ClaudeLLM(steps)
+        return ChatLLM(steps, family=ToolFamily.CLAUDE)
 
     def publish(
         self, call_id: str, paths: list[str], title: str | None = None
@@ -2266,7 +2262,7 @@ def test_an_artifact_read_takes_urls_and_file_ids_in_path_and_paths(
     notes = _publish(source, "notes.md", b"notes")
     artifact_id = _artifact_id(first)
     chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
-    llm = _ClaudeLLM(
+    llm = ChatLLM(
         [
             tool_step(
                 ArtifactTool.NAME,
@@ -2279,7 +2275,8 @@ def test_an_artifact_read_takes_urls_and_file_ids_in_path_and_paths(
                 },
             ),
             Delta(content="Done."),
-        ]
+        ],
+        family=ToolFamily.CLAUDE,
     )
     chat.send(llm)
 
@@ -2304,24 +2301,26 @@ def test_a_claude_program_finds_the_artifact_tool_and_publishes_with_it(
 ) -> None:
     chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
     sandbox.write_file(chat.ref(db_session), "out/a.md", b"# A\n")
-    llm = _ClaudeLLM(
+    llm = ChatLLM(
         [
             code_step(
+                CLAUDE_CODE_MODE,
                 "code",
-                "matches = await tool_search('publish a file')\n"
+                "matches = await search_tools('publish a file')\n"
                 "print([match['name'] for match in matches])\n"
                 "r = await tools.artifact__artifact(file_path='out/a.md')\n"
                 "print(r['files'][0]['url'])\n",
             ),
             Delta(content="Done."),
-        ]
+        ],
+        family=ToolFamily.CLAUDE,
     )
     parts = chat.send(llm, code_mode=True)
 
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "execute_code"
+        if tool["function"]["name"] == CLAUDE_CODE_MODE.run_name
     ]
     assert "\n  - artifact: Give files from the VM to the user" in description
     assert "artifact__artifact" not in description

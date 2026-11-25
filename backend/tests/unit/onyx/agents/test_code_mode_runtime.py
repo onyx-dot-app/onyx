@@ -16,6 +16,7 @@ from onyx.agents.models import (
     ToolCallContext,
 )
 from onyx.agents.runtime import Agent, RunFailed
+from onyx.agents.tool_execution import STOPPED_CALL_MESSAGE
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
@@ -39,6 +40,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tools.constants import EXEC_TOOL_NAME
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode.cells import (
     CodeCells,
@@ -52,16 +54,18 @@ from onyx.tools.tool_implementations.code_mode.models import (
     SandboxLimits,
     StoreCommit,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CLAUDE_CODE_MODE,
+    OPENAI_CODE_MODE,
+)
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool
 
-WRITE = ToolCall(
-    id="write", name=CodeModeTool.NAME, arguments={"code": "store('n', 1)"}
-)
+WRITE = ToolCall(id="write", name=EXEC_TOOL_NAME, arguments={"code": "store('n', 1)"})
 READ = ToolCall(
     id="read",
-    name=CodeModeTool.NAME,
+    name=EXEC_TOOL_NAME,
     arguments={"code": "await tools.echo(value='x')\nprint(load('n') + 1)"},
 )
 
@@ -96,7 +100,9 @@ def _agent(
         echo_calls.append(invocation.call_id)
         return ToolResult(content="echoed")
 
-    tool = CodeModeTool([FakeTool("echo", echo)], cells=CodeCells(), limits=LIMITS)
+    tool = CodeModeTool(
+        [FakeTool("echo", echo)], cells=CodeCells(OPENAI_CODE_MODE), limits=LIMITS
+    )
     return Agent(
         FakeModelClient(_answer_with_last_result),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
@@ -146,10 +152,18 @@ def test_a_program_reads_an_earlier_program_of_the_same_step(restored: bool) -> 
     [
         (
             called,
-            f"`{called}` is available only inside `execute_code` programs. Call "
+            f"`{called}` is available only inside `exec` programs. Call "
             "it there: `await tools.echo(value=...)`.",
         )
         for called in ("echo", "tools.echo", "tools_echo")
+    ]
+    # Another shape's code mode tools.
+    + [
+        (called, f"`{called}` is not a tool in this chat. {use}")
+        for called, use in (
+            ("repl", "Run a program with `exec`."),
+            ("poll", "Wait on a running cell with `wait`."),
+        )
     ],
 )
 def test_a_direct_call_of_a_program_function_says_where_it_runs(
@@ -170,7 +184,9 @@ def test_a_direct_call_of_a_program_function_says_where_it_runs(
         echo_calls.append(invocation.call_id)
         return ToolResult(content="echoed")
 
-    tool = CodeModeTool([FakeTool("echo", echo)], cells=CodeCells(), limits=LIMITS)
+    tool = CodeModeTool(
+        [FakeTool("echo", echo)], cells=CodeCells(OPENAI_CODE_MODE), limits=LIMITS
+    )
     agent = Agent(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
@@ -215,18 +231,46 @@ def test_a_program_saved_while_running_is_not_run_again_on_restore() -> None:
     )
 
 
+@pytest.mark.parametrize("waiting", ["lost owner", "child runs"])
+def test_a_started_call_whose_tool_is_gone_may_have_had_effects(waiting: str) -> None:
+    """A run continues without the tool of a call that already started, here
+    the other shape's run tool: the call ends as one that may have had
+    effects, and nothing runs again."""
+    echo_calls: list[str] = []
+    history, saved = _suspended_before_read(echo_calls)
+    assert saved.progress is not None
+    saved.progress.pending_tool_calls = (
+        {} if waiting == "lost owner" else {READ.id: ChildRunWait(run_ids=["child"])}
+    )
+    tool = CodeModeTool(
+        [FakeTool("echo", lambda *_: ToolResult(content="echoed"))],
+        cells=CodeCells(CLAUDE_CODE_MODE),
+        limits=LIMITS,
+    )
+    agent = Agent(
+        FakeModelClient(_answer_with_last_result),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id="agent",
+        state=history,
+        tools=[tool.bind(ToolContext)],
+    )
+    run = agent.resume(saved)
+    assert run.result(timeout=10).output.text == STOPPED_CALL_MESSAGE
+    assert run.wait_for_idle(5)
+    assert echo_calls == []
+    assert run.snapshot().steps[0].tools[READ.id].status == ExecutionStatus.ERROR
+
+
 EARLIER_TURN: list[Message] = [
     UserMessage(id="question", content="Remember a value"),
     AssistantMessage(
         id="store-call",
-        content=[
-            ToolCall(id="store", name=CodeModeTool.NAME, arguments={"code": "..."})
-        ],
+        content=[ToolCall(id="store", name=EXEC_TOOL_NAME, arguments={"code": "..."})],
     ),
     ToolResultMessage(
         id="store-result",
         tool_call_id="store",
-        tool_name=CodeModeTool.NAME,
+        tool_name=EXEC_TOOL_NAME,
         content="Stored: k.",
         details=CodeModeExecutionResult(
             cell_id=1,
@@ -251,7 +295,7 @@ def _load_in_new_turn(
                 content=[
                     ToolCall(
                         id="load",
-                        name=CodeModeTool.NAME,
+                        name=EXEC_TOOL_NAME,
                         arguments={"code": "load('k')"},
                     )
                 ]
@@ -261,9 +305,11 @@ def _load_in_new_turn(
     agent = Agent(
         FakeModelClient(reply),
         tools=[
-            CodeModeTool([EchoTool()], cells=CodeCells(), limits=SandboxLimits()).bind(
-                ToolContext
-            )
+            CodeModeTool(
+                [EchoTool()],
+                cells=CodeCells(OPENAI_CODE_MODE),
+                limits=SandboxLimits(),
+            ).bind(ToolContext)
         ],
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=history, checkpoint=checkpoint),
@@ -321,16 +367,18 @@ def test_a_running_cell_ends_by_its_own_time_limit_before_the_run_suspends() -> 
             content=[
                 ToolCall(
                     id="loop",
-                    name=CodeModeTool.NAME,
+                    name=EXEC_TOOL_NAME,
                     arguments={"code": "yield_control()\nawait asyncio.sleep(60)\n"},
                 ),
                 ToolCall(id="delegate", name="delegate", arguments={}),
             ]
         )
 
-    cells = CodeCells()
+    cells = CodeCells(OPENAI_CODE_MODE)
     tool = CodeModeTool(
-        [], cells=cells, limits=LIMITS.model_copy(update={"lifetime_seconds": 1})
+        [],
+        cells=cells,
+        limits=LIMITS.model_copy(update={"lifetime_seconds": 1}),
     )
     parent = Agent(
         FakeModelClient(generate),
@@ -375,12 +423,12 @@ def test_before_tool_call_denies_direct_and_program_calls_alike() -> None:
     secret_tool = FakeTool("secret", secret)
     code_mode = CodeModeTool(
         [secret_tool, FakeTool("echo", lambda _i, _c: ToolResult(content="echoed"))],
-        cells=CodeCells(),
+        cells=CodeCells(OPENAI_CODE_MODE),
         limits=LIMITS,
     )
     program = ToolCall(
         id="program",
-        name=CodeModeTool.NAME,
+        name=EXEC_TOOL_NAME,
         arguments={
             "code": "print(await tools.echo(value='x'))\n"
             "try:\n"
@@ -430,13 +478,13 @@ def test_a_raising_before_tool_call_fails_direct_and_program_calls_alike(
         return ToolResult(content="secret value")
 
     secret_tool = FakeTool("secret", secret)
-    cells = CodeCells()
+    cells = CodeCells(OPENAI_CODE_MODE)
     code_mode = CodeModeTool([secret_tool], cells=cells, limits=LIMITS)
     # The program cannot catch the policy failure and go on.
     call = (
         ToolCall(
             id="call",
-            name=CodeModeTool.NAME,
+            name=EXEC_TOOL_NAME,
             arguments={
                 "code": "try:\n"
                 "    await tools.secret(value='y')\n"
@@ -483,14 +531,14 @@ def test_a_raising_before_tool_call_fails_the_run_when_no_one_watches_the_cell()
     None
 ):
     hook_raised = threading.Event()
-    cells = CodeCells()
+    cells = CodeCells(OPENAI_CODE_MODE)
     secret_tool = FakeTool("secret", lambda _i, _c: ToolResult(content="secret"))
     code_mode = CodeModeTool([secret_tool], cells=cells, limits=LIMITS)
-    # The first observation ends at the yield; no wait_code call watches the
+    # The first observation ends at the yield; no wait call watches the
     # cell after that.
     call = ToolCall(
         id="call",
-        name=CodeModeTool.NAME,
+        name=EXEC_TOOL_NAME,
         arguments={"code": "yield_control()\nawait tools.secret(value='y')\n"},
     )
 

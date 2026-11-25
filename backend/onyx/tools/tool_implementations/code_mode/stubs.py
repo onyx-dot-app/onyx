@@ -35,6 +35,11 @@ from onyx.tools.tool_implementations.code_mode.sandbox import (
     YIELD_CONTROL_STUB,
     HostFunction,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    PROGRAM_SEARCH_NAMES,
+    CodeModeShape,
+    SearchHost,
+)
 from onyx.tools.tool_implementations.code_mode.store import (
     STORE_FUNCTIONS,
     STORE_STUBS,
@@ -42,9 +47,7 @@ from onyx.tools.tool_implementations.code_mode.store import (
     json_value,
 )
 from onyx.tools.tool_implementations.code_mode.tool_search import (
-    TOOL_SEARCH_FUNCTION,
-    TOOL_SEARCH_NAMES,
-    TOOL_SEARCH_STUBS,
+    TOOL_MATCH_STUB,
     ToolIndex,
 )
 from onyx.utils.pydantic_util import as_base
@@ -54,7 +57,7 @@ from onyx.utils.pydantic_util import as_base
 MAX_STUB_CHARS = 16_000
 MAX_TOOL_DESCRIPTION_CHARS = 2_000
 MAX_ARGUMENT_DESCRIPTION_CHARS = 400
-# Schema keywords whose values are data, not schemas; tool_search skips them.
+# Schema keywords whose values are data, not schemas; the search skips them.
 _SCHEMA_DATA_KEYWORDS = frozenset({"enum", "const", "default", "examples", "example"})
 # Schema keywords whose values map arbitrary keys to schemas.
 _SCHEMA_MAP_KEYWORDS = frozenset(
@@ -98,11 +101,11 @@ _RESERVED_FUNCTION_NAMES: frozenset[str] = frozenset(
 )
 # Names a declared result type must not take: it is a global of the stub
 # module, as are the names that the sandbox, the store and the tool search
-# give programs.
+# give programs, in every shape.
 _RESERVED_TYPE_NAMES: frozenset[str] = _RESERVED_FUNCTION_NAMES | {
     *SANDBOX_NAMES,
     *STORE_FUNCTIONS,
-    *TOOL_SEARCH_NAMES,
+    *PROGRAM_SEARCH_NAMES,
 }
 
 
@@ -134,6 +137,12 @@ class ToolFunction(BaseModel):
         return self.tool.code_mode_exposure is CodeModeExposure.DEFERRED
 
     @property
+    def full_stub(self) -> str:
+        """The function's stub with the declarations of its result types, as
+        a match returns it."""
+        return "\n\n\n".join([*self.declarations, f"{_TOOLS_CLASS}\n\n{self.stub}"])
+
+    @property
     def called_name(self) -> str:
         """The name that programs call the function by."""
         return f"{TOOLS_NAMESPACE}.{self.function_name}"
@@ -143,13 +152,14 @@ class ToolStubs(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     functions: Mapping[str, ToolFunction]
-    # The imports, store()/load(), yield_control() and, with deferred
-    # functions, tool_search() of every stub module.
+    shape: CodeModeShape
+    # The imports, store()/load(), yield_control() and the shape's search
+    # (with deferred functions) and describe functions of every stub module.
     header: str
-    # The stub module that the `execute_code` description lists: no deferred
+    # The stub module that the run tool's description lists: no deferred
     # functions.
     listed_text: str
-    # tool_search() over the deferred functions; None when there are none.
+    # The search over the deferred functions; None when there are none.
     tool_index: ToolIndex | None
 
     def program_text(self, code: str) -> str:
@@ -175,9 +185,44 @@ class ToolStubs(BaseModel):
     @property
     def async_functions(self) -> dict[str, HostFunction]:
         """Host functions that only some programs have; programs await them."""
-        if self.tool_index is None:
-            return {}
-        return {TOOL_SEARCH_FUNCTION: self.tool_index.tool_search}
+        functions: dict[str, HostFunction] = {}
+        if self.tool_index is not None:
+            functions[self.shape.search_name] = SearchHost(
+                self.tool_index, self.shape.search_limit_argument
+            )
+        if self.shape.describe is not None:
+            functions[self.shape.describe.name] = self.describe_tool
+        return functions
+
+    def describe_tool(self, name: object) -> dict[str, str]:
+        """Answer a program's describe call: the match of the function named
+        `name`, also after `tools.`, or of the tool named `name`."""
+        if not isinstance(name, str):
+            raise TypeError(f"name must be str, not {type(name).__name__}")
+        function = self.functions.get(name.removeprefix(f"{TOOLS_NAMESPACE}.")) or next(
+            (
+                function
+                for function in self.functions.values()
+                if function.tool.name == name
+            ),
+            None,
+        )
+        if function is None:
+            raise ValueError(
+                f"No tool function is named {name!r}. Use a name from the "
+                "Functions list"
+                + (
+                    f" or from {self.shape.search.name}(query)"
+                    if self.tool_index is not None
+                    else ""
+                )
+                + "."
+            )
+        return {
+            "name": function.function_name,
+            "description": function.description,
+            "stub": function.full_stub,
+        }
 
     @property
     def deferred_namespaces(self) -> dict[str, str | None]:
@@ -767,7 +812,6 @@ def tool_function(
 
 def _searchable(function: ToolFunction) -> SearchableFunction:
     namespace = function.tool.code_mode_function_name.namespace or ""
-    stub = "\n\n\n".join([*function.declarations, f"{_TOOLS_CLASS}\n\n{function.stub}"])
     # Property names and descriptions at every depth of the argument schema,
     # outer ones first; each distinct text once, within a fixed size.
     parameter_texts: dict[str, None] = {}
@@ -804,7 +848,7 @@ def _searchable(function: ToolFunction) -> SearchableFunction:
     return SearchableFunction(
         name=function.function_name,
         description=function.description,
-        stub=stub,
+        stub=function.full_stub,
         # The name counts twice, so a match on it ranks above a match in prose.
         text=f"{function.function_name} {function.function_name} {namespace} "
         f"{function.description}",
@@ -821,8 +865,9 @@ def _module(header: str, functions: Iterable[ToolFunction]) -> str:
     return "\n\n\n".join([header, *declarations, tools_class]) + "\n"
 
 
-def build_tool_stubs(tools: Sequence[Tool]) -> ToolStubs:
-    """Build the function map and the stub modules for a set of tools."""
+def build_tool_stubs(shape: CodeModeShape, tools: Sequence[Tool]) -> ToolStubs:
+    """Build the function map and the stub modules for a set of tools, with
+    the search and describe functions of `shape`."""
     model_types = {
         id(tool): _model_result_type(tool.code_mode_result) for tool in tools
     }
@@ -853,9 +898,17 @@ def build_tool_stubs(tools: Sequence[Tool]) -> ToolStubs:
             else model_types[id(tool)],
         )
     deferred = [function for function in functions.values() if function.deferred]
-    header = f"{_STUB_HEADER}\n\n\n{TOOL_SEARCH_STUBS}" if deferred else _STUB_HEADER
+    search_stubs = [
+        function.stub
+        for function in (shape.search if deferred else None, shape.describe)
+        if function is not None
+    ]
+    header = "\n\n\n".join(
+        [_STUB_HEADER, *([TOOL_MATCH_STUB, *search_stubs] if search_stubs else [])]
+    )
     return ToolStubs(
         functions=functions,
+        shape=shape,
         header=header,
         listed_text=_module(
             header,

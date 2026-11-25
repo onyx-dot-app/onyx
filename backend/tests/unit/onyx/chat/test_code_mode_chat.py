@@ -24,6 +24,7 @@ from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import StoredToolResult
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -45,7 +46,11 @@ from onyx.prompts.tool_prompts import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.constants import FILE_READER_TOOL_NAME, WAIT_CODE_TOOL_NAME
+from onyx.tools.constants import (
+    EXEC_TOOL_NAME,
+    FILE_READER_TOOL_NAME,
+    WAIT_TOOL_NAME,
+)
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     CapabilityEntry,
@@ -55,7 +60,6 @@ from onyx.tools.models import (
     PythonExecutionFile,
 )
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
-    CodeModeTool,
     with_code_mode,
 )
 from onyx.tools.tool_implementations.code_mode.models import (
@@ -67,12 +71,16 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeStdout,
     StoreCommit,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CODE_MODE_SHAPES,
+    OPENAI_CODE_MODE,
+)
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     ApplyPatchTool,
     ExecCommandTool,
     WriteStdinTool,
-    sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -132,7 +140,7 @@ def _execution(stdout: str = "alpha\n") -> CodeModeExecutionResult:
 
 
 def _call() -> ToolCall:
-    return ToolCall(id="code-1", name=CodeModeTool.NAME, arguments={"code": CODE})
+    return ToolCall(id="code-1", name=EXEC_TOOL_NAME, arguments={"code": CODE})
 
 
 def _result_message(
@@ -140,7 +148,7 @@ def _result_message(
 ) -> ToolResultMessage:
     return ToolResultMessage(
         tool_call_id="code-1",
-        tool_name=CodeModeTool.NAME,
+        tool_name=EXEC_TOOL_NAME,
         content="program output",
         details=_execution() if details is None and not is_error else details,
         is_error=is_error,
@@ -318,7 +326,7 @@ def test_nested_artifacts_belong_to_the_code_mode_call() -> None:
         }
     )
     history = project_response(
-        _state(_result_message(execution)), tool_ids={CodeModeTool.NAME: None}
+        _state(_result_message(execution)), tool_ids={EXEC_TOOL_NAME: None}
     )
     assert history.tool_calls[0].generated_files == [file]
 
@@ -329,15 +337,28 @@ def test_direct_search_prompt_has_no_code_mode_guidance() -> None:
     search = MagicMock(spec=SearchTool)
     search.name = SearchTool.NAME
     direct = build_system_prompt("base", tools=[search], include_user_info=False)
-    assert CODE_MODE_GUIDANCE not in direct
+    for shape in CODE_MODE_SHAPES.values():
+        assert CODE_MODE_GUIDANCE.format(name=shape.run_name) not in direct
     assert INTERNAL_SEARCH_GUIDANCE.format(name=SearchTool.NAME) in direct
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in direct
+
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+def test_code_mode_guidance_names_the_shape_s_run_tool(family: ToolFamily) -> None:
+    offered = with_code_mode(
+        [MemoryTool(tool_id=1, llm=MagicMock())], CODE_MODE_SHAPES[family]
+    )[0]
+    prompt = build_system_prompt("base", tools=offered, include_user_info=False)
+    for other, shape in CODE_MODE_SHAPES.items():
+        assert (CODE_MODE_GUIDANCE.format(name=shape.run_name) in prompt) is (
+            other is family
+        )
 
 
 @pytest.mark.parametrize("code_mode", [False, True])
 def test_tool_sections_name_a_tool_as_the_model_calls_it(code_mode: bool) -> None:
     memory: list[Tool] = [MemoryTool(tool_id=1, llm=MagicMock())]
-    offered = with_code_mode(memory)[0] if code_mode else memory
+    offered = with_code_mode(memory, OPENAI_CODE_MODE)[0] if code_mode else memory
     prompt = build_system_prompt("base", tools=offered, include_user_info=False)
     name = "tools.add_memory" if code_mode else "add_memory"
     assert MEMORY_GUIDANCE.format(name=name) in prompt
@@ -346,7 +367,7 @@ def test_tool_sections_name_a_tool_as_the_model_calls_it(code_mode: bool) -> Non
 @pytest.mark.parametrize("code_mode", [False, True])
 def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> None:
     def prompt(tools: list[Tool]) -> str:
-        offered = with_code_mode(tools)[0] if code_mode else tools
+        offered = with_code_mode(tools, OPENAI_CODE_MODE)[0] if code_mode else tools
         return build_system_prompt("base", tools=offered, include_user_info=False)
 
     turn = SandboxTurn(
@@ -365,7 +386,7 @@ def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> 
     only_exec = prompt([ExecCommandTool(turn)])
     assert f"Run commands with `{prefix}exec_command`." in only_exec
     assert "apply_patch" not in only_exec
-    assert ("Call them from `execute_code` programs." in only_exec) is code_mode
+    assert ("Call them from `exec` programs." in only_exec) is code_mode
 
 
 def test_the_token_reservation_counts_code_mode_guidance() -> None:
@@ -373,9 +394,9 @@ def test_the_token_reservation_counts_code_mode_guidance() -> None:
         "base",
         include_all_guidance=True,
         include_user_info=False,
-        all_guidance_sandbox_tools=sandbox_tools_for_model(["gpt-5.1"]),
+        all_guidance_sandbox_tools=SANDBOX_TOOLS[ToolFamily.OPENAI],
     )
-    assert CODE_MODE_GUIDANCE in reserved
+    assert CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME) in reserved
     assert "## Sandbox" in reserved
 
 
@@ -415,13 +436,15 @@ class _LookupTool(EchoTool):
         return "lookup"
 
 
-def test_function_tools_move_into_execute_code() -> None:
-    offered, cells = with_code_mode([EchoTool(), _DirectOnlyTool(), _LookupTool()])
+def test_function_tools_move_into_the_run_tool() -> None:
+    offered, cells = with_code_mode(
+        [EchoTool(), _DirectOnlyTool(), _LookupTool()], OPENAI_CODE_MODE
+    )
     assert cells is not None
     assert [tool.name for tool in offered] == [
         "send_email",
-        CodeModeTool.NAME,
-        WAIT_CODE_TOOL_NAME,
+        EXEC_TOOL_NAME,
+        WAIT_TOOL_NAME,
     ]
     code_mode = offered[1]
     assert [tool.name for tool in code_mode.inner_tools] == ["echo", "lookup"]
@@ -431,12 +454,12 @@ def test_function_tools_move_into_execute_code() -> None:
 
 def test_without_function_tools_the_tools_stay_direct() -> None:
     tools: list[Tool] = [_DirectOnlyTool()]
-    assert with_code_mode(tools) == (tools, None)
+    assert with_code_mode(tools, OPENAI_CODE_MODE) == (tools, None)
 
 
 def test_a_tool_that_waits_for_child_runs_must_be_direct() -> None:
     with pytest.raises(ValueError, match="send_email"):
-        with_code_mode([EchoTool(), _NestedChildRunTool()])
+        with_code_mode([EchoTool(), _NestedChildRunTool()], OPENAI_CODE_MODE)
 
 
 def _context_files() -> ExtractedContextFiles:
@@ -458,7 +481,7 @@ def _offered(request: dict[str, Any]) -> list[str]:
     ("preferred_tool_id", "operation"),
     [
         # A function runs only inside programs, so the preference names it so.
-        (EchoTool().id, "tools.echo (a function in `execute_code` programs)"),
+        (EchoTool().id, "tools.echo (a function in `exec` programs)"),
         (_DirectOnlyTool().id, "send_email"),
     ],
 )
@@ -483,8 +506,8 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
     [request] = llm.requests
     assert _offered(request) == [
         "send_email",
-        CodeModeTool.NAME,
-        WAIT_CODE_TOOL_NAME,
+        EXEC_TOOL_NAME,
+        WAIT_TOOL_NAME,
     ]
     assert request["tool_choice"] == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {operation}." in str(request)
@@ -497,7 +520,7 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
                 index=0,
                 id="call-0",
                 function=ResponseFunctionCall(
-                    name=CodeModeTool.NAME, arguments='{"code": "print(1)"}'
+                    name=EXEC_TOOL_NAME, arguments='{"code": "print(1)"}'
                 ),
             )
         ]
@@ -520,8 +543,8 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
     assert first["tools"] == final["tools"]
     assert _offered(final) == [
         "send_email",
-        CodeModeTool.NAME,
-        WAIT_CODE_TOOL_NAME,
+        EXEC_TOOL_NAME,
+        WAIT_TOOL_NAME,
     ]
     assert final["tool_choice"] == ToolChoiceOptions.NONE
 
@@ -536,7 +559,7 @@ def test_the_next_run_of_the_same_agent_starts_new_cells() -> None:
                     index=0,
                     id=call_id,
                     function=ResponseFunctionCall(
-                        name=CodeModeTool.NAME, arguments=json.dumps({"code": code})
+                        name=EXEC_TOOL_NAME, arguments=json.dumps({"code": code})
                     ),
                 )
             ]
@@ -630,8 +653,8 @@ def test_the_file_notice_names_a_tool_that_runs_inside_programs() -> None:
 
     [request] = llm.requests
     assert _offered(request) == [
-        CodeModeTool.NAME,
-        WAIT_CODE_TOOL_NAME,
+        EXEC_TOOL_NAME,
+        WAIT_TOOL_NAME,
     ]
     assert "Use the read_file tool" in str(request)
     assert 'file_id="file-1"' in str(request)
@@ -678,14 +701,14 @@ def test_live_stdout_cut_at_the_limit_is_replaced_by_the_saved_stdout() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model_name", "named", "unnamed"),
+    ("family", "named", "unnamed"),
     [
-        ("claude-opus-4-5", ["`edit`", "`write`"], "`apply_patch`"),
-        ("gpt-5.1", ["`apply_patch`"], "`edit`"),
+        (ToolFamily.CLAUDE, ["`edit`", "`write`"], "`apply_patch`"),
+        (ToolFamily.OPENAI, ["`apply_patch`"], "`edit`"),
     ],
 )
 def test_the_token_estimate_names_the_model_s_sandbox_tools(
-    model_name: str, named: list[str], unnamed: str
+    family: ToolFamily, named: list[str], unnamed: str
 ) -> None:
     prompts: list[str] = []
 
@@ -698,7 +721,7 @@ def test_the_token_estimate_names_the_model_s_sandbox_tools(
         persona_system_prompt="",
         base_system_prompt="base",
         token_counter=count,
-        sandbox_tools=sandbox_tools_for_model([model_name]),
+        sandbox_tools=SANDBOX_TOOLS[family],
     )
     [estimate] = prompts
     assert all(name in estimate for name in named)

@@ -18,6 +18,10 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    OPENAI_CODE_MODE,
+    CodeModeShape,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -34,6 +38,8 @@ from tests.integration.mock_services.mock_llm_server.models import (
 
 # Onyx special-cases some model names (claude, qwen, gpt-6-sol.x, catalog models).
 MOCK_LLM_MODEL_NAME = "mock-model"
+# A mock model name that gets the Claude tool family (LLMConfig.tool_family).
+CLAUDE_MOCK_LLM_MODEL_NAME = "claude-sonnet-4-5-mock"
 # Deep Research needs at least 50000.
 MOCK_LLM_MAX_INPUT_TOKENS = 200000
 
@@ -52,10 +58,11 @@ def tool_call_reply(
     tool_choice: str | None = None,
     required: bool = True,
     conditions: RequestConditions | None = None,
+    shape: CodeModeShape = OPENAI_CODE_MODE,
 ) -> Reply:
     """A reply that calls tools the way the server offers them: native tool
-    calls, or with code mode on, one `execute_code` program that awaits each
-    call in order. A program calls a tool as `tools.<name>`, with the other
+    calls, or with code mode on, one program of `shape`'s run tool that awaits
+    each call in order. A program calls a tool as `tools.<name>`, with the other
     characters of its name as `_`; it can call a deferred (MCP or custom)
     function without `tool_search`. The
     program call takes the first call's id, so a later reply can wait for
@@ -82,11 +89,11 @@ def tool_call_reply(
     )
     return Reply(
         tool_calls=[
-            ToolCall(id=calls[0].id, name="execute_code", arguments={"code": program})
+            ToolCall(id=calls[0].id, name=shape.run_name, arguments={"code": program})
         ],
         conditions=base.model_copy(
             update={
-                "offers": [*base.offers, "execute_code"],
+                "offers": [*base.offers, shape.run_name],
                 "tool_choice": tool_choice or base.tool_choice,
             }
         ),

@@ -73,7 +73,6 @@ from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
 from onyx.llm.interfaces import LLM
-from onyx.llm.model_capabilities import is_claude_model, model_identity_names
 from onyx.server.query_and_chat.models import (
     ModelResponseSlot,
     response_id_info,
@@ -88,10 +87,6 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolQuestionResolved,
 )
 from onyx.server.settings.store import load_settings
-from onyx.tools.constants import (
-    ASK_USER_QUESTION_TOOL_NAME,
-    REQUEST_USER_INPUT_TOOL_NAME,
-)
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolOptions
 from onyx.tools.tool_constructor import (
@@ -102,8 +97,8 @@ from onyx.tools.tool_constructor import (
 )
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     LoadSkillTool,
-    sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
@@ -893,11 +888,11 @@ def bind_run_store(
             tools=tools,
             user_identity=setup.user_identity,
             on_root_drained=on_root_drained,
-            question_tool=lambda name, restored_id: QuestionTool(
+            question_tool=lambda response_id, name: QuestionTool(
                 name,
                 tenant_id=tenant_id,
                 chat_session_id=setup.chat_session_id,
-                response_id=restored_id,
+                response_id=response_id,
             ),
             subagent_factory=lambda depth: chat_subagent_factory(
                 setup=setup,
@@ -1100,12 +1095,7 @@ def create_chat_agent(
         )
         if turn is not None:
             sandbox_tools = [
-                tool(turn)
-                for tool in sandbox_tools_for_model(
-                    model_identity_names(
-                        llm.config.model_name, llm.config.deployment_name
-                    )
-                )
+                tool(turn) for tool in SANDBOX_TOOLS[llm.config.tool_family]
             ]
             # A turn that runs without asking (evals) gates no built-in
             # action, as integration policies allow its Ask actions.
@@ -1126,14 +1116,8 @@ def create_chat_agent(
             inject_memories=setup.use_memories,
             with_subagents=with_subagents,
             additional_context=setup.additional_context,
-            question_tool=QuestionTool(
-                ASK_USER_QUESTION_TOOL_NAME
-                if is_claude_model(
-                    model_identity_names(
-                        llm.config.model_name, llm.config.deployment_name
-                    )
-                )
-                else REQUEST_USER_INPUT_TOOL_NAME,
+            question_tool=partial(
+                QuestionTool,
                 tenant_id=get_current_tenant_id(),
                 chat_session_id=setup.chat_session_id,
                 response_id=setup.responses[response_index].message_id,

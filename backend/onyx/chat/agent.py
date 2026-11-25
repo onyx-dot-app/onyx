@@ -79,6 +79,8 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     WaitCodeTool,
     with_code_mode,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
+from onyx.tools.tool_implementations.question.models import QUESTION_TOOL_NAME
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.tools.tool_implementations.sandbox.spill import spill_large_result
@@ -139,11 +141,13 @@ class ChatAgent(Agent, RestorableFeature):
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
         on_drained: Callable[[], None] | None = None,
-        question_tool: QuestionTool | None = None,
+        question_tool: Callable[[str], QuestionTool] | None = None,
     ) -> None:
         """`on_drained`: see Agent; a root agent's runs end per-run tool state
         there (subagents share the root's tools and pass none). Only a root
-        agent gets `question_tool`."""
+        agent gets a question tool: `question_tool` builds it under the given
+        name. The model's tool family (LLMConfig.tool_family) selects the
+        shapes of the code mode tools and the question tool's name."""
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
         self.agent_instructions = (
@@ -161,10 +165,11 @@ class ChatAgent(Agent, RestorableFeature):
         # them, and code mode applies per agent.
         self.configured_tools = list(tools)
         self.code_mode = code_mode
+        tool_family = llm.config.tool_family
         # Each agent instance has its own cells, so a restored run has none open;
         # a later run of this instance reopens them at its first step.
         self.application_tools, self.code_cells = (
-            with_code_mode(self.configured_tools)
+            with_code_mode(self.configured_tools, CODE_MODE_SHAPES[tool_family])
             if code_mode
             else (list(self.configured_tools), None)
         )
@@ -249,15 +254,21 @@ class ChatAgent(Agent, RestorableFeature):
                     if is_subagent
                     else [
                         WaitAgentsTool(
-                            has_open_cells=lambda: (
-                                self.code_cells is not None and self.code_cells.has_open
+                            open_cell_wait_name=lambda: (
+                                self.code_cells.shape.wait_name
+                                if self.code_cells is not None
+                                and self.code_cells.has_open
+                                else None
                             )
                         )
                     ]
                 ),
             ]
         if question_tool is not None and not is_subagent:
-            self.application_tools = [*self.application_tools, question_tool]
+            self.application_tools = [
+                *self.application_tools,
+                question_tool(QUESTION_TOOL_NAME[tool_family]),
+            ]
         # The root agent's sandbox and code mode results end with the file
         # copy status line when it changed. Subagents and the calls inside a
         # code mode program never read it, so they cannot use it up.
@@ -304,7 +315,11 @@ class ChatAgent(Agent, RestorableFeature):
         successful result that the root model gets. An amendment or a failed
         result gets no status line; the line waits for the next result."""
         result = spill_large_result(
-            turn, context, code_mode=self.code_cells is not None
+            turn,
+            context,
+            code_mode_run_name=None
+            if self.code_cells is None
+            else self.code_cells.shape.run_name,
         )
         if (
             context.amended
@@ -595,7 +610,7 @@ def build_chat_agent(
     is_subagent: bool = False,
     depth: int = 0,
     on_drained: Callable[[], None] | None = None,
-    question_tool: QuestionTool | None = None,
+    question_tool: Callable[[str], QuestionTool] | None = None,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature.
 

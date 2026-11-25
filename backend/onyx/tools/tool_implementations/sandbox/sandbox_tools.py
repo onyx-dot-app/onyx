@@ -1,6 +1,6 @@
 """Tools that run commands, edit files and publish files in the user's
 private sandbox (`server/features/build/sandbox/harness_base.py:HarnessSandbox`).
-`sandbox_tools_for_model` gives the set that a turn's model gets.
+`SANDBOX_TOOLS` gives the set that a turn's model gets.
 
 They have no tool row: a chat turn builds them when it offers the sandbox
 (`chat/execution.py:create_chat_agent`), and they share a `SandboxTurn`. The
@@ -9,7 +9,7 @@ published file asks (ARTIFACTS_DELETE_APPROVAL).
 """
 
 import posixpath
-from collections.abc import Callable, Generator, Hashable, Sequence
+from collections.abc import Callable, Generator, Hashable, Mapping, Sequence
 from contextlib import closing
 from functools import partial
 from typing import Literal
@@ -22,7 +22,7 @@ from onyx.agents.tools import (
     ToolProgress,
 )
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.model_capabilities import is_claude_model
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
@@ -763,16 +763,16 @@ class _LibraryTool(SandboxTool):
     artifact operations (artifact_operations.py), which reach only the files
     published in the user's own root chats that are not deleted
     (`db/chat.py:get_user_published_files`), this chat included. In code mode
-    each is a deferred function of its group, which tool_search finds; the
-    group's line in the execute_code description says what the group is for,
-    and no listed function or prompt names a function. Running a list or copy
-    again changes nothing, so a call that a lost server left running runs
-    again; the tools that publish say otherwise."""
+    each is a deferred function of its group, which the program search
+    finds; the group's line in the run tool's description says what the group
+    is for, and no listed function or prompt names a function. Running a list
+    or copy again changes nothing, so a call that a lost server left running
+    runs again; the tools that publish say otherwise."""
 
     USE = None
     interrupted_result = None
     CODE_MODE_NAMESPACE = "library"
-    # The group's line in the execute_code description.
+    # The group's line in the run tool's description.
     CODE_MODE_NAMESPACE_DESCRIPTION = (
         "Find and read the user's published files, copy them into this chat, "
         "add versions to them, and change or delete them; create a file here "
@@ -1019,7 +1019,7 @@ def _artifact_conflict_message(error: ArtifactVersionConflict) -> str:
 class ArtifactTool(_LibraryTool, _FileTool):
     """One tool with an action for each artifact operation
     (artifact_operations.py), which Claude models get instead of the
-    library tools (sandbox_tools_for_model), for
+    library tools (SANDBOX_TOOLS), for
     compatibility with how they work with artifacts. Each action builds the
     library tools' arguments of its operation, so both families publish,
     list and copy alike, and a publish gives the same PublishedFiles card.
@@ -1338,18 +1338,20 @@ class LoadSkillTool(SandboxTool):
         )
 
 
-def sandbox_tools_for_model(
-    model_names: Sequence[str],
-) -> tuple[type[SandboxTool], ...]:
-    """The sandbox tools of a chat turn whose model has these names
-    (model_identity_names), in the order the prompt names them. Claude
-    models get the tools they work with: edit and write for files, and the
-    artifact tool for published files. The others get apply_patch and the
-    library tools. No turn gets both sets. The turn
-    builds them, and its prompt and token estimate name them."""
-    if is_claude_model(model_names):
-        return (ExecCommandTool, WriteStdinTool, EditTool, WriteTool, ArtifactTool)
-    return (
+# The sandbox tools of a chat turn by the tool family of its model, in the
+# order the prompt names them. Claude models get the tools they work with:
+# edit and write for files, and the artifact tool for published files. The
+# others get apply_patch and the library tools. No turn gets both sets. The
+# turn builds them, and its prompt and token estimate name them.
+SANDBOX_TOOLS: Mapping[ToolFamily, tuple[type[SandboxTool], ...]] = {
+    ToolFamily.CLAUDE: (
+        ExecCommandTool,
+        WriteStdinTool,
+        EditTool,
+        WriteTool,
+        ArtifactTool,
+    ),
+    ToolFamily.OPENAI: (
         ExecCommandTool,
         WriteStdinTool,
         ApplyPatchTool,
@@ -1361,18 +1363,20 @@ def sandbox_tools_for_model(
         LibraryReplaceLibraryFileTool,
         LibraryManageLibraryTool,
         LibrarySearchTool,
-    )
+    ),
+}
 
 
 def sandbox_guidance(
     tools: Sequence[SandboxTool | type[SandboxTool]],
     called_name: Callable[[str], str],
     *,
-    code_mode: bool,
+    code_mode_run_name: str | None,
 ) -> str | None:
     """The system prompt's sandbox section: the use of each of `tools`, in
     order, by the name that `called_name` gives for its tool name; None
-    without any."""
+    without any. `code_mode_run_name` is the code mode run tool's name, when
+    code mode applies."""
     uses = [
         tool.USE.format(name=f"`{called_name(tool.NAME)}`")
         for tool in tools
@@ -1383,5 +1387,9 @@ def sandbox_guidance(
     listed = uses[0] if len(uses) == 1 else f"{', '.join(uses[:-1])} and {uses[-1]}"
     return SANDBOX_GUIDANCE.format(
         uses=f"{listed[0].upper()}{listed[1:]}."
-        + (SANDBOX_CODE_MODE_NOTE if code_mode else "")
+        + (
+            ""
+            if code_mode_run_name is None
+            else SANDBOX_CODE_MODE_NOTE.format(name=code_mode_run_name)
+        )
     )

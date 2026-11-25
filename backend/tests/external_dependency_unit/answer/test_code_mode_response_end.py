@@ -79,10 +79,8 @@ def test_turn_deadline_closes_open_cells_and_reports_its_own_stop_reason(
     # The model waits on the cell, then never answers.
     llm = ChatLLM(
         [
-            tool_step(
-                "execute_code", "start", {"code": program, "yield_time_ms": 1000}
-            ),
-            tool_step("wait_code", "wait", {"cell_id": 1, "yield_time_ms": 1000}),
+            tool_step("exec", "start", {"code": program, "yield_time_ms": 1000}),
+            tool_step("wait", "wait", {"cell_id": 1, "yield_time_ms": 1000}),
         ],
         hold_open=True,
     )
@@ -130,7 +128,7 @@ def test_closing_searches_get_their_own_citations_and_reach_later_turns(
     # The answer starts after the second search ended, so only the closing reports it.
     llm = ChatLLM(
         [
-            tool_step("execute_code", "start", {"code": program}),
+            tool_step("exec", "start", {"code": program}),
             Delta(content="Started."),
         ],
         gates={1: lambda: _wait(latch_started)},

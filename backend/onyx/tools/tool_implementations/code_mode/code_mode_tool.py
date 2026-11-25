@@ -1,10 +1,9 @@
-"""The execute_code and wait_code tools: model-written Python programs that call
-other tools, run as cells of the response (code_mode/cells.py)."""
+"""The code mode run and wait tools: model-written Python programs that call
+other tools, run as cells of the response (code_mode/cells.py). Each tool
+family gets its own shape of them (code_mode/shapes.py)."""
 
 from collections.abc import Callable
 from functools import partial
-
-from pydantic import BaseModel, Field
 
 from onyx.agents.tools import (
     NestedInputAnswer,
@@ -13,12 +12,6 @@ from onyx.agents.tools import (
     ToolOutcome,
 )
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.constants import (
-    CODE_MODE_TOOL_NAME,
-    DEFAULT_MAX_OUTPUT_CHARS,
-    MAX_OUTPUT_CHARS_DESCRIPTION,
-    WAIT_CODE_TOOL_NAME,
-)
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -38,20 +31,22 @@ from onyx.tools.tool_implementations.code_mode.cells import (
 from onyx.tools.tool_implementations.code_mode.models import SandboxLimits
 from onyx.tools.tool_implementations.code_mode.prompt import (
     INNER_CALL_MESSAGE,
-    WAIT_CODE_DESCRIPTION,
+    OTHER_OPERATION_MESSAGE,
+    PROGRAM_FUNCTION_USE,
+    RUN_USE,
+    WAIT_DESCRIPTION,
+    WAIT_USE,
     code_mode_description,
     program_function_operation,
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CODE_MODE_SHAPES,
+    RUN_TOOL_NAMES,
+    WAIT_TOOL_NAMES,
+    CodeModeShape,
+)
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
-from onyx.tools.tool_implementations.utils import output_chars
-
-# How long a call waits for the cell before it returns the output so far.
-DEFAULT_EXECUTE_YIELD_MS = 30_000
-MAX_EXECUTE_YIELD_MS = 120_000
-DEFAULT_WAIT_YIELD_MS = 15_000
-MAX_WAIT_YIELD_MS = 300_000
-MIN_YIELD_MS = 1_000
 
 RESTORED_RUNNING_MESSAGE = (
     "Execution was interrupted before it finished and was not run again. Its tool "
@@ -59,56 +54,17 @@ RESTORED_RUNNING_MESSAGE = (
     "you retry. Its store writes were discarded."
 )
 RESTORED_WAIT_MESSAGE = (
-    "wait_code was interrupted when the server stopped, and the cell stopped. Its "
+    "{wait} was interrupted when the server stopped, and the cell stopped. Its "
     "calls after its last output are not known: they may have run and had effects. "
     "Check before you retry."
 )
 
-
-class CodeModeArguments(BaseModel):
-    code: str = Field(description="The Python program to run.")
-    yield_time_ms: int = Field(
-        default=DEFAULT_EXECUTE_YIELD_MS,
-        description="How long to wait for the program before returning its output "
-        f"so far while it keeps running. Defaults to {DEFAULT_EXECUTE_YIELD_MS} ms, "
-        f"at most {MAX_EXECUTE_YIELD_MS} ms.",
-    )
-    max_output_chars: int = Field(
-        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
-    )
-
-
-class WaitCodeArguments(BaseModel):
-    cell_id: int = Field(description="Identifier of the running cell.")
-    yield_time_ms: int = Field(
-        default=DEFAULT_WAIT_YIELD_MS,
-        description="How long to wait for more output before returning. Defaults "
-        f"to {DEFAULT_WAIT_YIELD_MS} ms, at most {MAX_WAIT_YIELD_MS} ms.",
-    )
-    max_output_chars: int = Field(
-        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
-    )
-    terminate: bool = Field(
-        default=False,
-        description="True stops the running cell; false or omitted waits for output.",
-    )
-
-
-def yield_seconds(yield_time_ms: int, maximum_ms: int) -> float:
-    return min(max(yield_time_ms, MIN_YIELD_MS), maximum_ms) / 1000
-
-
-# The saved result of an `execute_code` call that stopped before it returned. A
-# program's tool calls can have effects, so it never runs twice.
+# The saved result of a run call that stopped before it returned. A program's
+# tool calls can have effects, so it never runs twice.
 INTERRUPTED_PROGRAM_RESULT = ToolResult(content=RESTORED_RUNNING_MESSAGE, is_error=True)
-# The saved result of a `wait_code` call that stopped before it returned. The
-# cell's last saved observation keeps reporting it running, so the run's finish
-# adds the closing record there.
-INTERRUPTED_WAIT_RESULT = ToolResult(content=RESTORED_WAIT_MESSAGE, is_error=True)
 
 
 class CodeModeTool(Tool):
-    NAME = CODE_MODE_TOOL_NAME
     DISPLAY_NAME = "Code"
     DESCRIPTION = "Run a Python program that calls tools."
     interrupted_result = INTERRUPTED_PROGRAM_RESULT
@@ -120,10 +76,33 @@ class CodeModeTool(Tool):
         cells: CodeCells,
         limits: SandboxLimits,
     ) -> None:
+        # The cells' shape names this tool and its programs' functions.
+        self.shape = cells.shape
         self._inner_tools = list(inner_tools)
         self._cells = cells
         self._limits = limits
-        self._stubs = build_tool_stubs(self._inner_tools)
+        self._stubs = build_tool_stubs(self.shape, self._inner_tools)
+        run = self.shape.run_name
+        # The program search exists only with deferred functions.
+        search = self.shape.search if self._stubs.tool_index is not None else None
+        describe = self.shape.describe or search
+        # What a call of a code mode operation of any shape, as a tool that
+        # this chat does not offer, says to use instead.
+        self._operation_uses = {
+            **dict.fromkeys(RUN_TOOL_NAMES, RUN_USE.format(run=run)),
+            **dict.fromkeys(
+                WAIT_TOOL_NAMES, WAIT_USE.format(wait=self.shape.wait_name)
+            ),
+            **{
+                function.name: PROGRAM_FUNCTION_USE.format(function=use.name, run=run)
+                for shape in CODE_MODE_SHAPES.values()
+                for function, use in (
+                    (shape.search, search),
+                    (shape.describe, describe),
+                )
+                if function is not None and use is not None
+            },
+        }
         # Calls to a sequential tool run one at a time, as they do outside programs.
         sequences: dict[str, SequentialCalls] = {}
         self._sequential_calls = {
@@ -151,7 +130,9 @@ class CodeModeTool(Tool):
 
     def operation_names(self, preference: ToolPreference) -> list[str]:
         return [
-            program_function_operation(function.called_name, deferred=function.deferred)
+            program_function_operation(
+                function.called_name, self.shape, deferred=function.deferred
+            )
             for function in self._stubs.functions.values()
             if function.tool.matches(preference)
         ]
@@ -172,7 +153,12 @@ class CodeModeTool(Tool):
 
     def inner_call_hint(self, name: str) -> str | None:
         """`name` is a function name, as the description lists it, or the
-        name of its tool, also after `tools.` or `tools_`."""
+        name of its tool, also after `tools.` or `tools_`; or the name of a
+        code mode tool or program function of any shape."""
+        if name in self._operation_uses:
+            return OTHER_OPERATION_MESSAGE.format(
+                name=name, use=self._operation_uses[name]
+            )
         candidates = [
             name,
             name.removeprefix(f"{TOOLS_NAMESPACE}."),
@@ -191,6 +177,7 @@ class CodeModeTool(Tool):
             return None
         return INNER_CALL_MESSAGE.format(
             name=name,
+            run=self.shape.run_name,
             called_name=function.called_name,
             arguments=", ".join(
                 f"{argument}=..." for argument in sorted(function.required_arguments)
@@ -208,7 +195,7 @@ class CodeModeTool(Tool):
 
     @property
     def name(self) -> str:
-        return self.NAME
+        return self.shape.run_name
 
     @property
     def description(self) -> str:
@@ -226,22 +213,24 @@ class CodeModeTool(Tool):
         return tool_definition_from_arguments(
             self.name,
             code_mode_description(self._stubs, self._limits),
-            CodeModeArguments,
+            self.shape.run_arguments,
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
-        arguments = parse_tool_arguments(CodeModeArguments, invocation.arguments)
-        if not arguments.code.strip():
+        request = parse_tool_arguments(
+            self.shape.run_arguments, invocation.arguments
+        ).request()
+        if not request.code.strip():
             raise ToolCallException(
-                message="execute_code received an empty program",
+                message=f"{self.shape.run_name} received an empty program",
                 llm_facing_message="The `code` argument is empty. Provide a Python program.",
             )
         return self._cells.start(
-            self.program(arguments.code, self._limits),
+            self.program(request.code, self._limits),
             invocation,
             context,
-            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
-            max_chars=output_chars(arguments.max_output_chars),
+            yield_seconds=request.yield_seconds,
+            max_chars=request.max_chars,
         )
 
     def _resume_with_input(
@@ -250,25 +239,33 @@ class CodeModeTool(Tool):
         context: ToolContext,
         answers: list[NestedInputAnswer],
     ) -> ToolOutcome:
-        arguments = parse_tool_arguments(CodeModeArguments, invocation.arguments)
+        request = parse_tool_arguments(
+            self.shape.run_arguments, invocation.arguments
+        ).request()
         return self._cells.resume(
             invocation,
             context,
             answers,
             programs=self.program,
-            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
+            yield_seconds=request.yield_seconds,
         )
 
 
 class WaitCodeTool(Tool):
-    NAME = WAIT_CODE_TOOL_NAME
     DISPLAY_NAME = "Code"
     DESCRIPTION = "Wait for a running code cell."
-    interrupted_result = INTERRUPTED_WAIT_RESULT
 
     def __init__(
         self, cells: CodeCells, programs: Callable[[str, SandboxLimits], Program]
     ) -> None:
+        self.shape = cells.shape
+        # The saved result of a call that stopped before it returned. The
+        # cell's last saved observation keeps reporting it running, so the
+        # run's finish adds the closing record there.
+        self.interrupted_result = ToolResult(
+            content=RESTORED_WAIT_MESSAGE.format(wait=self.shape.wait_name),
+            is_error=True,
+        )
         self._cells = cells
         # Builds a saved cell's program with the current tools.
         self._programs = programs
@@ -285,7 +282,7 @@ class WaitCodeTool(Tool):
 
     @property
     def name(self) -> str:
-        return self.NAME
+        return self.shape.wait_name
 
     @property
     def description(self) -> str:
@@ -301,19 +298,23 @@ class WaitCodeTool(Tool):
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
-            self.name, WAIT_CODE_DESCRIPTION, WaitCodeArguments
+            self.name,
+            WAIT_DESCRIPTION.format(run=self.shape.run_name, wait=self.shape.wait_name),
+            self.shape.wait_arguments,
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
-        arguments = parse_tool_arguments(WaitCodeArguments, invocation.arguments)
+        request = parse_tool_arguments(
+            self.shape.wait_arguments, invocation.arguments
+        ).request()
         return self._cells.wait(
-            arguments.cell_id,
+            request.cell_id,
             invocation,
             context,
             programs=self._programs,
-            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
-            max_chars=output_chars(arguments.max_output_chars),
-            terminate=arguments.terminate,
+            yield_seconds=request.yield_seconds,
+            max_chars=request.max_chars,
+            terminate=request.terminate,
         )
 
     def _resume_with_input(
@@ -322,23 +323,28 @@ class WaitCodeTool(Tool):
         context: ToolContext,
         answers: list[NestedInputAnswer],
     ) -> ToolOutcome:
-        arguments = parse_tool_arguments(WaitCodeArguments, invocation.arguments)
+        request = parse_tool_arguments(
+            self.shape.wait_arguments, invocation.arguments
+        ).request()
         return self._cells.resume(
             invocation,
             context,
             answers,
             programs=self._programs,
-            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
+            yield_seconds=request.yield_seconds,
         )
 
 
-def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
+def with_code_mode(
+    tools: list[Tool], shape: CodeModeShape
+) -> tuple[list[Tool], CodeCells | None]:
     """Offer each tool as its `code_mode_exposure` declares: DIRECT tools stay
-    direct, the others become Python functions inside `execute_code`.
+    direct, the others become Python functions inside programs of the shape's
+    run tool.
 
-    `execute_code` and `wait_code` share the returned cells of each run; None
-    when no tool is a function. Raises ValueError for a tool that waits for child
-    runs but is not DIRECT, since a program cannot wait for them.
+    The run and wait tools share the returned cells of each run; None when no
+    tool is a function. Raises ValueError for a tool that waits for child runs
+    but is not DIRECT, since a program cannot wait for them.
     """
     for tool in tools:
         if (
@@ -354,7 +360,7 @@ def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
     ]
     if not inner:
         return tools, None
-    cells = CodeCells()
+    cells = CodeCells(shape)
     code_tool = CodeModeTool(inner, cells=cells, limits=SandboxLimits())
     return [
         *(tool for tool in tools if tool.code_mode_exposure is CodeModeExposure.DIRECT),

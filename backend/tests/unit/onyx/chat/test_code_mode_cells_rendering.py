@@ -4,6 +4,7 @@ from collections.abc import Callable, Generator
 from typing import Literal
 
 import pytest
+from pydantic import JsonValue
 
 from onyx.agents.events import ToolResultAmendedEvent
 from onyx.agents.models import (
@@ -18,6 +19,7 @@ from onyx.chat.presentation import (
     project_response,
     replay_response,
 )
+from onyx.chat.renderer import tool_renderer
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -34,7 +36,13 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.server.query_and_chat import streaming_models as packets
-from onyx.tools.constants import CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME
+from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.constants import (
+    EXEC_TOOL_NAME,
+    POLL_TOOL_NAME,
+    REPL_TOOL_NAME,
+    WAIT_TOOL_NAME,
+)
 from onyx.tools.tool_implementations.code_mode.models import (
     CellClosing,
     CodeModeCall,
@@ -91,11 +99,13 @@ CLOSING = CellClosing(
 )
 
 
-def _reply() -> Callable[[GenerationRequest, CancellationSignal], AssistantMessage]:
+def _reply(
+    run_name: str = EXEC_TOOL_NAME, wait_name: str = WAIT_TOOL_NAME
+) -> Callable[[GenerationRequest, CancellationSignal], AssistantMessage]:
     turns = iter(
         [
-            ToolCall(id="exec", name=CODE_MODE_TOOL_NAME, arguments={"code": "work()"}),
-            ToolCall(id="wait", name=WAIT_CODE_TOOL_NAME, arguments={"cell_id": 1}),
+            ToolCall(id="exec", name=run_name, arguments={"code": "work()"}),
+            ToolCall(id="wait", name=wait_name, arguments={"cell_id": 1}),
         ]
     )
 
@@ -169,7 +179,7 @@ def test_cell_observations_and_closing_render_in_call_order(
     agent = Agent(
         (StoppedAnswerClient if stopped else FakeModelClient)(_reply()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[_tool(CODE_MODE_TOOL_NAME), _tool(WAIT_CODE_TOOL_NAME)],
+        tools=[_tool(EXEC_TOOL_NAME), _tool(WAIT_TOOL_NAME)],
         on_finish=_close,
     )
     run = agent.start(
@@ -257,7 +267,7 @@ def test_closing_of_a_call_from_before_a_restore_renders_in_a_new_card() -> None
             message_id="earlier-message",
             step_index=0,
             tool_call=ToolCall(
-                id="wait", name=WAIT_CODE_TOOL_NAME, arguments={"cell_id": 1}
+                id="wait", name=WAIT_TOOL_NAME, arguments={"cell_id": 1}
             ),
             result=ToolResult(
                 content="Execution running in cell 1", details=observation
@@ -296,7 +306,7 @@ def test_closing_record_reports_how_the_program_ended(
             message_id="message",
             step_index=0,
             tool_call=ToolCall(
-                id="wait", name=WAIT_CODE_TOOL_NAME, arguments={"cell_id": 1}
+                id="wait", name=WAIT_TOOL_NAME, arguments={"cell_id": 1}
             ),
             result=ToolResult(
                 content="Execution running in cell 1",
@@ -333,7 +343,7 @@ def test_a_call_left_unfinished_renders_as_stopped() -> None:
             message_id="message",
             step_index=0,
             tool_call=ToolCall(
-                id="wait", name=WAIT_CODE_TOOL_NAME, arguments={"cell_id": 1}
+                id="wait", name=WAIT_TOOL_NAME, arguments={"cell_id": 1}
             ),
             result=ToolResult(
                 content="Execution running in cell 1",
@@ -344,3 +354,56 @@ def test_a_call_left_unfinished_renders_as_stopped() -> None:
     child = [p.obj for p in live if p.placement.sub_turn_index == 0]
     assert not [obj for obj in child if isinstance(obj, packets.PacketException)]
     assert isinstance(child[-1], packets.SectionEnd)
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments", "start"),
+    [
+        *(
+            (name, {"code": "work()"}, packets.CodeModeStart(code="work()"))
+            for name in (EXEC_TOOL_NAME, REPL_TOOL_NAME)
+        ),
+        *(
+            (
+                name,
+                {"cell_id": 2},
+                packets.CodeModeStart(code="", cell_id=2, observation=1),
+            )
+            for name in (WAIT_TOOL_NAME, POLL_TOOL_NAME)
+        ),
+    ],
+)
+def test_run_and_wait_calls_of_every_shape_render_as_cells(
+    name: str, arguments: dict[str, JsonValue], start: packets.CodeModeStart
+) -> None:
+    renderer = tool_renderer(
+        ToolCall(id="call", name=name, arguments=arguments), Placement(turn_index=0)
+    )
+    assert [
+        packet.obj
+        for packet in renderer.start()
+        if isinstance(packet.obj, packets.CodeModeStart)
+    ] == [start]
+
+
+def test_a_chat_with_code_mode_calls_under_other_names_loads() -> None:
+    """Calls saved under names that no shape has, such as execute_code and
+    wait_code, replay as tool cards without error."""
+    agent = Agent(
+        FakeModelClient(_reply("execute_code", "wait_code")),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[_tool("execute_code"), _tool("wait_code")],
+        on_finish=_close,
+    )
+    run = agent.start(max_steps=10)
+    run.wait_for_completion(timeout=10)
+    assert run.wait_for_idle(timeout=10)
+    assert run.status == RunStatus.COMPLETE
+
+    projected = project_response(run.snapshot(), tool_ids={})
+    assert projected.response is not None
+    replayed = replay_response(projected.response, {}, {}, {})
+    assert not [p for p in replayed if isinstance(p.obj, packets.PacketException)]
+    assert not [p for p in replayed if isinstance(p.obj, packets.CodeModeStart)]
+    # Each call keeps its card, and the answer follows them.
+    assert {p.placement.turn_index for p in replayed} == {0, 1, 2}

@@ -460,7 +460,7 @@ agents/tool_execution.py:ToolBatch.decide_call   (direct calls, and program call
           -> PendingToolInput(display_name, display_arguments)
      the runtime marks the request PendingToolInput.approval
   a direct call waits in the run; a program call parks its cell's program
-  renderer sends tool_approval_request on the call's (or execute_code's) card
+  renderer sends tool_approval_request on the call's (or the run call's) card
 the run suspends when only such waits remain and its work is idle (see
   ToolInvocation.run_work)
 ChatRunStore.poll_control   one park pass over every owned run, once a second;
@@ -918,7 +918,7 @@ default agent, is Blocked.
     program.** MCP tools stay program functions in code mode. A gated call
     opens its request through `ToolInvocation.nested_calls`
     (`agents/tools.py:NestedCallGate`), and its card shows at once on the
-    observing `execute_code` or `wait_code` card, also for a cell that runs in
+    observing run or wait call's card, also for a cell that runs in
     the background. The program parks once it waits only for such calls
     ([[code-execution]]), the observation ends with `NestedInputWait`, and the
     run hands off as for a direct call: the parked cell is saved in

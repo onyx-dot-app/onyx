@@ -30,13 +30,12 @@ from onyx.server.features.build.sandbox.harness_base import (
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.tools.constants import (
     CITEABLE_TOOLS_NAMES,
-    CODE_MODE_TOOL_NAME,
     FILE_READER_TOOL_NAME,
     SKILLS_READ_TOOL_NAME,
-    WAIT_CODE_TOOL_NAME,
 )
 from onyx.tools.models import CustomToolCallSummary, SearchResults
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_TOOL_NAMES
 from onyx.tools.tool_implementations.sandbox.models import (
     SandboxExecResult,
     SpilledOutput,
@@ -98,8 +97,7 @@ _UNKNOWN_AGE = datetime.max.replace(tzinfo=timezone.utc)
 # still spills.
 _OWN_LIMITS = frozenset(
     {
-        CODE_MODE_TOOL_NAME,
-        WAIT_CODE_TOOL_NAME,
+        *CODE_MODE_TOOL_NAMES,
         ExecCommandTool.NAME,
         WriteStdinTool.NAME,
         FILE_READER_TOOL_NAME,
@@ -221,13 +219,13 @@ def _save(
     return _Saved(path=path, size=sum(map(len, parts)), cut=cut)
 
 
-def _envelope(saved: _Saved, body: str, *, code_mode: bool) -> str:
+def _envelope(saved: _Saved, body: str, *, code_mode_run_name: str | None) -> str:
     """The note that names a spilled result's file: `body`, which cannot
     close the tag, and how to read the file."""
     exec_call = (
-        f"{ExecCommandTool.NAME} in an {CODE_MODE_TOOL_NAME} program"
-        if code_mode
-        else ExecCommandTool.NAME
+        ExecCommandTool.NAME
+        if code_mode_run_name is None
+        else f"{ExecCommandTool.NAME} in {code_mode_run_name} programs"
     )
     return (
         f'<persisted-output path="{saved.path}" bytes={saved.size}>\n'
@@ -248,19 +246,24 @@ def _head_and_tail(text: str) -> tuple[str, str]:
 
 
 def spill_large_result(
-    turn: SandboxTurn, context: ToolResultContext, *, code_mode: bool
+    turn: SandboxTurn, context: ToolResultContext, *, code_mode_run_name: str | None
 ) -> ToolResult:
     """The result, or, when it is too large, a bounded view and the path of
     the file in the VM that holds the rest. When the write fails or times
-    out, the model gets the bounded view with SPILL_FAILED_NOTE."""
+    out, the model gets the bounded view with SPILL_FAILED_NOTE. `code_mode_run_name`
+    names the code mode run tool, when code mode applies."""
     result = context.result
     full = result.full_value
     if isinstance(full, SandboxExecResult):
-        return _spill_full_text(turn, context, full.output, code_mode=code_mode)
+        return _spill_full_text(
+            turn, context, full.output, code_mode_run_name=code_mode_run_name
+        )
     if isinstance(full, str):
-        return _spill_full_text(turn, context, full, code_mode=code_mode)
+        return _spill_full_text(
+            turn, context, full, code_mode_run_name=code_mode_run_name
+        )
     if isinstance(full, SearchResults):
-        return _spill_pages(turn, context, full, code_mode=code_mode)
+        return _spill_pages(turn, context, full, code_mode_run_name=code_mode_run_name)
     text = result.content
     if (
         context.calls[0].name in _OWN_LIMITS
@@ -290,7 +293,7 @@ def spill_large_result(
             f"Preview (first {PREVIEW_HEAD_CHARS:,} characters):\n{head}\n"
             f"Preview (last {PREVIEW_TAIL_CHARS:,} characters):\n{tail}\n"
             "The file holds the whole output.",
-            code_mode=code_mode,
+            code_mode_run_name=code_mode_run_name,
         )
         spilled = SpilledOutput(head=head, tail=tail)
     # A custom or MCP tool's output in the details becomes the preview, so the
@@ -318,7 +321,11 @@ def spill_large_result(
 
 
 def _spill_full_text(
-    turn: SandboxTurn, context: ToolResultContext, full: str, *, code_mode: bool
+    turn: SandboxTurn,
+    context: ToolResultContext,
+    full: str,
+    *,
+    code_mode_run_name: str | None,
 ) -> ToolResult:
     """A result whose content is the tool's cut of `full`: `full` goes to
     the file, and the model keeps the content with the file's path. The card
@@ -351,7 +358,7 @@ def _spill_full_text(
     return result.model_copy(
         update={
             "content": f"{result.content}\n\n"
-            + _envelope(saved, FULL_VALUE_NOTE, code_mode=code_mode),
+            + _envelope(saved, FULL_VALUE_NOTE, code_mode_run_name=code_mode_run_name),
             "details": details,
         }
     )
@@ -362,7 +369,7 @@ def _spill_pages(
     context: ToolResultContext,
     pages: SearchResults,
     *,
-    code_mode: bool,
+    code_mode_run_name: str | None,
 ) -> ToolResult:
     """A result whose content holds excerpts of `pages` (open_url): the file
     holds the pages, one JSON object for each line, and the model keeps the
@@ -405,7 +412,7 @@ def _spill_pages(
                 "The pages above are excerpts. The file holds each page whole, "
                 "one JSON object for each line; cite a page by its number:\n"
                 + listed.rstrip("\n"),
-                code_mode=code_mode,
+                code_mode_run_name=code_mode_run_name,
             )
         }
     )

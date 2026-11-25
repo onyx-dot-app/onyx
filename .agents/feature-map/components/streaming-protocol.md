@@ -193,7 +193,7 @@ from a stop. A turn-level Stop drops packets after it, except
 `tool_approval_resolved` (`chat/execution.py:ChatTurnExecution._publish`), so
 each request's resolution precedes the `stop` packet. For a code mode
 program's call, the events carry `nested_call`, and
-the packet sits on the `execute_code` or `wait_code` card with the nested
+the packet sits on the run or wait card with the nested
 call's name. A request's `arguments` is the tool's approval payload
 (`Tool.approval_details`), or the call's arguments when the tool gives none.
 Every client gets them
@@ -207,10 +207,12 @@ replay rules. Saved-session replay sends the request,
 and its resolution once decided, for each request of an ended or suspended
 response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
-`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`), and the
-prompt of the tools in `chat/renderer.py:PROMPT_ARGUMENT_TOOLS`
-(`generate_image`), while the model writes it, with the tool name as
-`tool_type`. The image step shows the prompt until the revised prompts arrive. Native model reasoning streams
+`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python` and the code mode run tool of
+every shape), and the prompt of the tools in `chat/renderer.py:PROMPT_ARGUMENT_TOOLS`
+(`generate_image`), while the model writes it, with the tool name as `tool_type`; a code
+mode run tool (`exec` or `repl`) always streams as
+`execute_code` (backend `tools/constants.py:CODE_MODE_STREAM_TOOL_TYPE`), the type that clients know (client `CODE_MODE_TOOL_TYPE`). The image step shows
+the prompt until the revised prompts arrive. Native model reasoning streams
 as reasoning packets.
 
 Each call's streamed arguments report at most once per
@@ -251,10 +253,10 @@ final `code_mode_delta` with `replace_stdout` replaces live output that stopped
 at the output limit, so live output matches replay. The final delta also
 lists `stored_keys`, the keys the program saved with `store()`, and
 `tool_call_count`, the calls the cell started so far (the model's text reports
-the same count). Each `execute_code` and `wait_code` call is its own code
+the same count). Each call of the run or wait tool is its own code
 mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
-arguments (`None` and 0 for `execute_code`, the cell id and 1 for
-`wait_code`, whose `code` is empty), so live and replay send the same start.
+arguments (`None` and 0 for the run tool, `exec` or `repl`, the cell id and
+1 for the wait tool, `wait` or `poll`, whose `code` is empty), so live and replay send the same start.
 The final delta of a saved observation carries the exact `cell_id` and
 `observation`; a call that failed or was cancelled before it saved one leaves
 them `None`. Its `status` adds `running` (the cell still runs; the final delta

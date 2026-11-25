@@ -20,7 +20,7 @@ from onyx.llm.models import (
     ToolResult,
 )
 from onyx.server.query_and_chat import streaming_models as packets
-from onyx.tools.constants import CODE_MODE_TOOL_NAME
+from onyx.tools.constants import EXEC_TOOL_NAME
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCall,
     CodeModeExecutionResult,
@@ -84,7 +84,7 @@ def test_a_tool_result_without_details_shows_its_content_once() -> None:
 
 def test_a_program_call_without_details_shows_its_content_once() -> None:
     live, replayed = _live_and_replayed(
-        ToolCall(id="exec", name=CODE_MODE_TOOL_NAME, arguments={"code": "work()"}),
+        ToolCall(id="exec", name=EXEC_TOOL_NAME, arguments={"code": "work()"}),
         ToolResult(
             content="Execution finished",
             details=CodeModeExecutionResult(

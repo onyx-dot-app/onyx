@@ -499,7 +499,7 @@ def test_a_background_agent_runs_programs_in_code_mode(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     """In code mode the root keeps `spawn_agent` as a tool of its own, and the
-    child calls tools from its own `execute_code` programs."""
+    child calls tools from its own `exec` programs."""
     nonce = uuid4().hex
     child_task = f"Compute the answer. {uuid4().hex}"
     mock_llm.conversation(
@@ -512,9 +512,7 @@ def test_a_background_agent_runs_programs_in_code_mode(
                     arguments={"name": "compute", "instruction": child_task},
                 )
             ],
-            conditions=RequestConditions(
-                offers=[SPAWN_AGENT_TOOL_NAME, "execute_code"]
-            ),
+            conditions=RequestConditions(offers=[SPAWN_AGENT_TOOL_NAME, "exec"]),
         ),
         Reply(
             text="Computing in the background.",
@@ -532,11 +530,11 @@ def test_a_background_agent_runs_programs_in_code_mode(
             tool_calls=[
                 ToolCall(
                     id="child-program",
-                    name="execute_code",
+                    name="exec",
                     arguments={"code": "print(6 * 7)"},
                 )
             ],
-            conditions=RequestConditions(offers=["execute_code"]),
+            conditions=RequestConditions(offers=["exec"]),
         ),
         Reply(
             text="Child program printed 42.",

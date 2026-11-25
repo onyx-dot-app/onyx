@@ -229,16 +229,17 @@ class WaitAgentsTool(_SubagentTool):
     )
     arguments = WaitAgentsArguments
 
-    def __init__(self, *, has_open_cells: Callable[[], bool]) -> None:
-        self.has_open_cells = has_open_cells
+    def __init__(self, *, open_cell_wait_name: Callable[[], str | None]) -> None:
+        # The code mode wait tool's name while a code cell is open, else None.
+        self.open_cell_wait_name = open_cell_wait_name
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(WaitAgentsArguments, invocation.arguments)
-        if self.has_open_cells():
+        if (wait := self.open_cell_wait_name()) is not None:
             raise ToolCallException(
                 "A code cell is open.",
                 "A code cell is still open, and ending your response would stop "
-                "it. Wait for it with wait_code first.",
+                f"it. Wait for it with {wait} first.",
             )
         control = invocation.agents
         agents = control.discover_agents()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 from enum import Enum
 from typing import Annotated, Any, Callable, Literal, Self
 from uuid import UUID
@@ -26,6 +27,17 @@ from onyx.tools.tool_implementations.sandbox.models import (
 )
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
+
+
+class ToolArguments[R](BaseModel):
+    """The arguments of one tool call as the model sends them. `request`
+    converts them into the request that the tool serves. It does not fail:
+    the fields hold all validation. Arguments beyond the fields are ignored."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    @abc.abstractmethod
+    def request(self) -> R: ...
 
 
 class CustomToolErrorInfo(BaseModel):
@@ -581,13 +593,13 @@ class SearchResults(BaseModel):
 class CodeModeExposure(str, Enum):
     """How code mode offers a tool to the model."""
 
-    # Its own tool beside `execute_code`, never a function inside programs. Tools
+    # Its own tool beside the code mode run tool, never a function inside programs. Tools
     # that wait for child runs must use this: a program cannot wait for them.
     DIRECT = "direct"
-    # A function whose stub the `execute_code` description lists.
+    # A function whose stub the run tool description lists.
     IMMEDIATE = "immediate"
     # A function that programs can call but the description does not list; the
-    # model finds it with `tool_search`.
+    # model finds it with the program search function.
     DEFERRED = "deferred"
 
 
@@ -601,7 +613,7 @@ class CodeModeFunctionName(BaseModel):
     # A group of tools, such as the MCP server of an MCP tool.
     namespace: str | None = None
     # What the namespace's tools are for, from the group's owner, such as an
-    # MCP integration's description. The `execute_code` description lists
+    # MCP integration's description. The run tool description lists
     # the first line beside each deferred namespace.
     namespace_description: str | None = None
 

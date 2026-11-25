@@ -150,7 +150,7 @@ and `code_mode_result` (the value and stub type a program receives); see
 on restore, the runtime saves it as the result of a call that a lost
 execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
-functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
+functions of code mode programs; `chat/prompt_utils.py:callable_tools` reads it.
 `inner_call_hint` answers a call of such a tool as a tool of its own: the
 result says how to call it through the offered tool
 (`agents/tool_execution.py`).
@@ -220,8 +220,8 @@ strict mode requires every object to be closed. Parsing ignores unknown argument
 sets `extra="forbid"`, because not every provider enforces the schema. A
 validation error names the argument and returns to the model as a tool error.
 The skill, subagent, memory, file reader, knowledge graph, internal search, web
-search, open URL, Python, image generation, `execute_code`
-and `wait_code` tools use it.
+search, open URL, Python, image generation, and the code mode run
+and wait tools use it.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
@@ -273,11 +273,12 @@ path any visible agent holds, finished agents included (`agents/agent_coordinati
 
 **Question tool.** `tools/tool_implementations/question/question_tool.py:QuestionTool`
 asks the user 1-3 multiple-choice questions and waits for the answers. Only the
-root `ChatAgent` gets it (`question_tool`), after code mode wraps the configured
-tools, so it stays direct and subagents never get it. Its name is
-`ask_user_question` for Claude models and `request_user_input` for others
-(`tools/constants.py:QUESTION_TOOL_NAMES`); a restored root gets it under the
-name its saved step declared (`chat/restoration.py:restore_chat_agent`). Which
+root `ChatAgent` gets it (`question_tool`, a factory that the agent calls with
+the name), after code mode wraps the configured tools, so it stays direct and
+subagents never get it. Its name is `ask_user_question` for Claude models and
+`request_user_input` for others (`tools/tool_implementations/question/models.py:QUESTION_TOOL_NAME` of the
+agent's `tool_family`); a restored root gets it when its saved step declared one,
+named for the active model's family (`chat/restoration.py:restore_chat_agent`). Which
 turns offer it, and how its call parks and resumes, is
 [[mcp-and-custom-tools#chat-approval-needs-waiting-client]]. Its arguments are not
 strict: the nested question models are `$defs` references. The model reads a card
@@ -367,7 +368,7 @@ are plain `AgentTool` objects with no `Tool` row, and
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed arguments
    show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):
-   `run_python`, `execute_code` and `generate_image` stream argument deltas, the file tools
+   `run_python`, the code mode run tool (`exec` or `repl`) and `generate_image` stream argument deltas, the file tools
    (`write`, `edit`, `apply_patch`) report `file_tool_progress`. Every stream
    is throttled
    ([[streaming-protocol]]). Code mode calls render with

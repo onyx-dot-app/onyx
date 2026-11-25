@@ -748,7 +748,7 @@ The mobile app copies the group end and step-kind rules in
 **Code mode steps.** Code mode runs behind the scenes: the timeline shows the
 tool calls a program makes, not the program.
 `lib/timeline/chat/transformers.ts:expandCodeModeSteps`
-turns each nested call of an `execute_code` or `wait_code` group into its own
+turns each nested call of a run or wait group into its own
 step, drawn by that tool's renderer as a direct call would be. The packet
 processor adds each nested packet to its call as the packet arrives, and after
 each processed batch builds `GroupedPacket.nestedCalls` for each group with
@@ -759,7 +759,7 @@ renderers of finished calls do not redraw. A call is its cell and
 `sub_turn_index`, as `CodeModeRenderer` (`backend/onyx/chat/renderer.py`)
 states, so the latest report replaces the earlier ones in place. Pacing
 compares the last packet of each step, because a new report can have as many
-packets as the old one. The program, its output, `wait_code`
+packets as the old one. The program, its output, wait tool (`wait` or `poll`)
 calls, yields and closing records have no step. A program without tool calls
 shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
 in one pass: a program runs from `code_mode_start` until a `code_mode_delta`

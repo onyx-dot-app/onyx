@@ -278,14 +278,14 @@ runs with representative model waits.
 
 ## Compare code mode
 
-In code mode, Onyx offers an `execute_code` tool instead of direct retrieval tools.
+In code mode, Onyx offers an `exec` tool instead of direct retrieval tools.
 The model writes a Python program, and each tool is an async function in that
 program. The program runs in a sandbox on the API server. The tool result is the
 printed output of the program. Set `CODE_MODE_ENABLED=true` on the API server to
 turn on code mode.
 
 The mock detects code mode from the offered tools. When a request offers
-`execute_code` with an `internal_search` function, and no direct `internal_search`
+`exec` with an `internal_search` function, and no direct `internal_search`
 tool, the search profile writes programs instead of direct search calls. The programs use the same seeded queries
 as direct mode. Each program prints one `[document] title` line for each result.
 The mock reads the document numbers from these lines, so the answer cites the
@@ -293,8 +293,8 @@ same way as in direct mode. The answer phase does not change.
 
 | Model | Programs in a turn | Chat model calls in a turn |
 |---|---|---|
-| `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode, plus one for each `wait_code` |
-| `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, one for each `wait_code`, then the answer |
+| `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode, plus one for each `wait` |
+| `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, one for each `wait`, then the answer |
 
 Search helper calls, such as query expansion and document selection, are not
 counted here. They match direct mode in the per-round arm. In direct mode only
@@ -303,8 +303,8 @@ search in its first step, so each search runs it. The mock's `/metrics` counts
 these calls in its `helper` phase.
 
 When a program runs longer than its yield time, the result says that the cell is
-running. The mock then calls `wait_code` for that cell until the program ends.
-Each `wait_code` call is one more model call, so check `onyx_loadtest_code_waits`
+running. The mock then calls `wait` for that cell until the program ends.
+Each `wait` call is one more model call, so check `onyx_loadtest_code_waits`
 and report it with each arm. The `-codebatched` suffix applies only to the search
 profile and has no effect in direct mode.
 
@@ -341,7 +341,7 @@ Make sure that each arm ran the intended path. Scrape the Locust `/metrics`
 output before the run ends, because the endpoint stops with Locust, and save it
 with the arm. `onyx_loadtest_code_programs` must be zero for the direct arm and
 nonzero for the code mode arms, and `onyx_loadtest_code_waits` gives each arm's
-`wait_code` calls.
+`wait` calls.
 
 Reset the statistics after the warmup, in the same run. Wait until all users have
 started and `ONYX_START_STAGGER_SECONDS` has passed, plus any cache warmup, then
@@ -352,9 +352,9 @@ turns finish when the time limit ends, because Locust does not report a turn
 that it stops. Assess each arm's CSV with `capacity_report.py`, as
 [Interpret user capacity](#interpret-user-capacity) describes.
 
-Without `wait_code` calls, the per-round arm keeps the number and order of model
+Without `wait` calls, the per-round arm keeps the number and order of model
 calls of direct mode. Its difference from direct mode then shows the combined
-cost of the code mode path: the sandbox, the `execute_code` schema and
+cost of the code mode path: the sandbox, the `exec` schema and
 arguments, and the printed program output that replaces the JSON search results.
 The batched arm also makes fewer model calls and runs the searches in parallel.
 `search_calls` counts searches in both modes, so the arms report comparable
@@ -394,7 +394,7 @@ planned token/chunk histograms, and completed responses by transport. These coun
 reset when the mock restarts. They measure model calls, not whole application turns.
 Locust `/metrics` adds `onyx_loadtest_active`, `started`, `finished`, `answer_chars`,
 `packets`, `search_calls`, `reasoning_packets`, and `citations`, labelled by scenario.
-Code mode adds `code_programs` (`execute_code` calls), `code_waits` (`wait_code`
+Code mode adds `code_programs` (`exec` calls), `code_waits` (`wait`
 calls), `nested_search_calls` (searches that programs made, also in `search_calls`;
 a search that several observations report counts once), and `code_failures`.
 Finished counts include failed setup and interrupted turns; success rates come from Locust request statistics.

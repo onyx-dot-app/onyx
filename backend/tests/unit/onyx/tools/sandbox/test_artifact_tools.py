@@ -16,10 +16,15 @@ from onyx.chat.prompt_utils import build_system_prompt
 from onyx.context.search.models import ChunkIndexRequest, InferenceChunk
 from onyx.file_store.models import ArtifactText
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolResult
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CODE_MODE_SHAPES,
+    OPENAI_CODE_MODE,
+)
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
 from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.models import (
@@ -59,6 +64,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     parse_artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     ApplyPatchTool,
     ArtifactTool,
     EditTool,
@@ -73,15 +79,14 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     LibrarySearchTool,
     WriteStdinTool,
     WriteTool,
-    sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.spill import RESULT_MAX_CHARS
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 
 
 def test_claude_models_get_the_artifact_tool_and_the_others_the_library_tools() -> None:
-    claude = sandbox_tools_for_model(["claude-sonnet-4-5"])
-    other = sandbox_tools_for_model(["gpt-5.1"])
+    claude = SANDBOX_TOOLS[ToolFamily.CLAUDE]
+    other = SANDBOX_TOOLS[ToolFamily.OPENAI]
     assert claude == (
         ExecCommandTool,
         WriteStdinTool,
@@ -110,7 +115,8 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
     turn = MagicMock(spec=SandboxTurn)
     turn.vm_chat_files = []
     stubs = build_tool_stubs(
-        [tool(turn) for tool in sandbox_tools_for_model(["gpt-5.1"])]
+        OPENAI_CODE_MODE,
+        [tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI]],
     )
 
     assert stubs.deferred_namespaces == {
@@ -142,17 +148,18 @@ def test_code_mode_defers_the_artifact_tools_in_their_group() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model", "group"), [("claude-sonnet-4-5", "artifact"), ("gpt-5.1", "library")]
+    ("family", "group"),
+    [(ToolFamily.CLAUDE, "artifact"), (ToolFamily.OPENAI, "library")],
 )
 def test_no_immediate_text_names_an_artifact_function_in_code_mode(
-    model: str, group: str
+    family: ToolFamily, group: str
 ) -> None:
     """Every artifact function is deferred in its family's group: only the
     deferred-groups note names the group, and no listed function, tool
     description or system prompt names a function of it."""
     turn = MagicMock(spec=SandboxTurn)
     turn.vm_chat_files = []
-    tools: list[Tool] = [tool(turn) for tool in sandbox_tools_for_model([model])]
+    tools: list[Tool] = [tool(turn) for tool in SANDBOX_TOOLS[family]]
     artifact_functions = [
         tool for tool in tools if tool.code_mode_function_name.namespace == group
     ]
@@ -161,7 +168,7 @@ def test_no_immediate_text_names_an_artifact_function_in_code_mode(
         tool.code_mode_exposure is CodeModeExposure.DEFERRED
         for tool in artifact_functions
     )
-    offered, _ = with_code_mode(tools)
+    offered, _ = with_code_mode(tools, CODE_MODE_SHAPES[family])
     # get_company_context reads the KV store.
     with patch("onyx.chat.prompt_utils.get_company_context", return_value=None):
         prompt = build_system_prompt("base", tools=offered, include_user_info=False)
@@ -185,12 +192,13 @@ def test_the_deferred_note_says_what_the_library_group_is_for() -> None:
     turn = MagicMock(spec=SandboxTurn)
     turn.vm_chat_files = []
     offered, _ = with_code_mode(
-        [tool(turn) for tool in sandbox_tools_for_model(["gpt-5.1"])]
+        [tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI]],
+        OPENAI_CODE_MODE,
     )
     [description] = [
         tool.tool_definition().description
         for tool in offered
-        if tool.name == "execute_code"
+        if tool.name == OPENAI_CODE_MODE.run_name
     ]
     assert (
         f"\n  - library: {LibraryListTool.CODE_MODE_NAMESPACE_DESCRIPTION}\n"

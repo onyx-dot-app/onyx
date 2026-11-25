@@ -49,11 +49,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.constants import (
-    CODE_MODE_TOOL_NAME,
-    QUESTION_TOOL_NAMES,
-    WAIT_CODE_TOOL_NAME,
-)
+from onyx.tools.constants import CODE_MODE_STREAM_TOOL_TYPE
 from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import (
     CustomToolCallSummary,
@@ -75,6 +71,11 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeExecutionResult,
     CodeModeStdout,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CODE_MODE_TOOL_NAMES,
+    RUN_TOOL_NAMES,
+    WAIT_TOOL_NAMES,
+)
 from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -86,6 +87,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.question.models import (
+    QUESTION_TOOL_NAMES,
     QuestionArguments,
     QuestionToolDetails,
 )
@@ -129,11 +131,11 @@ HIDDEN_TOOLS = frozenset(
 # The card's note between the head and the tail of a spilled result.
 SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 # Tools whose code argument streams to the browser while the model writes it.
-CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
+CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, *RUN_TOOL_NAMES})
 # Tools whose prompt argument streams to the browser while the model writes it.
 PROMPT_ARGUMENT_TOOLS = frozenset({ImageGenerationTool.NAME})
-# Tools whose calls observe a code mode cell; each call renders as one code mode card.
-CODE_MODE_TOOL_NAMES = frozenset({CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME})
+# The `tool_type` that clients see on those streamed arguments.
+CODE_ARGUMENT_STREAM_TYPES = frozenset({PythonTool.NAME, CODE_MODE_STREAM_TOOL_TYPE})
 
 
 class FileToolArguments(NamedTuple):
@@ -504,7 +506,11 @@ class MessageRenderer:
             )
             if report is not None:
                 self._argument_streams[event.content_index] = _ArgumentStream(
-                    event.tool_call_id, event.tool_name, report
+                    event.tool_call_id,
+                    CODE_MODE_STREAM_TOOL_TYPE
+                    if event.tool_name in RUN_TOOL_NAMES
+                    else event.tool_name,
+                    report,
                 )
             if event.tool_name in HIDDEN_TOOLS:
                 return result
@@ -1283,8 +1289,8 @@ class CodeModeRenderer(ToolRenderer):
     the call ends, so one call can stream its start packet several times, under
     the placement of each observation. Clients identify a call by its cell and
     its `sub_turn_index`, and show the latest report. The cell id is on
-    `CodeModeStart.cell_id` (wait_code) or on the final `CodeModeDelta.cell_id`
-    (execute_code). The cell's closing record follows the section end of its
+    `CodeModeStart.cell_id` (a wait call) or on the final
+    `CodeModeDelta.cell_id` (a run call). The cell's closing record follows the section end of its
     last observation, under the same placement.
     """
 
@@ -1300,7 +1306,7 @@ class CodeModeRenderer(ToolRenderer):
         self._stdout = ""
 
     def _start_objects(self, args: dict[str, JsonValue]) -> list[packets.PacketObj]:
-        if self.call.name == WAIT_CODE_TOOL_NAME:
+        if self.call.name in WAIT_TOOL_NAMES:
             return [
                 packets.CodeModeStart(
                     code="",

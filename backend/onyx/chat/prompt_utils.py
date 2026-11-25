@@ -85,7 +85,7 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
-from onyx.tools.constants import FILE_READER_TOOL_NAME
+from onyx.tools.constants import EXEC_TOOL_NAME, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import LlmPythonExecutionResult, ToolPreference
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
@@ -299,7 +299,7 @@ def calculate_reserved_tokens(
         db_session: Database session
         persona_system_prompt: Custom agent system prompt (can be empty string)
         token_counter: Function that counts tokens in text
-        sandbox_tools: The turn's sandbox tools (sandbox_tools_for_model), if any
+        sandbox_tools: The turn's sandbox tools (SANDBOX_TOOLS), if any
         files: List of file descriptors from the chat message (optional)
         user_memory_context: User memory context (optional)
 
@@ -521,11 +521,11 @@ def build_system_prompt(
             PYTHON_TOOL_GUIDANCE.format(name=PythonTool.NAME),
             GENERATE_IMAGE_GUIDANCE.format(name=ImageGenerationTool.NAME),
             MEMORY_GUIDANCE.format(name=MemoryTool.NAME),
-            CODE_MODE_GUIDANCE,
+            CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME),
             POSTGRES_QUERY_GUIDANCE.format(name=PostgresTool.NAME),
         ]
         sandbox_section = sandbox_guidance(
-            all_guidance_sandbox_tools, str, code_mode=True
+            all_guidance_sandbox_tools, str, code_mode_run_name=EXEC_TOOL_NAME
         )
         if sandbox_section is not None:
             tool_sections.append(sandbox_section)
@@ -534,7 +534,9 @@ def build_system_prompt(
 
     if tools:
         code_mode_tool = next((t for t in tools if isinstance(t, CodeModeTool)), None)
-        code_mode = code_mode_tool is not None
+        code_mode_run_name = (
+            None if code_mode_tool is None else code_mode_tool.shape.run_name
+        )
         # The name that the model calls a tool by: in code mode, its program
         # function's.
         called_name: Callable[[str], str] = (
@@ -542,7 +544,11 @@ def build_system_prompt(
         )
         # Inner tools are functions of a code mode program, not direct tools.
         tools = callable_tools(tools)
-        tool_guidance_sections: list[str] = [CODE_MODE_GUIDANCE] if code_mode else []
+        tool_guidance_sections: list[str] = (
+            []
+            if code_mode_run_name is None
+            else [CODE_MODE_GUIDANCE.format(name=code_mode_run_name)]
+        )
         search_tool = next((t for t in tools if isinstance(t, SearchTool)), None)
         web_search_tool = next((t for t in tools if isinstance(t, WebSearchTool)), None)
         open_url_tool = next((t for t in tools if isinstance(t, OpenURLTool)), None)
@@ -590,7 +596,7 @@ def build_system_prompt(
         sandbox_section = sandbox_guidance(
             [tool for tool in tools if isinstance(tool, SandboxTool)],
             called_name,
-            code_mode=code_mode,
+            code_mode_run_name=code_mode_run_name,
         )
         if sandbox_section is not None:
             tool_guidance_sections.append(sandbox_section)
