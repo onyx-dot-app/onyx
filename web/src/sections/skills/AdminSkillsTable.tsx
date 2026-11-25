@@ -12,7 +12,7 @@ import {
 import { Content, Section } from "@opal/layouts";
 import { SvgMoreHorizontal, SvgShare, SvgTrash } from "@opal/icons";
 import { useInstallationPolicyCopy } from "@/lib/skills/hooks";
-import { hasUnpublishedChanges } from "@/lib/skills/sharing";
+import { canShareSkill, hasUnpublishedChanges } from "@/lib/skills/sharing";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
 
@@ -206,8 +206,7 @@ export default function AdminSkillsTable({
             <Dropdown.Data
               label={t("menu", { name: skill.name })}
               items={[
-                ...(skill.user_permission === "OWNER" ||
-                skill.user_permission === "EDITOR"
+                ...(canShareSkill(skill)
                   ? [
                       {
                         kind: "action" as const,

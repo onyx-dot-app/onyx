@@ -88,3 +88,26 @@ test("Share and Delete call back for an editor, and a viewer gets no Share", asy
     screen.queryByRole("menuitem", { name: "Share" })
   ).not.toBeInTheDocument();
 });
+
+test("an owner gets no Share for a plugin of a personal marketplace", async () => {
+  const user = setupUser();
+  const personal = customFixture({
+    id: "personal",
+    name: "my-kit",
+    user_permission: "OWNER",
+    owner: { id: "me", email: "me@example.com" },
+    marketplace: {
+      id: "m-personal",
+      name: "me/plugins",
+      kind: "github",
+      repository: "me/plugins",
+      personal: true,
+    },
+  });
+  renderTable([personal]);
+
+  await user.click(screen.getByRole("button", { name: "More for my-kit" }));
+  expect(
+    screen.queryByRole("menuitem", { name: "Share" })
+  ).not.toBeInTheDocument();
+});
