@@ -69,4 +69,23 @@ describe("terminalSpans", () => {
       { text: "\ntail", style: null },
     ]);
   });
+
+  test("a style does not cross a lost-bytes note", () => {
+    expect(
+      terminalSpans("\u001b[31mred[... 5 bytes of stdout lost ...]tail")
+    ).toEqual([
+      { text: "red", style: { color: "var(--opal-ansi-1)" } },
+      { text: "[... 5 bytes of stdout lost ...]", style: null },
+      { text: "tail", style: null },
+    ]);
+  });
+
+  test("one span budget covers every segment", () => {
+    const side = "\u001b[31mx".repeat(1500);
+    const spans = terminalSpans(
+      `${side}\n... [output truncated, 9 characters omitted] ...\n${side}`
+    );
+    expect(spans.length).toBeLessThanOrEqual(2002);
+    expect(spans.some((span) => span.text.includes("\u001b"))).toBe(false);
+  });
 });
