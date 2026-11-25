@@ -62,14 +62,28 @@ func ScanNodeImages(webImage string) (*Result, error) {
 	if !ok || webDigest == "" {
 		return nil, fmt.Errorf("web runtime must be pinned by digest: %q", webImage)
 	}
-	result := &Result{}
+	if !slices.ContainsFunc(pins, func(pin nodeImagePin) bool { return strings.HasSuffix(pin.Image, "@"+webDigest) }) {
+		return nil, fmt.Errorf("web runtime %s is absent from the tracked Node image pins", webImage)
+	}
+	result, err := scanNodeRuntimes(pins)
+	if err != nil {
+		return nil, err
+	}
+	if err := collectNodePackages(result, pins, webDigest); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// collectNodePackages skips the web image already covered by the web job.
+func collectNodePackages(result *Result, pins []nodeImagePin, webDigest string) error {
 	for _, pin := range pins {
 		if strings.HasSuffix(pin.Image, "@"+webDigest) {
 			continue
 		}
 		findings, err := scanOSImage(pin.Image, true)
 		if err != nil {
-			return nil, fmt.Errorf("scan %s: %w", pin.Image, err)
+			return fmt.Errorf("scan %s: %w", pin.Image, err)
 		}
 		for i := range findings {
 			findings[i].Image = pin.Image
@@ -79,5 +93,5 @@ func ScanNodeImages(webImage string) (*Result, error) {
 		result.Findings = append(result.Findings, image.Findings...)
 		result.Blocking = append(result.Blocking, image.Blocking...)
 	}
-	return result, nil
+	return nil
 }

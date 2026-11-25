@@ -52,12 +52,13 @@ var branchUnsafe = regexp.MustCompile(`[^A-Za-z0-9._/-]+`)
 
 // Advisory is one advisory affecting an alerted package.
 type Advisory struct {
-	ID       string   `json:"id"`
-	Aliases  []string `json:"aliases,omitempty"`
-	Severity Severity `json:"severity"`
-	Title    string   `json:"title,omitempty"`
-	URL      string   `json:"url,omitempty"`
-	FixedIn  string   `json:"fixed_in,omitempty"`
+	ReleasePolicy bool     `json:"release_policy,omitempty"`
+	ID            string   `json:"id"`
+	Aliases       []string `json:"aliases,omitempty"`
+	Severity      Severity `json:"severity"`
+	Title         string   `json:"title,omitempty"`
+	URL           string   `json:"url,omitempty"`
+	FixedIn       string   `json:"fixed_in,omitempty"`
 	// Images names the scanned images the advisory surfaced in. An advisory
 	// found only in the lockfiles has none.
 	Images []string `json:"images,omitempty"`
@@ -368,13 +369,14 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 			}
 		}
 		a.Advisories = append(a.Advisories, Advisory{
-			ID:       f.ID,
-			Aliases:  slices.Clone(f.Aliases),
-			Severity: f.Severity,
-			Title:    f.Title,
-			URL:      f.URL,
-			FixedIn:  f.FixedIn,
-			Images:   appendUnique(nil, f.Image),
+			ID:            f.ID,
+			Aliases:       slices.Clone(f.Aliases),
+			Severity:      f.Severity,
+			Title:         f.Title,
+			URL:           f.URL,
+			FixedIn:       f.FixedIn,
+			ReleasePolicy: f.Source == nodeReleasePolicySource,
+			Images:        appendUnique(nil, f.Image),
 		})
 		a.Versions = appendUnique(a.Versions, f.Version)
 		a.Manifests = appendUnique(a.Manifests, f.Manifest)
@@ -389,6 +391,18 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 	alerts := make([]Alert, 0, len(keys))
 	for _, key := range keys {
 		a := byKey[key]
+		if a.Ecosystem == "Node.js" {
+			// A single CVE can need different patches on each installed major.
+			fixes := map[string][]string{}
+			for _, adv := range a.Advisories {
+				fixes[adv.ID] = appendUnique(fixes[adv.ID], adv.FixedIn)
+			}
+			for i, adv := range a.Advisories {
+				versions := fixes[adv.ID]
+				sort.Strings(versions)
+				a.Advisories[i].FixedIn = strings.Join(versions, ", ")
+			}
+		}
 		a.PinnedImagesOnly = len(a.PinnedImages) > 0 && a.PinnedImagesOnly
 		a.Advisories = mergeLinked(a.Advisories)
 		sort.Strings(a.Versions)
@@ -562,7 +576,11 @@ func advisoryIDs(a Alert) string {
 // ties the issue to its package.
 func renderAlertBody(a Alert) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "`%s` (%s) has a blocking vulnerability.\n\n", a.Package, a.Ecosystem)
+	if slices.ContainsFunc(a.Advisories, func(adv Advisory) bool { return adv.ReleasePolicy }) {
+		fmt.Fprintf(&b, "`%s` (%s) has a blocking security release requirement.\n\n", a.Package, a.Ecosystem)
+	} else {
+		fmt.Fprintf(&b, "`%s` (%s) has a blocking vulnerability.\n\n", a.Package, a.Ecosystem)
+	}
 	b.WriteString("| Advisory | Severity | Fixed in | Summary |\n|---|---|---|---|\n")
 	for _, adv := range a.Advisories {
 		id := adv.ID
@@ -686,6 +704,9 @@ func ensureAlertLabels(scope string) error {
 
 func createAlertIssue(a *Alert, scope string) error {
 	title := fmt.Sprintf("Vulnerable dependency: %s (%s)", a.Package, a.Ecosystem)
+	if a.Ecosystem == "Node.js" {
+		title = "Node.js runtime security updates"
+	}
 	if scope != mainScope {
 		title += " on " + scope
 	}

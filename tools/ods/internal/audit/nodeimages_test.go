@@ -2,7 +2,7 @@ package audit
 
 import (
 	"fmt"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
+
 	"reflect"
 	"slices"
 	"strings"
@@ -28,14 +28,10 @@ func TestNodeImagePins(t *testing.T) {
 	}
 }
 
-func TestScanNodeImagesPreservesAttributionAndRejectsPartialScans(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	gittest.Git(t, dir, "init", "-q")
-	image := func(digit string) string { return "node:24@sha256:" + strings.Repeat(digit, 64) }
-	web, first, second := image("a"), image("b"), image("c")
-	writeFixture(t, dir, "Dockerfile", "FROM "+web+"\nFROM "+first+"\nFROM "+first+"\nFROM "+second+"\n")
-	gittest.Git(t, dir, "add", "Dockerfile")
+func TestCollectNodePackagesPreservesAttributionAndReportsFailures(t *testing.T) {
+	webDigest := "sha256:" + strings.Repeat("a", 64)
+	first, second := "node:24@first", "node:24@second"
+	pins := []nodeImagePin{{Image: "node:24@" + webDigest}, {Image: first}, {Image: second}}
 	original := scanOSImage
 	t.Cleanup(func() { scanOSImage = original })
 	for _, fail := range []bool{false, true} {
@@ -50,12 +46,13 @@ func TestScanNodeImagesPreservesAttributionAndRejectsPartialScans(t *testing.T) 
 			}
 			return []Finding{{ID: "CVE-fixture", Severity: SeverityCritical, Manifest: ref}}, nil
 		}
-		result, err := ScanNodeImages(web)
+		result := &Result{}
+		err := collectNodePackages(result, pins, webDigest)
 		if !slices.Equal(scanned, []string{first, second}) {
 			t.Fatalf("scanned %v", scanned)
 		}
 		if fail {
-			if err == nil || result != nil {
+			if err == nil {
 				t.Fatalf("partial scan: %+v, %v", result, err)
 			}
 		} else if err != nil || len(result.Blocking) != 2 || result.Blocking[0].Image != first || result.Blocking[1].Image != second {
