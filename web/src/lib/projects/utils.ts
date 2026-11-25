@@ -35,9 +35,11 @@ export function resendFiles(
   sent: { files?: FileDescriptor[] },
   composerFiles: ProjectFile[]
 ): ProjectFile[] {
+  const sentFiles = (sent.files ?? []).map(fileDescriptorToProjectFile);
+  const sentIds = new Set(sentFiles.map((file) => file.id));
   return [
-    ...(sent.files ?? []).map(fileDescriptorToProjectFile),
-    ...composerFiles,
+    ...sentFiles,
+    ...composerFiles.filter((file) => !sentIds.has(file.id)),
   ];
 }
 

@@ -165,6 +165,13 @@ export interface AppInputBarProps {
 interface ChatDraft extends ComposedMessage {
   // Uploaded files only; a file still uploading has no stable id.
   files?: ProjectFile[];
+  /** The sent question this draft edits, and the draft set aside for it. */
+  edit?: DraftEdit;
+}
+
+interface DraftEdit {
+  messageId: number;
+  stash: ChatDraft;
 }
 
 // Older drafts are plain text, or have mentions without an `index`.
@@ -176,9 +183,10 @@ function toChatDraft(draft: StoredChatDraft): ChatDraft {
 
 function toStoredChatDraft(
   composed: ComposedMessage,
-  files: ProjectFile[]
+  files: ProjectFile[],
+  edit: DraftEdit | null = null
 ): ChatDraft {
-  return {
+  const draft: ChatDraft = {
     message: composed.message,
     mentions: composed.mentions,
     files: files.filter(
@@ -188,11 +196,17 @@ function toStoredChatDraft(
         (file.status !== UserFileStatus.UPLOADING && isFilePending(file.status))
     ),
   };
+  if (edit)
+    draft.edit = {
+      messageId: edit.messageId,
+      stash: toStoredChatDraft(edit.stash, edit.stash.files ?? []),
+    };
+  return draft;
 }
 
 function isChatDraftEmpty(draft: StoredChatDraft): boolean {
-  const { message, files } = toChatDraft(draft);
-  return !message.trim() && !files?.length;
+  const { message, files, edit } = toChatDraft(draft);
+  return !message.trim() && !files?.length && !edit;
 }
 
 /**
@@ -255,11 +269,8 @@ const AppInputBar = React.memo(
     const withdrawingForEdit =
       editWithdrawalSession !== null &&
       editWithdrawalSession === currentSessionId;
-    // The draft waits aside while a sent question is edited in the composer.
-    const [editing, setEditing] = useState<{
-      messageId: number;
-      stash: ChatDraft;
-    } | null>(null);
+    // A sent question edited in the composer. It is part of the chat's draft.
+    const [editing, setEditing] = useState<DraftEdit | null>(null);
     const { user, isAdmin } = useUser();
     const { isMac } = useBrowserInfo();
     const sendDelivery = user?.preferences.interrupt_on_send
@@ -479,6 +490,7 @@ const AppInputBar = React.memo(
       );
       if (draft && !initialMessage && !hasMessage) {
         setMessage(draft.message, draft.mentions, { focus: false });
+        setEditing(draft.edit ?? null);
       }
     }, [
       chatDraftLoaded,
@@ -493,15 +505,14 @@ const AppInputBar = React.memo(
       if (
         !chatDraftLoaded ||
         !draftSeededRef.current ||
-        draftGeneration !== getChatDraftGeneration() ||
-        editing
+        draftGeneration !== getChatDraftGeneration()
       )
         return;
       if (skipNextDraftSaveRef.current) {
         skipNextDraftSaveRef.current = false;
         return;
       }
-      saveChatDraft(toStoredChatDraft(composed, currentMessageFiles));
+      saveChatDraft(toStoredChatDraft(composed, currentMessageFiles, editing));
     }, [
       composed,
       currentMessageFiles,
@@ -529,7 +540,28 @@ const AppInputBar = React.memo(
     const questionRefusesFiles =
       questionWaits && currentMessageFiles.length > 0;
 
+    function beginEdit(
+      messageId: number,
+      edited: ComposedMessage,
+      files: ProjectFile[]
+    ) {
+      if (!editing) holdUploads(currentMessageFiles);
+      setHeldSendKey(null);
+      setEditing({
+        messageId,
+        // Files still uploading or processing come back with the draft.
+        stash: editing?.stash ?? {
+          ...composedRef.current,
+          files: currentMessageFiles,
+        },
+      });
+      setMessage(edited.message, edited.mentions);
+      setCurrentMessageFiles(files);
+      setCursorToEnd();
+    }
+
     function endEdit(stash: ChatDraft) {
+      setHeldSendKey(null);
       setEditing(null);
       setMessage(stash.message, stash.mentions);
       setCurrentMessageFiles(releaseUploads(stash.files ?? []));
@@ -560,10 +592,16 @@ const AppInputBar = React.memo(
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
       reset: () => {
+        setEditing(null);
         clearMessage();
         clearChatDraft();
       },
       restore: (unsent: UnsentMessage) => {
+        // A rejected edit stays an edit, and the draft goes aside again.
+        if (unsent.messageIdToResend !== undefined) {
+          beginEdit(unsent.messageIdToResend, unsent, unsent.files);
+          return;
+        }
         // Keep a draft the user started while the failed send was pending.
         if (message.trim() || currentMessageFiles.length > 0) return;
         setMessage(unsent.message, unsent.mentions);
@@ -582,18 +620,11 @@ const AppInputBar = React.memo(
       },
       editMessage: (edit: MessageEdit) => {
         if (disabled || chatState !== "input") return;
-        if (!editing) holdUploads(currentMessageFiles);
-        setEditing({
-          messageId: edit.messageId,
-          // Files still uploading or processing come back with the draft.
-          stash: editing?.stash ?? {
-            ...composedRef.current,
-            files: currentMessageFiles,
-          },
-        });
-        setMessage(edit.message, edit.mentions);
-        setCurrentMessageFiles(edit.files.map(fileDescriptorToProjectFile));
-        setCursorToEnd();
+        beginEdit(
+          edit.messageId,
+          edit,
+          edit.files.map(fileDescriptorToProjectFile)
+        );
       },
     }));
 
@@ -791,7 +822,7 @@ const AppInputBar = React.memo(
       if (
         !pending ||
         sessionId === null ||
-        (edit && composedRef.current.message.trim())
+        (edit && (composedRef.current.message.trim() || editing))
       )
         return;
       if (edit) setEditWithdrawalSession(sessionId);
@@ -1427,7 +1458,7 @@ const AppInputBar = React.memo(
           onEdit={(index) => void withdrawPendingMessage(index, true)}
           onSendNow={interruptWithQueuedMessage}
           disabled={queue.busy || disabled}
-          canEdit={!message.trim()}
+          canEdit={!message.trim() && !editing}
         />
         {editing && (
           <EditMessageBanner onCancel={() => endEdit(editing.stash)} />

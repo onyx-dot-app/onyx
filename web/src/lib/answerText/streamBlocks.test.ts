@@ -3,7 +3,25 @@ import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { splitMarkdownBlocks } from "@/lib/answerText/streamBlocks";
+import {
+  endsInOpenCodeFence,
+  splitMarkdownBlocks,
+} from "@/lib/answerText/streamBlocks";
+
+describe("endsInOpenCodeFence", () => {
+  it.each([
+    ["text", false],
+    ["```py\nx = 1", true],
+    ["```py\nx = 1\n```", false],
+    ["```py\nx = 1\n```\n\nmore", false],
+    ["~~~\n```\nstill code", true],
+    ["````\n```\n````", false],
+    ["- item\n\n  ```\n  code", true],
+    ["```a``` is inline", false],
+  ])("%j: %s", (text, open) => {
+    expect(endsInOpenCodeFence(text)).toBe(open);
+  });
+});
 
 // Whitespace between top-level blocks collapses in the rendered answer.
 function html(source: string): string {
@@ -38,6 +56,13 @@ describe("splitMarkdownBlocks", () => {
     "- a\n\n  ```\n  x\n\ny\n\n  ```\n\nb",
     "```a``` is inline.\n\nprose\n\n```\none\n\ntwo\n```\n\nafter",
     "intro\n\n$$\na\n\nb\n$$\n\nafter $$x$$ inline\n\n$$ y $$\n\nend",
+    "intro\n\n$$$$\na\n\n$$\n\nb\n$$$$\n\nend",
+    "$$\nx$$\n\ny\n$$\n\nend",
+    "$$\na\n\nb $$ c\n  $$  \n\nend",
+    "$$a$b\n\nc",
+    "[ref]\n\n> [ref]: https://example.com\n\nend",
+    "[ref]\n\n- item\n\n  [ref]: https://example.com\n\nend",
+    "[multi line]\n\n[multi\nline]: https://example.com\n\nend",
   ])(
     "renders each block as the whole text renders it, at every streamed prefix: %j",
     (text) => {
@@ -75,6 +100,10 @@ describe("splitMarkdownBlocks", () => {
       "b",
     ]);
     expect(splitMarkdownBlocks("$$ x $$\n\nb")).toEqual(["$$ x $$\n\n", "b"]);
+    expect(splitMarkdownBlocks("$$$$\nx\n\n$$\n\ny\n$$$$\n\nb")).toEqual([
+      "$$$$\nx\n\n$$\n\ny\n$$$$\n\n",
+      "b",
+    ]);
   });
 
   it("keeps a list continuation after a blank line in the list", () => {
@@ -86,6 +115,9 @@ describe("splitMarkdownBlocks", () => {
 
   it.each([
     "[ref]\n\n[x]: https://example.com",
+    "[ref]\n\n> [ref]: https://example.com",
+    "[ref]\n\n- [ref]: https://example.com",
+    "[a b]\n\n[a\nb]: https://example.com",
     "a[^x]\n\n[^x]: note",
     "<details>\n\nbody\n\n</details>",
     ":::note\n\ncontent\n\n:::",

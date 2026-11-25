@@ -1,4 +1,5 @@
 import { render, screen } from "@tests/setup/test-utils";
+import userEvent from "@testing-library/user-event";
 import {
   Packet,
   PacketType,
@@ -73,6 +74,10 @@ const command: Packet[] = [
       workdir: null,
     },
   },
+  {
+    placement: { turn_index: MAX_HOISTED_STEPS, tab_index: 0 },
+    obj: { type: PacketType.EXEC_OUTPUT_DELTA, text: "all tests passed" },
+  },
 ];
 // More steps than a hoisted run has, so they collapse into one run card.
 const longRun: TurnGroup[] = [
@@ -96,6 +101,26 @@ const longRun: TurnGroup[] = [
     ],
   },
 ];
+
+describe("AgentTimeline's handover to the run card", () => {
+  it("keeps an open step open inside the open run card", async () => {
+    const user = userEvent.setup();
+    const commandOnly = longRun.slice(-1);
+    const view = render(
+      <AgentTimeline turnGroups={commandOnly} chatState={{ agent }} />
+    );
+
+    await user.click(screen.getByRole("button", { name: /Running command/ }));
+    expect(await screen.findByText("all tests passed")).toBeVisible();
+
+    view.rerender(<AgentTimeline turnGroups={longRun} chatState={{ agent }} />);
+
+    expect(
+      screen.getByRole("button", { name: /Running npm/, expanded: true })
+    ).toBeInTheDocument();
+    expect(screen.getByText("all tests passed")).toBeVisible();
+  });
+});
 
 describe("AgentTimeline's collapsed run card", () => {
   it("titles a working run by its current step", () => {
@@ -128,6 +153,35 @@ describe("AgentTimeline's collapsed run card", () => {
     );
 
     expect(screen.getByText("You stopped this response")).toBeVisible();
+  });
+
+  it("keeps a run done when the user stops the text after it", () => {
+    render(
+      <AgentTimeline
+        turnGroups={longRun}
+        chatState={{ agent }}
+        stopPacketSeen
+        stopReason={StopReason.USER_CANCELLED}
+        hasDisplayContent
+        processingDurationSeconds={12}
+      />
+    );
+
+    expect(screen.getByText(/^Worked for 12/)).toBeVisible();
+  });
+
+  it("does not time a later run by the response's start", () => {
+    render(
+      <AgentTimeline
+        turnGroups={longRun}
+        chatState={{ agent }}
+        stopPacketSeen
+        processingDurationSeconds={12}
+        isFirstRun={false}
+      />
+    );
+
+    expect(screen.getByText("Worked")).toBeVisible();
   });
 });
 
