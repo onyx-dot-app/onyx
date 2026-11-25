@@ -114,6 +114,7 @@ import {
   useChatSessionStore,
   useCurrentResponseStopped,
 } from "@/app/app/stores/useChatSessionStore";
+import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useAnswerWithMessage, useWaitingQuestionIds } from "@/lib/chat/hooks";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
@@ -584,6 +585,20 @@ const AppInputBar = React.memo(
       setMessage(stash.message, stash.mentions);
       setCurrentMessageFiles(releaseUploads(stash.files ?? []));
     }
+
+    // A switch to another version hides the edited message, and a resend of a
+    // hidden message fails, so the edit ends and the draft comes back.
+    const editedMessageShown = useChatSessionStore((state) => {
+      if (!editing || state.currentSessionId === null) return true;
+      const tree = state.sessions.get(state.currentSessionId)?.messageTree;
+      if (!tree || tree.size === 0) return true;
+      return getLatestMessageChain(tree).some(
+        (message) => message.messageId === editing.messageId
+      );
+    });
+    useEffect(() => {
+      if (editing && !editedMessageShown) endEdit(editing.stash);
+    }, [editedMessageShown]);
 
     function submitMessage(submitted: ComposedMessage) {
       if (!submitted.message.trim()) return;

@@ -12587,12 +12587,6 @@
             "between": "du {start} au {end}"
           }
         },
-        "stoppedDuration": {
-          "label": "Vous avez arrêté après {duration}"
-        },
-        "interruptedThinking": {
-          "label": "Vous avez arrêté cette réponse"
-        },
         "memory": {
           "default": {
             "status": "Mémoire"
@@ -13595,9 +13589,11 @@
       }
     },
     "find": {
+      "capped": "Recherche dans {count, plural, one {le dernier message} other {les # derniers messages}}",
       "close": "Fermer la recherche",
       "count": "{current} sur {total}",
       "label": "Rechercher dans la session",
+      "loadingOlder": "Chargement des messages plus anciens…",
       "next": "Résultat suivant",
       "placeholder": "Rechercher dans la session",
       "previous": "Résultat précédent"
