@@ -805,27 +805,33 @@ class BoundedTelemetry:
             self._key = deployment_key()
         if self._legacy is None:
             self._legacy = legacy_customer_uuid() or ""
-        body: dict[str, Any] = {"is_cloud": MULTI_TENANT}
-        if self._legacy:
-            body["legacy_customer_uuid"] = self._legacy
-        response: requests.Response = transport(
-            _ENDPOINT + "/v1/enroll",
-            headers={
-                "Authorization": "Bearer " + self._key,
-                "Accept-Encoding": "identity",
-            },
-            json=body,
-            timeout=(1, 2),
-            allow_redirects=False,
-            stream=True,
-        )
-        with response:
-            if response.status_code == 422 and self._legacy:
-                # A service that predates the field rejects it. The retry enrolls without it.
-                self._legacy = ""
-            if response.status_code != 200:
-                raise ValueError("Fleet enrollment unavailable")
-            result: Any = read_json_body(response, 4096)
+        result: Any = None
+        # At most two requests: a service that predates `legacy_customer_uuid` answers 422,
+        # and this call enrolls again at once without it, so a short-lived process still
+        # delivers its queued events. Any other failure goes to the caller's backoff.
+        for _ in range(2):
+            body: dict[str, Any] = {"is_cloud": MULTI_TENANT}
+            if self._legacy:
+                body["legacy_customer_uuid"] = self._legacy
+            response: requests.Response = transport(
+                _ENDPOINT + "/v1/enroll",
+                headers={
+                    "Authorization": "Bearer " + self._key,
+                    "Accept-Encoding": "identity",
+                },
+                json=body,
+                timeout=(1, 2),
+                allow_redirects=False,
+                stream=True,
+            )
+            with response:
+                if response.status_code == 422 and self._legacy:
+                    self._legacy = ""
+                    continue
+                if response.status_code != 200:
+                    raise ValueError("Fleet enrollment unavailable")
+                result = read_json_body(response, 4096)
+            break
         deployment: Any = result["deployment_id"]
         if not isinstance(deployment, str) or not _OPAQUE.fullmatch(deployment):
             raise ValueError("Invalid fleet deployment ID")

@@ -93,26 +93,49 @@ def test_enrollment_reports_the_pre_v5_install_id(
 def test_a_service_without_the_field_gets_enrollment_without_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """One delivery attempt enrolls and delivers, so a process that flushes once before it
+    exits still sends its queued events to a service that predates the field."""
     monkeypatch.setattr(fleet, "deployment_key", Mock(return_value=TEST_KEY))
-    monkeypatch.setattr(fleet, "legacy_customer_uuid", Mock(return_value=LEGACY_UUID))
+    legacy: Mock = Mock(return_value=LEGACY_UUID)
+    monkeypatch.setattr(fleet, "legacy_customer_uuid", legacy)
     sender: fleet.BoundedTelemetry = fleet.BoundedTelemetry("api")
     assert sender.emit("heartbeat", {"dropped_events": 0})
     bodies: list[dict[str, Any]] = []
+    record: RecordingTransport = RecordingTransport()
 
     def old_service(url: str, **kwargs: Any) -> Response:
         if url.endswith("/v1/enroll"):
             bodies.append(kwargs["json"])
             if "legacy_customer_uuid" in kwargs["json"]:
                 return Response({"error": "invalid_request"}, status=422)
-        return RecordingTransport()(url, **kwargs)
+        return record(url, **kwargs)
 
-    assert not sender.flush_once(old_service)
-    sender._blocked_until = 0.0
     assert sender.flush_once(old_service)
     assert bodies == [
         {"is_cloud": fleet.MULTI_TENANT, "legacy_customer_uuid": LEGACY_UUID},
         {"is_cloud": fleet.MULTI_TENANT},
     ]
+    assert len(record.events) == 1
+    # Later enrollments of this process skip the field without asking again.
+    sender._deployment = None
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    assert sender.flush_once(old_service)
+    assert bodies[-1] == {"is_cloud": fleet.MULTI_TENANT}
+    legacy.assert_called_once()
+
+
+def test_enrollment_retries_without_the_field_only_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fleet, "deployment_key", Mock(return_value=TEST_KEY))
+    monkeypatch.setattr(fleet, "legacy_customer_uuid", Mock(return_value=LEGACY_UUID))
+    sender: fleet.BoundedTelemetry = fleet.BoundedTelemetry("api")
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    transport: Mock = Mock(return_value=Response({}, status=422))
+    assert not sender.flush_once(transport)
+    assert transport.call_count == 2
+    assert len(sender._queue) == 1
+    assert sender._blocked_until > time.monotonic()
 
 
 def test_cloud_reports_no_pre_v5_install_id(monkeypatch: pytest.MonkeyPatch) -> None:
