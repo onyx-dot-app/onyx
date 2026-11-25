@@ -215,9 +215,9 @@ class _PolicedConnectionCache(dict[str, Connection]):
         super().__init__()
         self._allowed_hosts: set[str] = set()
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: object, default: Any = None, /) -> Any:
         """``key`` is ``<server>:<port>``."""
-        host: str = key.rsplit(":", 1)[0]
+        host: str = str(key).rsplit(":", 1)[0]
         if host not in self._allowed_hosts:
             validate_network_host(host, "file server")
             self._allowed_hosts.add(host)
