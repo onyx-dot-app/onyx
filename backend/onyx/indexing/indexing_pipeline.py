@@ -18,6 +18,7 @@ from onyx.configs.app_configs import (
     USE_DOCUMENT_SUMMARY,
 )
 from onyx.configs.chat_configs import CONTEXTUAL_RAG_LLM_TIMEOUT
+from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -41,6 +42,7 @@ from onyx.connectors.models import (
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
     get_documents_by_ids,
+    get_onedrive_permission_owned_doc_ids,
     update_docs_content_hash__no_commit,
     update_docs_source_info__no_commit,
     upsert_document_by_connector_credential_pair,
@@ -420,13 +422,16 @@ def get_docs_to_update(
     db_docs: list[DBDocument],
     ignore_timestamp_gate: bool = False,
     ignore_content_hash_gate: bool = False,
+    access_owned_elsewhere: frozenset[str] = frozenset(),
 ) -> _DocsToUpdateResult:
     """Return the subset of documents that need to be re-indexed, plus their pre-computed hashes.
 
     Two-gate dedup:
 
     Permission changes bypass both gates so ACL updates persist, and so does a
-    source type or size reported that differs from the stored one.
+    source type or size reported that differs from the stored one. The access of
+    a document in `access_owned_elsewhere` is not compared: the upsert keeps the
+    stored access of those rows, so a difference would re-index them every run.
 
     Gate 1 — timestamp skip (fast path):
       If the connector supplies doc_updated_at and it hasn't advanced past what we
@@ -462,6 +467,7 @@ def get_docs_to_update(
         access_changed = bool(
             db_doc
             and doc.external_access is not None
+            and doc.id not in access_owned_elsewhere
             and (
                 doc.external_access.external_user_emails
                 != set(db_doc.external_user_emails or [])
@@ -737,11 +743,18 @@ def index_doc_batch_prepare(
         db_doc.id: db_doc.file_id for db_doc in db_docs if db_doc.file_id is not None
     }
 
+    # The upsert keeps OneDrive's access on rows a perm-synced OneDrive pair owns.
+    access_owned_elsewhere = (
+        frozenset(get_onedrive_permission_owned_doc_ids(db_session, document_ids))
+        if documents and documents[0].source == DocumentSource.SHAREPOINT
+        else frozenset()
+    )
     updatable_docs, doc_id_to_content_hash = get_docs_to_update(
         documents=documents,
         db_docs=db_docs,
         ignore_timestamp_gate=ignore_time_skip or force_update,
         ignore_content_hash_gate=index_to_secondary or force_update,
+        access_owned_elsewhere=access_owned_elsewhere,
     )
     if len(updatable_docs) != len(documents):
         updatable_doc_ids = [doc.id for doc in updatable_docs]
