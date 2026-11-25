@@ -492,7 +492,8 @@ export async function settleChatSession({
         store.applyLoadedSession(sessionId, settled, loadSequence, {
           ...merged,
           uncaughtError:
-            latestType === "assistant" || latestType === "error"
+            current.uncaughtError?.affectsRunStatus !== false &&
+            (latestType === "assistant" || latestType === "error")
               ? null
               : current.uncaughtError,
         });

@@ -495,6 +495,11 @@ const ChatScrollContainer = React.memo(
       // above the composer, without moving its top out of view. A view that
       // follows a streaming reply keeps to the end instead; an idle one stops
       // following, so the click's catch-up does not jump to the end.
+      const pendingRevealRef = useRef<{
+        restoreFollowing: boolean;
+        inputRevision: number;
+        container: Element;
+      } | null>(null);
       const prepareReveal = useCallback((row: Element) => {
         const container = scrollContainerRef.current;
         if (
@@ -506,17 +511,30 @@ const ChatScrollContainer = React.memo(
         ) {
           return;
         }
-        const modeAtOpen = modeRef.current;
+        const previous = pendingRevealRef.current;
+        const inputRevision = scrollInputRevisionRef.current;
+        const reveal = {
+          restoreFollowing:
+            modeRef.current === "following" ||
+            (previous?.container === container &&
+              previous.inputRevision === inputRevision &&
+              previous.restoreFollowing),
+          inputRevision,
+          container,
+        };
+        pendingRevealRef.current = reveal;
         modeRef.current = "reading";
-        const inputAtOpen = scrollInputRevisionRef.current;
         return (cancelled = false) => {
+          if (pendingRevealRef.current !== reveal) return;
+          pendingRevealRef.current = null;
           if (
-            scrollInputRevisionRef.current !== inputAtOpen ||
+            scrollContainerRef.current !== container ||
+            scrollInputRevisionRef.current !== inputRevision ||
             modeRef.current !== "reading"
           )
             return;
           if (cancelled || !row.isConnected) {
-            modeRef.current = modeAtOpen;
+            if (reveal.restoreFollowing) modeRef.current = "following";
             return;
           }
           const viewport = container.getBoundingClientRect();
@@ -527,7 +545,7 @@ const ChatScrollContainer = React.memo(
           const roomAbove = rect.top - viewport.top - TURN_TOP_OFFSET_PX;
           const delta = Math.min(hiddenBelow, roomAbove);
           if (delta <= 0) {
-            modeRef.current = modeAtOpen;
+            if (reveal.restoreFollowing) modeRef.current = "following";
             return;
           }
           container.scrollBy({
