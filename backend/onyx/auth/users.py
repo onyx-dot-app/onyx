@@ -1417,7 +1417,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
             verify_email_in_whitelist(email, tenant_id)
-            valid_email_domains = get_security_settings().valid_email_domains
+            try:
+                # Strict: the fallback defaults usually allow every domain,
+                # which would let a blocked domain in while the read fails.
+                security_settings = get_security_settings(allow_fallback=False)
+            except Exception as e:
+                logger.exception(
+                    "Could not read the security settings for %s", tenant_id
+                )
+                raise OnyxError(
+                    OnyxErrorCode.SERVICE_UNAVAILABLE,
+                    "Could not check the sign-in settings. Try again in a moment.",
+                ) from e
+            valid_email_domains = security_settings.valid_email_domains
             verify_email_domain(email, valid_email_domains=valid_email_domains)
 
             user = await self.user_db.get_by_email(email)

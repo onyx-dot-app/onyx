@@ -107,7 +107,9 @@ def single_tenant_open_sign_up(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default security settings and open sign-up, whatever the local
     workspace has set."""
     monkeypatch.setattr(users_module, "MULTI_TENANT", False)
-    monkeypatch.setattr(users_module, "get_security_settings", _build_env_defaults)
+    monkeypatch.setattr(
+        users_module, "get_security_settings", lambda **_kwargs: _build_env_defaults()
+    )
     monkeypatch.setattr(users_module, "workspace_invite_only_enabled", lambda: False)
 
 

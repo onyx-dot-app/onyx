@@ -79,6 +79,7 @@ class _TenantWork:
         self.promote = AsyncMock()
         self.seed = AsyncMock()
         self.on_after_register = AsyncMock()
+        self.get_settings = MagicMock()
         self.manager = UserManager(self.user_db)
 
 
@@ -104,11 +105,14 @@ def tenant_work() -> Iterator[_TenantWork]:
         patch.object(UserManager, "_promote_placeholder_to_web_login", work.promote),
         patch.object(UserManager, "on_after_register", work.on_after_register),
         patch(f"{_MODULE}.seed_pinned_personas_from_featured", work.seed),
-        patch(f"{_MODULE}.get_security_settings", return_value=settings),
+        patch(
+            f"{_MODULE}.get_security_settings", return_value=settings
+        ) as get_settings,
         patch(f"{_MODULE}.verify_email_in_whitelist"),
         patch(f"{_MODULE}.verify_email_domain"),
         patch(f"{_MODULE}.remove_user_from_invited_users_after_login"),
     ):
+        work.get_settings = get_settings
         yield work
 
 
@@ -226,3 +230,28 @@ async def test_a_live_sso_session_signs_in(tenant_work: _TenantWork) -> None:
     tenant_work.user_db.get_by_email.return_value = existing
 
     assert await tenant_work.manager.magic_link_login(EMAIL, None) is existing
+
+
+@pytest.mark.asyncio
+async def test_the_allowlist_is_read_strictly(tenant_work: _TenantWork) -> None:
+    tenant_work.user_db.get_by_email.return_value = _row()
+
+    await tenant_work.manager.magic_link_login(EMAIL, None)
+
+    # A failed read must not fall back to the env list, which usually allows
+    # every domain.
+    tenant_work.get_settings.assert_called_once_with(allow_fallback=False)
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_allowlist_is_a_retryable_refusal(
+    tenant_work: _TenantWork,
+) -> None:
+    tenant_work.get_settings.side_effect = RuntimeError("db down")
+
+    with pytest.raises(OnyxError) as excinfo:
+        await tenant_work.manager.magic_link_login(EMAIL, None)
+
+    assert excinfo.value.error_code is OnyxErrorCode.SERVICE_UNAVAILABLE
+    tenant_work.user_db.get_by_email.assert_not_awaited()
+    tenant_work.insert.assert_not_awaited()
