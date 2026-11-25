@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -99,7 +100,12 @@ func nodeRuntimeReport(runtimes []NodeRuntime, advisories map[string]nodeAdvisor
 			return nil, err
 		}
 		if floor := floors[parts[1]]; floor != nil && v.Compare(floor) < 0 {
-			findings = append(findings, Finding{ID: "NODE-SECURITY-RELEASE-" + parts[1], Title: "Node runtime predates the latest security release on its major line", FixedIn: floor.String(), Severity: SeverityHigh, URL: nodeReleasesURL, Source: "node-security-releases"})
+			findings = append(findings, Finding{
+				ID:      "NODE-SECURITY-RELEASE-" + floor.String(),
+				Title:   "Node runtime predates the latest security release on its major line",
+				FixedIn: floor.String(), Severity: SeverityHigh,
+				URL: nodeReleasesURL, Source: "node-security-releases",
+			})
 		}
 		for _, f := range findings {
 			f.Package = "node"
@@ -140,11 +146,22 @@ func nodeAdvisoryFindings(version *semver.Version, advisories map[string]nodeAdv
 		if patched.MatchVersion(version) {
 			continue
 		}
+		if _, err := strconv.ParseUint(key, 10, 64); err != nil {
+			return nil, fmt.Errorf("invalid Node advisory number %q", key)
+		}
+		for _, cve := range a.CVEs {
+			if cve == "" || cveRe.FindString(cve) != cve {
+				return nil, fmt.Errorf("invalid Node advisory CVE %q", cve)
+			}
+		}
 		id := "NODE-CORE-" + key
 		if len(a.CVEs) > 0 {
 			id = a.CVEs[0]
 		}
-		findings = append(findings, Finding{ID: id, Aliases: a.CVEs, Title: a.Description, Severity: ParseSeverity(a.Severity), URL: a.URL, Source: "node-security-wg"})
+		findings = append(findings, Finding{
+			ID: id, Aliases: a.CVEs, Title: a.Description,
+			Severity: ParseSeverity(a.Severity), URL: a.URL, Source: "node-security-wg",
+		})
 	}
 	return findings, nil
 }
