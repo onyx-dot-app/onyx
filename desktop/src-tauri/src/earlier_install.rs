@@ -131,30 +131,79 @@ fn link_is_dir(meta: &std::fs::Metadata) -> bool {
     }
 }
 
-/// Deletes `path` and its contents without following links: a link inside
-/// it is removed as a link, and a `path` that is a link is removed as a
-/// link only. Returns whether `path` is gone; files in use stay.
-pub fn remove_tree(path: &Path) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(path) else {
-        return !path.exists();
+/// The files that the earlier app's setup program installed: its binary and
+/// its uninstaller (it had no resources or sidecars), in delete order. The
+/// uninstaller goes last, so it marks a folder that still needs a retry.
+pub const EARLIER_FILES: [&str; 2] = ["onyx.exe", "uninstall.exe"];
+
+/// Whether a folder entry is one of the earlier app's files.
+pub fn is_earlier_file(name: &str) -> bool {
+    EARLIER_FILES.iter().any(|f| f.eq_ignore_ascii_case(name))
+}
+
+/// Whether a folder (its entry names) still holds the earlier install: its
+/// uninstaller is there.
+pub fn still_earlier<'a>(names: impl IntoIterator<Item = &'a str>) -> bool {
+    names
+        .into_iter()
+        .any(|name| name.eq_ignore_ascii_case("uninstall.exe"))
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Removal {
+    /// The earlier app's files are gone (the folder too, if it was empty).
+    Done,
+    /// A file is in use: the next launch tries again.
+    Retry,
+    /// The folder is a link, or no longer holds the earlier install.
+    NotEarlier,
+}
+
+/// Deletes the earlier app's files in `dir`, never anything else, and never
+/// through a link: a listed name that is a link is removed as a link. The
+/// folder goes only if it is empty then.
+pub fn remove_earlier_files(dir: &Path) -> Removal {
+    let meta = match std::fs::symlink_metadata(dir) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Removal::Done,
+        Err(_) => return Removal::Retry,
     };
-    if is_link(&meta) {
-        let removed = if link_is_dir(&meta) {
-            std::fs::remove_dir(path)
-        } else {
-            std::fs::remove_file(path)
+    if is_link(&meta) || !meta.is_dir() {
+        return Removal::NotEarlier;
+    }
+    let names: Vec<String> = match std::fs::read_dir(dir) {
+        Ok(entries) => entries
+            .flatten()
+            .filter_map(|e| e.file_name().to_str().map(str::to_string))
+            .collect(),
+        Err(_) => return Removal::Retry,
+    };
+    if !still_earlier(names.iter().map(String::as_str)) {
+        return Removal::NotEarlier;
+    }
+    // The uninstaller last, so a folder that needs a retry still has it.
+    let mut listed: Vec<&String> = names.iter().filter(|n| is_earlier_file(n)).collect();
+    listed.sort_by_key(|n| n.eq_ignore_ascii_case("uninstall.exe"));
+    for name in listed {
+        let path = dir.join(name);
+        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+            continue;
         };
-        return removed.is_ok();
-    }
-    if !meta.is_dir() {
-        return std::fs::remove_file(path).is_ok();
-    }
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            remove_tree(&entry.path());
+        let removed = if is_link(&meta) && link_is_dir(&meta) {
+            std::fs::remove_dir(&path)
+        } else if is_link(&meta) || meta.is_file() {
+            std::fs::remove_file(&path)
+        } else {
+            // A folder with a listed name is not the earlier app's file.
+            continue;
+        };
+        if removed.is_err() {
+            return Removal::Retry;
         }
     }
-    std::fs::remove_dir(path).is_ok()
+    // Only an empty folder: anything else in it is not the earlier app's.
+    let _ = std::fs::remove_dir(dir);
+    Removal::Done
 }
 
 /// Whether this process runs with an elevated (administrator) token. Then
@@ -230,13 +279,22 @@ pub fn retire(app: &tauri::AppHandle) {
                 .map(|p| p.to_string_lossy().into_owned()),
         )
         .collect();
+    let holds_uninstaller = |dir: &String| {
+        std::fs::read_dir(dir).is_ok_and(|entries| {
+            let names: Vec<String> = entries
+                .flatten()
+                .filter_map(|e| e.file_name().to_str().map(str::to_string))
+                .collect();
+            still_earlier(names.iter().map(String::as_str))
+        })
+    };
     let from_entry = hkcu
         .open_subkey(&key)
         .and_then(|k| k.get_value::<String, _>("UninstallString"))
         .ok()
         .and_then(|s| install_dir_of(&s))
         .filter(|dir| {
-            let ok = plausible_earlier_folder(dir, &exe, &protected);
+            let ok = plausible_earlier_folder(dir, &exe, &protected) && holds_uninstaller(dir);
             if !ok {
                 log::warn!("the earlier desktop app's uninstall entry names an unexpected folder; left alone");
             }
@@ -257,7 +315,10 @@ pub fn retire(app: &tauri::AppHandle) {
                     .config
                     .update(|c| c.earlier_install_dir = Some(dir.clone()))
                 {
+                    // Without the record a failed delete has no retry, so
+                    // the entry stays for the next launch to start from.
                     log::warn!("could not record the earlier desktop app's folder: {e}");
+                    return;
                 }
             }
             Step::RemoveUninstallEntry => match hkcu.delete_subkey_all(&key) {
@@ -268,18 +329,23 @@ pub fn retire(app: &tauri::AppHandle) {
                 }
             },
             Step::RemoveShortcuts => remove_shortcuts(&dir),
-            Step::RemoveFolder => {
-                if remove_tree(Path::new(&dir)) {
-                    log::info!("deleted the earlier desktop app's program folder");
+            Step::RemoveFolder => match remove_earlier_files(Path::new(&dir)) {
+                Removal::Retry => log::warn!(
+                    "some files of the earlier desktop app are in use; the next launch tries again"
+                ),
+                outcome => {
+                    if outcome == Removal::Done {
+                        log::info!("deleted the earlier desktop app's files");
+                    } else {
+                        log::warn!(
+                            "the earlier desktop app's folder no longer holds its install; left alone"
+                        );
+                    }
                     if let Err(e) = state.config.update(|c| c.earlier_install_dir = None) {
                         log::warn!("could not update the earlier desktop app's record: {e}");
                     }
-                } else {
-                    log::warn!(
-                        "some files of the earlier desktop app are in use; the next launch tries again"
-                    );
                 }
-            }
+            },
         }
     }
 }
@@ -383,27 +449,67 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn only_the_earlier_apps_files_are_listed() {
+        for name in ["onyx.exe", "ONYX.EXE", "uninstall.exe", "Uninstall.exe"] {
+            assert!(is_earlier_file(name), "{name}");
+        }
+        for name in [
+            "onyx.dll",
+            "config.json",
+            "EBWebView",
+            "uninstall.exe.bak",
+            "notes.txt",
+        ] {
+            assert!(!is_earlier_file(name), "{name}");
+        }
+        assert_eq!(EARLIER_FILES.last(), Some(&"uninstall.exe"));
+    }
+
+    #[test]
+    fn a_folder_is_still_the_earlier_install_while_its_uninstaller_is_there() {
+        assert!(still_earlier(["onyx.exe", "uninstall.exe"]));
+        assert!(still_earlier(["Uninstall.exe"]));
+        assert!(!still_earlier(["onyx.exe"]));
+        assert!(!still_earlier(["other.exe", "data"]));
+        assert!(!still_earlier([]));
+    }
+
     #[cfg(unix)]
     #[test]
-    fn the_tree_delete_never_follows_links() {
+    fn only_listed_files_go_and_links_are_not_followed() {
         let root = std::env::temp_dir().join(format!("onyx-retire-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let program = root.join("Onyx");
         let outside = root.join("outside");
         std::fs::create_dir_all(program.join("resources")).unwrap();
         std::fs::create_dir_all(&outside).unwrap();
-        std::fs::write(program.join("onyx.exe"), "").unwrap();
-        std::fs::write(program.join("resources/a"), "").unwrap();
-        std::fs::write(outside.join("keep"), "").unwrap();
-        std::os::unix::fs::symlink(&outside, program.join("link")).unwrap();
-        assert!(remove_tree(&program));
-        assert!(!program.exists());
-        assert!(outside.join("keep").exists());
-        // A top-level link is removed as a link only.
-        let top = root.join("top");
-        std::os::unix::fs::symlink(&outside, &top).unwrap();
-        assert!(remove_tree(&top));
-        assert!(outside.join("keep").exists());
+        std::fs::write(outside.join("onyx.exe"), "keep").unwrap();
+        std::fs::write(program.join("uninstall.exe"), "").unwrap();
+        std::fs::write(program.join("notes.txt"), "keep").unwrap();
+        std::os::unix::fs::symlink(outside.join("onyx.exe"), program.join("onyx.exe")).unwrap();
+        assert_eq!(remove_earlier_files(&program), Removal::Done);
+        assert!(!program.join("uninstall.exe").exists());
+        assert!(std::fs::symlink_metadata(program.join("onyx.exe")).is_err());
+        assert!(outside.join("onyx.exe").exists());
+        // Other files keep the folder.
+        assert!(program.join("notes.txt").exists());
+        assert!(program.join("resources").exists());
+        // Without its uninstaller the folder is no longer the earlier install.
+        assert_eq!(remove_earlier_files(&program), Removal::NotEarlier);
+        // An empty earlier folder goes; a folder that is a link is left alone.
+        let clean = root.join("Clean");
+        std::fs::create_dir_all(&clean).unwrap();
+        std::fs::write(clean.join("onyx.exe"), "").unwrap();
+        std::fs::write(clean.join("uninstall.exe"), "").unwrap();
+        assert_eq!(remove_earlier_files(&clean), Removal::Done);
+        assert!(!clean.exists());
+        let linked = root.join("Linked");
+        std::fs::write(outside.join("uninstall.exe"), "keep").unwrap();
+        std::os::unix::fs::symlink(&outside, &linked).unwrap();
+        assert_eq!(remove_earlier_files(&linked), Removal::NotEarlier);
+        assert!(outside.join("uninstall.exe").exists());
+        assert_eq!(remove_earlier_files(&root.join("Gone")), Removal::Done);
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

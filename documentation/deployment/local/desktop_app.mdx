@@ -106,7 +106,7 @@ over a setup program install. To change the installer type, uninstall the previo
 - **Windows**: the new MSI upgrades a previous MSI install. The new setup program (`.exe`) installs for all users.
   The previous setup program installed for the current user only. At each user's first launch,
   the new app removes that user's previous install: its entry in **Settings > Apps** and **Programs and Features**,
-  its shortcuts, and its program folder. Do not remove the previous app with its own uninstaller:
+  its shortcuts, and its program files. Do not remove the previous app with its own uninstaller:
   its **Delete the application data** option also deletes the new app's settings and sign-in.
   If the previous app is still running, the new app removes the rest of its files at a later launch.
   The new app also takes over `onyx://` sign-in links.

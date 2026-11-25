@@ -158,10 +158,14 @@ and binary name (`onyx`), so this app takes its place:
      uninstaller any more.
   2. It deletes the earlier app's Start menu and desktop shortcuts (only `Onyx.lnk` files that
      point into its folder).
-  3. It deletes the earlier program folder (the folder of its `uninstall.exe`) without following
-     links. It refuses a folder that is a drive root, the user profile or an AppData root, this
-     app's install folder, or one of this app's data folders. Files that are in use stay;
-     `config.json` keeps the folder (`earlierInstallDir`), and the next launch tries again.
+  3. In the earlier program folder (the folder of its `uninstall.exe`), it deletes only the files
+     that the earlier setup program installed: `onyx.exe`, then `uninstall.exe`. A link with one
+     of these names is removed as a link. The folder goes only if it is empty then. It refuses a
+     folder that is a link, a drive root, the user profile or an AppData root, this app's install
+     folder, or one of this app's data folders. A file that is in use stays: `config.json` keeps
+     the folder (`earlierInstallDir`), and the next launch tries again, but only while the folder
+     still holds `uninstall.exe`. If `config.json` cannot record the folder, the app stops before
+     it deletes the uninstall entry, so the next launch starts again from that entry.
 
   An elevated (administrator) process skips this. The earlier app's data folder
   (`%APPDATA%\onyx\onyx-desktop`) stays.
