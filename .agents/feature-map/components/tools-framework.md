@@ -276,7 +276,7 @@ asks the user 1-3 multiple-choice questions and waits for the answers. Only the
 root `ChatAgent` gets it (`question_tool`, a factory that the agent calls with
 the name), after code mode wraps the configured tools, so it stays direct and
 subagents never get it. Its name is `ask_user_question` for Claude models and
-`request_user_input` for others (`tools/constants.py:QUESTION_TOOL_NAME` of the
+`request_user_input` for others (`tools/tool_implementations/question/models.py:QUESTION_TOOL_NAME` of the
 agent's `tool_family`); a restored root gets it when its saved step declared one,
 named for the active model's family (`chat/restoration.py:restore_chat_agent`). Which
 turns offer it, and how its call parks and resumes, is

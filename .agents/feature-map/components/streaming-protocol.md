@@ -210,7 +210,7 @@ response from its `approval_request` row, and a suspended response ends with
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python` and the code mode run tool of
 every shape), and the prompt of the tools in `chat/renderer.py:PROMPT_ARGUMENT_TOOLS`
 (`generate_image`), while the model writes it, with the tool name as `tool_type`; a code
-mode run tool (`exec`, `repl`, or `execute_code` in saved chats) always streams as
+mode run tool (`exec` or `repl`) always streams as
 `execute_code`, the type that clients know (`CODE_MODE_TOOL_TYPE`). The image step shows
 the prompt until the revised prompts arrive. Native model reasoning streams
 as reasoning packets.

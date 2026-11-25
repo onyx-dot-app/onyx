@@ -131,9 +131,10 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         OPENAI: the one rule that picks every tool shape
                                         (code mode, question tool, sandbox file tools)
   code_mode/shapes.py:CODE_MODE_SHAPES  one CodeModeShape per family: run/wait tool names
-                                        and argument models (RunToolArguments /
-                                        WaitToolArguments subclasses; each run model names
-                                        its yield argument, YIELD_ARGUMENT), the program search
+                                        and argument models (interface.py:ToolArguments
+                                        [RunRequest] / [WaitRequest] subclasses; each run
+                                        model names its yield argument, YIELD_ARGUMENT,
+                                        copied to run_yield_argument), the program search
                                         function (a ProgramFunction: name and stub) and its
                                         host function, and the describe function, if any.
                                         with_code_mode builds CodeCells(shape); the run and
@@ -141,7 +142,8 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         (code, yield_time_ms, max_output_tokens) / wait
                                         (cell_id, yield_time_ms, max_tokens, terminate),
                                         tool_search(query, limit); token budgets convert to
-                                        characters at APPROX_CHARS_PER_TOKEN. CLAUDE: repl
+                                        characters through tool_implementations/utils.py:
+                                        output_chars_from_tokens. CLAUDE: repl
                                         (code, timeout) / poll (cell_id, timeout,
                                         terminate), search_tools(query, max) and
                                         describe_tool(name); default output budget. Each
@@ -149,9 +151,10 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         WaitRequest that CodeCells serves, so the engine is
                                         the same for every shape. Extra arguments are
                                         ignored (non-strict definitions)
-  RUN_TOOL_NAMES / WAIT_TOOL_NAMES /    every shape's names plus execute_code / wait_code,
-  CODE_MODE_TOOL_NAMES                  which saved chats hold; the renderer, spill limits
-                                        and other name-keyed checks read these sets
+  RUN_TOOL_NAMES / WAIT_TOOL_NAMES /    every shape's names; the renderer, spill limits
+  CODE_MODE_TOOL_NAMES                  and other name-keyed checks read these sets.
+                                        Calls under other names, such as execute_code,
+                                        replay as generic tool cards
   code_mode_tool.py:with_code_mode      ChatAgent only: by Tool.code_mode_exposure, DIRECT
                                         tools stay direct; IMMEDIATE and DEFERRED ->
                                         CodeModeTool(inner, cells=CodeCells(shape), ...)

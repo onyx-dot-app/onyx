@@ -1,8 +1,6 @@
 """Tool names, IDs, and invocation limits."""
 
-from collections.abc import Mapping
-
-from onyx.llm.model_capabilities import ToolFamily
+from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 
 # Tool names as referenced by tool results / tool calls
 SEARCH_TOOL_NAME = "run_search"
@@ -28,9 +26,6 @@ EXEC_TOOL_NAME = "exec"
 WAIT_TOOL_NAME = "wait"
 REPL_TOOL_NAME = "repl"
 POLL_TOOL_NAME = "poll"
-# Saved chats can also hold run and wait calls under these names.
-EXECUTE_CODE_TOOL_NAME = "execute_code"
-WAIT_CODE_TOOL_NAME = "wait_code"
 # The tool type that clients know the streamed code of a code mode run call
 # of every shape by (web and mobile `CODE_MODE_TOOL_TYPE`).
 CODE_MODE_STREAM_TOOL_TYPE = "execute_code"
@@ -43,12 +38,6 @@ LOAD_SKILL_TOOL_NAME = "load_skill"
 SKILL_TOOL_NAMES = frozenset({SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME})
 ASK_USER_QUESTION_TOOL_NAME = "ask_user_question"
 REQUEST_USER_INPUT_TOOL_NAME = "request_user_input"
-# The question tool's name in each shape.
-QUESTION_TOOL_NAME: Mapping[ToolFamily, str] = {
-    ToolFamily.CLAUDE: ASK_USER_QUESTION_TOOL_NAME,
-    ToolFamily.OPENAI: REQUEST_USER_INPUT_TOOL_NAME,
-}
-QUESTION_TOOL_NAMES = frozenset(QUESTION_TOOL_NAME.values())
 
 INTERNAL_SEARCH_TOOL_NAME = "internal_search"
 WEB_SEARCH_TOOL_NAME = "web_search"
@@ -65,12 +54,19 @@ FILE_READER_MAX_CHARS = 16000
 
 # The model's cut of a tool's output in characters (code mode cells, and the
 # `max_output_chars` argument of exec_command and write_stdin): the default
-# and the most. The OpenAI code mode shape takes it in tokens
-# (code_mode/shapes.py).
+# and the most.
 DEFAULT_MAX_OUTPUT_CHARS = 40_000
 MAX_OUTPUT_CHARS = 160_000
 MAX_OUTPUT_CHARS_DESCRIPTION = (
     "Character budget for the output this call returns; longer output is cut in "
     f"the middle. Defaults to {DEFAULT_MAX_OUTPUT_CHARS} characters, at most "
     f"{MAX_OUTPUT_CHARS}."
+)
+# The same cut in tokens, for arguments that take it in tokens
+# (`output_chars_from_tokens` converts it).
+DEFAULT_MAX_OUTPUT_TOKENS = DEFAULT_MAX_OUTPUT_CHARS // APPROX_CHARS_PER_TOKEN
+MAX_OUTPUT_TOKENS_DESCRIPTION = (
+    "Token budget for the output this call returns; longer output is cut in the "
+    f"middle. Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens, at most "
+    f"{MAX_OUTPUT_CHARS // APPROX_CHARS_PER_TOKEN}."
 )

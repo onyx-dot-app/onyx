@@ -157,14 +157,13 @@ def test_a_program_reads_an_earlier_program_of_the_same_step(restored: bool) -> 
         )
         for called in ("echo", "tools.echo", "tools_echo")
     ]
-    # Another shape's and saved chats' code mode tools and program functions.
+    # Another shape's code mode tools.
     + [
         (called, f"`{called}` is not a tool in this chat. {use}")
-        for names, use in (
-            (("repl", "execute_code"), "Run a program with `exec`."),
-            (("poll", "wait_code"), "Wait on a running cell with `wait`."),
+        for called, use in (
+            ("repl", "Run a program with `exec`."),
+            ("poll", "Wait on a running cell with `wait`."),
         )
-        for called in names
     ],
 )
 def test_a_direct_call_of_a_program_function_says_where_it_runs(
