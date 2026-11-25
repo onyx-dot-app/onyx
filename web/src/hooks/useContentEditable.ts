@@ -667,7 +667,11 @@ export function useContentEditable({
       plainPasteRef.current = false;
 
       if (pasteTilesEnabled && !plainPaste && shouldCreatePasteTile(text)) {
-        const existing = findMatchingPasteTile(text);
+        // A paste over a selection replaces it, so it never expands a tile.
+        const existing =
+          window.getSelection()?.isCollapsed === false
+            ? null
+            : findMatchingPasteTile(text);
         if (existing) {
           expandTile(existing);
           return;
