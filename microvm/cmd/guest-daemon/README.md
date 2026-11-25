@@ -144,7 +144,7 @@ Browser (`internal/guestd/browser`):
 - Chrome picks a free DevTools port (`--remote-debugging-port=0`) and writes it to
   `DevToolsActivePort` in the profile. The daemon reads the port from that file, so a process that
   holds some fixed port cannot pass for the browser. Each start can get a different port.
-- Chrome runs as `--command-user` in its own cgroup `/sys/fs/cgroup/guestd-browser/chrome`, outside the
+- Chrome runs as `--command-user` in its own cgroup `/sys/fs/cgroup/guestd-browser/chrome-<n>` (one per launch), outside the
   command cgroups. It is not an execution: `List` does not show it and `running_executions` does not
   count it.
 - Its env is the command env with no command env of its own. Chrome ignores `HTTP(S)_PROXY`, so the

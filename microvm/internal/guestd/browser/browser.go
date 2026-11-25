@@ -55,7 +55,10 @@ type Browser struct {
 	cfg    Config
 	client *http.Client
 	mu     sync.Mutex
-	run    *running // nil: no browser
+	// launches names each launch's group: a group that failed to close must
+	// not block the next launch. Daemon start-up removes leftovers.
+	launches int
+	run      *running // nil: no browser
 }
 
 type running struct {
@@ -155,7 +158,8 @@ func (b *Browser) stopLocked() error {
 }
 
 func (b *Browser) launch(env []string) (*running, error) {
-	g, err := b.cfg.Isolator.NewGroup("chrome")
+	b.launches++
+	g, err := b.cfg.Isolator.NewGroup("chrome-" + strconv.Itoa(b.launches))
 	if err != nil {
 		return nil, fmt.Errorf("kill group: %w", err)
 	}

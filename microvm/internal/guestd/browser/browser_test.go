@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -180,6 +181,35 @@ func TestActivePortIgnoresAFIFO(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("activePort blocked on a FIFO")
+	}
+}
+
+type stuckIsolator struct{ made map[string]bool }
+
+func (s *stuckIsolator) NewGroup(id string) (execs.Group, error) {
+	if s.made[id] {
+		return nil, fmt.Errorf("group %s exists", id)
+	}
+	s.made[id] = true
+	g, _ := execs.ProcessGroups{}.NewGroup(id)
+	return stuckGroup{g}, nil
+}
+
+type stuckGroup struct{ execs.Group }
+
+func (stuckGroup) Close() error { return errors.New("device or resource busy") }
+
+func TestStartAfterAGroupThatDidNotClose(t *testing.T) {
+	b, env := newFake(t, browsertest.ModeServe)
+	b.cfg.Isolator = &stuckIsolator{made: map[string]bool{}}
+	if _, _, err := b.Start(context.Background(), env); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Stop(); err == nil {
+		t.Fatal("stop: want the close error")
+	}
+	if _, started, err := b.Start(context.Background(), env); err != nil || !started {
+		t.Fatalf("start after a group that did not close: started %v err %v", started, err)
 	}
 }
 
