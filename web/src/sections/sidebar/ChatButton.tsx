@@ -638,6 +638,7 @@ const ChatButton = memo(
             loading={runStatus === "working" || regeneratingTitle}
             tooltip={tooltip}
             tooltipDelay={TOOLTIP_DELAY_MS}
+            tooltipSuppressed={menuOpen}
             rightChildren={jumpHint ?? rightMenu}
             rightChildrenAtRest={
               (jumpHint && jumpShortcut?.width) ||
