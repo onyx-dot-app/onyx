@@ -60,6 +60,10 @@ import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
+import {
+  ChatNamingModelSetting,
+  SearchDecisionModelSetting,
+} from "@/views/admin/ChatTaskModelSettings";
 import { DefaultImageModelSetting } from "@/lib/imageGeneration/components";
 import { setDefaultImageGenerationConfig } from "@/lib/imageGeneration/svc";
 import {
@@ -744,6 +748,8 @@ export default function LanguageModelsPage() {
                   }}
                 />
               </InputHorizontal>
+              <ChatNamingModelSetting />
+              <SearchDecisionModelSetting />
               <InputHorizontal
                 title={t("modelRouting.autoMode.title")}
                 description={t("modelRouting.autoMode.description")}
