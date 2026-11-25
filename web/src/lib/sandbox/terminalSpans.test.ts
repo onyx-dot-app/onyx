@@ -56,12 +56,17 @@ describe("terminalSpans", () => {
   });
 
   test("a style does not cross an omission marker", () => {
-    expect(terminalSpans("\u001b[31mred\n…12 tokens truncated…\ntail")).toEqual(
-      [
-        { text: "red\n", style: { color: "var(--opal-ansi-1)" } },
-        { text: "…12 tokens truncated…", style: null },
-        { text: "\ntail", style: null },
-      ]
-    );
+    expect(
+      terminalSpans(
+        "\u001b[31mred\n... [output truncated, 12 characters omitted] ...\ntail"
+      )
+    ).toEqual([
+      { text: "red\n", style: { color: "var(--opal-ansi-1)" } },
+      {
+        text: "... [output truncated, 12 characters omitted] ...",
+        style: null,
+      },
+      { text: "\ntail", style: null },
+    ]);
   });
 });

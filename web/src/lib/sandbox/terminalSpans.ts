@@ -181,8 +181,9 @@ function parseSegment(text: string): TerminalSpan[] {
   return spans;
 }
 
-// The marker the harness puts where it cut output, e.g. "…12 tokens truncated…".
-const OMISSION = /…\d+ tokens? truncated…/g;
+// `truncation_marker` in backend/onyx/tools/tool_implementations/utils.py.
+const OMISSION =
+  /\.\.\. \[output truncated, \d+ characters omitted\](?: \.\.\.)?/g;
 
 /**
  * Splits terminal output into styled spans. The 16 base colors are
