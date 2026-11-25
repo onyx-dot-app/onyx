@@ -1,6 +1,7 @@
 """Code mode through the real server: the model calls tools from an
 `exec` program, which runs in the sandbox and is saved with the chat."""
 
+from contextlib import ExitStack
 from uuid import uuid4
 
 from onyx.configs.constants import DocumentSource
@@ -183,102 +184,118 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
     `search_tools` and `describe_tool` in programs. A chat that switches to it
     keeps the cells and calls of the other shape."""
     nonce = uuid4().hex
-    integration_id = IntegrationManager.create(
-        {
-            "for_organization": True,
-            "name": f"ping-{nonce}",
-            "description": "Ping a service",
-            "auth_mode": "none",
-            "auth_method": None,
-            "config": {"shape": "openapi", "openapi_spec": _PING_SPEC},
-        },
-        admin_user,
-    ).id
-    persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
-    link_persona(persona.id, integration_id, {})
-    claude = MockLLMManager.create(
-        mock_llm.api_base,
-        admin_user,
-        model_name="claude-sonnet-4-5-mock",
-        make_default=False,
-    )
-    mock_llm.conversation(
-        nonce,
-        # The other shape starts cell 1 and leaves it running.
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id="exec-program",
-                    name="exec",
-                    arguments={"code": "yield_control()\nawait asyncio.sleep(60)"},
-                )
-            ],
-            conditions=RequestConditions(
-                offers=["exec", "wait"], does_not_offer=["repl", "poll"]
+    with ExitStack() as cleanup:
+        integration_id = IntegrationManager.create(
+            {
+                "for_organization": True,
+                "name": f"ping-{nonce}",
+                "description": "Ping a service",
+                "auth_mode": "none",
+                "auth_method": None,
+                "config": {"shape": "openapi", "openapi_spec": _PING_SPEC},
+            },
+            admin_user,
+        ).id
+        cleanup.callback(
+            lambda: IntegrationManager.delete(
+                integration_id, admin_user
+            ).raise_for_status()
+        )
+        persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
+        cleanup.callback(
+            lambda: PersonaManager.delete(persona, user_performing_action=admin_user)
+        )
+        link_persona(persona.id, integration_id, {})
+        claude = MockLLMManager.create(
+            mock_llm.api_base,
+            admin_user,
+            model_name="claude-sonnet-4-5-mock",
+            make_default=False,
+        )
+        cleanup.callback(
+            LLMProviderManager.delete, claude, user_performing_action=admin_user
+        )
+        mock_llm.conversation(
+            nonce,
+            # The other shape starts cell 1 and leaves it running.
+            Reply(
+                tool_calls=[
+                    ToolCall(
+                        id="exec-program",
+                        name="exec",
+                        arguments={"code": "yield_control()\nawait asyncio.sleep(60)"},
+                    )
+                ],
+                conditions=RequestConditions(
+                    offers=["exec", "wait"], does_not_offer=["repl", "poll"]
+                ),
             ),
-        ),
-        Reply(
-            text="Left it running.",
-            conditions=RequestConditions(has_results_for=["exec-program"]),
-        ),
-        Reply(
-            tool_calls=[ToolCall(id="poll-old", name="poll", arguments={"cell_id": 1})],
-            conditions=RequestConditions(
-                offers=["repl", "poll"], does_not_offer=["exec", "wait"]
+            Reply(
+                text="Left it running.",
+                conditions=RequestConditions(has_results_for=["exec-program"]),
             ),
-        ),
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id="repl-program", name="repl", arguments={"code": _CLAUDE_PROGRAM}
-                )
-            ],
-            conditions=RequestConditions(has_results_for=["poll-old"]),
-        ),
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id="poll-new",
-                    name="poll",
-                    arguments={"cell_id": 2, "timeout": 30_000},
-                )
-            ],
-            conditions=RequestConditions(has_results_for=["repl-program"]),
-        ),
-        # A program that runs past its timeout returns, and poll stops it.
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id="repl-slow",
-                    name="repl",
-                    arguments={
-                        "code": 'await asyncio.sleep(60)\nprint("late")',
-                        "timeout": 1_000,
-                    },
-                )
-            ],
-            conditions=RequestConditions(has_results_for=["poll-new"]),
-        ),
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id="poll-stop",
-                    name="poll",
-                    arguments={"cell_id": 3, "terminate": True},
-                )
-            ],
-            conditions=RequestConditions(has_results_for=["repl-slow"]),
-        ),
-        Reply(
-            text="Done.",
-            conditions=RequestConditions(has_results_for=["poll-stop"]),
-        ),
-        conditions=RequestConditions(prompt_contains=[nonce]),
-    )
-    try:
+            Reply(
+                tool_calls=[
+                    ToolCall(id="poll-old", name="poll", arguments={"cell_id": 1})
+                ],
+                conditions=RequestConditions(
+                    offers=["repl", "poll"], does_not_offer=["exec", "wait"]
+                ),
+            ),
+            Reply(
+                tool_calls=[
+                    ToolCall(
+                        id="repl-program",
+                        name="repl",
+                        arguments={"code": _CLAUDE_PROGRAM},
+                    )
+                ],
+                conditions=RequestConditions(has_results_for=["poll-old"]),
+            ),
+            Reply(
+                tool_calls=[
+                    ToolCall(
+                        id="poll-new",
+                        name="poll",
+                        arguments={"cell_id": 2, "timeout": 30_000},
+                    )
+                ],
+                conditions=RequestConditions(has_results_for=["repl-program"]),
+            ),
+            # A program that runs past its timeout returns, and poll stops it.
+            Reply(
+                tool_calls=[
+                    ToolCall(
+                        id="repl-slow",
+                        name="repl",
+                        arguments={
+                            "code": 'await asyncio.sleep(60)\nprint("late")',
+                            "timeout": 1_000,
+                        },
+                    )
+                ],
+                conditions=RequestConditions(has_results_for=["poll-new"]),
+            ),
+            Reply(
+                tool_calls=[
+                    ToolCall(
+                        id="poll-stop",
+                        name="poll",
+                        arguments={"cell_id": 3, "terminate": True},
+                    )
+                ],
+                conditions=RequestConditions(has_results_for=["repl-slow"]),
+            ),
+            Reply(
+                text="Done.",
+                conditions=RequestConditions(has_results_for=["poll-stop"]),
+            ),
+            conditions=RequestConditions(prompt_contains=[nonce]),
+        )
         session = ChatSessionManager.create(
             persona_id=persona.id, user_performing_action=admin_user
         )
+        cleanup.callback(ChatSessionManager.delete, session, admin_user)
         first = ChatSessionManager.send_message(
             session.id, f"Start a cell. {nonce}", admin_user
         )
@@ -340,7 +357,3 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
         first_packets, second_packets = response.json()["packets"]
         assert _replayed_code_cells(first_packets) == 1
         assert _replayed_code_cells(second_packets) == 5
-    finally:
-        assert PersonaManager.delete(persona, user_performing_action=admin_user)
-        IntegrationManager.delete(integration_id, admin_user).raise_for_status()
-        LLMProviderManager.delete(claude, user_performing_action=admin_user)
