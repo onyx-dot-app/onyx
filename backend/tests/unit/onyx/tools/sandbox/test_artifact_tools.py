@@ -341,6 +341,37 @@ _LONG_ID = "x" * (ARTIFACTS_PATH_MAX_CHARS + 1)
             },
             "operations.0.rename.new_name",
         ),
+        *(
+            (ManageLibraryArguments, {"operations": [operation]}, field)
+            for operation, field in (
+                (
+                    {
+                        "operation": "restore_version",
+                        "library_file_id": str(uuid4()),
+                        "version_number": 1,
+                        "file_name": _LONG_ID,
+                    },
+                    "operations.0.restore_version.file_name",
+                ),
+                (
+                    {
+                        "operation": "update",
+                        "library_file_id": str(uuid4()),
+                        "file_uri": {"file_id": "f"},
+                        "file_name": _LONG_ID,
+                    },
+                    "operations.0.update.file_name",
+                ),
+                (
+                    {
+                        "operation": "update",
+                        "library_file_id": str(uuid4()),
+                        "file_uri": {"file_id": _LONG_ID},
+                    },
+                    "operations.0.update.file_uri.file_id",
+                ),
+            )
+        ),
     ],
 )
 def test_text_that_a_result_echoes_is_refused_when_too_long(
@@ -505,8 +536,37 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
     [
         (
             {"file_path": "a.md", "out_dir": "x"},
-            "Invalid tool arguments: Action publish does not take out_dir; it takes file_path, "
-            "file_paths, force, title, url",
+            "Invalid tool arguments: Action publish does not take out_dir; it "
+            "takes file_path, "
+            "file_paths, force, label, path, title, url",
+        ),
+        (
+            {
+                "path": "f",
+                "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b/v1",
+                "title": "A",
+            },
+            "Invalid tool arguments: path goes with url, without file_path, "
+            "file_paths or title",
+        ),
+        (
+            {"path": "f"},
+            "Invalid tool arguments: path goes with url, without file_path, "
+            "file_paths or title",
+        ),
+        (
+            {
+                "action": "restore",
+                "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b",
+            },
+            "restore takes the url of the version to restore, ending in /v<N>",
+        ),
+        (
+            {
+                "action": "rename",
+                "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b",
+            },
+            "Invalid tool arguments: rename takes url and name",
         ),
         (
             {"action": "list", "url": "x"},
@@ -527,7 +587,8 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
             },
             "title and url go with file_path",
         ),
-        ({"file_path": "a.md", "force": True}, "force goes with url"),
+        ({"file_path": "a.md", "force": True}, "force and label go with url"),
+        ({"file_path": "a.md", "label": "why"}, "force and label go with url"),
         ({}, "publish takes file_path or file_paths"),
         (
             {"file_path": "a.md", "file_paths": ["b.md"]},
@@ -559,13 +620,7 @@ _LONG_PATH = "a/" * ARTIFACTS_PATH_MAX_CHARS
             "'report.pdf' is not an artifact url",
         ),
         ({"action": "delete"}, "Invalid tool arguments: delete takes url"),
-        (
-            {
-                "action": "rename",
-                "url": "/app/artifacts/5b1f6e2a-7c3d-4e8f-9a0b-1c2d3e4f5a6b",
-            },
-            "Invalid tool arguments: rename takes url and name",
-        ),
+        ({"action": "restore"}, "Invalid tool arguments: restore takes url"),
         ({"action": "open"}, None),
         ({"icon": "x"}, None),
         *(

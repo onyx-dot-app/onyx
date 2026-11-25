@@ -7,7 +7,7 @@ on are ToolCallExceptions (errors.py:artifact_errors)."""
 import base64
 import posixpath
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from functools import partial
 from itertools import count
@@ -17,6 +17,7 @@ from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.db.chat import (
+    append_copied_artifact_version,
     delete_chat_artifact,
     delete_unpublished_chat_artifacts,
     get_user_published_file,
@@ -51,11 +52,14 @@ from onyx.tools.tool_implementations.sandbox.models import (
     DELETE_OF_A_VERSION,
     PUBLISH_FILES_MAX_BYTES,
     PUBLISH_FILES_MAX_TITLE_CHARS,
+    VERSION_REASON_MAX_CHARS,
     ArtifactAtPath,
     ArtifactById,
     ArtifactCursor,
     ArtifactFileReference,
     ArtifactList,
+    ArtifactPublished,
+    ArtifactVersionConflict,
     DeleteOperation,
     KeptTitle,
     LibraryFileTarget,
@@ -73,8 +77,11 @@ from onyx.tools.tool_implementations.sandbox.models import (
     PublishedFile,
     PublishFileArgument,
     RenameOperation,
+    RestoreVersionOperation,
+    UpdateOperation,
     artifact_extension,
     artifact_url,
+    parse_file_reference,
     shown_artifact,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
@@ -161,6 +168,39 @@ def _deleted_file(
     return file
 
 
+def _short_text(text: str | None, max_chars: int) -> str | None:
+    """A title or version reason as a save keeps it: without NUL, which
+    Postgres text cannot hold, trimmed and cut to `max_chars`; None when
+    blank."""
+    return sanitize_string(text or "").strip()[:max_chars].rstrip() or None
+
+
+def _checked_name(new_name: str, current: str) -> str:
+    """`new_name` as the new name of the artifact named `current`: a name
+    that safe_file_name keeps, so the file keeps it in the VM, with the
+    extension of `current` by the list's last-dot rule
+    (`artifact_extension`), in any case, after a non-empty name, which gives
+    the file's type."""
+    if safe_file_name([new_name]) != new_name:
+        raise tool_error(
+            f"{new_name!r} is not a file name that the VM keeps; "
+            f"try {safe_file_name([new_name])!r}"
+        )
+    extension = artifact_extension(current)
+    if artifact_extension(new_name) != extension:
+        raise tool_error(
+            f"The file's content is {current}, so its name "
+            + (
+                "must have no extension"
+                if extension is None
+                else f"must end in {'.' + extension!r}"
+            )
+        )
+    if new_name.rpartition(".")[:2] == ("", "."):
+        raise tool_error(f"{new_name!r} has no name before its extension")
+    return new_name
+
+
 def publish(
     turn: SandboxTurn,
     cancellation: CancellationSignal,
@@ -168,6 +208,7 @@ def publish(
     *,
     artifact: ListedArtifact | None = None,
     expected_version: int | None = None,
+    version_reason: str | None = None,
 ) -> list[PublishedFile]:
     """Copy files from the VM to the file store, each as the next version of
     an artifact (`db/chat.py:save_chat_artifact`): the root chat's artifact
@@ -203,15 +244,10 @@ def publish(
                 name = (
                     posixpath.basename(path) if artifact is None else artifact.file_name
                 )
-                # Postgres text cannot hold NUL, and a blank title is no
-                # title
                 title = (
                     KeptTitle.NEWEST
                     if artifact is not None and requested.title is None
-                    else sanitize_string(requested.title or "")
-                    .strip()[:PUBLISH_FILES_MAX_TITLE_CHARS]
-                    .rstrip()
-                    or None
+                    else _short_text(requested.title, PUBLISH_FILES_MAX_TITLE_CHARS)
                 )
                 # A file with no thumbnail still publishes. Once the
                 # budget is spent, no render looks up its file or logs.
@@ -233,6 +269,9 @@ def publish(
                         if artifact is None
                         else ArtifactById(artifact_id=artifact.library_file_id),
                         expected_version=expected_version,
+                        version_reason=_short_text(
+                            version_reason, VERSION_REASON_MAX_CHARS
+                        ),
                     )
                 )
             # A Stop during the last copy publishes nothing.
@@ -291,6 +330,7 @@ def replace_file(
         [PublishFileArgument(path=arguments.file, title=arguments.title)],
         artifact=artifact,
         expected_version=arguments.expected_current_version,
+        version_reason=arguments.version_reason,
     )
     return published
 
@@ -587,6 +627,35 @@ def _card_path(file: ListedArtifact) -> str:
     return posixpath.join(posixpath.dirname(file.path), file.file_name)
 
 
+_OtherOperation = RenameOperation | RestoreVersionOperation | UpdateOperation
+
+
+def _changed_file(operation: _OtherOperation) -> ArtifactFileReference:
+    """The file that an operation other than a delete changes."""
+    return (
+        operation.target
+        if isinstance(operation, RenameOperation)
+        else ArtifactFileReference(library_file_id=operation.library_file_id)
+    )
+
+
+def _other_operation_line(operation: _OtherOperation, name: str) -> str:
+    """The card line of an operation that a delete's approval covers too,
+    for the file named `name`."""
+    if isinstance(operation, RenameOperation):
+        return f"rename {name} to {operation.new_name}"
+    line = (
+        f"restore version {operation.version_number} of {name}"
+        if isinstance(operation, RestoreVersionOperation)
+        else f"add {operation.file_uri.file_id} as a new version of {name}"
+    )
+    return (
+        line
+        if operation.file_name is None
+        else f"{line} and rename it to {operation.file_name}"
+    )
+
+
 def _reference_text(reference: ArtifactFileReference) -> str:
     """A file reference as the call gives it, for a card line."""
     if reference.file_id is not None:
@@ -605,14 +674,8 @@ def _card_chat(file: ListedArtifact) -> str:
     )
 
 
-def _other_operation_line(operation: RenameOperation, name: str) -> str:
-    """The card line of an operation that a delete's approval covers too,
-    for the file named `name`."""
-    return f"rename {name} to {operation.new_name}"
-
-
 def delete_approval_details(
-    user_id: UUID, operations: Sequence[DeleteOperation | RenameOperation]
+    user_id: UUID, operations: Sequence[DeleteOperation | _OtherOperation]
 ) -> ToolApprovalDetails | None:
     """The approval card of a call with these operations, which both tool
     families show; None for a call without a delete. A line for each of
@@ -622,10 +685,11 @@ def delete_approval_details(
     for yet still gets a line: a version older than the newest, which the
     delete refuses, and a version newer than the newest, which another chat
     can still publish, by the artifact's display path; any other target as
-    given, as another chat can still publish it. Each other operation gets
-    a line, which the approval covers too, with the display path and the
-    chat of the file that it changes. It never raises: a failed lookup asks with the
-    targets as given."""
+    given, as another chat can still publish it. An earlier restore or
+    update of the call can also make the newer version. Each other
+    operation gets a line, which the approval covers too, with the display
+    path and the chat of the file that it changes. It never raises: a failed
+    lookup asks with the targets as given."""
     deletes = [
         operation.target
         for operation in operations
@@ -679,18 +743,19 @@ def delete_approval_details(
                     f"from {_card_chat(file)}",
                 )
             for operation in others:
+                changed = _changed_file(operation)
                 try:
                     shown = shown_artifact(
-                        _published_file(db_session, user_id, operation.target)
+                        _published_file(db_session, user_id, changed)
                     )
                     name = f"{_card_path(shown)} from {_card_chat(shown)}"
                 except ToolCallException:
-                    name = _reference_text(operation.target)
+                    name = _reference_text(changed)
                 also.append(_other_operation_line(operation, name))
     except Exception:
         logger.exception("artifacts_delete_approval_lookup_failed")
         also = [
-            _other_operation_line(operation, _reference_text(operation.target))
+            _other_operation_line(operation, _reference_text(_changed_file(operation)))
             for operation in others
         ]
         return ToolApprovalDetails(
@@ -717,6 +782,8 @@ def manage(
     user_id: UUID,
     cancellation: CancellationSignal,
     arguments: ManageLibraryArguments,
+    *,
+    conflict_message: Callable[[ArtifactVersionConflict], str],
 ) -> ManageResults:
     """Run the operations on the artifacts of the user's listable chats in
     order, each in its own transaction, with one result for each; from the
@@ -725,66 +792,112 @@ def manage(
     materialize: a started operation ends, and the next one does not
     start. A delete removes the artifact with every version
     (delete_chat_artifact), also the versions published since the user
-    approved it; the tools ask first (delete_approval_details). A rename's
-    name must be one that safe_file_name keeps, so the file keeps it in the
-    VM, with a name before the current extension, which gives the file's
-    type."""
+    approved it; the tools ask first (delete_approval_details). A rename
+    sets the artifact's name (_checked_name). A restore_version or an
+    update copies a published file, a version of this artifact or of
+    another one of the user's, of the artifact's type (check_same_type), as
+    the artifact's next version (append_copied_artifact_version), with the
+    expected_current_version check, whose error `conflict_message` words for
+    the calling tool. The name stays unless file_name renames it within its
+    type; the title is the restored version's, or for an update the newest
+    version's."""
     results: list[ManageResult] = []
     for operation in arguments.operations:
         cancellation.check()
         try:
             with artifact_errors(f"The {operation.operation}"):
-                with get_session_with_current_tenant() as db_session:
-                    file = (
-                        _published_file(db_session, user_id, operation.target)
-                        if isinstance(operation, RenameOperation)
-                        else _deleted_file(db_session, user_id, operation.target)
-                    )
-                if isinstance(operation, RenameOperation):
-                    name = operation.new_name
-                    if safe_file_name([name]) != name:
-                        raise tool_error(
-                            f"{name!r} is not a file name that the VM keeps; "
-                            f"try {safe_file_name([name])!r}"
-                        )
-                    extension = artifact_extension(file.file_name)
-                    if artifact_extension(name) != extension:
-                        raise tool_error(
-                            f"The file's content is {file.file_name}, so its name "
-                            + (
-                                "must have no extension"
-                                if extension is None
-                                else f"must end in {'.' + extension!r}"
-                            )
-                        )
-                    if name.rpartition(".")[:2] == ("", "."):
-                        raise tool_error(f"{name!r} has no name before its extension")
+                if isinstance(operation, RestoreVersionOperation | UpdateOperation):
                     with get_session_with_current_tenant() as db_session:
-                        rename_chat_artifact(db_session, file.library_file_id, name)
-                        db_session.commit()
-                        # The target can name an older version.
-                        newest = _published_file(
+                        artifact = _published_file(
                             db_session,
                             user_id,
-                            ArtifactFileReference(library_file_id=file.library_file_id),
+                            ArtifactFileReference(
+                                library_file_id=operation.library_file_id
+                            ),
                         )
+                        source = _published_file(
+                            db_session,
+                            user_id,
+                            ArtifactFileReference(
+                                library_file_id=operation.library_file_id,
+                                version_number=operation.version_number,
+                            )
+                            if isinstance(operation, RestoreVersionOperation)
+                            else parse_file_reference(operation.file_uri.file_id),
+                        )
+                    check_same_type(artifact, source.file_name)
+                    version_reason = _short_text(
+                        operation.version_reason, VERSION_REASON_MAX_CHARS
+                    )
+                    try:
+                        [added] = ArtifactPublished.of(
+                            [
+                                append_copied_artifact_version(
+                                    source,
+                                    artifact_id=artifact.library_file_id,
+                                    name=artifact.file_name
+                                    if operation.file_name is None
+                                    else _checked_name(
+                                        operation.file_name, artifact.file_name
+                                    ),
+                                    rename=operation.file_name is not None,
+                                    title=source.title
+                                    if isinstance(operation, RestoreVersionOperation)
+                                    else KeptTitle.NEWEST,
+                                    expected_version=operation.expected_current_version,
+                                    version_reason=version_reason,
+                                )
+                            ]
+                        ).files
+                    except ArtifactVersionConflict as error:
+                        raise tool_error(conflict_message(error)) from error
                     result = ManageResult(
                         operation=operation.operation,
                         ok=True,
-                        library_file_id=newest.library_file_id,
-                        file_id=newest.file_id,
-                        version_number=newest.version_number,
-                        file_name=newest.file_name,
-                        url=newest.url,
+                        library_file_id=added.library_file_id,
+                        file_id=added.file_id,
+                        version_number=added.version_number,
+                        file_name=added.file_name,
+                        url=added.url,
+                        version_reason=version_reason,
                     )
                 else:
-                    result = ManageResult(
-                        operation=operation.operation,
-                        ok=True,
-                        library_file_id=file.library_file_id,
-                        file_name=file.file_name,
-                        deleted_versions=delete_chat_artifact(file.library_file_id),
-                    )
+                    with get_session_with_current_tenant() as db_session:
+                        file = (
+                            _published_file(db_session, user_id, operation.target)
+                            if isinstance(operation, RenameOperation)
+                            else _deleted_file(db_session, user_id, operation.target)
+                        )
+                    if isinstance(operation, RenameOperation):
+                        name = _checked_name(operation.new_name, file.file_name)
+                        with get_session_with_current_tenant() as db_session:
+                            rename_chat_artifact(db_session, file.library_file_id, name)
+                            db_session.commit()
+                            # The target can name an older version.
+                            newest = _published_file(
+                                db_session,
+                                user_id,
+                                ArtifactFileReference(
+                                    library_file_id=file.library_file_id
+                                ),
+                            )
+                        result = ManageResult(
+                            operation=operation.operation,
+                            ok=True,
+                            library_file_id=newest.library_file_id,
+                            file_id=newest.file_id,
+                            version_number=newest.version_number,
+                            file_name=newest.file_name,
+                            url=newest.url,
+                        )
+                    else:
+                        result = ManageResult(
+                            operation=operation.operation,
+                            ok=True,
+                            library_file_id=file.library_file_id,
+                            file_name=file.file_name,
+                            deleted_versions=delete_chat_artifact(file.library_file_id),
+                        )
         except ToolCallException as error:
             result = ManageResult(
                 operation=operation.operation,

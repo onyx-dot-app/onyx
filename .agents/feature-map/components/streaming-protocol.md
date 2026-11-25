@@ -294,9 +294,11 @@ preview. When the output went to a file in the sandbox VM, it is the head and
 tail of the output with a plain note instead ([[code-execution]]); `session_id` is set while the command runs, and `error` (with no
 output) when the call failed. A replayed call sends the start and `exec_end`
 only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `library_create_library_file` or `library_replace_library_file`
-call, or an `artifact` publish (its `file_path` and `title`, or each of its
+call, or an `artifact` publish without `path` (its `file_path` and `title`, or each of its
 `file_paths`, as the entries), starts with `publish_files_start`: `files`, the `{path, title}` entries
-as the model wrote them, and `description`. It ends with
+as the model wrote them, and `description`. An `artifact` publish with `path`
+copies a stored file as a version (an update) and shows the generic card
+(`chat/renderer.py:publish_card_files`). It ends with
 `publish_files_end`:
 `files`, one `PublishedFile` per entry in the same order, or `error` and no
 files when the call published none (it publishes all or none). A

@@ -115,6 +115,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     WriteArguments,
     WriteStdinArguments,
     parse_artifact_url,
+    parse_file_reference,
 )
 from onyx.tools.tool_implementations.sandbox.patch import (
     APPLY_PATCH_MAX_STAGED_BYTES,
@@ -864,6 +865,16 @@ class LibraryCreateLibraryFileTool(_LibraryTool, _FileTool):
         )
 
 
+def _library_conflict_message(error: ArtifactVersionConflict) -> str:
+    """The library tools' words for a new version whose
+    expected_current_version is not the newest."""
+    return (
+        f"Current version is {error.current_version}, not the one you "
+        "named; nothing changed. Copy the newest version, merge your change "
+        "and try again, or omit expected_current_version"
+    )
+
+
 class LibraryReplaceLibraryFileTool(_LibraryTool, _FileTool):
     """Adds a version to an artifact of any of the user's chats
     (artifact_operations.replace_file). It returns PublishedFiles, so the
@@ -888,10 +899,7 @@ class LibraryReplaceLibraryFileTool(_LibraryTool, _FileTool):
                 self._turn, invocation.cancellation, arguments
             )
         except ArtifactVersionConflict as error:
-            raise tool_error(
-                f"Current version is {error.current_version}; materialize it and "
-                "merge your change, or omit expected_current_version"
-            ) from error
+            raise tool_error(_library_conflict_message(error)) from error
         return ToolResult(
             content=ArtifactPublished.of([published]).model_dump_json(),
             details=PublishedFiles(files=[published]),
@@ -932,8 +940,18 @@ class LibraryManageLibraryTool(_LibraryTool, _FileTool):
                 self._turn.user_id,
                 invocation.cancellation,
                 parse_tool_arguments(ManageLibraryArguments, invocation.arguments),
+                conflict_message=_library_conflict_message,
             ).model_dump_json()
         )
+
+
+def _artifact_conflict_message(error: ArtifactVersionConflict) -> str:
+    """The artifact tool's words for a new version whose url names a version
+    that is not the newest."""
+    return (
+        f"Current version is {error.current_version}; read it, merge your "
+        "change, then publish with the url from that result, or pass force:true"
+    )
 
 
 class ArtifactTool(_LibraryTool, _FileTool):
@@ -1005,6 +1023,7 @@ class ArtifactTool(_LibraryTool, _FileTool):
                 parse_tool_arguments(
                     ManageLibraryArguments, {"operations": [operation]}
                 ),
+                conflict_message=_artifact_conflict_message,
             ).model_dump_json()
         )
 
@@ -1018,6 +1037,27 @@ class ArtifactTool(_LibraryTool, _FileTool):
         except ValueError as error:
             raise tool_error(str(error)) from error
         if action == "publish":
+            if reference is None and (arguments.force, arguments.label) != (None, None):
+                raise tool_error("force and label go with url")
+            if reference is not None and reference[1] is None and not arguments.force:
+                raise tool_error(
+                    "Pass the url from your last result, which names the "
+                    "version you saw, or force:true"
+                )
+            expected_version = (
+                None if reference is None or arguments.force else reference[1]
+            )
+            if reference is not None and arguments.path is not None:
+                return self._manage(
+                    invocation.cancellation,
+                    {
+                        "operation": "update",
+                        "library_file_id": str(reference[0]),
+                        "file_uri": {"file_id": arguments.path},
+                        "expected_current_version": expected_version,
+                        "version_reason": arguments.label,
+                    },
+                )
             paths = (
                 [arguments.file_path]
                 if arguments.file_path is not None
@@ -1035,8 +1075,6 @@ class ArtifactTool(_LibraryTool, _FileTool):
                 arguments.title is not None or reference is not None
             ):
                 raise tool_error("title and url go with file_path")
-            if arguments.force is not None and reference is None:
-                raise tool_error("force goes with url")
             if reference is None:
                 published = artifact_operations.publish(
                     self._turn,
@@ -1047,55 +1085,58 @@ class ArtifactTool(_LibraryTool, _FileTool):
                     ],
                 )
             else:
-                artifact_id, version = reference
-                if version is None and not arguments.force:
-                    raise tool_error(
-                        "Pass the url from your last result, which names the "
-                        "version you saw, or force:true"
-                    )
                 try:
                     published = [
                         artifact_operations.replace_file(
                             self._turn,
                             invocation.cancellation,
                             LibraryReplaceLibraryFileArguments(
-                                library_file_id=artifact_id,
+                                library_file_id=reference[0],
                                 file=paths[0],
-                                expected_current_version=None
-                                if arguments.force
-                                else version,
+                                expected_current_version=expected_version,
                                 title=arguments.title,
+                                version_reason=arguments.label,
                             ),
                         )
                     ]
                 except ArtifactVersionConflict as error:
-                    raise tool_error(
-                        f"Current version is {error.current_version}; read it, "
-                        "merge your change, then publish with the url from that "
-                        "result, or pass force:true"
-                    ) from error
+                    raise tool_error(_artifact_conflict_message(error)) from error
             return ToolResult(
                 content=ArtifactPublished.of(published).model_dump_json(),
                 details=PublishedFiles(files=published),
             )
-        if reference is not None and action in ("delete", "rename"):
+        if reference is not None and action in ("delete", "rename", "restore"):
             artifact_id, version = reference
-            operation: dict[str, JsonValue] = (
-                {
-                    "operation": "delete",
-                    "target": {
-                        "library_file_id": str(artifact_id),
-                        "version_number": version,
+            if action != "restore":
+                return self._manage(
+                    invocation.cancellation,
+                    {
+                        "operation": "delete",
+                        "target": {
+                            "library_file_id": str(artifact_id),
+                            "version_number": version,
+                        },
+                    }
+                    if action == "delete"
+                    else {
+                        "operation": "rename",
+                        "target": {"library_file_id": str(artifact_id)},
+                        "new_name": arguments.name,
                     },
-                }
-                if action == "delete"
-                else {
-                    "operation": "rename",
-                    "target": {"library_file_id": str(artifact_id)},
-                    "new_name": arguments.name,
-                }
+                )
+            if version is None:
+                raise tool_error(
+                    "restore takes the url of the version to restore, ending in /v<N>"
+                )
+            return self._manage(
+                invocation.cancellation,
+                {
+                    "operation": "restore_version",
+                    "library_file_id": str(artifact_id),
+                    "version_number": version,
+                    "version_reason": arguments.label,
+                },
             )
-            return self._manage(invocation.cancellation, operation)
         if action == "list":
             return ToolResult(
                 content=artifact_operations.list_artifacts(
@@ -1128,23 +1169,17 @@ class ArtifactTool(_LibraryTool, _FileTool):
                 f"read copies at most {ARTIFACTS_MATERIALIZE_MAX_ITEMS} files; "
                 "pass fewer paths"
             )
-        items: list[MaterializeItem] = []
-        for target in targets:
-            try:
-                artifact_id, version = parse_artifact_url(target)
-            except ValueError:
-                # The url parsed above, so this is a file ID.
-                items.append(MaterializeItem(file_id=target))
-            else:
-                items.append(
-                    MaterializeItem(library_file_id=artifact_id, version_number=version)
-                )
         return ToolResult(
             content=artifact_operations.materialize(
                 self._turn,
                 invocation.cancellation,
                 LibraryPrepareMaterializeArguments(
-                    items=items,
+                    items=[
+                        MaterializeItem(
+                            **parse_file_reference(target).model_dump(exclude_none=True)
+                        )
+                        for target in targets
+                    ],
                     destination=MaterializeDestination(directory=arguments.out_dir),
                 ),
             ).model_dump_json()

@@ -104,6 +104,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
     ARTIFACT_TYPE_EXTENSIONS,
     ArtifactAtPath,
+    ArtifactById,
     ArtifactCursor,
     ArtifactNotFound,
     ArtifactSort,
@@ -1103,22 +1104,25 @@ def save_chat_artifact(
     thumbnail: bytes | None,
     target: ArtifactTarget,
     expected_version: int | None = None,
+    version_reason: str | None = None,
+    rename: bool = False,
 ) -> PublishedFile:
     """Save a file that the model published as the next version of the
     artifact `target`: the root chat's artifact at a path, or an existing
-    artifact, whose path stays. With `expected_version`, the save raises
-    ArtifactVersionConflict, and keeps nothing, unless that is the
-    artifact's newest available version (`_newest_available_version`) when
-    the save holds the artifact's row lock; the new version is still the
-    highest number plus one. An artifact that is gone, or whose chat is
-    deleted, raises ArtifactNotFound. KeptTitle.NEWEST takes the title of that
-    newest available version. `thumbnail` is a JPEG of the file's first
-    page. The file and its thumbnail get the artifact chat's access and file
-    list, and its hard delete; a new artifact gets the chat's owner. An
-    artifact row without a version is a deleted one: a save at its path
-    replaces it with a new artifact, and a save by its ID raises
-    ArtifactNotFound. A thumbnail that fails to save is left out. `name` is
-    the file's name; the result has the artifact's name, which a rename sets."""
+    artifact, whose path stays, and which `rename` gives the name `name`.
+    With `expected_version`, the save raises ArtifactVersionConflict, and
+    keeps nothing, unless that is the artifact's newest available version
+    (`_newest_available_version`) when the save holds the artifact's row
+    lock; the new version is still the highest number plus one.
+    An artifact that is gone, or whose chat is deleted, raises
+    ArtifactNotFound. KeptTitle.NEWEST takes the title of that newest
+    available version. `thumbnail` is a JPEG of the file's first page. The file and its
+    thumbnail get the artifact chat's access and file list, and its hard
+    delete; a new artifact gets the chat's owner. An artifact row without a
+    version is a deleted one: a save at its path replaces it with a new
+    artifact, and a save by its ID raises ArtifactNotFound. A thumbnail that
+    fails to save is left out. `name` is the file's name; the
+    result has the artifact's name, which a rename sets."""
     file_store = get_default_file_store()
     file_id = str(uuid4())
     thumbnail_file_id: str | None = None
@@ -1184,7 +1188,10 @@ def save_chat_artifact(
                     .where(ChatArtifactVersion.artifact_id == ChatArtifact.id)
                     .exists(),
                 )
-                .values(updated_at=_ARTIFACT_CHANGED_AT)
+                .values(
+                    updated_at=_ARTIFACT_CHANGED_AT,
+                    **({"name": name} if rename else {}),
+                )
                 .returning(
                     ChatArtifact.id,
                     ChatArtifact.chat_session_id,
@@ -1207,7 +1214,14 @@ def save_chat_artifact(
         version = db_session.execute(
             postgresql.insert(ChatArtifactVersion)
             .from_select(
-                ["artifact_id", "version", "file_id", "title", "thumbnail_file_id"],
+                [
+                    "artifact_id",
+                    "version",
+                    "file_id",
+                    "title",
+                    "thumbnail_file_id",
+                    "version_reason",
+                ],
                 select(
                     literal(locked.id),
                     func.coalesce(func.max(ChatArtifactVersion.version), 0) + 1,
@@ -1220,6 +1234,7 @@ def save_chat_artifact(
                     if title is KeptTitle.NEWEST
                     else literal(title, Text()),
                     literal(thumbnail_file_id, String()),
+                    literal(version_reason, Text()),
                 ).where(ChatArtifactVersion.artifact_id == locked.id),
             )
             .returning(ChatArtifactVersion.version, ChatArtifactVersion.title)
@@ -1269,6 +1284,53 @@ def save_chat_artifact(
         size=len(content),
         mime_type=mime_type,
         thumbnail_file_id=thumbnail_file_id,
+    )
+
+
+def append_copied_artifact_version(
+    source: ListedArtifact,
+    *,
+    artifact_id: UUID,
+    name: str,
+    rename: bool,
+    title: str | None | KeptTitle,
+    expected_version: int | None,
+    version_reason: str | None,
+) -> PublishedFile:
+    """Copy the published file `source`, and its thumbnail when it has one,
+    into new file records, saved as the next version of the artifact
+    `artifact_id` (save_chat_artifact, with its version check and its
+    clean-up when the save fails). The file store has no copy, so the copy
+    holds the file in memory, as a publish does. A thumbnail that fails to
+    read is left out. The caller checks the user's access to both."""
+    file_store = get_default_file_store()
+    with get_session_with_current_tenant() as db_session:
+        thumbnail_file_id = db_session.scalar(
+            select(ChatArtifactVersion.thumbnail_file_id).where(
+                ChatArtifactVersion.file_id == source.file_id
+            )
+        )
+    thumbnail: bytes | None = None
+    if thumbnail_file_id is not None:
+        try:
+            thumbnail = file_store.read_file(thumbnail_file_id).read()
+        except Exception:
+            logger.warning(
+                "Could not read the thumbnail %s of published file %s",
+                thumbnail_file_id,
+                source.file_id,
+                exc_info=True,
+            )
+    return save_chat_artifact(
+        file_store.read_file(source.file_id).read(),
+        name=name,
+        mime_type=source.mime_type,
+        title=title,
+        thumbnail=thumbnail,
+        target=ArtifactById(artifact_id=artifact_id),
+        expected_version=expected_version,
+        version_reason=version_reason,
+        rename=rename,
     )
 
 

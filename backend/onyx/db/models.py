@@ -5790,6 +5790,9 @@ class ChatArtifactVersion(Base):
         unique=True,
     )
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Why the version exists, at most VERSION_REASON_MAX_CHARS
+    # (sandbox/models.py), as a replace, an update or a restore gave it.
+    version_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     # A JPEG of the file's first page (FileOrigin.CHAT_ARTIFACT_THUMBNAIL),
     # with the version's access and deletes. A version stays valid without
     # it, so a deleted thumbnail only clears the link.

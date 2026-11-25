@@ -10,6 +10,7 @@ import json
 import threading
 import time
 from collections.abc import Callable, Generator, Sequence
+from io import BytesIO
 from typing import IO
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -26,7 +27,7 @@ from onyx.cache.interface import CacheBackend
 from onyx.chat import process_message
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import handle_stream_message_objects
-from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin, MessageType
 from onyx.db import chat as chat_db
 from onyx.db.chat import (
     create_chat_session,
@@ -99,14 +100,18 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactNotFound,
     ArtifactPublished,
     DeleteOperation,
+    FileUri,
     LibraryFileTarget,
     LibraryListFilters,
     ManageLibraryArguments,
+    ManageResult,
     ManageResults,
     MaterializedItems,
     PublishedFile,
     PublishFileArgument,
     RenameOperation,
+    RestoreVersionOperation,
+    UpdateOperation,
     VmChatFile,
     artifact_url,
 )
@@ -1557,7 +1562,13 @@ class _Family:
         raise NotImplementedError
 
     def replace(
-        self, call_id: str, artifact_id: UUID, file: str, seen: int, force: bool
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        file: str,
+        seen: int,
+        force: bool,
+        reason: str | None = None,
     ) -> Delta:
         """A new version of the artifact from `file`, by a caller that last
         saw version `seen`; `force` adds it whatever the newest version."""
@@ -1571,6 +1582,23 @@ class _Family:
         raise NotImplementedError
 
     def rename(self, call_id: str, artifact_id: UUID, name: str) -> Delta:
+        raise NotImplementedError
+
+    def restore(
+        self, call_id: str, artifact_id: UUID, version: int, reason: str | None
+    ) -> Delta:
+        raise NotImplementedError
+
+    def update(
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        file_id: str,
+        seen: int,
+        reason: str | None = None,
+    ) -> Delta:
+        """A copy of the published file `file_id` as the artifact's next
+        version, by a caller that last saw version `seen`."""
         raise NotImplementedError
 
 
@@ -1615,7 +1643,13 @@ class _Library(_Family):
         )
 
     def replace(
-        self, call_id: str, artifact_id: UUID, file: str, seen: int, force: bool
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        file: str,
+        seen: int,
+        force: bool,
+        reason: str | None = None,
     ) -> Delta:
         return tool_step(
             LibraryReplaceLibraryFileTool.NAME,
@@ -1624,6 +1658,7 @@ class _Library(_Family):
                 "library_file_id": str(artifact_id),
                 "file": file,
                 "expected_current_version": None if force else seen,
+                "version_reason": reason,
             },
         )
 
@@ -1649,6 +1684,48 @@ class _Library(_Family):
                         "operation": "rename",
                         "target": {"library_file_id": str(artifact_id)},
                         "new_name": name,
+                    }
+                ]
+            },
+        )
+
+    def restore(
+        self, call_id: str, artifact_id: UUID, version: int, reason: str | None
+    ) -> Delta:
+        return tool_step(
+            LibraryManageLibraryTool.NAME,
+            call_id,
+            {
+                "operations": [
+                    {
+                        "operation": "restore_version",
+                        "library_file_id": str(artifact_id),
+                        "version_number": version,
+                        "version_reason": reason,
+                    }
+                ]
+            },
+        )
+
+    def update(
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        file_id: str,
+        seen: int,
+        reason: str | None = None,
+    ) -> Delta:
+        return tool_step(
+            LibraryManageLibraryTool.NAME,
+            call_id,
+            {
+                "operations": [
+                    {
+                        "operation": "update",
+                        "library_file_id": str(artifact_id),
+                        "file_uri": {"file_id": file_id},
+                        "expected_current_version": seen,
+                        "version_reason": reason,
                     }
                 ]
             },
@@ -1698,7 +1775,13 @@ class _Artifact(_Family):
         )
 
     def replace(
-        self, call_id: str, artifact_id: UUID, file: str, seen: int, force: bool
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        file: str,
+        seen: int,
+        force: bool,
+        reason: str | None = None,
     ) -> Delta:
         return tool_step(
             ArtifactTool.NAME,
@@ -1707,6 +1790,7 @@ class _Artifact(_Family):
                 "file_path": file,
                 "url": artifact_url(artifact_id, seen),
                 "force": force or None,
+                "label": reason,
             },
         )
 
@@ -1730,6 +1814,44 @@ class _Artifact(_Family):
             call_id,
             {"action": "rename", "url": artifact_url(artifact_id, 1), "name": name},
         )
+
+    def restore(
+        self, call_id: str, artifact_id: UUID, version: int, reason: str | None
+    ) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {
+                "action": "restore",
+                "url": artifact_url(artifact_id, version),
+                "label": reason,
+            },
+        )
+
+    def update(
+        self,
+        call_id: str,
+        artifact_id: UUID,
+        file_id: str,
+        seen: int,
+        reason: str | None = None,
+    ) -> Delta:
+        return tool_step(
+            ArtifactTool.NAME,
+            call_id,
+            {"url": artifact_url(artifact_id, seen), "path": file_id, "label": reason},
+        )
+
+
+_LIBRARY_CONFLICT = (
+    "Current version is 2, not the one you named; nothing changed. Copy "
+    "the newest version, merge your change and try again, or omit "
+    "expected_current_version"
+)
+_ARTIFACT_CONFLICT = (
+    "Current version is 2; read it, merge your change, then publish with the "
+    "url from that result, or pass force:true"
+)
 
 
 @pytest.fixture(params=[_Library(), _Artifact()], ids=["library", "artifact"])
@@ -2147,6 +2269,32 @@ def test_a_replace_from_another_chat_versions_its_artifact_in_both_families(
 
 
 @pytest.mark.usefixtures("node")
+def test_a_replace_that_names_a_version_above_the_newest_says_they_differ(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    _publish(source, "report.md", b"v1")
+    artifact_id = _artifact_id(_publish(source, "report.md", b"v2"))
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    sandbox.write_file(chat.ref(db_session), "mine.md", b"mine")
+    family = _Library()
+    llm = family.llm(
+        [
+            family.replace("ahead", artifact_id, "mine.md", 5, False),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    message = last_tool_text(llm, "ahead")
+    assert message.startswith("Current version is 2, not the one you named")
+    assert "newer" not in message
+
+
+@pytest.mark.usefixtures("node")
 def test_a_stale_replace_writes_nothing_and_force_adds_the_version(
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
@@ -2170,7 +2318,10 @@ def test_a_stale_replace_writes_nothing_and_force_adds_the_version(
     )
     parts = chat.send(llm)
 
-    assert last_tool_text(llm, "stale").startswith("Current version is 2;")
+    # Each family words a conflict one way, for replace and manage alike.
+    assert last_tool_text(llm, "stale") == (
+        _LIBRARY_CONFLICT if isinstance(family, _Library) else _ARTIFACT_CONFLICT
+    )
     db_session.expire_all()
     versions = db_session.scalars(
         select(ChatArtifactVersion.version)
@@ -2747,6 +2898,83 @@ def test_the_delete_card_cuts_a_long_path_and_chat_title_as_the_list_does(
     }
 
 
+def test_a_delete_of_the_version_that_an_earlier_update_makes_asks(
+    db_session: Session, user: User
+) -> None:
+    """The update makes version 2 of a.md, which the delete names: the card
+    shows that version as not published yet, so the call never deletes
+    unasked."""
+    source = _chat(db_session, user, "Reports")
+    artifact_id = _artifact_id(_publish(source, "a.md", b"v1"))
+    other = _publish(source, "b.md", b"b")
+    tool = LibraryManageLibraryTool(_turn(user, _chat(db_session, user)))
+
+    card = tool.approval_details(
+        {
+            "operations": [
+                {
+                    "operation": "update",
+                    "library_file_id": str(artifact_id),
+                    "file_uri": {"file_id": other},
+                },
+                {
+                    "operation": "delete",
+                    "target": {
+                        "library_file_id": str(artifact_id),
+                        "version_number": 2,
+                    },
+                },
+            ]
+        }
+    )
+
+    assert card is not None
+    assert card.payload == {
+        "Delete": [
+            "a.md (version 2 not published yet; the delete removes the file and every version)"
+        ],
+        "Also in this call": [
+            f"add {other} as a new version of a.md from chat \u201cReports\u201d"
+        ],
+    }
+
+
+def test_the_delete_card_names_the_new_name_of_a_restore_or_update(
+    db_session: Session, user: User
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    deleted = _artifact_id(_publish(source, "gone.md", b"x"))
+    artifact_id = _artifact_id(_publish(source, "a.md", b"v1"))
+    other = _publish(source, "b.md", b"b")
+
+    card = artifact_operations.delete_approval_details(
+        user.id,
+        [
+            DeleteOperation(
+                operation="delete", target=LibraryFileTarget(library_file_id=deleted)
+            ),
+            UpdateOperation(
+                operation="update",
+                library_file_id=artifact_id,
+                file_uri=FileUri(file_id=other),
+                file_name="c.md",
+            ),
+            RestoreVersionOperation(
+                operation="restore_version",
+                library_file_id=artifact_id,
+                version_number=1,
+                file_name="d.md",
+            ),
+        ],
+    )
+
+    assert card is not None and card.payload is not None
+    assert card.payload["Also in this call"] == [
+        f"add {other} as a new version of a.md from chat \u201cReports\u201d and rename it to c.md",
+        "restore version 1 of a.md from chat \u201cReports\u201d and rename it to d.md",
+    ]
+
+
 def test_a_failed_delete_keeps_the_newest_version_and_its_number(
     monkeypatch: pytest.MonkeyPatch, db_session: Session, user: User
 ) -> None:
@@ -2914,6 +3142,7 @@ def test_a_rename_by_an_older_version_gives_the_newest_version(
                 ]
             }
         ),
+        conflict_message=str,
     ).results
 
     assert (
@@ -2962,6 +3191,7 @@ def test_a_rename_into_a_chat_deleted_during_it_writes_no_name(
                     ]
                 }
             ),
+            conflict_message=str,
         )
 
     assert f"No published file {artifact_id} in your chats" in (
@@ -2994,6 +3224,7 @@ def test_a_rename_keeps_the_extension_by_the_lists_last_dot_rule(
                     ]
                 }
             ),
+            conflict_message=str,
         )
 
     assert "README, so its name must have no extension" in (
@@ -3025,6 +3256,7 @@ def test_a_rename_needs_a_name_before_the_extension(
                     ]
                 }
             ),
+            conflict_message=str,
         )
 
     assert "'.png' has no name before its extension" in (
@@ -3054,6 +3286,11 @@ def test_the_delete_card_lists_the_other_operations_of_the_call(
                     "target": {"library_file_id": str(kept)},
                     "new_name": "final.md",
                 },
+                {
+                    "operation": "restore_version",
+                    "library_file_id": str(kept),
+                    "version_number": 1,
+                },
             ]
         }
     )
@@ -3062,7 +3299,8 @@ def test_the_delete_card_lists_the_other_operations_of_the_call(
     assert details.payload == {
         "Delete": ["old.md (1 version) from chat \u201cReports\u201d"],
         "Also in this call": [
-            "rename draft.md from chat \u201cReports\u201d to final.md"
+            "rename draft.md from chat \u201cReports\u201d to final.md",
+            "restore version 1 of draft.md from chat \u201cReports\u201d",
         ],
     }
 
@@ -3185,3 +3423,255 @@ def test_a_delete_batched_with_a_rename_runs_both_only_after_approval(
     db_session.expire_all()
     assert db_session.get_one(ChatArtifact, kept).name == "summary.md"
     assert db_session.get(ChatArtifact, doomed) is None
+
+
+def _versions(
+    db_session: Session, artifact_id: UUID
+) -> list[tuple[str, str | None, str | None, str | None]]:
+    """Each version's file ID, thumbnail file ID, title and reason."""
+    db_session.expire_all()
+    return [
+        (row.file_id, row.thumbnail_file_id, row.title, row.version_reason)
+        for row in db_session.scalars(
+            select(ChatArtifactVersion)
+            .where(ChatArtifactVersion.artifact_id == artifact_id)
+            .order_by(ChatArtifactVersion.version)
+        )
+    ]
+
+
+@pytest.mark.usefixtures("node")
+def test_a_restore_and_an_update_copy_a_version_and_its_thumbnail(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    user: User,
+    family: _Family,
+) -> None:
+    """A restore copies version 1 of chat A's report, with its thumbnail and
+    title, into new records as version 3; an update copies another
+    artifact's file as version 4 with the newest title; a replace adds
+    version 5. Each keeps its reason and the name, and shows the generic
+    card."""
+    chat_a = _chat(db_session, user, "Reports")
+    path = f"{session_workspace(chat_a)}/report.md"
+    first = save_chat_artifact(
+        b"v1",
+        name="report.md",
+        mime_type="text/markdown",
+        title="First",
+        thumbnail=b"thumb-1",
+        target=ArtifactAtPath(
+            chat_session_id=chat_a,
+            path=path,
+        ),
+    )
+    save_chat_artifact(
+        b"v2",
+        name="report.md",
+        mime_type="text/markdown",
+        title="Second",
+        thumbnail=None,
+        target=ArtifactAtPath(
+            chat_session_id=chat_a,
+            path=path,
+        ),
+    )
+    assert first.artifact_id is not None and first.thumbnail_file_id is not None
+    artifact_id = first.artifact_id
+    other = _publish(_chat(db_session, user, "Other"), "notes.md", b"other")
+    chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+    sandbox.write_file(chat.ref(db_session), "merged.md", b"merged")
+    llm = family.llm(
+        [
+            family.restore("restore", artifact_id, 1, "back to v1"),
+            family.update("update", artifact_id, other, 3, "from notes"),
+            family.replace("replace", artifact_id, "merged.md", 4, False, "merged"),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    [restored] = ManageResults.model_validate_json(
+        last_tool_text(llm, "restore")
+    ).results
+    assert (restored.version_number, restored.url, restored.version_reason) == (
+        3,
+        artifact_url(artifact_id, 3),
+        "back to v1",
+    )
+    [updated] = ManageResults.model_validate_json(last_tool_text(llm, "update")).results
+    assert (updated.version_number, updated.file_name) == (4, "report.md")
+    versions = _versions(db_session, artifact_id)
+    assert [(title, reason) for _, _, title, reason in versions] == [
+        ("First", None),
+        ("Second", None),
+        ("First", "back to v1"),
+        ("First", "from notes"),
+        ("First", "merged"),
+    ]
+    file_ids = [file_id for file_id, _, _, _ in versions]
+    assert len(set(file_ids)) == 5
+    assert file_ids[2:4] == [restored.file_id, updated.file_id]
+    store = get_default_file_store()
+    assert [store.read_file(file_id).read() for file_id in file_ids] == [
+        b"v1",
+        b"v2",
+        b"v1",
+        b"other",
+        b"merged",
+    ]
+    thumbnail = versions[2][1]
+    assert thumbnail is not None and thumbnail != first.thumbnail_file_id
+    assert store.read_file(thumbnail).read() == b"thumb-1"
+    assert versions[3][1] is None
+    names = db_session.scalars(
+        select(FileRecord.display_name).where(FileRecord.file_id.in_(file_ids[2:4]))
+    ).all()
+    assert names == ["report.md", "report.md"]
+    # Only the replace shows the publish card.
+    start, end, section_end = _publish_packets(parts)
+    assert start == packets.PublishFilesStart(
+        files=[PublishFileArgument(path="merged.md")]
+    )
+    assert isinstance(end, packets.PublishFilesEnd)
+    assert [file.version for file in end.files] == [5]
+    assert section_end == packets.SectionEnd()
+    [panel] = get_chat_published_files(chat_a, db_session)
+    assert panel.version == 5
+
+
+def test_an_update_renames_only_with_its_own_file_name_and_keeps_the_type(
+    db_session: Session, user: User
+) -> None:
+    """The operation's file_name renames the artifact within its extension;
+    file_uri.file_name does not rename. The artifact tool's path takes a
+    url too."""
+    chat = _chat(db_session, user, "Reports")
+    artifact_id = _artifact_id(_publish(chat, "report.md", b"v1"))
+    source = _publish(chat, "notes.md", b"notes")
+
+    def update(operation: dict[str, JsonValue]) -> ManageResult:
+        [result] = artifact_operations.manage(
+            user.id,
+            CancellationSignal(),
+            ManageLibraryArguments.model_validate(
+                {
+                    "operations": [
+                        {
+                            "operation": "update",
+                            "library_file_id": str(artifact_id),
+                            "file_uri": {"file_id": source},
+                        }
+                        | operation
+                    ]
+                }
+            ),
+            conflict_message=str,
+        ).results
+        return result
+
+    renamed = update({"file_name": "final.md"})
+    assert (renamed.ok, renamed.file_name, renamed.version_number) == (
+        True,
+        "final.md",
+        2,
+    )
+    kept = update({"file_uri": {"file_id": source, "file_name": "ignored.md"}})
+    assert (kept.ok, kept.file_name, kept.version_number) == (True, "final.md", 3)
+    with pytest.raises(
+        ToolCallException,
+        match="The file's content is final.md, so its name must end in '.md'",
+    ):
+        update({"file_name": "final.csv"})
+
+    result = _call(
+        ArtifactTool(_turn(user, _chat(db_session, user))),
+        {
+            "url": artifact_url(artifact_id, 3),
+            "path": artifact_url(_artifact_id(source), 1),
+        },
+    )
+    [by_url] = ManageResults.model_validate_json(result.content).results
+    assert (by_url.ok, by_url.file_name, by_url.version_number) == (
+        True,
+        "final.md",
+        4,
+    )
+    newest_file_id = _versions(db_session, artifact_id)[-1][0]
+    assert get_default_file_store().read_file(newest_file_id).read() == b"notes"
+
+
+@pytest.mark.usefixtures("node", "sandbox")
+def test_a_stale_or_foreign_update_writes_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    make_test_user: MakeTestUser,
+    family: _Family,
+) -> None:
+    source = _chat(db_session, user, "Reports")
+    # A source with a thumbnail, whose copy a refused update must not keep.
+    first = save_chat_artifact(
+        b"v1",
+        name="report.md",
+        mime_type="text/markdown",
+        title=None,
+        thumbnail=b"thumb-1",
+        target=ArtifactAtPath(
+            chat_session_id=source,
+            path=f"{session_workspace(source)}/report.md",
+        ),
+    ).file_id
+    _publish(source, "report.md", b"v2")
+    artifact_id = _artifact_id(first)
+    sheet = _publish(source, "data.csv", b"a,b\n")
+    theirs = _publish(
+        _chat(db_session, make_test_user("artifact_tools_update_stranger")),
+        "a.md",
+        b"a",
+    )
+    upload = get_default_file_store().save_file(
+        content=BytesIO(b"upload"),
+        display_name="upload.md",
+        file_origin=FileOrigin.CHAT_UPLOAD,
+        file_type="text/markdown",
+    )
+    try:
+        chat = _sandbox_chat(db_session, user, monkeypatch, "Today")
+        before = _versions(db_session, artifact_id)
+        records = db_session.scalars(select(func.count(FileRecord.file_id))).one()
+        llm = family.llm(
+            [
+                family.update("stale", artifact_id, first, 1),
+                family.update("theirs", artifact_id, theirs, 2),
+                family.update("upload", artifact_id, upload, 2),
+                family.update("sheet", artifact_id, sheet, 2),
+                family.restore("missing", artifact_id, 9, None),
+                Delta(content="Done."),
+            ]
+        )
+        chat.send(llm)
+
+        assert (
+            _LIBRARY_CONFLICT if isinstance(family, _Library) else _ARTIFACT_CONFLICT
+        ) in last_tool_text(llm, "stale")
+        assert f"No published file {theirs} in your chats" in last_tool_text(
+            llm, "theirs"
+        )
+        assert f"No published file {upload} in your chats" in last_tool_text(
+            llm, "upload"
+        )
+        assert "data.csv is not a file of the type of report.md" in last_tool_text(
+            llm, "sheet"
+        )
+        assert f"No version 9 of {artifact_id}; its newest is 2" in last_tool_text(
+            llm, "missing"
+        )
+        assert _versions(db_session, artifact_id) == before
+        # The stale copy left no file record or thumbnail behind.
+        assert (
+            db_session.scalars(select(func.count(FileRecord.file_id))).one() == records
+        )
+    finally:
+        get_default_file_store().delete_file(upload)

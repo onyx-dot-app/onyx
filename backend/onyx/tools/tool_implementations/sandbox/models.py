@@ -210,6 +210,9 @@ PUBLISH_FILES_MAX_BYTES = 100 << 20
 PUBLISH_FILES_MAX_FILES = 20
 # Longest title that a publish keeps; it cuts a longer one.
 PUBLISH_FILES_MAX_TITLE_CHARS = 200
+# Longest version_reason that a save keeps; it cuts a longer one.
+VERSION_REASON_MAX_CHARS = 500
+_VERSION_REASON = "A short note on why this version exists, for the version history."
 
 
 class PublishFileArgument(BaseModel):
@@ -512,6 +515,7 @@ class LibraryReplaceLibraryFileArguments(BaseModel):
         description="A short title for the new version. Defaults to the "
         "current version's title.",
     )
+    version_reason: str | None = Field(default=None, description=_VERSION_REASON)
 
 
 class ArtifactAtPath(BaseModel):
@@ -681,6 +685,16 @@ class ArtifactFileReference(BaseModel):
         return self
 
 
+def parse_file_reference(text: str) -> ArtifactFileReference:
+    """The published file version that `text` names: the url of an artifact
+    or of one of its versions, or else a version's file ID."""
+    try:
+        artifact_id, version = parse_artifact_url(text)
+    except ValueError:
+        return ArtifactFileReference(file_id=text)
+    return ArtifactFileReference(library_file_id=artifact_id, version_number=version)
+
+
 class MaterializeItem(ArtifactFileReference):
     """One file to copy, and the name and directory of the copy."""
 
@@ -794,8 +808,63 @@ class RenameOperation(BaseModel):
     )
 
 
+_EXPECTED_CURRENT_VERSION = (
+    "The version_number that you last read. The operation fails when the "
+    "artifact has a newer one."
+)
+_NEW_FILE_NAME = (
+    "Also renames the artifact: a file name, not a path, with the current "
+    "extension. Defaults to the current name."
+)
+
+
+# Adds a copy of an older version as the newest version.
+class RestoreVersionOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: Literal["restore_version"]
+    library_file_id: UUID
+    version_number: int = Field(description="The version to copy.")
+    expected_current_version: int | None = Field(
+        default=None, description=_EXPECTED_CURRENT_VERSION
+    )
+    file_name: _EchoedText | None = Field(default=None, description=_NEW_FILE_NAME)
+    version_reason: str | None = Field(default=None, description=_VERSION_REASON)
+
+
+# A stored file by its ID. The stored record gives its size and type, so the
+# ones given here are not used.
+class FileUri(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: _EchoedText = Field(
+        description="The file ID of a version of any of your published files, "
+        "or its url."
+    )
+    # Not used: the operation's own file_name renames.
+    file_name: str | None = None
+    file_size_bytes: int | None = None
+    mime_type: str | None = None
+
+
+# Adds a copy of a stored version, of this or another artifact, as the newest
+# version.
+class UpdateOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: Literal["update"]
+    library_file_id: UUID
+    file_uri: FileUri
+    file_name: _EchoedText | None = Field(default=None, description=_NEW_FILE_NAME)
+    expected_current_version: int | None = Field(
+        default=None, description=_EXPECTED_CURRENT_VERSION
+    )
+    version_reason: str | None = Field(default=None, description=_VERSION_REASON)
+
+
 ManageOperation = Annotated[
-    DeleteOperation | RenameOperation, Field(discriminator="operation")
+    DeleteOperation | RenameOperation | RestoreVersionOperation | UpdateOperation,
+    Field(discriminator="operation"),
 ]
 
 
@@ -813,7 +882,7 @@ class ManageResult(BaseModel):
     """The outcome of one library_manage_library operation, in the operations'
     order: the artifact as the operation left it, or the error."""
 
-    operation: Literal["delete", "rename"]
+    operation: Literal["delete", "rename", "restore_version", "update"]
     ok: bool
     error: Annotated[str | None, OMITTED_WHEN_NONE] = None
     library_file_id: Annotated[UUID | None, OMITTED_WHEN_NONE] = None
@@ -822,6 +891,8 @@ class ManageResult(BaseModel):
     version_number: Annotated[int | None, OMITTED_WHEN_NONE] = None
     file_name: Annotated[str | None, OMITTED_WHEN_NONE] = None
     url: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    # The added version's, as saved.
+    version_reason: Annotated[str | None, OMITTED_WHEN_NONE] = None
     # A delete's: the versions that it deleted.
     deleted_versions: Annotated[int | None, OMITTED_WHEN_NONE] = None
 
@@ -833,13 +904,16 @@ class ManageResults(BaseModel):
 
 
 # The arguments that each action of the artifact tool takes.
-ArtifactAction = Literal["publish", "list", "read", "delete", "rename"]
+ArtifactAction = Literal["publish", "list", "read", "delete", "rename", "restore"]
 ARTIFACT_ACTION_ARGUMENTS: dict[ArtifactAction, frozenset[str]] = {
-    "publish": frozenset({*ARTIFACT_PUBLISH_PATHS, "title", "url", "force"}),
+    "publish": frozenset(
+        {*ARTIFACT_PUBLISH_PATHS, "title", "url", "path", "force", "label"}
+    ),
     "list": frozenset({"scope", "type", "query", "limit", "after"}),
     "read": frozenset({"url", "path", "paths", "out_dir"}),
     "delete": frozenset({"url"}),
     "rename": frozenset({"url", "name"}),
+    "restore": frozenset({"url", "label"}),
 }
 
 
@@ -855,7 +929,7 @@ class ArtifactArguments(BaseModel):
         description="publish (the default) gives files from the VM to the user; "
         "list finds published files; read copies published files into the VM; "
         "delete deletes a published file, after the user approves; rename "
-        "renames a published file.",
+        "renames a published file; restore makes an older version the newest.",
     )
     file_path: _EchoedText | None = Field(
         default=None,
@@ -876,7 +950,8 @@ class ArtifactArguments(BaseModel):
         "one that ends in /v<N> names that version. publish with file_path: "
         "the file to add a version to, by the url of the version you last saw. "
         "delete: the file to delete, with all its versions, by the url of its "
-        "newest version. rename: the file to rename.",
+        "newest version. rename: the file to rename. restore: the version to "
+        "restore, ending in /v<N>.",
     )
     name: _EchoedText | None = Field(
         default=None,
@@ -888,8 +963,16 @@ class ArtifactArguments(BaseModel):
         description="publish with url: add the version even when the file has a "
         "newer version than the url names. Older versions stay.",
     )
+    label: str | None = Field(
+        default=None,
+        description="publish with url, restore: a short note on why this "
+        "version exists.",
+    )
     path: _EchoedText | None = Field(
-        default=None, description="read: a file ID, or the url of a published file."
+        default=None,
+        description="read: a file ID, or the url of a published file. publish "
+        "with url: a file ID of any published file, whose copy becomes the "
+        "url's newest version.",
     )
     paths: list[_EchoedText] | None = Field(
         default=None,
@@ -937,12 +1020,21 @@ class ArtifactArguments(BaseModel):
                     "takes": ", ".join(sorted(takes)),
                 },
             )
-        if self.action in ("delete", "rename") and self.url is None:
+        if self.action in ("delete", "rename", "restore") and self.url is None:
             raise PydanticCustomError(
                 "action_arguments", "{action} takes url", {"action": self.action}
             )
         if self.action == "rename" and self.name is None:
             raise PydanticCustomError("action_arguments", "rename takes url and name")
+        if self.path is not None and (
+            self.action == "publish"
+            and (self.url is None or (self.file_path, self.file_paths, self.title))
+            != (None, None, None)
+        ):
+            raise PydanticCustomError(
+                "action_arguments",
+                "path goes with url, without file_path, file_paths or title",
+            )
         return self
 
 
