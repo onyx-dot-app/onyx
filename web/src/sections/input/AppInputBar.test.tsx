@@ -475,12 +475,10 @@ describe("edit a sent message in the composer", () => {
       messages: [queued],
       error: null,
       busy: false,
-      hasActiveSubagents: false,
       needsResponseSelection: false,
       submit: jest.fn(),
       withdraw: () => withdrawal.promise,
       interrupt: jest.fn(),
-      stopSubagents: jest.fn(),
     };
     const inputBarRef = createRef<AppInputBarHandle>();
     mockProjectsContext.currentMessageFiles = [];
