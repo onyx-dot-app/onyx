@@ -32,10 +32,14 @@ An operator deploys sandboxes on Kubernetes (the default) or Docker Compose.
 When the pod template, RBAC or network setup is wrong, provisioning fails and
 the user sees Craft fail to start.
 
-A third runtime is in development: Firecracker micro-VMs on KVM nodes, opt-in
-with `SANDBOX_RUNTIME=firecracker` (default `pod`). It is not wired to the API
-server yet, so users and operators do not see it. The Kubernetes and Docker
-paths do not change.
+A third runtime is in development: Firecracker micro-VMs on KVM nodes, with
+`SANDBOX_RUNTIME=firecracker` or `auto` (backend default `pod`; `off` acts as
+`pod`). It serves chat sandbox tools, not Craft build sessions. With `auto`,
+chats get the tools only while a live registered node reports the template
+(`backend/onyx/microvm/availability.py`). Admins see the runtime, the nodes and
+why tools are off at `GET /admin/sandbox/status`
+(`backend/onyx/server/features/microvm/admin_api.py`, single tenant only). The
+Kubernetes and Docker paths do not change.
 
 In this document "session workspace" is the directory of one session under
 `/workspace/sessions`. "Workspace" alone, as in "workspace policy", means the
@@ -412,7 +416,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   Each command has a client label; when Start gets no answer, the harness
   finds the command by that label and adopts it.
 - `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
-  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`
+  `SANDBOX_RUNTIME=firecracker` or `auto`, and `SANDBOX_FC_TEMPLATE`
   (`backend/onyx/microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the source image
   tag of the root drive. Each node names its templates
   `<tag>-<key hash[:12]>` and the hash differs per node, so

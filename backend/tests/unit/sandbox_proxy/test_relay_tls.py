@@ -279,7 +279,11 @@ def test_config_needs_firecracker_and_all_files(
     with pytest.raises(ValueError, match="SANDBOX_RUNTIME=firecracker"):
         server._relay_tls_config()
 
-    monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.FIRECRACKER)
+    monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.OFF)
+    with pytest.raises(ValueError, match="SANDBOX_RUNTIME=firecracker or auto"):
+        server._relay_tls_config()
+
+    monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.AUTO)
     monkeypatch.setattr(server, "SANDBOX_PROXY_RELAY_TLS_CERT_PATH", "/c")
     monkeypatch.setattr(server, "SANDBOX_PROXY_RELAY_TLS_KEY_PATH", "")
     monkeypatch.setattr(server, "SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH", "/ca")

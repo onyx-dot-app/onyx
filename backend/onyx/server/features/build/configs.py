@@ -31,12 +31,22 @@ if _env_sandbox_backend:
 
 
 class SandboxRuntime(str, Enum):
-    """How sandboxes run on a Kubernetes backend. Mirrors Terraform `craft_sandbox_runtime`."""
+    """How sandboxes run on a Kubernetes backend. Mirrors Helm `craft.sandboxRuntime`."""
 
     POD = "pod"
-    # Opt-in. Adds relay-signed VM identity in the egress proxy and host-node
-    # key registration; pod sandboxes keep working beside it.
+    # Adds relay-signed VM identity in the egress proxy and host-node key
+    # registration; pod sandboxes keep working beside it. Chat sandbox tools
+    # are always offered.
     FIRECRACKER = "firecracker"
+    # Firecracker wiring as above, but chat sandbox tools are offered only
+    # while a live registered node has the template (microvm/availability.py).
+    AUTO = "auto"
+    # No sandbox parts are deployed. The backend behaves as with `pod`.
+    OFF = "off"
+
+    @property
+    def uses_firecracker(self) -> bool:
+        return self in (SandboxRuntime.FIRECRACKER, SandboxRuntime.AUTO)
 
 
 SANDBOX_RUNTIME = SandboxRuntime.POD
@@ -50,10 +60,12 @@ if _env_sandbox_runtime:
             f"{', '.join(r.value for r in SandboxRuntime)}."
         )
 if (
-    SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER
+    SANDBOX_RUNTIME.uses_firecracker
     and SANDBOX_BACKEND is not SandboxBackend.KUBERNETES
 ):
-    raise ValueError("SANDBOX_RUNTIME=firecracker requires SANDBOX_BACKEND=kubernetes.")
+    raise ValueError(
+        f"SANDBOX_RUNTIME={SANDBOX_RUNTIME.value} requires SANDBOX_BACKEND=kubernetes."
+    )
 
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [
