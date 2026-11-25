@@ -1,7 +1,11 @@
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
+from tokenizers import Tokenizer
+from tokenizers.models import WordLevel
+from tokenizers.normalizers import Lowercase
+from tokenizers.pre_tokenizers import Whitespace
 
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY, USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import DocumentSource
@@ -112,13 +116,27 @@ def test_chunker_heartbeat(
 
 
 def test_chunker_counts_whole_text_when_tokenizer_config_truncates() -> None:
-    """thenlper/gte-small ships a tokenizer.json that truncates and pads every
+    """Mirrors thenlper/gte-small, whose tokenizer.json truncates and pads every
     encode to 128 tokens."""
-    tokenizer = HuggingFaceTokenizer("thenlper/gte-small")
-    long_text = "This sentence adds about ten tokens to the document. " * 400
+    words = "this sentence adds about ten tokens to the document the end".split()
+    hub_tokenizer = Tokenizer(
+        WordLevel(
+            {"[UNK]": 0, "[PAD]": 1} | {w: i + 2 for i, w in enumerate(words)},
+            unk_token="[UNK]",
+        )
+    )
+    hub_tokenizer.normalizer = Lowercase()
+    hub_tokenizer.pre_tokenizer = Whitespace()
+    hub_tokenizer.enable_truncation(max_length=128)
+    hub_tokenizer.enable_padding(length=128, pad_id=1, pad_token="[PAD]")
+    with patch.object(Tokenizer, "from_pretrained", return_value=hub_tokenizer):
+        tokenizer = HuggingFaceTokenizer("thenlper/gte-small")
 
-    assert len(tokenizer.encode("hello")) == 1
-    assert len(tokenizer.encode(long_text)) > 3 * DOC_EMBEDDING_CONTEXT_SIZE
+    long_text = "This sentence adds about ten tokens to the document. " * 400
+    last_sentence = "The end."
+
+    assert len(tokenizer.encode("sentence")) == 1
+    assert len(tokenizer.encode(long_text)) == 4000
 
     document = Document(
         id="test_doc",
@@ -126,7 +144,7 @@ def test_chunker_counts_whole_text_when_tokenizer_config_truncates() -> None:
         semantic_identifier="Test Document",
         metadata={},
         doc_updated_at=None,
-        sections=[TextSection(text=long_text, link="link1")],
+        sections=[TextSection(text=long_text + last_sentence, link="link1")],
     )
     chunks = Chunker(
         tokenizer=tokenizer, enable_multipass=False, enable_contextual_rag=False
@@ -137,3 +155,4 @@ def test_chunker_counts_whole_text_when_tokenizer_config_truncates() -> None:
         len(tokenizer.encode(chunk.content)) <= DOC_EMBEDDING_CONTEXT_SIZE
         for chunk in chunks
     )
+    assert last_sentence in chunks[-1].content
