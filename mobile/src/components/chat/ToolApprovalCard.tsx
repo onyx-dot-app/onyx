@@ -199,15 +199,17 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
         >
           Approve once
         </Button>
-        <Button
-          prominence="secondary"
-          size="md"
-          disabled={submitting}
-          onPress={() => void decide("approve_session")}
-          accessibilityLabel="Approve now and run this tool without asking again for the rest of this chat"
-        >
-          Approve for this chat
-        </Button>
+        {request.can_approve_for_chat !== false ? (
+          <Button
+            prominence="secondary"
+            size="md"
+            disabled={submitting}
+            onPress={() => void decide("approve_session")}
+            accessibilityLabel="Approve now and run this tool without asking again for the rest of this chat"
+          >
+            Approve for this chat
+          </Button>
+        ) : null}
         <Button
           prominence="secondary"
           size="md"
