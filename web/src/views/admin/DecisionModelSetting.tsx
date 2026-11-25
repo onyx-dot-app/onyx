@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useLifecycleBadge } from "@/lib/badges/components";
 import { Button, MessageCard, OnyxLoader } from "@opal/components";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { useDecisionModel } from "@/lib/languageModels/hooks";
@@ -17,6 +18,7 @@ const SELECT_ID = "decision-model-select";
 
 export default function DecisionModelSetting() {
   const t = useTranslations("admin.decisionModels");
+  const betaTag = useLifecycleBadge("beta");
   const { model, providers, error, refetch } = useDecisionModel();
   const settings = useSettings();
   const [pending, setPending] = useState(false);
@@ -47,8 +49,10 @@ export default function DecisionModelSetting() {
     <InputHorizontal
       title={t("decisionModel.title")}
       description={t("decisionModel.description")}
+      tag={betaTag}
       suffix="optional"
       withLabel={SELECT_ID}
+      fillInput
     >
       {error ? (
         <MessageCard
@@ -67,7 +71,8 @@ export default function DecisionModelSetting() {
           role="group"
           aria-label={t("decisionModel.title")}
           flexDirection="row"
-          width="fit"
+          justifyContent="start"
+          alignItems="start"
           height="auto"
           gap={2}
         >

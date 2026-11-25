@@ -768,6 +768,7 @@ export default function LanguageModelsPage() {
                       }}
                     />
                   </InputHorizontal>
+                  <ChatNamingModelSetting />
                   <InputHorizontal
                     title={t("modelRouting.autoMode.title")}
                     description={t("modelRouting.autoMode.description")}
@@ -911,12 +912,6 @@ export default function LanguageModelsPage() {
                   )}
                 </Section>
               </Card>
-              <Card border="solid" rounding={4}>
-                <Section alignItems="stretch">
-                  <ChatNamingModelSetting />
-                  <SearchDecisionModelSetting />
-                </Section>
-              </Card>
             </Section>
 
             {/* ── Image Generation: the default image model ── */}
@@ -947,7 +942,10 @@ export default function LanguageModelsPage() {
                 title={t("sections.decisions.title")}
               />
               <Card border="solid" rounding={4}>
-                <DecisionModelSetting />
+                <Section alignItems="stretch">
+                  <DecisionModelSetting />
+                  <SearchDecisionModelSetting />
+                </Section>
               </Card>
             </Section>
 
