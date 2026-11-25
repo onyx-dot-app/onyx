@@ -3722,7 +3722,7 @@
           "fields": {
             "host": {
               "label": "Servidor de Arquivos",
-              "description": "O nome DNS ou o endereço IPv4 do servidor de arquivos, por ex. fs01.corp.example.com. Não adicione o nome do compartilhamento."
+              "description": "O nome DNS ou o endereço IPv4 do servidor de arquivos, por ex. fs01.corp.example.com. Não adicione o nome do compartilhamento. O Kerberos precisa do nome DNS totalmente qualificado."
             },
             "share": {
               "label": "Nome do Compartilhamento",
@@ -4399,6 +4399,8 @@
         "subdomain": "Subdomínio do {source}",
         "domain": "Domínio do {source}",
         "accountDomain": "Domínio da Conta",
+        "kerberosRealm": "Realm Kerberos",
+        "kerberosKdc": "KDC do Kerberos",
         "ldapHost": "Host LDAP",
         "ldapTls": "Criptografia LDAP",
         "ldapPort": "Porta LDAP",
@@ -4437,6 +4439,8 @@
         "youtrackToken": "Um token permanente de um usuário do YouTrack que pode ler todos os projetos a indexar. Crie-o no seu perfil do YouTrack, em Segurança da conta.",
         "azureDatalakeAccountKey": "No portal do Azure, abra a conta de armazenamento, depois Segurança + rede, depois Chaves de acesso.",
         "smbDomain": "Opcional. O nome NetBIOS ou DNS do domínio do Active Directory. Deixe vazio para uma conta local do servidor de arquivos.",
+        "smbKerberosRealm": "O nome DNS do domínio do Active Directory em maiúsculas, por exemplo CORP.EXAMPLE.COM.",
+        "smbKerberosKdc": "Opcional. O nome de host de um controlador de domínio que emite tíquetes. Deixe vazio para encontrá-lo pelos registros SRV do DNS.",
         "smbLdapHost": "Somente para a sincronização de permissões. O nome DNS de um controlador de domínio, por exemplo dc01.corp.example.com. Ele deve corresponder ao nome no certificado TLS do controlador de domínio.",
         "smbLdapTls": "Somente para a sincronização de permissões. Como o Onyx criptografa a conexão com o controlador de domínio. O padrão é LDAPS.",
         "smbLdapPort": "Opcional. O padrão é 636 para LDAPS e 389 para StartTLS.",
@@ -4461,7 +4465,9 @@
           "iamRole": "Função do IAM",
           "assumeRole": "Assumir função",
           "serviceAccount": "Conta de serviço",
-          "oauth": "OAuth"
+          "oauth": "OAuth",
+          "ntlm": "NTLM",
+          "kerberos": "Kerberos"
         },
         "descriptions": {
           "sharepointClientSecret": "Neste modo, o conector do SharePoint usa um segredo do cliente para se autenticar. Você precisa informar o ID do cliente e o segredo do cliente.",

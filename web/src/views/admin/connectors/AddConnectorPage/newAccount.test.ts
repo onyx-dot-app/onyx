@@ -111,7 +111,7 @@ test("a file share account saves without the permission sync fields", () => {
     typedDraft(source, schema, {
       [NEW_ACCOUNT_FIELD]: { ...initialNewAccountValues(spec), ...signIn },
     })?.credential_json
-  ).toEqual(signIn);
+  ).toEqual({ authentication_method: "ntlm", ...signIn });
 
   const directory = {
     ldap_host: "dc01.corp.example.com",
@@ -128,5 +128,32 @@ test("a file share account saves without the permission sync fields", () => {
         ...directory,
       },
     })?.credential_json
-  ).toEqual({ ...signIn, ...directory });
+  ).toEqual({ authentication_method: "ntlm", ...signIn, ...directory });
+});
+
+test("a file share account with Kerberos needs its realm", () => {
+  const source = ValidSources.Smb;
+  const spec = typedAccountSpec(source);
+  if (spec === null) throw new Error("A file share takes a typed account");
+  const schema = newAccountSchema(spec, MESSAGES);
+  const account = {
+    ...initialNewAccountValues(spec),
+    authentication_method: "kerberos",
+    smb_username: "svc-onyx",
+    smb_password: "secret",
+  };
+
+  expect(
+    typedDraft(source, schema, { [NEW_ACCOUNT_FIELD]: account })
+  ).toBeNull();
+  expect(
+    typedDraft(source, schema, {
+      [NEW_ACCOUNT_FIELD]: { ...account, kerberos_realm: "CORP.EXAMPLE.COM" },
+    })?.credential_json
+  ).toEqual({
+    authentication_method: "kerberos",
+    smb_username: "svc-onyx",
+    smb_password: "secret",
+    kerberos_realm: "CORP.EXAMPLE.COM",
+  });
 });

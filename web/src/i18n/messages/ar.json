@@ -3722,7 +3722,7 @@
           "fields": {
             "host": {
               "label": "خادم الملفات",
-              "description": "اسم DNS أو عنوان IPv4 لخادم الملفات، مثل fs01.corp.example.com. لا تُضف اسم المشاركة."
+              "description": "اسم DNS أو عنوان IPv4 لخادم الملفات، مثل fs01.corp.example.com. لا تُضف اسم المشاركة. يحتاج Kerberos إلى اسم DNS المؤهل بالكامل."
             },
             "share": {
               "label": "اسم المشاركة",
@@ -4399,6 +4399,8 @@
         "subdomain": "النطاق الفرعي لـ {source}",
         "domain": "نطاق {source}",
         "accountDomain": "نطاق الحساب",
+        "kerberosRealm": "نطاق Kerberos",
+        "kerberosKdc": "KDC لـ Kerberos",
         "ldapHost": "مضيف LDAP",
         "ldapTls": "تشفير LDAP",
         "ldapPort": "منفذ LDAP",
@@ -4437,6 +4439,8 @@
         "youtrackToken": "رمز دائم لمستخدم YouTrack يمكنه قراءة كل المشاريع المراد فهرستها. أنشئه في ملفك الشخصي في YouTrack ضمن أمان الحساب.",
         "azureDatalakeAccountKey": "في مدخل Azure، افتح حساب التخزين، ثم الأمان + الشبكات، ثم مفاتيح الوصول.",
         "smbDomain": "اختياري. اسم NetBIOS أو اسم DNS لنطاق Active Directory. اتركه فارغًا لحساب محلي على خادم الملفات.",
+        "smbKerberosRealm": "اسم DNS لنطاق Active Directory بأحرف كبيرة، مثل CORP.EXAMPLE.COM.",
+        "smbKerberosKdc": "اختياري. اسم المضيف لوحدة تحكم بالنطاق تصدر التذاكر. اتركه فارغًا للعثور عليه عبر سجلات DNS SRV.",
         "smbLdapHost": "لمزامنة الأذونات فقط. اسم DNS لوحدة تحكم بالنطاق، مثل dc01.corp.example.com. يجب أن يطابق الاسم الوارد في شهادة TLS لوحدة التحكم بالنطاق.",
         "smbLdapTls": "لمزامنة الأذونات فقط. طريقة تشفير Onyx للاتصال بوحدة التحكم بالنطاق. القيمة الافتراضية هي LDAPS.",
         "smbLdapPort": "اختياري. القيمة الافتراضية هي 636 لـ LDAPS و389 لـ StartTLS.",
@@ -4461,7 +4465,9 @@
           "iamRole": "دور IAM",
           "assumeRole": "تولّي الدور",
           "serviceAccount": "حساب الخدمة",
-          "oauth": "OAuth"
+          "oauth": "OAuth",
+          "ntlm": "NTLM",
+          "kerberos": "Kerberos"
         },
         "descriptions": {
           "sharepointClientSecret": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint سر العميل للمصادقة. ستحتاج إلى تقديم معرّف العميل وسر العميل.",

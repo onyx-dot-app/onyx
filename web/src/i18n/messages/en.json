@@ -3722,7 +3722,7 @@
           "fields": {
             "host": {
               "label": "File Server",
-              "description": "The DNS name or IPv4 address of the file server, e.g. fs01.corp.example.com. Do not add the share name."
+              "description": "The DNS name or IPv4 address of the file server, e.g. fs01.corp.example.com. Do not add the share name. Kerberos needs the fully qualified DNS name."
             },
             "share": {
               "label": "Share Name",
@@ -4399,6 +4399,8 @@
         "subdomain": "{source} Subdomain",
         "domain": "{source} Domain",
         "accountDomain": "Account Domain",
+        "kerberosRealm": "Kerberos Realm",
+        "kerberosKdc": "Kerberos KDC",
         "ldapHost": "LDAP Host",
         "ldapTls": "LDAP Encryption",
         "ldapPort": "LDAP Port",
@@ -4437,6 +4439,8 @@
         "youtrackToken": "A permanent token for a YouTrack user that can read every project to index. Create it in your YouTrack profile under Account Security.",
         "azureDatalakeAccountKey": "In the Azure portal, open the storage account, then Security + networking, then Access keys.",
         "smbDomain": "Optional. The NetBIOS or DNS name of the Active Directory domain. Leave empty for a local account of the file server.",
+        "smbKerberosRealm": "The DNS name of the Active Directory domain in upper case, e.g. CORP.EXAMPLE.COM.",
+        "smbKerberosKdc": "Optional. The host name of a domain controller that issues tickets. Leave empty to find it through DNS SRV records.",
         "smbLdapHost": "For permission sync only. The DNS name of a domain controller, e.g. dc01.corp.example.com. It must match the name in the TLS certificate of the domain controller.",
         "smbLdapTls": "For permission sync only. How Onyx encrypts the connection to the domain controller. The default is LDAPS.",
         "smbLdapPort": "Optional. The default is 636 for LDAPS and 389 for StartTLS.",
@@ -4461,7 +4465,9 @@
           "iamRole": "IAM Role",
           "assumeRole": "Assume Role",
           "serviceAccount": "Service Account",
-          "oauth": "OAuth"
+          "oauth": "OAuth",
+          "ntlm": "NTLM",
+          "kerberos": "Kerberos"
         },
         "descriptions": {
           "sharepointClientSecret": "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",

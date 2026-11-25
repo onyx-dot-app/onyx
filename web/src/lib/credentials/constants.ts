@@ -236,6 +236,82 @@ const AZURE_DATALAKE_SPEC = defineCredentialSpec({
   ],
 });
 
+// The directory fields of a Windows file share account. They serve
+// permission sync only, so each is optional.
+const SMB_DIRECTORY_FIELDS = [
+  "ldap_host",
+  "ldap_tls",
+  "ldap_port",
+  "ldap_ca_cert",
+] as const;
+
+/**
+ * A Windows file share: a service account that signs in with NTLM or with
+ * Kerberos. A stored account that names no method uses NTLM.
+ */
+const SMB_SPEC = defineCredentialSpec({
+  brandName: "Windows File Share",
+  fields: {
+    smb_domain: text("accountDomain", {
+      optional: true,
+      hint: { key: "smbDomain" },
+    }),
+    smb_username: text("username"),
+    smb_password: secret("password"),
+    kerberos_realm: text("kerberosRealm", {
+      hint: { key: "smbKerberosRealm" },
+    }),
+    kerberos_kdc: text("kerberosKdc", {
+      optional: true,
+      hint: { key: "smbKerberosKdc" },
+    }),
+    ldap_host: text("ldapHost", {
+      optional: true,
+      hint: { key: "smbLdapHost" },
+    }),
+    ldap_tls: select(
+      "ldapTls",
+      [
+        { value: "ldaps", label: "ldaps" },
+        { value: "starttls", label: "startTls" },
+      ],
+      { optional: true, hint: { key: "smbLdapTls" }, defaultValue: "ldaps" }
+    ),
+    ldap_port: text("ldapPort", {
+      optional: true,
+      hint: { key: "smbLdapPort" },
+    }),
+    ldap_ca_cert: textArea("ldapCaCert", {
+      optional: true,
+      hint: { key: "smbLdapCaCert" },
+    }),
+  },
+  methods: [
+    {
+      value: "ntlm",
+      label: "ntlm",
+      fields: [
+        "smb_domain",
+        "smb_username",
+        "smb_password",
+        ...SMB_DIRECTORY_FIELDS,
+      ],
+    },
+    {
+      value: "kerberos",
+      label: "kerberos",
+      fields: [
+        "smb_domain",
+        "smb_username",
+        "smb_password",
+        "kerberos_realm",
+        "kerberos_kdc",
+        ...SMB_DIRECTORY_FIELDS,
+      ],
+    },
+  ],
+});
+
 /**
  * A Google account (Gmail, Google Drive): a service account typed in, or an
  * OAuth sign-in, which saves the account itself.
@@ -491,39 +567,7 @@ export const CREDENTIAL_SPECS = {
     },
   }),
   azure_datalake: AZURE_DATALAKE_SPEC,
-  // The backend defaults `authentication_method` to NTLM, its one method.
-  smb: defineCredentialSpec({
-    brandName: "Windows File Share",
-    fields: {
-      smb_domain: text("accountDomain", {
-        optional: true,
-        hint: { key: "smbDomain" },
-      }),
-      smb_username: text("username"),
-      smb_password: secret("password"),
-      // The directory fields serve permission sync only, so each is optional.
-      ldap_host: text("ldapHost", {
-        optional: true,
-        hint: { key: "smbLdapHost" },
-      }),
-      ldap_tls: select(
-        "ldapTls",
-        [
-          { value: "ldaps", label: "ldaps" },
-          { value: "starttls", label: "startTls" },
-        ],
-        { optional: true, hint: { key: "smbLdapTls" }, defaultValue: "ldaps" }
-      ),
-      ldap_port: text("ldapPort", {
-        optional: true,
-        hint: { key: "smbLdapPort" },
-      }),
-      ldap_ca_cert: textArea("ldapCaCert", {
-        optional: true,
-        hint: { key: "smbLdapCaCert" },
-      }),
-    },
-  }),
+  smb: SMB_SPEC,
   zendesk: defineCredentialSpec({
     brandName: "Zendesk",
     fields: {

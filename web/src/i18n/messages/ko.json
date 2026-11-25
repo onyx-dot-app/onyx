@@ -3722,7 +3722,7 @@
           "fields": {
             "host": {
               "label": "파일 서버",
-              "description": "파일 서버의 DNS 이름 또는 IPv4 주소(예: fs01.corp.example.com). 공유 이름은 넣지 마세요."
+              "description": "파일 서버의 DNS 이름 또는 IPv4 주소(예: fs01.corp.example.com). 공유 이름은 넣지 마세요. Kerberos에는 정규화된 DNS 이름이 필요합니다."
             },
             "share": {
               "label": "공유 이름",
@@ -4399,6 +4399,8 @@
         "subdomain": "{source} 서브도메인",
         "domain": "{source} 도메인",
         "accountDomain": "계정 도메인",
+        "kerberosRealm": "Kerberos 영역",
+        "kerberosKdc": "Kerberos KDC",
         "ldapHost": "LDAP 호스트",
         "ldapTls": "LDAP 암호화",
         "ldapPort": "LDAP 포트",
@@ -4437,6 +4439,8 @@
         "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
         "azureDatalakeAccountKey": "Azure Portal에서 스토리지 계정을 열고 보안 + 네트워킹, 액세스 키를 차례로 엽니다.",
         "smbDomain": "선택 사항입니다. Active Directory 도메인의 NetBIOS 또는 DNS 이름입니다. 파일 서버의 로컬 계정이면 비워 두세요.",
+        "smbKerberosRealm": "Active Directory 도메인의 DNS 이름(대문자)입니다. 예: CORP.EXAMPLE.COM.",
+        "smbKerberosKdc": "선택 사항입니다. 티켓을 발급하는 도메인 컨트롤러의 호스트 이름입니다. 비워 두면 DNS SRV 레코드로 찾습니다.",
         "smbLdapHost": "권한 동기화에만 사용합니다. 도메인 컨트롤러의 DNS 이름입니다(예: dc01.corp.example.com). 도메인 컨트롤러의 TLS 인증서에 있는 이름과 일치해야 합니다.",
         "smbLdapTls": "권한 동기화에만 사용합니다. Onyx가 도메인 컨트롤러 연결을 암호화하는 방식입니다. 기본값은 LDAPS입니다.",
         "smbLdapPort": "선택 사항입니다. 기본값은 LDAPS의 경우 636, StartTLS의 경우 389입니다.",
@@ -4461,7 +4465,9 @@
           "iamRole": "IAM 역할",
           "assumeRole": "역할 수임",
           "serviceAccount": "서비스 계정",
-          "oauth": "OAuth"
+          "oauth": "OAuth",
+          "ntlm": "NTLM",
+          "kerberos": "Kerberos"
         },
         "descriptions": {
           "sharepointClientSecret": "이 모드를 선택하면 SharePoint 커넥터가 클라이언트 시크릿으로 인증합니다. 클라이언트 ID와 클라이언트 시크릿을 입력해야 합니다.",

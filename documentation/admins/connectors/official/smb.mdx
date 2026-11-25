@@ -61,8 +61,8 @@ You need the following:
 - A file server that supports SMB 2.1 or later with SMB signing. Onyx never uses SMB 1.
 - SMB 3 encryption on the file server. Each version of Windows Server since 2012 supports SMB 3 encryption.
   For an older server, see [Connection options](#connection-options).
-- A domain service account that signs in with NTLMv2. A local account of the file server also works,
-  but not with permission sync.
+- A domain service account. Onyx signs in with NTLMv2 or with [Kerberos](#kerberos).
+  A local account of the file server also works with NTLM, but not with permission sync.
 
 Give the service account read access in two places:
 
@@ -100,12 +100,12 @@ Permission sync also connects to a domain controller. The same SSRF protection r
   <Step title="Enter the file server">
     Go to **Admin Panel → Connectors** and select **Windows File Share (SMB)**. In **File Server**,
     enter the DNS name or the IPv4 address of the file server, for example `fs01.corp.example.com`.
-    Do not add the share name.
+    Do not add the share name. Kerberos needs the fully qualified DNS name.
   </Step>
 
   <Step title="Select or create an authentication account">
     Under **Authentication Account**, select a saved account. To create an account,
-    select **New Windows File Share (SMB) Account** and fill in these fields:
+    select **New Windows File Share (SMB) Account**. On the **NTLM** tab, fill in these fields:
 
     | Field                           | Value                                                                                    |
     | ------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -115,6 +115,8 @@ Permission sync also connects to a domain controller. The same SSRF protection r
 
     The account form also has the LDAP fields. Fill them in only for permission sync.
     See [Set up permission sync](#set-up-permission-sync).
+
+    If your network does not allow NTLM, use the **Kerberos** tab. See [Kerberos](#kerberos).
   </Step>
 
   <Step title="Choose the content">
@@ -246,6 +248,40 @@ The document sync runs each hour. The group sync runs each 30 minutes.
 You can change the intervals with `SMB_PERMISSION_DOC_SYNC_FREQUENCY` and `SMB_PERMISSION_GROUP_SYNC_FREQUENCY`,
 in seconds. A new file stays private until the next document sync reads its access list.
 
+## Kerberos
+
+Use Kerberos when your network does not allow NTLM.
+Onyx gets a Kerberos ticket with the username and the password of the service account. Onyx does not use a keytab.
+
+You need the following:
+
+- The fully qualified DNS name of the file server in **File Server**, and of the domain controller in **LDAP Host**.
+  Kerberos identifies a server by its name, so an IP address does not work.
+- A key distribution center (KDC) that Onyx can reach on port 88. A KDC is a domain controller that issues tickets.
+- Clocks that agree. The time of Onyx and the time of the domain controllers must be less than 5 minutes apart.
+
+<Steps>
+  <Step title="Select the Kerberos tab">
+    Under **Authentication Account**, select **New Windows File Share (SMB) Account**, then the **Kerberos** tab.
+  </Step>
+
+  <Step title="Fill in the account">
+    Fill in the domain, the username, and the password of the service account, as for NTLM. Then fill in these fields:
+
+    | Field              | Value                                                                                                              |
+    | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+    | **Kerberos Realm** | The DNS name of the Active Directory domain in upper case, for example `CORP.EXAMPLE.COM`.                         |
+    | **Kerberos KDC**   | Optional. The host name of a KDC. With the field empty, Onyx finds a KDC through the DNS SRV records of the realm. |
+  </Step>
+
+  <Step title="Run the checks">
+    Select **Start Checks**. One check gives a warning when **File Server** is an IP address.
+    One check makes sure that Onyx got a ticket.
+  </Step>
+</Steps>
+
+With Kerberos, permission sync also signs in to the domain controller with Kerberos. The connection uses TLS.
+
 ## Connection options
 
 The connector form also has these optional fields.
@@ -281,8 +317,14 @@ The connector form also has these optional fields.
   </Accordion>
 
   <Accordion title="The file server rejected the service account">
-    Check the domain, the username, and the password of the service account.
-    Make sure that the server accepts NTLMv2 sign-in.
+    Check the domain, the username, and the password of the service account. With **NTLM**,
+    make sure that the server accepts NTLMv2 sign-in. If your network does not allow NTLM, use [Kerberos](#kerberos).
+  </Accordion>
+
+  <Accordion title="Onyx cannot get a Kerberos ticket">
+    Check **Kerberos Realm**. Make sure that **File Server** is a fully qualified DNS name, not an IP address.
+    Make sure that Onyx can reach a KDC on port 88, or enter one in **Kerberos KDC**.
+    Then make sure that the clock of Onyx and the clocks of the domain controllers are less than 5 minutes apart.
   </Accordion>
 
   <Accordion title="The file server does not support SMB 3 encryption">

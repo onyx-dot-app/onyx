@@ -3722,7 +3722,7 @@
           "fields": {
             "host": {
               "label": "ファイルサーバー",
-              "description": "ファイルサーバーの DNS 名または IPv4 アドレス（例: fs01.corp.example.com）。共有名は含めないでください。"
+              "description": "ファイルサーバーの DNS 名または IPv4 アドレス（例: fs01.corp.example.com）。共有名は含めないでください。Kerberos には完全修飾 DNS 名が必要です。"
             },
             "share": {
               "label": "共有名",
@@ -4399,6 +4399,8 @@
         "subdomain": "{source} サブドメイン",
         "domain": "{source} ドメイン",
         "accountDomain": "アカウントのドメイン",
+        "kerberosRealm": "Kerberos レルム",
+        "kerberosKdc": "Kerberos KDC",
         "ldapHost": "LDAP ホスト",
         "ldapTls": "LDAP 暗号化",
         "ldapPort": "LDAP ポート",
@@ -4437,6 +4439,8 @@
         "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
         "azureDatalakeAccountKey": "Azure portal でストレージアカウントを開き、[セキュリティとネットワーク]、[アクセスキー] の順に開きます。",
         "smbDomain": "任意。Active Directory ドメインの NetBIOS 名または DNS 名。ファイルサーバーのローカルアカウントの場合は空のままにします。",
+        "smbKerberosRealm": "Active Directory ドメインの DNS 名（大文字）。例: CORP.EXAMPLE.COM。",
+        "smbKerberosKdc": "任意。チケットを発行するドメインコントローラーのホスト名。空のままにすると、DNS SRV レコードから検出します。",
         "smbLdapHost": "権限同期でのみ使用します。ドメインコントローラーの DNS 名（例: dc01.corp.example.com）。ドメインコントローラーの TLS 証明書にある名前と一致する必要があります。",
         "smbLdapTls": "権限同期でのみ使用します。Onyx がドメインコントローラーへの接続を暗号化する方法。既定値は LDAPS です。",
         "smbLdapPort": "任意。既定値は LDAPS では 636、StartTLS では 389 です。",
@@ -4461,7 +4465,9 @@
           "iamRole": "IAM ロール",
           "assumeRole": "ロールの引き受け",
           "serviceAccount": "サービスアカウント",
-          "oauth": "OAuth"
+          "oauth": "OAuth",
+          "ntlm": "NTLM",
+          "kerberos": "Kerberos"
         },
         "descriptions": {
           "sharepointClientSecret": "このモードでは、SharePoint コネクタはクライアントシークレットで認証します。クライアント ID とクライアントシークレットを入力してください。",
