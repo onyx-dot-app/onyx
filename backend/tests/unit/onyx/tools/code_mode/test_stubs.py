@@ -327,7 +327,7 @@ def test_a_required_object_that_admits_null_through_its_combinator_is_sent_as_nu
         "required": ["x"],
     }
     function = build_tool_stubs(
-        [FakeTool("create_ticket", _unused, parameters=parameters)]
+        OPENAI_CODE_MODE, [FakeTool("create_ticket", _unused, parameters=parameters)]
     ).functions["create_ticket"]
     assert tool_arguments(function, {"x": None}).value == {"x": None}
 

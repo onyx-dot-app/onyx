@@ -131,7 +131,7 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         OPENAI: the one family decision; the family picks
                                         each tool's shape (an X_SHAPES lookup)
   code_mode/shapes.py:CODE_MODE_SHAPES  one CodeModeShape per family: run/wait tool names
-                                        and argument models (interface.py:ToolArguments
+                                        and argument models (tools/models.py:ToolArguments
                                         [RunRequest] / [WaitRequest] subclasses), and the
                                         argument names that the prompt and host functions
                                         use: run_yield_argument and the search function's

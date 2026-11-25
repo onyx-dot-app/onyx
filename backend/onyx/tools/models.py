@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 from enum import Enum
 from typing import Annotated, Any, Callable, Literal, Self
 from uuid import UUID
@@ -26,6 +27,17 @@ from onyx.tools.tool_implementations.sandbox.models import (
 )
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
+
+
+class ToolArguments[R](BaseModel):
+    """The arguments of one tool call as the model sends them. `request`
+    converts them into the request that the tool serves. It does not fail:
+    the fields hold all validation. Arguments beyond the fields are ignored."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    @abc.abstractmethod
+    def request(self) -> R: ...
 
 
 class CustomToolErrorInfo(BaseModel):
