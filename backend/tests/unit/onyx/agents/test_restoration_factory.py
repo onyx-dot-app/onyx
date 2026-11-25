@@ -53,10 +53,11 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.skills.models import ChatSkill
-from onyx.tools.constants import EXEC_TOOL_NAME, QUESTION_TOOL_NAME, WAIT_TOOL_NAME
+from onyx.tools.constants import EXEC_TOOL_NAME, WAIT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import CapabilityEntry, ToolContext
 from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
+from onyx.tools.tool_implementations.question.models import QUESTION_TOOL_NAME
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
@@ -484,14 +485,6 @@ def test_a_program_parked_under_one_family_ends_truthfully_under_the_other(
             name, tenant_id="tenant", chat_session_id=uuid4(), response_id=response_id
         )
 
-    def model(reply: Callable[..., AssistantMessage], family: ToolFamily) -> LLM:
-        return FakeModelClient(
-            reply,
-            model_name="claude-sonnet-4-5"
-            if family is ToolFamily.CLAUDE
-            else "gpt-5.1",
-        )
-
     def ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
         if context.call.name != "send":
             return None
@@ -515,7 +508,7 @@ def test_a_program_parked_under_one_family_ends_truthfully_under_the_other(
         ),
         persona=None,
         user_memory_context=None,
-        llm=model(first, saved),
+        llm=FakeModelClient(first, saved),
         agent_id="parked-agent",
         question_tool=partial(question, 1),
     )
@@ -533,7 +526,7 @@ def test_a_program_parked_under_one_family_ends_truthfully_under_the_other(
     rebuilt = restore_chat_agent(
         checkpoint,
         0,
-        llm=model(second, active),
+        llm=FakeModelClient(second, active),
         tools=[FakeTool("send", send)],
         user_identity=None,
         subagent_factory=lambda _depth: pytest.fail("No agent tools"),

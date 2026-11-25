@@ -70,7 +70,7 @@ from onyx.prompts.chat_prompts import (
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
-from onyx.tools.constants import PYTHON_TOOL_NAME, QUESTION_TOOL_NAME
+from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext, ToolPreference
@@ -80,6 +80,7 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     with_code_mode,
 )
 from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
+from onyx.tools.tool_implementations.question.models import QUESTION_TOOL_NAME
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.tools.tool_implementations.sandbox.spill import spill_large_result

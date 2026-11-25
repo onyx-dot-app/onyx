@@ -50,9 +50,10 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     PacketObj,
 )
-from onyx.tools.constants import QUESTION_TOOL_NAMES, REQUEST_USER_INPUT_TOOL_NAME
+from onyx.tools.constants import REQUEST_USER_INPUT_TOOL_NAME
 from onyx.tools.tool_implementations.question.models import (
     MAX_QUESTIONS_BYTES,
+    QUESTION_TOOL_NAMES,
     ToolQuestionAnswer,
 )
 from tests.external_dependency_unit.chat.test_wait_agents import (

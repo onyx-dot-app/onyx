@@ -35,9 +35,9 @@ from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import AssistantMessage, Message, ToolResultFields
-from onyx.tools.constants import QUESTION_TOOL_NAMES
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
+from onyx.tools.tool_implementations.question.models import QUESTION_TOOL_NAMES
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.tools.tool_implementations.subagents.subagent_tools import ListAgentsTool

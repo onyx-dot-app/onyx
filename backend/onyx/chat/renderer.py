@@ -49,7 +49,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.constants import CODE_MODE_STREAM_TOOL_TYPE, QUESTION_TOOL_NAMES
+from onyx.tools.constants import CODE_MODE_STREAM_TOOL_TYPE
 from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import (
     CustomToolCallSummary,
@@ -87,6 +87,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.question.models import (
+    QUESTION_TOOL_NAMES,
     QuestionArguments,
     QuestionToolDetails,
 )
@@ -133,6 +134,8 @@ SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, *RUN_TOOL_NAMES})
 # Tools whose prompt argument streams to the browser while the model writes it.
 PROMPT_ARGUMENT_TOOLS = frozenset({ImageGenerationTool.NAME})
+# The `tool_type` that clients see on those streamed arguments.
+CODE_ARGUMENT_STREAM_TYPES = frozenset({PythonTool.NAME, CODE_MODE_STREAM_TOOL_TYPE})
 
 
 class FileToolArguments(NamedTuple):

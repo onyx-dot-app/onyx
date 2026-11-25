@@ -39,10 +39,8 @@ from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import (
     EXEC_TOOL_NAME,
-    EXECUTE_CODE_TOOL_NAME,
     POLL_TOOL_NAME,
     REPL_TOOL_NAME,
-    WAIT_CODE_TOOL_NAME,
     WAIT_TOOL_NAME,
 )
 from onyx.tools.tool_implementations.code_mode.models import (
@@ -101,11 +99,13 @@ CLOSING = CellClosing(
 )
 
 
-def _reply() -> Callable[[GenerationRequest, CancellationSignal], AssistantMessage]:
+def _reply(
+    run_name: str = EXEC_TOOL_NAME, wait_name: str = WAIT_TOOL_NAME
+) -> Callable[[GenerationRequest, CancellationSignal], AssistantMessage]:
     turns = iter(
         [
-            ToolCall(id="exec", name=EXEC_TOOL_NAME, arguments={"code": "work()"}),
-            ToolCall(id="wait", name=WAIT_TOOL_NAME, arguments={"cell_id": 1}),
+            ToolCall(id="exec", name=run_name, arguments={"code": "work()"}),
+            ToolCall(id="wait", name=wait_name, arguments={"cell_id": 1}),
         ]
     )
 
@@ -361,7 +361,7 @@ def test_a_call_left_unfinished_renders_as_stopped() -> None:
     [
         *(
             (name, {"code": "work()"}, packets.CodeModeStart(code="work()"))
-            for name in (EXEC_TOOL_NAME, REPL_TOOL_NAME, EXECUTE_CODE_TOOL_NAME)
+            for name in (EXEC_TOOL_NAME, REPL_TOOL_NAME)
         ),
         *(
             (
@@ -369,11 +369,11 @@ def test_a_call_left_unfinished_renders_as_stopped() -> None:
                 {"cell_id": 2},
                 packets.CodeModeStart(code="", cell_id=2, observation=1),
             )
-            for name in (WAIT_TOOL_NAME, POLL_TOOL_NAME, WAIT_CODE_TOOL_NAME)
+            for name in (WAIT_TOOL_NAME, POLL_TOOL_NAME)
         ),
     ],
 )
-def test_run_and_wait_calls_of_every_shape_and_saved_chat_render_as_cells(
+def test_run_and_wait_calls_of_every_shape_render_as_cells(
     name: str, arguments: dict[str, JsonValue], start: packets.CodeModeStart
 ) -> None:
     renderer = tool_renderer(
@@ -384,3 +384,26 @@ def test_run_and_wait_calls_of_every_shape_and_saved_chat_render_as_cells(
         for packet in renderer.start()
         if isinstance(packet.obj, packets.CodeModeStart)
     ] == [start]
+
+
+def test_a_chat_with_code_mode_calls_under_other_names_loads() -> None:
+    """Calls saved under names that no shape has, such as execute_code and
+    wait_code, replay as tool cards without error."""
+    agent = Agent(
+        FakeModelClient(_reply("execute_code", "wait_code")),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[_tool("execute_code"), _tool("wait_code")],
+        on_finish=_close,
+    )
+    run = agent.start(max_steps=10)
+    run.wait_for_completion(timeout=10)
+    assert run.wait_for_idle(timeout=10)
+    assert run.status == RunStatus.COMPLETE
+
+    projected = project_response(run.snapshot(), tool_ids={})
+    assert projected.response is not None
+    replayed = replay_response(projected.response, {}, {}, {})
+    assert not [p for p in replayed if isinstance(p.obj, packets.PacketException)]
+    assert not [p for p in replayed if isinstance(p.obj, packets.CodeModeStart)]
+    # Each call keeps its card, and the answer follows them.
+    assert {p.placement.turn_index for p in replayed} == {0, 1, 2}

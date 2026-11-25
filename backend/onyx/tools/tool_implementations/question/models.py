@@ -1,10 +1,24 @@
-"""Arguments, answers and result details of the question tool (question_tool.py)."""
+"""Names, arguments, answers and result details of the question tool
+(question_tool.py)."""
 
+from collections.abc import Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.db.enums import QuestionAnsweredVia, QuestionOutcome
+from onyx.llm.model_capabilities import ToolFamily
+from onyx.tools.constants import (
+    ASK_USER_QUESTION_TOOL_NAME,
+    REQUEST_USER_INPUT_TOOL_NAME,
+)
+
+# The question tool's name in each tool family.
+QUESTION_TOOL_NAME: Mapping[ToolFamily, str] = {
+    ToolFamily.CLAUDE: ASK_USER_QUESTION_TOOL_NAME,
+    ToolFamily.OPENAI: REQUEST_USER_INPUT_TOOL_NAME,
+}
+QUESTION_TOOL_NAMES = frozenset(QUESTION_TOOL_NAME.values())
 
 MAX_QUESTIONS = 3
 MAX_QUESTIONS_BYTES = 8 * 1024

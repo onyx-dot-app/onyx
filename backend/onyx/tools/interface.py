@@ -4,7 +4,7 @@ from collections.abc import Callable, Collection
 from functools import cache, partial
 from typing import TYPE_CHECKING, final
 
-from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import (
@@ -104,6 +104,17 @@ def parse_tool_arguments[T: BaseModel](
             message=f"Invalid tool arguments: {message}",
             llm_facing_message=f"Invalid tool arguments: {message}",
         ) from error
+
+
+class ToolArguments[R](BaseModel):
+    """The arguments of one tool call as the model sends them. `request`
+    converts them into the request that the tool serves. It does not fail:
+    the fields hold all validation. Arguments beyond the fields are ignored."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    @abc.abstractmethod
+    def request(self) -> R: ...
 
 
 def merge_tool_arguments(

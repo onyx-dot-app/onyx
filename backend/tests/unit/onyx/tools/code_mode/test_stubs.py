@@ -10,7 +10,6 @@ from pydantic_monty import Monty, MontyTypingError
 
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolResult
-from onyx.tools.constants import QUESTION_TOOL_NAME, QUESTION_TOOL_NAMES
 from onyx.tools.interface import tool_definition_from_arguments
 from onyx.tools.models import (
     CodeModeExposure,
@@ -45,6 +44,10 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.question.models import (
+    QUESTION_TOOL_NAME,
+    QUESTION_TOOL_NAMES,
+)
 from onyx.tools.tool_implementations.sandbox.models import LibraryListArguments
 from tests.unit.onyx.tools.code_mode.fakes import (
     FakeMCPTool,
@@ -781,8 +784,8 @@ def test_describe_tool_returns_the_match_of_one_listed_or_deferred_function() ->
 
 
 def test_the_names_of_different_operations_never_overlap() -> None:
-    """A name keys one operation in every family and in saved chats, so the
-    name-keyed checks never confuse two operations."""
+    """A name keys one operation in every family, so the name-keyed checks
+    never confuse two operations."""
     operations = [
         RUN_TOOL_NAMES,
         WAIT_TOOL_NAMES,

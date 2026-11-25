@@ -62,7 +62,11 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolCallArgumentDelta,
     WriteStdinStart,
 )
-from onyx.tools.constants import EXEC_TOOL_NAME, EXECUTE_CODE_TOOL_NAME, REPL_TOOL_NAME
+from onyx.tools.constants import (
+    CODE_MODE_STREAM_TOOL_TYPE,
+    EXEC_TOOL_NAME,
+    REPL_TOOL_NAME,
+)
 from onyx.tools.tool_implementations.sandbox.models import FileToolName
 
 
@@ -341,15 +345,13 @@ def code_deltas(packets: list[Packet], name: str) -> list[str]:
     ]
 
 
-# Clients know the run tool of every shape, and of saved chats, by one tool
-# type.
+# Clients know the run tool of every shape by one tool type.
 @pytest.mark.parametrize(
     ("name", "tool_type"),
     [
         ("run_python", "run_python"),
-        (EXEC_TOOL_NAME, EXECUTE_CODE_TOOL_NAME),
-        (REPL_TOOL_NAME, EXECUTE_CODE_TOOL_NAME),
-        (EXECUTE_CODE_TOOL_NAME, EXECUTE_CODE_TOOL_NAME),
+        (EXEC_TOOL_NAME, CODE_MODE_STREAM_TOOL_TYPE),
+        (REPL_TOOL_NAME, CODE_MODE_STREAM_TOOL_TYPE),
     ],
 )
 def test_code_reports_merge_the_text_between_them(
