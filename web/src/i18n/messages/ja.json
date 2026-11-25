@@ -17573,8 +17573,7 @@
         },
         "switch": {
           "title": "このプラグインを使用",
-          "label": "{name} を使用",
-          "failed": "プラグインを変更できませんでした。"
+          "label": "{name} を使用"
         },
         "actions": {
           "share": "共有",

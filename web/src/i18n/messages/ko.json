@@ -17573,8 +17573,7 @@
         },
         "switch": {
           "title": "이 플러그인 사용",
-          "label": "{name} 사용",
-          "failed": "플러그인을 변경할 수 없습니다."
+          "label": "{name} 사용"
         },
         "actions": {
           "share": "공유",

@@ -17573,8 +17573,7 @@
         },
         "switch": {
           "title": "Use this plugin",
-          "label": "Use {name}",
-          "failed": "Could not change the plugin."
+          "label": "Use {name}"
         },
         "actions": {
           "share": "Share",

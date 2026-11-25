@@ -17573,8 +17573,7 @@
         },
         "switch": {
           "title": "使用此插件",
-          "label": "使用 {name}",
-          "failed": "无法更改插件。"
+          "label": "使用 {name}"
         },
         "actions": {
           "share": "分享",
