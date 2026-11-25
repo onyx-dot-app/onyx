@@ -27,11 +27,10 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 | --- | --- | --- | --- |
 | [MCP](/admins/plugins/mcp) | A server that uses the [Model Context Protocol](https://modelcontextprotocol.io/) | Chat, custom agents, and Craft | The vendor publishes an MCP server, or you run your own. |
 | [OpenAPI](/admins/plugins/openapi) | A REST API that you describe with an OpenAPI schema | Chat and custom agents | You have an internal or third-party REST API and no MCP server. |
-| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Craft only | Craft must act as each user in a supported application, with action-level approvals. Requires Craft, which is available on the **Business** and **Enterprise** plans. |
+| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Chat, custom agents, and Craft | An agent must act as each user in a supported application, with action-level approvals. Requires Craft, which is available on the **Business** and **Enterprise** plans. |
 
 <Tip>
-  You can add the same service more than once. For example,
-  add the Slack Craft App for Craft and the Slack MCP server for Chat.
+  You can add the same service more than once. For example, add the Slack Craft App and the Slack MCP server.
 </Tip>
 
 ### Plugins compared to connectors
@@ -175,7 +174,8 @@ Click **Refresh** on the **Actions** tab to load them again.
 
 Onyx can ask a user to approve an action before it runs.
 Admins set the policy for each action on the **Actions** tab of an integration. MCP tool policies apply in Chat,
-in custom agents, and in Craft. Craft App policies apply in Craft.
+in custom agents, and in Craft. Craft App policies apply in Chat, in custom agents, and in Craft,
+also to the requests of commands that the agent runs.
 
 | Policy | Effect |
 | --- | --- |
