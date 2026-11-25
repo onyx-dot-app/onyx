@@ -138,7 +138,9 @@ functions and deferred namespaces in this order
 (`tools/tool_implementations/code_mode/stubs.py:build_tool_stubs`), and
 `chat/prompt_utils.py:build_system_prompt` orders the tool guidance sections
 by the rank of their tools, and the sandbox section's tools, in the token
-estimate too. A new tool class must set `rank`;
+estimate too. The search guidance, which covers every search tool and has no
+heading, opens the tools section before every tool's own section. A new tool
+class must set `rank`;
 `backend/tests/unit/onyx/tools/test_tool_ranks.py` fails for a tool class
 without one.
 
