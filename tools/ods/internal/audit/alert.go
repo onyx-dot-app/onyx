@@ -78,15 +78,17 @@ const (
 // Alert groups the blocking findings for one package, the unit that gets a
 // tracking issue, a fix PR, and a Slack post.
 type Alert struct {
-	ImageFamilies    []string   `json:"image_families,omitempty"`
-	HasPinnedImages  bool       `json:"has_pinned_images,omitempty"`
-	PinnedImagesOnly bool       `json:"pinned_images_only,omitempty"`
-	Key              string     `json:"key"`
-	Ecosystem        string     `json:"ecosystem"`
-	Package          string     `json:"package"`
-	Advisories       []Advisory `json:"advisories"`
-	Versions         []string   `json:"versions,omitempty"`
-	Manifests        []string   `json:"manifests,omitempty"`
+	// ImageFamilies are the base families to refresh for this package.
+	ImageFamilies   []string `json:"image_families,omitempty"`
+	HasPinnedImages bool     `json:"has_pinned_images,omitempty"`
+	// ImageOnly means every blocking copy came from an image scan.
+	ImageOnly  bool       `json:"image_only,omitempty"`
+	Key        string     `json:"key"`
+	Ecosystem  string     `json:"ecosystem"`
+	Package    string     `json:"package"`
+	Advisories []Advisory `json:"advisories"`
+	Versions   []string   `json:"versions,omitempty"`
+	Manifests  []string   `json:"manifests,omitempty"`
 	// Branch is where the workflow pushes the fix when Dependabot has no open
 	// PR for the package, and whose PR a sync closes with the issue.
 	Branch   string      `json:"branch"`
@@ -342,7 +344,7 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 		a := byKey[key]
 		if a == nil {
 			eco := canonicalEcosystem(f.Ecosystem)
-			a = &Alert{PinnedImagesOnly: true, Key: key, Ecosystem: eco, Package: canonicalPackage(eco, f.Package), Branch: alertBranch(scope, key)}
+			a = &Alert{ImageOnly: true, Key: key, Ecosystem: eco, Package: canonicalPackage(eco, f.Package), Branch: alertBranch(scope, key)}
 			byKey[key] = a
 			keys = append(keys, key)
 		}
@@ -353,7 +355,9 @@ func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 			name, _, _ = strings.Cut(filepath.Base(name), ":")
 			a.ImageFamilies = appendUnique(a.ImageFamilies, name)
 		} else {
-			a.PinnedImagesOnly = false
+			if f.Image == "" {
+				a.ImageOnly = false
+			}
 			if strings.Contains(f.Ecosystem, ":") {
 				family := "python"
 				if strings.Contains(f.Manifest, "node") {

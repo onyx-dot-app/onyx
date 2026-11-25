@@ -568,7 +568,7 @@ func TestGroupAlertsKeepsBothImageAndLockfileOwners(t *testing.T) {
 		pinned   bool
 	}{{[]Finding{image}, true, true}, {[]Finding{lockfile, image}, false, true}, {[]Finding{lockfile}, false, false}} {
 		got := groupAlerts(tc.findings, nil, "main")[0]
-		if got.PinnedImagesOnly != tc.only || got.HasPinnedImages != tc.pinned || slices.Contains(got.ImageFamilies, "node") != tc.pinned {
+		if got.ImageOnly != tc.only || got.HasPinnedImages != tc.pinned || slices.Contains(got.ImageFamilies, "node") != tc.pinned {
 			t.Fatalf("wrong repair owners: %+v", got)
 		}
 	}
