@@ -18,8 +18,17 @@ choose which models users can see, set the default model, and control model sett
 
 The page has these sections:
 
-- **Default Model**: the model Onyx uses for new chat sessions unless a user or agent picks another one.
-- **Available Providers**: the providers you have connected. You cannot delete the provider that owns the default model.
+- **Default Chat Model**: the model Onyx uses for new chat sessions unless a user or agent picks another one.
+- **Chat Naming Model**: the model that generates chat session titles. A fast, low-cost model works well.
+  Choose **Chat Default** to name each chat with the model that the user chats with.
+- **Search Decision Model**: the model that picks the retrieved documents for an answer.
+  See [Search Settings](/admins/managing_features/chat#search-settings).
+- **Default Image Generation Model**: the model the Image Generation action uses.
+  See [Image Generation](/admins/actions/image_generation).
+- **Available Providers**: the providers you have connected.
+  If you clear the model that holds a default, or delete its provider,
+  Onyx asks you to choose a model to take over that default. If no other model can take it over, the default is cleared.
+  For the chat default, chat turns off.
 - **Add Provider**, **Gateways & Routers**, and **Self-hosted & Custom**: the providers you can connect.
 
 ### Provider Types
@@ -105,8 +114,8 @@ Every provider dialog has a **Models** section. Use it to control what users see
   Type a name and click **Add Model** to add one by hand.
 - **Auto Update** (OpenAI, Anthropic, Vertex AI) adds and selects new models when the vendor releases them,
   and removes models the vendor retires. A retired model that an agent uses is hidden instead.
-  It does not change your selection of the other models or the **Default Model**.
-- **Set as Default** makes a model the workspace **Default Model**.
+  It does not change your selection of the other models or the **Default Chat Model**.
+- **Set as Default** makes a model the workspace **Default Chat Model**.
 - A **Vision** badge shows that a model accepts images.
   A **Decision** badge shows that a model can run decision tasks.
 - **Model Settings** on a model row lets you rename it, set the default and maximum reasoning level,
