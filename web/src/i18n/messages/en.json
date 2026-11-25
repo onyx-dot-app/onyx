@@ -17573,7 +17573,9 @@
         },
         "switch": {
           "title": "Use this plugin",
-          "label": "Use {name}"
+          "label": "Use {name}",
+          "required": "Your admin made this plugin required. You cannot turn it off.",
+          "unavailable": "You cannot turn this plugin on or off."
         },
         "actions": {
           "share": "Share",

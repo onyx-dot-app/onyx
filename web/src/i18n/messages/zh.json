@@ -17573,7 +17573,9 @@
         },
         "switch": {
           "title": "使用此插件",
-          "label": "使用 {name}"
+          "label": "使用 {name}",
+          "required": "管理员已将此插件设为必需。你无法将其关闭。",
+          "unavailable": "你无法开启或关闭此插件。"
         },
         "actions": {
           "share": "分享",

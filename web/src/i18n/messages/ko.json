@@ -17573,7 +17573,9 @@
         },
         "switch": {
           "title": "이 플러그인 사용",
-          "label": "{name} 사용"
+          "label": "{name} 사용",
+          "required": "관리자가 이 플러그인을 필수로 지정했습니다. 끌 수 없습니다.",
+          "unavailable": "이 플러그인을 켜거나 끌 수 없습니다."
         },
         "actions": {
           "share": "공유",

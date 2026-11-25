@@ -17573,7 +17573,9 @@
         },
         "switch": {
           "title": "Usar este plugin",
-          "label": "Usar {name}"
+          "label": "Usar {name}",
+          "required": "Tu administrador hizo obligatorio este plugin. No puedes desactivarlo.",
+          "unavailable": "No puedes activar ni desactivar este plugin."
         },
         "actions": {
           "share": "Compartir",

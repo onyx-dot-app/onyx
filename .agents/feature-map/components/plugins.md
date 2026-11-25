@@ -67,7 +67,8 @@ Group or user restriction needs EE.
   leaves out the plugins that are not `member_visible`. The plugin page
   (`sections/plugins/MemberPluginDetailPage.tsx`) has Share, a "..." menu
   (Upload New Version through `sections/modals/plugins/UploadPluginFlow.tsx`,
-  Delete Plugin) and the switch in its header. A needed integration that is
+  Delete Plugin) and the switch in its header. When the switch is disabled
+  (`pluginSwitch` blocked), Overview says why as text. A needed integration that is
   not added links an organization-wide manager to `/admin/integrations/new`
   with the owner set to the organization and `return_to` the plugin page.
   Admin Panel → Plugins (`/admin/plugins`, full admin panel access) renders the

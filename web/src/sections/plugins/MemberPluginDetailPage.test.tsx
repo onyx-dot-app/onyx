@@ -486,3 +486,30 @@ test("in the admin panel the back link returns to the admin plugin list", async 
     "/admin/plugins"
   );
 });
+
+test("the overview says why the switch of a required plugin is disabled", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    enabled: true,
+    can_toggle: false,
+    required_for_user: true,
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText(
+      "Your admin made this plugin required. You cannot turn it off."
+    )
+  ).toBeVisible();
+  expect(
+    screen.getByRole("switch", { name: "Use review-kit" })
+  ).toHaveAttribute("aria-disabled", "true");
+});

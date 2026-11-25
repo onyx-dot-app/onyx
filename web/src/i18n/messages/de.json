@@ -17573,7 +17573,9 @@
         },
         "switch": {
           "title": "Dieses Plugin verwenden",
-          "label": "{name} verwenden"
+          "label": "{name} verwenden",
+          "required": "Ihr Admin hat dieses Plugin als erforderlich festgelegt. Sie können es nicht deaktivieren.",
+          "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren."
         },
         "actions": {
           "share": "Teilen",
