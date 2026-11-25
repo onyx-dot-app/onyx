@@ -1,12 +1,14 @@
 """The set-based Postgres writes of a docprocessing batch: document tags."""
 
 import random
+import threading
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -177,3 +179,55 @@ def test_tag_batch_concurrent_batches_share_tags_and_documents(
     final = {document_id: metadata(rng) for document_id in document_ids}
     _upsert(final)
     assert _stored_tags(db_session, run_id) == _expected_tags(final)
+
+
+def _wait_until_blocked_on_a_lock(db_session: Session, document_id: str) -> None:
+    """Returns when a statement that names the document waits for a row lock."""
+    blocked = text(
+        "SELECT count(*) FROM pg_stat_activity "
+        "WHERE wait_event_type = 'Lock' AND pid <> pg_backend_pid() "
+        "AND strpos(query, :document_id) > 0"
+    )
+    for _ in range(200):
+        db_session.rollback()
+        if db_session.execute(blocked, {"document_id": document_id}).scalar_one():
+            return
+        db_session.execute(text("SELECT pg_sleep(0.05)"))
+    raise AssertionError("The batch did not reach the lock wait.")
+
+
+def test_tag_batch_does_not_deadlock_with_document_deletion(
+    db_session: Session, run_id: str
+) -> None:
+    """Document deletion removes the tag links, then the document row. A batch
+    that waits for a link must not hold a lock on the document row."""
+    doc = f"{run_id}a"
+    key = f"{run_id}team"
+    _create_documents(db_session, [doc])
+    _upsert({doc: {key: "old"}})
+
+    errors: list[BaseException] = []
+
+    def run_batch() -> None:
+        try:
+            _upsert({doc: {key: "new"}})
+        except BaseException as e:
+            errors.append(e)
+
+    batch = threading.Thread(target=run_batch)
+    with get_session_with_current_tenant() as deletion:
+        deletion.execute(delete(Document__Tag).where(Document__Tag.document_id == doc))
+        batch.start()
+        try:
+            _wait_until_blocked_on_a_lock(db_session, doc)
+            deletion.execute(delete(Document).where(Document.id == doc))
+            deletion.commit()
+        except IntegrityError as e:
+            errors.append(e)
+        finally:
+            deletion.rollback()
+            batch.join()
+
+    # One side can lose on the foreign key. A deadlock is an OperationalError.
+    for error in errors:
+        assert isinstance(error, IntegrityError), error

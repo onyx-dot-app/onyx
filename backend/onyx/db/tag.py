@@ -170,8 +170,8 @@ def upsert_document_tags_batch(
     documents: list[DocumentTagInput],
     db_session: Session,
 ) -> None:
-    """Makes the tags of each document equal to its metadata, in one
-    transaction. Commits.
+    """Makes the tags of each document equal to its metadata. Commits the new
+    tags and links first, then the removal of stale links.
 
     Each multi-row write is in key order, so two batches that share tags or
     documents take their row locks in the same order."""
@@ -243,6 +243,11 @@ def upsert_document_tags_batch(
             )
             .on_conflict_do_nothing()
         )
+
+    # The link insert holds a lock on each document row, and document deletion
+    # removes the links first, then the document. Release those locks before
+    # the wait for the stale links, or the two can deadlock.
+    db_session.commit()
 
     stale_links = sorted(current_links - wanted_links)
     if stale_links:
