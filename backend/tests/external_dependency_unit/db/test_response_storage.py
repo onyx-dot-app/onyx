@@ -87,6 +87,7 @@ from onyx.db.chat import (
     get_chat_message,
     get_chat_messages_by_session,
     get_or_create_root_message,
+    get_selected_branch,
     load_message_branch,
     reserve_chat_response_ids,
     root_response_id,
@@ -4655,3 +4656,31 @@ def test_a_result_stopped_by_the_user_does_not_wake_its_reader(
     )[1]
     assert result.failure is not None
     assert not result.wakes_recipient
+
+
+def test_selected_branch_reads_one_statement(
+    db_session: Session, conversation: ChatSession, executed_sql: list[str]
+) -> None:
+    response = _response(db_session, conversation)
+    question = response.parent_message
+    assert question is not None
+    message_id, question_id, session_id = response.id, question.id, conversation.id
+    db_session.commit()
+    db_session.expire_all()
+    executed_sql.clear()
+
+    selected, branch = get_selected_branch(db_session, session_id)
+    assert len(executed_sql) == 1
+    assert selected is not None and selected.id == message_id
+    assert branch.message_ids == [message_id, question_id]
+
+    # The deepest message is a question, so no response is selected.
+    question.latest_child_message_id = None
+    db_session.flush()
+    selected, branch = get_selected_branch(db_session, session_id)
+    assert selected is None
+    assert branch.message_ids == [question_id]
+
+    selected, branch = get_selected_branch(db_session, uuid4())
+    assert selected is None
+    assert branch.message_ids == []
