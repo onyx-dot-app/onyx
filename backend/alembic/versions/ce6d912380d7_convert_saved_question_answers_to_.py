@@ -11,7 +11,8 @@ checkpoints of parked responses, whose runs hold the answers they received.
 This revision rewrites each answer, `{"question_id", "option_label": X}`, to
 `{"question_id", "option_labels": [X]}`; an answer without an option gets an
 empty list. It changes only the answers of the request rows and of question
-results ("type": "question"), not other JSON with the same keys. The downgrade
+results (`QuestionToolDetails`: "type": "question" with an outcome), and
+only answers that name their question, not other JSON with the same keys. The downgrade
 keeps the first option, and removes `multi_select` from the request rows'
 questions, which the earlier code does not accept.
 
@@ -79,11 +80,14 @@ def _to_option_label(answer: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return answer
 
 
-def _each(value: JsonValue, change: Change) -> JsonValue:
-    """`change` applied to each object of a list."""
+def _each(value: JsonValue, change: Change, key: str) -> JsonValue:
+    """`change` applied to each object of a list that has `key`."""
     if not isinstance(value, list):
         return value
-    return [change(dict(item)) if isinstance(item, dict) else item for item in value]
+    return [
+        change(dict(item)) if isinstance(item, dict) and key in item else item
+        for item in value
+    ]
 
 
 def _in_question_results(value: JsonValue, change: Change) -> JsonValue:
@@ -93,8 +97,13 @@ def _in_question_results(value: JsonValue, change: Change) -> JsonValue:
     if not isinstance(value, dict):
         return value
     rewritten = {key: _in_question_results(item, change) for key, item in value.items()}
-    if rewritten.get("type") == "question" and "answers" in rewritten:
-        rewritten["answers"] = _each(rewritten.get("answers"), change)
+    # A QuestionToolDetails: its type, outcome and answers.
+    if (
+        rewritten.get("type") == "question"
+        and "outcome" in rewritten
+        and "answers" in rewritten
+    ):
+        rewritten["answers"] = _each(rewritten["answers"], change, "question_id")
     return rewritten
 
 
@@ -128,7 +137,7 @@ def _rewrite_answers(change: Change) -> None:
         "id",
         "answers",
         "answers IS NOT NULL",
-        lambda answers: _each(answers, change),
+        lambda answers: _each(answers, change, "question_id"),
     )
     for table, key, column, where in _RESULT_COLUMNS:
         _rewrite(
@@ -152,5 +161,6 @@ def downgrade() -> None:
             lambda question: {
                 key: item for key, item in question.items() if key != "multi_select"
             },
+            "question",
         ),
     )

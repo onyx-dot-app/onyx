@@ -58,6 +58,11 @@ UNRELATED_ARGUMENTS = {
     "question": "Kept?",
     "options": [],
     "multi_select": True,
+    # Another tool's result that has a "question" type and answers.
+    "survey": {
+        "type": "question",
+        "answers": [{"option_label": "kept"}, {"question_id": "q2"}],
+    },
 }
 
 
