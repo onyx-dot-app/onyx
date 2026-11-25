@@ -4,6 +4,7 @@ user's approval, keyed by its integration."""
 
 import json
 from collections.abc import Generator
+from io import BytesIO
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4

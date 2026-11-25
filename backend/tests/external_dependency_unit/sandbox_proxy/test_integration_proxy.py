@@ -790,7 +790,7 @@ def test_a_chat_session_takes_the_policies_of_its_chat(
 
     def policy(method: str, path: str, from_chat: bool = True) -> ActionPolicy:
         matched = _evaluate(_request(f"https://{host}{path}", method=method), user)
-        assert matched.target.api_app
+        assert matched.target.api_app and matched.target.chat_tools
         resolved = addon._resolve_request_policies(ctx, matched, from_chat)
         return resolved.governing_action.policy
 
@@ -799,3 +799,35 @@ def test_a_chat_session_takes_the_policies_of_its_chat(
     assert policy("POST", "/items") is ActionPolicy.DENY
     assert policy("DELETE", "/items/7") is ActionPolicy.ASK
     assert policy("GET", "/other") is ActionPolicy.ASK
+
+
+def test_a_chat_matches_the_linked_integrations_of_its_agent(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    """A custom agent uses its linked integrations whether the user turned
+    them on or not, so a command of its chat matches a linked app that is
+    off. Craft keeps the on/off choice of the user."""
+    host = _host()
+    app = _custom_app(db_session, created, host)
+    _run(db_session, [app])
+    turn_off_integrations(db_session, user.id, [app])
+    agent = create_test_persona(db_session, user)
+    link_persona(db_session, agent.id, app.id)
+    chat = ChatSession(
+        id=uuid4(), user_id=user.id, persona_id=agent.id, description="linked"
+    )
+    db_session.add(chat)
+    db_session.commit()
+    request = _request(f"https://{host}/items")
+
+    matched = IntegrationRequestEvaluator().evaluate(request, TENANT, user.id, chat.id)
+
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.target.integration_id == app.id
+    # A URL-pattern app has no chat tool that the gate can name.
+    assert not matched.target.chat_tools
+    assert _evaluate(request, user) is None
+    assert (
+        IntegrationRequestEvaluator().evaluate(request, TENANT, user.id, uuid4())
+        is None
+    )

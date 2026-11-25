@@ -5,6 +5,7 @@ Exceptions are failures and must never authorize credential injection.
 """
 
 import json
+from collections.abc import Collection
 from typing import Any, Protocol
 from urllib.parse import parse_qs
 from uuid import UUID
@@ -12,9 +13,18 @@ from uuid import UUID
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
+from onyx.db.chat import get_chat_session_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ActionPolicy, IntegrationActionPolicyValue, IntegrationKind
-from onyx.db.integration import list_enabled_integrations_by_id
+from onyx.db.enums import (
+    ActionPolicy,
+    ExternalAppType,
+    IntegrationActionPolicyValue,
+    IntegrationKind,
+)
+from onyx.db.integration import (
+    get_external_app_for_integration,
+    list_enabled_integrations_by_id,
+)
 from onyx.db.models import Integration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -25,6 +35,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.models import RequestMatch
+from onyx.integrations.policy import chat_session_integrations
 from onyx.integrations.registry import get_kind_handler
 from onyx.sandbox_proxy.models import McpProtocolRequest
 from onyx.sandbox_proxy.resolvers.mcp_matching import IntegrationMatchTarget, may_match
@@ -47,6 +58,7 @@ class RequestEvaluator(Protocol):
         request: http.Request,
         tenant_id: str,
         user_id: UUID,
+        session_tag: UUID | None = None,
     ) -> AllMatchedActions | McpProtocolRequest | None: ...
 
 
@@ -104,7 +116,9 @@ def _pick(
 
 class IntegrationRequestEvaluator(RequestEvaluator):
     """Matches a request against the integrations that the sandbox owner
-    turned on. The gate applies the stored policies.
+    turned on, or for a ``session_tag`` of a chat of the owner, the
+    integrations of the agent of that chat. The gate applies the stored
+    policies.
 
     * an MCP protocol message gives ``McpProtocolRequest``;
     * an MCP body that does not parse gives one blocked action;
@@ -121,6 +135,7 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         request: http.Request,
         tenant_id: str,
         user_id: UUID,
+        session_tag: UUID | None = None,
     ) -> AllMatchedActions | McpProtocolRequest | None:
         candidates = [
             target
@@ -129,8 +144,8 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         ]
         if not candidates:
             return None
-        on = self._usable.get(tenant_id, user_id).on
-        candidates = [c for c in candidates if c.integration_id in on]
+        usable = self._usable_ids(tenant_id, user_id, session_tag)
+        candidates = [c for c in candidates if c.integration_id in usable]
         if not candidates:
             return None
         with get_session_with_tenant(tenant_id=tenant_id) as db:
@@ -159,6 +174,7 @@ class IntegrationRequestEvaluator(RequestEvaluator):
                 kind=integration.kind,
                 app_name=integration.name,
                 api_app=integration.api_app_id is not None,
+                chat_tools=_has_chat_tools(integration, db),
             )
         if not match.actions:
             return McpProtocolRequest(target=target)
@@ -175,6 +191,25 @@ class IntegrationRequestEvaluator(RequestEvaluator):
             target=target,
             payload=_request_payload(request),
         )
+
+    def _usable_ids(
+        self, tenant_id: str, user_id: UUID, session_tag: UUID | None
+    ) -> Collection[int]:
+        """A custom agent or a task uses its linked integrations, turned on
+        or not, so a chat reads the integrations of its agent."""
+        if session_tag is not None:
+            with get_session_with_tenant(tenant_id=tenant_id) as db:
+                if get_chat_session_id_for_user(db, session_tag, user_id) is not None:
+                    return chat_session_integrations(db, user_id, session_tag).keys()
+        return self._usable.get(tenant_id, user_id).on
+
+
+def _has_chat_tools(integration: Integration, db_session: Session) -> bool:
+    """A CUSTOM external app has no chat tools."""
+    if integration.kind is not IntegrationKind.API or integration.api_app_id:
+        return True
+    app = get_external_app_for_integration(integration.id, db_session)
+    return app is None or app.app_type is not ExternalAppType.CUSTOM
 
 
 def _request_payload(request: http.Request) -> dict[str, Any]:

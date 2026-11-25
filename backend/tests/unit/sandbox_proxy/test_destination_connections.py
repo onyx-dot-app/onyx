@@ -454,6 +454,9 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                 usable, "load_usable_integration_ids", lambda *_args: usable_ids(1)
             )
             monkeypatch.setattr(
+                request_evaluator, "get_chat_session_id_for_user", lambda *_: None
+            )
+            monkeypatch.setattr(
                 request_evaluator,
                 "list_enabled_integrations_by_id",
                 lambda *_args: [integration],

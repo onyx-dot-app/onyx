@@ -377,6 +377,22 @@ def persona_link_settings(
     }
 
 
+def chat_session_integrations(
+    db_session: Session, user_id: UUID, chat_session_id: UUID
+) -> dict[int, AgentIntegration]:
+    """``chat_integrations`` of the agent of the chat."""
+    persona_id = get_chat_session_persona_id(db_session, chat_session_id)
+    if persona_id is None:
+        return {}
+    return chat_integrations(
+        db_session,
+        user_id,
+        persona_id,
+        persona_link_settings(db_session, persona_id),
+        chat_session_id,
+    )
+
+
 def resolve_chat_action_policies(
     db_session: Session,
     *,
@@ -391,17 +407,8 @@ def resolve_chat_action_policies(
     uses it for a request from the VM of the chat. It reads the integrations
     that chat tool construction reads, so an integration the user cannot use
     on the agent is Blocked."""
-    persona_id = get_chat_session_persona_id(db_session, chat_session_id)
-    held = (
-        chat_integrations(
-            db_session,
-            user_id,
-            persona_id,
-            persona_link_settings(db_session, persona_id),
-            chat_session_id,
-        ).get(integration.id)
-        if persona_id is not None
-        else None
+    held = chat_session_integrations(db_session, user_id, chat_session_id).get(
+        integration.id
     )
     return resolve_action_policies(
         db_session,

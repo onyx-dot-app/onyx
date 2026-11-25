@@ -712,8 +712,14 @@ class GateAddon:
     def _evaluate(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
     ) -> AllMatchedActions | McpProtocolRequest | None:
+        # Off-catalog traffic is high volume: no log line for its tag.
+        tag = self._extract_session_tag(flow, log=False)
+        try:
+            session_tag = UUID(tag) if tag else None
+        except ValueError:
+            session_tag = None
         return self._request_evaluator.evaluate(
-            flow.request, sandbox.tenant_id, sandbox.user_id
+            flow.request, sandbox.tenant_id, sandbox.user_id, session_tag
         )
 
     def _resolve_request_policies(
@@ -1372,7 +1378,9 @@ class GateAddon:
         )
         return exact, from_chat
 
-    def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
+    def _extract_session_tag(
+        self, flow: http.HTTPFlow, *, log: bool = True
+    ) -> str | None:
         """The originating session tag, or None.
 
         HTTPS: cached from the CONNECT in `http_connect`. HTTP: read off the
@@ -1396,6 +1404,8 @@ class GateAddon:
         # still blocked by the src-IP-pinned sandbox identity in resolve_sandbox.
         mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
         tag = mcp_header or cached or direct
+        if not log:
+            return tag
         logger.debug(
             "session_tag_resolved conn=%s host=%s cached=%s direct=%s "
             "proxy_auth_present=%s session=%s",
@@ -1415,15 +1425,22 @@ def _app_tool_hint(matched_actions: AllMatchedActions) -> str:
     if target.kind is not IntegrationKind.API:
         return f"Use the tool of {target.app_name} for this action."
     tool_name = custom_tool_name if target.api_app else app_action_tool_name
-    tools = ", ".join(
+    tools = [
         tool_name(target.integration_id, action.action_type)
         for action in matched_actions.actions
-        if action.policy is ActionPolicy.ASK
+        if target.chat_tools
+        and action.policy is ActionPolicy.ASK
         and not (target.api_app and always_asks(target.kind, action.action_type))
-    )
+    ]
     if not tools:
         return f"{target.app_name} has no tool for this request."
-    return f"For {target.app_name}, call: {tools}."
+    if len(tools) == 1:
+        return f"For {target.app_name}, call: {tools[0]}."
+    # Each tool sends one action, e.g. one GraphQL root field.
+    return (
+        f"For {target.app_name}, split the request: one call of each of "
+        f"{', '.join(tools)}."
+    )
 
 
 # ------------------------------------------------------------------------------

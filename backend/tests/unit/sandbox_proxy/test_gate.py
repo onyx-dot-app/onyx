@@ -85,6 +85,7 @@ class _StubMatcher(RequestEvaluator):
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        session_tag: UUID | None = None,  # noqa: ARG002
     ) -> AllMatchedActions | McpProtocolRequest | None:
         self.calls += 1
         if self._exc is not None:
@@ -2038,31 +2039,47 @@ async def test_an_ask_from_a_chat_is_refused_and_names_the_app_tool(
 
 
 @pytest.mark.parametrize(
-    ("action_type", "hint"),
+    ("action_types", "api_app", "chat_tools", "hint"),
     [
-        ("create_ticket", "custom__51__create_ticket"),
-        ("unspecified", "Tickets has no tool for this request."),
+        (("create_ticket",), True, True, "call: custom__51__create_ticket."),
+        (("unspecified",), True, True, "Tickets has no tool for this request."),
+        (
+            ("query.viewer", "query.repository"),
+            True,
+            True,
+            "split the request: one call of each of custom__51__query_viewer, "
+            "custom__51__query_repository.",
+        ),
+        (("unspecified",), False, True, "call: app__51__request."),
+        # A URL-pattern app has no chat tools.
+        (("unspecified",), False, False, "Tickets has no tool for this request."),
     ],
 )
 @pytest.mark.asyncio
-async def test_an_ask_from_a_chat_names_the_tool_of_a_rest_app(
-    monkeypatch: pytest.MonkeyPatch, action_type: str, hint: str
+async def test_an_ask_from_a_chat_names_the_tool_of_an_api_app(
+    monkeypatch: pytest.MonkeyPatch,
+    action_types: tuple[str, ...],
+    api_app: bool,
+    chat_tools: bool,
+    hint: str,
 ) -> None:
     _chat_policies(monkeypatch, ActionPolicy.ASK)
     match = AllMatchedActions(
-        actions=(
+        actions=tuple(
             MatchedAction(
                 action_type=action_type,
-                display_name="Create a ticket",
-                description="Create a ticket.",
+                display_name=action_type,
+                description=action_type,
                 policy=ActionPolicy.ASK,
-            ),
+            )
+            for action_type in action_types
         ),
         target=GatedTarget(
             integration_id=51,
             kind=IntegrationKind.API,
             app_name="Tickets",
-            api_app=True,
+            api_app=api_app,
+            chat_tools=chat_tools,
         ),
     )
     addon = _build(

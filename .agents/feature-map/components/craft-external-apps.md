@@ -141,10 +141,15 @@ calls the one policy function (`integrations/policy.py:resolve_action_policies`)
 with the interactive approval mode and the stored actions, so Ask keeps the
 approval wait. An interactive session and the task catalog pass empty link
 settings, which inherit each action; no link (`None`) would block each
-action. The gate maps Allow, Ask and Blocked to the
-`ActionPolicy` values that approval rows store (`sandbox_proxy/addons/gate.py:resolve_gate_policies`),
-then forces `unspecified` on an API integration to Ask unless it resolved to
-DENY (`GateAddon._resolve_request_policies`). `AllMatchedActions` sorts actions
+action. The policy function itself makes each `always_asks` action
+(`unspecified`) Ask unless it is Blocked. The gate maps Allow, Ask and Blocked
+to the `ActionPolicy` values that approval rows store
+(`sandbox_proxy/addons/gate.py:resolve_gate_policies`). A request from a chat
+VM takes the policies of the agent of that chat
+(`integrations/policy.py:resolve_chat_action_policies`), and the evaluator
+matches it against that agent's integrations, linked ones that the user
+turned off included. A chat Ask gets `approval_needs_tool` with the chat tools
+to call instead (`sandbox_proxy/addons/gate.py:_app_tool_hint`). `AllMatchedActions` sorts actions
 strictest first, and `governing_action` decides the verdict.
 
 **Approvals.** For an Ask verdict, `GateAddon._apply_session_grant` first looks

@@ -103,8 +103,9 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
     SandboxProxyError.APPROVAL_NEEDS_TOOL: (
         "This request needs the user's approval, and a request from a command "
         "cannot ask for it, so it was not performed. Do not retry it from a "
-        "command. Send the same request through the tool of this app, which "
-        "asks the user in the chat."
+        "command. Send it through the chat tool that the detail names, which "
+        "asks the user in the chat. If the detail names no tool, the request "
+        "cannot run in this chat."
     ),
 }
 
