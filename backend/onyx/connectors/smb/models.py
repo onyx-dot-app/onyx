@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from onyx.connectors.models import ConnectorCheckpoint
 
@@ -24,8 +24,24 @@ class SmbAuthMethod(str, Enum):
     NTLM = "ntlm"
 
 
+class LdapTlsMode(str, Enum):
+    """How the directory connection is encrypted. There is no plain mode: the
+    bind sends the service account's password."""
+
+    LDAPS = "ldaps"
+    STARTTLS = "starttls"
+
+
+LDAP_DEFAULT_PORTS: dict[LdapTlsMode, int] = {
+    LdapTlsMode.LDAPS: 636,
+    LdapTlsMode.STARTTLS: 389,
+}
+_MAX_PORT = 65535
+
+
 class SmbCredentials(BaseModel):
-    """A domain service account."""
+    """A domain service account, and the domain controller that permission
+    sync asks about users and groups."""
 
     model_config = ConfigDict(extra="ignore", hide_input_in_errors=True)
 
@@ -35,6 +51,33 @@ class SmbCredentials(BaseModel):
     smb_domain: str = ""
     smb_username: str
     smb_password: str
+    # Empty when permission sync is not used.
+    ldap_host: str = ""
+    # None uses the TLS mode's standard port.
+    ldap_port: int | None = Field(default=None, ge=1, le=_MAX_PORT)
+    ldap_tls: LdapTlsMode = LdapTlsMode.LDAPS
+    # PEM certificates of the authority that signed the domain controller's
+    # certificate. Empty uses the system's trusted authorities.
+    ldap_ca_cert: str = ""
+
+    @field_validator("ldap_tls", mode="before")
+    @classmethod
+    def _missing_means_ldaps(cls, value: Any) -> Any:
+        return value or LdapTlsMode.LDAPS
+
+    @field_validator("ldap_port", mode="before")
+    @classmethod
+    def _blank_port_means_default(cls, value: Any) -> Any:
+        return None if value in ("", None) else value
+
+    @field_validator("ldap_host", "ldap_ca_cert", mode="before")
+    @classmethod
+    def _strip_directory_fields(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else (value or "")
+
+    @property
+    def directory_port(self) -> int:
+        return self.ldap_port or LDAP_DEFAULT_PORTS[self.ldap_tls]
 
     @field_validator("authentication_method", mode="before")
     @classmethod
@@ -108,6 +151,47 @@ class SmbSessionInfo(BaseModel):
     dialect: str
     signing_required: bool
     encrypted: bool
+
+
+class EmailAttribute(str, Enum):
+    """The Active Directory attribute that holds a user's Onyx login email."""
+
+    # ``mail``, and ``userPrincipalName`` for a user with no ``mail``.
+    MAIL = "mail"
+    USER_PRINCIPAL_NAME = "userPrincipalName"
+
+
+class DirectoryInfo(BaseModel):
+    """The domain the directory connection is bound to."""
+
+    # E.g. "DC=corp,DC=example,DC=com".
+    base_dn: str
+    domain_sid: str
+
+
+class DirectoryUser(BaseModel):
+    sid: str
+    mail: str | None = None
+    user_principal_name: str | None = None
+    # False for a disabled account, which cannot sign in.
+    enabled: bool = True
+
+
+class DirectoryGroup(BaseModel):
+    sid: str
+    distinguished_name: str
+    name: str | None = None
+
+
+class DirectoryUserPage(BaseModel):
+    users: list[DirectoryUser]
+    # None after the last page.
+    cookie: bytes | None
+
+
+class DirectoryGroupPage(BaseModel):
+    groups: list[DirectoryGroup]
+    cookie: bytes | None
 
 
 class SmbPendingFolder(BaseModel):

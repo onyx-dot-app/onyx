@@ -1,4 +1,4 @@
-"""Windows file share gateway: every SMB call lives here.
+"""Windows file share gateway: every SMB and LDAP call lives here.
 
 The connector reads one share of one file server with a domain service
 account. The session never uses SMB 1, needs SMB 2.1 or later, and requires
@@ -6,10 +6,14 @@ signing. Encryption is required unless the connector config turns it off.
 
 ``smbclient`` keeps sessions in a connection cache. Each gateway has its own,
 so two credentials for one server never share a session.
+
+Permission sync also asks the domain's Active Directory about users and
+groups, over LDAP with TLS and the same service account.
 """
 
 import os
 import socket
+import ssl
 import sys
 import threading
 import weakref
@@ -18,6 +22,20 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar, TypeVar
 
 import smbclient
+from ldap3 import BASE, NONE, SAFE_SYNC, SIMPLE, SUBTREE, Server, Tls
+from ldap3 import Connection as LdapConnection
+from ldap3.core.exceptions import (
+    LDAPBindError,
+    LDAPCertificateError,
+    LDAPException,
+    LDAPInsufficientAccessRightsResult,
+    LDAPInvalidCredentialsResult,
+    LDAPSocketOpenError,
+    LDAPSocketReceiveError,
+    LDAPSocketSendError,
+    LDAPStartTLSError,
+)
+from ldap3.utils.conv import escape_filter_chars
 from pydantic import ValidationError
 from smbprotocol.connection import Connection
 from smbprotocol.exceptions import (
@@ -44,11 +62,18 @@ from onyx.connectors.smb.config import (
     SmbCredentialBinding,
 )
 from onyx.connectors.smb.models import (
+    DirectoryGroup,
+    DirectoryGroupPage,
+    DirectoryInfo,
+    DirectoryUser,
+    DirectoryUserPage,
+    LdapTlsMode,
     SmbCredentials,
     SmbEntry,
     SmbFile,
     SmbSessionInfo,
 )
+from onyx.connectors.smb.sid import MalformedSidError, rid_of, sid_from_bytes
 from onyx.connectors.source_operations import (
     OperationConsumes,
     SourceOperations,
@@ -125,6 +150,23 @@ _NO_SHARE_STATUSES = frozenset(
         0xC00000CC,  # STATUS_BAD_NETWORK_NAME
     }
 )
+
+_LDAP_RECEIVE_TIMEOUT_SECONDS = 120
+LDAP_PAGE_SIZE = 1000
+# A listing still paging past this is a cursor that does not advance.
+_MAX_LDAP_PAGES = 10_000
+_PAGED_RESULTS_CONTROL = "1.2.840.113556.1.4.319"
+# Matches a group and every group nested in it.
+_MATCHING_RULE_IN_CHAIN = "1.2.840.113556.1.4.1941"
+_MATCHING_RULE_BIT_AND = "1.2.840.113556.1.4.803"
+# The groupType bit of a security group. A distribution group grants nothing.
+_SECURITY_GROUP_TYPE = 0x80000000
+# The userAccountControl bit of a disabled account.
+_ACCOUNT_DISABLED = 0x2
+_USER_FILTER = "(&(objectCategory=person)(objectClass=user))"
+_GROUP_CATEGORY_FILTER = "(objectCategory=group)"
+_USER_ATTRIBUTES = ["objectSid", "mail", "userPrincipalName", "userAccountControl"]
+_GROUP_ATTRIBUTES = ["objectSid", "cn"]
 
 T = TypeVar("T")
 
@@ -265,9 +307,51 @@ def _status(error: Exception) -> int | None:
     return None
 
 
+class DirectoryRequestError(SourceApiError):
+    """The domain controller answered with an error the gateway does not map."""
+
+
+def _text(entry: dict[str, Any], attribute: str) -> str | None:
+    """The first value of a text attribute. None when the entry has none."""
+    values: list[bytes] = entry["raw_attributes"].get(attribute) or []
+    return values[0].decode("utf-8", errors="replace") if values else None
+
+
+def _sid(entry: dict[str, Any]) -> str | None:
+    values: list[bytes] = entry["raw_attributes"].get("objectSid") or []
+    if not values:
+        return None
+    try:
+        return sid_from_bytes(values[0])
+    except MalformedSidError:
+        return None
+
+
+def _directory_user(entry: dict[str, Any]) -> DirectoryUser | None:
+    sid: str | None = _sid(entry)
+    if sid is None:
+        return None
+    account_control: str | None = _text(entry, "userAccountControl")
+    return DirectoryUser(
+        sid=sid,
+        mail=_text(entry, "mail"),
+        user_principal_name=_text(entry, "userPrincipalName"),
+        enabled=not (int(account_control or 0) & _ACCOUNT_DISABLED),
+    )
+
+
+def _directory_group(entry: dict[str, Any]) -> DirectoryGroup | None:
+    sid: str | None = _sid(entry)
+    if sid is None:
+        return None
+    return DirectoryGroup(
+        sid=sid, distinguished_name=str(entry["dn"]), name=_text(entry, "cn")
+    )
+
+
 class SmbSourceOperations(SourceOperations):
     source = DocumentSource.SMB
-    sdk_modules = ("smbclient", "smbprotocol", "spnego")
+    sdk_modules = ("smbclient", "smbprotocol", "spnego", "ldap3")
     config_keys = frozenset(
         {CONFIG_HOST, CONFIG_SHARE, CONFIG_PORT, CONFIG_REQUIRE_ENCRYPTION}
     )
@@ -277,6 +361,7 @@ class SmbSourceOperations(SourceOperations):
     _session_lock: ClassVar[threading.RLock] = threading.RLock()
     _connection_cache: dict[str, Connection] | None = None
     _validated_host: str | None = None
+    _ldap_connection: LdapConnection | None = None
 
     def _config(self) -> SmbConnectorConfig:
         try:
@@ -553,6 +638,304 @@ class SmbSourceOperations(SourceOperations):
                 return SmbFile(size=len(content), content=content)
 
         return self._call(download, f"the file '{unc}'")
+
+    def _directory_host(self, credentials: SmbCredentials) -> str:
+        if not credentials.ldap_host:
+            raise ConnectorValidationError(
+                "The credential names no LDAP host. Permission sync asks a "
+                "domain controller about users and groups."
+            )
+        return credentials.ldap_host
+
+    def _open_ldap(self) -> LdapConnection:
+        """A bound connection. The password goes out only after TLS is up
+        and the address the socket reached passed the network policy."""
+        credentials: SmbCredentials = self._credentials()
+        host: str = self._directory_host(credentials)
+        validate_network_host(host, "domain controller")
+        server = Server(
+            host,
+            port=credentials.directory_port,
+            use_ssl=credentials.ldap_tls is LdapTlsMode.LDAPS,
+            tls=Tls(
+                validate=ssl.CERT_REQUIRED,
+                ca_certs_data=credentials.ldap_ca_cert or None,
+            ),
+            get_info=NONE,
+            connect_timeout=_CONNECTION_TIMEOUT_SECONDS,
+        )
+        connection = LdapConnection(
+            server,
+            user=credentials.account_name,
+            password=credentials.smb_password,
+            authentication=SIMPLE,
+            client_strategy=SAFE_SYNC,
+            auto_bind=False,
+            # A referral names another server. Following it would send the
+            # password there.
+            auto_referrals=False,
+            read_only=True,
+            raise_exceptions=True,
+            receive_timeout=_LDAP_RECEIVE_TIMEOUT_SECONDS,
+        )
+        connection.open()
+        try:
+            ldap_socket: socket.socket | None = connection.socket
+            if ldap_socket is None:
+                raise UnreachableValidationError(
+                    f"Onyx cannot reach the domain controller '{host}'."
+                )
+            validate_network_host(
+                str(ldap_socket.getpeername()[0]), "domain controller address"
+            )
+            if credentials.ldap_tls is LdapTlsMode.STARTTLS:
+                connection.start_tls()
+            connection.bind()
+        except Exception:
+            connection.unbind()
+            raise
+        return connection
+
+    def _ldap(self) -> LdapConnection:
+        if self._ldap_connection is None:
+            with self._session_lock:
+                if self._ldap_connection is None:
+                    self._ldap_connection = self._open_ldap()
+        return self._ldap_connection
+
+    def _drop_ldap(self) -> None:
+        with self._session_lock:
+            connection: LdapConnection | None = self._ldap_connection
+            self._ldap_connection = None
+        if connection is not None:
+            try:
+                connection.unbind()
+            except LDAPException:
+                logger.debug("Closing the LDAP connection failed", exc_info=True)
+
+    def _map_ldap_error(self, error: Exception, target: str) -> Exception:
+        host: str = self._credentials().ldap_host
+        if isinstance(error, LDAPInvalidCredentialsResult | LDAPBindError):
+            return CredentialInvalidError(
+                f"The domain controller '{host}' rejected the service account."
+            )
+        if isinstance(error, LDAPInsufficientAccessRightsResult):
+            return InsufficientPermissionsError(
+                f"The service account may not read {target} from the directory."
+            )
+        if isinstance(error, LDAPCertificateError | LDAPStartTLSError | ssl.SSLError):
+            return ConnectorValidationError(
+                f"Onyx does not trust the TLS certificate of '{host}': {error}. "
+                "Add the certificate of the authority that signed it to the "
+                "credential, and use the name the certificate holds."
+            )
+        if isinstance(error, LDAPSocketOpenError | OSError):
+            # ldap3 wraps a failed certificate check in a socket error.
+            if "certificate" in str(error).lower():
+                return ConnectorValidationError(
+                    f"Onyx does not trust the TLS certificate of '{host}': "
+                    f"{error}. Add the certificate of the authority that "
+                    "signed it to the credential, and use the name the "
+                    "certificate holds."
+                )
+            return UnreachableValidationError(
+                f"Onyx cannot reach the domain controller '{host}': {error}"
+            )
+        return DirectoryRequestError(
+            f"The domain controller '{host}' failed on {target}: {error}",
+            status_code=None,
+        )
+
+    def _ldap_search(
+        self,
+        *,
+        base: str,
+        search_filter: str,
+        attributes: list[str],
+        target: str,
+        scope: str = SUBTREE,
+        cookie: bytes | None = None,
+        page_size: int | None = None,
+    ) -> tuple[list[dict[str, Any]], bytes | None]:
+        """One search, or one page of it. Returns the entries and the cookie
+        of the next page. A connection the server closed is made again once."""
+        for attempt in range(2):
+            try:
+                _, result, response, _ = self._ldap().search(
+                    base,
+                    search_filter,
+                    search_scope=scope,
+                    attributes=attributes,
+                    paged_size=page_size,
+                    paged_cookie=cookie,
+                )
+            except (LDAPSocketReceiveError, LDAPSocketSendError) as e:
+                self._drop_ldap()
+                if attempt:
+                    raise self._map_ldap_error(e, target) from e
+                continue
+            except (ConnectorValidationError, SourceApiError):
+                raise
+            except (LDAPException, OSError) as e:
+                self._drop_ldap()
+                raise self._map_ldap_error(e, target) from e
+            entries: list[dict[str, Any]] = [
+                entry
+                for entry in response or []
+                if entry.get("type") == "searchResEntry"
+            ]
+            next_cookie: bytes | None = (
+                ((result.get("controls") or {}).get(_PAGED_RESULTS_CONTROL) or {})
+                .get("value", {})
+                .get("cookie")
+            )
+            return entries, next_cookie or None
+        raise RuntimeError("Bug: the retry loop always returns or raises.")
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_directory_info(self) -> DirectoryInfo:
+        """Binds to the domain controller and reads the domain's name and SID."""
+        target: str = "the domain"
+        roots, _ = self._ldap_search(
+            base="",
+            search_filter="(objectClass=*)",
+            attributes=["defaultNamingContext"],
+            scope=BASE,
+            target=target,
+        )
+        base_dn: str | None = _text(roots[0], "defaultNamingContext") if roots else None
+        if not base_dn:
+            raise DirectoryRequestError(
+                "The LDAP server names no domain. Is it an Active Directory "
+                "domain controller?",
+                status_code=None,
+            )
+        domains, _ = self._ldap_search(
+            base=base_dn,
+            search_filter="(objectClass=*)",
+            attributes=["objectSid"],
+            scope=BASE,
+            target=target,
+        )
+        domain_sid: str | None = _sid(domains[0]) if domains else None
+        if domain_sid is None:
+            raise InsufficientPermissionsError(
+                f"The service account may not read the domain object '{base_dn}'."
+            )
+        return DirectoryInfo(base_dn=base_dn, domain_sid=domain_sid)
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_directory_users(
+        self,
+        *,
+        base_dn: str,
+        cookie: bytes | None = None,
+        page_size: int = LDAP_PAGE_SIZE,
+    ) -> DirectoryUserPage:
+        """One page of the domain's user accounts. Computers are left out."""
+        entries, next_cookie = self._ldap_search(
+            base=base_dn,
+            search_filter=_USER_FILTER,
+            attributes=_USER_ATTRIBUTES,
+            cookie=cookie,
+            page_size=page_size,
+            target="the domain's users",
+        )
+        return DirectoryUserPage(
+            users=[
+                user
+                for entry in entries
+                if (user := _directory_user(entry)) is not None
+            ],
+            cookie=next_cookie,
+        )
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_directory_groups(
+        self,
+        *,
+        base_dn: str,
+        cookie: bytes | None = None,
+        page_size: int = LDAP_PAGE_SIZE,
+    ) -> DirectoryGroupPage:
+        """One page of the domain's security groups."""
+        entries, next_cookie = self._ldap_search(
+            base=base_dn,
+            search_filter=(
+                f"(&{_GROUP_CATEGORY_FILTER}"
+                f"(groupType:{_MATCHING_RULE_BIT_AND}:={_SECURITY_GROUP_TYPE}))"
+            ),
+            attributes=_GROUP_ATTRIBUTES,
+            cookie=cookie,
+            page_size=page_size,
+            target="the domain's groups",
+        )
+        return DirectoryGroupPage(
+            groups=[
+                group
+                for entry in entries
+                if (group := _directory_group(entry)) is not None
+            ],
+            cookie=next_cookie,
+        )
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def find_directory_group(self, *, base_dn: str, sid: str) -> DirectoryGroup | None:
+        """The domain group with this SID. None for a SID the domain does not
+        know as a group, e.g. a local group of the file server."""
+        entries, _ = self._ldap_search(
+            base=base_dn,
+            search_filter=(
+                f"(&{_GROUP_CATEGORY_FILTER}(objectSid={escape_filter_chars(sid)}))"
+            ),
+            attributes=_GROUP_ATTRIBUTES,
+            target=f"the group {sid}",
+        )
+        return _directory_group(entries[0]) if entries else None
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_group_member_sids(
+        self, *, base_dn: str, group: DirectoryGroup
+    ) -> list[str]:
+        """The SIDs of the users in a group, members of nested groups
+        included. A user's primary group is not in ``memberOf``, so it is
+        matched by its id."""
+        member_filter: str = (
+            f"(&{_USER_FILTER}(|"
+            f"(memberOf:{_MATCHING_RULE_IN_CHAIN}:="
+            f"{escape_filter_chars(group.distinguished_name)})"
+            f"(primaryGroupID={rid_of(group.sid)})))"
+        )
+        sids: list[str] = []
+        cookie: bytes | None = None
+        for _ in range(_MAX_LDAP_PAGES):
+            entries, cookie = self._ldap_search(
+                base=base_dn,
+                search_filter=member_filter,
+                attributes=["objectSid"],
+                cookie=cookie,
+                page_size=LDAP_PAGE_SIZE,
+                target=f"the members of the group {group.sid}",
+            )
+            sids.extend(sid for entry in entries if (sid := _sid(entry)) is not None)
+            if cookie is None:
+                return sids
+        raise RuntimeError(f"The members of {group.sid} passed {_MAX_LDAP_PAGES} pages")
 
 
 def _enable_keepalive(connection: Connection) -> None:

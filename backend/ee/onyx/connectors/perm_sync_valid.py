@@ -13,6 +13,9 @@ from ee.onyx.external_permissions.linear.capability_checks import (
     build_linear_doc_permission_sync_checks,
     build_linear_group_sync_checks,
 )
+from ee.onyx.external_permissions.smb.capability_checks import (
+    build_smb_group_sync_checks,
+)
 from ee.onyx.external_permissions.youtrack.capability_checks import (
     build_youtrack_doc_permission_sync_checks,
     build_youtrack_group_sync_checks,
@@ -58,6 +61,7 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_group_sync_checks,
 )
 from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.smb.connector import SmbConnector
 from onyx.connectors.youtrack.config import YouTrackConnectorConfig
 from onyx.connectors.youtrack.connector import YouTrackConnector
 from onyx.connectors.zoom.connector import ZoomConnector
@@ -270,6 +274,34 @@ def validate_azure_datalake_perm_sync(connector: AzureDataLakeConnector) -> None
             )
 
 
+def smb_check_context(connector: SmbConnector) -> CapabilityCheckContext:
+    return CapabilityCheckContext(
+        source=DocumentSource.SMB,
+        credential_json=connector.ops.credentials_provider.get_credentials(),
+        connector=connector,
+        connector_specific_config=connector.config().model_dump(mode="json"),
+        source_operations=connector.ops,
+    )
+
+
+def validate_smb_perm_sync(connector: SmbConnector) -> None:
+    """Scheduled syncs validate through here, so a service account that lost
+    its directory access fails the sync instead of emptying every group."""
+    context: CapabilityCheckContext = smb_check_context(connector)
+    # Checks mirrored across both capabilities share an id and run once.
+    checks: dict[str, CapabilityCheck] = {
+        check.check_id: check for check in build_smb_group_sync_checks()
+    }
+    for check in checks.values():
+        try:
+            check.run(context)
+        except InconclusiveValidationError as e:
+            # A new domain can have no user with an address yet.
+            logger.info(
+                "Windows file share check %s could not decide: %s", check.check_id, e
+            )
+
+
 def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
     """
     Permission sync reads each recording's share settings, its registered
@@ -315,6 +347,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     HubSpotConnector: validate_hubspot_perm_sync,
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
+    SmbConnector: validate_smb_perm_sync,
     YouTrackConnector: validate_youtrack_perm_sync,
     ZoomConnector: validate_zoom_perm_sync,
 }

@@ -15,6 +15,7 @@ from onyx.connectors.field_policy import (
     ScopeOpaque,
     ScopeToggle,
 )
+from onyx.connectors.smb.models import EmailAttribute
 
 DEFAULT_SMB_PORT = 445
 # A DNS name or an IPv4 address.
@@ -74,6 +75,10 @@ class SmbConnectorConfig(SmbCredentialBinding, ConnectorConfig):
     ] = False
     port: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = Field(
         default=DEFAULT_SMB_PORT, ge=1, le=_MAX_PORT
+    )
+    # Permission sync matches this attribute to the Onyx login email.
+    email_attribute: Annotated[EmailAttribute, FieldPolicy(FieldClass.COSMETIC)] = (
+        EmailAttribute.MAIL
     )
 
     @field_validator("share", mode="before")
