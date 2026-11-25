@@ -2,6 +2,7 @@
 write one-field documents, and proxy matches by root field."""
 
 import json
+from urllib.parse import quote
 from uuid import uuid4
 
 import pytest
@@ -153,15 +154,19 @@ def test_tools_send_one_root_field(
 
 
 def _matched_keys(
-    db_session: Session, integration: Integration, query: str, url: str = ENDPOINT
+    db_session: Session,
+    integration: Integration,
+    query: str,
+    url: str = ENDPOINT,
+    method: str = "POST",
 ) -> list[str] | None:
     (target,) = load_match_targets(db_session, integration.id)
     match = ApiKindHandler().match_request(
         integration,
         target,
         ProxiedRequest(
-            method="POST",
-            path="/graphql",
+            method=method,
+            path=url.removeprefix("https://tickets.example.com"),
             url=url,
             body=json.dumps({"query": query}).encode(),
         ),
@@ -190,6 +195,40 @@ def test_proxy_matches_a_script_request_by_root_field(
         )
         is None
     )
+
+
+def test_a_request_to_another_path_under_the_endpoint_is_no_match(
+    db_session: Session, integration: Integration
+) -> None:
+    """The Allow of a root field must not let a request to another route run
+    with the credential of the app."""
+    query = "{ ticket { id } }"
+    assert _matched_keys(db_session, integration, query, ENDPOINT + "/") == [
+        "query.ticket"
+    ]
+    assert _matched_keys(db_session, integration, query, ENDPOINT + "/admin") is None
+
+
+def test_the_query_in_the_url_of_a_get_request_is_matched(
+    db_session: Session, integration: Integration
+) -> None:
+    """A server can run the ``query`` of the URL, so each root field of the
+    URL and of the body is matched."""
+    url_query = quote('mutation { ticketClose(id: "7") { id } }')
+    assert _matched_keys(
+        db_session,
+        integration,
+        '{ ticket(id: "1") { id } }',
+        f"{ENDPOINT}?query={url_query}",
+        method="GET",
+    ) == ["mutation.ticketClose", "query.ticket"]
+    assert _matched_keys(
+        db_session,
+        integration,
+        "",
+        f"{ENDPOINT}?query={quote('{ other { id } }')}",
+        method="GET",
+    ) == ["unspecified"]
 
 
 def test_an_endpoint_change_needs_a_new_connection(

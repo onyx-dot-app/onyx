@@ -1,6 +1,6 @@
 import re
 from collections.abc import Sequence
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from mitmproxy import http
 from sqlalchemy.orm import Session
@@ -29,7 +29,10 @@ from onyx.external_apps.matching.engine import (
     recognize_actions,
     url_matches_patterns,
 )
-from onyx.external_apps.matching.graphql_parsing import parse_invocations
+from onyx.external_apps.matching.graphql_parsing import (
+    operation_invocations,
+    parse_invocations,
+)
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.kinds.base import IntegrationKindHandler
@@ -505,18 +508,31 @@ class ApiKindHandler(IntegrationKindHandler):
         request: ProxiedRequest,
         db_session: Session,
     ) -> RequestMatch | None:
-        """A request under the endpoint URL calls the action of each root
-        field in its body. A body with no root field, or with a root field
-        that is no action, also calls the request action, which asks."""
-        if match_request((target,), http.Request.make(request.method, url)) is None:
+        """A request to the endpoint URL calls the action of each root field
+        in its body and in the ``query`` of its URL (the GET form). A request
+        with no root field, or with a root field that is no action, also calls
+        the request action, which asks. A request to another path under the
+        endpoint is no match."""
+        proxied = http.Request.make(request.method, url)
+        if match_request((target,), proxied) is None or normalized_request_path(
+            proxied.path or ""
+        ) != (target.path_prefix or "/"):
             return None
         actions = {
             action.key: action
             for action in api_integration_actions(integration_id, db_session)
         }
+        url_queries = parse_qs(urlsplit(url).query).get("query", [])
         invoked = {
             f"{operation}.{field}"
-            for operation, field in parse_invocations(request.body)
+            for operation, field in [
+                *parse_invocations(request.body),
+                *(
+                    invocation
+                    for query in url_queries
+                    for invocation in operation_invocations(query)
+                ),
+            ]
         }
         matched = [
             _matched_action(integration_id, actions[key])
