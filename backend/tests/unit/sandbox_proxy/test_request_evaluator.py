@@ -13,8 +13,8 @@ import pytest
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ExternalAppType, IntegrationKind
-from onyx.db.models import ExternalApp, Integration
+from onyx.db.enums import ApiAppType, ExternalAppType, IntegrationKind
+from onyx.db.models import ApiApp, ExternalApp, Integration
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import url_matches_patterns
 from onyx.external_apps.matching.request import ProxiedRequest
@@ -213,10 +213,20 @@ def test_a_malformed_url_gives_a_load_error_and_keeps_the_valid_targets() -> Non
             return_value=[(1, "https://x:invalid/mcp"), (2, "https://ok.example/mcp")],
         ),
         patch(
-            f"{module}.list_enabled_openapi_documents",
+            f"{module}.list_enabled_api_apps",
             return_value=[
-                (3, json.dumps({"servers": [{"url": "https://y:invalid/v1"}]})),
-                (4, json.dumps({"servers": [{"url": "https://api.example/v1"}]})),
+                (
+                    integration_id,
+                    ApiApp(
+                        api_type=ApiAppType.REST,
+                        base_url=url,
+                        openapi_document=json.dumps({"servers": [{"url": url}]}),
+                    ),
+                )
+                for integration_id, url in (
+                    (3, "https://y:invalid/v1"),
+                    (4, "https://api.example/v1"),
+                )
             ],
         ),
         patch(f"{module}.list_enabled_external_apps", return_value=[]),

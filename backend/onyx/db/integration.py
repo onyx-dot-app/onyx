@@ -106,31 +106,16 @@ def list_enabled_mcp_server_urls(
     )
 
 
-def list_enabled_openapi_documents(
+def list_enabled_api_apps(
     db_session: Session, integration_id: int | None = None
-) -> list[tuple[int, str | None]]:
-    """``(integration_id, openapi_document)`` of each enabled REST app, or of
+) -> list[tuple[int, ApiApp]]:
+    """``(integration_id, api_app)`` of each enabled REST or GraphQL app, or of
     only ``integration_id``."""
     return list(
         db_session.execute(
-            select(Integration.id, ApiApp.openapi_document)
+            select(Integration.id, ApiApp)
             .join(ApiApp, ApiApp.id == Integration.api_app_id)
-            .where(_enabled(integration_id), ApiApp.api_type == ApiAppType.REST)
-            .order_by(Integration.id)
-        ).tuples()
-    )
-
-
-def list_enabled_graphql_endpoints(
-    db_session: Session, integration_id: int | None = None
-) -> list[tuple[int, str]]:
-    """``(integration_id, endpoint URL)`` of each enabled GraphQL app, or of
-    only ``integration_id``."""
-    return list(
-        db_session.execute(
-            select(Integration.id, ApiApp.base_url)
-            .join(ApiApp, ApiApp.id == Integration.api_app_id)
-            .where(_enabled(integration_id), ApiApp.api_type == ApiAppType.GRAPHQL)
+            .where(_enabled(integration_id))
             .order_by(Integration.id)
         ).tuples()
     )

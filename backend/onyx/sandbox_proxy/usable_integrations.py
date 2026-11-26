@@ -10,14 +10,13 @@ from cachetools import TTLCache
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import IntegrationKind
+from onyx.db.enums import ApiAppType, IntegrationKind
 from onyx.db.integration import (
+    list_enabled_api_apps,
     list_enabled_external_apps,
-    list_enabled_graphql_endpoints,
     list_enabled_mcp_server_urls,
-    list_enabled_openapi_documents,
 )
-from onyx.db.models import ExternalApp
+from onyx.db.models import ApiApp, ExternalApp
 from onyx.integrations.craft import load_usable_integration_ids
 from onyx.integrations.models import UsableIntegrationIds
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
@@ -96,18 +95,12 @@ def load_match_targets(
         target = mcp_match_target(integration_id, server_url)
         if target is not None:
             targets.append(target)
-    for integration_id, document in list_enabled_openapi_documents(
+    for integration_id, api_app in list_enabled_api_apps(
         db_session, only_integration_id
     ):
-        target = openapi_match_target(integration_id, document)
+        target = api_app_match_target(integration_id, api_app)
         if target is not None:
             targets.append(target)
-    for integration_id, endpoint_url in list_enabled_graphql_endpoints(
-        db_session, only_integration_id
-    ):
-        target = mcp_match_target(integration_id, endpoint_url, IntegrationKind.API)
-        if target is not None:
-            targets.append(target.model_copy(update={"graphql": True}))
     targets.extend(
         app_match_target(integration_id, app)
         for integration_id, app in list_enabled_external_apps(
@@ -132,6 +125,15 @@ def mcp_match_target(
     return IntegrationMatchTarget(
         integration_id=integration_id, kind=kind, endpoint=endpoint
     )
+
+
+def api_app_match_target(
+    integration_id: int, app: ApiApp
+) -> IntegrationMatchTarget | None:
+    if app.api_type is ApiAppType.REST:
+        return openapi_match_target(integration_id, app.openapi_document)
+    target = mcp_match_target(integration_id, app.base_url, IntegrationKind.API)
+    return target.model_copy(update={"graphql": True}) if target else None
 
 
 def app_match_target(integration_id: int, app: ExternalApp) -> IntegrationMatchTarget:
