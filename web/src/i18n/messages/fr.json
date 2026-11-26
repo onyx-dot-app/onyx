@@ -13724,6 +13724,10 @@
           "title": "Le navigateur est désactivé",
           "description": "Un administrateur a désactivé le navigateur, ou vous ne pouvez pas voir le navigateur de ce chat."
         },
+        "unreachable": {
+          "title": "Impossible de joindre le navigateur",
+          "description": "Vérifiez que vous êtes connecté et en ligne, puis réessayez."
+        },
         "error": {
           "title": "Le navigateur n'est pas disponible",
           "description": "Le bac à sable du chat n'a pas pu démarrer. Réessayez plus tard."

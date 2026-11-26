@@ -120,6 +120,23 @@ test("without a backend it shows the disconnected state with a retry", () => {
   }
 });
 
+test("connects that never open stop with a retry", () => {
+  jest.useFakeTimers();
+  try {
+    renderPanel();
+    for (let i = 0; i < 6; i++) {
+      act(() => socket().closeWith(1006));
+      act(() => jest.advanceTimersByTime(10_000));
+    }
+    expect(screen.getByText("Could not reach the browser")).toBeInTheDocument();
+    expect(FakeSocket.instances).toHaveLength(6);
+    act(() => screen.getByRole("button", { name: "Retry" }).click());
+    expect(FakeSocket.instances).toHaveLength(7);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 test("a forbidden close shows that the browser is off", () => {
   renderPanel();
   act(() => socket().closeWith(4403));

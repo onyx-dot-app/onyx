@@ -13724,6 +13724,10 @@
           "title": "O navegador está desativado",
           "description": "Um administrador desativou o navegador, ou você não pode ver o navegador deste chat."
         },
+        "unreachable": {
+          "title": "Não foi possível acessar o navegador",
+          "description": "Verifique se você está conectado e online e tente novamente."
+        },
         "error": {
           "title": "O navegador não está disponível",
           "description": "Não foi possível iniciar a sandbox do chat. Tente novamente mais tarde."

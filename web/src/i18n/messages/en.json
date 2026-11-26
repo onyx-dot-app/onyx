@@ -13724,6 +13724,10 @@
           "title": "The browser is off",
           "description": "An admin turned off the browser, or you cannot view this chat's browser."
         },
+        "unreachable": {
+          "title": "Could not reach the browser",
+          "description": "Check that you are signed in and online, then try again."
+        },
         "error": {
           "title": "The browser is unavailable",
           "description": "The chat's sandbox could not start. Try again later."

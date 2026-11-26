@@ -75,6 +75,7 @@ function browserViewReducer(
             : { ...state, connection: "connecting" };
         case "disconnected":
         case "disabled":
+        case "unreachable":
         case "error":
           // The service releases a closed viewer's control and file chooser
           return {
