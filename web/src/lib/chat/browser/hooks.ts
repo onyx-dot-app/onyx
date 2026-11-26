@@ -66,7 +66,7 @@ const INITIAL_BROWSER_VIEW: BrowserViewState = {
 type BrowserViewAction =
   | { type: "socket"; state: BrowserSocketState }
   | { type: "message"; message: BrowserServerMessage }
-  | { type: "answeredFileChooser" }
+  | { type: "answeredFileChooser"; id: string }
   // The viewer closed its connection, to open a new one
   | { type: "reset" }
   // The viewer moved to another chat
@@ -99,7 +99,9 @@ function browserViewReducer(
       }
       return state;
     case "answeredFileChooser":
-      return { ...state, fileChooser: null };
+      return state.fileChooser?.id === action.id
+        ? { ...state, fileChooser: null }
+        : state;
     case "clear":
       return INITIAL_BROWSER_VIEW;
     case "reset":
@@ -289,7 +291,7 @@ export function useBrowserStream({
   const answerFileChooser = useCallback(
     (id: string, paths: string[]) => {
       if (!send({ type: "fileChooser", id, paths })) return false;
-      dispatch({ type: "answeredFileChooser" });
+      dispatch({ type: "answeredFileChooser", id });
       return true;
     },
     [send]

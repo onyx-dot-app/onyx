@@ -320,6 +320,31 @@ test("an upload that ends after its file chooser closed does not answer", async 
   expect(screen.getByText("The page asks for a file.")).toBeInTheDocument();
 });
 
+test("a late answer for a replaced file chooser keeps the new one", async () => {
+  let finishUpload: (paths: string[]) => void = () => undefined;
+  jest.mocked(uploadBrowserFiles).mockReturnValue(
+    new Promise((resolve) => {
+      finishUpload = resolve;
+    })
+  );
+  renderPanel();
+  openControlled();
+  act(() =>
+    socket().receive({ type: "fileChooser", id: "f1", multiple: false })
+  );
+  await userEvent.upload(
+    screen.getByLabelText("Files for the page"),
+    new File(["a"], "a.txt")
+  );
+  await waitFor(() => expect(uploadBrowserFiles).toHaveBeenCalled());
+  // The upload ends after f2 came, before f1's prompt goes
+  await act(async () => {
+    socket().receive({ type: "fileChooser", id: "f2", multiple: true });
+    finishUpload(["browser-uploads/a.txt"]);
+  });
+  expect(screen.getByText("The page asks for files.")).toBeInTheDocument();
+});
+
 test("Shift+Escape leaves the page and lets go of the keys held on it", () => {
   renderPanel();
   act(() => {
