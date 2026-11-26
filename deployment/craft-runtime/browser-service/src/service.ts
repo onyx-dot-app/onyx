@@ -559,10 +559,12 @@ export class BrowserService {
     });
     const { targetInfo } = await cdp.send("Target.getTargetInfo");
     this.frameChats.set(targetInfo.targetId, chat);
-    await cdp.send("Page.enable").catch(noop);
+    await cdp.send("Page.enable");
     page.setDefaultTimeout(BrowserPage.DEFAULT_TIMEOUT_MS);
     page.setDefaultNavigationTimeout(BrowserPage.DEFAULT_TIMEOUT_MS);
-    await page.setViewportSize(VIEWPORT).catch(noop);
+    await page
+      .setViewportSize(VIEWPORT)
+      .catch((error: unknown) => this.log("viewport_failed", { chat: chat.id, tab: tab.id, error: String(error) }));
     const isMainNavigation = (request: { isNavigationRequest(): boolean; frame(): unknown }) => {
       try {
         return request.isNavigationRequest() && request.frame() === page.mainFrame();
@@ -1356,7 +1358,9 @@ export class BrowserService {
           maxWidth: VIEWPORT.width,
           maxHeight: VIEWPORT.height,
         })
-        .catch(noop);
+        .catch((error: unknown) =>
+          this.log("screencast_failed", { chat: cast.tab.chat.id, tab: cast.tab.id, error: String(error) }),
+        );
     });
     return cast.params;
   }
