@@ -1323,8 +1323,9 @@ interface SpawnedSubagents {
   /** The agent for each name; undefined for an empty or unlisted name. */
   agents: (ChatSubagent | undefined)[];
   /**
-   * The agents list was read for an open chat. Without it (such as in a
-   * shared chat), an undefined agent is unknown, not starting.
+   * The chat has an agents list. Without one (such as a shared chat), an
+   * undefined agent is unknown, not starting. While the list loads, a spawn
+   * still counts as starting, so a running group does not flash done.
    */
   available: boolean;
 }
@@ -1338,14 +1339,14 @@ export function useSpawnedSubagents(
 ): SpawnedSubagents {
   const base = useContext(SubagentPathContext);
   const sessionId = useChatSessionStore((state) => state.currentSessionId);
-  const { agents, loaded } = useChatSubagents(sessionId, false);
+  const { agents } = useChatSubagents(sessionId, false);
   return {
     agents: names.map((name) =>
       name
         ? agents.find((agent) => agent.path === `${base}/${name}`)
         : undefined
     ),
-    available: sessionId !== null && loaded,
+    available: sessionId !== null,
   };
 }
 
