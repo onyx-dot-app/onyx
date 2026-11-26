@@ -46,7 +46,6 @@ import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs
 import GraphQLFields from "@/sections/integrations/GraphQLFields";
 import { apiBaseUrl } from "@/sections/integrations/detectApi";
 import RestEndpointFields, {
-  EMPTY_REST,
   restDraftFrom,
   type RestDraft,
 } from "@/sections/integrations/RestEndpointFields";
@@ -84,7 +83,7 @@ export default function IntegrationConfigurationTab({
   const savedRest =
     integration.config.shape === "openapi"
       ? restDraftFrom(integration.config)
-      : EMPTY_REST;
+      : { document: null, baseUrl: "", endpoints: "" };
   const [rest, setRest] = useState<RestDraft>(savedRest);
   const [lineErrors, setLineErrors] = useState<EndpointLineError[]>([]);
   const [graphql, setGraphql] = useState<GraphQLConfig | null>(

@@ -30,12 +30,6 @@ export interface RestDraft {
   endpoints: string;
 }
 
-export const EMPTY_REST: RestDraft = {
-  document: null,
-  baseUrl: "",
-  endpoints: "",
-};
-
 export function restDraftFrom(view: OpenApiConfigView): RestDraft {
   return {
     document: view.openapi_document,
