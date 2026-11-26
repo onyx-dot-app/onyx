@@ -5,6 +5,7 @@ import uuid
 from collections.abc import Callable
 from io import BytesIO
 from typing import Any, List
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import JsonValue, TypeAdapter
@@ -353,6 +354,16 @@ class CustomTool(ApiTool):
                 ]
 
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
+        # The client removes these segments, so the request, with its
+        # credential, would go to a path outside the server URL.
+        if any(segment in (".", "..") for segment in urlsplit(url).path.split("/")):
+            raise ToolCallException(
+                message=f"A path parameter of {self._name} is '.' or '..'",
+                llm_facing_message=(
+                    f"The {self._name} tool does not accept '.' or '..' as a "
+                    "path parameter."
+                ),
+            )
         return self._method_spec.method, url, arguments.get(REQUEST_BODY)
 
 

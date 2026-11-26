@@ -1064,3 +1064,63 @@ def test_response_text_follows_the_charset(content_type: str, text: str) -> None
         status_code=200, content_type=content_type, body="café".encode("latin-1")
     )
     assert response.text == text
+
+
+def _items_tool(path: str) -> Any:
+    parameters = [
+        {"name": name, "in": "path", "required": True, "schema": {"type": "string"}}
+        for name in ("a", "b")
+        if f"{{{name}}}" in path
+    ]
+    schema = {
+        "openapi": "3.0.0",
+        "info": {"title": "Items", "description": "Items", "version": "1.0.0"},
+        "servers": [{"url": "https://api.example.com/v1/team"}],
+        "paths": {
+            path: {
+                "get": {
+                    "operationId": "getItem",
+                    "summary": "Get",
+                    "parameters": parameters,
+                }
+            }
+        },
+    }
+    return build_custom_tools_from_openapi_schema_and_headers(
+        integration_id=1,
+        openapi_schema=schema,
+        dynamic_schema_info=_NO_PLACEHOLDERS,
+        headers={"Authorization": "Bearer secret"},
+    )[0]
+
+
+@pytest.mark.parametrize(
+    ("path", "arguments"),
+    [
+        ("/items/{a}", {"a": ".."}),
+        ("/{a}/{b}", {"a": "..", "b": ".."}),
+        ("/{a}{b}", {"a": ".", "b": "."}),
+    ],
+)
+def test_a_path_parameter_cannot_leave_the_server_url(
+    path: str, arguments: dict[str, Any]
+) -> None:
+    """A client removes '.' and '..' segments, so a value that the model
+    chooses must not move the credential to a path outside the server URL."""
+    tool = _items_tool(path)
+    with (
+        patch("onyx.utils.url.socket.getaddrinfo", return_value=_addr_info("8.8.8.8")),
+        patch("onyx.utils.url._pinned_request") as pinned,
+    ):
+        response = tool.run(
+            ToolInvocation(
+                call_id="get",
+                arguments=arguments,
+                cancellation=CancellationSignal(),
+                update=lambda _: None,
+            ),
+            ToolContext(),
+        )
+    assert isinstance(response, ToolResult)
+    assert response.is_error
+    pinned.assert_not_called()
