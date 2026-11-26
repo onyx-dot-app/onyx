@@ -21,6 +21,7 @@ describe("endsInOpenCodeFence", () => {
     ["  ```python\nx = 1", true],
     ["   ~~~\ncode\n less indented", true],
     ["- item\n\n  ```python\n  x\n\nMore text", false],
+    ["1. item\n\n  ```python\nx = 1", true],
     ["> ```\n> x\nplain", false],
     ["> ```\n> x\n>\n> more code", true],
     ["- ```\n  x\n```\nnew fence", true],
