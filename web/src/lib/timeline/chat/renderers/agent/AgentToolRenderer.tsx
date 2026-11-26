@@ -103,7 +103,8 @@ export function AgentToolRenderer({
     {
       icon: STEP_ICONS.agent,
       status: title("running"),
-      doneStatus: title(failed ? "failed" : "done"),
+      // A call that never ended keeps its running title.
+      doneStatus: isComplete ? title(failed ? "failed" : "done") : null,
       supportsCollapsible: true,
       timelineLayout: "timeline",
       content: message ? (

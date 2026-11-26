@@ -146,6 +146,11 @@ test.each([
   }
 );
 
+test("a call that never ended has no done title", () => {
+  renderStep(call("skills_read", { name: "pptx" }, "running"));
+  expect(screen.getByTestId("done")).toBeEmptyDOMElement();
+});
+
 test("a running load names the skill", () => {
   renderStep(call("load_skill", { name: "pptx" }, "running"));
   expect(screen.getByTestId("status")).toHaveTextContent("Loading skill pptx");
