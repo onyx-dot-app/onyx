@@ -152,3 +152,40 @@ test("each file keeps its operation, and files past the line limit are counted",
   expect(small.files.map((file) => file.change)).toEqual(["delete", "update"]);
   expect(small.omittedFiles).toBe(0);
 });
+
+describe("a change of the final newline", () => {
+  const lines = (a: string, b: string) =>
+    computeDiff(a, b).map((l) => `${l.type}:${l.content}`);
+
+  test("adding it shows the last line as removed and added", () => {
+    const diff = computeDiff("hello", "hello\n");
+    expect(lines("hello", "hello\n")).toEqual(["removed:hello", "added:hello"]);
+    expect(countDiffLines(diff)).toEqual({ added: 1, removed: 1 });
+  });
+
+  test("removing it shows the last line as removed and added", () => {
+    const diff = computeDiff("hello\n", "hello");
+    expect(lines("hello\n", "hello")).toEqual(["removed:hello", "added:hello"]);
+    expect(countDiffLines(diff)).toEqual({ added: 1, removed: 1 });
+  });
+
+  test("in a longer file only the last line changes", () => {
+    const body = ["a", "b", "c", "d", "e", "f"].join("\n");
+    expect(lines(`${body}\n`, body)).toEqual([
+      "unchanged:a",
+      "unchanged:b",
+      "unchanged:c",
+      "unchanged:d",
+      "unchanged:e",
+      "removed:f",
+      "added:f",
+    ]);
+  });
+
+  test("equal endings still diff as unchanged", () => {
+    expect(countDiffLines(computeDiff("a\nb", "a\nb"))).toEqual({
+      added: 0,
+      removed: 0,
+    });
+  });
+});
