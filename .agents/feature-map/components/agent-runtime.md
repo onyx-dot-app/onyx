@@ -350,6 +350,11 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
   copy `backend/tests/unit/onyx/agents/fakes.py`. For real LiteLLM requests to a
   mock HTTP provider, copy
   `backend/tests/external_dependency_unit/llm/test_agent_runtime_http.py`.
+- `measure-runtime-cost` **Measure the runtime's cost under load.** Run
+  `backend/scripts/benchmark_agent_runtime.py` before and after a change to the
+  runtime, chat hooks or event delivery. It runs concurrent long chats on the
+  real chat agent with a scripted model and search tool, and reports CPU,
+  latency, peak memory, garbage collection time and what stays alive.
 - `new-feature` **Build a new feature on the runtime.** Start from
   [[#run-by-hand]], then settle these:
   - For a child inside chat, see `deep_research/agent.py:DeepResearchAgent` and
