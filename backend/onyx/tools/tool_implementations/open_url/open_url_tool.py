@@ -29,6 +29,7 @@ from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
 from onyx.tools.constants import OPEN_URL_TOOL_NAME, WEB_FETCH_TOOL_NAME
 from onyx.tools.interface import (
     CITATIONS_PER_TOOL_CALL,
@@ -443,13 +444,15 @@ class OpenURLTool(Tool):
     merge_list_argument = "urls"
     merge_list_limit = MAX_URLS_PER_CALL
 
-    DESCRIPTION = "Open and read the content of one or more URLs."
-    DESCRIPTION_NO_WEB_FETCH = (
+    SUMMARY = "Open and read the content of one or more URLs."
+    SUMMARY_NO_WEB_FETCH = (
         "Open and read the content of one or more URLs. Web access is "
         "disabled for this conversation, so only URLs whose content already "
         "exists in the connected knowledge sources can be read — nothing is "
         "fetched from the live internet."
     )
+    DESCRIPTION = f"{SUMMARY} {OPEN_URLS_GUIDANCE}"
+    DESCRIPTION_NO_WEB_FETCH = f"{SUMMARY_NO_WEB_FETCH} {OPEN_URLS_GUIDANCE}"
     DISPLAY_NAME = "Open URL"
 
     def __init__(
@@ -516,6 +519,12 @@ class OpenURLTool(Tool):
         if self._web_fetch_disabled:
             return self.DESCRIPTION_NO_WEB_FETCH
         return self.DESCRIPTION
+
+    @property
+    def summary(self) -> str:
+        if self._web_fetch_disabled:
+            return self.SUMMARY_NO_WEB_FETCH
+        return self.SUMMARY
 
     @property
     def display_name(self) -> str:

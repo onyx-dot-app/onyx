@@ -25,7 +25,7 @@ unchanged; this only re-shapes what the chat pipeline already yields.
 from collections.abc import Iterator
 from typing import Any
 
-from onyx.chat.renderer import CODE_ARGUMENT_STREAM_TYPES
+from onyx.chat.renderer import CODE_ARGUMENT_TOOLS
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -153,7 +153,7 @@ class ChatAcpTranslator:
             )
             kind, title = (
                 _CODE_ARGUMENTS
-                if tool_type in CODE_ARGUMENT_STREAM_TYPES
+                if tool_type in CODE_ARGUMENT_TOOLS
                 else _ARGUMENT_STARTS.get(str(tool_type), opening)
             )
             self._open[call_id] = False
