@@ -169,8 +169,18 @@ type SandboxdClient interface {
 	// old and new files. Bad archives fail as in RestoreSession and
 	// change nothing. Installs run one at a time.
 	InstallSkill(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[InstallSkillRequest, InstallSkillResponse], error)
-	// Reserved for the browser. They return UNIMPLEMENTED.
+	// BrowserStart makes sure that the VM's one headless Chrome runs, and
+	// returns its DevTools (CDP) port on 127.0.0.1. Clients attach to it over
+	// CDP. The daemon owns the browser: it runs as the command user, with the
+	// command env, in its own cgroup outside the executions, so it stays up
+	// between commands. A repeat call while it answers returns
+	// started=false. A browser that exited or does not answer is started
+	// again, with the same profile directory. A daemon restart stops it;
+	// the next BrowserStart starts it again. A daemon with no browser
+	// (--browser-binary empty) returns UNIMPLEMENTED.
 	BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error)
+	// BrowserStop closes the browser cleanly, so it writes its cookies to
+	// the profile, and kills what is left after 5 s. The profile stays.
 	BrowserStop(ctx context.Context, in *BrowserStopRequest, opts ...grpc.CallOption) (*BrowserStopResponse, error)
 	// ManagedStatus returns the slot that is mounted on the mount point and
 	// the state of each slot device.
@@ -615,8 +625,18 @@ type SandboxdServer interface {
 	// old and new files. Bad archives fail as in RestoreSession and
 	// change nothing. Installs run one at a time.
 	InstallSkill(grpc.ClientStreamingServer[InstallSkillRequest, InstallSkillResponse]) error
-	// Reserved for the browser. They return UNIMPLEMENTED.
+	// BrowserStart makes sure that the VM's one headless Chrome runs, and
+	// returns its DevTools (CDP) port on 127.0.0.1. Clients attach to it over
+	// CDP. The daemon owns the browser: it runs as the command user, with the
+	// command env, in its own cgroup outside the executions, so it stays up
+	// between commands. A repeat call while it answers returns
+	// started=false. A browser that exited or does not answer is started
+	// again, with the same profile directory. A daemon restart stops it;
+	// the next BrowserStart starts it again. A daemon with no browser
+	// (--browser-binary empty) returns UNIMPLEMENTED.
 	BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error)
+	// BrowserStop closes the browser cleanly, so it writes its cookies to
+	// the profile, and kills what is left after 5 s. The profile stays.
 	BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error)
 	// ManagedStatus returns the slot that is mounted on the mount point and
 	// the state of each slot device.

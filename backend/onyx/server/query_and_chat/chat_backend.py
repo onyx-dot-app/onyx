@@ -1,9 +1,10 @@
 import datetime
+import posixpath
 import time
 from collections.abc import Generator
 from concurrent.futures import Future
 from datetime import timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import (
@@ -37,6 +38,10 @@ from onyx.chat.chat_utils import (
     create_chat_session_from_request,
 )
 from onyx.chat.errors import unhandled_stream_error
+from onyx.chat.file_preview import (
+    convert_chat_file_preview_pdf,
+    resolve_chat_file_preview,
+)
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
@@ -147,6 +152,7 @@ from onyx.db.incognito import (
 )
 from onyx.db.models import (
     ChatSessionSharedStatus,
+    FileRecord,
     Persona,
     User,
 )
@@ -160,6 +166,7 @@ from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.file_types import PDF_MIME_TYPE
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.serving import (
     ATTACHMENT_SAFE_MIME_TYPES,
@@ -1337,46 +1344,75 @@ def get_chat_artifact(
     return ChatArtifactFile(**file.model_dump(exclude={"display_path"}), access=access)
 
 
+def _readable_chat_file_record(
+    file_id: str, user: User, db_session: Session
+) -> FileRecord:
+    """The record of the chat file `file_id`, a stored file's id or a user
+    file's id, when `user` can read it. Raises OnyxError NOT_FOUND
+    otherwise, also for a file of another user, so callers cannot probe for
+    files across ownership boundaries."""
+    # For user files, we need to get the file id from the user file id
+    file_id_from_user_file = get_file_id_by_user_file_id(file_id, db_session)
+    if file_id_from_user_file:
+        file_id = file_id_from_user_file
+    if not user_can_access_chat_file(file_id, user, db_session):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+    file_record = get_default_file_store().read_file_record(file_id)
+    if not file_record:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+    return file_record
+
+
+def _chat_file_preview_disposition(file_name: str) -> tuple[str, dict[str, str]]:
+    """The media type and security headers of the PDF preview of the chat
+    file named `file_name`: inline, named after the file with a .pdf
+    extension."""
+    return resolve_inline_disposition(
+        PDF_MIME_TYPE, filename=f"{posixpath.splitext(file_name)[0]}.pdf"
+    )
+
+
 @router.get("/file/{file_id:path}", tags=PUBLIC_API_TAGS)
 def fetch_chat_file(
     file_id: str,
     request: Request,
     parsed: bool = Query(False),
+    preview: Annotated[Literal["pdf"] | None, Query()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    # For user files, we need to get the file id from the user file id
-    file_id_from_user_file = get_file_id_by_user_file_id(file_id, db_session)
-    if file_id_from_user_file:
-        file_id = file_id_from_user_file
-
-    if not user_can_access_chat_file(file_id, user, db_session):
-        # Return 404 (rather than 403) so callers cannot probe for file
-        # existence across ownership boundaries.
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
-
+    """Download a chat file that you can read. `parsed=true` returns a
+    spreadsheet as JSON sheets. `preview=pdf` returns the stored PDF preview
+    of a PowerPoint or Word file of a chat upload or a published file, and
+    never converts: 422 `PREVIEW_UNAVAILABLE` when the file can have no PDF
+    preview (not such a file, or no upload or published file owns it, or its
+    upload is being deleted), and 409 `PREVIEW_NOT_READY` when
+    no PDF is stored yet: ask for it with `POST /chat/file/{file_id}/preview`.
+    A file that you cannot read is 404."""
+    file_record = _readable_chat_file_record(file_id, user, db_session)
+    file_id = file_record.file_id
     file_store = get_default_file_store()
-    file_record = file_store.read_file_record(file_id)
-    if not file_record:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+    file_name = file_record.display_name or file_id
 
     # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
     # the frontend cannot render); everything else is served raw as usual.
     parse_spreadsheet = parsed and is_spreadsheet_mime_type(file_record.file_type)
 
-    media_type, security_headers = resolve_inline_disposition(
-        file_record.file_type,
-        filename=ensure_filename_extension(
-            file_record.display_name or file_id, file_record.file_type
-        ),
-        attachment_types=ATTACHMENT_SAFE_MIME_TYPES,
-        # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
-        fallback_disposition=None if parse_spreadsheet else "attachment",
-    )
+    if preview is None:
+        media_type, security_headers = resolve_inline_disposition(
+            file_record.file_type,
+            filename=ensure_filename_extension(file_name, file_record.file_type),
+            attachment_types=ATTACHMENT_SAFE_MIME_TYPES,
+            # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
+            fallback_disposition=None if parse_spreadsheet else "attachment",
+        )
+        etag_variant = "-parsed" if parse_spreadsheet else ""
+    else:
+        media_type, security_headers = _chat_file_preview_disposition(file_name)
+        etag_variant = "-preview-pdf"
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag_variant: str = "-parsed" if parse_spreadsheet else ""
     etag: str = f'"{file_id}{etag_variant}-{RESPONSE_POLICY_VERSION}"'
     cache_headers: dict[str, str] = {
         "Cache-Control": "private, max-age=31536000, immutable",
@@ -1388,17 +1424,64 @@ def fetch_chat_file(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    if preview is not None:
+        preview_row, _, _ = resolve_chat_file_preview(db_session, file_record)
+        if preview_row.preview_file_id is None:
+            raise OnyxError(
+                OnyxErrorCode.PREVIEW_NOT_READY, "The PDF preview is not made yet"
+            )
+        # The link is written once, so the ETag names one PDF.
+        return StreamingResponse(
+            file_store.read_file(
+                preview_row.preview_file_id, mode="b", use_tempfile=True
+            ),
+            media_type=media_type,
+            headers=cache_headers,
+        )
+
     if parse_spreadsheet:
         # Use a tempfile since openpyxl needs a seekable file and the workbook
         # may be large.
         with file_store.read_file(file_id, mode="b", use_tempfile=True) as xlsx_io:
-            preview = parse_spreadsheet_for_preview(
+            preview_sheets = parse_spreadsheet_for_preview(
                 xlsx_io, file_record.display_name or ""
             )
-        return JSONResponse(content=preview.model_dump(), headers=cache_headers)
+        return JSONResponse(content=preview_sheets.model_dump(), headers=cache_headers)
 
     file_io = file_store.read_file(file_id, mode="b")
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
+
+
+@router.post("/file/{file_id:path}/preview", tags=PUBLIC_API_TAGS)
+def make_chat_file_preview(
+    file_id: str,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """The PDF preview of a PowerPoint or Word file of a chat upload or a
+    published file that you can read: the stored PDF, else the PDF that the
+    sandbox of the file's owner converts, which can take some seconds, and
+    which later `GET /chat/file/{file_id}?preview=pdf` requests return.
+    Errors: 404 for a file that you cannot read. 422 `PREVIEW_UNAVAILABLE`
+    when the file has no PDF preview now (not such a file, no upload or
+    published file owns it or its upload is being deleted, larger than the
+    conversion limit, a file that the converter rejects or cannot
+    convert within its time limit, or no sandbox in the deployment):
+    download the file instead. 503 when the sandbox cannot start or be
+    reached now: try again."""
+    file_record = _readable_chat_file_record(file_id, user, db_session)
+    media_type, security_headers = _chat_file_preview_disposition(
+        file_record.display_name or file_record.file_id
+    )
+    return StreamingResponse(
+        convert_chat_file_preview_pdf(db_session, file_record),
+        media_type=media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Vary": "Cookie",
+            **security_headers,
+        },
+    )
 
 
 @router.get("/search", tags=PUBLIC_API_TAGS)

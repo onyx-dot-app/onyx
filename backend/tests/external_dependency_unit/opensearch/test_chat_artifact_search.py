@@ -64,6 +64,7 @@ def _publish_and_index(db_session: Session, user: User, word: str) -> UUID:
         ),
         title=None,
         thumbnail=None,
+        preview_pdf=None,
     )
     if published.artifact_id is None:
         raise RuntimeError("save_chat_artifact always sets the artifact")
