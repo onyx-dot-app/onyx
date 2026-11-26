@@ -42,8 +42,9 @@ BROWSER_ACT_DESCRIPTION = (
 )
 BROWSER_WAIT_FOR_DESCRIPTION = (
     "Wait until all the given conditions match in a tab: the element `ref` "
-    "or `selector` is visible, the page shows `text`, the URL contains "
-    "`url_includes`. Works on a tab that the user controls."
+    "or `selector` is in the page (hidden elements count), the page text "
+    "contains `text`, the URL contains `url_includes`. Works on a tab that "
+    "the user controls."
 )
 BROWSER_EVALUATE_DESCRIPTION = (
     "Run JavaScript in the page and return its JSON value, up to 64 KB. It "

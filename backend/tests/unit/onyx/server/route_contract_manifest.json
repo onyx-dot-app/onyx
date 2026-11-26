@@ -207,6 +207,7 @@
   "GET /chat/incognito-availability": "basic",
   "GET /chat/max-selected-document-tokens": "basic",
   "GET /chat/search": "read:chat",
+  "GET /chat/sessions/{chat_session_id}/browser/downloads/{name}": "basic",
   "GET /connector/oauth/authorize/{source}": "basic",
   "GET /connector/oauth/callback/{source}": "basic",
   "GET /connector/oauth/details/{source}": "basic",
@@ -605,6 +606,8 @@
   "POST /chat/question-requests/{question_request_id}/answers": "write:chat",
   "POST /chat/seed-chat-session-from-slack": "basic",
   "POST /chat/send-chat-message": "current_chat_accessible_user, write:chat +anonymous",
+  "POST /chat/sessions/{chat_session_id}/browser/clear": "basic",
+  "POST /chat/sessions/{chat_session_id}/browser/upload": "basic",
   "POST /chat/stop-chat-session/{chat_session_id}": "write:chat",
   "POST /enterprise-settings/refresh-token": "current_user_with_expired_token",
   "POST /evals/eval_run": "current_cloud_superuser",
@@ -813,6 +816,7 @@
   "PUT /skills/organization-library/default-access": "manage:plugins",
   "PUT /skills/{skill_id}/enabled": "basic",
   "WS /build/sessions/{session_id}/webapp/_next/{hmr_endpoint}": "current_user_from_websocket_cookie",
+  "WS /chat/sessions/{chat_session_id}/browser/ws": "current_user_from_websocket_cookie",
   "WS /voice/synthesize/stream": "current_user_from_websocket",
   "WS /voice/transcribe/stream": "current_user_from_websocket"
 }

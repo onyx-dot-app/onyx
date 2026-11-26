@@ -447,6 +447,34 @@ def test_a_stop_closes_chrome_before_it_saves_the_profile_without_caches(
     assert store.downloads == 1
 
 
+def test_a_browser_call_sets_up_the_chat_session_so_its_downloads_are_saved(
+    tenant_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    store: FakeArchiveStore,
+    service: FakeBrowserService,  # noqa: ARG001
+    ref: HarnessSandboxRef,
+) -> None:
+    """A browser call before any sandbox tool: the chat's downloads still
+    get saved at the stop and come back on the next VM."""
+    sandbox.browser_call(ref, "status", {}, timeout_seconds=10)
+    sid, chat = str(ref.sandbox_id), str(ref.session_id)
+    node.agent.files[(sid, chat, "downloads/report.pdf")] = b"pdf"
+
+    assert _sleep(sandbox, ref) is VmStopOutcome.STOPPED
+
+    save = harness_state.get_session_save(tenant_cache, ref.session_id)
+    assert save is not None and save.file_id is not None
+    with zipfile.ZipFile(io.BytesIO(node.agent.objects[save.file_id])) as archive:
+        assert archive.namelist() == ["downloads/report.pdf"]
+
+    # The next VM restores the chat's save (the empty profile has no file).
+    profile_save = harness_state.get_session_save(tenant_cache, ref.sandbox_id)
+    assert profile_save is not None and profile_save.file_id is None
+    sandbox.browser_call(ref, "status", {}, timeout_seconds=10)
+    assert store.downloads == 1
+
+
 def test_a_stop_does_not_save_browser_uploads(
     tenant_cache: CacheBackend,
     sandbox: FirecrackerHarnessSandbox,
