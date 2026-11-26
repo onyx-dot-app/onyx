@@ -429,10 +429,8 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     expect(screen.getAllByText("old.py → moved.py")).toHaveLength(2);
     expect(screen.getAllByText("print('hi')")).toHaveLength(2);
     expect(screen.getAllByText("a = 2")).toHaveLength(2);
-    // The applied patch lists the files it changed, with their change.
-    expect(
-      screen.getByText("A new.py M old.py → moved.py")
-    ).toBeInTheDocument();
+    // The diffs name the changed files, so no file list repeats them.
+    expect(view.container).not.toHaveTextContent(/A new\.py/);
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(
       screen.getByText("Failed to find expected lines in old.py")
@@ -912,7 +910,7 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
     expect(screen.getByText("3 passed")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/Exit code/);
     expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
-    expect(screen.getByText("D gone.py")).toBeInTheDocument();
+    expect(view.container).toHaveTextContent("a = 2");
     expect(view.container).not.toHaveTextContent(/await run/);
   } finally {
     view.unmount();
