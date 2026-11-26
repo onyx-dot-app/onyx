@@ -1,5 +1,24 @@
+import logging
 import os
 from enum import Enum
+
+_logger = logging.getLogger(__name__)
+
+
+def _env_number[N: (int, float)](
+    name: str, raw: str | None, default: N, kind: type[N]
+) -> N:
+    """An optional numeric setting (`raw`, the value of env `name`); a bad
+    value logs and uses the default, so it cannot break imports."""
+    raw = (raw or "").strip()
+    if not raw:
+        return default
+    try:
+        return kind(raw)
+    except ValueError:
+        _logger.error("Ignoring %s=%r: not a number. Using %s.", name, raw, default)
+        return default
+
 
 # In-sandbox paths shared by every backend implementation. Kept in sync with
 # the SESSIONS_ROOT constants the individual managers define (those exist
@@ -247,7 +266,9 @@ SANDBOX_DOCKER_MEMORY_LIMIT = os.environ.get("SANDBOX_DOCKER_MEMORY_LIMIT", "2g"
 SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0"))
 # Processes and threads of one harness sandbox container (Chrome and
 # LibreOffice start many threads).
-SANDBOX_DOCKER_PIDS_LIMIT = int(os.environ.get("SANDBOX_DOCKER_PIDS_LIMIT", "2048"))
+SANDBOX_DOCKER_PIDS_LIMIT = _env_number(
+    "SANDBOX_DOCKER_PIDS_LIMIT", os.environ.get("SANDBOX_DOCKER_PIDS_LIMIT"), 2048, int
+)
 # Optional OCI runtime of harness sandbox containers, for example "runsc"
 # (gVisor). Empty: Docker's default runtime.
 SANDBOX_DOCKER_RUNTIME = os.environ.get("SANDBOX_DOCKER_RUNTIME", "").strip()
@@ -272,15 +293,26 @@ SANDBOX_HARNESS_POD_TEMPLATE = (
     os.environ.get("SANDBOX_HARNESS_POD_TEMPLATE", "").strip() or "harness-sandbox-pod"
 )
 # The guest daemon's TCP port in the sandbox container.
-SANDBOX_HARNESS_DAEMON_PORT = int(os.environ.get("SANDBOX_HARNESS_DAEMON_PORT", "8052"))
+SANDBOX_HARNESS_DAEMON_PORT = _env_number(
+    "SANDBOX_HARNESS_DAEMON_PORT",
+    os.environ.get("SANDBOX_HARNESS_DAEMON_PORT"),
+    8052,
+    int,
+)
 # A start (pod or container create, readiness, daemon Init) ends by this time.
-SANDBOX_HARNESS_START_TIMEOUT_SECONDS = float(
-    os.environ.get("SANDBOX_HARNESS_START_TIMEOUT_SECONDS", "120")
+SANDBOX_HARNESS_START_TIMEOUT_SECONDS = _env_number(
+    "SANDBOX_HARNESS_START_TIMEOUT_SECONDS",
+    os.environ.get("SANDBOX_HARNESS_START_TIMEOUT_SECONDS"),
+    120.0,
+    float,
 )
 # An idle stop saves and deletes a container sandbox after this long without
 # activity. The same default as the Firecracker idle stop.
-SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS = int(
-    os.environ.get("SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS", "900")
+SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS = _env_number(
+    "SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS",
+    os.environ.get("SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS"),
+    900,
+    int,
 )
 # Harness pod sizes. The defaults match the Craft sandbox PodTemplate.
 SANDBOX_POD_CPU_REQUEST = os.environ.get("SANDBOX_POD_CPU_REQUEST", "1000m")

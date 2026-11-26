@@ -458,8 +458,9 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   (`.../container/state.py`) holds the name, address, `(attempt,
   generation)` and the certificate; the daemon key uses the per-sandbox key
   record of `onyx/microvm/registry.py`. A daemon restart is a new
-  generation (Init again); an unusable container is replaced by the next
-  attempt. Saves stream CaptureSession into the file store and back
+  generation (Init again; old exec records end); session files follow the
+  attempt (`RunningInstance.files_identity`), so they outlive the restart.
+  An unusable container is replaced by the next attempt. Saves stream CaptureSession into the file store and back
   (`.../container/transfer.py:FileStoreSessionTransfer`). The Celery sweep
   (`SWEEP_HARNESS_CONTAINERS`, beat only with `SANDBOX_CONTAINER_HARNESS`)
   deletes containers without a record after the resource grace time and

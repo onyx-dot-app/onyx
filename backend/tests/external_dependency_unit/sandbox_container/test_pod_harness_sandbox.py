@@ -14,6 +14,7 @@ The host cannot reach pod IPs, so the test dials each pod through
 
 import os
 import re
+import select
 import subprocess
 import time
 from collections.abc import Generator, Iterator
@@ -55,6 +56,7 @@ _IMAGE = os.environ.get(
 )
 _TEMPLATE = "harness-sandbox-pod"
 _START_SECONDS = 240.0
+_FORWARD_START_SECONDS = 30.0
 _FORWARD_LINE = re.compile(r"Forwarding from 127\.0\.0\.1:(\d+)")
 
 pytestmark = pytest.mark.skipif(
@@ -95,11 +97,13 @@ class _ForwardedPodRuntime(PodRuntime):
         )
         if process.stdout is None:
             raise RuntimeError("Bug: port-forward has no stdout")
-        line = process.stdout.readline()
+        ready, _, _ = select.select([process.stdout], [], [], _FORWARD_START_SECONDS)
+        line = process.stdout.readline() if ready else ""
         match = _FORWARD_LINE.search(line)
         if match is None:
             process.kill()
-            raise RuntimeError(f"port-forward failed: {line}")
+            process.wait()
+            raise RuntimeError(f"port-forward did not start: {line!r}")
         address = f"127.0.0.1:{match.group(1)}"
         self._forwards[name] = (process, address)
         return address
@@ -125,6 +129,7 @@ class _ForwardedPodRuntime(PodRuntime):
     def close(self) -> None:
         for process, _ in self._forwards.values():
             process.kill()
+            process.wait()
 
 
 @pytest.fixture(scope="module")
@@ -138,40 +143,44 @@ def namespace(core_api: client.CoreV1Api) -> Generator[str, None, None]:
     core_api.create_namespace(
         client.V1Namespace(metadata=client.V1ObjectMeta(name=name))
     )
-    core_api.create_namespaced_pod_template(
-        namespace=name,
-        body=client.V1PodTemplate(
-            metadata=client.V1ObjectMeta(name=_TEMPLATE),
-            template=client.V1PodTemplateSpec(
-                metadata=client.V1ObjectMeta(
-                    labels={"app.kubernetes.io/component": "sandbox"}
-                ),
-                spec=client.V1PodSpec(
-                    enable_service_links=False,
-                    termination_grace_period_seconds=1,
-                    security_context=client.V1PodSecurityContext(
-                        run_as_non_root=True,
-                        run_as_user=1000,
-                        fs_group=1000,
-                        seccomp_profile=client.V1SeccompProfile(type="RuntimeDefault"),
+    try:
+        core_api.create_namespaced_pod_template(
+            namespace=name,
+            body=client.V1PodTemplate(
+                metadata=client.V1ObjectMeta(name=_TEMPLATE),
+                template=client.V1PodTemplateSpec(
+                    metadata=client.V1ObjectMeta(
+                        labels={"app.kubernetes.io/component": "sandbox"}
                     ),
-                    containers=[
-                        client.V1Container(
-                            name="sandbox",
-                            image=_IMAGE,
-                            image_pull_policy="Never",
-                            security_context=client.V1SecurityContext(
-                                allow_privilege_escalation=False,
-                                capabilities=client.V1Capabilities(drop=["ALL"]),
+                    spec=client.V1PodSpec(
+                        enable_service_links=False,
+                        termination_grace_period_seconds=1,
+                        security_context=client.V1PodSecurityContext(
+                            run_as_non_root=True,
+                            run_as_user=1000,
+                            fs_group=1000,
+                            seccomp_profile=client.V1SeccompProfile(
+                                type="RuntimeDefault"
                             ),
-                        )
-                    ],
+                        ),
+                        containers=[
+                            client.V1Container(
+                                name="sandbox",
+                                image=_IMAGE,
+                                image_pull_policy="Never",
+                                security_context=client.V1SecurityContext(
+                                    allow_privilege_escalation=False,
+                                    capabilities=client.V1Capabilities(drop=["ALL"]),
+                                ),
+                            )
+                        ],
+                    ),
                 ),
             ),
-        ),
-    )
-    yield name
-    core_api.delete_namespace(name)
+        )
+        yield name
+    finally:
+        core_api.delete_namespace(name)
 
 
 @pytest.fixture

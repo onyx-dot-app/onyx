@@ -21,7 +21,8 @@ from uuid import uuid4
 
 import pytest
 from docker import DockerClient
-from docker.errors import ImageNotFound, NotFound
+from docker.errors import DockerException, NotFound
+from requests.exceptions import RequestException
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
@@ -76,10 +77,13 @@ _START_SECONDS = 180.0
 def _docker_and_image() -> bool:
     if not os.path.exists(_DOCKER_SOCKET):
         return False
-    client = DockerClient(base_url=f"unix://{_DOCKER_SOCKET}")
+    try:
+        client = DockerClient(base_url=f"unix://{_DOCKER_SOCKET}")
+    except DockerException:
+        return False
     try:
         client.images.get(_IMAGE)
-    except ImageNotFound:
+    except (DockerException, RequestException):
         return False
     finally:
         client.close()
@@ -112,18 +116,19 @@ def proxy_ca_volume(docker_client: DockerClient) -> Generator[str, None, None]:
     """A volume with a proxy CA certificate, as the sandbox proxy makes."""
     name = f"onyx-harness-test-ca-{uuid4().hex[:8]}"
     docker_client.volumes.create(name)
-    ca_pem = new_daemon_credentials().cert_pem
-    docker_client.containers.run(
-        _IMAGE,
-        entrypoint=["sh", "-c", 'printf "%s" "$CA" > /ca/ca.crt'],
-        command=[],
-        environment={"CA": ca_pem},
-        user="0:0",
-        volumes={name: {"bind": "/ca", "mode": "rw"}},
-        remove=True,
-    )
-    yield name
-    docker_client.volumes.get(name).remove(force=True)
+    try:
+        docker_client.containers.run(
+            _IMAGE,
+            entrypoint=["sh", "-c", 'printf "%s" "$CA" > /ca/ca.crt'],
+            command=[],
+            environment={"CA": new_daemon_credentials().cert_pem},
+            user="0:0",
+            volumes={name: {"bind": "/ca", "mode": "rw"}},
+            remove=True,
+        )
+        yield name
+    finally:
+        docker_client.volumes.get(name).remove(force=True)
 
 
 @pytest.fixture(scope="module")

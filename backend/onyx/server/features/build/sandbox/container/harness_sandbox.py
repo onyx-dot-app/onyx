@@ -376,15 +376,23 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
     ) -> ContainerRecord | None:
         """The record with the container's new address (a restart can move a
         published port); None when the address is the same."""
-        if not found.address or found.address == record.address:
+        address = found.address
+        if not address or address == record.address:
             return None
-        moved = record.model_copy(update={"address": found.address})
+        # Only the address: another worker may have written a newer generation.
         update_container_record(
             tenant_cache,
             sandbox_id,
-            lambda current: moved if current.name == record.name else None,
+            lambda current: (
+                current.model_copy(update={"address": address})
+                if current.name == record.name and current.address != address
+                else None
+            ),
         )
-        return moved
+        current = get_container_record(tenant_cache, sandbox_id)
+        if current is not None and current.name == record.name:
+            return current
+        return record.model_copy(update={"address": address})
 
     def _transfer(self, instance: ContainerInstance) -> SessionTransfer | None:
         if self._file_archives is None:
