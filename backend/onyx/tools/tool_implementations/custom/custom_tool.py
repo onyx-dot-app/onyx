@@ -45,6 +45,7 @@ from onyx.tools.tool_implementations.http_request import (
     TOOL_REQUEST_FAILURE_MESSAGES,
     ToolRequestError,
     ToolRequestFailure,
+    failed_tool_result,
     fresh_call_credentials,
     note_rejected_credential,
     send_tool_request,
@@ -184,21 +185,13 @@ class ApiTool(Tool):
         is_unreachable: bool = False,
         is_auth_error: bool = False,
     ) -> ToolResult:
-        return ToolResult(
-            content=message,
-            is_error=True,
-            details=CustomToolCallSummary(
-                tool_name=self._name,
-                integration_id=self._integration_id,
-                response_type="text",
-                tool_result=None,
-                error=CustomToolErrorInfo(
-                    status_code=status_code,
-                    message=message,
-                    is_unreachable=is_unreachable,
-                    is_auth_error=is_auth_error,
-                ),
-            ),
+        return failed_tool_result(
+            tool_name=self._name,
+            integration_id=self._integration_id,
+            message=message,
+            status_code=status_code,
+            is_unreachable=is_unreachable,
+            is_auth_error=is_auth_error,
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002

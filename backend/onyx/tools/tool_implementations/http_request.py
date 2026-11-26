@@ -16,8 +16,10 @@ from onyx.integrations.call_credentials import (
 )
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.models import CallCredentials
+from onyx.llm.models import ToolResult
 from onyx.server.security.models import OutboundSSRFParams, SSRFProtectionLevel
 from onyx.server.security.store import get_security_settings
+from onyx.tools.models import CustomToolCallSummary, CustomToolErrorInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, ssrf_safe_request
 from shared_configs.configs import MULTI_TENANT
@@ -103,6 +105,34 @@ class ToolResponse(BaseModel):
             )
         except LookupError:
             return self.body.decode("utf-8", errors="replace")
+
+
+def failed_tool_result(
+    *,
+    tool_name: str,
+    integration_id: int | None,
+    message: str,
+    status_code: int | None = None,
+    is_unreachable: bool = False,
+    is_auth_error: bool = False,
+) -> ToolResult:
+    """The error result of an API integration tool call."""
+    return ToolResult(
+        content=message,
+        is_error=True,
+        details=CustomToolCallSummary(
+            tool_name=tool_name,
+            integration_id=integration_id,
+            response_type="text",
+            tool_result=None,
+            error=CustomToolErrorInfo(
+                status_code=status_code,
+                message=message,
+                is_unreachable=is_unreachable,
+                is_auth_error=is_auth_error,
+            ),
+        ),
+    )
 
 
 def send_tool_request(
