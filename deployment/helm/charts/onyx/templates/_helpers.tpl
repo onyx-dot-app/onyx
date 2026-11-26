@@ -309,13 +309,13 @@ Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
 
 {{/*
 "true" when the Onyx images are a release before v6.0.0: global.version,
-or the chart appVersion when global.version floats (latest, edge, beta),
-or an api or celery_shared image tag that overrides it.
+or the chart appVersion when global.version floats (latest, edge, beta,
+also with "-dev"), or an api or celery_shared image tag that overrides it.
 A published chart carries the newest stable tag as its appVersion
 (helm-chart-releases.yml), which is the release that "latest" points at.
 */}}
 {{- define "onyx.craftPreV6App" -}}
-{{- $v := toString .Values.global.version -}}
+{{- $v := trimSuffix "-dev" (toString .Values.global.version) -}}
 {{- if not (include "onyx.craftFcPinned" $v) -}}{{- $v = toString .Chart.AppVersion -}}{{- end -}}
 {{- $old := false -}}
 {{- range list $v (dig "image" "tag" "" (.Values.api | default dict)) (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}

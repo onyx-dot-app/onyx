@@ -132,10 +132,19 @@ def test_published_v6_chart_takes_the_release_images(tmp_path: Path) -> None:
     assert data["SANDBOX_RUNTIME"] == "auto"
 
 
-def test_published_pre_v6_chart_keeps_pod_sandboxes(tmp_path: Path) -> None:
-    """The "latest" images of a v5 chart do not know "auto", and v5 has no
+@pytest.mark.parametrize("version", ["latest", "latest-dev", "edge"])
+def test_published_pre_v6_chart_keeps_pod_sandboxes(
+    tmp_path: Path, version: str
+) -> None:
+    """The floating images of a v5 chart do not know "auto", and v5 has no
     Firecracker images: "auto" acts as "pod" and the tags stay unpinned."""
-    docs = _docs(_render_published(tmp_path, "v5.2.0", _REGISTRATION))
+    docs = _docs(
+        _render_published(
+            tmp_path,
+            "v5.2.0",
+            [*_REGISTRATION, "--set-string", f"global.version={version}"],
+        )
+    )
     assert _find(docs, "DaemonSet", "onyx-craft-fc-host-agent") is None
     assert _configmap(docs)["SANDBOX_RUNTIME"] == "pod"
 
