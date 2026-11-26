@@ -16737,7 +16737,6 @@
       "share": {
         "label": "共享"
       },
-      "updatedAt": "更新于 {date}",
       "updatedNow": {
         "label": "刚刚"
       }
