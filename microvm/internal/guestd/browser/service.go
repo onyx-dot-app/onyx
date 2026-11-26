@@ -113,8 +113,21 @@ func (b *Browser) stopService(r *running) error {
 }
 
 // DialService connects to the service socket. It fails when no service
-// listens.
+// listens, or when the listener does not run as the service user: the
+// command user owns the socket dir, and can put a link to another socket there.
 func (b *Browser) DialService(ctx context.Context) (net.Conn, error) {
 	var d net.Dialer
-	return d.DialContext(ctx, "unix", b.SocketPath())
+	c, err := d.DialContext(ctx, "unix", b.SocketPath())
+	if err != nil {
+		return nil, err
+	}
+	want := uint32(os.Geteuid())
+	if b.cfg.Credential != nil {
+		want = b.cfg.Credential.Uid
+	}
+	if err := checkPeerUID(c, want); err != nil {
+		_ = c.Close()
+		return nil, err
+	}
+	return c, nil
 }
