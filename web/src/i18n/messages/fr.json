@@ -13742,8 +13742,7 @@
         "responsePlaceholder": "Saisissez une réponse",
         "dismiss": "Ignorer",
         "accept": "Accepter",
-        "takeControl": "Prenez le contrôle pour répondre.",
-        "sendError": "Impossible de répondre à la page. Réessayez."
+        "takeControl": "Prenez le contrôle pour répondre."
       },
       "fileChooser": {
         "label": "Choisir des fichiers pour la page",
@@ -13755,9 +13754,9 @@
         "chooseOne": "Choisir un fichier",
         "chooseMany": "Choisir des fichiers",
         "inputLabel": "Fichiers pour la page",
-        "sendError": "Impossible de répondre à la page. Réessayez.",
         "error": "Impossible de téléverser les fichiers. Réessayez."
-      }
+      },
+      "answerError": "Impossible de répondre à la page. Réessayez."
     }
   },
   "common": {

@@ -221,7 +221,6 @@ export function useBrowserStream({
     dispatch({ type: "clear" });
   }
   const [generation, setGeneration] = useState(0);
-  // The connection, with the chat whose browser it views
   const clientRef = useRef<{
     sessionId: string;
     client: BrowserStreamClient;
@@ -437,16 +436,11 @@ export function useChatBrowserTabs({
     const pending = newTabPendingRef.current;
     newTabPendingRef.current = null;
     if (pending !== null && pending.sessionId === browserSessionId) {
-      // A socket that closed since the render keeps its openings for the
-      // next live render
-      let unsent = 0;
-      for (let i = 0; i < pending.count; i++)
-        if (!send({ type: "newTab" })) unsent++;
-      if (unsent > 0)
-        newTabPendingRef.current = {
-          sessionId: pending.sessionId,
-          count: unsent,
-        };
+      // A socket that closed since the render keeps the rest for the next
+      // live render
+      let count = pending.count;
+      while (count > 0 && send({ type: "newTab" })) count--;
+      if (count > 0) newTabPendingRef.current = { ...pending, count };
     }
     const hadPages = hadPagesRef.current;
     hadPagesRef.current = pageCount > 0;
@@ -469,9 +463,9 @@ export function useChatBrowserTabs({
     // The browser closes the page; its tab goes when the page list drops it.
     // Without a connection, the panel closes the browser and its pages.
     const page = pageOfTab(id);
+    if (page === undefined && id !== RIGHT_PANEL_BROWSER_TAB) return false;
     if (page !== undefined && send({ type: "closeTab", tab: page.id }))
       return true;
-    if (page === undefined && id !== RIGHT_PANEL_BROWSER_TAB) return false;
     newTabPendingRef.current = null;
     dispatch({ type: "closeTab", tabId: RIGHT_PANEL_BROWSER_TAB });
     return true;

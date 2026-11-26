@@ -545,9 +545,9 @@ test("another selected tab hides the old page until its own frame comes", async 
 
 // jsdom has no PointerEvent, so pointer fields would not reach the handlers
 class TestPointerEvent extends MouseEvent {
-  readonly pointerId: number;
-  readonly pointerType: string;
-  readonly isPrimary: boolean;
+  pointerId: number;
+  pointerType: string;
+  isPrimary: boolean;
   constructor(type: string, init: PointerEventInit = {}) {
     super(type, init);
     this.pointerId = init.pointerId ?? 0;
@@ -555,12 +555,16 @@ class TestPointerEvent extends MouseEvent {
     this.isPrimary = init.isPrimary ?? false;
   }
 }
-if (typeof globalThis.PointerEvent === "undefined")
-  Object.defineProperty(globalThis, "PointerEvent", {
-    configurable: true,
-    writable: true,
-    value: TestPointerEvent,
+globalThis.PointerEvent ??= TestPointerEvent as typeof PointerEvent;
+
+/** Opens the stream on `tabs`, with "t1" selected and this viewer in control. */
+function openControlled(tabs: object[] = [TAB]) {
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs, selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
   });
+}
 
 /** Frames of `width` x `height`; call before the panel renders. */
 function mockFrames(width = 400, height = 300) {
@@ -598,70 +602,47 @@ const mouseSent = () =>
     (message) => (message as { type: string }).type === "mouse"
   );
 
-test("a dialog and a file chooser name the origin that asks", () => {
+test("a dialog and a file chooser name the origin that asks, when known", () => {
   renderPanel();
-  act(() => {
-    socket().open();
-    socket().receive({
-      type: "tabs",
-      tabs: [
-        {
-          ...TAB,
-          dialog: {
-            type: "alert",
-            message: "Hello",
-            origin: "https://example.com",
-          },
-        },
-      ],
-      selected: "t1",
-    });
-    socket().receive({ type: "control", controller: "you" });
+  const dialog = { type: "alert", message: "Hello" };
+  openControlled([
+    { ...TAB, dialog: { ...dialog, origin: "https://example.com" } },
+  ]);
+  act(() =>
     socket().receive({
       type: "fileChooser",
       id: "f1",
       multiple: true,
       origin: "http://plain.example",
-    });
-  });
+    })
+  );
   expect(screen.getByText("example.com says")).toBeInTheDocument();
   expect(
     screen.getByText("http://plain.example asks for files.")
   ).toBeInTheDocument();
-});
 
-test("a dialog without an origin shows only its message", () => {
-  renderPanel();
   act(() => {
-    socket().open();
     socket().receive({
       type: "tabs",
-      tabs: [{ ...TAB, dialog: { type: "alert", message: "Hello" } }],
+      tabs: [{ ...TAB, dialog }],
       selected: "t1",
     });
+    socket().receive({ type: "fileChooser", id: "f2", multiple: false });
   });
-  expect(screen.getByRole("dialog", { name: "Page dialog" })).toHaveTextContent(
-    /^HelloTake control to respond\.$/
-  );
+  expect(screen.queryByText(/ says$/)).not.toBeInTheDocument();
+  expect(screen.getByText("The page asks for a file.")).toBeInTheDocument();
 });
 
 test("a blank page shows its dialog", () => {
   renderPanel();
-  act(() => {
-    socket().open();
-    socket().receive({
-      type: "tabs",
-      tabs: [
-        {
-          ...TAB,
-          url: "about:blank",
-          title: "",
-          dialog: { type: "alert", message: "Blank says hi" },
-        },
-      ],
-      selected: "t1",
-    });
-  });
+  openControlled([
+    {
+      ...TAB,
+      url: "about:blank",
+      title: "",
+      dialog: { type: "alert", message: "Blank says hi" },
+    },
+  ]);
   expect(screen.getByText("Blank says hi")).toBeInTheDocument();
   expect(screen.queryByText("No page yet")).not.toBeInTheDocument();
 });
@@ -669,15 +650,7 @@ test("a blank page shows its dialog", () => {
 test("a dialog answer that is not sent says so", () => {
   const toastError = jest.spyOn(toast, "error");
   renderPanel();
-  act(() => {
-    socket().open();
-    socket().receive({
-      type: "tabs",
-      tabs: [{ ...TAB, dialog: { type: "confirm", message: "Sure?" } }],
-      selected: "t1",
-    });
-    socket().receive({ type: "control", controller: "you" });
-  });
+  openControlled([{ ...TAB, dialog: { type: "confirm", message: "Sure?" } }]);
   socket().readyState = 0;
   act(() => screen.getByRole("button", { name: "Accept" }).click());
   expect(toastError).toHaveBeenCalledWith(
@@ -688,11 +661,7 @@ test("a dialog answer that is not sent says so", () => {
 
 test("a file chooser takes focus and gives it back to the page", () => {
   renderPanel();
-  act(() => {
-    socket().open();
-    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
-    socket().receive({ type: "control", controller: "you" });
-  });
+  openControlled();
   const page = screen.getByRole("textbox", { name: "Browser page" });
   act(() => page.focus());
   act(() =>
@@ -705,15 +674,7 @@ test("a file chooser takes focus and gives it back to the page", () => {
 
 test("a closed dialog leaves the focus where the user moved it", () => {
   renderPanel();
-  act(() => {
-    socket().open();
-    socket().receive({
-      type: "tabs",
-      tabs: [{ ...TAB, dialog: { type: "confirm", message: "Sure?" } }],
-      selected: "t1",
-    });
-    socket().receive({ type: "control", controller: "you" });
-  });
+  openControlled([{ ...TAB, dialog: { type: "confirm", message: "Sure?" } }]);
   const address = screen.getByRole("textbox", { name: "Address" });
   act(() => address.focus());
   act(() => socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" }));
@@ -730,12 +691,10 @@ test("an upload that fails after its file chooser closed shows no error", async 
     })
   );
   renderPanel();
-  act(() => {
-    socket().open();
-    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
-    socket().receive({ type: "control", controller: "you" });
-    socket().receive({ type: "fileChooser", id: "f1", multiple: false });
-  });
+  openControlled();
+  act(() =>
+    socket().receive({ type: "fileChooser", id: "f1", multiple: false })
+  );
   await userEvent.upload(
     screen.getByLabelText("Files for the page"),
     new File(["a"], "a.txt")
@@ -748,11 +707,7 @@ test("an upload that fails after its file chooser closed shows no error", async 
 
 test("a key released after a modifier went down still goes up on the page", () => {
   renderPanel();
-  act(() => {
-    socket().open();
-    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
-    socket().receive({ type: "control", controller: "you" });
-  });
+  openControlled();
   const input = screen.getByRole("textbox", { name: "Browser page" });
   fireEvent.keyDown(input, { key: "v", code: "KeyV" });
   fireEvent.keyDown(input, {
@@ -777,12 +732,8 @@ test("a page switch forgets the old page's clicks, held buttons and touch", asyn
   mockFrames();
   const { container } = renderPanel();
   const tabs = [TAB, { ...TAB, id: "t2" }];
-  act(() => {
-    socket().open();
-    socket().receive({ type: "tabs", tabs, selected: "t1" });
-    socket().receive({ type: "viewport", width: 400, height: 300 });
-    socket().receive({ type: "control", controller: "you" });
-  });
+  openControlled(tabs);
+  act(() => socket().receive({ type: "viewport", width: 400, height: 300 }));
   const canvas = await paintFrame(container);
   const at = { clientX: 10, clientY: 10, pointerId: 1, pointerType: "mouse" };
   const finger = { ...at, pointerId: 2, pointerType: "touch", isPrimary: true };
@@ -808,12 +759,8 @@ test("a page switch forgets the old page's clicks, held buttons and touch", asyn
 test("a touch that starts outside the page clicks nothing", async () => {
   mockFrames(400, 200);
   const { container } = renderPanel();
-  act(() => {
-    socket().open();
-    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
-    socket().receive({ type: "viewport", width: 400, height: 200 });
-    socket().receive({ type: "control", controller: "you" });
-  });
+  openControlled();
+  act(() => socket().receive({ type: "viewport", width: 400, height: 200 }));
   // A 400x200 frame in a 400x300 canvas leaves 50px bands above and below
   const canvas = await paintFrame(container);
   const touch = { pointerId: 1, pointerType: "touch", isPrimary: true };
@@ -828,39 +775,31 @@ test("the agent's cursor follows the canvas's size", async () => {
     .spyOn(HTMLElement.prototype, "clientWidth", "get")
     .mockImplementation(() => width);
   jest.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(300);
-  const observers: (() => void)[] = [];
-  const originalObserver = globalThis.ResizeObserver;
-  globalThis.ResizeObserver = class {
-    constructor(callback: () => void) {
-      observers.push(callback);
-    }
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-  try {
-    mockFrames();
-    const { container } = renderPanel();
-    const cursor = () =>
-      container.querySelector<HTMLElement>("[data-agent-browser-cursor]");
-    act(() => {
-      socket().open();
-      socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
-      socket().receive({ type: "viewport", width: 400, height: 300 });
-      socket().receive({
-        type: "pointer",
-        phase: "move",
-        x: 200,
-        y: 0,
-        sequence: 1,
-      });
+  const resizes: (() => void)[] = [];
+  jest.spyOn(globalThis, "ResizeObserver").mockImplementation((callback) => {
+    const observer = { observe() {}, unobserve() {}, disconnect() {} };
+    resizes.push(() => callback([], observer));
+    return observer;
+  });
+  mockFrames();
+  const { container } = renderPanel();
+  const cursor = () =>
+    container.querySelector<HTMLElement>("[data-agent-browser-cursor]");
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
+    socket().receive({ type: "viewport", width: 400, height: 300 });
+    socket().receive({
+      type: "pointer",
+      phase: "move",
+      x: 200,
+      y: 0,
+      sequence: 1,
     });
-    await paintFrame(container);
-    expect(cursor()?.style.transform).toBe("translate3d(200px, 0px, 0)");
-    width = 200;
-    act(() => observers.forEach((notify) => notify()));
-    expect(cursor()?.style.transform).toBe("translate3d(100px, 75px, 0)");
-  } finally {
-    globalThis.ResizeObserver = originalObserver;
-  }
+  });
+  await paintFrame(container);
+  expect(cursor()?.style.transform).toBe("translate3d(200px, 0px, 0)");
+  width = 200;
+  act(() => resizes.forEach((resize) => resize()));
+  expect(cursor()?.style.transform).toBe("translate3d(100px, 75px, 0)");
 });

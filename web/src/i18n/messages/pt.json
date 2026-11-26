@@ -13742,8 +13742,7 @@
         "responsePlaceholder": "Digite uma resposta",
         "dismiss": "Dispensar",
         "accept": "Aceitar",
-        "takeControl": "Assuma o controle para responder.",
-        "sendError": "Não foi possível responder à página. Tente novamente."
+        "takeControl": "Assuma o controle para responder."
       },
       "fileChooser": {
         "label": "Escolher arquivos para a página",
@@ -13755,9 +13754,9 @@
         "chooseOne": "Escolher arquivo",
         "chooseMany": "Escolher arquivos",
         "inputLabel": "Arquivos para a página",
-        "sendError": "Não foi possível responder à página. Tente novamente.",
         "error": "Não foi possível enviar os arquivos. Tente novamente."
-      }
+      },
+      "answerError": "Não foi possível responder à página. Tente novamente."
     }
   },
   "common": {

@@ -13742,8 +13742,7 @@
         "responsePlaceholder": "Type a response",
         "dismiss": "Dismiss",
         "accept": "Accept",
-        "takeControl": "Take control to respond.",
-        "sendError": "Could not answer the page. Try again."
+        "takeControl": "Take control to respond."
       },
       "fileChooser": {
         "label": "Choose files for the page",
@@ -13755,9 +13754,9 @@
         "chooseOne": "Choose file",
         "chooseMany": "Choose files",
         "inputLabel": "Files for the page",
-        "sendError": "Could not answer the page. Try again.",
         "error": "Could not upload the files. Try again."
-      }
+      },
+      "answerError": "Could not answer the page. Try again."
     }
   },
   "common": {

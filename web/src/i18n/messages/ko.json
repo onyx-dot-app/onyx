@@ -13742,8 +13742,7 @@
         "responsePlaceholder": "응답 입력",
         "dismiss": "닫기",
         "accept": "수락",
-        "takeControl": "응답하려면 제어권을 가져오세요.",
-        "sendError": "페이지에 응답하지 못했습니다. 다시 시도하세요."
+        "takeControl": "응답하려면 제어권을 가져오세요."
       },
       "fileChooser": {
         "label": "페이지에 사용할 파일 선택",
@@ -13755,9 +13754,9 @@
         "chooseOne": "파일 선택",
         "chooseMany": "파일 선택",
         "inputLabel": "페이지용 파일",
-        "sendError": "페이지에 응답하지 못했습니다. 다시 시도하세요.",
         "error": "파일을 업로드하지 못했습니다. 다시 시도하세요."
-      }
+      },
+      "answerError": "페이지에 응답하지 못했습니다. 다시 시도하세요."
     }
   },
   "common": {

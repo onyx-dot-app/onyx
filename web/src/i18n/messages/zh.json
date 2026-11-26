@@ -13742,8 +13742,7 @@
         "responsePlaceholder": "输入回复",
         "dismiss": "关闭",
         "accept": "接受",
-        "takeControl": "接管控制以进行回复。",
-        "sendError": "无法响应该页面。请重试。"
+        "takeControl": "接管控制以进行回复。"
       },
       "fileChooser": {
         "label": "为页面选择文件",
@@ -13755,9 +13754,9 @@
         "chooseOne": "选择文件",
         "chooseMany": "选择多个文件",
         "inputLabel": "页面文件",
-        "sendError": "无法响应该页面。请重试。",
         "error": "无法上传文件。请重试。"
-      }
+      },
+      "answerError": "无法响应该页面。请重试。"
     }
   },
   "common": {

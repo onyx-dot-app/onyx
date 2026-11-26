@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  type RefObject,
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -101,7 +95,7 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
   };
   const answerFileChooser = (id: string, paths: string[]): boolean => {
     if (stream.answerFileChooser(id, paths)) return true;
-    toast.error(t("fileChooser.sendError"));
+    toast.error(t("answerError"));
     return false;
   };
 
@@ -253,7 +247,7 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
                     };
                     if (promptText !== undefined)
                       answer.promptText = promptText;
-                    if (!send(answer)) toast.error(t("dialog.sendError"));
+                    if (!send(answer)) toast.error(t("answerError"));
                   }}
                 />
               )}
@@ -439,10 +433,9 @@ function DialogPrompt({
   const t = useTranslations("chat.browser");
   const [promptText, setPromptText] = useState("");
   const isPrompt = dialog.type === "prompt";
-  const cardRef = useRef<HTMLDivElement | null>(null);
   // The controller answers at once: focus goes to the answer field, else
   // to Accept
-  usePromptFocus(cardRef, "input, [data-prompt-focus]", controlling, onClosed);
+  const cardRef = usePromptFocus(controlling, onClosed);
   return (
     <Card
       ref={cardRef}
@@ -473,6 +466,7 @@ function DialogPrompt({
           <>
             {isPrompt && (
               <InputTypeIn
+                data-prompt-focus
                 aria-label={t("dialog.response")}
                 placeholder={t("dialog.responsePlaceholder")}
                 value={promptText}
@@ -511,7 +505,6 @@ function DialogPrompt({
 interface FileChooserPromptProps {
   sessionId: string;
   multiple: boolean;
-  // The asking frame's origin; null when unknown
   origin: string | null;
   // False when the answer was not sent
   onAnswer: (paths: string[]) => boolean;
@@ -529,8 +522,7 @@ function FileChooserPrompt({
 }: FileChooserPromptProps) {
   const t = useTranslations("chat.browser");
   const [uploading, setUploading] = useState(false);
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  usePromptFocus(cardRef, "[data-prompt-focus]", true, onClosed);
+  const cardRef = usePromptFocus(true, onClosed);
   // The chooser closes, or the user loses control, while the upload runs
   const shownRef = useRef(false);
   useEffect(() => {
@@ -573,14 +565,10 @@ function FileChooserPrompt({
           wordWrap="wrap-anywhere"
         >
           {origin === null
-            ? multiple
-              ? t("fileChooser.askMany")
-              : t("fileChooser.askOne")
+            ? t(multiple ? "fileChooser.askMany" : "fileChooser.askOne")
             : t(
                 multiple ? "fileChooser.askManyFrom" : "fileChooser.askOneFrom",
-                {
-                  origin: browserOriginLabel(origin),
-                }
+                { origin: browserOriginLabel(origin) }
               )}
         </Text>
         <Section flexDirection="row" justifyContent="end" gap={2}>
@@ -612,19 +600,16 @@ function FileChooserPrompt({
 }
 
 /**
- * Moves focus into a page prompt for its controller, and gives it back to
- * the page when the prompt goes while it still holds the focus.
+ * Moves focus to a page prompt's first `data-prompt-focus` element for its
+ * controller, and gives it back to the page when the prompt goes while it
+ * still holds the focus. Returns the ref for the prompt's card.
  */
-function usePromptFocus(
-  cardRef: RefObject<HTMLElement | null>,
-  selector: string,
-  controlling: boolean,
-  onClosed: () => void
-) {
+function usePromptFocus(controlling: boolean, onClosed: () => void) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!controlling) return;
-    cardRef.current?.querySelector<HTMLElement>(selector)?.focus();
-  }, [cardRef, selector, controlling]);
+    cardRef.current?.querySelector<HTMLElement>("[data-prompt-focus]")?.focus();
+  }, [controlling]);
   const closed = useEffectEvent(onClosed);
   useEffect(() => {
     const card = cardRef.current;
@@ -634,5 +619,6 @@ function usePromptFocus(
       if (active === null || active === document.body || card?.contains(active))
         closed();
     };
-  }, [cardRef]);
+  }, []);
+  return cardRef;
 }
