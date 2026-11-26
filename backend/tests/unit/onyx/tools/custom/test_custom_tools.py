@@ -856,7 +856,16 @@ def test_save_rejects_metadata_server_url(monkeypatch: pytest.MonkeyPatch) -> No
     validate_openapi_definition(_schema("http://10.0.0.5"))
 
 
-@pytest.mark.parametrize("servers", [[{"url": 123}], [{"url": "   "}], [{}], None])
+@pytest.mark.parametrize(
+    "servers",
+    [
+        [{"url": 123}],
+        [{"url": "   "}],
+        [{}],
+        None,
+        [{"url": "https://[api.example.com"}],
+    ],
+)
 def test_save_rejects_invalid_server_url(servers: list[dict[str, Any]] | None) -> None:
     schema = _schema("https://api.example.com")
     if servers is None:
