@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections.abc import Callable, Generator
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -46,6 +47,7 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.destination_policy import parse_destination_policy
 from onyx.sandbox_proxy.sandbox_identity.models import SessionContext
 from onyx.server.features.action_policies.models import ApprovalChoice
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.query_and_chat import command_approvals
 from onyx.server.query_and_chat.chat_backend import decide_approval
 from onyx.server.query_and_chat.models import ChatApprovalDecisionRequest
@@ -526,6 +528,56 @@ def test_a_command_grant_for_a_decided_request_grants_nothing(
         assert conflict.value.error_code is OnyxErrorCode.CONFLICT
         assert not approval_cache.command_grants_cover(
             command_id, chat.integration_id, ["issues.create"], cache
+        )
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
+
+
+@pytest.mark.parametrize(
+    ("case", "error_code"),
+    [
+        ("another_user", OnyxErrorCode.NOT_FOUND),
+        ("expired", OnyxErrorCode.CONFLICT),
+        ("always_asks", OnyxErrorCode.INVALID_INPUT),
+    ],
+)
+def test_a_refused_decision_leaves_the_request_waiting(
+    db_session: Session, chat: _Chat, case: str, error_code: OnyxErrorCode
+) -> None:
+    """Only the chat's owner decides, only while the request waits, and a
+    request that always asks cannot be approved for the command."""
+    command_id = uuid4()
+    action_type = "unspecified" if case == "always_asks" else "issues.create"
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, command_id), _matched(chat.integration_id, action_type), {}
+    )
+    decider = chat.user
+    if case == "another_user":
+        decider = create_test_user(db_session, "chat_command_approvals_other")
+    if case == "expired":
+        row = db_session.get(ActionApproval, approval_id)
+        assert row is not None
+        row.created_at = datetime.now(timezone.utc) - timedelta(
+            seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 60
+        )
+        db_session.commit()
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    try:
+        with pytest.raises(OnyxError) as error:
+            decide_approval(
+                approval_id,
+                ChatApprovalDecisionRequest(decision=ApprovalChoice.APPROVE_COMMAND),
+                request=MagicMock(),
+                user=decider,
+                db_session=db_session,
+            )
+        assert error.value.error_code is error_code
+        db_session.rollback()
+        db_session.expire_all()
+        row = db_session.get(ActionApproval, approval_id)
+        assert row is not None and row.decision is None
+        assert not approval_cache.command_grants_cover(
+            command_id, chat.integration_id, [action_type], cache
         )
     finally:
         cache.delete_prefix(f"approval:command:{command_id}:")
