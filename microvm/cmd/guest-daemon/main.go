@@ -33,9 +33,6 @@ import (
 // windowBytes is the HTTP/2 flow-control window of the gRPC server.
 const windowBytes = 16 << 20
 
-// browserRelayPort is the vsock port that relays to the browser service.
-const browserRelayPort = 3011
-
 // version is set with -ldflags "-X main.version=...".
 var version = "dev"
 
@@ -196,7 +193,7 @@ func baseEnv(environ []string, ident *commandIdentity) map[string]string {
 
 // checkPorts refuses a vsock API port that the browser relay also needs.
 func checkPorts(port uint, listen, browserBin string) error {
-	if port == browserRelayPort && listen == "" && browserBin != "" {
+	if port == browser.RelayPort && listen == "" && browserBin != "" {
 		return fmt.Errorf("--port=%d is the browser relay port; pick another port or set --browser-binary=", port)
 	}
 	return nil
@@ -290,9 +287,9 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 		grpc.ReadBufferSize(1<<20), grpc.WriteBufferSize(1<<20))
 
 	if br != nil && listen == "" {
-		bln, err := vsock.Listen(browserRelayPort)
+		bln, err := vsock.Listen(browser.RelayPort)
 		if err != nil {
-			return fmt.Errorf("browser relay port %d: %w", browserRelayPort, err)
+			return fmt.Errorf("browser relay port %d: %w", browser.RelayPort, err)
 		}
 		defer func() { _ = bln.Close() }()
 		// Each connection goes to the service socket, or closes when no service
