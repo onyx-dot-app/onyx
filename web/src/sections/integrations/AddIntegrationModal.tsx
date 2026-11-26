@@ -60,6 +60,7 @@ import {
   apiBaseUrl,
   detectApi,
   isNotThisKind,
+  SPEC_MAX_SIZE_KB,
   type DetectedApi,
   type SpecFile,
 } from "@/sections/integrations/detectApi";
@@ -175,7 +176,7 @@ export default function AddIntegrationModal({
   const [url, setUrl] = useState(prefill?.serverUrl ?? "");
   const [file, setFile] = useState<SpecFile | null>(null);
   const [readingFile, setReadingFile] = useState(false);
-  const [fileError, setFileError] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [detectError, setDetectError] = useState<string | null>(null);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [signIn, setSignIn] = useState<SignInDraft>(DEFAULT_SIGN_IN);
@@ -585,12 +586,16 @@ export default function AddIntegrationModal({
                 onFiles={(files) => {
                   const picked = files[0];
                   if (!picked) return;
+                  if (picked.size > SPEC_MAX_SIZE_KB * 1024) {
+                    setFileError(t("api.tooLarge"));
+                    return;
+                  }
                   setReadingFile(true);
-                  setFileError(false);
+                  setFileError(null);
                   picked
                     .text()
                     .then((text) => setFile({ name: picked.name, text }))
-                    .catch(() => setFileError(true))
+                    .catch(() => setFileError(t("api.failed")))
                     .finally(() => setReadingFile(false));
                 }}
               >
@@ -600,7 +605,7 @@ export default function AddIntegrationModal({
           </Section>
         )}
         {flow === "api" && fileError && (
-          <InputErrorText type="error">{t("api.failed")}</InputErrorText>
+          <InputErrorText type="error">{fileError}</InputErrorText>
         )}
       </Section>
     );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -10,6 +11,7 @@ import {
 import { InputVertical, Section, toast } from "@opal/layouts";
 import { introspectGraphQL } from "@/lib/integrations/svc";
 import type { GraphQLConfig } from "@/lib/integrations/types";
+import { SPEC_MAX_SIZE_KB } from "@/sections/integrations/detectApi";
 
 interface GraphQLFieldsProps {
   draft: GraphQLConfig;
@@ -29,6 +31,8 @@ export default function GraphQLFields({
   onLoadingChange,
 }: GraphQLFieldsProps) {
   const t = useTranslations("admin.integrations.add.graphql");
+  const tAdd = useTranslations("admin.integrations.add");
+  const [tooLarge, setTooLarge] = useState(false);
 
   async function introspect() {
     onLoadingChange(true);
@@ -79,9 +83,11 @@ export default function GraphQLFields({
         title={t("schema.title")}
         description={t("schema.description")}
         error={
-          showErrors && !draft.graphql_schema.trim()
-            ? t("schema.required")
-            : undefined
+          tooLarge
+            ? tAdd("api.tooLarge")
+            : showErrors && !draft.graphql_schema.trim()
+              ? t("schema.required")
+              : undefined
         }
       >
         <Section gap={2} alignItems="stretch" height="auto">
@@ -89,7 +95,10 @@ export default function GraphQLFields({
             accept=".graphql,.graphqls,.gql,text/plain"
             placeholder={t("schema.upload")}
             variant={disabled ? "disabled" : "primary"}
+            maxSizeKb={SPEC_MAX_SIZE_KB}
+            onFileSizeExceeded={() => setTooLarge(true)}
             setValue={(text) => {
+              setTooLarge(false);
               if (text.trim()) onChange({ ...draft, graphql_schema: text });
             }}
           />

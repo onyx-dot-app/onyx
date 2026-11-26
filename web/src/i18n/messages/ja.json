@@ -10484,6 +10484,7 @@
           },
           "failed": "仕様を読み取れませんでした。",
           "specError": "仕様を追加できません: {detail}",
+          "tooLarge": "ファイルが 5 MB を超えています。",
           "checkFailed": "Onyx は URL を確認できませんでした。もう一度お試しください。"
         },
         "detected": {

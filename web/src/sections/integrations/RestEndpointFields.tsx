@@ -16,7 +16,10 @@ import type {
   EndpointLineError,
   OpenApiConfigView,
 } from "@/lib/integrations/types";
-import { specBaseUrl } from "@/sections/integrations/detectApi";
+import {
+  SPEC_MAX_SIZE_KB,
+  specBaseUrl,
+} from "@/sections/integrations/detectApi";
 
 /** The REST endpoint form: a base URL and one endpoint per line. */
 export interface RestDraft {
@@ -63,6 +66,7 @@ export default function RestEndpointFields({
   const [specUrl, setSpecUrl] = useState("");
   // Save drops the actions of these operations, so show them before Save.
   const [skipped, setSkipped] = useState<string[]>([]);
+  const [tooLarge, setTooLarge] = useState(false);
 
   async function runImport(
     body: { openapi_document: string } | { spec_url: string }
@@ -90,13 +94,17 @@ export default function RestEndpointFields({
         title={t("import.title")}
         description={t("import.description")}
         suffix="optional"
+        error={tooLarge ? tAdd("api.tooLarge") : undefined}
       >
         <Section gap={2} alignItems="stretch" height="auto">
           <InputSingleUpload
             accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
             placeholder={t("import.upload")}
             variant={disabled ? "disabled" : "primary"}
+            maxSizeKb={SPEC_MAX_SIZE_KB}
+            onFileSizeExceeded={() => setTooLarge(true)}
             setValue={(text) => {
+              setTooLarge(false);
               if (text.trim()) void runImport({ openapi_document: text });
             }}
           />

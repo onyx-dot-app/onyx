@@ -10484,6 +10484,7 @@
           },
           "failed": "Could not read the spec.",
           "specError": "The spec cannot be added: {detail}",
+          "tooLarge": "The file is larger than 5 MB.",
           "checkFailed": "Onyx could not check the URL. Try again."
         },
         "detected": {

@@ -10484,6 +10484,7 @@
           },
           "failed": "Die Spezifikation konnte nicht gelesen werden.",
           "specError": "Die Spezifikation kann nicht hinzugefügt werden: {detail}",
+          "tooLarge": "Die Datei ist größer als 5 MB.",
           "checkFailed": "Onyx konnte die URL nicht prüfen. Versuchen Sie es erneut."
         },
         "detected": {

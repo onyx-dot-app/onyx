@@ -13,7 +13,11 @@ import {
   mockFetch,
   requestBody,
 } from "@tests/setup/integrationTestUtils";
-import type { OpenApiConfigView } from "@/lib/integrations/types";
+import type {
+  GraphQLConfig,
+  IntegrationConfigView,
+  OpenApiConfigView,
+} from "@/lib/integrations/types";
 
 const copy = messages.admin.integrations;
 const detailCopy = copy.detail;
@@ -439,6 +443,45 @@ test("lists the operations that a reimported spec skipped", async () => {
   );
   expect(await view.findByText(skipped)).toBeInTheDocument();
 });
+
+const GRAPHQL_CONFIG: GraphQLConfig = {
+  shape: "graphql",
+  endpoint_url: "https://api.example.com/graphql",
+  graphql_schema: "type Query { a: Int }",
+};
+
+test.each<[IntegrationConfigView, string]>([
+  [OPENAPI_VIEW, "openapi.json"],
+  [GRAPHQL_CONFIG, "schema.graphql"],
+])(
+  "does not read an upload over the size limit (%#)",
+  async (config, fileName) => {
+    mockFetch({
+      [URL_DETAIL]: makeDetail({
+        kind: "api",
+        shape: config.shape,
+        auth_mode: "none",
+        auth_method: null,
+        oauth_client: null,
+        config,
+      }),
+    });
+    const readAsText = jest.spyOn(FileReader.prototype, "readAsText");
+    const big = new File(["x"], fileName);
+    Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 + 1 });
+    const u = user();
+    open("configuration");
+    const view = await inPanel();
+    await view.findByRole("button", { name: detailCopy.configuration.save });
+    const input =
+      activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("No file input");
+    await u.upload(input, big);
+
+    expect(await view.findByText(copy.add.api.tooLarge)).toBeInTheDocument();
+    expect(readAsText).not.toHaveBeenCalled();
+  }
+);
 
 test("blocks Save while a spec import runs", async () => {
   let finishImport: (view: OpenApiConfigView) => void = () => undefined;

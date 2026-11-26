@@ -23,6 +23,9 @@ export type DetectedApi =
       mutations: number;
     };
 
+/** The largest spec or schema file, as the backend limits it. */
+export const SPEC_MAX_SIZE_KB = 5 * 1024;
+
 export interface SpecFile {
   name: string;
   text: string;

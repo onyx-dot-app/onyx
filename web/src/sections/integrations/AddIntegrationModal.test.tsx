@@ -758,6 +758,23 @@ describe("Custom API", () => {
     expect(await screen.findByText(add.api.failed)).toBeInTheDocument();
   });
 
+  test("does not read a spec file over the size limit", async () => {
+    const read = jest.fn(() => Promise.resolve("{}"));
+    const big = new File(["{}"], "openapi.json", { type: "application/json" });
+    Object.defineProperties(big, {
+      size: { value: 5 * 1024 * 1024 + 1 },
+      text: { value: read },
+    });
+    const { user } = open({ kind: "api" });
+    await user.upload(screen.getByLabelText(add.api.upload.label), big);
+
+    expect(await screen.findByText(add.api.tooLarge)).toBeInTheDocument();
+    expect(read).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: add.api.upload.remove })
+    ).not.toBeInTheDocument();
+  });
+
   test("a GraphQL endpoint counts its queries and mutations", async () => {
     const schema = `"""Root"""
 type Query {
