@@ -606,6 +606,14 @@ def test_a_line_sent_as_shown_keeps_an_operation_it_cannot_write() -> None:
     assert "delete" not in other_edited["paths"]["/pets/{petId}"]
     assert "post" in other_edited["paths"]["/reports"]
 
+    label_edited = _apply(
+        spec, [line.replace("List reports", "Find reports") for line in lines]
+    )
+    assert label_edited["paths"]["/reports"]["get"] == {
+        **reports["get"],
+        "summary": "Find reports",
+    }
+
 
 def test_lines_save_over_an_operation_with_malformed_parameters() -> None:
     """A removed operation with malformed parameters does not break the

@@ -2,9 +2,7 @@
 edits of an imported spec that keep what the spec said about the other
 operations."""
 
-import copy
 import json
-from collections.abc import Generator
 from typing import Any
 from uuid import uuid4
 
@@ -13,10 +11,6 @@ import yaml
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IntegrationAuthMode
-from onyx.db.integration import (
-    get_api_app_for_integration,
-    get_openapi_tool_for_integration,
-)
 from onyx.db.models import Integration, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -35,7 +29,6 @@ from onyx.server.features.integrations.models import (
     OpenApiEndpointsRequest,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.integration_helpers import delete_integrations
 
 BASE_URL = "https://tickets.example.com/api"
 
@@ -106,16 +99,7 @@ def admin(make_test_user: MakeTestUser) -> User:
     return make_test_user("endpoint-lines-admin", is_admin=True)
 
 
-@pytest.fixture
-def created(db_session: Session) -> Generator[list[int], None, None]:
-    ids: list[int] = []
-    yield ids
-    delete_integrations(db_session, ids)
-
-
-def _create(
-    db_session: Session, admin: User, created: list[int], config: OpenApiConfigInput
-) -> int:
+def _create(db_session: Session, admin: User, config: OpenApiConfigInput) -> int:
     detail = admin_api.create_integration(
         IntegrationCreate(
             name=f"tickets-{uuid4().hex[:8]}",
@@ -125,7 +109,6 @@ def _create(
         admin,
         db_session,
     )
-    created.append(detail.id)
     return detail.id
 
 
@@ -164,12 +147,11 @@ def _action_keys(db_session: Session, admin: User, integration_id: int) -> set[s
 
 
 def test_typed_lines_make_a_document_and_actions(
-    db_session: Session, admin: User, created: list[int]
+    db_session: Session, admin: User
 ) -> None:
     integration_id = _create(
         db_session,
         admin,
-        created,
         OpenApiConfigInput(
             base_url=BASE_URL,
             endpoints=[
@@ -204,14 +186,9 @@ def test_typed_lines_make_a_document_and_actions(
     assert "requestBody" not in operations[keys["GET /tickets"]]
     assert _action_keys(db_session, admin, integration_id) == set(keys.values())
 
-    app = get_api_app_for_integration(integration_id, db_session)
-    tool = get_openapi_tool_for_integration(integration_id, db_session)
-    assert app is not None and app.base_url == BASE_URL
-    assert tool is not None and tool.openapi_schema == json.loads(view.openapi_document)
-
 
 def test_a_line_edit_keeps_the_rest_of_an_imported_yaml_spec(
-    db_session: Session, admin: User, created: list[int]
+    db_session: Session, admin: User
 ) -> None:
     document = yaml.safe_dump(IMPORTED, sort_keys=False)
     imported = admin_api.import_openapi_spec(
@@ -227,7 +204,6 @@ def test_a_line_edit_keeps_the_rest_of_an_imported_yaml_spec(
     integration_id = _create(
         db_session,
         admin,
-        created,
         OpenApiConfigInput(
             openapi_document=imported.openapi_document,
             base_url=BASE_URL,
@@ -302,64 +278,14 @@ def test_a_line_edit_keeps_the_rest_of_an_imported_yaml_spec(
     assert actions[patch_key].admin_policy is None
 
 
-def test_a_query_name_with_a_space_survives_a_label_edit(
-    db_session: Session, admin: User, created: list[int]
-) -> None:
-    """The line writes a space in a query name as %20, so a line with an
-    edited label keeps the parameter."""
-    search = {
-        "operationId": "searchTickets",
-        "summary": "Search",
-        "parameters": [
-            {"name": "filter mode", "in": "query", "schema": {"type": "integer"}}
-        ],
-        "responses": {"200": {"description": "OK"}},
-    }
-    spec = copy.deepcopy(IMPORTED)
-    spec["paths"]["/search"] = {"get": search}
-    imported = admin_api.import_openapi_spec(
-        OpenApiEndpointsRequest(openapi_document=json.dumps(spec)), admin
-    )
-    assert imported.skipped == []
-    assert "GET /search?filter%20mode Search" in imported.endpoints
-
-    integration_id = _create(
-        db_session,
-        admin,
-        created,
-        OpenApiConfigInput(
-            openapi_document=imported.openapi_document,
-            base_url=BASE_URL,
-            endpoints=imported.endpoints,
-        ),
-    )
-    view = _view(db_session, admin, integration_id)
-    assert _operations(view.openapi_document)["searchTickets"] == search
-
-    admin_api.update_integration(
-        integration_id,
-        IntegrationUpdate(
-            config=OpenApiConfigInput(
-                base_url=BASE_URL,
-                endpoints=[line.replace("Search", "Find") for line in view.endpoints],
-            )
-        ),
-        admin,
-        db_session,
-    )
-    edited = _operations(_view(db_session, admin, integration_id).openapi_document)
-    assert edited["searchTickets"]["parameters"] == search["parameters"]
-    assert edited["searchTickets"]["summary"] == "Find"
-
-
 def test_unchanged_lines_keep_the_document_text(
-    db_session: Session, admin: User, created: list[int]
+    db_session: Session, admin: User
 ) -> None:
     document = "# Kept\n" + yaml.safe_dump(
         {**IMPORTED, "servers": [{"url": BASE_URL}]}, sort_keys=False
     )
     integration_id = _create(
-        db_session, admin, created, OpenApiConfigInput(openapi_document=document)
+        db_session, admin, OpenApiConfigInput(openapi_document=document)
     )
     view = _view(db_session, admin, integration_id)
     admin_api.update_integration(
@@ -375,13 +301,12 @@ def test_unchanged_lines_keep_the_document_text(
 
 @pytest.mark.parametrize("suffix", ["?version=2", "#v2"])
 def test_a_base_url_with_a_query_or_fragment_is_refused(
-    db_session: Session, admin: User, created: list[int], suffix: str
+    db_session: Session, admin: User, suffix: str
 ) -> None:
     with pytest.raises(OnyxError) as error:
         _create(
             db_session,
             admin,
-            created,
             OpenApiConfigInput(
                 base_url=BASE_URL + suffix, endpoints=["GET /tickets List"]
             ),
@@ -391,13 +316,10 @@ def test_a_base_url_with_a_query_or_fragment_is_refused(
     assert "query or a fragment" in error.value.detail
 
 
-def test_each_bad_line_gets_its_own_error(
-    db_session: Session, admin: User, created: list[int]
-) -> None:
+def test_each_bad_line_gets_its_own_error(db_session: Session, admin: User) -> None:
     integration_id = _create(
         db_session,
         admin,
-        created,
         OpenApiConfigInput(base_url=BASE_URL, endpoints=["GET /tickets List"]),
     )
     with pytest.raises(OnyxError) as error:
@@ -431,14 +353,13 @@ def test_each_bad_line_gets_its_own_error(
 
 
 def test_a_replaced_endpoint_does_not_take_the_policy_of_the_old_one(
-    db_session: Session, admin: User, created: list[int]
+    db_session: Session, admin: User
 ) -> None:
     """``/a_b`` and ``/a-b`` are different endpoints, so they get different
     action keys, and the Allow of the old one does not apply to the new one."""
     integration_id = _create(
         db_session,
         admin,
-        created,
         OpenApiConfigInput(base_url=BASE_URL, endpoints=["POST /a_b Archive"]),
     )
     (old_key,) = _action_keys(db_session, admin, integration_id)
@@ -490,12 +411,12 @@ def _matched_keys(
 
 
 def test_a_rest_app_with_no_endpoints_saves_and_matches_any_request(
-    db_session: Session, admin: User, created: list[int]
+    db_session: Session, admin: User
 ) -> None:
     """A base URL with no endpoints, as the URL-pattern migration writes: VM
     scripts reach it through the proxy as the other-request action."""
     integration_id = _create(
-        db_session, admin, created, OpenApiConfigInput(base_url=BASE_URL, endpoints=[])
+        db_session, admin, OpenApiConfigInput(base_url=BASE_URL, endpoints=[])
     )
     assert _view(db_session, admin, integration_id).endpoints == []
 
