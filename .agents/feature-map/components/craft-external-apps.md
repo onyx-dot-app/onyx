@@ -413,8 +413,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     policy: the request's Ask actions must be Ask actions of its own row, so
     the decided request needs no saved grant. Only a call whose `ToolContext.
     shows_command_approvals` is set holds: a root agent of a streamed turn
-    (`chat/agent.py:build_chat_agent`); a background agent or a
-    `run_chat_turn` caller gets `approval_needs_tool`. When the last call of
+    (`chat/agent.py:build_chat_agent`) that the desktop launcher did not
+    send; a background agent, a launcher turn or a `run_chat_turn` caller
+    gets `approval_needs_tool`. When the last call of
     this process that waits on the command ends, `CommandApprovals.end`
     refuses the command's waiting rows: REJECTED by the user on a Stop,
     EXPIRED otherwise. Each card ends with its row's outcome; a stopped call

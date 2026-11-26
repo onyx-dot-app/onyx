@@ -72,6 +72,7 @@ from onyx.prompts.chat_prompts import (
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
@@ -802,9 +803,12 @@ def build_chat_agent(
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
         question_tool=question_tool,
-        # A background agent's progress reaches no client, and a
-        # non-streaming caller reads only the final response.
-        shows_command_approvals=setup.new_msg_req.stream and not is_subagent,
+        # A background agent's progress reaches no client, a non-streaming
+        # caller reads only the final response, and the desktop launcher
+        # shows no approval card.
+        shows_command_approvals=setup.new_msg_req.stream
+        and not is_subagent
+        and setup.new_msg_req.origin is not MessageOrigin.DESKTOP,
     )
     agent = feature.agent(
         state,

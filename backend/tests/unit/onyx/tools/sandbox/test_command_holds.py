@@ -12,6 +12,7 @@ from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     HarnessSandboxRef,
 )
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.sandbox import sandbox_tools
 from onyx.tools.tool_implementations.sandbox.command_approvals import (
@@ -58,14 +59,20 @@ def test_only_a_shown_call_holds_its_command(shows: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    ("stream", "is_subagent", "shows"),
-    [(True, False, True), (False, False, False), (True, True, False)],
+    ("stream", "is_subagent", "origin", "shows"),
+    [
+        (True, False, MessageOrigin.WEBAPP, True),
+        (False, False, MessageOrigin.WEBAPP, False),
+        (True, True, MessageOrigin.WEBAPP, False),
+        (True, False, MessageOrigin.DESKTOP, False),
+    ],
 )
 def test_only_a_streamed_root_agent_shows_command_approvals(
-    stream: bool, is_subagent: bool, shows: bool
+    stream: bool, is_subagent: bool, origin: MessageOrigin, shows: bool
 ) -> None:
     setup = MagicMock()
     setup.new_msg_req.stream = stream
+    setup.new_msg_req.origin = origin
     with patch("onyx.chat.agent.ChatFeature") as chat_feature:
         build_chat_agent(
             MagicMock(),

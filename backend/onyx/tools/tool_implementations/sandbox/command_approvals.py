@@ -15,8 +15,8 @@ Stop, expired otherwise. Each card that a call shows ends with its request's
 outcome; the renderer closes the cards of a stopped call.
 
 Only a call that a client streams holds requests (`ToolContext.
-shows_command_approvals`); a background agent or a non-streaming caller
-holds none, so the proxy refuses the command's Ask requests.
+shows_command_approvals`); a background agent, a non-streaming caller or
+the desktop launcher holds none, so the proxy refuses the command's Ask requests.
 """
 
 import threading
