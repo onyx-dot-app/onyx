@@ -2097,22 +2097,19 @@ def get_or_create_root_message(
 
 def configure_response_transaction__no_commit(session: Session) -> None:
     """Bound database waits while a response holds its execution lease."""
+    # Both settings in one statement: one round trip for each transaction.
     session.execute(
         select(
             func.set_config(
                 "statement_timeout",
                 str(CHAT_RESPONSE_STATEMENT_TIMEOUT_MS),
                 True,
-            )
-        )
-    )
-    session.execute(
-        select(
+            ),
             func.set_config(
                 "lock_timeout",
                 str(CHAT_RESPONSE_LOCK_TIMEOUT_MS),
                 True,
-            )
+            ),
         )
     )
 
