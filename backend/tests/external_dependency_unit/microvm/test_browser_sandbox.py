@@ -627,10 +627,12 @@ def test_clear_browser_data_stops_chrome_and_deletes_the_profile_and_its_save(
 
     store.delete = delete_during_a_call  # ty: ignore[invalid-assignment]
 
-    sandbox.clear_browser_data(ref)
-
-    racers[0].join(10)
-    assert not racers[0].is_alive()
+    try:
+        sandbox.clear_browser_data(ref)
+    finally:
+        for racer in racers:
+            racer.join(10)
+    assert len(racers) == 1 and not racers[0].is_alive()
     assert outcomes == [{"tab": "t1"}]
     assert node.agent.events == ["browser_stop", f"browser_start:{sid}"]
     assert not [key for key in node.agent.files if key[:2] == (sid, sid)]
