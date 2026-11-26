@@ -1,7 +1,7 @@
 import json
 import re
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote, urlencode
 
 import yaml
@@ -340,19 +340,12 @@ def _with_variable_defaults(url: str, variables: object) -> str:
     return re.sub(r"\{([^{}]+)\}", default, url)
 
 
-def openapi_to_url(openapi_schema: dict[str, dict | str]) -> str:
-    """
-    Extract URLs from the servers section of an OpenAPI schema.
-
-    Args:
-        openapi_schema (Dict[str, Union[Dict, str, List]]): The OpenAPI schema in dictionary format.
-
-    Returns:
-        List[str]: A list of base URLs.
-    """
+def openapi_to_url(openapi_schema: dict[str, Any]) -> str:
+    """The one server URL of an OpenAPI schema, with its variables set to
+    their defaults. Raises ``ValueError`` unless there is exactly one."""
     urls: list[str] = []
 
-    servers = cast(list[dict[str, Any]], openapi_schema.get("servers", []))
+    servers = openapi_schema.get("servers", [])
     for server in servers:
         url = server.get("url")
         if url is not None and not isinstance(url, str):
@@ -403,8 +396,8 @@ def validate_openapi_schema(
         isinstance(server, dict) for server in servers
     ):
         raise ValueError("`servers` must be a list of objects")
-    if check_server_url and not openapi_to_url(schema):
-        raise ValueError("OpenAPI schema does not contain a valid URL in `servers`")
+    if check_server_url:
+        openapi_to_url(schema)
 
     method_specs = openapi_to_method_specs(schema)
     for method_spec in method_specs:
