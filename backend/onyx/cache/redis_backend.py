@@ -163,8 +163,15 @@ class RedisCacheBackend(CacheBackend):
     def expire(self, key: str, seconds: int) -> None:
         self._r.expire(key, seconds)
 
-    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
-        return self._r.renew_if_value(key, expected, seconds)
+    def renew_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        seconds: int,
+        *,
+        also: Collection[str] = (),
+    ) -> bool:
+        return self._r.renew_if_value(key, expected, seconds, also=also)
 
     def ttl(self, key: str) -> int:
         return self._r.ttl(key)

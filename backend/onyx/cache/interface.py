@@ -186,10 +186,19 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+    def renew_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        seconds: int,
+        *,
+        also: Collection[str] = (),
+    ) -> bool:
         """Reset an unexpired key's TTL to ``seconds`` only while it holds ``expected``.
 
-        Returns whether the key was renewed.
+        The same atomic step gives the keys in ``also`` that exist the same
+        TTL, so a lease can renew the keys it guards without a lock. Returns
+        whether the key was renewed.
         """
         raise NotImplementedError
 

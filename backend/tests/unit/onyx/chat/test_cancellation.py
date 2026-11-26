@@ -135,10 +135,18 @@ class _MemoryCacheBackend(CacheBackend):
         if key in self._store:
             self._ttls[key] = seconds
 
-    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+    def renew_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        seconds: int,
+        *,
+        also: Collection[str] = (),
+    ) -> bool:
         if self.get(key) != expected:
             return False
-        self.expire(key, seconds)
+        for name in (key, *also):
+            self.expire(name, seconds)
         return True
 
     def ttl(self, key: str) -> int:
@@ -321,6 +329,31 @@ def test_stale_turn_cannot_publish_refresh_or_release_new_admission() -> None:
     assert not is_chat_session_processing(session_id, cache)
 
 
+def test_refresh_renews_every_key_in_one_cache_call() -> None:
+    cache = _AdmissionCache()
+    session_id = uuid4()
+    admission = ChatTurnAdmission(cache)
+    admission.claim(session_id)
+    admission.publish(17, [4])
+    keys = [
+        f"chatprocessing_owner_{session_id}",
+        f"chatprocessing_fence_{session_id}",
+        f"chatprocessing_responses_{session_id}",
+    ]
+    for key in keys:
+        cache.expire(key, 20)
+    with (
+        patch.object(cache, "lock") as lock,
+        patch.object(cache, "expire", wraps=cache.expire),
+        patch.object(cache, "renew_if_value", wraps=cache.renew_if_value) as renew,
+    ):
+        admission.refresh()
+    lock.assert_not_called()
+    renew.assert_called_once()
+    assert [cache.ttl(key) for key in keys] == [ACTIVE_LEASE_SECONDS] * 3
+    admission.release()
+
+
 def test_missing_stream_marker_keeps_admitted_session_busy() -> None:
     cache = _AdmissionCache()
     session_id = uuid4()
@@ -414,7 +447,9 @@ def test_admission_retry_cannot_reclaim_lost_ownership(lease_expired: bool) -> N
     original_renew = cache.renew_if_value
     attempts = 0
 
-    def renew(key: str, expected: bytes, seconds: int) -> bool:
+    def renew(
+        key: str, expected: bytes, seconds: int, *, also: Collection[str] = ()
+    ) -> bool:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
@@ -423,7 +458,7 @@ def test_admission_retry_cannot_reclaim_lost_ownership(lease_expired: bool) -> N
             else:
                 cache.set(owner_key, b"replacement", ex=PREPARATION_LEASE_SECONDS)
             raise RedisTimeoutError("Renewal timed out")
-        return original_renew(key, expected, seconds)
+        return original_renew(key, expected, seconds, also=also)
 
     try:
         with patch.object(cache, "renew_if_value", side_effect=renew):

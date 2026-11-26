@@ -510,11 +510,19 @@ class PostgresCacheBackend(CacheBackend):
             session.execute(stmt)
             session.commit()
 
-    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+    def renew_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        seconds: int,
+        *,
+        also: Collection[str] = (),
+    ) -> bool:
         """Renew a matching unexpired lease and commit the update.
 
         The row lock is taken first so the expiry check and the new deadline
         use the clock after any lock wait, not the transaction start time.
+        It is held to the commit, so the ``also`` keys change with the lease.
         """
         from onyx.db.engine.sql_engine import get_session_with_tenant
 
@@ -536,6 +544,12 @@ class PostgresCacheBackend(CacheBackend):
             _set_statement_timeout(session, self._statement_timeout_ms)
             session.execute(lock_stmt)
             renewed = session.execute(stmt).scalar_one_or_none()
+            if renewed is not None and also:
+                session.execute(
+                    update(CacheStore)
+                    .where(CacheStore.key.in_(also))
+                    .values(expires_at=now + timedelta(seconds=seconds))
+                )
             session.commit()
         return renewed is not None
 

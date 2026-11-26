@@ -182,3 +182,20 @@ def test_conditional_expiry_preserves_current_owner(cache: CacheBackend) -> None
         assert not cache.renew_if_value(key, b"replacement", 60)
     finally:
         cache.delete(key)
+
+
+def test_conditional_expiry_renews_the_guarded_keys(cache: CacheBackend) -> None:
+    key = f"conditional-expiry:{uuid4()}"
+    guarded, absent = f"{key}:guarded", f"{key}:absent"
+    try:
+        cache.set(key, b"owner", ex=10)
+        cache.set(guarded, b"1", ex=10)
+        assert not cache.renew_if_value(key, b"other", 60, also=[guarded, absent])
+        assert cache.ttl(guarded) <= 10
+        assert cache.renew_if_value(key, b"owner", 60, also=[guarded, absent])
+        assert cache.ttl(key) > 10
+        assert cache.ttl(guarded) > 10
+        assert not cache.exists(absent)
+    finally:
+        cache.delete(key)
+        cache.delete(guarded)
